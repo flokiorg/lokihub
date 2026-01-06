@@ -3,7 +3,7 @@ import { swrFetcher } from "src/utils/swr";
 import { SWRConfiguration } from "swr";
 import useSWRInfinite from "swr/infinite";
 
-const ONCHAIN_TRANSACTIONS_LIMIT = 500;
+const ONCHAIN_TRANSACTIONS_LIMIT = 100;
 
 const pollConfiguration: SWRConfiguration = {
   refreshInterval: 30000,

@@ -47,7 +47,6 @@ type API interface {
 	RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error)
 	GetServices(ctx context.Context) (interface{}, error)
 	GetInfo(ctx context.Context) (*InfoResponse, error)
-	GetInfoWithAuth(ctx context.Context, unlocked bool) (*InfoResponse, error)
 	GetMnemonic(unlockPassword string) (*MnemonicResponse, error)
 	SetNextBackupReminder(backupReminderRequest *BackupReminderRequest) error
 	Start(startRequest *StartRequest) error

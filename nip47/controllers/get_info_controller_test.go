@@ -32,7 +32,7 @@ func TestHandleGetInfoEvent_NoPermission(t *testing.T) {
 	assert.NoError(t, err)
 
 	lightningAddress := "hello@flokicoin.org"
-	svc.Cfg.SetUpdate("AlbyLightningAddress", lightningAddress, "")
+	svc.Cfg.SetUpdate("LightningAddress", lightningAddress, "")
 
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
@@ -189,7 +189,7 @@ func TestHandleGetInfoEvent_WithMetadata(t *testing.T) {
 	defer svc.Remove()
 
 	lightningAddress := "hello@flokicoin.org"
-	svc.Cfg.SetUpdate("AlbyLightningAddress", lightningAddress, "")
+	svc.Cfg.SetUpdate("LightningAddress", lightningAddress, "")
 
 	metadata := map[string]interface{}{
 		"a": 123,

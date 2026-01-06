@@ -89,7 +89,7 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 				metadata["name"] = app.Name
 			}
 			if !app.Isolated {
-				lightningAddress, _ := controller.cfg.Get("AlbyLightningAddress", "")
+				lightningAddress, _ := controller.cfg.Get("LightningAddress", "")
 				responsePayload.LightningAddress = &lightningAddress
 			} else if metadata["app_store_app_id"] == constants.SUBWALLET_APPSTORE_APP_ID && metadata["lud16"] != nil {
 				lightningAddress := metadata["lud16"].(string)

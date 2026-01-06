@@ -24,7 +24,7 @@ export default function TwoColumnFullScreenLayout() {
         </div>
         
         <div className="flex flex-col relative z-10 text-left">
-          <h1 className="text-5xl font-black text-white tracking-tight mb-6 drop-shadow-lg">
+          <h1 className="text-4xl font-black text-white tracking-tight mb-6 drop-shadow-lg">
             Your Gateway to the<br /> Lightning Network
           </h1>
           <p className="text-white/90 text-xl font-medium leading-relaxed max-w-lg drop-shadow-md">

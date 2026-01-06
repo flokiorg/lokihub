@@ -20,6 +20,7 @@ type LightningClientWrapper interface {
 	SubscribeInvoices(ctx context.Context, req *lnrpc.InvoiceSubscription, options ...grpc.CallOption) (SubscribeInvoicesWrapper, error)
 	SubscribeSingleInvoice(ctx context.Context, req *invoicesrpc.SubscribeSingleInvoiceRequest, options ...grpc.CallOption) (SubscribeSingleInvoiceWrapper, error) // Added
 	SubscribePayment(ctx context.Context, req *routerrpc.TrackPaymentRequest, options ...grpc.CallOption) (SubscribePaymentWrapper, error)
+	SubscribeTransactions(ctx context.Context, req *lnrpc.GetTransactionsRequest, options ...grpc.CallOption) (SubscribeTransactionsWrapper, error)
 	LookupInvoice(ctx context.Context, req *lnrpc.PaymentHash, options ...grpc.CallOption) (*lnrpc.Invoice, error)
 	GetInfo(ctx context.Context, req *lnrpc.GetInfoRequest, options ...grpc.CallOption) (*lnrpc.GetInfoResponse, error)
 	DecodeBolt11(ctx context.Context, bolt11 string, options ...grpc.CallOption) (*lnrpc.PayReq, error)
@@ -38,4 +39,8 @@ type SubscribeSingleInvoiceWrapper interface {
 
 type SubscribePaymentWrapper interface {
 	Recv() (*lnrpc.Payment, error)
+}
+
+type SubscribeTransactionsWrapper interface {
+	Recv() (*lnrpc.Transaction, error)
 }

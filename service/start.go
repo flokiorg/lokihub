@@ -60,7 +60,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	}).Info("Starting Lokihub")
 
 	// To debug go-nostr, run with -tags "debug dev" (dev tag so FLND build doesn't break with debug tag set)
-	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag=v1.20.0'" cmd/http/main.go
+	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=v1.20.0'" cmd/http/main.go
 	if logger.Logger.GetLevel() >= logrus.DebugLevel {
 		nostr.InfoLogger.SetOutput(logger.Logger.Out)
 		nostr.DebugLogger.SetOutput(logger.Logger.Out)
@@ -70,7 +70,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	pool := nostr.NewSimplePool(ctx, nostr.WithRelayOptions(
 		nostr.WithNoticeHandler(svc.noticeHandler),
 		nostr.WithRequestHeader(http.Header{
-			"User-Agent": {"AlbyHub/" + version.Tag},
+			"User-Agent": {"Lokihub/" + version.Tag},
 		}),
 	))
 

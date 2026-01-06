@@ -22,7 +22,7 @@ export function Banner({ onDismiss }: { onDismiss: () => void }) {
         <p className="line-clamp-2 md:block whitespace-normal md:whitespace-nowrap overflow-hidden text-ellipsis text-center">
           <span className="font-semibold">Update Available</span>
           <span className="mx-2 opacity-60">→</span>
-          <span className="font-mono font-medium bg-background/20 px-2 py-0.5 rounded">{lokiInfo.version}</span>
+          <span className="font-mono font-medium bg-background/20 px-2 mr-2 py-0.5 rounded">{lokiInfo.version}</span>
           <span className="opacity-90">{lokiInfo.releaseNotes}</span>
         </p>
       </ExternalLink>

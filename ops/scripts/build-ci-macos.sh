@@ -43,7 +43,6 @@ cd ..
 # -----------------------------------------------------------------------------
 # 2. Build HTTP Server (Native)
 # -----------------------------------------------------------------------------
-echo "--- Building HTTP Servers ---"
 
 build_http() {
     local ARCH=$1
@@ -66,9 +65,6 @@ build_http() {
     popd > /dev/null
 }
 
-# Build both architectures
-build_http "amd64"
-build_http "arm64"
 
 
 # -----------------------------------------------------------------------------
@@ -93,10 +89,12 @@ build_macos_desktop() {
     # 1. Enforce Clean Build
     rm -rf build/bin
 
-    wails build -platform "$WAILS_PLATFORM" -tags wails -trimpath \
-        -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
-        -o "${BASENAME}" -clean
-        
+    # Native build
+    CGO_ENABLED=1 GOOS=darwin GOARCH=$ARCH \
+        wails build -platform "$WAILS_PLATFORM" -tags wails -trimpath \
+            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
+            -o "${BASENAME}" -clean
+            
     local APP_SOURCE="build/bin/${BASENAME}.app"
     
     if [ ! -d "$APP_SOURCE" ]; then
@@ -157,6 +155,10 @@ build_macos_desktop() {
         exit 1
     fi
 }
+
+echo "--- Building HTTP Servers ---"
+build_http "amd64"
+build_http "arm64"
 
 echo "--- Building Darwin AMD64 ---"
 build_macos_desktop "amd64"

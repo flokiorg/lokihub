@@ -108,7 +108,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 
 	relayUrls := api.cfg.GetRelayUrls()
 
-	lightningAddress, err := api.cfg.Get("AlbyLightningAddress", "")
+	lightningAddress, err := api.cfg.Get("LightningAddress", "")
 	if err != nil {
 		return nil, err
 	}
@@ -1122,10 +1122,6 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 }
 
 func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
-	return api.GetInfoWithAuth(ctx, false)
-}
-
-func (api *api) GetInfoWithAuth(ctx context.Context, unlocked bool) (*InfoResponse, error) {
 	info := InfoResponse{}
 	backendType, _ := api.cfg.Get("LNBackendType", "")
 	autoUnlockPassword, _ := api.cfg.Get("AutoUnlockPassword", "")
@@ -1137,7 +1133,6 @@ func (api *api) GetInfoWithAuth(ctx context.Context, unlocked bool) (*InfoRespon
 		info.StartupError = api.startupError.Error()
 		info.StartupErrorTime = api.startupErrorTime
 	}
-	info.Running = api.svc.GetLNClient() != nil
 	info.BackendType = backendType
 	info.Version = version.Tag
 	info.AutoUnlockPasswordEnabled = autoUnlockPassword != ""
@@ -1151,14 +1146,15 @@ func (api *api) GetInfoWithAuth(ctx context.Context, unlocked bool) (*InfoRespon
 	}
 	info.MessageboardNwcUrl = api.cfg.GetMessageboardNwcUrl()
 
-	if api.svc.GetLNClient() != nil {
-		nodeInfo, err := api.svc.GetLNClient().GetInfo(ctx)
+	lnClient := api.svc.GetLNClient()
+	if lnClient != nil {
+		nodeInfo, err := lnClient.GetInfo(ctx)
 		if err != nil {
 			logger.Logger.WithError(err).Error("Failed to get nodeInfo")
 			return nil, err
 		}
-
 		info.Network = nodeInfo.Network
+		info.Running = true
 	}
 
 	info.NodeAlias, _ = api.cfg.Get("NodeAlias", "")
@@ -1168,9 +1164,8 @@ func (api *api) GetInfoWithAuth(ctx context.Context, unlocked bool) (*InfoRespon
 	info.MempoolUrl = api.cfg.GetMempoolApi()
 	info.EnableSwap = api.cfg.EnableSwap()
 	info.EnableMessageboardNwc = api.cfg.EnableMessageboardNwc()
-	if unlocked {
-		info.WorkDir = api.cfg.GetDefaultWorkDir()
-	}
+	info.WorkDir = api.cfg.GetDefaultWorkDir()
+
 	return &info, nil
 }
 

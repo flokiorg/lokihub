@@ -247,3 +247,7 @@ func (wrapper *LNDWrapper) SubscribeChannelEvents(ctx context.Context, in *lnrpc
 func (wrapper *LNDWrapper) ForwardingHistory(ctx context.Context, in *lnrpc.ForwardingHistoryRequest, options ...grpc.CallOption) (*lnrpc.ForwardingHistoryResponse, error) {
 	return wrapper.client.ForwardingHistory(ctx, in, options...)
 }
+
+func (wrapper *LNDWrapper) SubscribeTransactions(ctx context.Context, req *lnrpc.GetTransactionsRequest, options ...grpc.CallOption) (SubscribeTransactionsWrapper, error) {
+	return wrapper.client.SubscribeTransactions(ctx, req, options...)
+}

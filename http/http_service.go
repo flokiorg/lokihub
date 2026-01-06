@@ -233,13 +233,16 @@ func (httpSvc *HttpService) infoHandler(c echo.Context) error {
 		}
 	}
 
-	responseBody, err := httpSvc.api.GetInfoWithAuth(c.Request().Context(), unlocked)
+	responseBody, err := httpSvc.api.GetInfo(c.Request().Context())
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: err.Error(),
 		})
 	}
 
+	if !unlocked {
+		responseBody.WorkDir = "" // Don't expose workdir if not unlocked
+	}
 	responseBody.Unlocked = unlocked
 
 	return c.JSON(http.StatusOK, responseBody)

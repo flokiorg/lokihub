@@ -96,7 +96,7 @@ func TestCheckUnlockPasswordCache(t *testing.T) {
 	hitPanic := false
 	func() {
 		defer func() {
-			// ensure the app cannot panic if firing events to Alby API fails
+			// ensure the app cannot panic if firing events to Loki API fails
 			if r := recover(); r != nil {
 				hitPanic = true
 			}

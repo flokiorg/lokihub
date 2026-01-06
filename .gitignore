@@ -27,5 +27,4 @@ frontend/.yarn
 *.db-shm
 *.db-wal
 *.db-journal
-albyhub-data
 data

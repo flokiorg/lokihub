@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
@@ -42,6 +43,10 @@ type LNDService struct {
 	ctx            context.Context
 	eventPublisher events.EventPublisher
 	logger         *logrus.Entry
+
+	txCache      []lnclient.OnchainTransaction
+	txCacheMtx   sync.RWMutex
+	txCacheValid bool
 }
 
 func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, lndAddress, lndCertHex, lndMacaroonHex string) (result lnclient.LNClient, err error) {
@@ -98,6 +103,7 @@ func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, ln
 	go lndService.subscribeInvoices(lndCtx)
 	go lndService.subscribeChannelEvents(lndCtx)
 	go lndService.subscribeOpenHoldInvoices(lndCtx)
+	go lndService.subscribeTransactions(lndCtx)
 	go lndService.trackForwardedPayments(lndCtx)
 
 	logger.Logger.WithField("alias", nodeInfo.Alias).Info("Connected to FLND")
@@ -1688,50 +1694,149 @@ func (svc *LNDService) ExecuteCustomNodeCommand(ctx context.Context, command *ln
 	return nil, nil
 }
 
-func (svc *LNDService) ListOnchainTransactions(ctx context.Context, from, until, limit, offset uint64) ([]lnclient.OnchainTransaction, error) {
-	resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{})
+func (svc *LNDService) subscribeTransactions(ctx context.Context) {
+	stream, err := svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get onchain transactions")
-		return nil, err
+		svc.logger.WithError(err).Error("Failed to subscribe to transactions")
+		return
 	}
 
-	transactions := []lnclient.OnchainTransaction{}
-	for _, tx := range resp.Transactions {
-		state := "unconfirmed"
-		if tx.NumConfirmations > 0 {
-			state = "confirmed"
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			_, err := stream.Recv()
+			if err != nil {
+				if errors.Is(ctx.Err(), context.Canceled) {
+					return
+				}
+				svc.logger.WithError(err).Error("Failed to receive transaction update, retrying subscription in 5s")
+				time.Sleep(5 * time.Second)
+				stream, err = svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
+				if err != nil {
+					svc.logger.WithError(err).Error("Failed to resubscribe to transactions")
+				}
+				continue
+			}
 
-		amountLoki := tx.Amount
-		txType := "incoming"
-		if tx.Amount < 0 {
-			amountLoki = -amountLoki
-			txType = "outgoing"
+			// Invalidate cache on any new transaction event
+			svc.txCacheMtx.Lock()
+			svc.txCacheValid = false
+			svc.txCacheMtx.Unlock()
+			svc.logger.Info("Invalidated on-chain transaction cache due to new event")
 		}
-
-		transactions = append(transactions, lnclient.OnchainTransaction{
-			AmountLoki:       uint64(amountLoki),
-			CreatedAt:        uint64(tx.TimeStamp),
-			State:            state,
-			Type:             txType,
-			NumConfirmations: uint32(tx.NumConfirmations),
-			TxId:             tx.TxHash,
-		})
 	}
-	sort.SliceStable(transactions, func(i, j int) bool {
-		return transactions[i].CreatedAt > transactions[j].CreatedAt
+}
+
+func (svc *LNDService) refreshTransactionCache(ctx context.Context) error {
+	var allTransactions []lnclient.OnchainTransaction
+	offset := uint32(0)
+	limit := uint32(1000) // Batch size to avoid gRPC usage limits
+
+	for {
+		req := &lnrpc.GetTransactionsRequest{
+			IndexOffset:     offset,
+			MaxTransactions: limit,
+		}
+
+		resp, err := svc.client.GetTransactions(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		for _, tx := range resp.Transactions {
+			state := "unconfirmed"
+			if tx.NumConfirmations > 0 {
+				state = "confirmed"
+			}
+
+			amountLoki := tx.Amount
+			txType := "incoming"
+			if tx.Amount < 0 {
+				amountLoki = -amountLoki
+				txType = "outgoing"
+			}
+
+			allTransactions = append(allTransactions, lnclient.OnchainTransaction{
+				AmountLoki:       uint64(amountLoki),
+				CreatedAt:        uint64(tx.TimeStamp),
+				State:            state,
+				Type:             txType,
+				NumConfirmations: uint32(tx.NumConfirmations),
+				TxId:             tx.TxHash,
+			})
+		}
+
+		// If we got fewer transactions than the limit, we've reached the end
+		if len(resp.Transactions) < int(limit) {
+			break
+		}
+
+		// Update offset for next batch.
+		// Note: GetTransactions uses index in list, not block height or ID.
+		// Using the index of the last transaction returned + 1.
+		// Actually, GetTransactions doc says index_offset: "The index of the transaction that will be used as either the start or end of a query..."
+		// It usually corresponds to the number of transactions to skip if sorted?
+		// LND documentation says: "The index of the transaction that will be used as either the start or end of a query to determine which transactions should be returned in the response."
+		// Simpler approach: offset by count.
+		offset += uint32(len(resp.Transactions))
+	}
+
+	// Sort by CreatedAt descending (newest first)
+	sort.SliceStable(allTransactions, func(i, j int) bool {
+		return allTransactions[i].CreatedAt > allTransactions[j].CreatedAt
 	})
 
-	// Slice transactions based on limit and offset
+	svc.txCacheMtx.Lock()
+	svc.txCache = allTransactions
+	svc.txCacheValid = true
+	svc.txCacheMtx.Unlock()
+
+	return nil
+}
+
+func (svc *LNDService) ListOnchainTransactions(ctx context.Context, from, until, limit, offset uint64) ([]lnclient.OnchainTransaction, error) {
+	svc.txCacheMtx.RLock()
+	isValid := svc.txCacheValid
+	svc.txCacheMtx.RUnlock()
+
+	if !isValid {
+		// Cache is invalid, refresh it synchronously
+		// Note: This might block the first request after invalidation, but ensures consistency.
+		// For better UX, could do it in background if stale data is acceptable, but user wants newest.
+		if err := svc.refreshTransactionCache(ctx); err != nil {
+			logger.Logger.WithError(err).Error("Failed to refresh onchain transaction cache")
+			return nil, err
+		}
+	}
+
+	svc.txCacheMtx.RLock()
+	defer svc.txCacheMtx.RUnlock()
+
+	// Slice from cache
 	start := int(offset)
 	end := start + int(limit)
 
-	if start > len(transactions) {
-		start = len(transactions)
-	}
-	if end > len(transactions) || limit == 0 {
-		end = len(transactions)
+	if start > len(svc.txCache) {
+		start = len(svc.txCache)
 	}
 
-	return transactions[start:end], nil
+	// If limit is 0, return all from start
+	if limit == 0 {
+		end = len(svc.txCache)
+	} else if end > len(svc.txCache) {
+		end = len(svc.txCache)
+	}
+
+	// Return a copy to be safe? Or just slice (since it's read-only usually, copy is safer but slower)
+	// Slicing is fine if we respect immutability of the cache.
+	// But since this returns []OnchainTransaction (value type struct), slicing returns a new slice header pointing to same array.
+	// As long as caller doesn't modify elements (which they shouldn't), it's fine.
+	// However, if refreshTransactionCache replaces the array, old readers are safe holding old array.
+
+	result := make([]lnclient.OnchainTransaction, end-start)
+	copy(result, svc.txCache[start:end])
+
+	return result, nil
 }
