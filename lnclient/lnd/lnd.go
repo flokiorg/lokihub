@@ -1706,17 +1706,28 @@ func (svc *LNDService) subscribeTransactions(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
+			if stream == nil {
+				var err error
+				stream, err = svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
+				if err != nil {
+					svc.logger.WithError(err).Error("Failed to subscribe to transactions, retrying in 5s")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(5 * time.Second):
+						continue
+					}
+				}
+			}
+
 			_, err := stream.Recv()
 			if err != nil {
 				if errors.Is(ctx.Err(), context.Canceled) {
 					return
 				}
-				svc.logger.WithError(err).Error("Failed to receive transaction update, retrying subscription in 5s")
-				time.Sleep(5 * time.Second)
-				stream, err = svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
-				if err != nil {
-					svc.logger.WithError(err).Error("Failed to resubscribe to transactions")
-				}
+				svc.logger.WithError(err).Error("Failed to receive transaction update")
+				stream = nil                // Mark stream as invalid so it gets re-created in next iteration
+				time.Sleep(1 * time.Second) // Small backoff before retrying connection
 				continue
 			}
 
