@@ -1,0 +1,86 @@
+package tests
+
+import (
+	"strconv"
+	"testing"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/tests/db"
+
+	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/service/keys"
+)
+
+func CreateTestService(t *testing.T) (svc *TestService, err error) {
+	return CreateTestServiceWithMnemonic(t, "", "")
+}
+
+func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword string) (svc *TestService, err error) {
+	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+
+	gormDb, err := db.NewDB(t)
+	if err != nil {
+		return nil, err
+	}
+
+	mockLn, err := NewMockLn()
+	if err != nil {
+		return nil, err
+	}
+
+	appConfig := &config.AppConfig{
+		Workdir: ".test",
+	}
+
+	cfg, err := config.NewConfig(
+		appConfig,
+		gormDb,
+	)
+	if err != nil {
+		return nil, err
+	}
+	keys := keys.NewKeys()
+
+	if mnemonic != "" {
+		if err = cfg.SetUpdate("Mnemonic", mnemonic, unlockPassword); err != nil {
+			return nil, err
+		}
+	}
+
+	if err = keys.Init(cfg, unlockPassword); err != nil {
+		return nil, err
+	}
+
+	eventPublisher := events.NewEventPublisher()
+
+	appsService := apps.NewAppsService(gormDb, eventPublisher, keys, cfg)
+
+	return &TestService{
+		Cfg:            cfg,
+		LNClient:       mockLn,
+		EventPublisher: eventPublisher,
+		DB:             gormDb,
+		Keys:           keys,
+		AppsService:    appsService,
+	}, nil
+}
+
+type TestService struct {
+	Keys           keys.Keys
+	Cfg            config.Config
+	LNClient       lnclient.LNClient
+	EventPublisher events.EventPublisher
+	AppsService    apps.AppsService
+	DB             *gorm.DB
+}
+
+func (s *TestService) Remove() {
+	db.CloseDB(s.DB)
+}

@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Latest Run IDs
+        id: get_run_ids
+        uses: actions/github-script@v7
+        with:
+          script: |
+            async function getLatestRunId(workflowId) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                status: 'success',
+                per_page: 1,
+              });
+              return runs.data.workflow_runs.length > 0 ? runs.data.workflow_runs[0].id : null;
+            }
+
+            const linuxId = await getLatestRunId('linux.yaml');
+            const macosId = await getLatestRunId('macos.yaml');
+            const windowsId = await getLatestRunId('windows.yaml');
+
+            if (!linuxId) core.setFailed("No successful Linux runs found.");
+            if (!macosId) core.setFailed("No successful macOS runs found.");
+            if (!windowsId) core.setFailed("No successful Windows runs found.");
+
+            console.log(`Linux Run ID: ${linuxId}`);
+            console.log(`macOS Run ID: ${macosId}`);
+            console.log(`Windows Run ID: ${windowsId}`);
+
+            core.setOutput('linux_run_id', linuxId);
+            core.setOutput('macos_run_id', macosId);
+            core.setOutput('windows_run_id', windowsId);
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "Error: VERSION file not found"
+            exit 1
+          fi
+          TAG=$(cat VERSION | tr -d '[:space:]')
+          if [ -z "$TAG" ]; then
+            echo "Error: VERSION file is empty"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Check Release Note
+        id: check_note
+        shell: bash
+        run: |
+          if [ -f "releases/${{ env.TAG }}.md" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release note found: releases/${{ env.TAG }}.md"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No release note found for ${{ env.TAG }}, skipping release."
+          fi
+
+      - name: Download Linux Artifacts
+        if: steps.check_note.outputs.exists == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.get_run_ids.outputs.linux_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Download macOS Artifacts
+        if: steps.check_note.outputs.exists == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.get_run_ids.outputs.macos_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Download Windows Artifacts
+        if: steps.check_note.outputs.exists == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.get_run_ids.outputs.windows_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Display Artifacts
+        if: steps.check_note.outputs.exists == 'true'
+        run: ls -R artifacts
+
+      - name: Delete Existing Tag
+        if: steps.check_note.outputs.exists == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${{ env.TAG }}`
+              });
+              console.log('Deleted existing tag ${{ env.TAG }}');
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('Tag ${{ env.TAG }} does not exist, skipping deletion');
+              } else {
+                throw error;
+              }
+            }
+
+      - name: Delete Existing Release
+        if: steps.check_note.outputs.exists == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              const release = releases.data.find(r => r.tag_name === '${{ env.TAG }}');
+              if (release) {
+                await github.rest.repos.deleteRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: release.id
+                });
+                console.log('Deleted existing release for ${{ env.TAG }}');
+              } else {
+                console.log('No existing release found for ${{ env.TAG }}');
+              }
+            } catch (error) {
+              console.error('Error deleting release:', error.message);
+            }
+
+      - name: Create Release
+        if: steps.check_note.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Release ${{ env.TAG }}
+          body_path: releases/${{ env.TAG }}.md
+          files: artifacts/**/*
+          fail_on_unmatched_files: false
+          prerelease: ${{ contains(env.TAG, 'alpha') || contains(env.TAG, 'beta') || contains(env.TAG, 'rc') }}

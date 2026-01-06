@@ -1,0 +1,11 @@
+{
+  "source": [
+    "./build/bin/Lokihub.app",
+    "./build/bin/Lokihub.app/Contents/MacOS/Lokihub"
+  ],
+  "bundle_id": "org.flokicoin.lokihub",
+  "sign": {
+    "application_identity": "Developer ID Application: FlokiCoin.org",
+    "entitlements_file": "./build/darwin/entitlements.plist"
+  }
+}

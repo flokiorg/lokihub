@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Lokihub",
+  "outputfilename": "Lokihub",
+  "frontend:install": "yarn install",
+  "frontend:build": "yarn build:wails",
+  "frontend:dev:watcher": "yarn dev:wails",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "The Flokicoin Developers",
+    "email": "hub@flokicoin.org"
+  },
+  "info": {
+    "companyName": "Flokiorg",
+    "productName": "Lokihub",
+    "productVersion": "1.0.0",
+    "copyright": "The Flokicoin Developers",
+    "comments": ""
+  }
+}

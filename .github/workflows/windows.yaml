@@ -1,0 +1,60 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows Desktop
+    runs-on: [self-hosted, windows]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Read Version
+        id: version
+        shell: powershell
+        run: |
+          if (-not (Test-Path "VERSION")) {
+            Write-Error "Error: VERSION file not found"
+            exit 1
+          }
+          $TAG = (Get-Content "VERSION").Trim()
+          if (-not $TAG) {
+            Write-Error "Error: VERSION file is empty"
+            exit 1
+          }
+          "TAG=$TAG" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run Windows Build Script
+        shell: powershell
+        run: ./ops/scripts/build-ci-windows.ps1
+        env:
+          TAG: ${{ env.TAG }}
+
+      - name: Upload Artifacts (Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-windows-${{ env.TAG }}
+          path: ops/bin/*
+          if-no-files-found: error

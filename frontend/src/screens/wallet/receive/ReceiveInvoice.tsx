@@ -1,0 +1,243 @@
+import {
+    ArrowLeftIcon,
+    CopyIcon,
+    LinkIcon,
+    PlusIcon
+} from "lucide-react";
+import React from "react";
+import { toast } from "sonner";
+import Tick from "src/assets/illustrations/tick.svg?react";
+import AppHeader from "src/components/AppHeader";
+import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import Loading from "src/components/Loading";
+import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
+import QRCode from "src/components/QRCode";
+import { Button } from "src/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "src/components/ui/card";
+import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
+import { LinkButton } from "src/components/ui/custom/link-button";
+import { LoadingButton } from "src/components/ui/custom/loading-button";
+import { Input } from "src/components/ui/input";
+import { Label } from "src/components/ui/label";
+import { useBalances } from "src/hooks/useBalances";
+
+
+import { useInfo } from "src/hooks/useInfo";
+import { useTransaction } from "src/hooks/useTransaction";
+import { copyToClipboard } from "src/lib/clipboard";
+import { CreateInvoiceRequest, Transaction } from "src/types";
+import { request } from "src/utils/request";
+
+export default function ReceiveInvoice() {
+  const { data: info, hasChannelManagement } = useInfo();
+  const { data: balances } = useBalances();
+
+  const [isLoading, setLoading] = React.useState(false);
+  const [amount, setAmount] = React.useState<string>("");
+  const [description, setDescription] = React.useState<string>("");
+  const [transaction, setTransaction] = React.useState<Transaction | null>(
+    null
+  );
+  const [paymentDone, setPaymentDone] = React.useState(false);
+  const { data: invoiceData } = useTransaction(
+    transaction ? transaction.paymentHash : "",
+    true
+  );
+
+  React.useEffect(() => {
+    if (invoiceData?.settledAt) {
+      setPaymentDone(true);
+    }
+  }, [invoiceData]);
+
+  if (!balances || !info) {
+    return <Loading />;
+  }
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    try {
+      setLoading(true);
+      const invoice = await request<Transaction>("/api/invoices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: (parseInt(amount) || 0) * 1000,
+          description,
+        } as CreateInvoiceRequest),
+      });
+
+      if (invoice) {
+        setTransaction(invoice);
+        setAmount("");
+        setDescription("");
+        toast("Successfully created invoice");
+      }
+    } catch (e) {
+      toast.error("Failed to create invoice", {
+        description: "" + e,
+      });
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = () => {
+    copyToClipboard(transaction?.invoice as string);
+  };
+
+  return (
+    <div className="grid gap-5">
+      <AppHeader title={transaction ? "Lightning Invoice" : "Create Invoice"} />
+      <div className="flex flex-col md:flex-row gap-12">
+        <div className="w-full md:max-w-lg grid gap-6">
+          {hasChannelManagement &&
+            (+amount * 1000 || transaction?.amount || 0) >=
+              0.8 * balances.lightning.totalReceivable && (
+              <LowReceivingCapacityAlert />
+            )}
+          <div>
+            {transaction ? (
+              <Card>
+                {!paymentDone ? (
+                  <>
+                    <CardHeader>
+                      <CardTitle className="flex justify-center">
+                        <Loading className="size-4 mr-2" />
+                        <p>Waiting for payment</p>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center gap-6">
+                      <QRCode value={transaction.invoice} />
+                      <div className="flex flex-col gap-1 items-center">
+                        <p className="text-2xl font-medium slashed-zero">
+                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                        </p>
+                        <FormattedFiatAmount
+                          amount={Math.floor(transaction.amount / 1000)}
+                          className="text-xl"
+                        />
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-2">
+                      <Button
+                        className="w-full"
+                        onClick={copy}
+                        variant="outline"
+                      >
+                        <CopyIcon className="w-4 h-4 mr-2" />
+                        Copy Invoice
+                      </Button>
+                    </CardFooter>
+                  </>
+                ) : (
+                  <>
+                    <CardHeader>
+                      <CardTitle className="text-center">
+                        Payment Received
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center gap-6">
+                      <Tick className="w-48" />
+                      <div className="flex flex-col gap-1 items-center">
+                        <p className="text-2xl font-medium slashed-zero">
+                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                        </p>
+                        <FormattedFiatAmount
+                          amount={Math.floor(transaction.amount / 1000)}
+                          className="text-xl"
+                        />
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-2 pt-2">
+                      <Button
+                        onClick={() => {
+                          setPaymentDone(false);
+                          setTransaction(null);
+                        }}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <PlusIcon className="w-4 h-4 mr-2" />
+                        Create Another Invoice
+                      </Button>
+                      <LinkButton
+                        to="/wallet"
+                        variant="link"
+                        className="w-full"
+                      >
+                        <ArrowLeftIcon className="w-4 h-4 mr-2" />
+                        Back to Wallet
+                      </LinkButton>
+                    </CardFooter>
+                  </>
+                )}
+              </Card>
+            ) : (
+              <form onSubmit={handleSubmit} className="grid gap-6">
+                <div className="grid gap-2">
+                  <Label htmlFor="amount">Amount</Label>
+                  <InputWithAdornment
+                    id="amount"
+                    type="number"
+                    value={amount?.toString()}
+                    placeholder="Amount in Loki..."
+                    onChange={(e) => {
+                      setAmount(e.target.value.trim());
+                    }}
+                    min={1}
+                    autoFocus
+                    endAdornment={
+                      <FormattedFiatAmount amount={+amount} className="mr-2" />
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Input
+                    id="description"
+                    type="text"
+                    value={description}
+                    placeholder="For e.g. who is sending this payment?"
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+                <LoadingButton
+                  className="w-full md:w-fit"
+                  loading={isLoading}
+                  type="submit"
+                  disabled={!amount}
+                >
+                  Create Invoice
+                </LoadingButton>
+                <div className="grid gap-2 border-t pt-6">
+
+                    <LinkButton
+                      to="/wallet/receive/onchain"
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                      Receive from On-chain
+                    </LinkButton>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

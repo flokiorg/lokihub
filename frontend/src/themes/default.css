@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Flokicoin Rebranding Palette 
+   Based on assets: Gold/Orange (#D99525), Teal (#123C3C), Cream (#FDFCF5 / #ECDDB3)
+*/
+
+:root {
+  --font-sans: "Inter var", serif;
+  --radius: 0.625rem;
+  
+  /* Light Mode - Cream & Teal */
+  --background: hsl(51 56% 98%); /* Cream */
+  --foreground: hsl(180 54% 15%); /* Teal */
+
+  --card: hsl(51 56% 98%);
+  --card-foreground: hsl(180 54% 15%);
+  
+  --popover: hsl(51 56% 98%);
+  --popover-foreground: hsl(180 54% 15%);
+  
+  --primary: hsl(37 71% 50%); /* Gold/Orange */
+  --primary-foreground: hsl(180 54% 15%);
+  
+  --secondary: hsl(43 58% 90%); /* Light Cream Accent */
+  --secondary-foreground: hsl(180 54% 15%);
+  
+  --muted: hsl(43 58% 90%);
+  --muted-foreground: hsl(180 30% 40%);
+  
+  --accent: hsl(37 71% 50%);
+  --accent-foreground: hsl(180 54% 15%);
+  
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --border: hsl(180 20% 85%);
+  --input: hsl(180 20% 85%);
+  --ring: hsl(37 71% 50%);
+
+  /* Sidebar - Light */
+  --sidebar: hsl(51 56% 96%);
+  --sidebar-foreground: hsl(180 54% 15%);
+  --sidebar-primary: hsl(37 71% 50%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(43 58% 90%);
+  --sidebar-accent-foreground: hsl(180 54% 15%);
+  --sidebar-border: hsl(180 20% 85%);
+  --sidebar-ring: hsl(37 71% 50%);
+
+  /* Chart colors - approximated to palette */
+  --chart-1: hsl(37 71% 50%); /* Gold */
+  --chart-2: hsl(180 54% 30%); /* Teal */
+  --chart-3: hsl(43 58% 70%); /* Dark Cream */
+  --chart-4: hsl(180 30% 50%);
+  --chart-5: hsl(37 71% 70%);
+
+  /* Custom colors */
+  --positive: hsl(138, 68%, 96%);
+  --positive-foreground: hsl(142 76% 36%);
+
+  --warning: hsl(33, 90%, 96%);
+  --warning-foreground: hsl(21, 90%, 48%);
+}
+
+.dark {
+  /* Dark Mode - Teal & Cream */
+  --background: hsl(180 54% 11%); /* Deep Teal */
+  --foreground: hsl(43 58% 85%); /* Cream */
+
+  --card: hsl(180 50% 13%); /* Slightly lighter teal */
+  --card-foreground: hsl(43 58% 85%);
+
+  --popover: hsl(180 50% 13%);
+  --popover-foreground: hsl(43 58% 85%);
+
+  --primary: hsl(37 71% 50%); /* Gold */
+  --primary-foreground: hsl(180 54% 15%); /* Dark text on gold */
+
+  --secondary: hsl(180 40% 20%);
+  --secondary-foreground: hsl(43 58% 85%);
+
+  --muted: hsl(180 40% 20%);
+  --muted-foreground: hsl(180 20% 60%);
+
+  --accent: hsl(180 40% 25%);
+  --accent-foreground: hsl(43 58% 85%);
+
+  --destructive: hsl(0 62% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --border: hsl(180 30% 20%);
+  --input: hsl(180 30% 20%);
+  --ring: hsl(37 71% 50%);
+
+  /* Sidebar - Dark */
+  --sidebar: hsl(180 54% 9%); /* Very dark teal */
+  --sidebar-foreground: hsl(43 58% 85%);
+  --sidebar-primary: hsl(37 71% 50%);
+  --sidebar-primary-foreground: hsl(180 54% 15%);
+  --sidebar-accent: hsl(180 40% 20%);
+  --sidebar-accent-foreground: hsl(43 58% 85%);
+  --sidebar-border: hsl(180 30% 20%);
+  --sidebar-ring: hsl(37 71% 50%);
+  
+  --chart-1: hsl(37 71% 50%);
+  --chart-2: hsl(180 54% 40%);
+  --chart-3: hsl(43 58% 60%);
+  --chart-4: hsl(180 30% 60%);
+  --chart-5: hsl(37 71% 60%);
+}

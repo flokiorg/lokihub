@@ -1,0 +1,8 @@
+{
+  "notarize": [
+    {
+      "path": "./build/out/lokihub-Server-MacOS.zip",
+      "bundle_id": "org.flokicoin.lokihub"
+    }
+  ]
+}

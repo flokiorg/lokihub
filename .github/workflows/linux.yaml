@@ -1,0 +1,62 @@
+name: Linux Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux & HTTP
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: read
+    steps:
+      - name: Pre-Checkout Cleanup
+        run: sudo chown -R $USER:$USER . || true
+      
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "Error: VERSION file not found"
+            exit 1
+          fi
+          TAG=$(cat VERSION | tr -d '[:space:]')
+          if [ -z "$TAG" ]; then
+            echo "Error: VERSION file is empty"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Build Builder Image
+        run: |
+          sudo docker build \
+            -t lokihub-builder:latest \
+            -f ops/docker/builder.Dockerfile .
+
+      - name: Make Scripts Executable
+        run: chmod +x ops/scripts/*.sh
+
+      - name: Run Build Script in Docker
+        run: |
+          sudo docker run --rm \
+            -v ${{ github.workspace }}:/build \
+            -e TAG=${{ env.TAG }} \
+            lokihub-builder:latest \
+            /bin/bash /build/ops/scripts/build-ci-linux.sh
+
+      - name: Fix Permissions
+        if: always()
+        run: sudo chown -R $USER:$USER ${{ github.workspace }}
+
+      - name: Upload Artifacts (Linux/HTTP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-linux-http-${{ env.TAG }}
+          path: ops/bin/*
+          if-no-files-found: error

@@ -1,0 +1,155 @@
+package nip47
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/flokiorg/lokihub/nip47/models"
+	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/sirupsen/logrus"
+)
+
+type Nip47InfoPublishRequest struct {
+	AppId            uint
+	AppWalletPubKey  string
+	AppWalletPrivKey string
+	RelayUrl         string
+	Attempt          uint32
+}
+
+type nip47InfoPublishQueue struct {
+	channel chan *Nip47InfoPublishRequest
+}
+
+func NewNip47InfoPublishQueue() *nip47InfoPublishQueue {
+	return &nip47InfoPublishQueue{
+		channel: make(chan *Nip47InfoPublishRequest),
+	}
+}
+
+func (q *nip47InfoPublishQueue) AddToQueue(req *Nip47InfoPublishRequest) {
+	// thread will be blocked if the channel is full, so execute in a separate goroutine
+	go func() {
+		q.channel <- req
+	}()
+}
+
+func (q *nip47InfoPublishQueue) Channel() <-chan *Nip47InfoPublishRequest {
+	return q.channel
+}
+
+func (svc *nip47Service) GetNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string) (*nostr.Event, error) {
+	filter := nostr.Filter{
+		Kinds:   []int{models.INFO_EVENT_KIND},
+		Authors: []string{appWalletPubKey},
+		Limit:   1,
+	}
+
+	relayEvent := pool.QuerySingle(ctx, svc.cfg.GetRelayUrls(), filter)
+	if relayEvent == nil {
+		return nil, nil
+	}
+
+	return relayEvent.Event, nil
+}
+
+func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrmodels.SimplePool, appId uint, appWalletPubKey string, appWalletPrivKey string, relayUrl string, lnClient lnclient.LNClient) (*nostr.Event, error) {
+	var capabilities []string
+	var permitsNotifications bool
+	tags := nostr.Tags{[]string{"encryption", cipher.SUPPORTED_ENCRYPTIONS}}
+
+	if svc.keys.GetNostrPublicKey() == appWalletPubKey {
+		// legacy app, so return lnClient.GetSupportedNIP47Methods()
+		capabilities = lnClient.GetSupportedNIP47Methods()
+		permitsNotifications = true
+	} else {
+		app := db.App{}
+		err := svc.db.First(&app, &db.App{
+			ID: appId,
+		}).Error
+		if err != nil {
+			logger.Logger.WithFields(logrus.Fields{
+				"walletPubKey": appWalletPubKey,
+			}).WithError(err).Error("Failed to find app for wallet pubkey")
+			return nil, err
+		}
+		capabilities = svc.permissionsService.GetPermittedMethods(&app, lnClient)
+		permitsNotifications = svc.permissionsService.PermitsNotifications(&app)
+
+		// NWA: associate the info event with the app so that the app can receive the wallet pubkey
+		tags = append(tags, []string{"p", app.AppPubkey})
+	}
+	if permitsNotifications && len(lnClient.GetSupportedNIP47NotificationTypes()) > 0 {
+		capabilities = append(capabilities, "notifications")
+		tags = append(tags, []string{"notifications", strings.Join(lnClient.GetSupportedNIP47NotificationTypes(), " ")})
+	}
+
+	ev := &nostr.Event{}
+	ev.Kind = models.INFO_EVENT_KIND
+	ev.Content = strings.Join(capabilities, " ")
+	ev.CreatedAt = nostr.Now()
+	ev.PubKey = appWalletPubKey
+	ev.Tags = tags
+	err := ev.Sign(appWalletPrivKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// publish to a single relay so that we can requeue failed publishes on a relay level
+	publishResultChannel := pool.PublishMany(ctx, []string{relayUrl}, *ev)
+
+	publishSuccessful := false
+	for result := range publishResultChannel {
+		if result.Error == nil {
+			publishSuccessful = true
+		} else {
+			logger.Logger.WithFields(logrus.Fields{
+				"appId": appId,
+				"relay": result.RelayURL,
+			}).WithError(result.Error).Error("failed to publish nip47 info to relay")
+		}
+	}
+	if !publishSuccessful {
+		return nil, errors.New("failed to publish nostr info event to all relays")
+	}
+	logger.Logger.WithField("wallet_pubkey", appWalletPubKey).Debug("published info event")
+	return ev, nil
+}
+
+func (svc *nip47Service) PublishNip47InfoDeletion(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error {
+	ev := &nostr.Event{}
+	ev.Kind = nostr.KindDeletion
+	ev.Content = "deleting nip47 info since app connection for this key was deleted"
+	ev.Tags = nostr.Tags{[]string{"e", infoEventId}, []string{"k", strconv.Itoa(models.INFO_EVENT_KIND)}}
+	ev.CreatedAt = nostr.Now()
+	ev.PubKey = appWalletPubKey
+	err := ev.Sign(appWalletPrivKey)
+	if err != nil {
+		return err
+	}
+	publishResultChannel := pool.PublishMany(ctx, svc.cfg.GetRelayUrls(), *ev)
+
+	publishSuccessful := false
+	for result := range publishResultChannel {
+		if result.Error == nil {
+			publishSuccessful = true
+		} else {
+			logger.Logger.WithFields(logrus.Fields{
+				"wallet_pubkey": appWalletPubKey,
+				"relay":         result.RelayURL,
+			}).WithError(result.Error).Error("failed to publish info event deletion to relay")
+		}
+	}
+
+	if !publishSuccessful {
+		return errors.New("failed to publish info event deletion to all relays")
+	}
+	return nil
+}
