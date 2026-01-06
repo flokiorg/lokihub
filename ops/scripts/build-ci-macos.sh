@@ -157,14 +157,22 @@ build_macos_desktop() {
 }
 
 echo "--- Building HTTP Servers ---"
-build_http "amd64"
-build_http "arm64"
+if [[ -n "$1" ]]; then
+    build_http "$1"
+else
+    build_http "amd64"
+    build_http "arm64"
+fi
 
-echo "--- Building Darwin AMD64 ---"
-build_macos_desktop "amd64"
-
-echo "--- Building Darwin ARM64 ---"
-build_macos_desktop "arm64"
+echo "--- Building Darwin Desktop ---"
+if [[ -n "$1" ]]; then
+    build_macos_desktop "$1"
+else
+    echo "--- Building Darwin AMD64 ---"
+    build_macos_desktop "amd64"
+    echo "--- Building Darwin ARM64 ---"
+    build_macos_desktop "arm64"
+fi
 
 echo "macOS Build Script Complete."
 ls -lh ops/bin
