@@ -16,8 +16,8 @@
     "tsc:compile": "tsc --noEmit",
     "format": "prettier --check '**/*.(md|json)' 'src/**/*.(js|ts|tsx)' '!src/assets/**/*.json' 'platform_specific/**/*.ts'",
     "format:fix": "prettier --loglevel silent --write '**/*.(md|json)' 'src/**/*.(js|ts|tsx)' '!src/assets/**/*.json' 'platform_specific/**/*.ts'",
-    "preview": "vite preview",
-    "prepare": "cd .. && husky frontend/.husky"
+    "preview": "vite preview"
+
   },
   "dependencies": {
     "@getalby/sdk": "^6.0.1",
@@ -107,7 +107,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.3",
     "globals": "^15.4.0",
-    "husky": "^9.0.11",
+
     "lint-staged": "^15.2.5",
     "prettier": "3.6.2",
     "shx": "^0.4.0",
