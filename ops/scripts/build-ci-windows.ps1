@@ -24,6 +24,15 @@ Push-Location "frontend"
 try {
     yarn install
     if ($LASTEXITCODE -ne 0) { throw "yarn install failed" }
+    
+    # DEBUG: Check wailsjs existence
+    Write-Host "--- Debug: Listing wailsjs directory ---"
+    if (Test-Path "wailsjs") {
+        Get-ChildItem -Recurse "wailsjs" | Select-Object FullName
+    } else {
+        Write-Error "wailsjs directory not found!"
+    }
+
     yarn build:http
     if ($LASTEXITCODE -ne 0) { throw "yarn build:http failed" }
 } finally {
