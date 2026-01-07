@@ -5,7 +5,6 @@ import {
   Server,
   Zap
 } from "lucide-react";
-import { nip47 } from "nostr-tools";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -25,6 +24,7 @@ import {
 import { Switch } from "src/components/ui/switch";
 import useSetupStore from "src/state/SetupStore";
 import { request } from "src/utils/request";
+import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 import { SetupLayout } from "./SetupLayout";
 
 interface ServiceOption {
@@ -124,17 +124,7 @@ export function SetupServices() {
     fetchServices();
   }, []); // Run once on mount
 
-  const validateUrl = (url: string, name: string, protocols: string[] = ["https"]): string | null => {
-    if (!url) return `${name} is required.`;
-    
-    // Check if URL starts with one of the allowed protocols
-    const isValidProtocol = protocols.some(protocol => url.startsWith(`${protocol}://`));
-    
-    if (!isValidProtocol) {
-        return `${name} must start with ${protocols.map(p => p + "://").join(" or ")}`;
-    }
-    return null;
-  };
+
 
   const validate = (): boolean => {
       const errors: string[] = [];
@@ -142,19 +132,20 @@ export function SetupServices() {
       // Assuming lokihubServicesURL is always required
 
       if (enableSwap) {
-          const swapErr = validateUrl(swapServiceUrl, "Swap Service URL", ["https"]);
-          if (swapErr) errors.push(swapErr);
+          if (!swapServiceUrl) {
+            errors.push("Swap Service URL is required.");
+          } else {
+            const swapErr = validateHTTPURL(swapServiceUrl, "Swap Service URL");
+            if (swapErr) errors.push(swapErr);
+          }
       }
 
       if (enableMessageboardNwc) {
           if (!messageboardNwcUrl) {
               errors.push("Messageboard URL is required.");
           } else {
-              try {
-                  nip47.parseConnectionString(messageboardNwcUrl);
-              } catch (e) {
-                  errors.push("Invalid Messageboard NWC URL. It must be a valid nostr+walletconnect:// URI.");
-              }
+              const mbErr = validateMessageBoardURL(messageboardNwcUrl);
+              if (mbErr) errors.push(mbErr);
           }
       }
       
@@ -169,7 +160,7 @@ export function SetupServices() {
             errors.push("At least one relay is required");
         }
         for (const relayUrl of relays) {
-          const relayErr = validateUrl(relayUrl, "Nostr Relay URL", ["wss"]);
+          const relayErr = validateWebSocketURL(relayUrl, "Nostr Relay URL");
           if (relayErr) {
             errors.push(relayErr);
             break; // Only show first error
@@ -178,8 +169,12 @@ export function SetupServices() {
       }
 
       
-      const mempoolErr = validateUrl(mempoolApi, "Flokicoin Explorer URL", ["https"]);
-      if (mempoolErr) errors.push(mempoolErr);
+      if (!mempoolApi) {
+        errors.push("Flokicoin Explorer URL is required.");
+      } else {
+        const mempoolErr = validateHTTPURL(mempoolApi, "Flokicoin Explorer URL");
+        if (mempoolErr) errors.push(mempoolErr);
+      }
 
       setValidationErrors(errors);
       return errors.length === 0;

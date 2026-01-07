@@ -48,3 +48,7 @@ run-2:
     WORK_DIR=$(pwd)/data/account-2 \
     PORT=9090 \
     go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'" ./cmd/http
+
+# Run Wails app locally
+run-wails:
+    wails dev -tags wails -ldflags "-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"

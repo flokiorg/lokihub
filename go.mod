@@ -30,7 +30,7 @@ require (
 )
 
 require (
-	github.com/flokiorg/flnd v0.1.11-beta
+	github.com/flokiorg/flnd v0.1.12-beta
 	github.com/lightzapp/lightz-client v1.0.1-alpha
 	github.com/tidwall/gjson v1.18.0
 )

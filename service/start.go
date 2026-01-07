@@ -89,10 +89,18 @@ func (svc *service) startNostr(ctx context.Context) error {
 			default:
 				svc.relayStatuses = nil
 				for _, relayUrl := range svc.cfg.GetRelayUrls() {
-					relay, ok := pool.Relays.Load(relayUrl)
+					normalizedUrl := nostr.NormalizeURL(relayUrl)
+					relay, ok := pool.Relays.Load(normalizedUrl)
+					online := ok && relay != nil && relay.IsConnected()
+
+					// Force reconnection if offline
+					if !online {
+						go pool.EnsureRelay(relayUrl)
+					}
+
 					svc.relayStatuses = append(svc.relayStatuses, RelayStatus{
 						Url:    relayUrl,
-						Online: ok && relay != nil && relay.IsConnected(),
+						Online: online,
 					})
 				}
 				time.Sleep(10 * time.Second)

@@ -335,7 +335,8 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: paymentResponse, Error: ""}
 	}
 
-	switch route {
+	path := strings.Split(route, "?")[0]
+	switch path {
 	case "/api/transfers":
 		transferRequest := &api.TransferRequest{}
 		err := json.Unmarshal([]byte(body), transferRequest)

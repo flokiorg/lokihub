@@ -32,15 +32,49 @@ export const validateUrl = (
  * @param url - NWC URL to validate
  * @returns true if valid, false otherwise (shows toast on error)
  */
-export const validateNwc = (url: string): boolean => {
-  if (!url) return true;
+export const validateWebSocketURL = (
+  url: string,
+  name: string
+): string | null => {
+  if (!url) return null;
+  if (!url.startsWith("wss://") && !url.startsWith("ws://")) {
+    return `${name} must start with wss:// or ws://`;
+  }
+  return null;
+};
+
+export const validateHTTPURL = (
+  url: string,
+  name: string
+): string | null => {
+  if (!url) return null;
+  if (!url.startsWith("https://") && !url.startsWith("http://")) {
+    return `${name} must start with https:// or http://`;
+  }
+  return null;
+};
+
+export const validateMessageBoardURL = (url: string): string | null => {
+  if (!url) return null;
+  if (!url.startsWith("nostr+walletconnect://")) {
+    return "Messageboard NWC URL must start with nostr+walletconnect://";
+  }
   try {
     nip47.parseConnectionString(url);
-    return true;
+    return null;
   } catch (e) {
-    toast.error(
-      "Invalid Messageboard NWC URL. Must be valid nostr+walletconnect://"
-    );
+    return "Invalid Messageboard NWC URL. Must be valid nostr+walletconnect://";
+  }
+};
+
+/**
+ * @deprecated Use validateMessageBoardURL instead
+ */
+export const validateNwc = (url: string): boolean => {
+  const error = validateMessageBoardURL(url);
+  if (error) {
+    toast.error(error);
     return false;
   }
+  return true;
 };

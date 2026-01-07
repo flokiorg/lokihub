@@ -37,7 +37,7 @@ import {
 import { useInfo } from "src/hooks/useInfo";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
-import { validateNwc, validateUrl } from "src/utils/validation";
+import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 
 function Settings() {
   const { theme, darkMode, setTheme, setDarkMode } = useTheme();
@@ -218,23 +218,26 @@ function Settings() {
              errors.push("At least one relay is required");
         }
         for (const relayUrl of relays) {
-          if (!validateUrl(relayUrl, "Nostr Relay URL", ["wss"])) {
-            errors.push(`Invalid Relay URL: ${relayUrl}`);
+          const relayErr = validateWebSocketURL(relayUrl, "Nostr Relay URL");
+          if (relayErr) {
+            errors.push(relayErr);
           }
         }
       }
 
       // Validate mempool URL
-      if (mempoolApi && !validateUrl(mempoolApi, "Flokicoin Explorer URL", ["https"])) {
-        errors.push("Invalid Flokicoin Explorer URL");
+      if (mempoolApi) {
+        const mempoolErr = validateHTTPURL(mempoolApi, "Flokicoin Explorer URL");
+        if (mempoolErr) errors.push(mempoolErr);
       }
 
       // Validate swap URL
       if (enableSwap) {
           if (!swapServiceUrl) {
               errors.push("Swap Service URL is required when enabled");
-          } else if (!validateUrl(swapServiceUrl, "Swap Service URL", ["https"])) {
-             errors.push("Invalid Swap Service URL");
+          } else {
+             const swapErr = validateHTTPURL(swapServiceUrl, "Swap Service URL");
+             if (swapErr) errors.push(swapErr);
           }
       }
 
@@ -242,8 +245,9 @@ function Settings() {
       if (enableMessageboardNwc) {
           if (!messageboardNwcUrl) {
               errors.push("Messageboard NWC URL is required when enabled");
-          } else if (!validateNwc(messageboardNwcUrl)) {
-              errors.push("Invalid Messageboard NWC URL");
+          } else {
+              const mbErr = validateMessageBoardURL(messageboardNwcUrl);
+              if (mbErr) errors.push(mbErr);
           }
       }
 

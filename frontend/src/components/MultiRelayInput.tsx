@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ServiceOption } from "src/components/ServiceCardSelector";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
+import { validateWebSocketURL } from "src/utils/validation";
 // Removed Select components as they are no longer used
 // import {
 //     Select,
@@ -40,8 +41,9 @@ export function MultiRelayInput({
   const customRelays = selectedRelays.filter(url => !communityRelayUrls.includes(url));
 
   const validateRelay = (url: string): boolean => {
-    if (!url.startsWith("wss://")) {
-      setError("Relay URL must start with wss://");
+    const validationError = validateWebSocketURL(url, "Relay URL");
+    if (validationError) {
+      setError(validationError);
       return false;
     }
     if (selectedRelays.includes(url)) { // Changed from 'relays' to 'selectedRelays'

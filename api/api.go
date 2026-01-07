@@ -1241,8 +1241,8 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.SwapServiceUrl != "" {
-		if !strings.HasPrefix(updateSettingsRequest.SwapServiceUrl, "https://") {
-			return fmt.Errorf("Swap Service URL must start with https://")
+		if err := utils.ValidateHTTPURL(updateSettingsRequest.SwapServiceUrl); err != nil {
+			return fmt.Errorf("invalid Swap Service URL: %w", err)
 		}
 		err := api.cfg.SetSwapServiceURL(updateSettingsRequest.SwapServiceUrl)
 		if err != nil {
@@ -1254,8 +1254,8 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.Relay != "" {
-		if !strings.HasPrefix(updateSettingsRequest.Relay, "wss://") {
-			return fmt.Errorf("Relay URL must start with wss://")
+		if err := utils.ValidateWebSocketURL(updateSettingsRequest.Relay); err != nil {
+			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		err := api.cfg.SetRelay(updateSettingsRequest.Relay)
 		if err != nil {
@@ -1267,8 +1267,8 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.MempoolApi != "" {
-		if !strings.HasPrefix(updateSettingsRequest.MempoolApi, "https://") {
-			return fmt.Errorf("Flokicoin Explorer URL must start with https://")
+		if err := utils.ValidateHTTPURL(updateSettingsRequest.MempoolApi); err != nil {
+			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		err := api.cfg.SetMempoolApi(updateSettingsRequest.MempoolApi)
 		if err != nil {
@@ -1277,8 +1277,8 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	if updateSettingsRequest.MessageboardNwcUrl != "" {
-		if !strings.HasPrefix(updateSettingsRequest.MessageboardNwcUrl, "nostr+walletconnect://") {
-			return fmt.Errorf("Messageboard NWC URL must start with nostr+walletconnect://")
+		if err := utils.ValidateMessageBoardURL(updateSettingsRequest.MessageboardNwcUrl); err != nil {
+			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
 		}
 		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
 		if err != nil {
@@ -1888,16 +1888,16 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.LokihubServicesURL != "" {
-		if !strings.HasPrefix(req.LokihubServicesURL, "https://") {
-			return errors.New("Hub Services URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
+			return fmt.Errorf("invalid Hub Services URL: %w", err)
 		}
 		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
 			return err
 		}
 	}
 	if req.SwapServiceUrl != "" {
-		if !strings.HasPrefix(req.SwapServiceUrl, "https://") {
-			return errors.New("Swap Service URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.SwapServiceUrl); err != nil {
+			return fmt.Errorf("invalid Swap Service URL: %w", err)
 		}
 		if err := api.cfg.SetSwapServiceURL(req.SwapServiceUrl); err != nil {
 			return err
@@ -1905,8 +1905,8 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.Relay != "" {
-		if !strings.HasPrefix(req.Relay, "wss://") {
-			return errors.New("Relay URL must start with wss://")
+		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
 			return err
@@ -1914,8 +1914,8 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.MessageboardNwcUrl != "" {
-		if !strings.HasPrefix(req.MessageboardNwcUrl, "nostr+walletconnect://") {
-			return errors.New("Messageboard NWC URL must start with nostr+walletconnect://")
+		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
+			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
 		}
 		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
 			return err
@@ -1923,8 +1923,8 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	if req.MempoolApi != "" {
-		if !strings.HasPrefix(req.MempoolApi, "https://") {
-			return errors.New("Flokicoin Explorer URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
 			return err
@@ -1981,16 +1981,16 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.LokihubServicesURL != "" {
-		if !strings.HasPrefix(req.LokihubServicesURL, "https://") {
-			return errors.New("Hub Services URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
+			return fmt.Errorf("invalid Hub Services URL: %w", err)
 		}
 		if err := api.cfg.SetLokihubServicesURL(req.LokihubServicesURL); err != nil {
 			return err
 		}
 	}
 	if req.SwapServiceUrl != "" {
-		if !strings.HasPrefix(req.SwapServiceUrl, "https://") {
-			return errors.New("Swap Service URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.SwapServiceUrl); err != nil {
+			return fmt.Errorf("invalid Swap Service URL: %w", err)
 		}
 		if err := api.cfg.SetSwapServiceURL(req.SwapServiceUrl); err != nil {
 			return err
@@ -1998,8 +1998,8 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.Relay != "" {
-		if !strings.HasPrefix(req.Relay, "wss://") {
-			return errors.New("Relay URL must start with wss://")
+		if err := utils.ValidateWebSocketURL(req.Relay); err != nil {
+			return fmt.Errorf("invalid Relay URL: %w", err)
 		}
 		if err := api.cfg.SetRelay(req.Relay); err != nil {
 			return err
@@ -2007,8 +2007,8 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.MessageboardNwcUrl != "" {
-		if !strings.HasPrefix(req.MessageboardNwcUrl, "nostr+walletconnect://") {
-			return errors.New("Messageboard NWC URL must start with nostr+walletconnect://")
+		if err := utils.ValidateMessageBoardURL(req.MessageboardNwcUrl); err != nil {
+			return fmt.Errorf("invalid Messageboard NWC URL: %w", err)
 		}
 		if err := api.cfg.SetMessageboardNwcUrl(req.MessageboardNwcUrl); err != nil {
 			return err
@@ -2016,8 +2016,8 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	if req.MempoolApi != "" {
-		if !strings.HasPrefix(req.MempoolApi, "https://") {
-			return errors.New("Flokicoin Explorer URL must start with https://")
+		if err := utils.ValidateHTTPURL(req.MempoolApi); err != nil {
+			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
 			return err

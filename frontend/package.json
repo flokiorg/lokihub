@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:http": "yarn prepare:http && vite --force",
-    "dev:wails": "yarn prepare:wails && vite",
+    "dev:wails": "yarn prepare:wails && vite --force",
     "build:http": "yarn prepare:http && tsc && vite build",
     "build:wails": "yarn prepare:wails && tsc && vite build",
     "prepare:wails": "shx cp ./platform_specific/wails/src/utils/*.ts src/utils/",

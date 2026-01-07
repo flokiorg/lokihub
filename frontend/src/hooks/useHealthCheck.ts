@@ -4,7 +4,7 @@ import { HealthResponse } from "src/types";
 import { swrFetcher } from "src/utils/swr";
 
 const pollConfiguration: SWRConfiguration = {
-  refreshInterval: 5 * 60 * 1000, // 5 minutes
+  refreshInterval: 10000, // 10 seconds
 };
 
 export function useHealthCheck(poll = true) {

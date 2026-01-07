@@ -77,11 +77,11 @@ export default defineConfig(({ command }) => ({
     port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : undefined,
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL || "http://localhost:8080",
+        target: process.env.VITE_API_URL || "http://127.0.0.1:8080",
         secure: false,
       },
       "/logout": {
-        target: process.env.VITE_API_URL || "http://localhost:8080",
+        target: process.env.VITE_API_URL || "http://127.0.0.1:8080",
         secure: false,
       },
     },
@@ -123,9 +123,11 @@ const insertDevCSPPlugin: Plugin = {
         <meta
           http-equiv="Content-Security-Policy"
           content="
-            default-src 'self';
-            script-src 'self' ${DEVELOPMENT_NONCE};
-            connect-src 'self' wss:;
+            default-src 'self' 'unsafe-inline';
+            script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEVELOPMENT_NONCE};
+            connect-src 'self' wss: http://localhost:* ws://localhost:*;
+            style-src 'self' 'unsafe-inline';
+            img-src 'self' data: blob:;
           "
         />
         `

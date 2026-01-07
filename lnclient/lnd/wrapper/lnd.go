@@ -57,8 +57,16 @@ func NewLNDclient(lndOptions LNDoptions) (result *LNDWrapper, err error) {
 	} else {
 		creds = credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
 	}
+	const (
+		maxGrpcRecvMsgSize = 50 * 1024 * 1024
+		maxGrpcSendMsgSize = 20 * 1024 * 1024
+	)
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxGrpcRecvMsgSize),
+			grpc.MaxCallSendMsgSize(maxGrpcSendMsgSize),
+		),
 	}
 
 	var macaroonData []byte
