@@ -1,6 +1,6 @@
 module github.com/flokiorg/lokihub
 
-go 1.24.9
+go 1.24.0
 
 require (
 	github.com/adrg/xdg v0.5.3
