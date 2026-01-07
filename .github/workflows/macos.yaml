@@ -4,9 +4,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-macos-amd:
-    name: Build macOS Desktop (AMD64)
-    runs-on: [self-hosted, macos-amd]
+  build-macos:
+    name: Build macOS Desktop (${{ matrix.arch }})
+    runs-on: [self-hosted, "${{ matrix.runner }}"]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: macos-amd
+          - arch: arm64
+            runner: macos-arm
     permissions:
       contents: read
     steps:
@@ -34,7 +42,6 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
-
       - name: Read Version
         id: version
         shell: bash
@@ -53,75 +60,14 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x ops/scripts/*.sh
 
-      - name: Run macOS Build Script (AMD64)
-        run: ./ops/scripts/build-ci-macos.sh amd64
+      - name: Run macOS Build Script (${{ matrix.arch }})
+        run: ./ops/scripts/build-ci-macos.sh ${{ matrix.arch }}
         env:
           TAG: ${{ env.TAG }}
 
-      - name: Upload Artifacts (macOS AMD64)
+      - name: Upload Artifacts (macOS ${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-macos-amd64-${{ env.TAG }}
-          path: ops/bin/*
-          if-no-files-found: error
-
-  build-macos-arm:
-    name: Build macOS Desktop (ARM64)
-    runs-on: [self-hosted, macOS]
-    permissions:
-      contents: read
-    steps:
-      - name: Pre-Checkout Cleanup
-        run: rm -rf * || true
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Yarn
-        run: npm install -g yarn
-
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
-
-
-      - name: Read Version
-        id: version
-        shell: bash
-        run: |
-          if [ ! -f "VERSION" ]; then
-            echo "Error: VERSION file not found"
-            exit 1
-          fi
-          TAG=$(cat VERSION | tr -d '[:space:]')
-          if [ -z "$TAG" ]; then
-            echo "Error: VERSION file is empty"
-            exit 1
-          fi
-          echo "TAG=$TAG" >> $GITHUB_ENV
-
-      - name: Make Scripts Executable
-        run: chmod +x ops/scripts/*.sh
-
-      - name: Run macOS Build Script (ARM64)
-        run: ./ops/scripts/build-ci-macos.sh arm64
-        env:
-          TAG: ${{ env.TAG }}
-
-      - name: Upload Artifacts (macOS ARM64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts-macos-arm64-${{ env.TAG }}
+          name: artifacts-macos-${{ matrix.arch }}-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error
