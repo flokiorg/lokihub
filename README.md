@@ -78,7 +78,7 @@ _If you get a blank screen, try running in your normal terminal (outside of vsco
 ### Run dockerfile locally (HTTP mode)
 
     $ docker build . -t nwc-local --progress=plain
-    $ docker run -v $(pwd)/.data/docker:/data -e WORK_DIR='/data' -p 8080:8080 nwc-local
+    $ docker run -v $(pwd)/.data/docker:/data -e WORK_DIR='/data' -p 1610:1610 nwc-local
 
 ### Testing
 

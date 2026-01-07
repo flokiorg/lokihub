@@ -19,7 +19,7 @@ type AppConfig struct {
 	LNDCertFile     string `envconfig:"LND_CERT_FILE"`
 	LNDMacaroonFile string `envconfig:"LND_MACAROON_FILE"`
 	Workdir         string `envconfig:"WORK_DIR"`
-	Port            string `envconfig:"PORT" default:"8080"`
+	Port            string `envconfig:"PORT" default:"1610"`
 	DatabaseUri     string `envconfig:"DATABASE_URI" default:"nwc.db"`
 	LogLevel        string `envconfig:"LOG_LEVEL" default:"4"`
 	LogToFile       bool   `envconfig:"LOG_TO_FILE" default:"true"`

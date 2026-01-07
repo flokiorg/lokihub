@@ -22,7 +22,7 @@ var appIcon []byte
 
 func main() {
 	// Get a port lock on a rare port to prevent the app running twice
-	listener, err := net.Listen("tcp", "0.0.0.0:55521")
+	listener, err := net.Listen("tcp", "0.0.0.0:25521")
 	if err != nil {
 		log.Println("Another instance of Lokihub is already running.")
 		return

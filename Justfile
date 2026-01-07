@@ -34,13 +34,13 @@ build-front:
 # Run HTTP server locally (Account 1)
 run-1:
     WORK_DIR=$(pwd)/data/account-1 \
-    PORT=8080 \
+    PORT=1610 \
     go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'" ./cmd/http
 
 # Debug HTTP server locally (Account 1) with Delve
 debug-1:
     WORK_DIR=$(pwd)/data/account-1 \
-    PORT=8080 \
+    PORT=1610 \
     dlv debug ./cmd/http --headless --listen=:2345 --api-version=2 --accept-multiclient -- -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"
 
 # Run HTTP server locally (Account 2)

@@ -77,11 +77,11 @@ export default defineConfig(({ command }) => ({
     port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : undefined,
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL || "http://127.0.0.1:8080",
+        target: process.env.VITE_API_URL || "http://127.0.0.1:1610",
         secure: false,
       },
       "/logout": {
-        target: process.env.VITE_API_URL || "http://127.0.0.1:8080",
+        target: process.env.VITE_API_URL || "http://127.0.0.1:1610",
         secure: false,
       },
     },
