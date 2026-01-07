@@ -27,7 +27,7 @@
       "react": ["./node_modules/@types/react"],
       "@lightz/lightning-tools": ["../../lightning-tools/dist/types/index.d.ts"],
       "@lightz/lightning-tools/*": ["../../lightning-tools/dist/types/*.d.ts"],
-      "wailsjs/*": ["./wailsjs/*", "wailsjs/*"]
+      "wailsjs/*": ["./wailsjs/*", "wailsjs/*", "../wailsjs/*"]
     }
   },
   "include": ["src", "types", "wailsjs"],
