@@ -35,7 +35,10 @@ RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz
 
-ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+
+RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 
 # Install basic utils (AMD64 default) & Multi-arch setup
 RUN dpkg --add-architecture arm64 && \
