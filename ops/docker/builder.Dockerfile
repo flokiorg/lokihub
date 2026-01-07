@@ -16,7 +16,26 @@ RUN dpkg --add-architecture arm64 && apt-get update && apt-get install -y \
 # -----------------------------------------------------------------------------
 # Stage 2: Final Builder
 # -----------------------------------------------------------------------------
-FROM golang:1.24.9-bullseye
+# -----------------------------------------------------------------------------
+# Stage 2: Final Builder
+# -----------------------------------------------------------------------------
+FROM debian:bullseye
+
+ARG GO_VERSION=1.24.9
+
+# Install Go manually
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Install basic utils (AMD64 default) & Multi-arch setup
 RUN dpkg --add-architecture arm64 && \
