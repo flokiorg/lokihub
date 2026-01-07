@@ -30,6 +30,6 @@
       "wailsjs/*": ["./wailsjs/*"]
     }
   },
-  "include": ["src", "types", "wailsjs"],
+  "include": ["src", "types", "wailsjs", "platform_specific"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
