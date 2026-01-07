@@ -29,8 +29,7 @@ try {
     Write-Host "--- Debug: Listing wailsjs directory ---"
     if (Test-Path "wailsjs") {
         Get-ChildItem -Recurse "wailsjs" | Select-Object FullName
-    } else {
-        Write-Error "wailsjs directory not found!"
+        Write-Warning "wailsjs directory not found (expected if fresh checkout)"
     }
 
     yarn build:http
