@@ -16,7 +16,7 @@ RUN dpkg --add-architecture arm64 && apt-get update && apt-get install -y \
 # -----------------------------------------------------------------------------
 # Stage 2: Final Builder
 # -----------------------------------------------------------------------------
-FROM golang:1.22-bullseye
+FROM golang:1.24-bullseye
 
 # Install basic utils (AMD64 default) & Multi-arch setup
 RUN dpkg --add-architecture arm64 && \
