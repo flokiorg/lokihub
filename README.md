@@ -1,4 +1,4 @@
-<img alt="Lokihub Logo" src="./frontend/public/loki-light-head.svg" width="200" align="right" />
+<img alt="Lokihub Logo" src="./frontend/src/assets/loki-light-head.svg" width="200" align="right" />
 
 
 
