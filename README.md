@@ -6,8 +6,8 @@ Lokihub allows you to control your Flokicoin Lightning node or wallet from any o
 
 The application can run in two modes:
 
-- Desktop (Wails app): Mac (arm64), Windows (amd64), Linux (amd64)
-- HTTP (Web app): Docker, Linux (amd64), Mac (arm64)
+- Desktop (Wails app): Mac, Windows, Linux
+- HTTP (Web app): Docker, Linux, Mac, Windows
 
 Ideally the app runs 24/7 (on a node, VPS or always-online desktop/laptop machine) so it can be connected to a lightning address and receive online payments.
 
