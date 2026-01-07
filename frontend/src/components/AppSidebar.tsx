@@ -1,13 +1,13 @@
 import {
-    BoxIcon,
-    CircleHelp,
-    HomeIcon,
-    LogOut,
-    LucideIcon,
-    Plug2Icon,
-    Settings,
-    SquareStack,
-    WalletIcon,
+  BoxIcon,
+  CircleHelp,
+  HomeIcon,
+  LogOut,
+  LucideIcon,
+  Plug2Icon,
+  Settings,
+  SquareStack,
+  WalletIcon,
 } from "lucide-react";
 import React from "react";
 
@@ -18,21 +18,22 @@ import { LokihubLogo } from "src/components/icons/LokihubLogo";
 import SidebarHint from "src/components/SidebarHint";
 
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    useSidebar
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar
 } from "src/components/ui/sidebar";
 
 import { useHealthCheck } from "src/hooks/useHealthCheck";
 import { useInfo } from "src/hooks/useInfo";
 import { deleteAuthToken } from "src/lib/auth";
 import { isHttpMode } from "src/utils/isHttpMode";
+import { request } from "src/utils/request";
 
 export function AppSidebar() {
   const { mutate: refetchInfo } = useInfo();
@@ -45,11 +46,20 @@ export function AppSidebar() {
 
   const logout = React.useCallback(async () => {
     deleteAuthToken();
-    await refetchInfo();
-
     if (_isHttpMode) {
       window.location.href = "/logout";
     } else {
+      try {
+        await request("/api/stop", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      } catch (error) {
+        console.error("Failed to stop node", error);
+      }
+      await refetchInfo();
       navigate("/", { replace: true });
     }
   }, [_isHttpMode, navigate, refetchInfo]);

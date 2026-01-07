@@ -24,11 +24,17 @@ export default function TwoColumnFullScreenLayout() {
         </div>
         
         <div className="flex flex-col relative z-10 text-left">
-          <h1 className="text-4xl font-black text-white tracking-tight mb-6 drop-shadow-lg">
+          <h1 
+            className="text-4xl font-black text-white tracking-tight mb-6"
+            style={{ textShadow: "0 4px 12px rgba(0,0,0,0.6)" }}
+          >
             Your Gateway to the<br /> Lightning Network
           </h1>
-          <p className="text-white/90 text-xl font-medium leading-relaxed max-w-lg drop-shadow-md">
-            Manage your channels, connect apps, and experience instant operations with the power of Lokichain.
+          <p 
+            className="text-white/90 text-xl font-medium leading-relaxed max-w-lg"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}
+          >
+            Manage your channels, connect apps, and make instant payments.
           </p>
         </div>
       </div>

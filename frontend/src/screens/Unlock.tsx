@@ -48,8 +48,10 @@ export default function Unlock() {
       if (authTokenResponse) {
         saveAuthToken(authTokenResponse.token);
       }
-      await refetchInfo();
-      navigate("/");
+      const newInfo = await refetchInfo();
+      if (newInfo && newInfo.unlocked) {
+        navigate("/", { replace: true });
+      }
     } catch (error) {
       handleRequestError("Failed to connect", error);
     } finally {

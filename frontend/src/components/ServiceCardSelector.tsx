@@ -83,13 +83,22 @@ export function ServiceCardSelector({
             key={option.value}
             onClick={() => handleSelectOption(option.value)}
             className={cn(
-              "relative group flex flex-col gap-2 p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full",
+              "relative group flex flex-col gap-2 p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full overflow-hidden",
               isSelected
-                ? "border-primary bg-primary/5 ring-1 ring-primary shadow-sm"
-                : "border-border hover:border-primary/50 hover:bg-muted/30 hover:shadow-sm",
+                ? "border-primary ring-1 ring-primary shadow-sm"
+                : "border-border hover:border-primary/50 hover:shadow-sm",
               disabled && "opacity-50 pointer-events-none"
             )}
           >
+            {/* Background Layer for older browser compatibility */}
+            <div 
+              className={cn(
+                "absolute inset-0 transition-opacity duration-200 pointer-events-none",
+                isSelected ? "bg-primary opacity-5" : "bg-muted opacity-0 group-hover:opacity-30"
+              )} 
+            />
+
+            <div className="relative z-10 flex flex-col gap-2 h-full">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
                   <div className={cn("p-1.5 rounded-md shrink-0", isSelected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground group-hover:text-foreground")}>
@@ -112,6 +121,7 @@ export function ServiceCardSelector({
                     {getHostname(option.value)}
                  </p>
             </div>
+            </div>
           </div>
         );
       })}
@@ -120,13 +130,22 @@ export function ServiceCardSelector({
       <div
         onClick={handleSelectCustom}
         className={cn(
-          "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px]",
+          "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group",
           isCustom
-            ? "border-yellow-500/50 bg-yellow-500/5 ring-1 ring-yellow-500/20 shadow-sm"
-            : "border-border hover:border-primary/50 hover:bg-muted/30 hover:shadow-sm",
+            ? "border-yellow-500 ring-1 ring-yellow-500/20 shadow-sm"
+            : "border-border hover:border-primary/50 hover:shadow-sm",
           disabled && "opacity-50 pointer-events-none"
         )}
       >
+        {/* Background Layer */}
+        <div 
+            className={cn(
+            "absolute inset-0 transition-opacity duration-200 pointer-events-none",
+            isCustom ? "bg-yellow-500 opacity-5" : "bg-muted opacity-0 group-hover:opacity-30"
+            )} 
+        />
+        
+        <div className="relative z-10 flex flex-col h-full">
          {!isCustom ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-2">
                 <div className="p-2 rounded-full bg-muted/50 text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-colors">
@@ -166,6 +185,7 @@ export function ServiceCardSelector({
                 </div>
             </>
          )}
+        </div>
       </div>
 
     </div>

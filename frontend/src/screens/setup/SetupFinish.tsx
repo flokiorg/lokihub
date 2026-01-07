@@ -12,7 +12,7 @@ import { SetupLayout } from "./SetupLayout";
 let lastStartupErrorTime: string;
 export function SetupFinish() {
   const navigate = useNavigate();
-  const { data: info } = useInfo(true); // poll the info endpoint to auto-redirect when app is running
+  const { data: info, mutate: refetchInfo } = useInfo(true); // poll the info endpoint to auto-redirect when app is running
 
   const [loading, setLoading] = React.useState(false);
   // Removed connectionError state in favor of direct navigation on error
@@ -93,10 +93,11 @@ export function SetupFinish() {
           } 
         });
       } else {
+        await refetchInfo();
         navigate("/setup/security", { replace: true });
       }
     })();
-  }, [navigate, info]);
+  }, [navigate, info, refetchInfo]);
 
 
 
