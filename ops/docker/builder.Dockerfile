@@ -1,7 +1,10 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Generate ARM64 Sysroot
 # -----------------------------------------------------------------------------
-FROM debian:bookworm AS sysroot-gen
+# -----------------------------------------------------------------------------
+# Stage 1: Generate ARM64 Sysroot
+# -----------------------------------------------------------------------------
+FROM debian:bullseye AS sysroot-gen
 
 RUN dpkg --add-architecture arm64 && apt-get update && apt-get install -y \
     build-essential \
@@ -13,7 +16,7 @@ RUN dpkg --add-architecture arm64 && apt-get update && apt-get install -y \
 # -----------------------------------------------------------------------------
 # Stage 2: Final Builder
 # -----------------------------------------------------------------------------
-FROM golang:1.24-bookworm
+FROM golang:1.22-bullseye
 
 # Install basic utils (AMD64 default) & Multi-arch setup
 RUN dpkg --add-architecture arm64 && \

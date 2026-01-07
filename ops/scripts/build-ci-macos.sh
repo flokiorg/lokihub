@@ -83,6 +83,11 @@ build_macos_desktop() {
     
     local BASENAME="lokihub-desktop-darwin-${ARCH}"
     local ARCHIVE_NAME="lokihub-desktop-darwin-${ARCH}-${TAG}"
+
+    # Special case for AMD64: Treat it as the main/universal binary name (remove arch suffix)
+    if [ "$ARCH" == "amd64" ]; then
+        ARCHIVE_NAME="lokihub-desktop-darwin-${TAG}"
+    fi
     
     echo "Building macOS Desktop for $ARCH..."
     
@@ -170,8 +175,8 @@ if [[ -n "$1" ]]; then
 else
     echo "--- Building Darwin AMD64 ---"
     build_macos_desktop "amd64"
-    echo "--- Building Darwin ARM64 ---"
-    build_macos_desktop "arm64"
+    # echo "--- Building Darwin ARM64 ---"
+    # build_macos_desktop "arm64"
 fi
 
 echo "macOS Build Script Complete."

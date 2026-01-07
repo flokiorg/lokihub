@@ -13,7 +13,7 @@ export default function TwoColumnFullScreenLayout() {
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
         {/* Modern clean gradient overlay for readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.2), transparent)" }} />
         
         <div className="flex-1 w-full h-full flex flex-col relative z-10 pointer-events-none">
           <div className="flex flex-row justify-end items-center mt-5">

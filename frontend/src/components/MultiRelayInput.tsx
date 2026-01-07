@@ -109,17 +109,26 @@ export function MultiRelayInput({
                   key={index}
                   onClick={() => toggleCommunityRelay(option.value)}
                   className={`
-                    relative flex items-start justify-between p-4 rounded-xl border transition-all cursor-pointer select-none
+                    relative group flex items-start justify-between p-4 rounded-xl border transition-all cursor-pointer select-none overflow-hidden
                     ${isSelected 
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary' 
-                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                      ? 'border-primary ring-1 ring-primary' 
+                      : 'border-border hover:border-primary'
                     }
                   `}
                 >
-                  <div className="flex gap-3">
+                  {/* Background Layer for older browser compatibility */}
+                  <div 
+                    className={`
+                      absolute inset-0 transition-opacity duration-200 pointer-events-none
+                      ${isSelected ? "bg-primary opacity-5" : "bg-muted opacity-0 group-hover:opacity-50"}
+                    `}
+                  />
+
+                  <div className="flex gap-3 relative z-10">
                     <div className="flex-shrink-0 mt-0.5">
-                       <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary/20' : 'bg-muted'}`}>
-                          <Zap className="w-4 h-4 text-primary" />
+                       <div className="relative p-2 rounded-lg overflow-hidden">
+                          <div className={`absolute inset-0 ${isSelected ? 'bg-primary opacity-20' : 'bg-muted opacity-100'}`} />
+                          <Zap className="w-4 h-4 text-primary relative z-10" />
                        </div>
                     </div>
                     <div className="space-y-1 text-left">
@@ -127,12 +136,12 @@ export function MultiRelayInput({
                        {option.description && (
                           <div className="text-sm text-muted-foreground">{option.description}</div>
                        )}
-                       <div className="text-xs font-mono text-muted-foreground/80">{option.value}</div>
+                       <div className="text-xs font-mono text-muted-foreground opacity-80">{option.value}</div>
                     </div>
                   </div>
                   
                   {isSelected && (
-                    <div className="flex-shrink-0 text-primary">
+                    <div className="flex-shrink-0 text-primary relative z-10">
                       <div className="bg-primary text-primary-foreground rounded-full p-0.5">
                         <Check className="w-3 h-3" />
                       </div>

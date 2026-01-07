@@ -86,7 +86,7 @@ export function ServiceCardSelector({
               "relative group flex flex-col gap-2 p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full overflow-hidden",
               isSelected
                 ? "border-primary ring-1 ring-primary shadow-sm"
-                : "border-border hover:border-primary/50 hover:shadow-sm",
+                : "border-border hover:border-primary hover:shadow-sm",
               disabled && "opacity-50 pointer-events-none"
             )}
           >
@@ -101,8 +101,11 @@ export function ServiceCardSelector({
             <div className="relative z-10 flex flex-col gap-2 h-full">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                  <div className={cn("p-1.5 rounded-md shrink-0", isSelected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground group-hover:text-foreground")}>
-                      {option.recommended ? <ShieldCheck className="w-4 h-4"/> : <Globe className="w-4 h-4" />}
+                  <div className={cn("relative p-1.5 rounded-md shrink-0 overflow-hidden", !isSelected && "bg-muted text-muted-foreground group-hover:text-foreground")}>
+                      {isSelected && <div className="absolute inset-0 bg-primary opacity-10" />}
+                      <div className={cn("relative z-10", isSelected && "text-primary")}>
+                        {option.recommended ? <ShieldCheck className="w-4 h-4"/> : <Globe className="w-4 h-4" />}
+                      </div>
                   </div>
                   <span className="font-semibold text-sm leading-tight">{option.name}</span>
               </div>
@@ -117,7 +120,7 @@ export function ServiceCardSelector({
                 {option.description && (
                      <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">{option.description}</p>
                 )}
-                 <p className="text-[10px] text-muted-foreground/50 font-mono truncate">
+                 <p className="text-[10px] text-muted-foreground opacity-50 font-mono truncate">
                     {getHostname(option.value)}
                  </p>
             </div>
@@ -132,8 +135,8 @@ export function ServiceCardSelector({
         className={cn(
           "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group",
           isCustom
-            ? "border-yellow-500 ring-1 ring-yellow-500/20 shadow-sm"
-            : "border-border hover:border-primary/50 hover:shadow-sm",
+            ? "border-yellow-500 ring-1 ring-yellow-500 shadow-sm"
+            : "border-border hover:border-primary hover:shadow-sm",
           disabled && "opacity-50 pointer-events-none"
         )}
       >
@@ -148,8 +151,9 @@ export function ServiceCardSelector({
         <div className="relative z-10 flex flex-col h-full">
          {!isCustom ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-2">
-                <div className="p-2 rounded-full bg-muted/50 text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-colors">
-                    <PenLine className="w-5 h-5" />
+                <div className="relative p-2 rounded-full overflow-hidden">
+                    <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-all" />
+                    <PenLine className="relative z-10 w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
                 <div className="space-y-0.5">
                     <span className="font-medium text-sm block">Custom Service</span>
@@ -160,8 +164,11 @@ export function ServiceCardSelector({
             <>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                         <div className="p-1.5 rounded-md bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                             <Server className="w-4 h-4" />
+                         <div className="relative p-1.5 rounded-md overflow-hidden">
+                             <div className="absolute inset-0 bg-yellow-500 opacity-10" />
+                             <div className="relative z-10 text-yellow-600 dark:text-yellow-400">
+                                <Server className="w-4 h-4" />
+                             </div>
                          </div>
                          <span className="font-semibold text-sm">Custom URL</span>
                     </div>
@@ -178,7 +185,7 @@ export function ServiceCardSelector({
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={placeholder || "https://example.com"}
-                        className="h-8 text-xs font-mono bg-background/50 border-yellow-500/20 focus-visible:ring-yellow-500/30 px-2"
+                        className="h-8 text-xs font-mono bg-background border-yellow-500 focus-visible:ring-yellow-500 px-2"
                         onClick={(e) => e.stopPropagation()} 
                          onBlur={onBlur}
                     />
