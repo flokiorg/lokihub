@@ -111,7 +111,7 @@ build_macos_desktop() {
     CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
     wails build -platform "darwin/arm64" -tags wails -trimpath \
             -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
-            -o "${BASENAME}-arm64" -clean
+            -o "${BASENAME}-arm64"
             
     # Rename again for ARM64
     if [ -d "build/bin/Lokihub.app" ]; then
