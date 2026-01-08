@@ -101,12 +101,25 @@ build_macos_desktop() {
     wails build -platform "darwin/amd64" -tags wails -trimpath \
             -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
             -o "${BASENAME}-amd64" -clean
+    
+    # Wails might output "Lokihub.app" instead of the target name
+    if [ -d "build/bin/Lokihub.app" ]; then
+        mv "build/bin/Lokihub.app" "build/bin/${BASENAME}-amd64.app"
+    fi
 
     echo "Building Desktop ARM64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
     wails build -platform "darwin/arm64" -tags wails -trimpath \
             -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
             -o "${BASENAME}-arm64" -clean
+            
+    # Rename again for ARM64
+    if [ -d "build/bin/Lokihub.app" ]; then
+        mv "build/bin/Lokihub.app" "build/bin/${BASENAME}-arm64.app"
+    fi
+            
+    echo "Debugging: Contents of build/bin:"
+    ls -R build/bin
             
     # Lipo the binaries inside the app bundles? No, Wails produces a .app.
     # We need to construct a Universal .app from the two slices.
