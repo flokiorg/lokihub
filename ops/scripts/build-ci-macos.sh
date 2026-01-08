@@ -44,6 +44,10 @@ cd ..
 # 2. Build HTTP Server (Universal)
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# 2. Build HTTP Server (Universal)
+# -----------------------------------------------------------------------------
+
 build_http() {
     local OUTPUT_NAME="lokihub-http-macos"
     local TARGET_BINARY_NAME="lokihub"
@@ -51,14 +55,18 @@ build_http() {
     
     echo "Building HTTP Server (Universal)..."
     
-    # Go doesn't support 'universal' GOARCH directly in one command easily without toolchain support or lipo.
-    # However, for server, we might still want separate or universal?
-    # User said "clean the ci from arm or amd". Universal is best for single artifact.
-    # We will build both and lipo them.
+    # Force CGO enabled and set CC for cross-compilation
+    echo "Building AMD64 slice..."
+    CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
+        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" \
+        -o "ops/bin/lokihub-amd64" ./cmd/http
+
+    echo "Building ARM64 slice..."
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
+        go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" \
+        -o "ops/bin/lokihub-arm64" ./cmd/http
     
-    GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" -o "ops/bin/lokihub-amd64" ./cmd/http
-    GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" -o "ops/bin/lokihub-arm64" ./cmd/http
-    
+    echo "Creating Universal Binary..."
     lipo -create -output "ops/bin/${OUTPUT_NAME}" "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
     rm "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
 
@@ -69,8 +77,6 @@ build_http() {
     rm "$TARGET_BINARY_NAME"
     popd > /dev/null
 }
-
-
 
 # -----------------------------------------------------------------------------
 # 3. Build Desktop (Universal)
@@ -85,38 +91,58 @@ build_macos_desktop() {
     # 1. Enforce Clean Build
     rm -rf build/bin
 
-    # Native build - Wails handles universal via -platform darwin/universal
-    CGO_ENABLED=1 \
-    wails build -platform "darwin/universal" -tags wails -trimpath \
+    # Wails universal build can be tricky with CGO constraints.
+    # It is safer to build two native slices and lipo them if the automated 'darwin/universal' fails CGO.
+    # However, Wails 'darwin/universal' flag should handle it IF we setup environment correctly.
+    # But since we saw CGO errors, let's try explicit manual universal build for robustness.
+
+    echo "Building Desktop AMD64 slice..."
+    CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
+    wails build -platform "darwin/amd64" -tags wails -trimpath \
             -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
-            -o "${BASENAME}" -clean
+            -o "${BASENAME}-amd64" -clean
+
+    echo "Building Desktop ARM64 slice..."
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CC="clang -arch arm64" \
+    wails build -platform "darwin/arm64" -tags wails -trimpath \
+            -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
+            -o "${BASENAME}-arm64" -clean
             
-    local APP_SOURCE="build/bin/${BASENAME}.app"
+    # Lipo the binaries inside the app bundles? No, Wails produces a .app.
+    # We need to construct a Universal .app from the two slices.
     
-    if [ ! -d "$APP_SOURCE" ]; then
-        if [ -d "build/bin/Lokihub.app" ]; then
-            echo "Found Lokihub.app, renaming to ${BASENAME}.app to match expectation."
-            mv "build/bin/Lokihub.app" "$APP_SOURCE"
-        else
-            echo "Error: App bundle $APP_SOURCE not found."
-            echo "Contents of build/bin:"
-            ls -R build/bin
-            exit 1
-        fi
+    # Path to binaries
+    local APP_AMD64="build/bin/${BASENAME}-amd64.app"
+    local APP_ARM64="build/bin/${BASENAME}-arm64.app"
+    
+    # We will use ARM64 as the base (since we are on arm runner usually, or just pick one)
+    # and replace the binary with the lipo'd one.
+    local FINAL_APP="build/bin/${BASENAME}.app"
+    
+    echo "Creating Universal App Bundle..."
+    cp -r "$APP_ARM64" "$FINAL_APP"
+    
+    local BIN_AMD64=$(find "$APP_AMD64/Contents/MacOS" -type f -perm +111 | head -n 1)
+    local BIN_ARM64=$(find "$APP_ARM64/Contents/MacOS" -type f -perm +111 | head -n 1)
+    local BIN_DEST="$FINAL_APP/Contents/MacOS/$(basename "$BIN_ARM64")"
+    
+    if [[ -z "$BIN_AMD64" || -z "$BIN_ARM64" ]]; then
+       echo "Error: Could not find binaries to lipo."
+       exit 1
     fi
 
-    # 2. Verify Architecture
-    echo "Verifying architecture for $APP_SOURCE..."
-    # Find executable inside the bundle
-    local BINARY=$(find "$APP_SOURCE/Contents/MacOS" -maxdepth 1 -type f -perm +111 | head -n 1)
-    if [ -n "$BINARY" ]; then
-        echo "Binary signatures:"
-        file "$BINARY"
-    else
-        echo "Warning: No executable found in bundle to verify."
-    fi
+    # Lipo them
+    lipo -create -output "$BIN_DEST" "$BIN_AMD64" "$BIN_ARM64"
+    
+    # Verify
+    echo "Verifying Universal Binary:"
+    file "$BIN_DEST"
 
-    local APP_DEST="ops/bin/lokihub.app" # Needs to be lokihub.app for nice viewing
+    # Clean up slices
+    rm -rf "$APP_AMD64" "$APP_ARM64"
+
+    local APP_SOURCE="$FINAL_APP"
+    local APP_DEST="ops/bin/lokihub.app" 
     local DMG_Path="ops/bin/${ARCHIVE_NAME}.dmg"
     
     if [ -d "$APP_SOURCE" ]; then
@@ -124,9 +150,7 @@ build_macos_desktop() {
         mv "$APP_SOURCE" "$APP_DEST"
         
         # Create DMG
-        # Ensure icon exists in bundle (Force fix)
         cp "ops/darwin/icon.icns" "$APP_DEST/Contents/Resources/icon.icns" || echo "Warning: Could not copy icon to bundle"
-        # Touch bundle to refresh cache
         touch "$APP_DEST"
 
         if [ -d "$APP_DEST" ]; then
