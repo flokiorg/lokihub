@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Lokihub
+Comment=The Flokicoin Developers
+Exec=lokihub
+Icon=lokihub
+Categories=Utility;Network;Finance;
+Terminal=false

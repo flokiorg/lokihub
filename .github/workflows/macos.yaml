@@ -5,16 +5,9 @@ on:
 
 jobs:
   build-macos:
-    name: Build macOS Desktop (${{ matrix.arch }})
-    runs-on: [self-hosted, "${{ matrix.runner }}"]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: macos-amd
-          - arch: arm64
-            runner: macos-arm
+    name: Build macOS Desktop (Universal)
+    # Use Apple Silicon runner for efficient universal builds + signing
+    runs-on: [self-hosted, macos-arm]
     permissions:
       contents: read
     steps:
@@ -60,14 +53,14 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x ops/scripts/*.sh
 
-      - name: Run macOS Build Script (${{ matrix.arch }})
-        run: ./ops/scripts/build-ci-macos.sh ${{ matrix.arch }}
+      - name: Run macOS Build Script
+        run: ./ops/scripts/build-ci-macos.sh
         env:
           TAG: ${{ env.TAG }}
 
-      - name: Upload Artifacts (macOS ${{ matrix.arch }})
+      - name: Upload Artifacts (macOS Universal)
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-macos-${{ matrix.arch }}-${{ env.TAG }}
+          name: artifacts-macos-universal-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error

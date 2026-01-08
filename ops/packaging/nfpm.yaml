@@ -1,0 +1,50 @@
+name: "lokihub"
+arch: "${GOARCH}"
+platform: "linux"
+version: "${TAG}"
+section: "default"
+priority: "extra"
+maintainer: "The Flokicoin Developers <team@flokicoin.org>"
+description: |
+  Lokihub - The Official Flokicoin Wallet & Service Manager.
+  Manage your wallet, run services, and connect to the Flokicoin network.
+vendor: "Flokiorg"
+homepage: "https://flokicoin.org"
+license: "MIT"
+
+contents:
+  # Desktop Binary
+  - src: "ops/bin/${BINARY_NAME}"
+    dst: "/usr/bin/lokihub"
+    type: "tree" 
+    file_info:
+      mode: 0755
+
+  # Desktop Entry & Icon
+  - src: "ops/appicon.png"
+    dst: "/usr/share/icons/hicolor/256x256/apps/lokihub.png"
+  
+  - src: "ops/packaging/lokihub.desktop"
+    dst: "/usr/share/applications/lokihub.desktop"
+
+overrides:
+  deb:
+    depends:
+      - libgtk-3-0
+      - ${LIBWEBKIT}
+    recommends:
+      - libappindicator3-1
+  rpm:
+    depends:
+      - gtk3
+      - ${LIBWEBKIT_RPM}
+    recommends:
+      - libappindicator-gtk3
+
+# For the server package, we will likely run nfpm with a separate config or override via CLI/Wait... 
+# actually nfpm supports multiple 'packages' in one yaml if using v2.3+, but standard usage is one per config or overrides.
+# We need distinct names "lokihub" vs "lokihub-server". 
+# Strategy: We will use environment variables or separate configs? 
+# Simplest: This config is for DESKTOP. We will make a separate short one for SERVER if needed, 
+# or use env var substitution for 'name' and 'contents'. 
+# Let's start with just DESKTOP as that's the primary "dependency hell" fix.

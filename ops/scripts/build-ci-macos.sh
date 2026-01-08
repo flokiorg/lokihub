@@ -41,21 +41,26 @@ yarn build:http
 cd ..
 
 # -----------------------------------------------------------------------------
-# 2. Build HTTP Server (Native)
+# 2. Build HTTP Server (Universal)
 # -----------------------------------------------------------------------------
 
 build_http() {
-    local ARCH=$1
-    local OUTPUT_NAME="lokihub-http-darwin-${ARCH}"
+    local OUTPUT_NAME="lokihub-http-macos"
     local TARGET_BINARY_NAME="lokihub"
-    local ARCHIVE_NAME="lokihub-server-darwin-${ARCH}-${TAG}"
+    local ARCHIVE_NAME="lokihub-server-macos-${TAG}"
     
-    echo "Building HTTP for darwin/$ARCH..."
+    echo "Building HTTP Server (Universal)..."
     
-    # Native build
-    CGO_ENABLED=1 GOOS=darwin GOARCH=$ARCH \
-        go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" \
-        -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
+    # Go doesn't support 'universal' GOARCH directly in one command easily without toolchain support or lipo.
+    # However, for server, we might still want separate or universal?
+    # User said "clean the ci from arm or amd". Universal is best for single artifact.
+    # We will build both and lipo them.
+    
+    GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" -o "ops/bin/lokihub-amd64" ./cmd/http
+    GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" -o "ops/bin/lokihub-arm64" ./cmd/http
+    
+    lipo -create -output "ops/bin/${OUTPUT_NAME}" "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
+    rm "ops/bin/lokihub-amd64" "ops/bin/lokihub-arm64"
 
     # Package
     pushd ops/bin > /dev/null
@@ -68,35 +73,21 @@ build_http() {
 
 
 # -----------------------------------------------------------------------------
-# 3. Build Desktop (x64 and arm64 handling)
+# 3. Build Desktop (Universal)
 # -----------------------------------------------------------------------------
-# We typically want a Universal binary or separate. The original workflow had separate matrix jobs.
-# Here we can build both if the host supports it (Go supports cross-arch easily on mac).
-# Wails supports 'darwin/universal' or specific.
-# Let's keep it simple: Use the HOST architecture or build specific if we want both.
-# If the runner is M1 (arm64), we can target arm64 easily.
-# If we want both, we run wails twice.
 
 build_macos_desktop() {
-    local ARCH=$1
-    local WAILS_PLATFORM="darwin/$ARCH"
-    
-    local BASENAME="lokihub-desktop-darwin-${ARCH}"
-    local ARCHIVE_NAME="lokihub-desktop-darwin-${ARCH}-${TAG}"
+    local BASENAME="lokihub-desktop-macos"
+    local ARCHIVE_NAME="lokihub-desktop-macos-${TAG}"
 
-    # Special case for AMD64: Treat it as the main/universal binary name (remove arch suffix)
-    if [ "$ARCH" == "amd64" ]; then
-        ARCHIVE_NAME="lokihub-desktop-darwin-${TAG}"
-    fi
-    
-    echo "Building macOS Desktop for $ARCH..."
+    echo "Building macOS Desktop (Universal)..."
     
     # 1. Enforce Clean Build
     rm -rf build/bin
 
-    # Native build
-    CGO_ENABLED=1 GOOS=darwin GOARCH=$ARCH \
-        wails build -platform "$WAILS_PLATFORM" -tags wails -trimpath \
+    # Native build - Wails handles universal via -platform darwin/universal
+    CGO_ENABLED=1 \
+    wails build -platform "darwin/universal" -tags wails -trimpath \
             -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'" \
             -o "${BASENAME}" -clean
             
@@ -162,22 +153,10 @@ build_macos_desktop() {
 }
 
 echo "--- Building HTTP Servers ---"
-if [[ -n "$1" ]]; then
-    build_http "$1"
-else
-    build_http "amd64"
-    build_http "arm64"
-fi
+build_http
 
 echo "--- Building Darwin Desktop ---"
-if [[ -n "$1" ]]; then
-    build_macos_desktop "$1"
-else
-    echo "--- Building Darwin AMD64 ---"
-    build_macos_desktop "amd64"
-    # echo "--- Building Darwin ARM64 ---"
-    # build_macos_desktop "arm64"
-fi
+build_macos_desktop
 
 echo "macOS Build Script Complete."
 ls -lh ops/bin

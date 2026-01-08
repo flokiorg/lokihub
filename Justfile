@@ -14,14 +14,19 @@ docker-push:
 
 
 # Build Artifacts using Docker (CI-like environment)
-build-release:
-    ./ops/build-docker.sh all
+# Build Artifacts using Docker
+# Build Artifacts using Docker
+build-linux-amd64:
+    ./ops/build-docker.sh amd64
 
-build-release-http:
-    ./ops/build-docker.sh http
+build-linux-arm64:
+    ./ops/build-docker.sh arm64
 
-build-release-desktop:
-    ./ops/build-docker.sh desktop
+build-linux-amd64-modern:
+    ./ops/build-docker.sh amd64 modern
+
+build-linux-arm64-modern:
+    ./ops/build-docker.sh arm64 modern
 
 ### Local ###
 

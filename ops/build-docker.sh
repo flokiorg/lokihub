@@ -1,9 +1,19 @@
 #!/bin/bash
 set -e
 
-TARGET=$1
-if [ -z "$TARGET" ]; then
-    TARGET="all"
+ARCH=$1
+VARIANT=$2
+
+if [ -z "$ARCH" ]; then
+    ARCH="amd64"
+fi
+
+DOCKERFILE="ops/docker/build-linux-${ARCH}.Dockerfile"
+CONTAINER_SUFFIX="${ARCH}"
+
+if [ "$VARIANT" == "modern" ]; then
+    DOCKERFILE="ops/docker/build-linux-${ARCH}-modern.Dockerfile"
+    CONTAINER_SUFFIX="${ARCH}-modern"
 fi
 
 if [ ! -f "VERSION" ]; then
@@ -16,25 +26,24 @@ if [ -z "$TAG" ]; then
     exit 1
 fi
 
-echo "Building Release for TAG=$TAG (Target: $TARGET)"
+echo "Building Release for TAG=$TAG (Arch: $ARCH, Variant: ${VARIANT:-legacy})"
 
 # Ensure scripts are executable
 chmod +x ops/scripts/*.sh
 
+CONTAINER_NAME="lokihub-builder-${CONTAINER_SUFFIX}"
+
 # Build Builder Docker Image
-echo "Building Docker Builder Image..."
-docker build -t lokihub-builder:latest -f ops/docker/builder.Dockerfile .
+echo "Building Docker Builder Image (${CONTAINER_SUFFIX})..."
+docker build -t "${CONTAINER_NAME}:latest" -f "${DOCKERFILE}" .
 
 # Run Build in Docker
 echo "Running Build in Docker..."
-# Note: Currently build-ci-linux.sh builds everything. 
-# We ignore the TARGET arg for selective building as the underlying script doesn't support it yet.
-# If splitting is required, we would pass $TARGET to build-ci-linux.sh and handle it there.
 
 docker run --rm \
     -v $(pwd):/build \
     -e TAG=${TAG} \
-    lokihub-builder:latest \
+    "${CONTAINER_NAME}:latest" \
     /bin/bash /build/ops/scripts/build-ci-linux.sh
 
 echo "Build Complete. Artifacts are in ops/bin/"

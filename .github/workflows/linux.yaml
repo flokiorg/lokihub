@@ -5,8 +5,11 @@ on:
 
 jobs:
   build-linux:
-    name: Build Linux & HTTP
+    name: Build Linux (${{ matrix.arch }})
     runs-on: [self-hosted, linux]
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     permissions:
       contents: read
     steps:
@@ -27,17 +30,13 @@ jobs:
             exit 1
           fi
           TAG=$(cat VERSION | tr -d '[:space:]')
-          if [ -z "$TAG" ]; then
-            echo "Error: VERSION file is empty"
-            exit 1
-          fi
           echo "TAG=$TAG" >> $GITHUB_ENV
 
       - name: Build Builder Image
         run: |
           sudo docker build \
-            -t lokihub-builder:latest \
-            -f ops/docker/builder.Dockerfile .
+            -t lokihub-builder-${{ matrix.arch }}:latest \
+            -f ops/docker/build-linux-${{ matrix.arch }}.Dockerfile .
 
       - name: Make Scripts Executable
         run: chmod +x ops/scripts/*.sh
@@ -47,16 +46,16 @@ jobs:
           sudo docker run --rm \
             -v ${{ github.workspace }}:/build \
             -e TAG=${{ env.TAG }} \
-            lokihub-builder:latest \
+            lokihub-builder-${{ matrix.arch }}:latest \
             /bin/bash /build/ops/scripts/build-ci-linux.sh
 
       - name: Fix Permissions
         if: always()
         run: sudo chown -R $USER:$USER ${{ github.workspace }}
 
-      - name: Upload Artifacts (Linux/HTTP)
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-linux-http-${{ env.TAG }}
+          name: artifacts-linux-${{ matrix.arch }}-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error
