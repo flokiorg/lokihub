@@ -102,6 +102,7 @@ export default function SettingsLayout() {
         <aside className="flex flex-col justify-between lg:w-1/5">
           <nav className="flex flex-wrap lg:flex-col lg:space-y-1">
             <MenuItem to="/settings">General</MenuItem>
+            <MenuItem to="/settings/services">Services</MenuItem>
             {info?.autoUnlockPasswordSupported && (
               <MenuItem to="/settings/auto-unlock">Auto Unlock</MenuItem>
             )}

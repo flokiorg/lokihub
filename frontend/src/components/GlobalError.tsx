@@ -6,17 +6,17 @@ import { ServiceCardSelector, ServiceOption } from "src/components/ServiceCardSe
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle
 } from "src/components/ui/card";
 import { Label } from "src/components/ui/label";
 import { Switch } from "src/components/ui/switch";
 import { request } from "src/utils/request";
-import { validateNwc, validateUrl } from "src/utils/validation";
+import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 
 type GlobalErrorProps = {
   message: string;
@@ -102,29 +102,35 @@ export function GlobalError({ message }: GlobalErrorProps) {
                 errors.push("At least one relay is required");
            }
            for (const relayUrl of relays) {
-              if (!validateUrl(relayUrl, "Nostr Relay URL", ["wss"])) {
-                  errors.push(`Invalid Relay URL: ${relayUrl}`);
+              const relayErr = validateWebSocketURL(relayUrl, "Nostr Relay URL");
+              if (relayErr) {
+                  errors.push(relayErr);
               }
            }
         }
         
-        if (services.mempoolApi && !validateUrl(services.mempoolApi, "Flokicoin Explorer URL", ["https"])) {
-            errors.push("Invalid Flokicoin Explorer URL");
+        if (!services.mempoolApi) {
+            errors.push("Flokicoin Explorer URL is required");
+        } else {
+            const mempoolErr = validateHTTPURL(services.mempoolApi, "Flokicoin Explorer URL");
+            if (mempoolErr) errors.push(mempoolErr);
         }
 
         if (services.enableSwap) {
              if (!services.swapServiceUrl) {
                  errors.push("Swap Service URL is required when enabled");
-             } else if (!validateUrl(services.swapServiceUrl, "Swap Service URL", ["https"])) {
-                  errors.push("Invalid Swap Service URL");
+             } else {
+                  const swapErr = validateHTTPURL(services.swapServiceUrl, "Swap Service URL");
+                  if (swapErr) errors.push(swapErr);
              }
         }
 
         if (services.enableMessageboardNwc) {
              if (!services.messageboardNwcUrl) {
                  errors.push("Messageboard NWC URL is required when enabled");
-             } else if (!validateNwc(services.messageboardNwcUrl)) {
-                 errors.push("Invalid Messageboard NWC URL");
+             } else {
+                 const mbErr = validateMessageBoardURL(services.messageboardNwcUrl);
+                 if (mbErr) errors.push(mbErr);
              }
         }
 

@@ -39,6 +39,7 @@ import Backup from "src/screens/settings/Backup";
 import { ChangeUnlockPassword } from "src/screens/settings/ChangeUnlockPassword";
 import DebugTools from "src/screens/settings/DebugTools";
 import DeveloperSettings from "src/screens/settings/DeveloperSettings";
+import { Services } from "src/screens/settings/Services";
 import Settings from "src/screens/settings/Settings";
 
 import { RestoreNode } from "src/screens/setup/RestoreNode";
@@ -208,6 +209,11 @@ const routes: RouteObject[] = [
               {
                 index: true,
                 element: <Settings />,
+              },
+              {
+                path: "services",
+                element: <Services />,
+                handle: { crumb: () => "Services" },
               },
               {
                 path: "about",

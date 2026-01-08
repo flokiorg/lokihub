@@ -4,15 +4,17 @@ import { useEffect, useRef } from "react";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "src/components/ui/table";
 import { useInfo } from "src/hooks/useInfo";
 import { useOnchainTransactions } from "src/hooks/useOnchainTransactions";
 import { cn } from "src/lib/utils";
+import { isHttpMode } from "src/utils/isHttpMode";
+import { openLink } from "src/utils/openLink";
 
 export function OnchainTransactionsTable() {
   const { data: info } = useInfo();
@@ -104,7 +106,12 @@ export function OnchainTransactionsTable() {
                   key={tx.txId}
                   className="cursor-pointer"
                   onClick={() => {
-                    window.open(`${info?.mempoolUrl}/tx/${tx.txId}`, "_blank");
+                    const url = `${info?.mempoolUrl}/tx/${tx.txId}`;
+                    if (isHttpMode()) {
+                      window.open(url, "_blank");
+                    } else {
+                      openLink(url);
+                    }
                   }}
                 >
                   <TableCell className="flex items-center gap-2">
