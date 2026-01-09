@@ -1,8 +1,8 @@
 import {
-    AlertCircleIcon,
-    AlertTriangleIcon,
-    CopyIcon,
-    ExternalLinkIcon,
+  AlertCircleIcon,
+  AlertTriangleIcon,
+  CopyIcon,
+  ExternalLinkIcon,
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -21,12 +21,12 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { Channel, CloseChannelResponse } from "src/types";
 import { request } from "src/utils/request";
 import {
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -155,7 +155,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                   <AlertTriangleIcon className="h-4 w-4" />
                   <AlertTitle>Heads up!</AlertTitle>
                   <AlertDescription>
-                    Your channel balance will be locked for up to two weeks if
+                    Your channel balance will be locked for up to one week if
                     you force close
                   </AlertDescription>
                 </Alert>
@@ -204,7 +204,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                     </Label>
                     <p className="text-sm text-muted-foreground">
                       You close the channel alone. Your funds may be locked for
-                      up to two weeks and may incur higher fees. Only try this
+                      up to one week and may incur higher fees. Only try this
                       if a normal closure does not work.
                     </p>
                   </div>

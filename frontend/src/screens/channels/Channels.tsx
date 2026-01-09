@@ -579,7 +579,7 @@ export default function Channels() {
                   })}
                   . Once spendable again these will become available in your
                   on-chain balance. Funds from channels that were force closed
-                  may take up to 2 weeks to become available.
+                  may take up to 1 week to become available.
                 </AlertDescription>
               </Alert>
             )}
