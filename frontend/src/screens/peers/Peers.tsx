@@ -9,20 +9,21 @@ import { Button } from "src/components/ui/button.tsx";
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu.tsx";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "src/components/ui/table.tsx";
 import { useChannels } from "src/hooks/useChannels";
+import { useInfo } from "src/hooks/useInfo";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { usePeers } from "src/hooks/usePeers.ts";
 import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
@@ -87,6 +88,7 @@ type PeerTableRowProps = {
 function PeerTableRow(props: PeerTableRowProps) {
   const { peer } = props;
   const { data: channels } = useChannels();
+  const { data: info } = useInfo();
   const { data: peerDetails } = useNodeDetails(peer.nodeId);
 
   function hasOpenedChannels(peer: Peer) {
@@ -133,7 +135,7 @@ function PeerTableRow(props: PeerTableRowProps) {
       </TableCell>
       <TableCell className="flex flex-row items-center">
         <ExternalLinkButton
-          to={`https://flokichain.info/lightning/node/${peer.nodeId}`}
+          to={`${info?.mempoolUrl}/lightning/node/${peer.nodeId}`}
           variant="link"
           className="p-2"
         >

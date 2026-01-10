@@ -87,10 +87,10 @@ export function ChannelDropdownMenu({
           <DropdownMenuItem>
             <ExternalLink
               className="flex flex-1 flex-row items-center gap-2"
-              to={`https://flokichain.info/lightning/node/${channel.remotePubkey}`}
+              to={`${info?.mempoolUrl}/lightning/node/${channel.remotePubkey}`}
             >
               <ExternalLinkIcon />
-              View Node on flokichain.info
+              View Node on {info?.mempoolUrl ? new URL(info.mempoolUrl).hostname : "Explorer"}
             </ExternalLink>
           </DropdownMenuItem>
           {channel.public && (

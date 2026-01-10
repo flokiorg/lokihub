@@ -1,18 +1,18 @@
 import dayjs from "dayjs";
 import {
-  AlertTriangleIcon,
-  ArrowDownUpIcon,
-  ArrowRightIcon,
-  CopyIcon,
-  ExternalLinkIcon,
-  HeartIcon,
-  HourglassIcon,
-  InfoIcon,
-  LinkIcon,
-  Settings2Icon,
-  SparklesIcon,
-  UnplugIcon,
-  ZapIcon,
+    AlertTriangleIcon,
+    ArrowDownUpIcon,
+    ArrowRightIcon,
+    CopyIcon,
+    ExternalLinkIcon,
+    HeartIcon,
+    HourglassIcon,
+    InfoIcon,
+    LinkIcon,
+    Settings2Icon,
+    SparklesIcon,
+    UnplugIcon,
+    ZapIcon,
 } from "lucide-react";
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -29,32 +29,32 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
+    Alert,
+    AlertDescription,
+    AlertTitle,
 } from "src/components/ui/alert.tsx";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card.tsx";
 import CircleProgress from "src/components/ui/custom/circle-progress";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu.tsx";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { ONCHAIN_DUST_LOKI } from "src/constants.ts";
 import { useBalances } from "src/hooks/useBalances.ts";
@@ -67,10 +67,10 @@ import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
 import { copyToClipboard } from "src/lib/clipboard.ts";
 import { cn } from "src/lib/utils.ts";
 import {
-  Channel,
-  LongUnconfirmedZeroConfChannel,
-  MempoolTransaction,
-  PendingBalancesDetails,
+    Channel,
+    LongUnconfirmedZeroConfChannel,
+    MempoolTransaction,
+    PendingBalancesDetails,
 } from "src/types";
 import { request } from "src/utils/request";
 
@@ -660,7 +660,7 @@ function PendingBalancesDetailsItem({
     <div key={details.channelId} className="inline">
       &nbsp;
       <ExternalLink
-        to={`https://flokichain.info/lightning/node/${details.nodeId}`}
+        to={`${info?.mempoolUrl}/lightning/node/${details.nodeId}`}
         className="underline"
       >
         {nodeDetails?.alias || "Unknown"}

@@ -71,8 +71,7 @@ export default function NodeAlias() {
             />
             <p className="text-sm text-muted-foreground">
               Your lightning node alias will appear to your channel partners,
-              connected peers, and on lightning network explorers such as
-              flokichain.info.
+              connected peers, and on lightning network explorers.
             </p>
           </div>
           <Button type="submit" disabled={isLoading} className="w-fit">
