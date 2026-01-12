@@ -40,6 +40,7 @@ func TestUnlock_IncorrectPassword(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -73,6 +74,7 @@ func TestUnlock_UnknownPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -105,6 +107,7 @@ func TestGetApps_NoToken(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -135,6 +138,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -187,6 +191,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -237,6 +242,7 @@ func TestCreateApp_NoToken(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mocks.NewMockKeys(t))
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -275,6 +281,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
@@ -333,6 +340,7 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	mockSvc.On("GetConfig").Return(mockConfig)
 	mockSvc.On("GetKeys").Return(mockKeys)
 	mockSvc.On("GetLokiSvc").Return(mocks.NewMockLokiService(t))
+	mockSvc.On("GetAppStoreSvc").Return(&mocks.MockAppStoreService{})
 
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)

@@ -1031,8 +1031,8 @@ func (_c *MockLNClient_ListChannels_Call) RunAndReturn(run func(ctx context.Cont
 }
 
 // ListOnchainTransactions provides a mock function for the type MockLNClient
-func (_mock *MockLNClient) ListOnchainTransactions(ctx context.Context) ([]lnclient.OnchainTransaction, error) {
-	ret := _mock.Called(ctx)
+func (_mock *MockLNClient) ListOnchainTransactions(ctx context.Context, from uint64, until uint64, limit uint64, offset uint64) ([]lnclient.OnchainTransaction, error) {
+	ret := _mock.Called(ctx, from, until, limit, offset)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListOnchainTransactions")
@@ -1040,18 +1040,18 @@ func (_mock *MockLNClient) ListOnchainTransactions(ctx context.Context) ([]lncli
 
 	var r0 []lnclient.OnchainTransaction
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]lnclient.OnchainTransaction, error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint64, uint64, uint64, uint64) ([]lnclient.OnchainTransaction, error)); ok {
+		return returnFunc(ctx, from, until, limit, offset)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []lnclient.OnchainTransaction); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint64, uint64, uint64, uint64) []lnclient.OnchainTransaction); ok {
+		r0 = returnFunc(ctx, from, until, limit, offset)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]lnclient.OnchainTransaction)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint64, uint64, uint64, uint64) error); ok {
+		r1 = returnFunc(ctx, from, until, limit, offset)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1064,24 +1064,28 @@ type MockLNClient_ListOnchainTransactions_Call struct {
 }
 
 // ListOnchainTransactions is a helper method to define mock.On call
-//   - ctx
-func (_e *MockLNClient_Expecter) ListOnchainTransactions(ctx interface{}) *MockLNClient_ListOnchainTransactions_Call {
-	return &MockLNClient_ListOnchainTransactions_Call{Call: _e.mock.On("ListOnchainTransactions", ctx)}
+//   - ctx context.Context
+//   - from uint64
+//   - until uint64
+//   - limit uint64
+//   - offset uint64
+func (_e *MockLNClient_Expecter) ListOnchainTransactions(ctx interface{}, from interface{}, until interface{}, limit interface{}, offset interface{}) *MockLNClient_ListOnchainTransactions_Call {
+	return &MockLNClient_ListOnchainTransactions_Call{Call: _e.mock.On("ListOnchainTransactions", ctx, from, until, limit, offset)}
 }
 
-func (_c *MockLNClient_ListOnchainTransactions_Call) Run(run func(ctx context.Context)) *MockLNClient_ListOnchainTransactions_Call {
+func (_c *MockLNClient_ListOnchainTransactions_Call) Run(run func(ctx context.Context, from uint64, until uint64, limit uint64, offset uint64)) *MockLNClient_ListOnchainTransactions_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(uint64), args[2].(uint64), args[3].(uint64), args[4].(uint64))
 	})
 	return _c
 }
 
-func (_c *MockLNClient_ListOnchainTransactions_Call) Return(onchainTransactions []lnclient.OnchainTransaction, err error) *MockLNClient_ListOnchainTransactions_Call {
-	_c.Call.Return(onchainTransactions, err)
+func (_c *MockLNClient_ListOnchainTransactions_Call) Return(transactions []lnclient.OnchainTransaction, err error) *MockLNClient_ListOnchainTransactions_Call {
+	_c.Call.Return(transactions, err)
 	return _c
 }
 
-func (_c *MockLNClient_ListOnchainTransactions_Call) RunAndReturn(run func(ctx context.Context) ([]lnclient.OnchainTransaction, error)) *MockLNClient_ListOnchainTransactions_Call {
+func (_c *MockLNClient_ListOnchainTransactions_Call) RunAndReturn(run func(context.Context, uint64, uint64, uint64, uint64) ([]lnclient.OnchainTransaction, error)) *MockLNClient_ListOnchainTransactions_Call {
 	_c.Call.Return(run)
 	return _c
 }
