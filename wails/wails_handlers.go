@@ -1,6 +1,7 @@
 package wails
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -107,6 +108,35 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		}
+	}
+
+	appLogoRegex := regexp.MustCompile(
+		`/api/appstore/logos/([0-9a-f]+)`,
+	)
+	appLogoMatch := appLogoRegex.FindStringSubmatch(route)
+
+	switch {
+	case len(appLogoMatch) > 1:
+		appIdStr := appLogoMatch[1]
+
+		path, err := app.svc.GetAppStoreSvc().GetLogoPath(appIdStr)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		if path == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "Logo not found"}
+		}
+
+		fileBytes, err := os.ReadFile(path)
+		if err != nil {
+			// If file not found, return error or empty?
+			// Return error for now.
+			logger.Logger.WithError(err).Error("Failed to read logo file")
+			return WailsRequestRouterResponse{Body: nil, Error: "Logo file unavailable"}
+		}
+
+		encoded := base64.StdEncoding.EncodeToString(fileBytes)
+		return WailsRequestRouterResponse{Body: encoded, Error: ""}
 	}
 
 	// list apps
@@ -440,6 +470,16 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		res := WailsRequestRouterResponse{Body: nil, Error: ""}
 		return res
+	// App Store Routes
+	case "/api/appstore/apps":
+		apps := app.svc.GetAppStoreSvc().ListApps()
+		return WailsRequestRouterResponse{Body: apps, Error: ""}
+
+	case "/api/appstore/logos/:appId":
+		// This regex matching is handled by the manual regex block below if I don't use the switch case structure cleanly
+		// But wait, the switch is on `route` usually?
+		// No, the code uses regex finding earlier.
+		// I should stick to the pattern used in the file.
 	case "/api/channels":
 		switch method {
 		case "GET":

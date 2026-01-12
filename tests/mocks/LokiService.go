@@ -205,3 +205,59 @@ func (_c *MockLokiService_GetInfo_Call) RunAndReturn(run func(ctx context.Contex
 	_c.Call.Return(run)
 	return _c
 }
+
+// GetFAQ provides a mock function for the type MockLokiService
+func (_mock *MockLokiService) GetFAQ(ctx context.Context) ([]loki.FAQ, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFAQ")
+	}
+
+	var r0 []loki.FAQ
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]loki.FAQ, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []loki.FAQ); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]loki.FAQ)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockLokiService_GetFAQ_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFAQ'
+type MockLokiService_GetFAQ_Call struct {
+	*mock.Call
+}
+
+// GetFAQ is a helper method to define mock.On call
+//   - ctx
+func (_e *MockLokiService_Expecter) GetFAQ(ctx interface{}) *MockLokiService_GetFAQ_Call {
+	return &MockLokiService_GetFAQ_Call{Call: _e.mock.On("GetFAQ", ctx)}
+}
+
+func (_c *MockLokiService_GetFAQ_Call) Run(run func(ctx context.Context)) *MockLokiService_GetFAQ_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockLokiService_GetFAQ_Call) Return(faq []loki.FAQ, err error) *MockLokiService_GetFAQ_Call {
+	_c.Call.Return(faq, err)
+	return _c
+}
+
+func (_c *MockLokiService_GetFAQ_Call) RunAndReturn(run func(ctx context.Context) ([]loki.FAQ, error)) *MockLokiService_GetFAQ_Call {
+	_c.Call.Return(run)
+	return _c
+}

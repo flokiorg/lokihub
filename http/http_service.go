@@ -22,6 +22,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service"
 
 	"github.com/flokiorg/lokihub/api"
@@ -47,6 +48,7 @@ type HttpService struct {
 	eventPublisher events.EventPublisher
 	db             *gorm.DB
 	appsSvc        apps.AppsService
+	appStoreSvc    appstore.Service
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -57,6 +59,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		eventPublisher: eventPublisher,
 		db:             svc.GetDB(),
 		appsSvc:        apps.NewAppsService(svc.GetDB(), eventPublisher, svc.GetKeys(), svc.GetConfig()),
+		appStoreSvc:    svc.GetAppStoreSvc(),
 	}
 }
 
@@ -166,6 +169,8 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/swaps/mnemonic", httpSvc.swapMnemonicHandler)
 	readOnlyApiGroup.GET("/autoswap", httpSvc.getAutoSwapConfigHandler)
 	readOnlyApiGroup.GET("/forwards", httpSvc.forwardsHandler)
+	readOnlyApiGroup.GET("/appstore/apps", httpSvc.getAppStoreAppsHandler)
+	readOnlyApiGroup.GET("/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
 
 	// Full access API group - requires a token with full permissions
 	fullAccessApiGroup := e.Group("/api")
@@ -1549,4 +1554,23 @@ func (httpSvc *HttpService) setupManualHandler(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusOK)
+}
+
+func (httpSvc *HttpService) getAppStoreAppsHandler(c echo.Context) error {
+	apps := httpSvc.appStoreSvc.ListApps()
+	return c.JSON(http.StatusOK, apps)
+}
+
+func (httpSvc *HttpService) getAppStoreLogoHandler(c echo.Context) error {
+	appId := c.Param("appId")
+	if appId == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "appId is required"})
+	}
+
+	logoPath, err := httpSvc.appStoreSvc.GetLogoPath(appId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+
+	return c.File(logoPath)
 }
