@@ -26,6 +26,9 @@ export type AppStoreApp = {
   hideConnectionQr?: boolean;
   internal?: boolean;
   superuser?: boolean;
+  version: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export const appStoreCategories = {

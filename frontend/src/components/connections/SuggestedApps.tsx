@@ -2,27 +2,37 @@ import { LayoutGrid } from "lucide-react";
 import React from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "src/components/EmptyState";
+import Loading from "src/components/Loading";
 import { Badge } from "src/components/ui/badge";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardTitle,
 } from "src/components/ui/card";
+import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
+import { swrFetcher } from "src/utils/swr";
+import useSWR from "swr";
 import {
-  AppStoreApp,
-  appStoreApps,
-  sortedAppStoreCategories,
+    AppStoreApp,
+    sortedAppStoreCategories
 } from "./SuggestedAppData";
 
-function SuggestedAppCard({ id, title, description, logo }: AppStoreApp) {
+function SuggestedAppCard({ id, title, description }: AppStoreApp) {
+  const { data: logoBase64 } = useSWR(`/api/appstore/logos/${id}`, swrFetcher);
+  const image = logoBase64 ? `data:image/png;base64,${logoBase64}` : null;
+
   return (
     <Link to={`/appstore/${id}`}>
       <Card className="h-full">
         <CardContent>
           <div className="flex gap-3 items-center">
-            <img src={logo} alt="logo" className="inline rounded-lg size-12" />
+            {image ? (
+                <img src={image} alt="logo" className="inline rounded-lg size-12" />
+            ) : (
+                <div className="inline rounded-lg size-12 bg-muted/50" />
+            )}
             <div className="grow">
               <CardTitle>{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
@@ -53,9 +63,18 @@ function InternalAppCard({ id, title, description, logo }: AppStoreApp) {
 }
 
 export default function SuggestedApps() {
+  const { apps: appStoreApps, loading, error } = useAppStore();
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>(
     []
   );
+
+  if (loading) {
+      return <Loading />;
+  }
+
+  if (error) {
+      return <div className="text-center text-red-500">Failed to load apps</div>;
+  }
 
   if (appStoreApps.length === 0) {
     return (
@@ -130,8 +149,8 @@ export default function SuggestedApps() {
                   {categoryApps.map((app) =>
                     app.internal ? (
                       <InternalAppCard key={app.id} {...app} />
-                    ) : (
-                      <SuggestedAppCard key={app.id} {...app} />
+                    ) : ( // @ts-ignore
+                      <SuggestedAppCard key={app.id} {...app} logo={`/api/appstore/logos/${app.id}`} />
                     )
                   )}
                 </div>

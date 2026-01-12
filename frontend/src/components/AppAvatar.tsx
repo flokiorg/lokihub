@@ -1,8 +1,10 @@
-import { appStoreApps } from "src/components/connections/SuggestedAppData";
 import UserAvatar from "src/components/UserAvatar";
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
+import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
 import { App } from "src/types";
+import { swrFetcher } from "src/utils/swr";
+import useSWR from "swr";
 
 type Props = {
   app: App;
@@ -10,16 +12,25 @@ type Props = {
 };
 
 export default function AppAvatar({ app, className }: Props) {
-  if (app.name === LOKI_ACCOUNT_APP_NAME) {
-    return <UserAvatar className={className} />;
-  }
+  const { apps: appStoreApps } = useAppStore();
+
   const appStoreApp = appStoreApps.find(
     (suggestedApp) =>
       (app?.metadata?.app_store_app_id &&
         suggestedApp.id === app.metadata?.app_store_app_id) ||
-      app.name.includes(suggestedApp.title)
+      app.name.toLowerCase().includes(suggestedApp.title.toLowerCase())
   );
-  const image = appStoreApp?.logo;
+
+  const { data: logoBase64 } = useSWR(
+    appStoreApp?.id ? `/api/appstore/logos/${appStoreApp.id}` : null,
+    swrFetcher
+  );
+
+  const image = logoBase64 ? `data:image/png;base64,${logoBase64}` : null;
+
+  if (app.name === LOKI_ACCOUNT_APP_NAME) {
+    return <UserAvatar className={className} />;
+  }
 
   const gradient =
     app.name

@@ -4,6 +4,7 @@ export const localStorageKeys = {
   channelOrder: "channelOrder",
   authToken: "authToken",
   supportLokiSidebarHintHiddenUntil: "supportLokiSidebarHintHiddenUntil",
+  appAlertsHiddenUntil: "appAlertsHiddenUntil",
 };
 
 export const ONCHAIN_DUST_LOKI = 1000;
