@@ -1,5 +1,7 @@
 package constants
 
+import "time"
+
 // shared constants used by multiple packages
 
 const (
@@ -76,9 +78,14 @@ const (
 	ENCRYPTION_TYPE_NIP44_V2 = "nip44_v2"
 )
 
-const SUBWALLET_APPSTORE_APP_ID = "uncle-jim"
+const SUBWALLET_APPSTORE_APP_ID = "uncle-jim" // Thanks jim
 
 const (
-	FLOKICOIN_DISPLAY_FORMAT_LOKI   = "loki"
 	FLOKICOIN_DISPLAY_FORMAT_BIP177 = "bip177"
+	FLOKICOIN_DISPLAY_FORMAT_LOKI   = "loki"
+)
+
+const (
+	APP_STORE_SYNC_INTERVAL = 6 * time.Hour
+	APP_STORE_CACHE_DIR     = "appstore"
 )

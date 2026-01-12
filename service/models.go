@@ -7,6 +7,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
@@ -36,4 +37,5 @@ type Service interface {
 	GetRelayStatuses() []RelayStatus
 	GetStartupState() string
 	ReloadNostr() error
+	GetAppStoreSvc() appstore.Service
 }

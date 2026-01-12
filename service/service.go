@@ -18,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/pkg/version"
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
@@ -37,6 +38,7 @@ type service struct {
 	transactionsService transactions.TransactionsService
 	swapsService        swaps.SwapsService
 	lokiSvc             loki.LokiService
+	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
 	wg                  *sync.WaitGroup
@@ -139,6 +141,9 @@ func NewService(ctx context.Context) (*service, error) {
 	eventPublisher.RegisterSubscriber(&paymentForwardedConsumer{
 		db: gormDB,
 	})
+
+	svc.appStoreSvc = appstore.NewAppStoreService(cfg)
+	svc.appStoreSvc.Start()
 
 	eventPublisher.Publish(&events.Event{
 		Event: "nwc_started",
@@ -283,6 +288,10 @@ func (svc *service) GetRelayStatuses() []RelayStatus {
 
 func (svc *service) GetStartupState() string {
 	return svc.startupState
+}
+
+func (svc *service) GetAppStoreSvc() appstore.Service {
+	return svc.appStoreSvc
 }
 
 func (svc *service) removeExcessEvents() {

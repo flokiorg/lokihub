@@ -9,6 +9,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
@@ -58,6 +59,25 @@ func (_mock *MockService) GetLokiSvc() loki.LokiService {
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(loki.LokiService)
+		}
+	}
+	return r0
+}
+
+// GetAppStoreSvc provides a mock function for the type MockService
+func (_mock *MockService) GetAppStoreSvc() appstore.Service {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAppStoreSvc")
+	}
+
+	var r0 appstore.Service
+	if returnFunc, ok := ret.Get(0).(func() appstore.Service); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(appstore.Service)
 		}
 	}
 	return r0
