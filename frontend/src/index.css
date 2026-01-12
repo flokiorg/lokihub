@@ -29,6 +29,13 @@ body {
 }
 
 @layer base {
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+@layer base {
   [role="menuitem"]:not([disabled]),
   [data-slot="command-item"],
   [data-slot="field"] {
