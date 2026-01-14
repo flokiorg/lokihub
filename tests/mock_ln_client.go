@@ -116,7 +116,7 @@ func (mln *MockLn) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, err er
 	return &MockNodeInfo, nil
 }
 
-func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string) (transaction *lnclient.Transaction, err error) {
+func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
 	return MockLNClientTransaction, nil
 }
 
@@ -245,4 +245,12 @@ func (mln *MockLn) MakeOffer(ctx context.Context, description string) (string, e
 
 func (mln *MockLn) ListOnchainTransactions(ctx context.Context, from, until, limit, offset uint64) ([]lnclient.OnchainTransaction, error) {
 	return nil, errors.ErrUnsupported
+}
+
+func (mln *MockLn) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
+	return nil
+}
+
+func (mln *MockLn) SubscribeCustomMessages(ctx context.Context) (<-chan lnclient.CustomMessage, <-chan error, error) {
+	return make(chan lnclient.CustomMessage), make(chan error), nil
 }

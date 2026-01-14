@@ -1368,3 +1368,81 @@ func (_c *MockConfig_SetEnableMessageboardNwc_Call) RunAndReturn(run func(bool) 
 	_c.Call.Return(run)
 	return _c
 }
+
+// GetLokihubStoreURL provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetLokihubStoreURL() string {
+	ret := _mock.Called()
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockConfig_GetLokihubStoreURL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLokihubStoreURL'
+type MockConfig_GetLokihubStoreURL_Call struct {
+	*mock.Call
+}
+
+// GetLokihubStoreURL is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) GetLokihubStoreURL() *MockConfig_GetLokihubStoreURL_Call {
+	return &MockConfig_GetLokihubStoreURL_Call{Call: _e.mock.On("GetLokihubStoreURL")}
+}
+
+func (_c *MockConfig_GetLokihubStoreURL_Call) Run(run func()) *MockConfig_GetLokihubStoreURL_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_GetLokihubStoreURL_Call) Return(_a0 string) *MockConfig_GetLokihubStoreURL_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockConfig_GetLokihubStoreURL_Call) RunAndReturn(run func() string) *MockConfig_GetLokihubStoreURL_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetLokihubStoreURL provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetLokihubStoreURL(value string) error {
+	ret := _mock.Called(value)
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetLokihubStoreURL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetLokihubStoreURL'
+type MockConfig_SetLokihubStoreURL_Call struct {
+	*mock.Call
+}
+
+// SetLokihubStoreURL is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) SetLokihubStoreURL(value interface{}) *MockConfig_SetLokihubStoreURL_Call {
+	return &MockConfig_SetLokihubStoreURL_Call{Call: _e.mock.On("SetLokihubStoreURL", value)}
+}
+
+func (_c *MockConfig_SetLokihubStoreURL_Call) Run(run func(value string)) *MockConfig_SetLokihubStoreURL_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetLokihubStoreURL_Call) Return(_a0 error) *MockConfig_SetLokihubStoreURL_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockConfig_SetLokihubStoreURL_Call) RunAndReturn(run func(string) error) *MockConfig_SetLokihubStoreURL_Call {
+	_c.Call.Return(run)
+	return _c
+}
