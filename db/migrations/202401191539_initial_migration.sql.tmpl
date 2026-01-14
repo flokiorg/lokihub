@@ -66,9 +66,9 @@ CREATE TABLE "transactions" (
   "payment_hash" text,
   "description" text,
   "description_hash" text,
-  "amount_msat" integer,
-  "fee_msat" integer,
-  "fee_reserve_msat" integer,
+  "amount_mloki" integer,
+  "fee_mloki" integer,
+  "fee_reserve_mloki" integer,
   "created_at" {{ .Timestamp }},
   "updated_at" {{ .Timestamp }},
   "expires_at" {{ .Timestamp }},
@@ -111,8 +111,8 @@ CREATE TABLE "swaps" (
 
 CREATE TABLE "forwards" (
   "id" {{ .AutoincrementPrimaryKey }},
-  "outbound_amount_forwarded_msat" integer,
-  "total_fee_earned_msat" integer,
+  "outbound_amount_forwarded_mloki" integer,
+  "total_fee_earned_mloki" integer,
   "created_at" {{ .Timestamp }},
   "updated_at" {{ .Timestamp }}
 );

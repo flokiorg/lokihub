@@ -21,18 +21,18 @@ func TestGetIsolatedBalance_PendingNoOverflow(t *testing.T) {
 	app.Isolated = true
 	svc.DB.Save(&app)
 
-	paymentAmount := uint64(1000) // 1 sat
+	paymentAmount := uint64(1000)
 
 	tx := db.Transaction{
-		AppId:          &app.ID,
-		RequestEventId: nil,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		State:          constants.TRANSACTION_STATE_PENDING,
-		FeeReserveMsat: uint64(10000),
-		AmountMloki:    paymentAmount,
-		PaymentRequest: tests.MockInvoice,
-		PaymentHash:    tests.MockPaymentHash,
-		SelfPayment:    true,
+		AppId:           &app.ID,
+		RequestEventId:  nil,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		State:           constants.TRANSACTION_STATE_PENDING,
+		FeeReserveMloki: uint64(10000),
+		AmountMloki:     paymentAmount,
+		PaymentRequest:  tests.MockInvoice,
+		PaymentHash:     tests.MockPaymentHash,
+		SelfPayment:     true,
 	}
 	svc.DB.Save(&tx)
 
@@ -50,18 +50,18 @@ func TestGetIsolatedBalance_SettledNoOverflow(t *testing.T) {
 	app.Isolated = true
 	svc.DB.Save(&app)
 
-	paymentAmount := uint64(1000) // 1 sat
+	paymentAmount := uint64(1000)
 
 	tx := db.Transaction{
-		AppId:          &app.ID,
-		RequestEventId: nil,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		State:          constants.TRANSACTION_STATE_SETTLED,
-		FeeReserveMsat: uint64(0),
-		AmountMloki:    paymentAmount,
-		PaymentRequest: tests.MockInvoice,
-		PaymentHash:    tests.MockPaymentHash,
-		SelfPayment:    true,
+		AppId:           &app.ID,
+		RequestEventId:  nil,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		State:           constants.TRANSACTION_STATE_SETTLED,
+		FeeReserveMloki: uint64(0),
+		AmountMloki:     paymentAmount,
+		PaymentRequest:  tests.MockInvoice,
+		PaymentHash:     tests.MockPaymentHash,
+		SelfPayment:     true,
 	}
 	svc.DB.Save(&tx)
 

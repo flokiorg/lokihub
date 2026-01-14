@@ -13,6 +13,7 @@ func Migrate(gormDB *gorm.DB) error {
 
 	m := gormigrate.New(gormDB, gormigrate.DefaultOptions, []*gormigrate.Migration{
 		_202401191539_initial_migration,
+		_202501141200_add_lsps_table,
 	})
 
 	return m.Migrate()

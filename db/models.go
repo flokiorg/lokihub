@@ -70,9 +70,9 @@ type Transaction struct {
 	RequestEvent    *RequestEvent
 	Type            string
 	State           string
-	AmountMloki     uint64 `gorm:"column:amount_msat"`
-	FeeMsat         uint64
-	FeeReserveMsat  uint64
+	AmountMloki     uint64 `gorm:"column:amount_mloki"`
+	FeeMloki        uint64
+	FeeReserveMloki uint64
 	PaymentRequest  string
 	PaymentHash     string
 	Description     string
@@ -115,11 +115,11 @@ type Swap struct {
 }
 
 type Forward struct {
-	ID                          uint
-	OutboundAmountForwardedMsat uint64
-	TotalFeeEarnedMsat          uint64
-	CreatedAt                   time.Time
-	UpdatedAt                   time.Time
+	ID                           uint
+	OutboundAmountForwardedMloki uint64
+	TotalFeeEarnedMloki          uint64
+	CreatedAt                    time.Time
+	UpdatedAt                    time.Time
 }
 
 const (
