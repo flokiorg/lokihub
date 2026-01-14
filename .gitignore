@@ -28,3 +28,5 @@ frontend/.yarn
 *.db-wal
 *.db-journal
 data
+lokihub-services/
+lokihub-store/

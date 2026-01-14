@@ -68,7 +68,7 @@ export default defineConfig(({ command }) => ({
         background_color: "#ffffff",
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 3000000, // 3MB
+        maximumFileSizeToCacheInBytes: 6000000, // 6MB
       },
     }),
     ...(command === "serve" ? [insertDevCSPPlugin] : []),

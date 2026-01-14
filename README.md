@@ -145,7 +145,8 @@ The following configuration options can be set as environment variables or in a 
 - `LOG_LEVEL`: Log level for the main application. Higher is more verbose.
 - `NETWORK`: On-chain network used for the node.
 - `AUTO_UNLOCK_PASSWORD`: Provide unlock password to auto-unlock Lokihub on startup (e.g. after a machine restart). Unlock password still be required to access the interface.
-- `LOKI_HUB_SERVICES_URL`: The URL for Lokihub's backend services API.
+- `LOKIHUB_SERVICES_URL`: The URL for Lokihub's backend services API.
+- `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
 - `ESPLORA_SERVER`: The Esplora server URL.
 - `SWAP_SERVICE_URL`: The swap service URL.
 - `REBALANCE_SERVICE_URL`: The rebalance service URL.
@@ -211,7 +212,7 @@ If the client creates the secret the client only needs to share the public key o
 - `pubkey`: the public key of the client's secret for the user to authorize
 - `return_to`: (optional) if a `return_to` URL is provided the user will be redirected to that URL after authorization. The `lud16`, `relay` and `pubkey` query parameters will be added to the URL.
 - `expires_at` (optional) connection cannot be used after this date. Unix timestamp in seconds.
-- `max_amount` (optional) maximum amount in millisats that can be sent per renewal period
+- `max_amount` (optional) maximum amount in millis that can be sent per renewal period
 - `budget_renewal` (optional) reset the budget at the end of the given budget renewal. Can be `never` (default), `daily`, `weekly`, `monthly`, `yearly`
 - `request_methods` (optional) url encoded, space separated list of request types that you need permission for: `pay_invoice` (default), `get_balance` (see NIP47). For example: `..&request_methods=pay_invoice%20get_balance`
 - `notification_types` (optional) url encoded, space separated list of notification types that you need permission for: For example: `..&notification_types=payment_received%20payment_sent`

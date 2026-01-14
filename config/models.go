@@ -33,12 +33,14 @@ type AppConfig struct {
 	AutoUnlockPassword    string `envconfig:"AUTO_UNLOCK_PASSWORD"`
 	LogDBQueries          bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
 	SwapServiceUrl        string `envconfig:"SWAP_SERVICE_URL"`
-	LokihubServicesURL    string `envconfig:"LOKI_HUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
+	LokihubServicesURL    string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
+	LokihubStoreURL       string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
 	MessageboardNwcUrl    string `envconfig:"MESSAGEBOARD_NWC_URL"`
 	RebalanceServiceUrl   string `envconfig:"REBALANCE_SERVICE_URL"`
 	EnableRebalance       bool   `envconfig:"ENABLE_REBALANCE" default:"false"`
 	EnableSwap            bool   `envconfig:"ENABLE_SWAP" default:"false"`
 	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
+	LSP                   string `envconfig:"LSP"`
 }
 
 func (c *AppConfig) GetBaseFrontendUrl() string {
@@ -71,6 +73,8 @@ type Config interface {
 	SetFlokicoinDisplayFormat(value string) error
 	GetLokihubServicesURL() string
 	SetLokihubServicesURL(value string) error
+	GetLokihubStoreURL() string
+	SetLokihubStoreURL(value string) error
 	GetSwapServiceURL() string
 	SetSwapServiceURL(value string) error
 	GetMessageboardNwcUrl() string
@@ -84,4 +88,6 @@ type Config interface {
 	EnableMessageboardNwc() bool
 	SetEnableMessageboardNwc(value bool) error
 	GetDefaultWorkDir() string
+	GetLSP() string
+	SetLSP(value string) error
 }
