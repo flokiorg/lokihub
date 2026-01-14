@@ -22,6 +22,7 @@ import { AppStoreDetail } from "src/screens/appstore/AppStoreDetail";
 import Channels from "src/screens/channels/Channels";
 import { CurrentChannelOrder } from "src/screens/channels/CurrentChannelOrder";
 import IncreaseOutgoingCapacity from "src/screens/channels/IncreaseOutgoingCapacity";
+import OrderChannel from "src/screens/channels/OrderChannel";
 import { AutoChannel } from "src/screens/channels/auto/AutoChannel";
 import { OpenedAutoChannel } from "src/screens/channels/auto/OpenedAutoChannel";
 import { OpeningAutoChannel } from "src/screens/channels/auto/OpeningAutoChannel";
@@ -367,6 +368,11 @@ const routes: RouteObject[] = [
             path: "order",
             element: <CurrentChannelOrder />,
             handle: { crumb: () => "Current Order" },
+          },
+          {
+            path: "lsp-order",
+            element: <OrderChannel />,
+            handle: { crumb: () => "Increase Inbound Liquidity" },
           },
           {
             path: "onchain/deposit-flokicoin",

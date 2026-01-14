@@ -6,13 +6,13 @@ import { useChannels } from "src/hooks/useChannels";
 import { Channel, UpdateChannelRequest } from "src/types";
 import { request } from "src/utils/request";
 import {
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -21,7 +21,7 @@ type Props = {
 
 export function RoutingFeeDialogContent({ channel }: Props) {
   const currentBaseFeeLoki: number = Math.floor(
-    channel.forwardingFeeBaseMsat / 1000
+    channel.forwardingFeeBaseMloki / 1000
   );
   const currentFeePPM: number = channel.forwardingFeeProportionalMillionths;
 
@@ -38,7 +38,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
 
   async function updateFee() {
     try {
-      const forwardingFeeBaseMsat = +baseFeeLoki * 1000;
+      const forwardingFeeBaseMloki = +baseFeeLoki * 1000;
 
       console.info(
         `🎬 Updating channel ${channel.id} with ${channel.remotePubkey}`
@@ -52,7 +52,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            forwardingFeeBaseMsat: forwardingFeeBaseMsat,
+            forwardingFeeBaseMloki: forwardingFeeBaseMloki,
             forwardingFeeProportionalMillionths:
               +forwardingFeeProportionalMillionths,
           } as UpdateChannelRequest),

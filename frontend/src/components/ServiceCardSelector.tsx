@@ -1,4 +1,4 @@
-import { Check, Globe, PenLine, Server, ShieldCheck } from "lucide-react";
+import { Check, Globe, Plus, Server, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "src/components/ui/input";
 import { cn } from "src/lib/utils";
@@ -6,6 +6,7 @@ import { cn } from "src/lib/utils";
 export interface ServiceOption {
   name: string;
   value: string;
+  uri?: string; // For LSP services
   description?: string;
   recommended?: boolean;
 }
@@ -18,6 +19,9 @@ interface ServiceCardSelectorProps {
   disabled?: boolean;
   onBlur?: () => void;
   onOptionSelect?: (value: string) => void;
+  customLabel?: string;
+  customIcon?: React.ReactNode;
+  fullWidth?: boolean;
 }
 
 export function ServiceCardSelector({
@@ -28,6 +32,9 @@ export function ServiceCardSelector({
   disabled,
   onBlur,
   onOptionSelect,
+  customLabel,
+  customIcon,
+  fullWidth,
 }: ServiceCardSelectorProps) {
   const [isCustom, setIsCustom] = useState(false);
   const customInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +81,7 @@ export function ServiceCardSelector({
   };
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+    <div className={cn("grid gap-4", fullWidth ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]")}>
       {options.map((option) => {
         const isSelected = value === option.value;
 
@@ -133,30 +140,21 @@ export function ServiceCardSelector({
       <div
         onClick={handleSelectCustom}
         className={cn(
-          "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group",
+          "relative flex flex-col p-3 rounded-lg border border-dashed transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group",
           isCustom
-            ? "border-yellow-500 ring-1 ring-yellow-500 shadow-sm"
-            : "border-border hover:border-primary hover:shadow-sm",
+            ? "border-yellow-500 ring-1 ring-yellow-500 shadow-sm bg-card"
+            : "border-border hover:border-primary hover:shadow-sm bg-transparent",
           disabled && "opacity-50 pointer-events-none"
         )}
       >
-        {/* Background Layer */}
-        <div 
-            className={cn(
-            "absolute inset-0 transition-opacity duration-200 pointer-events-none",
-            isCustom ? "bg-yellow-500 opacity-5" : "bg-muted opacity-0 group-hover:opacity-30"
-            )} 
-        />
-        
         <div className="relative z-10 flex flex-col h-full">
          {!isCustom ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-2">
-                <div className="relative p-2 rounded-full overflow-hidden">
-                    <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-all" />
-                    <PenLine className="relative z-10 w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-2 text-muted-foreground group-hover:text-primary transition-colors">
+                <div className="p-2 rounded-full bg-muted/50 group-hover:bg-primary/10 group-hover:scale-110 transition-all duration-300">
+                    {customIcon || <Plus className="w-5 h-5" />}
                 </div>
                 <div className="space-y-0.5">
-                    <span className="font-medium text-sm block">Custom Service</span>
+                    <span className="font-medium text-sm block">{customLabel || "Add Custom Service"}</span>
                     <p className="text-[10px] text-muted-foreground leading-tight">Connect a trusted service</p>
                 </div>
             </div>
@@ -170,7 +168,7 @@ export function ServiceCardSelector({
                                 <Server className="w-4 h-4" />
                              </div>
                          </div>
-                         <span className="font-semibold text-sm">Custom URL</span>
+                         <span className="font-semibold text-sm">{customLabel || "Custom Service"}</span>
                     </div>
                     {isCustom && (
                         <div className="bg-yellow-500 text-white rounded-full p-0.5">

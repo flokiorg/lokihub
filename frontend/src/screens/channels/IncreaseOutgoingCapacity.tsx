@@ -1,5 +1,5 @@
 import { InfoIcon } from "lucide-react";
-import React, { FormEvent } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
@@ -12,21 +12,29 @@ import { MempoolAlert } from "src/components/MempoolAlert";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
+import { LinkButton } from "src/components/ui/custom/link-button";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "src/components/ui/dialog";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "src/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
@@ -35,10 +43,10 @@ import { usePeers } from "src/hooks/usePeers";
 import { cn, formatAmount } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
 import {
-    Channel,
-    Network,
-    NewChannelOrder,
-    OnchainOrder,
+  Channel,
+  Network,
+  NewChannelOrder,
+  OnchainOrder,
 } from "src/types";
 
 import LightningNetworkDark from "src/assets/illustrations/lightning-network-dark.svg?react";
@@ -344,7 +352,8 @@ type NewChannelOnchainProps = {
 
 function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { data: peers } = usePeers();
-
+  const { data: info } = useInfo();
+  
   if (props.order.paymentMethod !== "onchain") {
     throw new Error("unexpected payment method");
   }
@@ -352,6 +361,40 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { setOrder } = props;
   const isAlreadyPeered =
     pubkey && peers?.some((peer) => peer.nodeId === pubkey);
+
+  const [selection, setSelection] = useState<string>(() => {
+      // Initialize state: if order.pubkey is set and matches an LSP, select it.
+      // Otherwise if LSPs avail, select first. Else custom.
+      if (pubkey && info?.lsps?.find(l => l.pubkey === pubkey)) {
+          return pubkey;
+      }
+      if (info?.lsps && info.lsps.length > 0) {
+          return info.lsps[0].pubkey;
+      }
+      return "custom";
+  });
+
+  // Effect to sync selection changes to parent order state
+  useEffect(() => {
+     if (selection !== "custom") {
+         const lsp = info?.lsps?.find(l => l.pubkey === selection);
+         if (lsp) {
+             setOrder(current => ({
+                 ...current,
+                 paymentMethod: "onchain",
+                 pubkey: lsp.pubkey,
+                 host: lsp.host
+             }));
+         }
+     } else if (!pubkey) {
+         // If switched to custom and no pubkey set logic? 
+         // Actually, do nothing, let user type.
+         // But maybe clear if coming from an LSP selection?
+         // Let's decided to clear it only if it was an LSP before.
+         // For now, simpler: user clears it manually or types over.
+     }
+  }, [selection, info?.lsps, setOrder]);
+
 
   function setPubkey(pubkey: string) {
     props.setOrder((current) => ({
@@ -374,11 +417,15 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { data: nodeDetails } = useNodeDetails(pubkey);
 
   React.useEffect(() => {
+    // Only auto-fill host if custom selection, or if we want to ensure host is set?
+    // If LSP is selected, we parsed URI above.
     const socketAddress = nodeDetails?.sockets?.split(",")?.[0];
-    if (socketAddress) {
+    if (socketAddress && selection === "custom") {
       setHost(socketAddress);
     }
-  }, [nodeDetails, setHost]);
+  }, [nodeDetails, setHost, selection]);
+
+  const hasLSPs = info?.lsps && info.lsps.length > 0;
 
   return (
     <>
@@ -386,53 +433,95 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
         {props.showCustomOptions && (
           <>
             <div className="grid gap-1.5">
-              <Label htmlFor="pubkey">Peer</Label>
-              <Input
-                id="pubkey"
-                type="text"
-                value={pubkey}
-                required
-                placeholder="Pubkey of the peer"
-                onChange={(e) => {
-                  const parts = e.target.value.trim().split("@");
-                  setPubkey(parts[0]);
-                  if (parts.length > 1) {
-                    setHost(parts[1]);
-                  }
-                }}
-              />
-              {nodeDetails && (
-                <div className="ml-2 text-muted-foreground text-sm">
-                  <span
-                    className="mr-2"
-                    style={{ color: `${nodeDetails.color}` }}
-                  >
-                    ⬤
-                  </span>
-                  {nodeDetails.alias && (
-                    <>
-                      {nodeDetails.alias} ({nodeDetails.active_channel_count}{" "}
-                      channels)
-                    </>
-                  )}
-                </div>
-              )}
+                <Label htmlFor="provider-select">Peer / Provider</Label>
+                {/* LSP Selector */}
+                <Select 
+                    value={selection} 
+                    onValueChange={(val) => {
+                        setSelection(val);
+                        if (val === "custom") {
+                            setPubkey("");
+                            setHost("");
+                        }
+                    }}
+                    disabled={!hasLSPs}
+                >
+                    <SelectTrigger className="w-full" id="provider-select">
+                        <SelectValue placeholder={!hasLSPs ? "No LSPs Configured" : "Select a Provider"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {info?.lsps?.map((lsp) => (
+                            <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
+                                {lsp.name || lsp.pubkey.substring(0, 16) + "..."}
+                            </SelectItem>
+                        ))}
+                        {hasLSPs && <div className="h-px bg-muted my-1" />}
+                        <SelectItem value="custom">Custom Peer</SelectItem>
+                    </SelectContent>
+                </Select>
+                {!hasLSPs && (
+                     <div className="text-muted-foreground text-xs">
+                        <span className="mr-1">Manage providers in</span>
+                        <LinkButton to="/settings/services" variant="link" className="h-auto p-0 text-xs underline">
+                            Settings &gt; Services
+                        </LinkButton>
+                     </div>
+                )}
             </div>
 
-            {!isAlreadyPeered && /*!nodeDetails && */ pubkey && (
-              <div className="grid gap-1.5">
-                <Label htmlFor="host">Host:Port</Label>
-                <Input
-                  id="host"
-                  type="text"
-                  value={host}
-                  required
-                  placeholder="0.0.0.0:5521 or [2600::]:5521"
-                  onChange={(e) => {
-                    setHost(e.target.value.trim());
-                  }}
-                />
-              </div>
+            {/* Manual Input Fields - Show if selection is Custom */}
+            {selection === "custom" && (
+                <>
+                    <div className="grid gap-1.5">
+                    <Label htmlFor="pubkey">Peer</Label>
+                    <Input
+                        id="pubkey"
+                        type="text"
+                        value={pubkey}
+                        required
+                        placeholder="Pubkey of the peer"
+                        onChange={(e) => {
+                        const parts = e.target.value.trim().split("@");
+                        setPubkey(parts[0]);
+                        if (parts.length > 1) {
+                            setHost(parts[1]);
+                        }
+                        }}
+                    />
+                    {nodeDetails && (
+                        <div className="ml-2 text-muted-foreground text-sm">
+                        <span
+                            className="mr-2"
+                            style={{ color: `${nodeDetails.color}` }}
+                        >
+                            ⬤
+                        </span>
+                        {nodeDetails.alias && (
+                            <>
+                            {nodeDetails.alias} ({nodeDetails.active_channel_count}{" "}
+                            channels)
+                            </>
+                        )}
+                        </div>
+                    )}
+                    </div>
+
+                    {!isAlreadyPeered && /*!nodeDetails && */ pubkey && (
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="host">Host:Port</Label>
+                        <Input
+                        id="host"
+                        type="text"
+                        value={host}
+                        required
+                        placeholder="0.0.0.0:5521 or [2600::]:5521"
+                        onChange={(e) => {
+                            setHost(e.target.value.trim());
+                        }}
+                        />
+                    </div>
+                    )}
+                </>
             )}
           </>
         )}

@@ -34,11 +34,11 @@ function PodcastingInfo({ boost }: { boost: Boostagram }) {
           <p className="text-muted-foreground break-all">{boost.ts}</p>
         </div>
       )}
-      {boost.valueMsatTotal && (
+      {boost.valueMlokiTotal && (
         <div className="mt-6">
           <p>Total amount</p>
           <p className="text-muted-foreground break-all sensitive">
-            <FormattedFlokicoinAmount amount={boost.valueMsatTotal} />
+            <FormattedFlokicoinAmount amount={boost.valueMlokiTotal} />
           </p>
         </div>
       )}

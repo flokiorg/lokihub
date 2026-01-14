@@ -1,10 +1,10 @@
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { useForwards } from "src/hooks/useForwards";
 
@@ -25,9 +25,9 @@ export function ForwardsWidget() {
           <div>
             <p className="text-muted-foreground text-xs">Fees Earned</p>
             <p className="text-xl font-semibold">
-              <FormattedFlokicoinAmount amount={forwards.totalFeeEarnedMsat} />
+              <FormattedFlokicoinAmount amount={forwards.totalFeeEarnedMloki} />
               <FormattedFiatAmount
-                amount={Math.floor(forwards.totalFeeEarnedMsat / 1000)}
+                amount={Math.floor(forwards.totalFeeEarnedMloki / 1000)}
               />
             </p>
           </div>
@@ -35,10 +35,10 @@ export function ForwardsWidget() {
             <p className="text-muted-foreground text-xs">Total Routed</p>
             <p className="text-xl font-semibold">
               <FormattedFlokicoinAmount
-                amount={forwards.outboundAmountForwardedMsat}
+                amount={forwards.outboundAmountForwardedMloki}
               />
               <FormattedFiatAmount
-                amount={Math.floor(forwards.outboundAmountForwardedMsat / 1000)}
+                amount={Math.floor(forwards.outboundAmountForwardedMloki / 1000)}
               />
             </p>
           </div>

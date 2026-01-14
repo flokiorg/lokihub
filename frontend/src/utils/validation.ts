@@ -78,3 +78,20 @@ export const validateNwc = (url: string): boolean => {
   }
   return true;
 };
+
+export const validateLSPURI = (uri: string): string | null => {
+  if (!uri) return "URI is required";
+  const parts = uri.split("@");
+  if (parts.length !== 2) return "Invalid format. Expected pubkey@host:port";
+  
+  const pubkey = parts[0];
+  const host = parts[1];
+
+  if (!/^[0-9a-fA-F]{66}$/.test(pubkey)) {
+    return "Invalid pubkey. Must be 33-byte hex string";
+  }
+  if (!host) {
+     return "Host is required";
+  }
+  return null;
+};

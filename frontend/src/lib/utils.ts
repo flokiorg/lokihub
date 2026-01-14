@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatAmount(amount: number, decimals = 1) {
-  amount /= 1000; //msat to sat
+  amount /= 1000; //mloki to loki
   let i = 0;
   for (i; amount >= 1000; i++) {
     amount /= 1000;

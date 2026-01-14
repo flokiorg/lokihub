@@ -33,6 +33,7 @@ import {
     AlertDescription,
     AlertTitle,
 } from "src/components/ui/alert.tsx";
+import { Button } from "src/components/ui/button";
 import {
     Card,
     CardContent,
@@ -418,6 +419,12 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
+                  <div className="px-6 pb-4">
+                      <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/channels/outgoing")}>
+                          <ArrowDownUpIcon className="mr-2 h-4 w-4" />
+                          Increase Balance
+                      </Button>
+                  </div>
                 </div>
                 <div className="flex flex-col flex-1">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pr-0">
@@ -453,6 +460,12 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
+                  <div className="px-6 pb-4">
+                      <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/channels/lsp-order")}>
+                          <ArrowRightIcon className="mr-2 h-4 w-4" />
+                          Increase Capacity
+                      </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

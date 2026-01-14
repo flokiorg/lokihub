@@ -1,11 +1,11 @@
 import React from "react";
 import {
-    ConnectPeerRequest,
-    MempoolUtxo,
-    NewChannelOrder,
-    OpenChannelRequest,
-    OpenChannelResponse,
-    PayInvoiceResponse,
+  ConnectPeerRequest,
+  MempoolUtxo,
+  NewChannelOrder,
+  OpenChannelRequest,
+  OpenChannelResponse,
+  PayInvoiceResponse,
 } from "src/types";
 
 import { CopyIcon, QrCodeIcon, RefreshCwIcon } from "lucide-react";
@@ -18,31 +18,31 @@ import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "src/components/ui/dialog";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { Separator } from "src/components/ui/separator";
 import { Table, TableBody, TableCell, TableRow } from "src/components/ui/table";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useBalances } from "src/hooks/useBalances";
 
@@ -202,7 +202,7 @@ function PayFlokicoinChannelOrderWaitingDepositConfirmation() {
           <Loading /> Waiting for one block confirmation
         </CardContent>
         <CardFooter className="text-muted-foreground">
-          estimated time: 10 minutes
+          estimated time: 1 minute
         </CardFooter>
       </Card>
     </>
