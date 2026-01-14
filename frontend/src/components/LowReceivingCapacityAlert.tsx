@@ -6,7 +6,11 @@ import {
     AlertTitle,
 } from "src/components/ui/alert.tsx";
 
-export default function LowReceivingCapacityAlert() {
+export default function LowReceivingCapacityAlert({
+    jitAvailable = false
+}: {
+    jitAvailable?: boolean;
+}) {
   return (
     <Alert variant="warning">
       <AlertTriangleIcon className="h-4 w-4" />
@@ -20,6 +24,7 @@ export default function LowReceivingCapacityAlert() {
         <Link className="underline" to="/wallet/swap?type=out">
           swap out funds
         </Link>
+        {jitAvailable && ", or purchase liquidity via JIT"}
         .
       </AlertDescription>
     </Alert>
