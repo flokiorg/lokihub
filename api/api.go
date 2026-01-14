@@ -1318,11 +1318,35 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		return parts[0], uint16(port), nil
 	}
 
-	if len(updateSettingsRequest.LSPs) > 0 {
+	// Process LSP updates (including deletions when array is empty)
+	// Note: We check if LSPs field is present in the request (non-nil)
+	// An empty array means "delete all custom LSPs", so we process it
+	if updateSettingsRequest.LSPs != nil {
 		// Get current LSPs from backend
 		existingLSPs, err := api.ListLSPs()
 		if err != nil {
 			return fmt.Errorf("failed to list existing LSPs: %w", err)
+		}
+
+		// Get community LSPs to ensure we never delete them
+		communityPubkeys := make(map[string]bool)
+		servicesData, err := api.GetServices(context.Background())
+		if err == nil {
+			if servicesMap, ok := servicesData.(map[string]interface{}); ok {
+				if lspsData, ok := servicesMap["lsps"].([]interface{}); ok {
+					for _, lspItem := range lspsData {
+						if lspMap, ok := lspItem.(map[string]interface{}); ok {
+							if uri, ok := lspMap["uri"].(string); ok {
+								// Extract pubkey from URI (format: pubkey@host:port)
+								parts := strings.Split(uri, "@")
+								if len(parts) == 2 {
+									communityPubkeys[parts[0]] = true
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
 		// Create maps for easier comparison
@@ -1337,8 +1361,15 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		}
 
 		// Process removals (LSPs in existing but not in new)
+		// ONLY delete custom LSPs (not community ones)
 		for pubkey, existing := range existingMap {
 			if _, stillExists := newMap[pubkey]; !stillExists {
+				// Safety check: never delete community LSPs
+				if communityPubkeys[pubkey] {
+					logger.Logger.WithField("pubkey", pubkey).Warn("Skipping deletion of community LSP")
+					continue
+				}
+
 				// Remove from selected if it was active
 				if existing.Active {
 					if err := api.RemoveSelectedLSP(pubkey); err != nil {

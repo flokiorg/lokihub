@@ -307,9 +307,12 @@ export default function ReceiveInvoice() {
                         </div>
                       ) : jitFeeParams ? (
                          <>
-                            {" "}Your LSP (<span className="text-primary">{info.lsps[0].name || `${info.lsps[0].pubkey.slice(0, 6)}...${info.lsps[0].pubkey.slice(-6)}@${info.lsps[0].host}`}</span>) will provide liquidity.
-                            <br/>
-                            Estimated Fee: {Math.ceil((parseInt(jitFeeParams.min_fee_mloki) + (parseInt(amount)*1000 * jitFeeParams.proportional / 1000000)) / 1000)} loki.
+                            <p>
+                              Your LSP (<span className="text-primary">{info.lsps[0].name || `${info.lsps[0].pubkey.slice(0, 6)}...${info.lsps[0].pubkey.slice(-6)}@${info.lsps[0].host}`}</span>) will provide liquidity.
+                            </p>
+                            <p>
+                              Estimated Fee: {Math.ceil((parseInt(jitFeeParams.min_fee_mloki) + (parseInt(amount)*1000 * jitFeeParams.proportional / 1000000)) / 1000)} loki.
+                            </p>
                          </>
                       ) : (
                          " Fetching fee information..."

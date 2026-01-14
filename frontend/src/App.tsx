@@ -1,8 +1,10 @@
 import {
-  RouterProvider,
-  createBrowserRouter,
-  createHashRouter,
+    RouterProvider,
+    createBrowserRouter,
+    createHashRouter,
 } from "react-router-dom";
+import { GlobalError } from "src/components/GlobalError";
+import Loading from "src/components/Loading";
 import { Toaster } from "src/components/ui/sonner";
 import { ThemeProvider } from "src/components/ui/theme-provider";
 import { TouchProvider } from "src/components/ui/tooltip";
@@ -19,7 +21,7 @@ const router = createRouterFunc(routes, {
 });
 
 function App() {
-  const { data: info } = useInfo();
+  const { data: info, error, isLoading } = useInfo();
 
   return (
     <>
@@ -29,6 +31,8 @@ function App() {
           defaultDarkMode="system"
           storageKey="vite-ui-theme"
         >
+          {isLoading && <Loading />}
+          {error && <GlobalError message={error.message} />}
           {info && <RouterProvider router={router} />}
           <Toaster position="bottom-right" richColors={true} />
         </ThemeProvider>
