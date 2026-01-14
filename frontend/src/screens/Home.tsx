@@ -62,11 +62,14 @@ function DashboardAlerts() {
   const dayInSeconds = 24 * 60 * 60;
   const fiveDaysAgo = now - 5 * dayInSeconds;
 
-  const newApps = apps
+  // Ensure apps is an array to prevent filter errors
+  const safeApps = Array.isArray(apps) ? apps : [];
+
+  const newApps = safeApps
     .filter((app) => app.createdAt > fiveDaysAgo && !dismissed.includes(app.id))
     .sort((a, b) => b.createdAt - a.createdAt);
 
-  const updatedApps = apps
+  const updatedApps = safeApps
     .filter(
       (app) =>
         app.updatedAt > fiveDaysAgo &&

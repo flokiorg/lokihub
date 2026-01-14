@@ -5,18 +5,18 @@ import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import { Badge } from "src/components/ui/badge";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardTitle,
 } from "src/components/ui/card";
 import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
 import { swrFetcher } from "src/utils/swr";
 import useSWR from "swr";
 import {
-    AppStoreApp,
-    sortedAppStoreCategories
+  AppStoreApp,
+  sortedAppStoreCategories
 } from "./SuggestedAppData";
 
 function SuggestedAppCard({ id, title, description }: AppStoreApp) {
@@ -83,7 +83,7 @@ export default function SuggestedApps() {
         title="No apps yet"
         description="Check back later or submit your own app to the community."
         buttonText="Submit your app"
-        buttonLink="https://github.com/flokiorg/lokihub-apps"
+        buttonLink="https://github.com/flokiorg/lokihub-store"
         externalLink={true}
       />
     );

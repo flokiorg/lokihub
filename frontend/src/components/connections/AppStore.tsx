@@ -15,7 +15,7 @@ function AppStore() {
               icon={CirclePlusIcon}
               text="Submit your app"
               variant="outline"
-              to="https://github.com/flokiorg/lokihub-apps"
+              to="https://github.com/flokiorg/lokihub-store"
             />
           </div>
         </div>
