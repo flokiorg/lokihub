@@ -52,7 +52,7 @@ func TestHandleLookupInvoiceEvent(t *testing.T) {
 		Preimage:        &tests.MockLNClientTransaction.Preimage,
 		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
 		AmountMloki:     uint64(tests.MockLNClientTransaction.Amount),
-		FeeMsat:         uint64(tests.MockLNClientTransaction.FeesPaid),
+		FeeMloki:        uint64(tests.MockLNClientTransaction.FeesPaid),
 		SettledAt:       &settledAt,
 		AppId:           &app.ID,
 	}).Error

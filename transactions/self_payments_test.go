@@ -190,7 +190,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToNoApp(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat
+		AmountMloki: 123000, // invoice is 123000 mloki
 	})
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -264,7 +264,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToApp(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat
+		AmountMloki: 123000, // invoice is 123000 mloki
 	})
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -343,7 +343,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToIsolatedApp(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat
+		AmountMloki: 123000, // invoice is 123000 mloki
 	})
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -438,7 +438,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToSelf(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat
+		AmountMloki: 123000, // invoice is 123000 mloki
 	})
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -515,7 +515,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToApp_AmountProvidedIgnoredOnNon
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat
+		AmountMloki: 123000, // invoice is 123000 mloki
 	})
 
 	dbRequestEvent := &db.RequestEvent{}

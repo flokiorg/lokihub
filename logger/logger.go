@@ -19,7 +19,10 @@ var logFilePath string
 
 func Init(logLevel string) {
 	Logger = logrus.New()
-	Logger.SetFormatter(&logrus.JSONFormatter{})
+	Logger.SetFormatter(&logrus.TextFormatter{
+		ForceColors:   true,
+		FullTimestamp: true,
+	})
 	Logger.SetOutput(os.Stdout)
 	logrusLogLevel, err := strconv.Atoi(logLevel)
 	if err != nil {

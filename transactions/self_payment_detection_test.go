@@ -37,7 +37,7 @@ func TestSendPaymentSync_SelfPaymentDetection_WithIncomingTransaction(t *testing
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
 	assert.Equal(t, uint64(123000), transaction.AmountMloki)
 	assert.Equal(t, mockPreimage, *transaction.Preimage)
-	assert.Zero(t, transaction.FeeMsat)
+	assert.Zero(t, transaction.FeeMloki)
 }
 
 func TestSendPaymentSync_SelfPaymentDetection_WithoutIncomingTransaction(t *testing.T) {

@@ -38,7 +38,7 @@ func TestSendKeysend(t *testing.T) {
 	assert.Equal(t, uint64(1000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_TYPE_OUTGOING, transaction.Type)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, 64, len(*transaction.Preimage))
 
@@ -66,7 +66,7 @@ func TestSendKeysend_CustomPreimage(t *testing.T) {
 	assert.Equal(t, uint64(1000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_TYPE_OUTGOING, transaction.Type)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, customPreimage, *transaction.Preimage)
 }
@@ -126,7 +126,7 @@ func TestSendKeysend_App_WithPermission(t *testing.T) {
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
 	assert.Equal(t, app.ID, *transaction.AppId)
 	assert.Equal(t, dbRequestEvent.ID, *transaction.RequestEventId)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, 64, len(*transaction.Preimage))
 }
@@ -203,7 +203,7 @@ func TestSendKeysend_App_BudgetNotExceeded(t *testing.T) {
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
 	assert.Equal(t, app.ID, *transaction.AppId)
 	assert.Equal(t, dbRequestEvent.ID, *transaction.RequestEventId)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, 64, len(*transaction.Preimage))
 }
@@ -234,7 +234,7 @@ func TestSendKeysend_App_BalanceExceeded(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 10000, // invoice is 1000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 10000, // invoice is 1000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -270,7 +270,7 @@ func TestSendKeysend_App_BalanceSufficient(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 11000, // invoice is 1000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 11000, // invoice is 1000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -290,7 +290,7 @@ func TestSendKeysend_App_BalanceSufficient(t *testing.T) {
 	assert.Equal(t, dbRequestEvent.ID, *transaction.RequestEventId)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, 64, len(*transaction.Preimage))
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 }
 
 func TestSendKeysend_TLVs(t *testing.T) {
@@ -327,7 +327,7 @@ func TestSendKeysend_TLVs(t *testing.T) {
 	assert.Equal(t, "Go podcasting!", boostagram.Message)
 	assert.Equal(t, "Satoshi Nakamoto", boostagram.SenderName)
 	assert.Equal(t, "boost", boostagram.Action)
-	assert.Equal(t, int64(1000), boostagram.ValueMsatTotal)
+	assert.Equal(t, int64(1000), boostagram.ValueMlokiTotal)
 
 	assert.Equal(t, "Go podcasting!", transaction.Description)
 
@@ -336,7 +336,7 @@ func TestSendKeysend_TLVs(t *testing.T) {
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
 	assert.NotNil(t, transaction.Preimage)
 	assert.Equal(t, 64, len(*transaction.Preimage))
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 }
 
 func TestSendKeysend_IsolatedAppToNoApp(t *testing.T) {
@@ -366,7 +366,7 @@ func TestSendKeysend_IsolatedAppToNoApp(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // payment is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // payment is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -435,7 +435,7 @@ func TestSendKeysend_IsolatedAppToIsolatedApp(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // payment is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // payment is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	dbRequestEvent := &db.RequestEvent{}

@@ -159,7 +159,7 @@ func (s *appStoreService) Sync() {
 }
 
 func (s *appStoreService) fetchRemoteApps() ([]App, error) {
-	url := fmt.Sprintf("%s/apps.json", s.cfg.GetLokihubServicesURL())
+	url := fmt.Sprintf("%s/apps.json", s.cfg.GetLokihubStoreURL())
 	resp, err := s.httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func (s *appStoreService) fetchRemoteApps() ([]App, error) {
 }
 
 func (s *appStoreService) downloadLogo(filename, appId, outputDir string) error {
-	url := fmt.Sprintf("%s/logos/%s", s.cfg.GetLokihubServicesURL(), filename)
+	url := fmt.Sprintf("%s/logos/%s", s.cfg.GetLokihubStoreURL(), filename)
 	resp, err := s.httpClient.Get(url)
 	if err != nil {
 		return err

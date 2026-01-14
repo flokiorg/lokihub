@@ -35,7 +35,7 @@ type transactionsService struct {
 
 type TransactionsService interface {
 	events.EventSubscriber
-	MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string) (*Transaction, error)
+	MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (*Transaction, error)
 	LookupTransaction(ctx context.Context, paymentHash string, transactionType *string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error)
 	ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaidOutgoing bool, unpaidIncoming bool, transactionType *string, lnClient lnclient.LNClient, appId *uint, forceFilterByAppId bool) (transactions []Transaction, totalCount uint64, err error)
 	SendPaymentSync(payReq string, amountMloki *uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
@@ -59,20 +59,20 @@ var balanceValidationLock = &sync.Mutex{}
 type Transaction = db.Transaction
 
 type Boostagram struct {
-	AppName        string         `json:"app_name"`
-	Name           string         `json:"name"`
-	Podcast        string         `json:"podcast"`
-	URL            string         `json:"url"`
-	Episode        StringOrNumber `json:"episode,omitempty"`
-	FeedId         StringOrNumber `json:"feedID,omitempty"`
-	ItemId         StringOrNumber `json:"itemID,omitempty"`
-	Timestamp      int64          `json:"ts,omitempty"`
-	Message        string         `json:"message,omitempty"`
-	SenderId       StringOrNumber `json:"sender_id"`
-	SenderName     string         `json:"sender_name"`
-	Time           string         `json:"time"`
-	Action         string         `json:"action"`
-	ValueMsatTotal int64          `json:"value_msat_total"`
+	AppName         string         `json:"app_name"`
+	Name            string         `json:"name"`
+	Podcast         string         `json:"podcast"`
+	URL             string         `json:"url"`
+	Episode         StringOrNumber `json:"episode,omitempty"`
+	FeedId          StringOrNumber `json:"feedID,omitempty"`
+	ItemId          StringOrNumber `json:"itemID,omitempty"`
+	Timestamp       int64          `json:"ts,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	SenderId        StringOrNumber `json:"sender_id"`
+	SenderName      string         `json:"sender_name"`
+	Time            string         `json:"time"`
+	Action          string         `json:"action"`
+	ValueMlokiTotal int64          `json:"value_mloki_total"`
 }
 
 type StringOrNumber struct {
@@ -139,7 +139,7 @@ func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *
 	}
 }
 
-func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string) (*Transaction, error) {
+func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (*Transaction, error) {
 	logger.Logger.WithFields(logrus.Fields{
 		"app_id":           appId,
 		"request_event_id": requestEventId,
@@ -173,7 +173,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		appId = &overwriteAppId
 	}
 
-	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), throughNodePubkey)
+	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths)
 	if err != nil {
 		logger.Logger.WithError(err).Error("Failed to create transaction")
 		return nil, err
@@ -355,7 +355,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 				RequestEventId:  requestEventId,
 				Type:            constants.TRANSACTION_TYPE_OUTGOING,
 				State:           constants.TRANSACTION_STATE_PENDING,
-				FeeReserveMsat:  CalculateFeeReserveMsat(paymentAmount),
+				FeeReserveMloki: CalculateFeeReserveMloki(paymentAmount),
 				AmountMloki:     paymentAmount,
 				PaymentRequest:  payReq,
 				PaymentHash:     paymentRequest.PaymentHash,
@@ -468,18 +468,18 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			}
 
 			dbTransaction = db.Transaction{
-				AppId:          appId,
-				Description:    svc.getDescriptionFromCustomRecords(customRecords),
-				RequestEventId: requestEventId,
-				Type:           constants.TRANSACTION_TYPE_OUTGOING,
-				State:          constants.TRANSACTION_STATE_PENDING,
-				FeeReserveMsat: CalculateFeeReserveMsat(uint64(amount)),
-				AmountMloki:    amount,
-				Metadata:       datatypes.JSON(metadataBytes),
-				Boostagram:     datatypes.JSON(boostagramBytes),
-				PaymentHash:    paymentHash,
-				Preimage:       &preimage,
-				SelfPayment:    selfPayment,
+				AppId:           appId,
+				Description:     svc.getDescriptionFromCustomRecords(customRecords),
+				RequestEventId:  requestEventId,
+				Type:            constants.TRANSACTION_TYPE_OUTGOING,
+				State:           constants.TRANSACTION_STATE_PENDING,
+				FeeReserveMloki: CalculateFeeReserveMloki(uint64(amount)),
+				AmountMloki:     amount,
+				Metadata:        datatypes.JSON(metadataBytes),
+				Boostagram:      datatypes.JSON(boostagramBytes),
+				PaymentHash:     paymentHash,
+				Preimage:        &preimage,
+				SelfPayment:     selfPayment,
 			}
 			err = tx.Create(&dbTransaction).Error
 
@@ -1030,7 +1030,7 @@ func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnC
 func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount uint64, description string, selfPayment bool) error {
 	amountWithFeeReserve := amount
 	if !selfPayment {
-		amountWithFeeReserve += CalculateFeeReserveMsat(amount)
+		amountWithFeeReserve += CalculateFeeReserveMloki(amount)
 	}
 
 	// ensure balance for isolated apps
@@ -1103,7 +1103,7 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 }
 
 // max of 1% or 10000 milliloki (10 loki)
-func CalculateFeeReserveMsat(amountMloki uint64) uint64 {
+func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
 	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), 10000))
 }
 
@@ -1362,12 +1362,12 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 
 	now := time.Now()
 	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
-		"State":          constants.TRANSACTION_STATE_SETTLED,
-		"Preimage":       &preimage,
-		"FeeMsat":        fee,
-		"FeeReserveMsat": 0,
-		"SettledAt":      &now,
-		"SelfPayment":    selfPayment,
+		"State":           constants.TRANSACTION_STATE_SETTLED,
+		"Preimage":        &preimage,
+		"FeeMloki":        fee,
+		"FeeReserveMloki": 0,
+		"SettledAt":       &now,
+		"SelfPayment":     selfPayment,
 	}).Error
 	if err != nil {
 		logger.Logger.WithFields(logrus.Fields{
@@ -1451,9 +1451,9 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 	}
 
 	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
-		"State":          constants.TRANSACTION_STATE_FAILED,
-		"FeeReserveMsat": 0,
-		"FailureReason":  reason,
+		"State":           constants.TRANSACTION_STATE_FAILED,
+		"FeeReserveMloki": 0,
+		"FailureReason":   reason,
 	}).Error
 	if err != nil {
 		logger.Logger.WithFields(logrus.Fields{

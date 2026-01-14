@@ -12,11 +12,33 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (api *api) CreateInvoice(ctx context.Context, amount uint64, description string) (*MakeInvoiceResponse, error) {
+func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*MakeInvoiceResponse, error) {
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amount, description, "", 0, nil, api.svc.GetLNClient(), nil, nil, nil)
+
+	var lspPubkey *string
+	if req.LSPPubkey != "" {
+		lspPubkey = &req.LSPPubkey
+	}
+	var lspScid *string
+	if req.LSPJitChannelSCID != "" {
+		lspScid = &req.LSPJitChannelSCID
+	}
+	var lspCltv *uint16
+	if req.LSPCltvExpiryDelta != 0 {
+		lspCltv = &req.LSPCltvExpiryDelta
+	}
+	var lspFeeBase *uint64
+	var lspFeeProp *uint32
+	if req.LSPJitChannelSCID != "" {
+		fb := req.LSPFeeBaseMloki
+		lspFeeBase = &fb
+		fp := req.LSPFeeProportionalMillionths
+		lspFeeProp = &fp
+	}
+
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, "", 0, nil, api.svc.GetLNClient(), nil, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +139,7 @@ func toApiTransaction(transaction *transactions.Transaction) *Transaction {
 		PaymentHash:     transaction.PaymentHash,
 		Amount:          transaction.AmountMloki,
 		AppId:           transaction.AppId,
-		FeesPaid:        transaction.FeeMsat,
+		FeesPaid:        transaction.FeeMloki,
 		UpdatedAt:       updatedAt,
 		CreatedAt:       createdAt,
 		SettledAt:       settledAt,
@@ -144,7 +166,7 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 		}
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, nil, api.svc.GetLNClient(), toAppId, nil, nil)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, nil, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil)
 
 	if err != nil {
 		return err
@@ -156,19 +178,19 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 
 func toApiBoostagram(boostagram *transactions.Boostagram) *Boostagram {
 	return &Boostagram{
-		AppName:        boostagram.AppName,
-		Name:           boostagram.Name,
-		Podcast:        boostagram.Podcast,
-		URL:            boostagram.URL,
-		Episode:        boostagram.Episode.String(),
-		FeedId:         boostagram.FeedId.String(),
-		ItemId:         boostagram.ItemId.String(),
-		Timestamp:      boostagram.Timestamp,
-		Message:        boostagram.Message,
-		SenderId:       boostagram.SenderId.String(),
-		SenderName:     boostagram.SenderName,
-		Time:           boostagram.Time,
-		Action:         boostagram.Action,
-		ValueMsatTotal: boostagram.ValueMsatTotal,
+		AppName:         boostagram.AppName,
+		Name:            boostagram.Name,
+		Podcast:         boostagram.Podcast,
+		URL:             boostagram.URL,
+		Episode:         boostagram.Episode.String(),
+		FeedId:          boostagram.FeedId.String(),
+		ItemId:          boostagram.ItemId.String(),
+		Timestamp:       boostagram.Timestamp,
+		Message:         boostagram.Message,
+		SenderId:        boostagram.SenderId.String(),
+		SenderName:      boostagram.SenderName,
+		Time:            boostagram.Time,
+		Action:          boostagram.Action,
+		ValueMlokiTotal: boostagram.ValueMlokiTotal,
 	}
 }

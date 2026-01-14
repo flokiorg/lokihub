@@ -53,7 +53,7 @@ func (controller *nip47Controller) payKeysend(ctx context.Context, payKeysendPar
 		ResultType: nip47Request.Method,
 		Result: payResponse{
 			Preimage: *transaction.Preimage,
-			FeesPaid: transaction.FeeMsat,
+			FeesPaid: transaction.FeeMloki,
 		},
 	}, tags)
 }

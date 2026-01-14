@@ -56,7 +56,7 @@ outputs
       {
         "pubkey": "03a5301e3873d71a6138c85acfed2c4bbc3ca4b52b607eb36df1d008cbc83d85d5",
         "short_channel_id": "330791x149x1",
-        "fee_base_msat": 0,
+        "fee_base_mloki": 0,
         "fee_proportional_millionths": 200,
         "cltv_expiry_delta": 9
       }

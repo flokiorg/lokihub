@@ -67,7 +67,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 132000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 132000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	mockEventConsumer := tests.NewMockEventConsumer()
@@ -114,7 +114,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient(t *testing.T) {
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -154,7 +154,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient_OutstandingPayment(t *t
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	svc.DB.Create(&db.Transaction{
@@ -198,7 +198,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient_SettledPayment(t *testi
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 
 	svc.DB.Create(&db.Transaction{
@@ -242,7 +242,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient_UnrelatedPayment(t *testi
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 	svc.DB.Create(&db.Transaction{
 		AppId:       nil, // unrelated to this app
@@ -288,7 +288,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient_FailedPayment(t *testing.
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 133000, // invoice is 123000 msat, but we also calculate fee reserves max of(10 loki or 1%)
+		AmountMloki: 133000, // invoice is 123000 mloki, but we also calculate fee reserves max of(10 loki or 1%)
 	})
 	svc.DB.Create(&db.Transaction{
 		AppId:       &app.ID,
@@ -334,7 +334,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficientThenSufficient(t *testin
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
-		AmountMloki: 123000, // invoice is 123000 msat, but we also need a fee reserves max of(10 loki or 1%)
+		AmountMloki: 123000, // invoice is 123000 mloki, but we also need a fee reserves max of(10 loki or 1%)
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -362,9 +362,9 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficientThenSufficient(t *testin
 }
 
 func TestCalculateFeeReserve(t *testing.T) {
-	assert.Equal(t, uint64(10_000), CalculateFeeReserveMsat(0))
-	assert.Equal(t, uint64(10_000), CalculateFeeReserveMsat(10_000))
-	assert.Equal(t, uint64(10_000), CalculateFeeReserveMsat(100_000))
-	assert.Equal(t, uint64(10_000), CalculateFeeReserveMsat(1000_000))
-	assert.Equal(t, uint64(20_000), CalculateFeeReserveMsat(2000_000))
+	assert.Equal(t, uint64(10_000), CalculateFeeReserveMloki(0))
+	assert.Equal(t, uint64(10_000), CalculateFeeReserveMloki(10_000))
+	assert.Equal(t, uint64(10_000), CalculateFeeReserveMloki(100_000))
+	assert.Equal(t, uint64(10_000), CalculateFeeReserveMloki(1000_000))
+	assert.Equal(t, uint64(20_000), CalculateFeeReserveMloki(2000_000))
 }

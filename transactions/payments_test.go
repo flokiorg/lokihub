@@ -36,7 +36,7 @@ func TestSendPaymentSync_NoApp(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(123000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.Equal(t, "123preimage", *transaction.Preimage)
 
 	type dummyMetadata struct {
@@ -64,7 +64,7 @@ func TestSendPaymentSync_ZeroAmount(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, amount, transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.Equal(t, "123preimage", *transaction.Preimage)
 }
 
@@ -85,7 +85,7 @@ func TestSendPaymentSync_AmountOnNonZeroAmountInvoice(t *testing.T) {
 	// amount is from the invoice, not what was specified
 	assert.Equal(t, uint64(123_000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.Equal(t, "123preimage", *transaction.Preimage)
 }
 
@@ -370,7 +370,7 @@ func TestSendPaymentSync_FailedRemovesFeeReserve(t *testing.T) {
 
 	assert.Equal(t, uint64(123000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, transaction.State)
-	assert.Zero(t, transaction.FeeReserveMsat)
+	assert.Zero(t, transaction.FeeReserveMloki)
 	assert.Nil(t, transaction.Preimage)
 
 	assert.Equal(t, 1, len(mockEventConsumer.GetConsumedEvents()))
@@ -399,7 +399,7 @@ func TestSendPaymentSync_PendingHasFeeReserve(t *testing.T) {
 
 	assert.Equal(t, uint64(123000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_PENDING, transaction.State)
-	assert.Equal(t, uint64(10000), transaction.FeeReserveMsat)
+	assert.Equal(t, uint64(10000), transaction.FeeReserveMloki)
 	assert.Nil(t, transaction.Preimage)
 }
 

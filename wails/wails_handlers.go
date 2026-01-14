@@ -541,7 +541,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}).WithError(err).Error("Failed to decode request to wails router")
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		invoice, err := app.api.CreateInvoice(ctx, makeInvoiceRequest.Amount, makeInvoiceRequest.Description)
+		invoice, err := app.api.CreateInvoice(ctx, makeInvoiceRequest)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
@@ -622,6 +622,307 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		}
+
+	// LSPS Settings Routes
+	case "/api/lsps/all":
+		// Get LiquidityManager
+		lm := app.svc.GetLiquidityManager()
+		if lm == nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "LiquidityManager not available"}
+		}
+
+		switch method {
+		case "GET":
+			lsps, err := lm.GetLSPs()
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: lsps, Error: ""}
+
+		case "POST":
+			// Struct for adding LSP
+			type AddLSPRequest struct {
+				Name string `json:"name"`
+				URI  string `json:"uri"`
+			}
+			req := &AddLSPRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			err = lm.AddLSP(req.Name, req.URI)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+
+		case "DELETE":
+			// Struct for removing LSP, or use query param?
+			// Using query param for now as per other DELETE routes
+			pubkey := ""
+			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
+			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+			for _, match := range paramMatches {
+				if match[1] == "pubkey" {
+					pubkey = match[2]
+				}
+			}
+			if pubkey == "" {
+				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
+			}
+			err := lm.RemoveLSP(pubkey)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+
+		case "PATCH":
+			// Set Active LSP
+			type SetActiveRequest struct {
+				Pubkey string `json:"pubkey"`
+			}
+			req := &SetActiveRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			err = lm.SetActiveLSP(req.Pubkey)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+
+		}
+
+	case "/api/lsps/selected":
+		// Manage selected LSPs (multiple active selection)
+		lm := app.svc.GetLiquidityManager()
+		if lm == nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "LiquidityManager not available"}
+		}
+
+		switch method {
+		case "GET":
+			// Return list of selected LSP pubkeys
+			selected, err := lm.GetSelectedLSPs()
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: selected, Error: ""}
+
+		case "POST":
+			// Add LSP to selected list
+			type SelectLSPRequest struct {
+				Pubkey string `json:"pubkey"`
+			}
+			req := &SelectLSPRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			err = lm.AddSelectedLSP(req.Pubkey)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+
+		case "DELETE":
+			pubkey := ""
+			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
+			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+			for _, match := range paramMatches {
+				if match[1] == "pubkey" {
+					pubkey = match[2]
+				}
+			}
+			if pubkey == "" {
+				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
+			}
+			err := lm.RemoveSelectedLSP(pubkey)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		}
+	case "/api/lsps0/protocols":
+		lspPubkey := ""
+		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp)=([^&]+)`)
+		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+		for _, match := range paramMatches {
+			if match[1] == "lspPubkey" || match[1] == "lsp" {
+				lspPubkey = match[2]
+			}
+		}
+
+		if lspPubkey == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey (or lsp) is required"}
+		}
+
+		req := &api.LSPS0ListProtocolsRequest{LSPPubkey: lspPubkey}
+		resp, err := app.api.LSPS0ListProtocols(ctx, req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
+
+	case "/api/lsps1/info":
+		req := &api.LSPS1GetInfoRequest{}
+		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp|token)=([^&]+)`)
+		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+		for _, match := range paramMatches {
+			switch match[1] {
+			case "lspPubkey", "lsp":
+				req.LSPPubkey = match[2]
+			case "token":
+				req.Token = match[2]
+			}
+		}
+
+		if req.LSPPubkey == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey is required"}
+		}
+
+		resp, err := app.api.LSPS1GetInfo(ctx, req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
+
+	case "/api/lsps1/order":
+		switch method {
+		case "POST":
+			req := &api.LSPS1CreateOrderRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			resp, err := app.api.LSPS1CreateOrder(ctx, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		case "GET":
+			req := &api.LSPS1GetOrderRequest{}
+			paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp|orderId|token)=([^&]+)`)
+			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+			for _, match := range paramMatches {
+				switch match[1] {
+				case "lspPubkey", "lsp":
+					req.LSPPubkey = match[2]
+				case "orderId":
+					req.OrderID = match[2]
+				case "token":
+					req.Token = match[2]
+				}
+			}
+			if req.LSPPubkey == "" || req.OrderID == "" {
+				return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey and orderId are required"}
+			}
+			resp, err := app.api.LSPS1GetOrder(ctx, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		}
+
+	case "/api/lsps2/info":
+		req := &api.LSPS2GetInfoRequest{}
+		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp|token)=([^&]+)`)
+		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+		for _, match := range paramMatches {
+			switch match[1] {
+			case "lspPubkey", "lsp":
+				req.LSPPubkey = match[2]
+			case "token":
+				req.Token = match[2]
+			}
+		}
+
+		if req.LSPPubkey == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey is required"}
+		}
+
+		resp, err := app.api.LSPS2GetInfo(ctx, req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
+
+	case "/api/lsps2/buy":
+		req := &api.LSPS2BuyRequest{}
+		err := json.Unmarshal([]byte(body), req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		resp, err := app.api.LSPS2Buy(ctx, req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
+
+	case "/api/lsps5/webhooks":
+		req := &api.LSPS5ListWebhooksRequest{}
+		paramRegex := regexp.MustCompile(`[?&](lspPubkey)=([^&]+)`)
+		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+		for _, match := range paramMatches {
+			if match[1] == "lspPubkey" {
+				req.LSPPubkey = match[2]
+			}
+		}
+
+		if req.LSPPubkey == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey is required"}
+		}
+
+		resp, err := app.api.LSPS5ListWebhooks(ctx, req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
+
+	case "/api/lsps5/webhook":
+		switch method {
+		case "POST":
+			req := &api.LSPS5SetWebhookRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			resp, err := app.api.LSPS5SetWebhook(ctx, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		case "DELETE":
+			req := &api.LSPS5RemoveWebhookRequest{}
+			// Try body first if JSON provided
+			if body != "" {
+				_ = json.Unmarshal([]byte(body), req)
+			}
+			// Fallback/Override with query params
+			paramRegex := regexp.MustCompile(`[?&](lspPubkey|url)=([^&]+)`)
+			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
+			for _, match := range paramMatches {
+				switch match[1] {
+				case "lspPubkey":
+					req.LSPPubkey = match[2]
+				case "url":
+					unescaped, _ := url.QueryUnescape(match[2])
+					req.URL = unescaped
+				}
+			}
+
+			if req.LSPPubkey == "" || req.URL == "" {
+				return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey and url are required"}
+			}
+
+			resp, err := app.api.LSPS5RemoveWebhook(ctx, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		}
+
 	case "/api/node/connection-info":
 		nodeConnectionInfo, err := app.api.GetNodeConnectionInfo(ctx)
 		if err != nil {

@@ -56,12 +56,19 @@ type NodeConnectionInfo struct {
 	Port    int    `json:"port"`
 }
 
+// CustomMessage represents a custom protocol message received from or sent to a peer
+type CustomMessage struct {
+	PeerPubkey string
+	Type       uint32
+	Data       []byte
+}
+
 type LNClient interface {
 	SendPaymentSync(payReq string, amount *uint64) (*PayInvoiceResponse, error)
 	SendKeysend(amount uint64, destination string, customRecords []TLVRecord, preimage string) (*PayKeysendResponse, error)
 	GetPubkey() string
 	GetInfo(ctx context.Context) (info *NodeInfo, err error)
-	MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string) (transaction *Transaction, err error)
+	MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *Transaction, err error)
 	MakeHoldInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, paymentHash string) (transaction *Transaction, err error)
 	SettleHoldInvoice(ctx context.Context, preimage string) (err error)
 	CancelHoldInvoice(ctx context.Context, paymentHash string) (err error)
@@ -95,6 +102,9 @@ type LNClient interface {
 	GetSupportedNIP47NotificationTypes() []string
 	GetCustomNodeCommandDefinitions() []CustomNodeCommandDef
 	ExecuteCustomNodeCommand(ctx context.Context, command *CustomNodeCommandRequest) (*CustomNodeCommandResponse, error)
+	// Custom message support for LSPS protocols
+	SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error
+	SubscribeCustomMessages(ctx context.Context) (<-chan CustomMessage, <-chan error, error)
 }
 
 type Channel struct {
@@ -110,7 +120,7 @@ type Channel struct {
 	InternalChannel                          interface{}
 	Confirmations                            *uint32
 	ConfirmationsRequired                    *uint32
-	ForwardingFeeBaseMsat                    uint32
+	ForwardingFeeBaseMloki                   uint32
 	ForwardingFeeProportionalMillionths      uint32
 	UnspendablePunishmentReserve             uint64
 	CounterpartyUnspendablePunishmentReserve uint64
@@ -148,7 +158,7 @@ type CloseChannelRequest struct {
 type UpdateChannelRequest struct {
 	ChannelId                                string `json:"channelId"`
 	NodeId                                   string `json:"nodeId"`
-	ForwardingFeeBaseMsat                    uint32 `json:"forwardingFeeBaseMsat"`
+	ForwardingFeeBaseMloki                   uint32 `json:"forwardingFeeBaseMloki"`
 	ForwardingFeeProportionalMillionths      uint32 `json:"forwardingFeeProportionalMillionths"`
 	MaxDustHtlcExposureFromFeeRateMultiplier uint64 `json:"maxDustHtlcExposureFromFeeRateMultiplier"`
 }
@@ -217,8 +227,8 @@ type PaymentFailedEventProperties struct {
 }
 
 type PaymentForwardedEventProperties struct {
-	TotalFeeEarnedMsat          uint64
-	OutboundAmountForwardedMsat uint64
+	TotalFeeEarnedMloki          uint64
+	OutboundAmountForwardedMloki uint64
 }
 
 type CustomNodeCommandArgDef struct {

@@ -171,6 +171,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/forwards", httpSvc.forwardsHandler)
 	readOnlyApiGroup.GET("/appstore/apps", httpSvc.getAppStoreAppsHandler)
 	readOnlyApiGroup.GET("/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
+	readOnlyApiGroup.GET("/lsps2/info", httpSvc.getLSPS2InfoHandler)
 
 	// Full access API group - requires a token with full permissions
 	fullAccessApiGroup := e.Group("/api")
@@ -213,6 +214,24 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.POST("/swaps/refund", httpSvc.refundSwapHandler)
 	fullAccessApiGroup.POST("/autoswap", httpSvc.enableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
+	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
+
+	fullAccessApiGroup.GET("/lsps/all", httpSvc.listLSPsHandler)
+	fullAccessApiGroup.POST("/lsps/all", httpSvc.addLSPHandler)
+	fullAccessApiGroup.DELETE("/lsps/all", httpSvc.removeLSPHandler)
+
+	fullAccessApiGroup.GET("/lsps/selected", httpSvc.getSelectedLSPsHandler)
+	fullAccessApiGroup.POST("/lsps/selected", httpSvc.addSelectedLSPHandler)
+	fullAccessApiGroup.DELETE("/lsps/selected", httpSvc.removeSelectedLSPHandler)
+
+	// LSPS0/1/5
+	fullAccessApiGroup.GET("/lsps0/protocols", httpSvc.lsps0ListProtocolsHandler)
+	fullAccessApiGroup.GET("/lsps1/info", httpSvc.lsps1GetInfoHandler)
+	fullAccessApiGroup.POST("/lsps1/order", httpSvc.lsps1CreateOrderHandler)
+	fullAccessApiGroup.GET("/lsps1/order", httpSvc.lsps1GetOrderHandler)
+	fullAccessApiGroup.GET("/lsps5/webhooks", httpSvc.lsps5ListWebhooksHandler)
+	fullAccessApiGroup.POST("/lsps5/webhook", httpSvc.lsps5SetWebhookHandler)
+	fullAccessApiGroup.DELETE("/lsps5/webhook", httpSvc.lsps5RemoveWebhookHandler)
 
 	httpSvc.lokiHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
 }
@@ -640,7 +659,7 @@ func (httpSvc *HttpService) makeInvoiceHandler(c echo.Context) error {
 		})
 	}
 
-	invoice, err := httpSvc.api.CreateInvoice(c.Request().Context(), makeInvoiceRequest.Amount, makeInvoiceRequest.Description)
+	invoice, err := httpSvc.api.CreateInvoice(c.Request().Context(), &makeInvoiceRequest)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -1573,4 +1592,205 @@ func (httpSvc *HttpService) getAppStoreLogoHandler(c echo.Context) error {
 	}
 
 	return c.File(logoPath)
+}
+
+func (httpSvc *HttpService) getLSPS2InfoHandler(c echo.Context) error {
+	lspPubkey := c.QueryParam("lspPubkey")
+	if lspPubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: "lspPubkey is required",
+		})
+	}
+
+	req := &api.LSPS2GetInfoRequest{
+		LSPPubkey: lspPubkey,
+	}
+
+	response, err := httpSvc.api.LSPS2GetInfo(c.Request().Context(), req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: fmt.Sprintf("Failed to get LSPS2 Info: %s", err.Error()),
+		})
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func (httpSvc *HttpService) buyLSPS2LiquidityHandler(c echo.Context) error {
+	var req api.LSPS2BuyRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: fmt.Sprintf("Bad request: %s", err.Error()),
+		})
+	}
+
+	response, err := httpSvc.api.LSPS2Buy(c.Request().Context(), &req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func (httpSvc *HttpService) listLSPsHandler(c echo.Context) error {
+	lsps, err := httpSvc.api.ListLSPs()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, lsps)
+}
+
+func (httpSvc *HttpService) addLSPHandler(c echo.Context) error {
+	type Request struct {
+		Name string `json:"name"`
+		Uri  string `json:"uri"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
+	if err := httpSvc.api.AddLSP(req.Name, req.Uri); err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func (httpSvc *HttpService) removeLSPHandler(c echo.Context) error {
+	pubkey := c.QueryParam("pubkey")
+	if pubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "pubkey is required"})
+	}
+	if err := httpSvc.api.RemoveLSP(pubkey); err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func (httpSvc *HttpService) getSelectedLSPsHandler(c echo.Context) error {
+	lsps, err := httpSvc.api.GetSelectedLSPs()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, lsps)
+}
+
+func (httpSvc *HttpService) addSelectedLSPHandler(c echo.Context) error {
+	type Request struct {
+		Pubkey string `json:"pubkey"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
+	if err := httpSvc.api.AddSelectedLSP(req.Pubkey); err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func (httpSvc *HttpService) removeSelectedLSPHandler(c echo.Context) error {
+	pubkey := c.QueryParam("pubkey")
+	if pubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "pubkey is required"})
+	}
+	if err := httpSvc.api.RemoveSelectedLSP(pubkey); err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func (httpSvc *HttpService) lsps0ListProtocolsHandler(c echo.Context) error {
+	lspPubkey := c.QueryParam("lspPubkey")
+	if lspPubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lspPubkey is required"})
+	}
+	resp, err := httpSvc.api.LSPS0ListProtocols(c.Request().Context(), &api.LSPS0ListProtocolsRequest{LSPPubkey: lspPubkey})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps1GetInfoHandler(c echo.Context) error {
+	lspPubkey := c.QueryParam("lspPubkey")
+	token := c.QueryParam("token")
+	if lspPubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lspPubkey is required"})
+	}
+	resp, err := httpSvc.api.LSPS1GetInfo(c.Request().Context(), &api.LSPS1GetInfoRequest{LSPPubkey: lspPubkey, Token: token})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps1CreateOrderHandler(c echo.Context) error {
+	var req api.LSPS1CreateOrderRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
+	resp, err := httpSvc.api.LSPS1CreateOrder(c.Request().Context(), &req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps1GetOrderHandler(c echo.Context) error {
+	lspPubkey := c.QueryParam("lspPubkey")
+	orderId := c.QueryParam("orderId")
+	token := c.QueryParam("token")
+	if lspPubkey == "" || orderId == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lspPubkey and orderId are required"})
+	}
+	resp, err := httpSvc.api.LSPS1GetOrder(c.Request().Context(), &api.LSPS1GetOrderRequest{LSPPubkey: lspPubkey, OrderID: orderId, Token: token})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps5ListWebhooksHandler(c echo.Context) error {
+	lspPubkey := c.QueryParam("lspPubkey")
+	if lspPubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lspPubkey is required"})
+	}
+	resp, err := httpSvc.api.LSPS5ListWebhooks(c.Request().Context(), &api.LSPS5ListWebhooksRequest{LSPPubkey: lspPubkey})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps5SetWebhookHandler(c echo.Context) error {
+	var req api.LSPS5SetWebhookRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
+	resp, err := httpSvc.api.LSPS5SetWebhook(c.Request().Context(), &req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps5RemoveWebhookHandler(c echo.Context) error {
+	var req api.LSPS5RemoveWebhookRequest
+	// Try bind first (POST/DELETE with body), fallback to query params
+	if err := c.Bind(&req); err != nil || req.LSPPubkey == "" || req.URL == "" {
+		req.LSPPubkey = c.QueryParam("lspPubkey")
+		req.URL = c.QueryParam("url")
+	}
+
+	if req.LSPPubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lspPubkey is required"})
+	}
+
+	resp, err := httpSvc.api.LSPS5RemoveWebhook(c.Request().Context(), &req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, resp)
 }

@@ -118,7 +118,7 @@ func TestSendPaymentSync_App_BudgetExceeded_SettledPayment(t *testing.T) {
 	err = svc.DB.Create(appPermission).Error
 	assert.NoError(t, err)
 
-	// 1 sat payment pushes app over the limit
+	// 1 loki payment pushes app over the limit
 	svc.DB.Create(&db.Transaction{
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_SETTLED,
@@ -155,7 +155,7 @@ func TestSendPaymentSync_App_BudgetExceeded_UnsettledPayment(t *testing.T) {
 	err = svc.DB.Create(appPermission).Error
 	assert.NoError(t, err)
 
-	// 1 sat payment pushes app over the limit
+	// 1 loki payment pushes app over the limit
 	svc.DB.Create(&db.Transaction{
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_PENDING,
@@ -193,7 +193,7 @@ func TestSendPaymentSync_App_BudgetNotExceeded_FailedPayment(t *testing.T) {
 	err = svc.DB.Create(appPermission).Error
 	assert.NoError(t, err)
 
-	// 1 sat payment would push app over the limit, but it failed so its not counted
+	// 1 loki payment would push app over the limit, but it failed so its not counted
 	svc.DB.Create(&db.Transaction{
 		AppId:       &app.ID,
 		State:       constants.TRANSACTION_STATE_FAILED,

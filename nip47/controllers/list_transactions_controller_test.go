@@ -58,7 +58,7 @@ func TestHandleListTransactionsEvent(t *testing.T) {
 			Preimage:        &tests.MockLNClientTransactions[i].Preimage,
 			PaymentHash:     tests.MockLNClientTransactions[i].PaymentHash,
 			AmountMloki:     uint64(tests.MockLNClientTransactions[i].Amount),
-			FeeMsat:         uint64(tests.MockLNClientTransactions[i].FeesPaid),
+			FeeMloki:        uint64(tests.MockLNClientTransactions[i].FeesPaid),
 			SettledAt:       &settledAt,
 			State:           constants.TRANSACTION_STATE_SETTLED,
 			AppId:           &app.ID,

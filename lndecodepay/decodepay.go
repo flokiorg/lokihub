@@ -32,9 +32,9 @@ func Decodepay(bolt11 string) (Bolt11, error) {
 		return Bolt11{}, fmt.Errorf("zpay32 decoding failed: %w", err)
 	}
 
-	var msat int64
+	var mloki int64
 	if inv.MilliSat != nil {
-		msat = int64(*inv.MilliSat)
+		mloki = int64(*inv.MilliSat)
 	}
 
 	var desc string
@@ -60,7 +60,7 @@ func Decodepay(bolt11 string) (Bolt11, error) {
 					PubKey: hex.EncodeToString(h.NodeID.SerializeCompressed()),
 					ShortChannelId: fmt.Sprintf("%dx%dx%d",
 						scid>>40&0xFFFFFF, scid>>16&0xFFFFFF, scid&0xFFFF),
-					FeeBaseMsat:               int(h.FeeBaseMSat),
+					FeeBaseMloki:              int(h.FeeBaseMSat),
 					FeeProportionalMillionths: int(h.FeeProportionalMillionths),
 					CLTVExpiryDelta:           int(h.CLTVExpiryDelta),
 				}
@@ -70,7 +70,7 @@ func Decodepay(bolt11 string) (Bolt11, error) {
 	}
 
 	return Bolt11{
-		MLoki:              msat,
+		MLoki:              mloki,
 		PaymentHash:        hex.EncodeToString(inv.PaymentHash[:]),
 		Description:        desc,
 		DescriptionHash:    deschash,
@@ -99,7 +99,7 @@ type Bolt11 struct {
 type Hop struct {
 	PubKey                    string `json:"pubkey"`
 	ShortChannelId            string `json:"short_channel_id"`
-	FeeBaseMsat               int    `json:"fee_base_msat"`
+	FeeBaseMloki              int    `json:"fee_base_mloki"`
 	FeeProportionalMillionths int    `json:"fee_proportional_millionths"`
 	CLTVExpiryDelta           int    `json:"cltv_expiry_delta"`
 }

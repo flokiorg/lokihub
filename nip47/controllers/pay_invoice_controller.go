@@ -77,7 +77,7 @@ func (controller *nip47Controller) pay(bolt11 string, amount *uint64, metadata m
 		ResultType: nip47Request.Method,
 		Result: payResponse{
 			Preimage: *transaction.Preimage,
-			FeesPaid: transaction.FeeMsat,
+			FeesPaid: transaction.FeeMloki,
 		},
 	}, tags)
 }

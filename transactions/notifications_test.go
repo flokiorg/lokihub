@@ -45,7 +45,7 @@ func TestNotifications_ReceivedKnownPayment(t *testing.T) {
 	assert.Equal(t, uint64(123000), incomingTransaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, incomingTransaction.State)
 	assert.Equal(t, tests.MockLNClientTransaction.Preimage, *incomingTransaction.Preimage)
-	assert.Zero(t, incomingTransaction.FeeReserveMsat)
+	assert.Zero(t, incomingTransaction.FeeReserveMloki)
 
 	transactions := []db.Transaction{}
 	result := svc.DB.Find(&transactions)
@@ -72,7 +72,7 @@ func TestNotifications_ReceivedUnknownPayment(t *testing.T) {
 	assert.Equal(t, uint64(tests.MockLNClientTransaction.Amount), incomingTransaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, incomingTransaction.State)
 	assert.Equal(t, tests.MockLNClientTransaction.Preimage, *incomingTransaction.Preimage)
-	assert.Zero(t, incomingTransaction.FeeReserveMsat)
+	assert.Zero(t, incomingTransaction.FeeReserveMloki)
 
 	transactions := []db.Transaction{}
 	result := svc.DB.Find(&transactions)
@@ -121,7 +121,7 @@ func TestNotifications_ReceivedKeysend(t *testing.T) {
 	assert.Equal(t, uint64(2000), incomingTransaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, incomingTransaction.State)
 	assert.Equal(t, tests.MockLNClientTransaction.Preimage, *incomingTransaction.Preimage)
-	assert.Zero(t, incomingTransaction.FeeReserveMsat)
+	assert.Zero(t, incomingTransaction.FeeReserveMloki)
 
 	var boostagram Boostagram
 	err = json.Unmarshal(incomingTransaction.Boostagram, &boostagram)
@@ -136,7 +136,7 @@ func TestNotifications_ReceivedKeysend(t *testing.T) {
 	assert.Equal(t, "Go podcasting!", boostagram.Message)
 	assert.Equal(t, "Satoshi Nakamoto", boostagram.SenderName)
 	assert.Equal(t, "boost", boostagram.Action)
-	assert.Equal(t, int64(1000), boostagram.ValueMsatTotal)
+	assert.Equal(t, int64(1000), boostagram.ValueMlokiTotal)
 
 	assert.Equal(t, "Go podcasting!", incomingTransaction.Description)
 
@@ -153,12 +153,12 @@ func TestNotifications_SentKnownPayment(t *testing.T) {
 	defer svc.Remove()
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_PENDING,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_PENDING,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -174,7 +174,7 @@ func TestNotifications_SentKnownPayment(t *testing.T) {
 	assert.Equal(t, uint64(123000), outgoingTransaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, outgoingTransaction.State)
 	assert.Equal(t, tests.MockLNClientTransaction.Preimage, *outgoingTransaction.Preimage)
-	assert.Zero(t, outgoingTransaction.FeeReserveMsat)
+	assert.Zero(t, outgoingTransaction.FeeReserveMloki)
 
 	transactions := []db.Transaction{}
 	result := svc.DB.Find(&transactions)
@@ -213,12 +213,12 @@ func TestNotifications_FailedKnownPendingPayment(t *testing.T) {
 	defer svc.Remove()
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_PENDING,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_PENDING,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -236,7 +236,7 @@ func TestNotifications_FailedKnownPendingPayment(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, outgoingTransaction.State)
 	assert.Nil(t, outgoingTransaction.Preimage)
-	assert.Zero(t, outgoingTransaction.FeeReserveMsat)
+	assert.Zero(t, outgoingTransaction.FeeReserveMloki)
 
 	transactions := []db.Transaction{}
 	result := svc.DB.Find(&transactions)
@@ -254,21 +254,21 @@ func TestNotifications_FailedKnownPendingAndExistingFailedPayment(t *testing.T) 
 	// The second (pending) payment should be marked as failed.
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_FAILED,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_FAILED,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_PENDING,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_PENDING,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -300,12 +300,12 @@ func TestNotifications_SentAfterMarkedPaymentFailed(t *testing.T) {
 	// The second (pending) payment should be marked as failed.
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_FAILED,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_FAILED,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -332,23 +332,23 @@ func TestNotifications_SentAfterMarkedTwoPaymentsFailed(t *testing.T) {
 	// The second (latest) failed payment should be marked as settled.
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_FAILED,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
-		UpdatedAt:      time.Now().Add(-1 * time.Second),
+		State:           constants.TRANSACTION_STATE_FAILED,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
+		UpdatedAt:       time.Now().Add(-1 * time.Second),
 	})
 
 	latestFailedTransaction := &db.Transaction{
-		State:          constants.TRANSACTION_STATE_FAILED,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
-		UpdatedAt:      time.Now(),
+		State:           constants.TRANSACTION_STATE_FAILED,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
+		UpdatedAt:       time.Now(),
 	}
 	svc.DB.Create(latestFailedTransaction)
 
@@ -378,21 +378,21 @@ func TestNotifications_SentWithFailedAndPendingPayment(t *testing.T) {
 	// The pending payment should be marked as settled.
 
 	svc.DB.Create(&db.Transaction{
-		State:          constants.TRANSACTION_STATE_FAILED,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_FAILED,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	})
 
 	pendingTransaction := &db.Transaction{
-		State:          constants.TRANSACTION_STATE_PENDING,
-		Type:           constants.TRANSACTION_TYPE_OUTGOING,
-		PaymentRequest: tests.MockLNClientTransaction.Invoice,
-		PaymentHash:    tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:    123000,
-		FeeReserveMsat: uint64(10000),
+		State:           constants.TRANSACTION_STATE_PENDING,
+		Type:            constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentRequest:  tests.MockLNClientTransaction.Invoice,
+		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki:     123000,
+		FeeReserveMloki: uint64(10000),
 	}
 	svc.DB.Create(pendingTransaction)
 

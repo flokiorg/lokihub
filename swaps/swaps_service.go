@@ -435,7 +435,7 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 		return nil, errors.New("swap feature is disabled")
 	}
 	amountMSat := amount * 1000
-	invoice, err := svc.transactionsService.MakeInvoice(svc.ctx, amountMSat, "On-chain to lightning swap", "", 0, nil, svc.lnClient, nil, nil, nil)
+	invoice, err := svc.transactionsService.MakeInvoice(svc.ctx, amountMSat, "On-chain to lightning swap", "", 0, nil, svc.lnClient, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -50,7 +50,7 @@ func ToNip47Transaction(transaction *transactions.Transaction) *Transaction {
 		Preimage:        preimage,
 		PaymentHash:     transaction.PaymentHash,
 		Amount:          int64(transaction.AmountMloki),
-		FeesPaid:        int64(transaction.FeeMsat),
+		FeesPaid:        int64(transaction.FeeMloki),
 		CreatedAt:       transaction.CreatedAt.Unix(),
 		ExpiresAt:       expiresAt,
 		SettledAt:       settledAt,

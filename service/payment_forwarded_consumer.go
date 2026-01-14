@@ -28,8 +28,8 @@ func (c *paymentForwardedConsumer) ConsumeEvent(ctx context.Context, event *even
 		return
 	}
 	forward := &db.Forward{
-		OutboundAmountForwardedMsat: properties.OutboundAmountForwardedMsat,
-		TotalFeeEarnedMsat:          properties.TotalFeeEarnedMsat,
+		OutboundAmountForwardedMloki: properties.OutboundAmountForwardedMloki,
+		TotalFeeEarnedMloki:          properties.TotalFeeEarnedMloki,
 	}
 	err := c.db.Create(forward).Error
 	if err != nil {

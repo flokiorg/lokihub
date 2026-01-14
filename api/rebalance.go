@@ -30,7 +30,7 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 		"receive_through": rebalanceChannelRequest.ReceiveThroughNodePubkey,
 	}
 
-	receiveInvoice, err := api.svc.GetTransactionsService().MakeInvoice(ctx, rebalanceChannelRequest.AmountLoki*1000, "Lokihub Rebalance through "+rebalanceChannelRequest.ReceiveThroughNodePubkey, "", 0, receiveMetadata, api.svc.GetLNClient(), nil, nil, &rebalanceChannelRequest.ReceiveThroughNodePubkey)
+	receiveInvoice, err := api.svc.GetTransactionsService().MakeInvoice(ctx, rebalanceChannelRequest.AmountLoki*1000, "Lokihub Rebalance through "+rebalanceChannelRequest.ReceiveThroughNodePubkey, "", 0, receiveMetadata, api.svc.GetLNClient(), nil, nil, &rebalanceChannelRequest.ReceiveThroughNodePubkey, nil, nil, nil, nil)
 	if err != nil {
 		logger.Logger.WithError(err).Error("failed to generate rebalance receive invoice")
 		return nil, err
@@ -142,6 +142,6 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 	})
 
 	return &RebalanceChannelResponse{
-		TotalFeeLoki: uint64(paymentRequest.MLoki)/1000 + payRebalanceInvoiceResponse.FeeMsat/1000 - rebalanceChannelRequest.AmountLoki,
+		TotalFeeLoki: uint64(paymentRequest.MLoki)/1000 + payRebalanceInvoiceResponse.FeeMloki/1000 - rebalanceChannelRequest.AmountLoki,
 	}, nil
 }
