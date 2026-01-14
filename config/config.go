@@ -101,6 +101,13 @@ func (cfg *config) init(env *AppConfig) error {
 		}
 	}
 
+	if cfg.Env.LSP != "" {
+		err := cfg.SetUpdate("LSP", cfg.Env.LSP, "")
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -465,6 +472,29 @@ func (cfg *config) SetLokihubServicesURL(value string) error {
 	return nil
 }
 
+func (cfg *config) GetLokihubStoreURL() string {
+	url, err := cfg.Get("LokihubStoreURL", "")
+	if err != nil {
+		logger.Logger.WithError(err).Error("Failed to fetch LokihubStoreURL")
+	}
+	if url != "" {
+		return url
+	}
+	return cfg.Env.LokihubStoreURL
+}
+
+func (cfg *config) SetLokihubStoreURL(value string) error {
+	if value == "" {
+		return errors.New("LokihubStoreURL cannot be empty")
+	}
+	err := cfg.SetUpdate("LokihubStoreURL", value, "")
+	if err != nil {
+		logger.Logger.WithError(err).Error("Failed to update LokihubStoreURL")
+		return err
+	}
+	return nil
+}
+
 func (cfg *config) GetSwapServiceURL() string {
 	url, err := cfg.Get("SwapServiceUrl", "")
 	if err != nil {
@@ -609,4 +639,25 @@ func (cfg *config) GetDefaultWorkDir() string {
 		return cfg.Env.Workdir
 	}
 	return filepath.Join(xdg.DataHome, "lokihub")
+}
+
+func (cfg *config) GetLSP() string {
+	url, err := cfg.Get("LSP", "")
+	if err != nil {
+		logger.Logger.WithError(err).Error("Failed to fetch LSP")
+	}
+	if url != "" {
+		return url
+	}
+	return cfg.Env.LSP
+}
+
+func (cfg *config) SetLSP(value string) error {
+	// LSP can be empty
+	err := cfg.SetUpdate("LSP", value, "")
+	if err != nil {
+		logger.Logger.WithError(err).Error("Failed to update LSP")
+		return err
+	}
+	return nil
 }

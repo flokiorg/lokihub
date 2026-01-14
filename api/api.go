@@ -34,6 +34,8 @@ import (
 	"github.com/flokiorg/lokihub/lnclient/lnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lsps/manager"
+
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/flokiorg/lokihub/pkg/version"
 	"github.com/flokiorg/lokihub/service"
@@ -582,7 +584,7 @@ func (api *api) ListChannels(ctx context.Context) ([]Channel, error) {
 			InternalChannel:                          channel.InternalChannel,
 			Confirmations:                            channel.Confirmations,
 			ConfirmationsRequired:                    channel.ConfirmationsRequired,
-			ForwardingFeeBaseMsat:                    channel.ForwardingFeeBaseMsat,
+			ForwardingFeeBaseMloki:                   channel.ForwardingFeeBaseMloki,
 			ForwardingFeeProportionalMillionths:      channel.ForwardingFeeProportionalMillionths,
 			UnspendablePunishmentReserve:             channel.UnspendablePunishmentReserve,
 			CounterpartyUnspendablePunishmentReserve: channel.CounterpartyUnspendablePunishmentReserve,
@@ -1161,6 +1163,23 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.LokihubServicesURL = api.cfg.GetLokihubServicesURL()
 	info.SwapServiceUrl = api.cfg.GetSwapServiceURL()
 	info.Relay = api.cfg.GetRelay()
+
+	// Populate selected LSPs
+	if lm := api.svc.GetLiquidityManager(); lm != nil {
+		selected, err := lm.GetSelectedLSPs()
+		if err == nil {
+			info.LSPs = make([]LSPInfo, len(selected))
+			for i, lsp := range selected {
+				info.LSPs[i] = LSPInfo{
+					Name:   lsp.Name,
+					Pubkey: lsp.Pubkey,
+					Host:   lsp.Host,
+					Active: lsp.Active,
+				}
+			}
+		}
+	}
+
 	info.MempoolUrl = api.cfg.GetMempoolApi()
 	info.EnableSwap = api.cfg.EnableSwap()
 	info.EnableMessageboardNwc = api.cfg.EnableMessageboardNwc()
@@ -1283,6 +1302,143 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
 		if err != nil {
 			return fmt.Errorf("failed to set MessageboardNwcUrl: %w", err)
+		}
+	}
+
+	// Helper function to parse host:port into address and port
+	parseHostPort := func(hostPort string) (string, uint16, error) {
+		parts := strings.Split(hostPort, ":")
+		if len(parts) != 2 {
+			return "", 0, fmt.Errorf("invalid host:port format: %s", hostPort)
+		}
+		port, err := strconv.ParseUint(parts[1], 10, 16)
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid port number: %w", err)
+		}
+		return parts[0], uint16(port), nil
+	}
+
+	if len(updateSettingsRequest.LSPs) > 0 {
+		// Get current LSPs from backend
+		existingLSPs, err := api.ListLSPs()
+		if err != nil {
+			return fmt.Errorf("failed to list existing LSPs: %w", err)
+		}
+
+		// Create maps for easier comparison
+		existingMap := make(map[string]manager.SettingsLSP)
+		for _, lsp := range existingLSPs {
+			existingMap[lsp.Pubkey] = lsp
+		}
+
+		newMap := make(map[string]LSPSettingInput)
+		for _, lsp := range updateSettingsRequest.LSPs {
+			newMap[lsp.Pubkey] = lsp
+		}
+
+		// Process removals (LSPs in existing but not in new)
+		for pubkey, existing := range existingMap {
+			if _, stillExists := newMap[pubkey]; !stillExists {
+				// Remove from selected if it was active
+				if existing.Active {
+					if err := api.RemoveSelectedLSP(pubkey); err != nil {
+						logger.Logger.WithError(err).WithField("pubkey", pubkey).Warn("Failed to deactivate LSP during removal")
+					}
+				}
+				// Remove the LSP
+				if err := api.RemoveLSP(pubkey); err != nil {
+					logger.Logger.WithError(err).WithField("pubkey", pubkey).Error("Failed to remove LSP")
+					return fmt.Errorf("failed to remove LSP %s: %w", pubkey, err)
+				}
+				// Disconnect peer
+				if err := api.DisconnectPeer(context.Background(), pubkey); err != nil {
+					logger.Logger.WithError(err).WithField("pubkey", pubkey).Warn("Failed to disconnect peer after LSP removal")
+				}
+			}
+		}
+
+		// Process additions and updates
+		for _, newLSP := range updateSettingsRequest.LSPs {
+			existing, alreadyExists := existingMap[newLSP.Pubkey]
+
+			if !alreadyExists {
+				// New LSP - Add it and connect peer if active
+				if newLSP.Active {
+					// Connect peer first
+					address, port, err := parseHostPort(newLSP.Host)
+					if err != nil {
+						logger.Logger.WithError(err).WithField("host", newLSP.Host).Error("Failed to parse host:port for new LSP")
+						return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
+					}
+					if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
+						Pubkey:  newLSP.Pubkey,
+						Address: address,
+						Port:    port,
+					}); err != nil {
+						logger.Logger.WithError(err).WithFields(map[string]interface{}{
+							"pubkey": newLSP.Pubkey,
+							"host":   newLSP.Host,
+						}).Error("Failed to connect peer for new LSP")
+						return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
+					}
+				}
+
+				// Add LSP
+				uri := newLSP.Pubkey + "@" + newLSP.Host
+				if err := api.AddLSP(newLSP.Name, uri); err != nil {
+					logger.Logger.WithError(err).WithFields(map[string]interface{}{
+						"name": newLSP.Name,
+						"uri":  uri,
+					}).Error("Failed to add new LSP")
+					return fmt.Errorf("failed to add LSP %s: %w", newLSP.Name, err)
+				}
+
+				// Activate if needed
+				if newLSP.Active {
+					if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
+						logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to activate new LSP")
+						return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
+					}
+				}
+			} else {
+				// Existing LSP - handle activation/deactivation
+				if newLSP.Active != existing.Active {
+					if newLSP.Active {
+						// Activating - connect peer first
+						address, port, err := parseHostPort(newLSP.Host)
+						if err != nil {
+							logger.Logger.WithError(err).WithField("host", newLSP.Host).Error("Failed to parse host:port when activating LSP")
+							return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
+						}
+						if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
+							Pubkey:  newLSP.Pubkey,
+							Address: address,
+							Port:    port,
+						}); err != nil {
+							logger.Logger.WithError(err).WithFields(map[string]interface{}{
+								"pubkey": newLSP.Pubkey,
+								"host":   newLSP.Host,
+							}).Error("Failed to connect peer when activating LSP")
+							return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
+						}
+						// Then activate
+						if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
+							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to activate LSP")
+							return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
+						}
+					} else {
+						// Deactivating - deactivate first, then disconnect
+						if err := api.RemoveSelectedLSP(newLSP.Pubkey); err != nil {
+							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to deactivate LSP")
+							return fmt.Errorf("failed to deactivate LSP %s: %w", newLSP.Name, err)
+						}
+						// Disconnect peer
+						if err := api.DisconnectPeer(context.Background(), newLSP.Pubkey); err != nil {
+							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Warn("Failed to disconnect peer after LSP deactivation")
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -1485,6 +1641,14 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.LNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.WithError(err).Error("Failed to save lnd macaroon hex")
+			return err
+		}
+	}
+
+	if setupRequest.LSP != "" {
+		err = api.cfg.SetLSP(setupRequest.LSP)
+		if err != nil {
+			logger.Logger.WithError(err).Error("Failed to save LSP")
 			return err
 		}
 	}
@@ -1820,16 +1984,16 @@ func (api *api) GetForwards() (*GetForwardsResponse, error) {
 	var totalFeeEarned uint64
 
 	for _, forward := range forwards {
-		totalOutboundAmount += forward.OutboundAmountForwardedMsat
-		totalFeeEarned += forward.TotalFeeEarnedMsat
+		totalOutboundAmount += forward.OutboundAmountForwardedMloki
+		totalFeeEarned += forward.TotalFeeEarnedMloki
 	}
 
 	numForwards := len(forwards)
 
 	return &GetForwardsResponse{
-		OutboundAmountForwardedMsat: totalOutboundAmount,
-		TotalFeeEarnedMsat:          totalFeeEarned,
-		NumForwards:                 uint64(numForwards),
+		OutboundAmountForwardedMloki: totalOutboundAmount,
+		TotalFeeEarnedMloki:          totalFeeEarned,
+		NumForwards:                  uint64(numForwards),
 	}, nil
 }
 
@@ -1885,6 +2049,12 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	// Set Backend Type last
 	if err := api.cfg.SetUpdate("LNBackendType", "FLND", ""); err != nil {
 		return err
+	}
+
+	if req.LSP != "" {
+		if err := api.cfg.SetLSP(req.LSP); err != nil {
+			return err
+		}
 	}
 
 	if req.LokihubServicesURL != "" {
@@ -1978,6 +2148,12 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	// Set Backend Type last
 	if err := api.cfg.SetUpdate("LNBackendType", "FLND", ""); err != nil {
 		return err
+	}
+
+	if req.LSP != "" {
+		if err := api.cfg.SetLSP(req.LSP); err != nil {
+			return err
+		}
 	}
 
 	if req.LokihubServicesURL != "" {

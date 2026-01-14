@@ -133,8 +133,8 @@ func (svc *LNDService) trackForwardedPayments(ctx context.Context) {
 				svc.eventPublisher.Publish(&events.Event{
 					Event: "nwc_payment_forwarded",
 					Properties: &lnclient.PaymentForwardedEventProperties{
-						TotalFeeEarnedMsat:          forwardingEvent.FeeMsat,
-						OutboundAmountForwardedMsat: forwardingEvent.AmtOutMsat,
+						TotalFeeEarnedMloki:          forwardingEvent.FeeMsat,
+						OutboundAmountForwardedMloki: forwardingEvent.AmtOutMsat,
 					},
 				})
 			}
@@ -400,10 +400,10 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 		}
 
 		log.WithFields(logrus.Fields{
-			"rawState":    invoice.State.String(),
-			"addIndex":    invoice.AddIndex,
-			"settleIndex": invoice.SettleIndex,
-			"amtPaidMsat": invoice.AmtPaidMsat,
+			"rawState":     invoice.State.String(),
+			"addIndex":     invoice.AddIndex,
+			"settleIndex":  invoice.SettleIndex,
+			"amtPaidMloki": invoice.AmtPaidMsat,
 		}).Info("Raw update received from single invoice stream")
 
 		switch invoice.State {
@@ -449,14 +449,14 @@ func (svc *LNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclient
 		return nil, err
 	}
 
-	paymentAmountMsat := uint64(paymentRequest.MLoki)
+	paymentAmountMloki := uint64(paymentRequest.MLoki)
 	if amount != nil {
-		paymentAmountMsat = *amount
+		paymentAmountMloki = *amount
 	}
 	sendRequest := &routerrpc.SendPaymentRequest{
 		PaymentRequest: payReq,
 		MaxParts:       MAX_PARTIAL_PAYMENTS,
-		FeeLimitMsat:   int64(transactions.CalculateFeeReserveMsat(paymentAmountMsat)),
+		FeeLimitMsat:   int64(transactions.CalculateFeeReserveMloki(paymentAmountMloki)),
 	}
 
 	if amount != nil {
@@ -542,7 +542,7 @@ func (svc *LNDService) SendKeysend(amount uint64, destination string, custom_rec
 		DestCustomRecords: destCustomRecords,
 		MaxParts:          MAX_PARTIAL_PAYMENTS,
 		TimeoutSeconds:    SEND_PAYMENT_TIMEOUT,
-		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMsat(amount)),
+		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMloki(amount)),
 	}
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
@@ -603,7 +603,7 @@ func (svc *LNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Cli
 	}
 }
 
-func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string) (transaction *lnclient.Transaction, err error) {
+func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
 	var descriptionHashBytes []byte
 
 	if descriptionHash != "" {
@@ -637,6 +637,32 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 	}
 
 	var hints []*lnrpc.RouteHint
+	// JIT Channel Hints
+	if lspJitChannelSCID != nil && lspCltvExpiryDelta != nil && lspFeeBaseMloki != nil && lspFeeProportionalMillionths != nil {
+		// Parse SCID
+		scid, err := strconv.ParseUint(*lspJitChannelSCID, 10, 64)
+		if err != nil {
+			logger.Logger.WithField("scid", *lspJitChannelSCID).WithError(err).Error("Invalid LSP JIT Channel SCID")
+			return nil, err
+		}
+
+		if throughNodePubkey == nil {
+			return nil, errors.New("throughNodePubkey (LSP Pubkey) is required for JIT channel hints")
+		}
+
+		hints = append(hints, &lnrpc.RouteHint{
+			HopHints: []*lnrpc.HopHint{
+				{
+					NodeId:                    *throughNodePubkey,
+					ChanId:                    scid,
+					FeeBaseMsat:               uint32(*lspFeeBaseMloki),
+					FeeProportionalMillionths: *lspFeeProportionalMillionths,
+					CltvExpiryDelta:           uint32(*lspCltvExpiryDelta),
+				},
+			},
+		})
+	}
+
 	if !hasPublicChannels && throughNodePubkey != nil {
 		channelsRes, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{
 			PrivateOnly: true,
@@ -974,7 +1000,7 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 		channelOpeningBlockHeight := lndChannel.ChanId >> 40
 		confirmations := nodeInfo.BlockHeight - uint32(channelOpeningBlockHeight) + 1
 
-		var forwardingFeeBaseMsat uint32
+		var forwardingFeeBaseMloki uint32
 		var forwardingFeeProportionalMillionths uint32
 		if !lndChannel.Private {
 			channelEdge, err := svc.client.GetChanInfo(ctx, &lnrpc.ChanInfoRequest{
@@ -991,7 +1017,7 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 				policy = channelEdge.Node2Policy
 			}
 			if policy != nil {
-				forwardingFeeBaseMsat = uint32(policy.FeeBaseMsat)
+				forwardingFeeBaseMloki = uint32(policy.FeeBaseMsat)
 				forwardingFeeProportionalMillionths = uint32(policy.FeeRateMilliMsat)
 			}
 		}
@@ -1012,7 +1038,7 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 			UnspendablePunishmentReserve:             lndChannel.LocalConstraints.ChanReserveSat,
 			CounterpartyUnspendablePunishmentReserve: lndChannel.RemoteConstraints.ChanReserveSat,
 			IsOutbound:                               lndChannel.Initiator,
-			ForwardingFeeBaseMsat:                    forwardingFeeBaseMsat,
+			ForwardingFeeBaseMloki:                   forwardingFeeBaseMloki,
 			ForwardingFeeProportionalMillionths:      forwardingFeeProportionalMillionths,
 		}
 	}
@@ -1155,7 +1181,7 @@ func (svc *LNDService) OpenChannel(ctx context.Context, openChannelRequest *lncl
 		NodePubkey:         nodePub,
 		Private:            !openChannelRequest.Public,
 		LocalFundingAmount: openChannelRequest.AmountLoki,
-		// set a super-high forwarding fee of 100K sats by default to disable unwanted routing
+		// set a super-high forwarding fee of 100K loki by default to disable unwanted routing
 		BaseFee: 100_000_000,
 	})
 	if err != nil {
@@ -1210,7 +1236,7 @@ func (svc *LNDService) UpdateChannel(ctx context.Context, updateChannelRequest *
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: channelPoint,
 		},
-		BaseFeeMsat:   int64(updateChannelRequest.ForwardingFeeBaseMsat),
+		BaseFeeMsat:   int64(updateChannelRequest.ForwardingFeeBaseMloki),
 		FeeRatePpm:    updateChannelRequest.ForwardingFeeProportionalMillionths,
 		TimeLockDelta: nodePolicy.TimeLockDelta,
 		MaxHtlcMsat:   nodePolicy.MaxHtlcMsat,

@@ -7,6 +7,8 @@ import (
 
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/lsps2"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 )
 
@@ -42,7 +44,7 @@ type API interface {
 	ListTransactions(ctx context.Context, appId *uint, limit uint64, offset uint64) (*ListTransactionsResponse, error)
 	ListOnchainTransactions(ctx context.Context, limit, offset uint64) ([]lnclient.OnchainTransaction, error)
 	SendPayment(ctx context.Context, invoice string, amountMloki *uint64, metadata map[string]interface{}) (*SendPaymentResponse, error)
-	CreateInvoice(ctx context.Context, amount uint64, description string) (*MakeInvoiceResponse, error)
+	CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*MakeInvoiceResponse, error)
 	LookupInvoice(ctx context.Context, paymentHash string) (*LookupInvoiceResponse, error)
 	RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error)
 	GetServices(ctx context.Context) (interface{}, error)
@@ -84,6 +86,25 @@ type API interface {
 	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
 	SendEvent(event string, properties interface{})
 	GetForwards() (*GetForwardsResponse, error)
+
+	// LSPS
+	LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error)
+	LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (interface{}, error) // placeholder return type for now using generic interface or specific if needed
+	LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderRequest) (interface{}, error)
+	LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (interface{}, error)
+	LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (interface{}, error) // Returns OpeningFeeParams
+	LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyResponse, error)
+	LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest) (interface{}, error)
+	LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksRequest) (interface{}, error)
+	LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error)
+
+	// LSP Management
+	ListLSPs() ([]manager.SettingsLSP, error)
+	GetSelectedLSPs() ([]manager.SettingsLSP, error)
+	AddSelectedLSP(pubkey string) error
+	RemoveSelectedLSP(pubkey string) error
+	AddLSP(name, uri string) error
+	RemoveLSP(pubkey string) error
 }
 
 type App struct {
@@ -254,6 +275,7 @@ type SetupRequest struct {
 	Relay                 string `json:"relay"`
 	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
 	MempoolApi            string `json:"mempoolApi"`
+	LSP                   string `json:"lsp"`
 	EnableSwap            *bool  `json:"enableSwap"`
 	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
@@ -265,6 +287,7 @@ type SetupLocalRequest struct {
 	Relay                 string `json:"relay"`
 	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
 	MempoolApi            string `json:"mempoolApi"`
+	LSP                   string `json:"lsp"`
 	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
@@ -278,6 +301,7 @@ type SetupManualRequest struct {
 	Relay                 string `json:"relay"`
 	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
 	MempoolApi            string `json:"mempoolApi"`
+	LSP                   string `json:"lsp"`
 	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
@@ -311,6 +335,13 @@ type InfoResponseRelay struct {
 	Online bool   `json:"online"`
 }
 
+type LSPInfo struct {
+	Name   string `json:"name"`
+	Pubkey string `json:"pubkey"`
+	Host   string `json:"host"`
+	Active bool   `json:"active"`
+}
+
 type InfoResponse struct {
 	BackendType                 string              `json:"backendType"`
 	SetupCompleted              bool                `json:"setupCompleted"`
@@ -329,6 +360,7 @@ type InfoResponse struct {
 	Relay                       string              `json:"relay"`
 	NodeAlias                   string              `json:"nodeAlias"`
 	MempoolUrl                  string              `json:"mempoolUrl"`
+	LSPs                        []LSPInfo           `json:"lsps"`
 	LokihubServicesURL          string              `json:"lokihubServicesURL"`
 	SwapServiceUrl              string              `json:"swapServiceUrl"`
 	MessageboardNwcUrl          string              `json:"messageboardNwcUrl"`
@@ -338,15 +370,23 @@ type InfoResponse struct {
 }
 
 type UpdateSettingsRequest struct {
-	Currency               string `json:"currency"`
-	FlokicoinDisplayFormat string `json:"flokicoinDisplayFormat"`
-	LokihubServicesURL     string `json:"lokihubServicesURL"`
-	SwapServiceUrl         string `json:"swapServiceUrl"`
-	Relay                  string `json:"relay"`
-	MessageboardNwcUrl     string `json:"messageboardNwcUrl"`
-	MempoolApi             string `json:"mempoolApi"`
-	EnableSwap             *bool  `json:"enableSwap"`
-	EnableMessageboardNwc  *bool  `json:"enableMessageboardNwc"`
+	Currency               string            `json:"currency"`
+	FlokicoinDisplayFormat string            `json:"flokicoinDisplayFormat"`
+	LokihubServicesURL     string            `json:"lokihubServicesURL"`
+	SwapServiceUrl         string            `json:"swapServiceUrl"`
+	Relay                  string            `json:"relay"`
+	MessageboardNwcUrl     string            `json:"messageboardNwcUrl"`
+	MempoolApi             string            `json:"mempoolApi"`
+	LSPs                   []LSPSettingInput `json:"lsps,omitempty"`
+	EnableSwap             *bool             `json:"enableSwap"`
+	EnableMessageboardNwc  *bool             `json:"enableMessageboardNwc"`
+}
+
+type LSPSettingInput struct {
+	Name   string `json:"name"`
+	Pubkey string `json:"pubkey"`
+	Host   string `json:"host"`
+	Active bool   `json:"active"`
 }
 
 type SetNodeAliasRequest struct {
@@ -429,20 +469,20 @@ type Transaction struct {
 type Metadata = map[string]interface{}
 
 type Boostagram struct {
-	AppName        string `json:"appName"`
-	Name           string `json:"name"`
-	Podcast        string `json:"podcast"`
-	URL            string `json:"url"`
-	Episode        string `json:"episode,omitempty"`
-	FeedId         string `json:"feedId,omitempty"`
-	ItemId         string `json:"itemId,omitempty"`
-	Timestamp      int64  `json:"ts,omitempty"`
-	Message        string `json:"message,omitempty"`
-	SenderId       string `json:"senderId"`
-	SenderName     string `json:"senderName"`
-	Time           string `json:"time"`
-	Action         string `json:"action"`
-	ValueMsatTotal int64  `json:"valueMsatTotal"`
+	AppName         string `json:"appName"`
+	Name            string `json:"name"`
+	Podcast         string `json:"podcast"`
+	URL             string `json:"url"`
+	Episode         string `json:"episode,omitempty"`
+	FeedId          string `json:"feedId,omitempty"`
+	ItemId          string `json:"itemId,omitempty"`
+	Timestamp       int64  `json:"ts,omitempty"`
+	Message         string `json:"message,omitempty"`
+	SenderId        string `json:"senderId"`
+	SenderName      string `json:"senderName"`
+	Time            string `json:"time"`
+	Action          string `json:"action"`
+	ValueMlokiTotal int64  `json:"valueMlokiTotal"`
 }
 
 // debug api
@@ -485,6 +525,80 @@ type SignMessageResponse struct {
 	Signature string `json:"signature"`
 }
 
+// LSPS Types
+
+// LSPS0
+type LSPS0ListProtocolsRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+}
+
+type LSPS0ListProtocolsResponse struct {
+	Protocols []int `json:"protocols"`
+}
+
+// LSPS1
+type LSPS1GetInfoRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	Token     string `json:"token,omitempty"`
+}
+
+type LSPS1CreateOrderRequest struct {
+	LSPPubkey            string  `json:"lsp_pubkey"`
+	LSPBalanceLoki       uint64  `json:"amount_loki"`
+	ChannelExpiryBlocks  uint32  `json:"channel_expiry_blocks"`
+	Token                *string `json:"token,omitempty"`
+	RefundOnchainAddress *string `json:"refund_onchain_address,omitempty"`
+	AnnounceChannel      bool    `json:"announce_channel"`
+}
+
+type LSPS1GetOrderRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	OrderID   string `json:"orderId"`
+	Token     string `json:"token,omitempty"`
+}
+
+// LSPS2
+type LSPS2GetInfoRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	Token     string `json:"token,omitempty"`
+}
+
+// LSPS2OpeningFeeParams mirrors lsps2.OpeningFeeParams but for API usage if needed,
+// strictly we can reuse the type from lsps2 package if we import it,
+// but usually API types are separate. However, to avoid duplication and alignment issues,
+// we can embed or use the lsps2 type if it serializes to compatible JSON.
+// The lsps2.OpeningFeeParams has JSON tags, so we can use it.
+type LSPS2OpeningFeeParams = lsps2.OpeningFeeParams
+
+type LSPS2BuyRequest struct {
+	LSPPubkey        string                `json:"lspPubkey"`
+	PaymentSizeMloki *uint64               `json:"paymentSizeMloki,omitempty"`
+	OpeningFeeParams LSPS2OpeningFeeParams `json:"openingFeeParams"`
+}
+
+type LSPS2BuyResponse struct {
+	RequestID       string `json:"requestId"`
+	InterceptSCID   uint64 `json:"interceptScid,string"`
+	CLTVExpiryDelta uint16 `json:"cltvExpiryDelta"`
+}
+
+// LSPS5
+type LSPS5SetWebhookRequest struct {
+	LSPPubkey string   `json:"lspPubkey"`
+	URL       string   `json:"url"`
+	Events    []string `json:"events"`
+	Signature string   `json:"signature"`
+}
+
+type LSPS5ListWebhooksRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+}
+
+type LSPS5RemoveWebhookRequest struct {
+	LSPPubkey string `json:"lspPubkey"`
+	URL       string `json:"url"`
+}
+
 type PayInvoiceRequest struct {
 	Amount   *uint64  `json:"amount"`
 	Metadata Metadata `json:"metadata"`
@@ -495,8 +609,13 @@ type MakeOfferRequest struct {
 }
 
 type MakeInvoiceRequest struct {
-	Amount      uint64 `json:"amount"`
-	Description string `json:"description"`
+	Amount                       uint64 `json:"amount"`
+	Description                  string `json:"description"`
+	LSPJitChannelSCID            string `json:"lspJitChannelSCID,omitempty"`
+	LSPCltvExpiryDelta           uint16 `json:"lspCltvExpiryDelta,omitempty"`
+	LSPPubkey                    string `json:"lspPubkey,omitempty"`
+	LSPFeeBaseMloki              uint64 `json:"lspFeeBaseMloki,omitempty"`
+	LSPFeeProportionalMillionths uint32 `json:"lspFeeProportionalMillionths,omitempty"`
 }
 
 type ResetRouterRequest struct {
@@ -532,7 +651,7 @@ type Channel struct {
 	InternalChannel                          interface{} `json:"internalChannel"`
 	Confirmations                            *uint32     `json:"confirmations"`
 	ConfirmationsRequired                    *uint32     `json:"confirmationsRequired"`
-	ForwardingFeeBaseMsat                    uint32      `json:"forwardingFeeBaseMsat"`
+	ForwardingFeeBaseMloki                   uint32      `json:"forwardingFeeBaseMloki"`
 	ForwardingFeeProportionalMillionths      uint32      `json:"forwardingFeeProportionalMillionths"`
 	UnspendablePunishmentReserve             uint64      `json:"unspendablePunishmentReserve"`
 	CounterpartyUnspendablePunishmentReserve uint64      `json:"counterpartyUnspendablePunishmentReserve"`
@@ -589,7 +708,7 @@ type ExecuteCustomNodeCommandRequest struct {
 }
 
 type GetForwardsResponse struct {
-	OutboundAmountForwardedMsat uint64 `json:"outboundAmountForwardedMsat"`
-	TotalFeeEarnedMsat          uint64 `json:"totalFeeEarnedMsat"`
-	NumForwards                 uint64 `json:"numForwards"`
+	OutboundAmountForwardedMloki uint64 `json:"outboundAmountForwardedMloki"`
+	TotalFeeEarnedMloki          uint64 `json:"totalFeeEarnedMloki"`
+	NumForwards                  uint64 `json:"numForwards"`
 }

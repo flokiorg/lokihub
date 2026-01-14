@@ -7,6 +7,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
@@ -38,4 +39,5 @@ type Service interface {
 	GetStartupState() string
 	ReloadNostr() error
 	GetAppStoreSvc() appstore.Service
+	GetLiquidityManager() *manager.LiquidityManager
 }

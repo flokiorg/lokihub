@@ -1,14 +1,14 @@
 import {
-  BellIcon,
-  CirclePlusIcon,
-  CrownIcon,
-  HandCoinsIcon,
-  InfoIcon,
-  LucideIcon,
-  NotebookTabsIcon,
-  PenLineIcon,
-  SearchIcon,
-  WalletMinimalIcon,
+    BellIcon,
+    CirclePlusIcon,
+    CrownIcon,
+    HandCoinsIcon,
+    InfoIcon,
+    LucideIcon,
+    NotebookTabsIcon,
+    PenLineIcon,
+    SearchIcon,
+    WalletMinimalIcon,
 } from "lucide-react";
 
 export type BackendType = "FLND";
@@ -139,6 +139,13 @@ export interface AppPermissions {
   isolated: boolean;
 }
 
+export interface LSP {
+  name: string;
+  pubkey: string;
+  host: string;
+  active: boolean;
+}
+
 export interface InfoResponse {
   backendType: BackendType;
   setupCompleted: boolean;
@@ -160,6 +167,7 @@ export interface InfoResponse {
   swapServiceUrl: string;
   messageboardNwcUrl: string;
   relay: string;
+  lsps: LSP[];
   enableSwap: boolean;
   enableMessageboardNwc: boolean;
   workDir: string;
@@ -177,7 +185,6 @@ export type HealthAlarm = {
   kind: HealthAlarmKind;
   rawDetails?: unknown;
 };
-
 
 export type HealthResponse = {
   alarms: HealthAlarm[];
@@ -294,7 +301,7 @@ export type Channel = {
   public: boolean;
   confirmations?: number;
   confirmationsRequired?: number;
-  forwardingFeeBaseMsat: number;
+  forwardingFeeBaseMloki: number;
   forwardingFeeProportionalMillionths: number;
   unspendablePunishmentReserve: number;
   counterpartyUnspendablePunishmentReserve: number;
@@ -304,7 +311,7 @@ export type Channel = {
 };
 
 export type UpdateChannelRequest = {
-  forwardingFeeBaseMsat: number;
+  forwardingFeeBaseMloki: number;
 };
 
 export type Peer = {
@@ -345,6 +352,11 @@ export type PayInvoiceResponse = {
 export type CreateInvoiceRequest = {
   amount: number;
   description: string;
+  lspJitChannelSCID?: string;
+  lspCltvExpiryDelta?: number;
+  lspPubkey?: string;
+  lspFeeBaseMloki?: number;
+  lspFeeProportionalMillionths?: number;
 };
 
 export type OpenChannelRequest = {
@@ -586,7 +598,7 @@ export type Boostagram = {
   senderName: string;
   time: string;
   action: "boost";
-  valueMsatTotal: number;
+  valueMlokiTotal: number;
 };
 
 export type OnchainTransaction = {
@@ -596,6 +608,40 @@ export type OnchainTransaction = {
   state: "confirmed" | "unconfirmed";
   numConfirmations: number;
   txId: string;
+};
+
+export type LSPS1GetInfoResponse = {
+  options: LSPS1Option[];
+};
+
+export type LSPS1Option = {
+  min_required_channel_confirmations: number;
+  min_initial_client_balance_loki: number;
+  max_initial_client_balance_loki: number;
+  min_initial_lsp_balance_loki: number;
+  max_initial_lsp_balance_loki: number;
+  min_channel_balance_loki: number;
+  max_channel_balance_loki: number;
+};
+
+export type LSPS1CreateOrderRequest = {
+  lsp_pubkey: string;
+  amount_loki: number;
+  channel_expiry_blocks: number;
+  token?: string;
+  refund_onchain_address?: string;
+  announce_channel?: boolean;
+};
+
+export type LSPS1CreateOrderResponse = {
+  order_id: string;
+  payment_invoice: string;
+};
+
+export type LSPS1GetOrderResponse = {
+    order_id: string;
+    state: string;
+    payment_invoice: string;
 };
 
 export type ListAppsResponse = {
@@ -638,13 +684,40 @@ export type AuthTokenResponse = {
 
 
 export type GetForwardsResponse = {
-  outboundAmountForwardedMsat: number;
-  totalFeeEarnedMsat: number;
+  outboundAmountForwardedMloki: number;
+  totalFeeEarnedMloki: number;
   numForwards: number;
 };
 
 export interface FAQ {
   question: string;
   answer: string;
+}
+
+export interface LSPS2OpeningFeeParams {
+  min_fee_mloki: string;
+  proportional: number;
+  valid_until: string;
+  min_lifetime: number;
+  max_client_to_self_delay: number;
+  min_payment_size_mloki: string;
+  max_payment_size_mloki: string;
+  promise: string;
+}
+
+export interface LSPS2GetInfoResponse {
+  opening_fee_params_menu: LSPS2OpeningFeeParams[];
+}
+
+export interface LSPS2BuyRequest {
+  lspPubkey: string;
+  paymentSizeMloki: number;
+  openingFeeParams: LSPS2OpeningFeeParams;
+}
+
+export interface LSPS2BuyResponse {
+  requestId: string;
+  interceptScid: string;
+  cltvExpiryDelta: number;
 }
 

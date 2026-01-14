@@ -20,6 +20,8 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient/lnd"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
 func (svc *service) ReloadNostr() error {
@@ -315,6 +317,22 @@ func (svc *service) StartApp(encryptionKey string) error {
 	}
 
 	svc.swapsService = swaps.NewSwapsService(ctx, svc.db, svc.cfg, svc.keys, svc.eventPublisher, svc.lnClient, svc.transactionsService)
+
+	// Initialize and start LiquidityManager (LSPS)
+	kvStore := persist.NewGormKVStore(svc.db)
+	lmCfg := manager.NewManagerConfig(svc.lnClient, kvStore)
+	lm, err := manager.NewLiquidityManager(lmCfg)
+	if err != nil {
+		logger.Logger.WithError(err).Error("Failed to initialize LiquidityManager")
+		// We don't fail startup for this yet, but we should log it
+	} else {
+		svc.liquidityManager = lm
+		if err := lm.Start(ctx); err != nil {
+			logger.Logger.WithError(err).Error("Failed to start LiquidityManager")
+		} else {
+			logger.Logger.Info("LiquidityManager started")
+		}
+	}
 
 	svc.publishAllAppInfoEvents()
 

@@ -27,6 +27,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/nip47"
 )
 
@@ -43,6 +44,7 @@ type service struct {
 	ctx                 context.Context
 	wg                  *sync.WaitGroup
 	nip47Service        nip47.Nip47Service
+	liquidityManager    *manager.LiquidityManager
 	appCancelFn         context.CancelFunc
 	nostrCancelFn       context.CancelFunc
 	keys                keys.Keys
@@ -265,6 +267,10 @@ func (svc *service) GetTransactionsService() transactions.TransactionsService {
 
 func (svc *service) GetSwapsService() swaps.SwapsService {
 	return svc.swapsService
+}
+
+func (svc *service) GetLiquidityManager() *manager.LiquidityManager {
+	return svc.liquidityManager
 }
 
 func (svc *service) InitSwapsService() {
