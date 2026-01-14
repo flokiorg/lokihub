@@ -58,3 +58,5 @@ jobs:
           name: artifacts-windows-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error
+        env:
+            ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: 10
