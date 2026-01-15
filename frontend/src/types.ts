@@ -1,14 +1,14 @@
 import {
-    BellIcon,
-    CirclePlusIcon,
-    CrownIcon,
-    HandCoinsIcon,
-    InfoIcon,
-    LucideIcon,
-    NotebookTabsIcon,
-    PenLineIcon,
-    SearchIcon,
-    WalletMinimalIcon,
+  BellIcon,
+  CirclePlusIcon,
+  CrownIcon,
+  HandCoinsIcon,
+  InfoIcon,
+  LucideIcon,
+  NotebookTabsIcon,
+  PenLineIcon,
+  SearchIcon,
+  WalletMinimalIcon,
 } from "lucide-react";
 
 export type BackendType = "FLND";
@@ -450,6 +450,7 @@ export type SetupNodeInfo = Partial<{
   mempoolApi?: string;
   enableSwap?: boolean;
   enableMessageboardNwc?: boolean;
+  lsps?: LSP[];
 }>;
 
 export type LSPType = "LSPS1";
@@ -719,5 +720,6 @@ export interface LSPS2BuyResponse {
   requestId: string;
   interceptScid: string;
   cltvExpiryDelta: number;
+  lspNodeID: string;
 }
 

@@ -125,6 +125,7 @@ type BuyResponse struct {
 	JitChannelSCID     string `json:"jit_channel_scid"`
 	LSPCLTVExpiryDelta uint16 `json:"lsp_cltv_expiry_delta"`
 	ClientTrustedLSP   bool   `json:"client_trusts_lsp"`
+	LSPNodeID          string `json:"lsp_node_id"`
 }
 
 // ParseSCID converts the string SCID to uint64

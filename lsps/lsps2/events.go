@@ -38,6 +38,7 @@ type InvoiceParametersReadyEvent struct {
 	InterceptSCID      uint64
 	CLTVExpiryDelta    uint16
 	PaymentSizeMloki   *uint64
+	LSPNodeID          string
 }
 
 func (e *InvoiceParametersReadyEvent) EventType() string {

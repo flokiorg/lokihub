@@ -1,9 +1,9 @@
 import {
-  ArrowLeftIcon,
-  CopyIcon,
-  InfoIcon,
-  LinkIcon,
-  PlusIcon
+    ArrowLeftIcon,
+    CopyIcon,
+    InfoIcon,
+    LinkIcon,
+    PlusIcon
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -17,11 +17,11 @@ import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { LinkButton } from "src/components/ui/custom/link-button";
@@ -107,6 +107,7 @@ export default function ReceiveInvoice() {
       setLoading(true);
       let jitSCID = ""; 
       let cltvDelta = 0;
+      let jitLSP = "";
 
       const firstLSP = info?.lsps?.[0]?.pubkey;
           if (needsJit && jitFeeParams && firstLSP) {
@@ -139,16 +140,17 @@ export default function ReceiveInvoice() {
                     openingFeeParams: jitFeeParams
                 } as LSPS2BuyRequest)
             });
-            if (buyRes) {
-                jitSCID = buyRes.interceptScid;
-                cltvDelta = buyRes.cltvExpiryDelta;
+                if (buyRes) {
+                 jitSCID = buyRes.interceptScid;
+                 cltvDelta = buyRes.cltvExpiryDelta;
+                 jitLSP = buyRes.lspNodeID;
+                }
+            } catch (e) {
+                console.error("Failed to buy liquidity", e);
+                toast.error("Failed to buy liquidity. Please try again later.");
+                return;
             }
-        } catch (e) {
-            console.error("Failed to buy liquidity", e);
-            toast.error("Failed to buy liquidity. Please try again later.");
-            return;
-        }
-      }
+          }
 
       const invoice = await request<Transaction>("/api/invoices", {
         method: "POST",
@@ -160,9 +162,9 @@ export default function ReceiveInvoice() {
           description,
           lspJitChannelSCID: jitSCID,
           lspCltvExpiryDelta: cltvDelta,
-          lspPubkey: jitSCID ? info?.lsps?.[0]?.pubkey : undefined,
-          lspFeeBaseMloki: jitSCID && jitFeeParams ? parseInt(jitFeeParams.min_fee_mloki) : undefined,
-          lspFeeProportionalMillionths: jitSCID && jitFeeParams ? jitFeeParams.proportional : undefined,
+          lspPubkey: jitSCID ? (jitLSP || info?.lsps?.[0]?.pubkey) : undefined,
+          lspFeeBaseMloki: jitSCID ? 0 : undefined,
+          lspFeeProportionalMillionths: jitSCID ? 0 : undefined,
         } as CreateInvoiceRequest),
       });
 

@@ -580,6 +580,7 @@ type LSPS2BuyResponse struct {
 	RequestID       string `json:"requestId"`
 	InterceptSCID   uint64 `json:"interceptScid,string"`
 	CLTVExpiryDelta uint16 `json:"cltvExpiryDelta"`
+	LSPNodeID       string `json:"lspNodeID"`
 }
 
 // LSPS5

@@ -127,6 +127,7 @@ func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyRe
 		RequestID:       resp.RequestID,
 		InterceptSCID:   resp.InterceptSCID,
 		CLTVExpiryDelta: resp.CLTVExpiryDelta,
+		LSPNodeID:       resp.LSPNodeID,
 	}, nil
 }
 

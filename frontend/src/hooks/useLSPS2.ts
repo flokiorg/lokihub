@@ -26,6 +26,7 @@ export interface LSPS2BuyResponse {
   jitChannelSCID: string;
   lspCltvExpiryDelta: number;
   clientTrusts0Conf: boolean;
+  lspNodeID: string;
 }
 
 /**
