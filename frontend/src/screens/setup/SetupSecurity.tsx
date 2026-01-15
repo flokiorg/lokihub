@@ -1,10 +1,11 @@
 import {
-    HandCoinsIcon,
-    ShieldAlertIcon,
-    UnlockIcon
+  HandCoinsIcon,
+  ShieldAlertIcon,
+  UnlockIcon
 } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Loading from "src/components/Loading";
 import { SetupLayout } from "./SetupLayout";
 
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
@@ -12,13 +13,24 @@ import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Label } from "src/components/ui/label";
 
+import { useInfo } from "src/hooks/useInfo";
+
 export function SetupSecurity() {
   const navigate = useNavigate();
+  const { data: info, isLoading } = useInfo();
   const [hasConfirmed, setConfirmed] = useState<boolean>(false);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    navigate("/");
+    if (isLoading) return; // Prevent action while loading
+    
+    if (info?.setupCompleted) {
+      navigate("/");
+    } else {
+        // If setup is logically complete (we are here), but info says no, 
+        // force a hard reload to sync state.
+        window.location.href = "/";
+    }
   }
 
   return (
@@ -72,7 +84,8 @@ export function SetupSecurity() {
                 I understand how to secure and recover funds
               </Label>
             </div>
-            <Button className="w-full" disabled={!hasConfirmed} type="submit">
+            <Button className="w-full" disabled={!hasConfirmed || isLoading} type="submit">
+              {isLoading ? <Loading className="w-4 h-4 mr-2" /> : null}
               Continue
             </Button>
           </div>
