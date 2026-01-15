@@ -1,6 +1,7 @@
 import { AlertCircle, RotateCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LSPManagementCard } from "src/components/LSPManagementCard";
 import { MultiRelayInput } from "src/components/MultiRelayInput";
 import { ServiceCardSelector, ServiceOption } from "src/components/ServiceCardSelector";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
@@ -15,6 +16,7 @@ import {
 } from "src/components/ui/card";
 import { Label } from "src/components/ui/label";
 import { Switch } from "src/components/ui/switch";
+import { LSP } from "src/types";
 import { request } from "src/utils/request";
 import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 
@@ -33,6 +35,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
     mempoolApi: "",
     enableSwap: true,
     enableMessageboardNwc: true,
+    lsps: [] as LSP[],
   });
   const [showConfig, setShowConfig] = useState(false);
 
@@ -42,11 +45,13 @@ export function GlobalError({ message }: GlobalErrorProps) {
     relay: ServiceOption[];
     messageboard: ServiceOption[];
     mempool: ServiceOption[];
+    lsp: ServiceOption[];
   }>({
     swap: [],
     relay: [],
     messageboard: [],
     mempool: [],
+    lsp: [],
   });
 
   useEffect(() => {
@@ -62,6 +67,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
               mempoolApi: info.mempoolUrl || "",
               enableSwap: info.enableSwap ?? true,
               enableMessageboardNwc: info.enableMessageboardNwc ?? true,
+              lsps: info.lsps || [],
             });
           }
         })
@@ -81,6 +87,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
                     relay: services.nostr_relay || [],
                     messageboard: services.messageboard_nwc || [],
                     mempool: services.flokicoin_explorer || [],
+                    lsp: services.lsps || [],
                 });
             }
         })
@@ -153,6 +160,12 @@ export function GlobalError({ message }: GlobalErrorProps) {
               relay: services.relay,
               enableSwap: services.enableSwap,
               enableMessageboardNwc: services.enableMessageboardNwc,
+              lsps: services.lsps.map(l => ({
+                  name: l.name,
+                  pubkey: l.pubkey,
+                  host: l.host,
+                  active: l.active,
+              })),
             }),
           }),
         ]);
@@ -291,6 +304,13 @@ export function GlobalError({ message }: GlobalErrorProps) {
                     </CardContent>
                 )}
               </Card>
+
+              {/* LSP Management */}
+              <LSPManagementCard
+                localLSPs={services.lsps}
+                setLocalLSPs={(lsps) => setServices({ ...services, lsps })}
+                className="border-border shadow-sm"
+              />
 
               {validationErrors.length > 0 && (
                 <div ref={errorRef} className="scroll-mt-4">

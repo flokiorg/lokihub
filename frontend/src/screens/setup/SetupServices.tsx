@@ -1,13 +1,14 @@
 import {
-  AlertCircle,
-  Globe,
-  PenLine,
-  Server,
-  Zap
+    AlertCircle,
+    Globe,
+    PenLine,
+    Server,
+    Zap
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { LSPManagementCard } from "src/components/LSPManagementCard";
 import { MultiRelayInput } from "src/components/MultiRelayInput";
 import { ServiceCardSelector } from "src/components/ServiceCardSelector";
 import { ServiceConfigurationHeader } from "src/components/ServiceConfigurationHeader";
@@ -15,14 +16,15 @@ import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Switch } from "src/components/ui/switch";
 import useSetupStore from "src/state/SetupStore";
+import { LSP } from "src/types";
 import { request } from "src/utils/request";
 import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 import { SetupLayout } from "./SetupLayout";
@@ -30,6 +32,7 @@ import { SetupLayout } from "./SetupLayout";
 interface ServiceOption {
   name: string;
   value: string;
+  uri?: string;
   description?: string;
   recommended?: boolean;
 }
@@ -40,6 +43,7 @@ interface CommunityServices {
   relay: ServiceOption[];
   messageboard: ServiceOption[];
   mempool: ServiceOption[];
+  lsp: ServiceOption[];
 }
 
 export function SetupServices() {
@@ -54,6 +58,7 @@ export function SetupServices() {
   const [mempoolApi, setMempoolApi] = useState(store.nodeInfo.mempoolApi || "");
   const [enableSwap, setEnableSwap] = useState(store.nodeInfo.enableSwap ?? false);
   const [enableMessageboardNwc, setEnableMessageboardNwc] = useState(store.nodeInfo.enableMessageboardNwc ?? false);
+  const [localLSPs, setLocalLSPs] = useState<LSP[]>(store.nodeInfo.lsps || []);
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -65,6 +70,7 @@ export function SetupServices() {
     relay: [],
     messageboard: [],
     mempool: [],
+    lsp: [],
   });
 
   // Fetch default values and community options
@@ -79,13 +85,18 @@ export function SetupServices() {
         const services = await request<any>("/api/setup/config", {
            method: "GET",
         });
+        
+        let fetchedCommunityLSPs: ServiceOption[] = [];
+        
         if (services) {
+            fetchedCommunityLSPs = services.lsps || [];
             setCommunityOptions({
                 rgs: [],
                 swap: services.swap_service || [],
                 relay: services.nostr_relay || [],
                 messageboard: services.messageboard_nwc || [],
                 mempool: services.flokicoin_explorer || [],
+                lsp: fetchedCommunityLSPs,
             });
         }
         
@@ -111,6 +122,41 @@ export function SetupServices() {
             }
             if (store.nodeInfo.enableMessageboardNwc === undefined && info.enableMessageboardNwc !== undefined) {
                 setEnableMessageboardNwc(info.enableMessageboardNwc);
+            }
+            
+            // Populate LSPs from info if local state is empty (or merge logic?)
+            // We want to combine community options with existing info LSPs
+            if (localLSPs.length === 0) {
+                const existingLSPs = (info.lsps as LSP[]) || [];
+                
+                // Merge logic similar to Services.tsx
+                const communityCards = fetchedCommunityLSPs.map(opt => {
+                    const [pubkey, host] = opt.uri?.split('@') || ['', ''];
+                    const existing = existingLSPs.find(l => l.pubkey === pubkey);
+                    
+                    if (existing) {
+                        return {
+                            ...existing,
+                            isCommunity: true,
+                            description: opt.description
+                        };
+                    }
+                    
+                    return {
+                        name: opt.name,
+                        pubkey: pubkey,
+                        host: host,
+                        active: false,
+                        isCommunity: true,
+                        description: opt.description
+                    } as LSP;
+                });
+                
+                // Custom LSPs
+                const communityPubkeys = new Set(fetchedCommunityLSPs.map(opt => opt.uri?.split('@')[0]));
+                const customCards = existingLSPs.filter(l => !communityPubkeys.has(l.pubkey));
+                
+                setLocalLSPs([...communityCards, ...customCards]);
             }
         }
 
@@ -199,6 +245,7 @@ export function SetupServices() {
       mempoolApi,
       enableSwap,
       enableMessageboardNwc,
+      lsps: localLSPs,
     });
     navigate("/setup/node");
   }
@@ -320,6 +367,13 @@ export function SetupServices() {
                  )}
             </Card>
 
+
+            {/* LSP Management */}
+            <LSPManagementCard
+                localLSPs={localLSPs}
+                setLocalLSPs={setLocalLSPs}
+                className="border-border shadow-sm"
+            />
 
             {validationErrors.length > 0 && (
               <div ref={errorRef} className="scroll-mt-4">
