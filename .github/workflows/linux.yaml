@@ -31,8 +31,9 @@ jobs:
           fi
           TAG=$(cat VERSION | tr -d '[:space:]')
           COMMIT_HASH=$(git rev-parse --short HEAD)
-          TAG="${TAG}-${COMMIT_HASH}"
+          BUILD_TAG="${TAG}-${COMMIT_HASH}"
           echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
 
       - name: Build Builder Image
         run: |
@@ -48,6 +49,7 @@ jobs:
           sudo docker run --rm \
             -v ${{ github.workspace }}:/build \
             -e TAG=${{ env.TAG }} \
+            -e BUILD_TAG=${{ env.BUILD_TAG }} \
             lokihub-builder-${{ matrix.arch }}:latest \
             /bin/bash /build/ops/scripts/build-ci-linux.sh
 

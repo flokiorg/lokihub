@@ -11,7 +11,11 @@ if (-not $env:TAG) {
         exit 1
     }
 }
+# Use BUILD_TAG for internal version string if provided, otherwise default to TAG
+$env:VERSION_STRING = if ($env:BUILD_TAG) { $env:BUILD_TAG } else { $env:TAG }
+
 Write-Host "TAG=$env:TAG"
+Write-Host "VERSION_STRING=$env:VERSION_STRING"
 
 New-Item -ItemType Directory -Force -Path "ops/bin" | Out-Null
 New-Item -ItemType Directory -Force -Path "build" | Out-Null
@@ -57,7 +61,7 @@ function Build-Http {
     $env:GOOS = "windows"
     $env:GOARCH = $Arch
     
-    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:TAG)'" `
+    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:VERSION_STRING)'" `
         -o "ops/bin/$OutputName" ./cmd/http
 
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
@@ -101,7 +105,7 @@ function Build-Desktop {
     
     # We explicitly force windowsgui via Wails default behavior
     # LDFLAGS only needs version info now
-    $LdFlags = "-X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:TAG)'"
+    $LdFlags = "-X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:VERSION_STRING)'"
 
     # 1. Enforce Clean Build
     if (Test-Path "build/bin") {

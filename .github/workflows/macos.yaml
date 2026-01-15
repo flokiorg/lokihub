@@ -45,12 +45,13 @@ jobs:
           fi
           TAG=$(cat VERSION | tr -d '[:space:]')
           COMMIT_HASH=$(git rev-parse --short HEAD)
-          TAG="${TAG}-${COMMIT_HASH}"
+          BUILD_TAG="${TAG}-${COMMIT_HASH}"
           if [ -z "$TAG" ]; then
             echo "Error: VERSION file is empty"
             exit 1
           fi
           echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
 
       - name: Make Scripts Executable
         run: chmod +x ops/scripts/*.sh
@@ -59,6 +60,7 @@ jobs:
         run: ./ops/scripts/build-ci-macos.sh
         env:
           TAG: ${{ env.TAG }}
+          BUILD_TAG: ${{ env.BUILD_TAG }}
 
       - name: Upload Artifacts (macOS Universal)
         uses: actions/upload-artifact@v4

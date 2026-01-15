@@ -41,18 +41,20 @@ jobs:
           }
           $TAG = (Get-Content "VERSION").Trim()
           $COMMIT_HASH = (git rev-parse --short HEAD).Trim()
-          $TAG = "$TAG-$COMMIT_HASH"
+          $BUILD_TAG = "$TAG-$COMMIT_HASH"
           if (-not $TAG) {
             Write-Error "Error: VERSION file is empty"
             exit 1
           }
           "TAG=$TAG" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUILD_TAG=$BUILD_TAG" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Run Windows Build Script
         shell: powershell
         run: ./ops/scripts/build-ci-windows.ps1
         env:
           TAG: ${{ env.TAG }}
+          BUILD_TAG: ${{ env.BUILD_TAG }}
 
       - name: Upload Artifacts (Windows)
         uses: actions/upload-artifact@v4

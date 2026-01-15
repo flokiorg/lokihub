@@ -15,6 +15,9 @@ if [ -z "$TAG" ]; then
     fi
 fi
 
+# Use BUILD_TAG for internal version string if provided, otherwise default to TAG
+VERSION_STRING="${BUILD_TAG:-$TAG}"
+
 # Disable VCS stamping
 export GOFLAGS="-buildvcs=false"
 
@@ -50,7 +53,7 @@ TARGET_BINARY_NAME="lokihub"
 OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
 ARCHIVE_NAME="lokihub-server-${GOOS}-${GOARCH}-${TAG}"
 
-go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${TAG}'" \
+go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${VERSION_STRING}'" \
     -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
 
 # Package HTTP
@@ -82,7 +85,7 @@ rm -f ops/bin/*.AppImage*
 rm -rf build/bin
 mkdir -p build/bin
 
-LDFLAGS="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=${TAG}'"
+LDFLAGS="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=${VERSION_STRING}'"
 
 # Wails Build
 echo "--- Building Desktop Binary (Direct Go) ---"
