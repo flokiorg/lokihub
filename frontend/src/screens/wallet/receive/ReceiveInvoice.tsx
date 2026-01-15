@@ -51,6 +51,7 @@ export default function ReceiveInvoice() {
   const [paymentDone, setPaymentDone] = React.useState(false);
   const [jitFeeParams, setJitFeeParams] = React.useState<LSPS2OpeningFeeParams | null>(null);
   const [jitError, setJitError] = React.useState<string | null>(null);
+  const [jitApplied, setJitApplied] = React.useState(false);
   const { data: invoiceData } = useTransaction(
     transaction ? transaction.paymentHash : "",
     true
@@ -170,6 +171,10 @@ export default function ReceiveInvoice() {
 
       if (invoice) {
         setTransaction(invoice);
+        // If we got a JIT SCID, we consider JIT applied
+        if (jitSCID) {
+           setJitApplied(true);
+        }
         setAmount("");
         setDescription("");
         toast("Successfully created invoice");
@@ -195,7 +200,7 @@ export default function ReceiveInvoice() {
         <div className="w-full md:max-w-lg grid gap-6">
           {hasChannelManagement &&
             (+amount * 1000 || transaction?.amount || 0) >=
-              0.8 * balances.lightning.totalReceivable && (
+              0.8 * balances.lightning.totalReceivable && !jitApplied && (
               <LowReceivingCapacityAlert jitAvailable={!!info?.lsps?.[0]} />
             )}
           <div>
@@ -256,6 +261,7 @@ export default function ReceiveInvoice() {
                         onClick={() => {
                           setPaymentDone(false);
                           setTransaction(null);
+                          setJitApplied(false);
                         }}
                         variant="outline"
                         className="w-full"

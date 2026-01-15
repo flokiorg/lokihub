@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
@@ -96,8 +98,15 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 		return nil, fmt.Errorf("LiquidityManager not started")
 	}
 
+	// Requirement: timeout after 10 seconds for fee calculation
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	fees, err := api.svc.GetLiquidityManager().GetLSPS2FeeParams(ctx, req.LSPPubkey)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("time out, please retry")
+		}
 		return nil, err
 	}
 

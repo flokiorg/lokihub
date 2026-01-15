@@ -288,8 +288,11 @@ export function mergeLSPs(existingLSPs: LSP[], communityLSPConfig: ServiceOption
     if (!communityLSPConfig) return existingLSPs;
     
     const communityCards = communityLSPConfig.map(opt => {
-        const [pubkey, host] = opt.uri?.split('@') || ['', ''];
-        const existing = existingLSPs.find(l => l.pubkey === pubkey);
+        const [pubkeyRaw, host] = opt.uri?.split('@') || ['', ''];
+        const pubkey = pubkeyRaw.toLowerCase();
+        
+        // Find existing case-insensitively
+        const existing = existingLSPs.find(l => l.pubkey.toLowerCase() === pubkey);
         
         if (existing) {
             return {
@@ -309,8 +312,11 @@ export function mergeLSPs(existingLSPs: LSP[], communityLSPConfig: ServiceOption
         } as LSP;
     });
     
-    const communityPubkeys = new Set(communityCards.map(c => c.pubkey));
-    const customCards = existingLSPs.filter(l => !communityPubkeys.has(l.pubkey));
+    // Use lower case set for checking presence
+    const communityPubkeys = new Set(communityCards.map(c => c.pubkey.toLowerCase()));
+    
+    // Filter custom cards (ensure comparison is robust)
+    const customCards = existingLSPs.filter(l => !communityPubkeys.has(l.pubkey.toLowerCase()));
     
     return [...communityCards, ...customCards];
 }

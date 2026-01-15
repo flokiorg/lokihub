@@ -3,11 +3,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -88,7 +88,7 @@ export function LSPManagementCard({
 
     const newLSP: LSP = {
       name: newLSPName,
-      pubkey: pubkey,
+      pubkey: pubkey.toLowerCase(),
       host: host,
       active: true,
       isCommunity: false,
