@@ -3,11 +3,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -131,7 +131,7 @@ export function LSPManagementCard({
                 "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none",
                 "hover:shadow-md active:scale-[0.98]",
                 provider.active
-                  ? "border-primary bg-primary/5 shadow-sm"
+                  ? "border-primary relative overflow-hidden before:absolute before:inset-0 before:bg-primary before:opacity-5 before:pointer-events-none shadow-sm"
                   : "border-border bg-card hover:border-primary/50"
               )}
             >
@@ -194,7 +194,7 @@ export function LSPManagementCard({
                 "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none",
                 "hover:shadow-md active:scale-[0.98]",
                 provider.active
-                  ? "border-primary bg-primary/5 shadow-sm"
+                  ? "border-primary relative overflow-hidden before:absolute before:inset-0 before:bg-primary before:opacity-5 before:pointer-events-none shadow-sm"
                   : "border-border bg-card hover:border-primary/50"
               )}
             >
@@ -264,8 +264,9 @@ export function LSPManagementCard({
           >
             {!isAddingLSP ? (
               <div className="flex flex-col items-center justify-center h-full py-6 text-muted-foreground group-hover:text-primary transition-colors">
-                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full bg-muted/50 mb-3 group-hover:bg-primary/10 group-hover:scale-110 transition-all duration-300">
-                  <Plus className="w-5 h-5" />
+                <div className="relative flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full mb-3 group-hover:scale-110 transition-all duration-300 overflow-hidden">
+                  <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-colors duration-300" />
+                  <Plus className="w-5 h-5 relative z-10" />
                 </div>
                 <span className="font-medium text-sm">Add Custom LSP</span>
               </div>
