@@ -1,18 +1,18 @@
 import dayjs from "dayjs";
 import {
-    AlertTriangleIcon,
-    ArrowDownUpIcon,
-    ArrowRightIcon,
-    CopyIcon,
-    ExternalLinkIcon,
-    HeartIcon,
-    HourglassIcon,
-    InfoIcon,
-    LinkIcon,
-    Settings2Icon,
-    SparklesIcon,
-    UnplugIcon,
-    ZapIcon,
+  AlertTriangleIcon,
+  ArrowDownUpIcon,
+  ArrowRightIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  HeartIcon,
+  HourglassIcon,
+  InfoIcon,
+  LinkIcon,
+  Settings2Icon,
+  SparklesIcon,
+  UnplugIcon,
+  ZapIcon,
 } from "lucide-react";
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -29,33 +29,32 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
+  Alert,
+  AlertDescription,
+  AlertTitle,
 } from "src/components/ui/alert.tsx";
-import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card.tsx";
 import CircleProgress from "src/components/ui/custom/circle-progress";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu.tsx";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { ONCHAIN_DUST_LOKI } from "src/constants.ts";
 import { useBalances } from "src/hooks/useBalances.ts";
@@ -68,10 +67,10 @@ import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
 import { copyToClipboard } from "src/lib/clipboard.ts";
 import { cn } from "src/lib/utils.ts";
 import {
-    Channel,
-    LongUnconfirmedZeroConfChannel,
-    MempoolTransaction,
-    PendingBalancesDetails,
+  Channel,
+  LongUnconfirmedZeroConfChannel,
+  MempoolTransaction,
+  PendingBalancesDetails,
 } from "src/types";
 import { request } from "src/utils/request";
 
@@ -419,12 +418,7 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
-                  <div className="px-6 pb-4">
-                      <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/channels/outgoing")}>
-                          <ArrowDownUpIcon className="mr-2 h-4 w-4" />
-                          Increase Balance
-                      </Button>
-                  </div>
+
                 </div>
                 <div className="flex flex-col flex-1">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pr-0">
@@ -460,12 +454,7 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
-                  <div className="px-6 pb-4">
-                      <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/channels/lsp-order")}>
-                          <ArrowRightIcon className="mr-2 h-4 w-4" />
-                          Increase Capacity
-                      </Button>
-                  </div>
+
                 </div>
               </CardContent>
             </Card>
