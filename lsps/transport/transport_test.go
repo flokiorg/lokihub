@@ -139,6 +139,10 @@ func (m *mockLNClient) ExecuteCustomNodeCommand(ctx context.Context, command *ln
 	return nil, nil
 }
 
+func (m *mockLNClient) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
+	return nil, nil, nil
+}
+
 // Tests
 
 func TestLNDTransport_SendCustomMessage(t *testing.T) {

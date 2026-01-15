@@ -254,3 +254,7 @@ func (mln *MockLn) SendCustomMessage(ctx context.Context, peerPubkey string, msg
 func (mln *MockLn) SubscribeCustomMessages(ctx context.Context) (<-chan lnclient.CustomMessage, <-chan error, error) {
 	return make(chan lnclient.CustomMessage), make(chan error), nil
 }
+
+func (mln *MockLn) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
+	return nil, nil, nil
+}
