@@ -134,8 +134,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/fergusstrange/embedded-postgres v1.33.0 h1:ka8vmRpm4IDsES7NPXQ/NThAp1fc/f+crcXYjCW7wK0=
 github.com/fergusstrange/embedded-postgres v1.33.0/go.mod h1:w0YvnCgf19o6tskInrOOACtnqfVlOvluz3hlNLY7tRk=
-github.com/flokiorg/flnd v0.1.14-beta h1:pTCl5JnZoOUekI6UrvjGtqWg8Z0Bt6wm7o0CsYrWj4Q=
-github.com/flokiorg/flnd v0.1.14-beta/go.mod h1:LA0PeymFF7rWS6DyprxatvRsuLWSZKLPkBL5+/rx2ik=
+github.com/flokiorg/flnd v0.1.16-beta h1:TnQ5Vudf91Q+O6gxDLdGDI1HP9CPlI9MghwQaja5vvY=
+github.com/flokiorg/flnd v0.1.16-beta/go.mod h1:LA0PeymFF7rWS6DyprxatvRsuLWSZKLPkBL5+/rx2ik=
 github.com/flokiorg/flokicoin-neutrino v0.16.4-beta h1:/brUIe8ULAeN7hE+NqCwSo/s3dpD5ttXh2RBvIuVfLM=
 github.com/flokiorg/flokicoin-neutrino v0.16.4-beta/go.mod h1:0hpgE2dNjuOV+p7BdcSOxY6++iUwc7YdZJ6MoqgRa4E=
 github.com/flokiorg/go-flokicoin v0.25.12-alpha h1:+mY5c3JzvIATXS9CCN3XsppHBwEWrbFuGF4ZFeCoD2o=
