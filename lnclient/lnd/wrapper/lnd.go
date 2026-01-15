@@ -259,3 +259,7 @@ func (wrapper *LNDWrapper) ForwardingHistory(ctx context.Context, in *lnrpc.Forw
 func (wrapper *LNDWrapper) SubscribeTransactions(ctx context.Context, req *lnrpc.GetTransactionsRequest, options ...grpc.CallOption) (SubscribeTransactionsWrapper, error) {
 	return wrapper.client.SubscribeTransactions(ctx, req, options...)
 }
+
+func (wrapper *LNDWrapper) ChannelAcceptor(ctx context.Context, options ...grpc.CallOption) (lnrpc.Lightning_ChannelAcceptorClient, error) {
+	return wrapper.client.ChannelAcceptor(ctx, options...)
+}

@@ -105,6 +105,15 @@ type LNClient interface {
 	// Custom message support for LSPS protocols
 	SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error
 	SubscribeCustomMessages(ctx context.Context) (<-chan CustomMessage, <-chan error, error)
+
+	// Channel Acceptor
+	SubscribeChannelAcceptor(ctx context.Context) (<-chan ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error)
+}
+
+type ChannelAcceptRequest struct {
+	ID         string
+	NodePubkey string
+	Capacity   uint64
 }
 
 type Channel struct {

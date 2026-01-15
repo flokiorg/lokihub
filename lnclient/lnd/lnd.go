@@ -1877,3 +1877,71 @@ func (svc *LNDService) ListOnchainTransactions(ctx context.Context, from, until,
 
 	return result, nil
 }
+
+func (svc *LNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
+	stream, err := svc.client.ChannelAcceptor(ctx)
+	if err != nil {
+		svc.logger.WithError(err).Error("Failed to subscribe to channel acceptor")
+		return nil, nil, err
+	}
+
+	reqChan := make(chan lnclient.ChannelAcceptRequest)
+
+	// Map to track IDs since LND uses uint64 ID but we might want to abstract it or just pass it as string
+	// Actually LND's ChannelAcceptRequest has `pending_chan_id` (bytes)
+
+	go func() {
+		defer close(reqChan)
+		for {
+			req, err := stream.Recv()
+			if err != nil {
+				// Don't log if context canceled
+				if ctx.Err() == nil {
+					svc.logger.WithError(err).Error("Channel acceptor stream failed")
+				}
+				return
+			}
+
+			// Convert pending_chan_id to hex string for ID
+			id := hex.EncodeToString(req.PendingChanId)
+			nodePubkey := hex.EncodeToString(req.NodePubkey)
+
+			reqChan <- lnclient.ChannelAcceptRequest{
+				ID:         id,
+				NodePubkey: nodePubkey,
+				Capacity:   req.FundingAmt,
+			}
+		}
+	}()
+
+	respond := func(id string, accept bool, zeroConf bool) error {
+		chanIdBytes, err := hex.DecodeString(id)
+		if err != nil {
+			return err
+		}
+
+		response := &lnrpc.ChannelAcceptResponse{
+			Accept:        accept,
+			PendingChanId: chanIdBytes,
+		}
+
+		if accept {
+			if zeroConf {
+				// For ZeroConf JIT channels:
+				// Ensure we accept 0 conf
+				response.MinAcceptDepth = 0
+				response.ZeroConf = true
+			} else {
+				// For Standard channels:
+				// Use safe default of 1 if not specified to avoid LND rejecting "0 depth without zero-conf"
+				// Note: LND usually defaults to 1 for private, but if we send 0 it might reject.
+				response.MinAcceptDepth = 1
+				response.ZeroConf = false
+			}
+		}
+
+		return stream.Send(response)
+	}
+
+	return reqChan, respond, nil
+}

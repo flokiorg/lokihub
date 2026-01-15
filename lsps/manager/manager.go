@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync" // Added import
+	"time"
 
 	"encoding/json"
 	"errors"
-	"regexp"
 	"strings"
 
 	"github.com/flokiorg/lokihub/lnclient"
@@ -17,6 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/lsps/lsps2"
 	"github.com/flokiorg/lokihub/lsps/lsps5"
 	"github.com/flokiorg/lokihub/lsps/transport"
+	"github.com/flokiorg/lokihub/utils"
 )
 
 type LiquidityManager struct {
@@ -46,10 +47,7 @@ type SettingsLSP struct {
 	Active bool   `json:"active"`
 }
 
-var (
-	// Pubkey hex validation
-	pubkeyRegex = regexp.MustCompile(`^[0-9a-fA-F]{66}$`)
-)
+var ()
 
 func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 	if cfg.LNClient == nil {
@@ -86,6 +84,7 @@ func (m *LiquidityManager) Start(ctx context.Context) error {
 
 	go m.processMessages(ctx, msgs, errs)
 	go m.processInternalEvents(ctx)
+	go m.StartInterceptor(ctx)
 
 	return nil
 }
@@ -200,18 +199,9 @@ func (m *LiquidityManager) AddLSP(name, uri string) error {
 
 	// 2. Validate URI
 	// Format: pubkey@host:port
-	parts := strings.Split(uri, "@")
-	if len(parts) != 2 {
-		return errors.New("invalid URI format: expected pubkey@host:port")
-	}
-	pubkey := parts[0]
-	host := parts[1]
-
-	if !pubkeyRegex.MatchString(pubkey) {
-		return errors.New("invalid pubkey format: expected 33-byte hex")
-	}
-	if host == "" {
-		return errors.New("host cannot be empty")
+	pubkey, host, err := utils.ParseLSPURI(uri)
+	if err != nil {
+		return err
 	}
 
 	// Check for duplicate pubkey
@@ -243,6 +233,8 @@ func (m *LiquidityManager) RemoveLSP(pubkey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	pubkey = strings.ToLower(pubkey)
+
 	existing, err := m.getLSPsFromDB()
 	if err != nil {
 		return err
@@ -265,6 +257,8 @@ func (m *LiquidityManager) RemoveLSP(pubkey string) error {
 func (m *LiquidityManager) SetActiveLSP(pubkey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	pubkey = strings.ToLower(pubkey)
 
 	existing, err := m.getLSPsFromDB()
 	if err != nil {
@@ -328,6 +322,8 @@ func (m *LiquidityManager) AddSelectedLSP(pubkey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	pubkey = strings.ToLower(pubkey)
+
 	existing, err := m.getLSPsFromDB()
 	if err != nil {
 		return err
@@ -353,6 +349,8 @@ func (m *LiquidityManager) AddSelectedLSP(pubkey string) error {
 func (m *LiquidityManager) RemoveSelectedLSP(pubkey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	pubkey = strings.ToLower(pubkey)
 
 	existing, err := m.getLSPsFromDB()
 	if err != nil {
@@ -507,5 +505,106 @@ func (m *LiquidityManager) OpenJitChannel(ctx context.Context, pubkey string, pa
 		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
 	default:
 		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
+	}
+}
+
+// Interceptor Logic
+func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
+	reqChan, respond, err := m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
+	if err != nil {
+		fmt.Printf("Failed to subscribe to channel acceptor: %v\n", err)
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok := <-reqChan:
+			if !ok {
+				// Stream closed
+				fmt.Println("Channel acceptor stream closed, retrying in 5s...")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(5 * time.Second):
+					// Retry subscription
+					reqChan, respond, err = m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
+					if err != nil {
+						fmt.Printf("Failed to resubscribe to channel acceptor: %v\n", err)
+						// Exponential backoff or just loop? 5s fixed for now.
+					}
+					continue
+				}
+			}
+
+			// Check against whitelist
+			m.mu.RLock()
+			activeLSPs, err := m.getLSPsFromDB()
+			m.mu.RUnlock()
+
+			if err != nil {
+				fmt.Printf("Failed to get LSPs from DB: %v\n", err)
+				// Default accept? Or Reject?
+				// To be safe, let's accept but maybe without zero-conf (by passing false? logic in LNDService handles true=ZeroConf, false=Reject?)
+				// Wait, the respond func I wrote sends Accept: accept.
+				// If I send true, it sets ZeroConf=true.
+				// This might be too aggressive for non-whitelisted peers.
+				// Let's adjust LNDService logic or here.
+				// Since LNDService logic is hardcoded to "If accept -> set ZeroConf=true",
+				// I should ONLY call respond(..., true) for WHITELISTED peers.
+				// For others, I might want to let LND handle it?
+				// The ChannelAcceptor RPC blocks LND until response.
+				// So I MUST respond.
+				// Use Case:
+				// 1. Whitelisted LSP -> Accept (Zero Conf)
+				// 2. Random Peer -> Accept (Normal) OR Reject?
+				// The user likely wants normal behavior for others.
+				// But `ChannelAcceptResponse` has `zero_conf` field.
+				// If I set `Accept: true` and `ZeroConf: false`, it's a normal accept.
+
+				// I need to update LNDService respond function to allow specifying zero-conf.
+				// But for now, let's assuming "Active LSPs" are the ONLY ones we trust for Zero Conf.
+				// And we probably want to Accept others normally?
+				// But wait, if I use ChannelAcceptor, I assume full control.
+
+				// Let's implement strict whitelist for ZeroConf, and Normal Accept for others?
+				// But to do Normal Accept via RPC, I just send Accept=true, ZeroConf=false.
+				// My LNDService `respond` function currently hardcodes ZeroConf=true if Accept=true.
+				// I should fix LNDService first to be more flexible, or just accept the limitation for now?
+				// Limiting to ONLY whitelisted LSPs for the interceptor seems safer?
+				// "all other channels regarding if they are zero conf or not should be rejected?"
+				// PROBABLY NOT.
+
+				// Let's fix LNDService logic first. It is bad practice to hardcode ZeroConf=true.
+				// I should pass it as arg.
+
+				// Since I cannot change LNDService in same tool call, and I already wrote it...
+				// I will rewrite LNDService respond function in next step.
+
+				// For now, let's write the loop logic assuming I can fix respond later.
+				respond(req.ID, true, false)
+				continue
+			}
+
+			whitelisted := false
+			requestPubkey := strings.ToLower(req.NodePubkey)
+			for _, lsp := range activeLSPs {
+				// Check if active and pubkey matches
+				if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
+					whitelisted = true
+					break
+				}
+			}
+
+			if whitelisted {
+				fmt.Printf("Accepting ZeroConf channel from %s\n", req.NodePubkey)
+				respond(req.ID, true, true)
+			} else {
+				fmt.Printf("Standard accept for channel from %s\n", req.NodePubkey)
+				// Accept normally (LND default validation)
+				respond(req.ID, true, false)
+			}
+		}
 	}
 }
