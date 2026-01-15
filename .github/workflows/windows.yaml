@@ -40,6 +40,8 @@ jobs:
             exit 1
           }
           $TAG = (Get-Content "VERSION").Trim()
+          $COMMIT_HASH = (git rev-parse --short HEAD).Trim()
+          $TAG = "$TAG-$COMMIT_HASH"
           if (-not $TAG) {
             Write-Error "Error: VERSION file is empty"
             exit 1

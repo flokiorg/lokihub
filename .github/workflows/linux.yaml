@@ -30,6 +30,8 @@ jobs:
             exit 1
           fi
           TAG=$(cat VERSION | tr -d '[:space:]')
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          TAG="${TAG}-${COMMIT_HASH}"
           echo "TAG=$TAG" >> $GITHUB_ENV
 
       - name: Build Builder Image
