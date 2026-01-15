@@ -1,50 +1,18 @@
-import {
-    AlertCircle,
-    Globe,
-    PenLine,
-    Server,
-    Zap
-} from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { LSPManagementCard } from "src/components/LSPManagementCard";
-import { MultiRelayInput } from "src/components/MultiRelayInput";
-import { ServiceCardSelector } from "src/components/ServiceCardSelector";
-import { ServiceConfigurationHeader } from "src/components/ServiceConfigurationHeader";
-import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
-import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
-import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "src/components/ui/card";
-import { Switch } from "src/components/ui/switch";
+    ServiceConfigForm,
+    ServiceConfigState,
+    mergeLSPs,
+    validateServiceConfig
+} from "src/components/ServiceConfigForm";
+import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
+import { Button } from "src/components/ui/button";
 import useSetupStore from "src/state/SetupStore";
 import { LSP } from "src/types";
 import { request } from "src/utils/request";
-import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
 import { SetupLayout } from "./SetupLayout";
-
-interface ServiceOption {
-  name: string;
-  value: string;
-  uri?: string;
-  description?: string;
-  recommended?: boolean;
-}
-
-interface CommunityServices {
-  rgs: ServiceOption[];
-  swap: ServiceOption[];
-  relay: ServiceOption[];
-  messageboard: ServiceOption[];
-  mempool: ServiceOption[];
-  lsp: ServiceOption[];
-}
 
 export function SetupServices() {
   const navigate = useNavigate();
@@ -52,26 +20,18 @@ export function SetupServices() {
   
   const [loading, setLoading] = useState(true);
   
-  const [swapServiceUrl, setSwapServiceUrl] = useState(store.nodeInfo.swapServiceUrl || "");
-  const [relay, setRelay] = useState(store.nodeInfo.relay || "");
-  const [messageboardNwcUrl, setMessageboardNwcUrl] = useState(store.nodeInfo.messageboardNwcUrl || "");
-  const [mempoolApi, setMempoolApi] = useState(store.nodeInfo.mempoolApi || "");
-  const [enableSwap, setEnableSwap] = useState(store.nodeInfo.enableSwap ?? false);
-  const [enableMessageboardNwc, setEnableMessageboardNwc] = useState(store.nodeInfo.enableMessageboardNwc ?? false);
-  const [localLSPs, setLocalLSPs] = useState<LSP[]>(store.nodeInfo.lsps || []);
+  const [config, setConfig] = useState<ServiceConfigState>({
+      mempoolApi: store.nodeInfo.mempoolApi || "",
+      relay: store.nodeInfo.relay || "",
+      swapServiceUrl: store.nodeInfo.swapServiceUrl || "",
+      messageboardNwcUrl: store.nodeInfo.messageboardNwcUrl || "",
+      enableSwap: store.nodeInfo.enableSwap ?? false,
+      enableMessageboardNwc: store.nodeInfo.enableMessageboardNwc ?? false,
+      lsps: store.nodeInfo.lsps || [],
+  });
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const errorRef = useRef<HTMLDivElement>(null);
 
-  // Community options state
-  const [communityOptions, setCommunityOptions] = useState<CommunityServices>({
-    rgs: [], // Not used in this step but part of the structure
-    swap: [],
-    relay: [],
-    messageboard: [],
-    mempool: [],
-    lsp: [],
-  });
 
   // Fetch default values and community options
   useEffect(() => {
@@ -81,83 +41,41 @@ export function SetupServices() {
     async function fetchServices() {
       try {
         setLoading(true);
-        // GET /api/setup/config which returns the aggregator JSON
+        // Get community services config to merge LSPs
         const services = await request<any>("/api/setup/config", {
            method: "GET",
         });
         
-        let fetchedCommunityLSPs: ServiceOption[] = [];
-        
-        if (services) {
-            fetchedCommunityLSPs = services.lsps || [];
-            setCommunityOptions({
-                rgs: [],
-                swap: services.swap_service || [],
-                relay: services.nostr_relay || [],
-                messageboard: services.messageboard_nwc || [],
-                mempool: services.flokicoin_explorer || [],
-                lsp: fetchedCommunityLSPs,
-            });
-        }
+        const communityLSPs = services?.lsps || [];
         
         // Also fetch current info to prepopulate defaults if store is empty
         const info = await request<any>("/api/info", { method: "GET" });
         if (info) {
-             // Populate defaults only if state is empty
-            if (!swapServiceUrl && info.swapServiceUrl) {
-              setSwapServiceUrl(info.swapServiceUrl);
-            }
-            if (!relay && info.relay) {
-              setRelay(info.relay);
-            }
-            if (!messageboardNwcUrl && info.messageboardNwcUrl) {
-                setMessageboardNwcUrl(info.messageboardNwcUrl);
-            }
-            if (!mempoolApi && info.mempoolUrl) {
-                setMempoolApi(info.mempoolUrl);
-            }
-            // Populate boolean defaults only if they are not already set in the store
-            if (store.nodeInfo.enableSwap === undefined && info.enableSwap !== undefined) {
-                setEnableSwap(info.enableSwap);
-            }
-            if (store.nodeInfo.enableMessageboardNwc === undefined && info.enableMessageboardNwc !== undefined) {
-                setEnableMessageboardNwc(info.enableMessageboardNwc);
-            }
-            
-            // Populate LSPs from info if local state is empty (or merge logic?)
-            // We want to combine community options with existing info LSPs
-            if (localLSPs.length === 0) {
-                const existingLSPs = (info.lsps as LSP[]) || [];
-                
-                // Merge logic similar to Services.tsx
-                const communityCards = fetchedCommunityLSPs.map(opt => {
-                    const [pubkey, host] = opt.uri?.split('@') || ['', ''];
-                    const existing = existingLSPs.find(l => l.pubkey === pubkey);
-                    
-                    if (existing) {
-                        return {
-                            ...existing,
-                            isCommunity: true,
-                            description: opt.description
-                        };
-                    }
-                    
-                    return {
-                        name: opt.name,
-                        pubkey: pubkey,
-                        host: host,
-                        active: false,
-                        isCommunity: true,
-                        description: opt.description
-                    } as LSP;
-                });
-                
-                // Custom LSPs
-                const communityPubkeys = new Set(fetchedCommunityLSPs.map(opt => opt.uri?.split('@')[0]));
-                const customCards = existingLSPs.filter(l => !communityPubkeys.has(l.pubkey));
-                
-                setLocalLSPs([...communityCards, ...customCards]);
-            }
+             // We need to construct the new state based on info + store
+             
+             // Helper to pick value: store > info > default
+             // Actually, store is initialized from empty/previous steps.
+             // If store values are empty, use info.
+             
+             setConfig(prev => {
+                 const newConfig = { ...prev };
+                 if (!newConfig.swapServiceUrl && info.swapServiceUrl) newConfig.swapServiceUrl = info.swapServiceUrl;
+                 if (!newConfig.relay && info.relay) newConfig.relay = info.relay;
+                 if (!newConfig.messageboardNwcUrl && info.messageboardNwcUrl) newConfig.messageboardNwcUrl = info.messageboardNwcUrl;
+                 if (!newConfig.mempoolApi && info.mempoolUrl) newConfig.mempoolApi = info.mempoolUrl;
+                 
+                 // Boolean defaults
+                 if (store.nodeInfo.enableSwap === undefined && info.enableSwap !== undefined) newConfig.enableSwap = info.enableSwap;
+                 if (store.nodeInfo.enableMessageboardNwc === undefined && info.enableMessageboardNwc !== undefined) newConfig.enableMessageboardNwc = info.enableMessageboardNwc;
+                 
+                 // LSPs
+                 if (newConfig.lsps.length === 0) {
+                     const existingLSPs = (info.lsps as LSP[]) || [];
+                     newConfig.lsps = mergeLSPs(existingLSPs, communityLSPs);
+                 }
+                 
+                 return newConfig;
+             });
         }
 
       } catch (err) {
@@ -171,81 +89,27 @@ export function SetupServices() {
   }, []); // Run once on mount
 
 
-
-  const validate = (): boolean => {
-      const errors: string[] = [];
-      
-      // Assuming lokihubServicesURL is always required
-
-      if (enableSwap) {
-          if (!swapServiceUrl) {
-            errors.push("Swap Service URL is required.");
-          } else {
-            const swapErr = validateHTTPURL(swapServiceUrl, "Swap Service URL");
-            if (swapErr) errors.push(swapErr);
-          }
-      }
-
-      if (enableMessageboardNwc) {
-          if (!messageboardNwcUrl) {
-              errors.push("Messageboard URL is required.");
-          } else {
-              const mbErr = validateMessageBoardURL(messageboardNwcUrl);
-              if (mbErr) errors.push(mbErr);
-          }
-      }
-      
-      
-      // Validate relays (comma- separated)
-      // Validate relays (comma- separated)
-      if (!relay) {
-          errors.push("At least one relay is required");
-      } else {
-        const relays = relay.split(",").map(r => r.trim()).filter(r => r.length > 0);
-        if (relays.length === 0) {
-            errors.push("At least one relay is required");
-        }
-        for (const relayUrl of relays) {
-          const relayErr = validateWebSocketURL(relayUrl, "Nostr Relay URL");
-          if (relayErr) {
-            errors.push(relayErr);
-            break; // Only show first error
-          }
-        }
-      }
-
-      
-      if (!mempoolApi) {
-        errors.push("Flokicoin Explorer URL is required.");
-      } else {
-        const mempoolErr = validateHTTPURL(mempoolApi, "Flokicoin Explorer URL");
-        if (mempoolErr) errors.push(mempoolErr);
-      }
-
-      setValidationErrors(errors);
-      return errors.length === 0;
-  };
-
-
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     
-    if (!validate()) {
+    const errors = validateServiceConfig(config);
+    if (errors.length > 0) {
+        setValidationErrors(errors);
         // Scroll to error container
         setTimeout(() => {
-            errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            document.getElementById("service-config-errors")?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 100);
         return;
     }
 
     store.updateNodeInfo({
-      swapServiceUrl,
-      relay,
-      messageboardNwcUrl,
-      mempoolApi,
-      enableSwap,
-      enableMessageboardNwc,
-      lsps: localLSPs,
+      swapServiceUrl: config.swapServiceUrl,
+      relay: config.relay,
+      messageboardNwcUrl: config.messageboardNwcUrl,
+      mempoolApi: config.mempoolApi,
+      enableSwap: config.enableSwap,
+      enableMessageboardNwc: config.enableMessageboardNwc,
+      lsps: config.lsps,
     });
     navigate("/setup/node");
   }
@@ -263,136 +127,12 @@ export function SetupServices() {
       <form onSubmit={onSubmit} className="flex flex-col items-center w-full max-w-4xl mx-auto pb-10">
 
         <div className="w-full space-y-6 mt-6">
-          <ServiceConfigurationHeader />
-            
-             {/* Flokicoin Explorer */}
-            <Card className="border-border shadow-sm">
-                <CardHeader className="pb-3">
-                     <CardTitle className="text-lg flex items-center gap-2">
-                        <Globe className="w-5 h-5 text-primary" />
-                        Flokicoin Explorer
-                    </CardTitle>
-                    <CardDescription>
-                         Used for fee estimation and transaction details.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                     <ServiceCardSelector
-                        value={mempoolApi}
-                        onChange={setMempoolApi}
-                        options={communityOptions.mempool}
-                        placeholder="https://..."
-                     />
-                </CardContent>
-            </Card>
-
-             {/* Nostr Relays */}
-            <Card className="border-border shadow-sm">
-                <CardHeader className="pb-3">
-                     <CardTitle className="text-lg flex items-center gap-2">
-                        <Zap className="w-5 h-5 text-primary" />
-                        Nostr Relays
-                    </CardTitle>
-                    <CardDescription>
-                        Connect to multiple Nostr relays for Wallet Connect (NWC) communication. Multiple relays improve availability.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <MultiRelayInput
-                        value={relay}
-                        onChange={setRelay}
-                        options={communityOptions.relay}
-                        placeholder="wss://..."
-                    />
-                </CardContent>
-            </Card>
-
-             {/* Swap Service */}
-             <Card className="border-border shadow-sm">
-                 <CardHeader className="pb-3">
-                     <div className="flex items-center justify-between">
-                         <div className="space-y-1">
-                             <CardTitle className="text-lg flex items-center gap-2">
-                                <Server className="w-5 h-5 text-primary" />
-                                 Swap Service
-                             </CardTitle>
-                             <CardDescription>
-                                 Enables Lightning to on-chain swaps (and vice-versa).
-                             </CardDescription>
-                         </div>
-                         <Switch checked={enableSwap} onCheckedChange={setEnableSwap} />
-                     </div>
-                 </CardHeader>
-                 {enableSwap && (
-                    <CardContent>
-                         <ServiceCardSelector
-                            value={swapServiceUrl}
-                            onChange={setSwapServiceUrl}
-                            options={communityOptions.swap}
-                            placeholder="https://..."
-                            disabled={!enableSwap}
-                         />
-                    </CardContent>
-                 )}
-            </Card>
-
-             
-            
-             {/* Messageboard NWC */}
-             <Card className="border-border shadow-sm">
-                 <CardHeader className="pb-3">
-                     <div className="flex items-center justify-between">
-                         <div className="space-y-1">
-                             <CardTitle className="text-lg flex items-center gap-2">
-                                <PenLine className="w-5 h-5 text-primary" />
-                                 Messageboard
-                             </CardTitle>
-                             <CardDescription>
-                                 Connects to a NWC-enabled messageboard service.
-                             </CardDescription>
-                         </div>
-                         <Switch checked={enableMessageboardNwc} onCheckedChange={setEnableMessageboardNwc} />
-                     </div>
-                 </CardHeader>
-                 {enableMessageboardNwc && (
-                    <CardContent>
-                         <ServiceCardSelector
-                            value={messageboardNwcUrl}
-                            onChange={setMessageboardNwcUrl}
-                            options={communityOptions.messageboard}
-                            placeholder="nostr+walletconnect://..."
-                            disabled={!enableMessageboardNwc}
-                         />
-                    </CardContent>
-                 )}
-            </Card>
-
-
-            {/* LSP Management */}
-            <LSPManagementCard
-                localLSPs={localLSPs}
-                setLocalLSPs={setLocalLSPs}
-                className="border-border shadow-sm"
+            <ServiceConfigForm 
+                state={config} 
+                onChange={setConfig} 
+                validationErrors={validationErrors}
             />
-
-            {validationErrors.length > 0 && (
-              <div ref={errorRef} className="scroll-mt-4">
-                  <Alert variant="destructive" className="mt-6 w-full animate-in fade-in slide-in-from-bottom-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Configuration Errors</AlertTitle>
-                      <AlertDescription>
-                          <ul className="list-disc pl-5 space-y-1 mt-2">
-                              {validationErrors.map((err, i) => (
-                                  <li key={i}>{err}</li>
-                              ))}
-                          </ul>
-                      </AlertDescription>
-                  </Alert>
-              </div>
-            )}
         </div>
-
-        
 
         <div className="flex justify-end w-full mt-8">
           <Button type="submit" size="lg" disabled={loading}>
