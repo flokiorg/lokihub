@@ -1113,7 +1113,7 @@ func (svc *LNDService) GetNodeConnectionInfo(ctx context.Context) (nodeConnectio
 
 	addresses := nodeInfo.Node.Addresses
 	if len(addresses) < 1 {
-		logger.Logger.Error("No available listening addresses")
+		logger.Logger.Warn("No available listening addresses")
 		return nodeConnectionInfo, nil
 	}
 
@@ -1939,6 +1939,13 @@ func (svc *LNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnc
 				response.ZeroConf = false
 			}
 		}
+
+		logger.Logger.WithFields(logrus.Fields{
+			"id":             id,
+			"accept":         accept,
+			"minAcceptDepth": response.MinAcceptDepth,
+			"zeroConf":       response.ZeroConf,
+		}).Info("Sending ChannelAcceptResponse")
 
 		return stream.Send(response)
 	}

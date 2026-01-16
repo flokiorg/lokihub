@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +16,7 @@ const (
 )
 
 var Logger *logrus.Logger
+var HttpLogger *logrus.Logger
 var logFilePath string
 
 func Init(logLevel string) {
@@ -24,11 +26,22 @@ func Init(logLevel string) {
 		FullTimestamp: true,
 	})
 	Logger.SetOutput(os.Stdout)
+
+	// HTTP Logger - discards stdout, only logs to file via hook
+	HttpLogger = logrus.New()
+	HttpLogger.SetFormatter(&logrus.TextFormatter{
+		ForceColors:   true,
+		FullTimestamp: true,
+	})
+	HttpLogger.SetOutput(io.Discard)
+
 	logrusLogLevel, err := strconv.Atoi(logLevel)
 	if err != nil {
 		logrusLogLevel = int(logrus.InfoLevel)
 	}
 	Logger.SetLevel(logrus.Level(logrusLogLevel))
+	HttpLogger.SetLevel(logrus.Level(logrusLogLevel))
+
 	if logrusLogLevel >= int(logrus.DebugLevel) {
 		Logger.ReportCaller = true
 		Logger.Debug("Logrus report caller enabled in debug mode")
@@ -51,6 +64,7 @@ func AddFileLogger(workdir string) error {
 		return err
 	}
 	Logger.AddHook(fileLoggerHook)
+	HttpLogger.AddHook(fileLoggerHook)
 	return nil
 }
 

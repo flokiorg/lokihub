@@ -80,7 +80,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		LogHost:      true,
 		LogRequestID: true,
 		LogValuesFunc: func(c echo.Context, values middleware.RequestLoggerValues) error {
-			logger.Logger.WithFields(logrus.Fields{
+			logger.HttpLogger.WithFields(logrus.Fields{
 				"uri":        values.URI,
 				"status":     values.Status,
 				"remote_ip":  values.RemoteIP,
