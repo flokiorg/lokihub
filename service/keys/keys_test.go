@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/logger"
@@ -19,7 +18,7 @@ import (
 )
 
 func TestUseExistingMnemonic(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
 	defer db.CloseDB(gormDb)
@@ -64,7 +63,7 @@ func TestUseExistingMnemonic(t *testing.T) {
 }
 
 func TestGenerateNewMnemonic(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
 	defer db.CloseDB(gormDb)
@@ -111,7 +110,7 @@ func TestGenerateNewMnemonic(t *testing.T) {
 }
 
 func TestGenerateSwapMnemonic(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
 	defer db.CloseDB(gormDb)

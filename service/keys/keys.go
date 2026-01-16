@@ -52,13 +52,13 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 		nostrSecretKey = nostr.GeneratePrivateKey()
 		err := cfg.SetUpdate("NostrSecretKey", nostrSecretKey, encryptionKey)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save generated nostr secret key")
+			logger.Logger.Error().Err(err).Msg("Failed to save generated nostr secret key")
 			return err
 		}
 	}
 	nostrPublicKey, err := nostr.GetPublicKey(nostrSecretKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Error converting nostr privkey to pubkey")
+		logger.Logger.Error().Err(err).Msg("Error converting nostr privkey to pubkey")
 		return err
 	}
 	keys.nostrSecretKey = nostrSecretKey
@@ -66,7 +66,7 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 
 	mnemonic, err := cfg.Get("Mnemonic", encryptionKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to decrypt mnemonic")
+		logger.Logger.Error().Err(err).Msg("Failed to decrypt mnemonic")
 		return err
 	}
 
@@ -74,38 +74,38 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 		// for backends that don't use a mnemonic, create one anyway for deriving keys
 		entropy, err := bip39.NewEntropy(128)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to generate entropy for mnemonic")
+			logger.Logger.Error().Err(err).Msg("Failed to generate entropy for mnemonic")
 			return err
 		}
 		mnemonic, err = bip39.NewMnemonic(entropy)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to generate mnemonic")
+			logger.Logger.Error().Err(err).Msg("Failed to generate mnemonic")
 			return err
 		}
 		err = cfg.SetUpdate("Mnemonic", mnemonic, encryptionKey)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save mnemonic")
+			logger.Logger.Error().Err(err).Msg("Failed to save mnemonic")
 			return err
 		}
 	}
 
 	masterKey, err := bip32.NewMasterKey(bip39.NewSeed(mnemonic, ""))
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to create seed from mnemonic")
+		logger.Logger.Error().Err(err).Msg("Failed to create seed from mnemonic")
 		return err
 	}
 
 	lokihubIndex := uint32(bip32.FirstHardenedChild + 128029 /* 🐝 */)
 	appKey, err := masterKey.NewChildKey(lokihubIndex)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to derive app key")
+		logger.Logger.Error().Err(err).Msg("Failed to derive app key")
 		return err
 	}
 	keys.appKey = appKey
 
 	swapMnemonic, err := keys.GenerateSwapMnemonic(masterKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to generate swap mnemonic")
+		logger.Logger.Error().Err(err).Msg("Failed to generate swap mnemonic")
 		return err
 	}
 	keys.swapMnemonic = swapMnemonic
@@ -118,7 +118,7 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 
 	swapKey, err := hdkeychain.NewMaster(bip39.NewSeed(swapMnemonic, ""), netParams)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to create seed from swap mnemonic")
+		logger.Logger.Error().Err(err).Msg("Failed to create seed from swap mnemonic")
 		return err
 	}
 	keys.swapKey = swapKey
