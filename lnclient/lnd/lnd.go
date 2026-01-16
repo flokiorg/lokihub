@@ -657,7 +657,9 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 		})
 	}
 
-	if !hasPublicChannels && throughNodePubkey != nil {
+	// Private Channel Hints: Add hints for private channels when no public channels exist
+	// This is critical for mobile wallets that only have private channels
+	if !hasPublicChannels {
 		channelsRes, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{
 			PrivateOnly: true,
 		})
@@ -665,8 +667,42 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 			return nil, err
 		}
 
+		// Structure to hold channel info for sorting
+		type channelCandidate struct {
+			channel      *lnrpc.Channel
+			chanInfo     *lnrpc.ChannelEdge
+			remotePolicy *lnrpc.RoutingPolicy
+			channelId    uint64
+		}
+
+		var candidates []channelCandidate
+
+		// First pass: collect valid channels with capacity and active status checks
 		for _, channel := range channelsRes.Channels {
-			if channel.RemotePubkey != *throughNodePubkey {
+			// If throughNodePubkey is specified (LSP scenario), filter by it
+			// Otherwise, include all private channels for general mobile wallet use
+			if throughNodePubkey != nil && channel.RemotePubkey != *throughNodePubkey {
+				continue
+			}
+
+			// Check if channel is active - CRITICAL for payment success
+			if !channel.Active {
+				logger.Logger.Debug().
+					Uint64("channel_id", channel.ChanId).
+					Str("remote_pubkey", channel.RemotePubkey).
+					Msg("Skipping inactive channel for route hints")
+				continue
+			}
+
+			// Check if channel has sufficient inbound capacity (remote balance)
+			// RemoteBalance is in satoshis, amount is in millisatoshis
+			remoteBalanceMsat := channel.RemoteBalance * 1000
+			if amount > 0 && remoteBalanceMsat < amount {
+				logger.Logger.Debug().
+					Uint64("channel_id", channel.ChanId).
+					Int64("remote_balance_msat", remoteBalanceMsat).
+					Int64("invoice_amount_msat", amount).
+					Msg("Skipping channel with insufficient inbound capacity for route hints")
 				continue
 			}
 
@@ -699,28 +735,66 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 				channelId = channel.PeerScidAlias
 			}
 
+			candidates = append(candidates, channelCandidate{
+				channel:      channel,
+				chanInfo:     chanInfo,
+				remotePolicy: remotePolicy,
+				channelId:    channelId,
+			})
+		}
+
+		// Sort candidates by remote balance (descending) to prioritize best capacity channels
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].channel.RemoteBalance > candidates[j].channel.RemoteBalance
+		})
+
+		// Select top N channels for hints
+		const MAX_ROUTE_HINTS = 3
+		selectedCount := 0
+		for _, candidate := range candidates {
+			if selectedCount >= MAX_ROUTE_HINTS {
+				break
+			}
+
 			hint := &lnrpc.RouteHint{
 				HopHints: []*lnrpc.HopHint{
 					{
-						NodeId:                    channel.RemotePubkey,
-						ChanId:                    channelId,
-						FeeBaseMsat:               uint32(remotePolicy.FeeBaseMsat),
-						FeeProportionalMillionths: uint32(remotePolicy.FeeRateMilliMsat),
-						CltvExpiryDelta:           remotePolicy.TimeLockDelta,
+						NodeId:                    candidate.channel.RemotePubkey,
+						ChanId:                    candidate.channelId,
+						FeeBaseMsat:               uint32(candidate.remotePolicy.FeeBaseMsat),
+						FeeProportionalMillionths: uint32(candidate.remotePolicy.FeeRateMilliMsat),
+						CltvExpiryDelta:           candidate.remotePolicy.TimeLockDelta,
 					},
 				},
 			}
 
 			hints = append(hints, hint)
-			if len(hints) == 3 {
-				// limit to 3 channels
-				// NOTE: there is no check that the channels are online or have enough receiving capacity.
-				break
-			}
+			selectedCount++
+
+			logger.Logger.Debug().
+				Uint64("channel_id", candidate.channel.ChanId).
+				Int64("remote_balance_sat", candidate.channel.RemoteBalance).
+				Uint32("fee_base_msat", uint32(candidate.remotePolicy.FeeBaseMsat)).
+				Str("remote_pubkey", candidate.channel.RemotePubkey).
+				Msg("Added channel to route hints")
 		}
 
+		logger.Logger.Info().
+			Int("selected_hints", selectedCount).
+			Int("total_candidates", len(candidates)).
+			Int64("invoice_amount_msat", amount).
+			Bool("filtered_by_pubkey", throughNodePubkey != nil).
+			Msg("Route hint selection completed")
+
 		if len(hints) == 0 {
-			return nil, errors.New("no channel found for given throughNodePubkey")
+			if throughNodePubkey != nil {
+				return nil, errors.New("no suitable channel found for given throughNodePubkey (check capacity and active status)")
+			}
+			// For wallets with only private channels but no suitable hints, this is acceptable
+			// LND will handle it, though payment success may be lower
+			logger.Logger.Warn().
+				Int64("invoice_amount_msat", amount).
+				Msg("No suitable private channels found for route hints - invoice may have reduced payment success")
 		}
 	}
 
