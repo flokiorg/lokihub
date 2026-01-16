@@ -1,8 +1,9 @@
 import {
-  AlertCircleIcon,
-  AlertTriangleIcon,
-  CopyIcon,
-  ExternalLinkIcon,
+    AlertCircleIcon,
+    AlertTriangleIcon,
+    CopyIcon,
+    ExternalLinkIcon,
+    Loader2,
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -21,12 +22,12 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { Channel, CloseChannelResponse } from "src/types";
 import { request } from "src/utils/request";
 import {
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -41,6 +42,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
   const { data: info } = useInfo();
   const { mutate: reloadBalances } = useBalances();
   const { data: channels, mutate: reloadChannels } = useChannels();
+  const [loading, setLoading] = React.useState(false);
 
   const onContinue = () => {
     setStep(step + 1);
@@ -51,6 +53,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
   };
 
   async function closeChannel() {
+    setLoading(true);
     try {
       console.info(`🎬 Closing channel with ${channel.remotePubkey}`);
 
@@ -82,6 +85,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong: " + error);
+      setLoading(false);
     }
   }
 
@@ -214,7 +218,10 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button onClick={closeChannel}>Close Channel</Button>
+            <Button onClick={closeChannel} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading ? "Closing..." : "Close Channel"}
+            </Button>
           </AlertDialogFooter>
         </>
       )}
