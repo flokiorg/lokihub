@@ -11,6 +11,9 @@ import (
 	"github.com/flokiorg/lokihub/lsps/manager"
 )
 
+// lspsRequestTimeout is the timeout for LSPS protocol requests
+const lspsRequestTimeout = 5 * time.Second
+
 // LSPS0ListProtocols lists supported protocols
 func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error) {
 	client := api.svc.GetLiquidityManager().LSPS0Client()
@@ -98,8 +101,7 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 		return nil, fmt.Errorf("LiquidityManager not started")
 	}
 
-	// Requirement: timeout after 10 seconds for fee calculation
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
 	fees, err := api.svc.GetLiquidityManager().GetLSPS2FeeParams(ctx, req.LSPPubkey)
