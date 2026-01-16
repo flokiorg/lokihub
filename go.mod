@@ -31,7 +31,7 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/flokiorg/flnd v0.1.16-beta
+	github.com/flokiorg/flnd v0.1.17-beta
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
 	github.com/tidwall/gjson v1.18.0
