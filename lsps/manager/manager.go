@@ -99,7 +99,7 @@ func (m *LiquidityManager) processMessages(ctx context.Context, msgs <-chan lncl
 		case err := <-errs:
 			if err != nil {
 				// Log error (we might need a logger in config)
-				logger.Logger.WithError(err).Error("Error receiving custom message")
+				logger.Logger.Error().Err(err).Msg("Error receiving custom message")
 				continue
 			}
 		case msg := <-msgs:
@@ -514,7 +514,7 @@ func (m *LiquidityManager) OpenJitChannel(ctx context.Context, pubkey string, pa
 func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 	reqChan, respond, err := m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to subscribe to channel acceptor")
+		logger.Logger.Error().Err(err).Msg("Failed to subscribe to channel acceptor")
 		return
 	}
 
@@ -525,7 +525,7 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 		case req, ok := <-reqChan:
 			if !ok {
 				// Stream closed
-				logger.Logger.Info("Channel acceptor stream closed, retrying in 5s...")
+				logger.Logger.Info().Msg("Channel acceptor stream closed, retrying in 5s...")
 				select {
 				case <-ctx.Done():
 					return
@@ -533,7 +533,7 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 					// Retry subscription
 					reqChan, respond, err = m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
 					if err != nil {
-						logger.Logger.WithError(err).Error("Failed to resubscribe to channel acceptor")
+						logger.Logger.Error().Err(err).Msg("Failed to resubscribe to channel acceptor")
 						// Exponential backoff or just loop? 5s fixed for now.
 					}
 					continue
@@ -546,7 +546,7 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 			m.mu.RUnlock()
 
 			if err != nil {
-				logger.Logger.WithError(err).Error("Failed to get LSPs from DB")
+				logger.Logger.Error().Err(err).Msg("Failed to get LSPs from DB")
 				// Default accept? Or Reject?
 				// To be safe, let's accept but maybe without zero-conf (by passing false? logic in LNDService handles true=ZeroConf, false=Reject?)
 				// Wait, the respond func I wrote sends Accept: accept.
@@ -600,10 +600,10 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 			}
 
 			if whitelisted {
-				logger.Logger.WithField("pubkey", req.NodePubkey).Info("Accepting ZeroConf channel from trusted LSP")
+				logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
 				respond(req.ID, true, true)
 			} else {
-				logger.Logger.WithField("pubkey", req.NodePubkey).Info("Standard accept for channel from untrusted peer")
+				logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
 				// Accept normally (LND default validation)
 				respond(req.ID, true, false)
 			}

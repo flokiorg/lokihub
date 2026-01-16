@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -50,7 +49,7 @@ func TestSchemaCheck(t *testing.T) {
 		})
 	}
 
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 
 	for _, tt := range tc {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,7 +122,7 @@ func getTestPostgresURI() string {
 }
 
 func setupTest(t *testing.T, sourceURI string, destURI string) (*testEnvironment, error) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 
 	source, err := test_db.NewDBWithURI(t, sourceURI)
 	if err != nil {

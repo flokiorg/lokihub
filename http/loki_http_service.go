@@ -37,7 +37,7 @@ func (lokiHttpSvc *LokiHttpService) RegisterSharedRoutes(readOnlyApiGroup *echo.
 func (lokiHttpSvc *LokiHttpService) lokiInfoHandler(c echo.Context) error {
 	info, err := lokiHttpSvc.lokiSvc.GetInfo(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to request loki info endpoint")
+		logger.Logger.Error().Err(err).Msg("Failed to request loki info endpoint")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to request loki info endpoint: %s", err.Error()),
 		})
@@ -49,7 +49,7 @@ func (lokiHttpSvc *LokiHttpService) lokiInfoHandler(c echo.Context) error {
 func (lokiHttpSvc *LokiHttpService) lokiFAQHandler(c echo.Context) error {
 	faq, err := lokiHttpSvc.lokiSvc.GetFAQ(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch FAQ")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch FAQ")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to fetch FAQ: %s", err.Error()),
 		})
@@ -61,7 +61,7 @@ func (lokiHttpSvc *LokiHttpService) lokiFAQHandler(c echo.Context) error {
 func (lokiHttpSvc *LokiHttpService) lokiFlokicoinRateHandler(c echo.Context) error {
 	rate, err := lokiHttpSvc.lokiSvc.GetFlokicoinRate(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get Flokicoin rate")
+		logger.Logger.Error().Err(err).Msg("Failed to get Flokicoin rate")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to get Flokicoin rate: %s", err.Error()),
 		})
@@ -72,7 +72,7 @@ func (lokiHttpSvc *LokiHttpService) lokiFlokicoinRateHandler(c echo.Context) err
 func (lokiHttpSvc *LokiHttpService) lokiCurrenciesHandler(c echo.Context) error {
 	currencies, err := lokiHttpSvc.lokiSvc.GetCurrencies(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get currencies")
+		logger.Logger.Error().Err(err).Msg("Failed to get currencies")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to get currencies: %s", err.Error()),
 		})

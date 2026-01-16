@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
@@ -29,7 +28,7 @@ var expectedTables = []string{
 func main() {
 	var fromDSN, toDSN string
 
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 
 	flag.StringVar(&fromDSN, "from", "", "source DSN")
 	flag.StringVar(&toDSN, "to", "", "destination DSN")
@@ -38,28 +37,28 @@ func main() {
 
 	if fromDSN == "" || toDSN == "" {
 		flag.Usage()
-		logger.Logger.Error("missing DSN")
+		logger.Logger.Error().Msg("missing DSN")
 		os.Exit(1)
 	}
 
 	stopDB := func(d *gorm.DB) {
 		if err := db.Stop(d); err != nil {
-			logger.Logger.WithError(err).Error("failed to close database")
+			logger.Logger.Error().Err(err).Msg("failed to close database")
 		}
 	}
 
-	logger.Logger.Info("opening source DB...")
+	logger.Logger.Info().Msg("opening source DB...")
 	fromDB, err := db.NewDB(fromDSN, false)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to open source database")
+		logger.Logger.Error().Err(err).Msg("failed to open source database")
 		os.Exit(1)
 	}
 	defer stopDB(fromDB)
 
-	logger.Logger.Info("opening destination DB...")
+	logger.Logger.Info().Msg("opening destination DB...")
 	toDB, err := db.NewDB(toDSN, false)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to open destination database")
+		logger.Logger.Error().Err(err).Msg("failed to open destination database")
 		os.Exit(1)
 	}
 	defer stopDB(toDB)
@@ -68,7 +67,7 @@ func main() {
 	// schemas should be equal at this point.
 	err = checkSchema(fromDB)
 	if err != nil {
-		logger.Logger.WithError(err).Error("database schema check failed; the migration tool may be outdated")
+		logger.Logger.Error().Err(err).Msg("database schema check failed; the migration tool may be outdated")
 		os.Exit(1)
 	}
 
@@ -77,47 +76,47 @@ func main() {
 	result := fromDB.Where("key = ?", "LdkVssEnabled").First(&vssConfig)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			logger.Logger.Error("LdkVssEnabled config not found in source DB. Migration will not proceed.")
+			logger.Logger.Error().Msg("LdkVssEnabled config not found in source DB. Migration will not proceed.")
 		} else {
-			logger.Logger.WithError(result.Error).Error("failed to query LdkVssEnabled config from source DB")
+			logger.Logger.Error().Err(result.Error).Msg("failed to query LdkVssEnabled config from source DB")
 		}
 		os.Exit(1)
 	}
 
 	if vssConfig.Value != "true" {
-		logger.Logger.Error("VSS is not enabled in the source DB (LdkVssEnabled is not 'true'). Migration will not proceed.")
+		logger.Logger.Error().Msg("VSS is not enabled in the source DB (LdkVssEnabled is not 'true'). Migration will not proceed.")
 		os.Exit(1)
 	}
-	logger.Logger.Info("LdkVssEnabled check passed.")
+	logger.Logger.Info().Msg("LdkVssEnabled check passed.")
 
 	// NOTE: we assume that excess request events have already been cleaned up due to the background task
 	// and only a maximum of ~1000 remain.
-	logger.Logger.Info("Deleting orphaned request events.")
+	logger.Logger.Info().Msg("Deleting orphaned request events.")
 	err = fromDB.Exec("DELETE FROM request_events WHERE app_id NOT IN (SELECT id FROM apps);").Error
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to delete orphaned request events")
+		logger.Logger.Error().Err(err).Msg("failed to delete orphaned request events")
 		os.Exit(1)
 	}
 
 	// NOTE: we assume that excess response events have already been cleaned up due to the background task
 	// and only a maximum of ~1000 remain.
-	logger.Logger.Info("Deleting orphaned response events.")
+	logger.Logger.Info().Msg("Deleting orphaned response events.")
 	err = fromDB.Exec("DELETE FROM response_events WHERE request_id NOT IN (SELECT id FROM request_events);").Error
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to delete orphaned response events")
+		logger.Logger.Error().Err(err).Msg("failed to delete orphaned response events")
 		os.Exit(1)
 	}
 
-	logger.Logger.Info("migrating...")
+	logger.Logger.Info().Msg("migrating...")
 	err = migrateDB(fromDB, toDB)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to migrate database")
+		logger.Logger.Error().Err(err).Msg("failed to migrate database")
 		os.Exit(1)
 	}
 
-	logger.Logger.Info("migration complete")
+	logger.Logger.Info().Msg("migration complete")
 }
 
 func migrateDB(from, to *gorm.DB) error {
@@ -131,38 +130,38 @@ func migrateDB(from, to *gorm.DB) error {
 	// Table migration order matters: referenced tables must be migrated
 	// before referencing tables.
 
-	logger.Logger.Info("migrating apps...")
+	logger.Logger.Info().Msg("migrating apps...")
 	if err := migrateTable[db.App](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate apps: %w", err)
 	}
 
-	logger.Logger.Info("migrating app_permissions...")
+	logger.Logger.Info().Msg("migrating app_permissions...")
 	if err := migrateTable[db.AppPermission](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate app_permissions: %w", err)
 	}
 
-	logger.Logger.Info("migrating request_events...")
+	logger.Logger.Info().Msg("migrating request_events...")
 	if err := migrateTable[db.RequestEvent](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate request_events: %w", err)
 	}
 
-	logger.Logger.Info("migrating response_events...")
+	logger.Logger.Info().Msg("migrating response_events...")
 	if err := migrateTable[db.ResponseEvent](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate response_events: %w", err)
 	}
 
-	logger.Logger.Info("migrating transactions...")
+	logger.Logger.Info().Msg("migrating transactions...")
 	if err := migrateTable[db.Transaction](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate transactions: %w", err)
 	}
 
-	logger.Logger.Info("migrating user_configs...")
+	logger.Logger.Info().Msg("migrating user_configs...")
 	if err := migrateTable[db.UserConfig](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate user_configs: %w", err)
 	}
 
 	if to.Dialector.Name() == "postgres" {
-		logger.Logger.Info("resetting sequences...")
+		logger.Logger.Info().Msg("resetting sequences...")
 		if err := resetSequences(tx); err != nil {
 			return fmt.Errorf("failed to reset sequences: %w", err)
 		}
@@ -243,7 +242,7 @@ func listTables(db *gorm.DB) ([]string, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			logger.Logger.WithError(err).Error("failed to close rows")
+			logger.Logger.Error().Err(err).Msg("failed to close rows")
 		}
 	}()
 

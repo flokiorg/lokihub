@@ -13,7 +13,6 @@ import (
 	"github.com/flokiorg/lokihub/nip47/models"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type Nip47InfoPublishRequest struct {
@@ -75,9 +74,9 @@ func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrmodels.
 			ID: appId,
 		}).Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"walletPubKey": appWalletPubKey,
-			}).WithError(err).Error("Failed to find app for wallet pubkey")
+			logger.Logger.Error().Err(err).
+				Str("walletPubKey", appWalletPubKey).
+				Msg("Failed to find app for wallet pubkey")
 			return nil, err
 		}
 		capabilities = svc.permissionsService.GetPermittedMethods(&app, lnClient)
@@ -110,16 +109,16 @@ func (svc *nip47Service) PublishNip47Info(ctx context.Context, pool nostrmodels.
 		if result.Error == nil {
 			publishSuccessful = true
 		} else {
-			logger.Logger.WithFields(logrus.Fields{
-				"appId": appId,
-				"relay": result.RelayURL,
-			}).WithError(result.Error).Error("failed to publish nip47 info to relay")
+			logger.Logger.Error().Err(result.Error).
+				Uint("appId", appId).
+				Str("relay", result.RelayURL).
+				Msg("failed to publish nip47 info to relay")
 		}
 	}
 	if !publishSuccessful {
 		return nil, errors.New("failed to publish nostr info event to all relays")
 	}
-	logger.Logger.WithField("wallet_pubkey", appWalletPubKey).Debug("published info event")
+	logger.Logger.Debug().Interface("wallet_pubkey", appWalletPubKey).Msg("published info event")
 	return ev, nil
 }
 
@@ -141,10 +140,10 @@ func (svc *nip47Service) PublishNip47InfoDeletion(ctx context.Context, pool nost
 		if result.Error == nil {
 			publishSuccessful = true
 		} else {
-			logger.Logger.WithFields(logrus.Fields{
-				"wallet_pubkey": appWalletPubKey,
-				"relay":         result.RelayURL,
-			}).WithError(result.Error).Error("failed to publish info event deletion to relay")
+			logger.Logger.Error().Err(result.Error).
+				Str("wallet_pubkey", appWalletPubKey).
+				Str("relay", result.RelayURL).
+				Msg("failed to publish info event deletion to relay")
 		}
 	}
 

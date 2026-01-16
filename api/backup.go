@@ -23,7 +23,7 @@ import (
 )
 
 func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
-	logger.Logger.Info("Creating backup to migrate Lokihub to another device")
+	logger.Logger.Info().Msg("Creating backup to migrate Lokihub to another device")
 	var err error
 
 	if !api.cfg.CheckUnlockPassword(unlockPassword) {
@@ -56,12 +56,12 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("failed to get storage dir: %w", err)
 	}
-	logger.Logger.WithField("path", lnStorageDir).Info("Found node storage dir")
+	logger.Logger.Info().Interface("path", lnStorageDir).Msg("Found node storage dir")
 
 	// Reset the routing data to decrease the LDK DB size
 	err = api.svc.GetLNClient().ResetRouter("ALL")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to reset router")
+		logger.Logger.Error().Err(err).Msg("Failed to reset router")
 		return fmt.Errorf("failed to reset router: %w", err)
 	}
 	// Stop the app to ensure no new requests are processed.
@@ -72,7 +72,7 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	// to be used after its data is exported.
 	err = db.Stop(api.db)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to stop database")
+		logger.Logger.Error().Err(err).Msg("Failed to stop database")
 		return fmt.Errorf("failed to close database: %w", err)
 	}
 
@@ -83,7 +83,7 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("failed to list files in the LNClient storage directory: %w", err)
 		}
-		logger.Logger.WithField("lnFiles", lnFiles).Info("Listed node storage dir")
+		logger.Logger.Info().Interface("lnFiles", lnFiles).Msg("Listed node storage dir")
 
 		// Avoid backing up log files.
 		lnFiles = utils.Filter(lnFiles, func(s string) bool {
@@ -120,36 +120,36 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	// Locate the main database file.
 	dbFilePath := api.cfg.GetEnv().DatabaseUri
 	// Add the database file to the archive.
-	logger.Logger.WithField("nwc.db", dbFilePath).Info("adding nwc db to zip")
+	logger.Logger.Info().Interface("nwc.db", dbFilePath).Msg("adding nwc db to zip")
 	err = addFileToZip(dbFilePath, "nwc.db")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to zip nwc db")
+		logger.Logger.Error().Err(err).Msg("Failed to zip nwc db")
 		return fmt.Errorf("failed to write nwc db file to zip: %w", err)
 	}
 
 	for _, fileToArchive := range filesToArchive {
-		logger.Logger.WithField("fileToArchive", fileToArchive).Info("adding file to zip")
+		logger.Logger.Info().Interface("fileToArchive", fileToArchive).Msg("adding file to zip")
 		relPath, err := filepath.Rel(workDir, fileToArchive)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to get relative path of input file")
+			logger.Logger.Error().Err(err).Msg("Failed to get relative path of input file")
 			return fmt.Errorf("failed to get relative path of input file: %w", err)
 		}
 
 		// Ensure forward slashes for zip format compatibility.
 		err = addFileToZip(fileToArchive, filepath.ToSlash(relPath))
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to write file to zip")
+			logger.Logger.Error().Err(err).Msg("Failed to write file to zip")
 			return fmt.Errorf("failed to write input file to zip: %w", err)
 		}
 	}
 
-	logger.Logger.Info("Successfully created backup to migrate Lokihub to another device")
+	logger.Logger.Info().Msg("Successfully created backup to migrate Lokihub to another device")
 
 	return nil
 }
 
 func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
-	logger.Logger.Info("Restoring migration backup file")
+	logger.Logger.Info().Msg("Restoring migration backup file")
 
 	workDir, err := filepath.Abs(api.cfg.GetEnv().Workdir)
 	if err != nil {
@@ -221,23 +221,23 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		return nil
 	}
 
-	logger.Logger.WithField("count", len(zr.File)).Info("Extracting files")
+	logger.Logger.Info().Int("count", len(zr.File)).Msg("Extracting files")
 	for _, f := range zr.File {
-		logger.Logger.WithField("file", f.Name).Info("Extracting file")
+		logger.Logger.Info().Interface("file", f.Name).Msg("Extracting file")
 		if err = extractZipEntry(f); err != nil {
 			return fmt.Errorf("failed to extract zip entry: %w", err)
 		}
 	}
-	logger.Logger.WithField("count", len(zr.File)).Info("Extracted files")
+	logger.Logger.Info().Int("count", len(zr.File)).Msg("Extracted files")
 
 	go func() {
-		logger.Logger.Info("Backup restored. Shutting down Lokihub...")
+		logger.Logger.Info().Msg("Backup restored. Shutting down Lokihub...")
 		api.svc.Shutdown()
 		// ensure no -shm or -wal files exist as they will stop the restore
 		for _, filename := range []string{"nwc.db", "nwc.db-shm", "nwc.db-wal"} {
 			err = os.Remove(filepath.Join(workDir, filename))
 			if err != nil {
-				logger.Logger.WithError(err).WithField("filename", filename).Error("failed to remove old nwc db file before restore")
+				logger.Logger.Error().Err(err).Str("filename", filename).Msg("failed to remove old nwc db file before restore")
 			}
 		}
 

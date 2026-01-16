@@ -16,7 +16,6 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -72,7 +71,7 @@ func (cfg *config) init(env *AppConfig) error {
 	if cfg.Env.LNDCertFile != "" {
 		certBytes, err := os.ReadFile(cfg.Env.LNDCertFile)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to read FLND cert file")
+			logger.Logger.Error().Err(err).Msg("Failed to read FLND cert file")
 			return err
 		}
 		certHex := hex.EncodeToString(certBytes)
@@ -91,7 +90,7 @@ func (cfg *config) init(env *AppConfig) error {
 	if cfg.Env.LNDMacaroonFile != "" {
 		macBytes, err := os.ReadFile(cfg.Env.LNDMacaroonFile)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to read FLND macaroon file")
+			logger.Logger.Error().Err(err).Msg("Failed to read FLND macaroon file")
 			return err
 		}
 		macHex := hex.EncodeToString(macBytes)
@@ -114,9 +113,9 @@ func (cfg *config) init(env *AppConfig) error {
 func (cfg *config) SetupCompleted() bool {
 	nodeLastStartTime, _ := cfg.Get("NodeLastStartTime", "")
 
-	logger.Logger.WithFields(logrus.Fields{
-		"has_node_last_start_time": nodeLastStartTime != "",
-	}).Debug("Checking if setup is completed")
+	logger.Logger.Debug().
+		Bool("has_node_last_start_time", nodeLastStartTime != "").
+		Msg("Checking if setup is completed")
 	return nodeLastStartTime != ""
 }
 
@@ -147,15 +146,15 @@ func (cfg *config) Unlock(encryptionKey string) error {
 	if jwtSecret == "" || jwtSecret == encryptedJwtSecret {
 		hexSecret, err := randomHex(32)
 		if err != nil {
-			logger.Logger.WithError(err).Error("failed to generate JWT secret")
+			logger.Logger.Error().Err(err).Msg("failed to generate JWT secret")
 			return err
 		}
 		jwtSecret = hexSecret
-		logger.Logger.Info("Generated new JWT secret")
+		logger.Logger.Info().Msg("Generated new JWT secret")
 
 		err = cfg.SetUpdate("JWTSecret", jwtSecret, encryptionKey)
 		if err != nil {
-			logger.Logger.WithError(err).Error("failed to save JWT secret")
+			logger.Logger.Error().Err(err).Msg("failed to save JWT secret")
 			return err
 		}
 	}
@@ -181,7 +180,7 @@ func (cfg *config) GetNetwork() string {
 func (cfg *config) GetMempoolApi() string {
 	url, err := cfg.Get("MempoolApi", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch MempoolApi")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch MempoolApi")
 	}
 	if url != "" {
 		return url
@@ -193,7 +192,7 @@ func (cfg *config) SetMempoolApi(value string) error {
 	// MempoolApi can be empty to use default
 	err := cfg.SetUpdate("MempoolApi", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update MempoolApi")
+		logger.Logger.Error().Err(err).Msg("Failed to update MempoolApi")
 		return err
 	}
 	return nil
@@ -218,11 +217,11 @@ func (cfg *config) Get(key string, encryptionKey string) (string, error) {
 
 	if keyCache, ok := cfg.cache[key]; ok {
 		if cachedValue, ok := keyCache[encKeyHash]; ok {
-			logger.Logger.WithField("key", key).Debug("hit config cache")
+			logger.Logger.Debug().Str("key", key).Msg("hit config cache")
 			return cachedValue, nil
 		}
 	}
-	logger.Logger.WithField("key", key).Debug("missed config cache")
+	logger.Logger.Debug().Str("key", key).Msg("missed config cache")
 
 	value, err := cfg.get(key, encryptionKey, cfg.db)
 	if err != nil {
@@ -233,7 +232,7 @@ func (cfg *config) Get(key string, encryptionKey string) (string, error) {
 		cfg.cache[key] = make(map[string]string)
 	}
 	cfg.cache[key][encKeyHash] = value
-	logger.Logger.WithField("key", key).Debug("set config cache")
+	logger.Logger.Debug().Str("key", key).Msg("set config cache")
 	return value, nil
 }
 
@@ -270,7 +269,7 @@ func (cfg *config) set(key string, value string, clauses clause.OnConflict, encr
 		return fmt.Errorf("failed to save key to config: %v", result.Error)
 	}
 
-	logger.Logger.WithField("key", key).Debug("clearing config cache")
+	logger.Logger.Debug().Str("key", key).Msg("clearing config cache")
 	cfg.cacheMutex.Lock()
 	defer cfg.cacheMutex.Unlock()
 	delete(cfg.cache, key)
@@ -285,7 +284,7 @@ func (cfg *config) SetIgnore(key string, value string, encryptionKey string) err
 	}
 	err := cfg.set(key, value, clauses, encryptionKey, cfg.db)
 	if err != nil {
-		logger.Logger.WithField("key", key).WithError(err).Error("Failed to set config key with ignore", err)
+		logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to set config key with ignore")
 		return err
 	}
 	return nil
@@ -298,7 +297,7 @@ func (cfg *config) SetUpdate(key string, value string, encryptionKey string) err
 	}
 	err := cfg.set(key, value, clauses, encryptionKey, cfg.db)
 	if err != nil {
-		logger.Logger.WithField("key", key).WithError(err).Error("Failed to set config key with update", err)
+		logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to set config key with update")
 		return err
 	}
 	return nil
@@ -319,12 +318,12 @@ func (cfg *config) ChangeUnlockPassword(currentUnlockPassword string, newUnlockP
 			return err
 		}
 
-		logger.Logger.WithField("count", len(encryptedUserConfigs)).Info("Updating encrypted entries")
+		logger.Logger.Info().Int("count", len(encryptedUserConfigs)).Msg("Updating encrypted entries")
 
 		for _, userConfig := range encryptedUserConfigs {
 			decryptedValue, err := cfg.get(userConfig.Key, currentUnlockPassword, tx)
 			if err != nil {
-				logger.Logger.WithField("key", userConfig.Key).WithError(err).Error("Failed to decrypt key")
+				logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to decrypt key")
 				return err
 			}
 			clauses := clause.OnConflict{
@@ -333,25 +332,25 @@ func (cfg *config) ChangeUnlockPassword(currentUnlockPassword string, newUnlockP
 			}
 			err = cfg.set(userConfig.Key, decryptedValue, clauses, newUnlockPassword, tx)
 			if err != nil {
-				logger.Logger.WithField("key", userConfig.Key).WithError(err).Error("Failed to encrypt key")
+				logger.Logger.Error().Err(err).Str("key", userConfig.Key).Msg("Failed to encrypt key")
 				return err
 			}
-			logger.Logger.WithField("key", userConfig.Key).Info("re-encrypted key")
+			logger.Logger.Info().Str("key", userConfig.Key).Msg("re-encrypted key")
 		}
 
 		// delete the JWT secret so it will be re-generated on next unlock (to log all sessions out on password change)
 		err = tx.Where(&db.UserConfig{Key: "JWTSecret"}).Delete(&db.UserConfig{}).Error
 		if err != nil {
-			logger.Logger.WithError(err).Error("failed to remove JWT secret during password change transaction")
+			logger.Logger.Error().Err(err).Msg("failed to remove JWT secret during password change transaction")
 			return fmt.Errorf("failed to delete new JWT secret: %w", err)
 		}
 
-		logger.Logger.Info("Successfully removed JWT secret as part of password change transaction")
+		logger.Logger.Info().Msg("Successfully removed JWT secret as part of password change transaction")
 		return nil
 	})
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to execute password change transaction")
+		logger.Logger.Error().Err(err).Msg("failed to execute password change transaction")
 		return err
 	}
 
@@ -367,7 +366,7 @@ func (cfg *config) SetAutoUnlockPassword(unlockPassword string) error {
 
 	err := cfg.SetUpdate("AutoUnlockPassword", unlockPassword, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to update auto unlock password")
+		logger.Logger.Error().Err(err).Msg("failed to update auto unlock password")
 		return err
 	}
 
@@ -383,7 +382,7 @@ func (cfg *config) CheckUnlockPassword(encryptionKey string) bool {
 func (cfg *config) SaveUnlockPasswordCheck(encryptionKey string) error {
 	err := cfg.SetUpdate("UnlockPasswordCheck", unlockPasswordCheck, encryptionKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save unlock password check to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save unlock password check to config")
 		return err
 	}
 	return nil
@@ -407,7 +406,7 @@ const defaultFlokicoinDisplayFormat = constants.FLOKICOIN_DISPLAY_FORMAT_BIP177
 func (cfg *config) GetCurrency() string {
 	currency, err := cfg.Get("Currency", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch currency")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch currency")
 		return defaultCurrency
 	}
 	if currency == "" {
@@ -422,7 +421,7 @@ func (cfg *config) SetCurrency(value string) error {
 	}
 	err := cfg.SetUpdate("Currency", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update currency")
+		logger.Logger.Error().Err(err).Msg("Failed to update currency")
 		return err
 	}
 	return nil
@@ -431,7 +430,7 @@ func (cfg *config) SetCurrency(value string) error {
 func (cfg *config) GetFlokicoinDisplayFormat() string {
 	format, err := cfg.Get("FlokicoinDisplayFormat", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch flokicoin display format")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch flokicoin display format")
 		return defaultFlokicoinDisplayFormat
 	}
 	if format == "" {
@@ -443,7 +442,7 @@ func (cfg *config) GetFlokicoinDisplayFormat() string {
 func (cfg *config) SetFlokicoinDisplayFormat(value string) error {
 	err := cfg.SetUpdate("FlokicoinDisplayFormat", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update flokicoin display format")
+		logger.Logger.Error().Err(err).Msg("Failed to update flokicoin display format")
 		return err
 	}
 	return nil
@@ -452,7 +451,7 @@ func (cfg *config) SetFlokicoinDisplayFormat(value string) error {
 func (cfg *config) GetLokihubServicesURL() string {
 	url, err := cfg.Get("LokihubServicesURL", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch LokihubServicesURL")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch LokihubServicesURL")
 	}
 	if url != "" {
 		return url
@@ -466,7 +465,7 @@ func (cfg *config) SetLokihubServicesURL(value string) error {
 	}
 	err := cfg.SetUpdate("LokihubServicesURL", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update LokihubServicesURL")
+		logger.Logger.Error().Err(err).Msg("Failed to update LokihubServicesURL")
 		return err
 	}
 	return nil
@@ -475,7 +474,7 @@ func (cfg *config) SetLokihubServicesURL(value string) error {
 func (cfg *config) GetLokihubStoreURL() string {
 	url, err := cfg.Get("LokihubStoreURL", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch LokihubStoreURL")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch LokihubStoreURL")
 	}
 	if url != "" {
 		return url
@@ -489,7 +488,7 @@ func (cfg *config) SetLokihubStoreURL(value string) error {
 	}
 	err := cfg.SetUpdate("LokihubStoreURL", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update LokihubStoreURL")
+		logger.Logger.Error().Err(err).Msg("Failed to update LokihubStoreURL")
 		return err
 	}
 	return nil
@@ -498,7 +497,7 @@ func (cfg *config) SetLokihubStoreURL(value string) error {
 func (cfg *config) GetSwapServiceURL() string {
 	url, err := cfg.Get("SwapServiceUrl", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch SwapServiceUrl")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch SwapServiceUrl")
 	}
 	if url != "" {
 		return url
@@ -512,7 +511,7 @@ func (cfg *config) SetSwapServiceURL(value string) error {
 	}
 	err := cfg.SetUpdate("SwapServiceUrl", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update SwapServiceUrl")
+		logger.Logger.Error().Err(err).Msg("Failed to update SwapServiceUrl")
 		return err
 	}
 	return nil
@@ -521,7 +520,7 @@ func (cfg *config) SetSwapServiceURL(value string) error {
 func (cfg *config) GetMessageboardNwcUrl() string {
 	url, err := cfg.Get("MessageboardNwcUrl", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch MessageboardNwcUrl")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch MessageboardNwcUrl")
 	}
 	if url != "" {
 		return url
@@ -533,7 +532,7 @@ func (cfg *config) SetMessageboardNwcUrl(value string) error {
 	// MessageboardNwcUrl can be empty
 	err := cfg.SetUpdate("MessageboardNwcUrl", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update MessageboardNwcUrl")
+		logger.Logger.Error().Err(err).Msg("Failed to update MessageboardNwcUrl")
 		return err
 	}
 	return nil
@@ -542,7 +541,7 @@ func (cfg *config) SetMessageboardNwcUrl(value string) error {
 func (cfg *config) GetRelay() string {
 	url, err := cfg.Get("Relay", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch Relay")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch Relay")
 	}
 	if url != "" {
 		return url
@@ -556,7 +555,7 @@ func (cfg *config) SetRelay(value string) error {
 	}
 	err := cfg.SetUpdate("Relay", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update Relay")
+		logger.Logger.Error().Err(err).Msg("Failed to update Relay")
 		return err
 	}
 	return nil
@@ -573,7 +572,7 @@ func (cfg *config) EnableRebalance() bool {
 func (cfg *config) EnableSwap() bool {
 	value, err := cfg.Get("EnableSwap", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch EnableSwap")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableSwap")
 		return cfg.Env.EnableSwap
 	}
 	if value == "" {
@@ -591,7 +590,7 @@ func (cfg *config) SetEnableSwap(enable bool) error {
 	}
 	err := cfg.SetUpdate("EnableSwap", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update EnableSwap")
+		logger.Logger.Error().Err(err).Msg("Failed to update EnableSwap")
 		return err
 	}
 	// Update the in-memory Env as well so subsequent calls to EnableSwap() return the new value
@@ -610,7 +609,7 @@ func (cfg *config) SetEnableSwap(enable bool) error {
 func (cfg *config) EnableMessageboardNwc() bool {
 	value, err := cfg.Get("EnableMessageboardNwc", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch EnableMessageboardNwc")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch EnableMessageboardNwc")
 		return cfg.Env.EnableMessageboardNwc
 	}
 	if value == "" {
@@ -628,7 +627,7 @@ func (cfg *config) SetEnableMessageboardNwc(enable bool) error {
 	}
 	err := cfg.SetUpdate("EnableMessageboardNwc", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update EnableMessageboardNwc")
+		logger.Logger.Error().Err(err).Msg("Failed to update EnableMessageboardNwc")
 		return err
 	}
 	return nil
@@ -644,7 +643,7 @@ func (cfg *config) GetDefaultWorkDir() string {
 func (cfg *config) GetLSP() string {
 	url, err := cfg.Get("LSP", "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch LSP")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch LSP")
 	}
 	if url != "" {
 		return url
@@ -656,7 +655,7 @@ func (cfg *config) SetLSP(value string) error {
 	// LSP can be empty
 	err := cfg.SetUpdate("LSP", value, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update LSP")
+		logger.Logger.Error().Err(err).Msg("Failed to update LSP")
 		return err
 	}
 	return nil

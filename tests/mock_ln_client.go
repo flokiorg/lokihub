@@ -258,3 +258,7 @@ func (mln *MockLn) SubscribeCustomMessages(ctx context.Context) (<-chan lnclient
 func (mln *MockLn) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
 	return nil, nil, nil
 }
+
+func (mln *MockLn) SetNodeAlias(ctx context.Context, alias string) error {
+	return nil
+}

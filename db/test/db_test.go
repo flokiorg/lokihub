@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests/db"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestTempStorePragmaIsApplied(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
 	defer db.CloseDB(gormDb)

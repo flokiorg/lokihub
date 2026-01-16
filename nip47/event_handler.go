@@ -19,38 +19,37 @@ import (
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
 	var nip47Response *models.Response
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventNostrId": event.ID,
-		"eventKind":           event.Kind,
-	}).Info("Processing Event")
+	logger.Logger.Info().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Msg("Processing Event")
 
 	// go-nostr already checks this, but just to be sure:
 	validEventSignature, err := event.CheckSignature()
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-		}).WithError(err).Error("invalid event signature")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("invalid event signature")
 		return
 	}
 	if !validEventSignature {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-		}).Error("invalid event signature")
+		logger.Logger.Error().
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("invalid event signature")
 		return
 	}
 
 	if lnClient == nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-		}).Error("cannot handle event due to LNClient not started")
+		logger.Logger.Error().
+			Str("requestEventNostrId", event.ID).
+			Msg("cannot handle event due to LNClient not started")
 		return
 	}
 
@@ -59,15 +58,15 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	err = svc.db.Create(&requestEvent).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-			}).Warn("Event already processed")
+			logger.Logger.Warn().
+				Str("requestEventNostrId", event.ID).
+				Msg("Event already processed")
 			return
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-		}).WithError(err).Error("Failed to save nostr event")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("Failed to save nostr event")
 		return
 	}
 	app := db.App{}
@@ -75,25 +74,25 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		AppPubkey: event.PubKey,
 	}).Error
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"appPubkey": event.PubKey,
-		}).WithError(err).Error("Failed to find app for nostr pubkey")
+		logger.Logger.Error().Err(err).
+			Str("appPubkey", event.PubKey).
+			Msg("Failed to find app for nostr pubkey")
 		return
 	}
 
 	now := time.Now()
 	err = svc.db.Model(&app).Update("last_used_at", &now).Error
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"it": app.ID,
-		}).WithError(err).Error("Failed to update app last used time")
+		logger.Logger.Error().Err(err).
+			Uint("appId", app.ID).
+			Msg("Failed to update app last used time")
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventNostrId": event.ID,
-		"eventKind":           event.Kind,
-		"appId":               app.ID,
-	}).Debug("App found for nostr event")
+	logger.Logger.Debug().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Uint("appId", app.ID).
+		Msg("App found for nostr event")
 
 	appWalletPrivKey := svc.keys.GetNostrSecretKey()
 
@@ -101,9 +100,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		// This is a new child key derived from master using app ID as index
 		appWalletPrivKey, err = svc.keys.GetAppWalletKey(app.ID)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appId": app.ID,
-			}).WithError(err).Error("error deriving child key")
+			logger.Logger.Error().Err(err).
+				Uint("appId", app.ID).
+				Msg("error deriving child key")
 			return
 		}
 	}
@@ -117,34 +116,34 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	nip47Cipher, err := cipher.NewNip47Cipher(encryption, app.AppPubkey, appWalletPrivKey)
 	if err != nil {
 		cipherErr := err
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-			"appId":               app.ID,
-			"encryption":          encryption,
-		}).WithError(err).Error("Failed to initialize cipher")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Uint("appId", app.ID).
+			Str("encryption", encryption).
+			Msg("Failed to initialize cipher")
 
 		err = svc.db.
 			Model(&requestEvent).
 			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
 			Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appPubkey": event.PubKey,
-			}).WithError(err).Error("Failed to save state to nostr event")
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
 		}
 
 		// whenever we are unable to handle the request encryption, we always respond with our preferred encryption
 		// re-create the cipher with NIP-44 to send an error response
-		nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
+		nip47Cipher, err = cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
 
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-				"appId":               app.ID,
-				"encryption":          encryption,
-			}).WithError(err).Error("Failed to initialize cipher")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Str("encryption", encryption).
+				Msg("Failed to initialize cipher")
 			return
 		}
 
@@ -157,10 +156,10 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-			}).WithError(err).Error("Failed to process event")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
 		}
 		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
 
@@ -172,9 +171,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		Update("app_id", app.ID).
 		Error
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"appPubkey": event.PubKey,
-		}).WithError(err).Error("Failed to save app to nostr event")
+		logger.Logger.Error().Err(err).
+			Str("appPubkey", event.PubKey).
+			Msg("Failed to save app to nostr event")
 
 		nip47Response = &models.Response{
 			Error: &models.Error{
@@ -184,10 +183,10 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		}
 		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-			}).WithError(err).Error("Failed to process event")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
 		}
 		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
 
@@ -196,9 +195,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
 			Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appPubkey": event.PubKey,
-			}).WithError(err).Error("Failed to save state to nostr event")
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
 		}
 
 		return
@@ -207,33 +206,33 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	payload, err := nip47Cipher.Decrypt(event.Content)
 	if err != nil {
 		decryptionErr := err
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-			"appId":               app.ID,
-		}).WithError(err).Error("Failed to decrypt content")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Uint("appId", app.ID).
+			Msg("Failed to decrypt content")
 
 		err = svc.db.
 			Model(&requestEvent).
 			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
 			Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appPubkey": event.PubKey,
-			}).WithError(err).Error("Failed to save state to nostr event")
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
 		}
 
 		// whenever we are unable to handle the request encryption, we always respond with our preferred encryption
 		// re-create the cipher with NIP-44 to send an error response
-		nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
+		nip47Cipher, err = cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, app.AppPubkey, appWalletPrivKey)
 
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-				"appId":               app.ID,
-				"encryption":          encryption,
-			}).WithError(err).Error("Failed to initialize cipher")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Str("encryption", encryption).
+				Msg("Failed to initialize cipher")
 			return
 		}
 
@@ -246,10 +245,10 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 		resp, err := svc.CreateResponse(event, nip47Response, nostr.Tags{}, nip47Cipher, appWalletPrivKey)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-			}).WithError(err).Error("Failed to process event")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to process event")
 		}
 		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
 
@@ -258,19 +257,19 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(payload), nip47Request)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": event.ID,
-			"eventKind":           event.Kind,
-		}).WithError(err).Error("Failed to process event")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", event.ID).
+			Int("eventKind", event.Kind).
+			Msg("Failed to process event")
 
 		err = svc.db.
 			Model(&requestEvent).
 			Update("state", db.REQUEST_EVENT_STATE_HANDLER_ERROR).
 			Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appPubkey": event.PubKey,
-			}).WithError(err).Error("Failed to save state to nostr event")
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
 		}
 
 		return
@@ -287,29 +286,29 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		var state string
 		resp, err := svc.CreateResponse(event, nip47Response, tags, nip47Cipher, appWalletPrivKey)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventNostrId": event.ID,
-				"eventKind":           event.Kind,
-				"appId":               app.ID,
-			}).WithError(err).Error("Failed to create response")
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Int("eventKind", event.Kind).
+				Uint("appId", app.ID).
+				Msg("Failed to create response")
 			state = db.REQUEST_EVENT_STATE_HANDLER_ERROR
 		} else {
 			err = svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
 			if err != nil {
-				logger.Logger.WithFields(logrus.Fields{
-					"requestEventNostrId":  event.ID,
-					"responseEventNostrId": resp.ID,
-					"eventKind":            event.Kind,
-					"appId":                app.ID,
-				}).WithError(err).Error("Failed to publish event")
+				logger.Logger.Error().Err(err).
+					Str("requestEventNostrId", event.ID).
+					Str("responseEventNostrId", resp.ID).
+					Int("eventKind", event.Kind).
+					Uint("appId", app.ID).
+					Msg("Failed to publish event")
 				state = db.REQUEST_EVENT_STATE_HANDLER_ERROR
 			} else {
-				logger.Logger.WithFields(logrus.Fields{
-					"requestEventNostrId":  event.ID,
-					"responseEventNostrId": resp.ID,
-					"eventKind":            event.Kind,
-					"appId":                app.ID,
-				}).Debug("Published response")
+				logger.Logger.Debug().
+					Str("requestEventNostrId", event.ID).
+					Str("responseEventNostrId", resp.ID).
+					Int("eventKind", event.Kind).
+					Uint("appId", app.ID).
+					Msg("Published response")
 				state = db.REQUEST_EVENT_STATE_HANDLER_EXECUTED
 			}
 		}
@@ -318,19 +317,19 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			Update("state", state).
 			Error
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"appPubkey": event.PubKey,
-			}).WithError(err).Error("Failed to save state to nostr event")
+			logger.Logger.Error().Err(err).
+				Str("appPubkey", event.PubKey).
+				Msg("Failed to save state to nostr event")
 		}
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventNostrId": event.ID,
-		"eventKind":           event.Kind,
-		"appId":               app.ID,
-		"method":              nip47Request.Method,
-		"params":              nip47Request.Params,
-	}).Debug("Handling NIP-47 request")
+	logger.Logger.Debug().
+		Str("requestEventNostrId", event.ID).
+		Int("eventKind", event.Kind).
+		Uint("appId", app.ID).
+		Str("method", nip47Request.Method).
+		Interface("params", nip47Request.Params).
+		Msg("Handling NIP-47 request")
 
 	if !slices.Contains(permissions.GetAlwaysGrantedMethods(), nip47Request.Method) {
 		scope, err := permissions.RequestMethodToScope(nip47Request.Method)
@@ -350,10 +349,10 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		// but we should check the creation date of a request and ignore too old requests
 		// for payments and invoice creation.
 		if (scope == constants.PAY_INVOICE_SCOPE || scope == constants.MAKE_INVOICE_SCOPE) && time.Since(event.CreatedAt.Time()).Hours() > 6 {
-			logger.Logger.WithFields(logrus.Fields{
-				"request_event_id": requestEvent.ID,
-				"app_id":           app.ID,
-			}).Error("Received request more than 6 hours old")
+			logger.Logger.Error().
+				Uint("request_event_id", requestEvent.ID).
+				Uint("app_id", app.ID).
+				Msg("Received request more than 6 hours old")
 
 			// ignore the request
 			return
@@ -361,12 +360,12 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 		hasPermission, code, message := svc.permissionsService.HasPermission(&app, scope)
 		if !hasPermission {
-			logger.Logger.WithFields(logrus.Fields{
-				"request_event_id": requestEvent.ID,
-				"app_id":           app.ID,
-				"code":             code,
-				"message":          message,
-			}).Error("App does not have permission")
+			logger.Logger.Error().
+				Uint("request_event_id", requestEvent.ID).
+				Uint("app_id", app.ID).
+				Str("code", code).
+				Str("message", message).
+				Msg("App does not have permission")
 
 			svc.eventPublisher.Publish(&events.Event{
 				Event: "nwc_permission_denied",
@@ -465,7 +464,7 @@ func (svc *nip47Service) CreateResponse(initialEvent *nostr.Event, content inter
 
 	appWalletPubKey, err := nostr.GetPublicKey(appWalletPrivKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Error converting nostr privkey to pubkey")
+		logger.Logger.Error().Err(err).Msg("Error converting nostr privkey to pubkey")
 		return
 	}
 
@@ -491,11 +490,11 @@ func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmod
 	responseEvent := db.ResponseEvent{NostrId: resp.ID, RequestId: requestEvent.ID, State: "received"}
 	err := svc.db.Create(&responseEvent).Error
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventNostrId": requestEvent.NostrId,
-			"appId":               appId,
-			"replyEventId":        resp.ID,
-		}).WithError(err).Error("Failed to save response/reply event")
+		logger.Logger.Error().Err(err).
+			Str("requestEventNostrId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Str("replyEventId", resp.ID).
+			Msg("Failed to save response/reply event")
 		return err
 	}
 
@@ -507,36 +506,36 @@ func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmod
 		if result.Error == nil {
 			publishSuccessful = true
 		} else {
-			logger.Logger.WithFields(logrus.Fields{
-				"requestEventId":       requestEvent.ID,
-				"requestNostrEventId":  requestEvent.NostrId,
-				"appId":                appId,
-				"responseEventId":      responseEvent.ID,
-				"responseNostrEventId": resp.ID,
-				"relay":                result.RelayURL,
-			}).WithError(result.Error).Error("failed to publish response event to relay")
+			logger.Logger.Error().Err(result.Error).
+				Uint("requestEventId", requestEvent.ID).
+				Str("requestNostrEventId", requestEvent.NostrId).
+				Interface("appId", appId).
+				Uint("responseEventId", responseEvent.ID).
+				Str("responseNostrEventId", resp.ID).
+				Str("relay", result.RelayURL).
+				Msg("failed to publish response event to relay")
 		}
 	}
 
 	if !publishSuccessful {
 		updateColumns["state"] = db.RESPONSE_EVENT_STATE_PUBLISH_FAILED
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventId":       requestEvent.ID,
-			"requestNostrEventId":  requestEvent.NostrId,
-			"appId":                appId,
-			"responseEventId":      responseEvent.ID,
-			"responseNostrEventId": resp.ID,
-		}).WithError(err).Error("Failed to publish reply")
+		logger.Logger.Error().Err(err).
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Failed to publish reply")
 	} else {
 		updateColumns["state"] = db.RESPONSE_EVENT_STATE_PUBLISH_CONFIRMED
 		updateColumns["replied_at"] = time.Now()
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventId":       requestEvent.ID,
-			"requestNostrEventId":  requestEvent.NostrId,
-			"appId":                appId,
-			"responseEventId":      responseEvent.ID,
-			"responseNostrEventId": resp.ID,
-		}).Info("Published reply")
+		logger.Logger.Info().
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Published reply")
 	}
 
 	err = svc.db.
@@ -544,13 +543,13 @@ func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmod
 		Updates(updateColumns).
 		Error
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventId":       requestEvent.ID,
-			"requestNostrEventId":  requestEvent.NostrId,
-			"appId":                appId,
-			"responseEventId":      responseEvent.ID,
-			"responseNostrEventId": resp.ID,
-		}).WithError(err).Error("Failed to update response/reply event")
+		logger.Logger.Error().Err(err).
+			Uint("requestEventId", requestEvent.ID).
+			Str("requestNostrEventId", requestEvent.NostrId).
+			Interface("appId", appId).
+			Uint("responseEventId", responseEvent.ID).
+			Str("responseNostrEventId", resp.ID).
+			Msg("Failed to update response/reply event")
 		return err
 	}
 

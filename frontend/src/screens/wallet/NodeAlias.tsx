@@ -40,9 +40,7 @@ export default function NodeAlias() {
       });
 
       await reloadInfo();
-      toast("Alias changed. Restart your node to apply the change.", {
-        description: "Your node alias has been updated successfully.",
-      });
+      toast("Your node alias has been updated successfully.");
     } catch (error) {
       console.error("Failed to update node alias:", error);
       handleRequestError("Failed to update node alias", error);
@@ -50,6 +48,8 @@ export default function NodeAlias() {
       setIsLoading(false);
     }
   };
+
+  const isUnchanged = nodeAlias === info?.nodeAlias;
 
   return (
     <div className="grid gap-5">
@@ -74,7 +74,11 @@ export default function NodeAlias() {
               connected peers, and on lightning network explorers.
             </p>
           </div>
-          <Button type="submit" disabled={isLoading} className="w-fit">
+          <Button
+            type="submit"
+            disabled={isLoading || isUnchanged || !nodeAlias}
+            className="w-fit"
+          >
             {isLoading ? "Updating..." : "Update Alias"}
           </Button>
         </form>

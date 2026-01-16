@@ -31,11 +31,11 @@ func NewDB(t *testing.T) (*gorm.DB, error) {
 
 	if dbUri == defaultTestDB {
 		//in case the file was not removed in the last run, remove it before starting the test
-		logger.Logger.WithField("uri", defaultTestDB).Info("removing test db")
+		logger.Logger.Info().Str("uri", defaultTestDB).Msg("removing test db")
 		os.Remove(defaultTestDB)
 	}
 
-	logger.Logger.WithField("uri", dbUri).Info("Creating new test DB with URI")
+	logger.Logger.Info().Str("uri", dbUri).Msg("Creating new test DB with URI")
 	return NewDBWithURI(t, dbUri)
 }
 
@@ -78,7 +78,7 @@ func CloseDB(d *gorm.DB) {
 	}
 
 	if GetTestDatabaseURI() == defaultTestDB {
-		logger.Logger.WithField("uri", defaultTestDB).Info("removing test db")
+		logger.Logger.Info().Str("uri", defaultTestDB).Msg("removing test db")
 		os.Remove(defaultTestDB)
 	}
 }

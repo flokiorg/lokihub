@@ -7,7 +7,6 @@ import (
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/sirupsen/logrus"
 )
 
 // SendCustomMessage sends a custom peer message to the specified peer.
@@ -15,10 +14,10 @@ import (
 func (svc *LNDService) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
 	peerPubkeyBytes, err := hex.DecodeString(peerPubkey)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"peer_pubkey": peerPubkey,
-			"msg_type":    msgType,
-		}).WithError(err).Error("Failed to decode peer pubkey")
+		logger.Logger.Error().Err(err).
+			Str("peer_pubkey", peerPubkey).
+			Uint32("msg_type", msgType).
+			Msg("Failed to decode peer pubkey")
 		return err
 	}
 
@@ -30,18 +29,18 @@ func (svc *LNDService) SendCustomMessage(ctx context.Context, peerPubkey string,
 
 	_, err = svc.client.SendCustomMessage(ctx, req)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"peer_pubkey": peerPubkey,
-			"msg_type":    msgType,
-		}).WithError(err).Error("Failed to send custom message")
+		logger.Logger.Error().Err(err).
+			Str("peer_pubkey", peerPubkey).
+			Uint32("msg_type", msgType).
+			Msg("Failed to send custom message")
 		return err
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"peer_pubkey": peerPubkey,
-		"msg_type":    msgType,
-		"data_len":    len(data),
-	}).Debug("Sent custom message")
+	logger.Logger.Debug().
+		Str("peer_pubkey", peerPubkey).
+		Uint32("msg_type", msgType).
+		Int("data_len", len(data)).
+		Msg("Sent custom message")
 
 	return nil
 }
@@ -54,7 +53,7 @@ func (svc *LNDService) SubscribeCustomMessages(ctx context.Context) (<-chan lncl
 
 	stream, err := svc.client.SubscribeCustomMessages(ctx, &lnrpc.SubscribeCustomMessagesRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to subscribe to custom messages")
+		logger.Logger.Error().Err(err).Msg("Failed to subscribe to custom messages")
 		close(msgChan)
 		close(errChan)
 		return msgChan, errChan, err
@@ -71,7 +70,7 @@ func (svc *LNDService) SubscribeCustomMessages(ctx context.Context) (<-chan lncl
 					// Context cancelled, exit gracefully
 					return
 				}
-				logger.Logger.WithError(err).Error("Error receiving custom message")
+				logger.Logger.Error().Err(err).Msg("Error receiving custom message")
 				select {
 				case errChan <- err:
 				case <-ctx.Done():
@@ -89,11 +88,11 @@ func (svc *LNDService) SubscribeCustomMessages(ctx context.Context) (<-chan lncl
 
 			select {
 			case msgChan <- customMsg:
-				logger.Logger.WithFields(logrus.Fields{
-					"peer_pubkey": peerPubkey,
-					"msg_type":    msg.Type,
-					"data_len":    len(msg.Data),
-				}).Debug("Received custom message")
+				logger.Logger.Debug().
+					Str("peer_pubkey", peerPubkey).
+					Uint32("msg_type", msg.Type).
+					Int("data_len", len(msg.Data)).
+					Msg("Received custom message")
 			case <-ctx.Done():
 				return
 			}

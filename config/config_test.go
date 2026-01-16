@@ -7,7 +7,6 @@ import (
 
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -15,7 +14,7 @@ import (
 )
 
 func TestCheckCache_NoEncryptionKey(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	err = migrations.Migrate(db)
@@ -45,7 +44,7 @@ func TestCheckCache_NoEncryptionKey(t *testing.T) {
 }
 
 func TestCheckUnlockPasswordCache(t *testing.T) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	unlockPassword := "123"
 
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})

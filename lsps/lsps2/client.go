@@ -139,7 +139,7 @@ func (h *ClientHandler) SelectOpeningParams(ctx context.Context, lspPubkey strin
 	}
 
 	// Debug log
-	logger.Logger.WithField("peer", lspPubkey).Info("Sending BuyRequest")
+	logger.Logger.Info().Str("peer", lspPubkey).Msg("Sending BuyRequest")
 
 	if err := h.transport.SendCustomMessage(ctx, lspPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
 		peerState.mu.Lock()
@@ -203,7 +203,7 @@ func (h *ClientHandler) handleGetInfoResponse(peerPubkey, requestID string, resp
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 	// Debug log
-	logger.Logger.WithField("peer", peerPubkey).Info("Received GetInfo response")
+	logger.Logger.Info().Str("peer", peerPubkey).Msg("Received GetInfo response")
 
 	if err := json.Unmarshal(resultBytes, &result); err != nil {
 		return fmt.Errorf("failed to unmarshal get_info response: %w", err)

@@ -7,7 +7,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type makeHoldInvoiceParams struct {
@@ -31,10 +30,10 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 	}
 
 	if makeHoldInvoiceParams.PaymentHash == "" {
-		logger.Logger.WithFields(logrus.Fields{
-			"requestEventId": requestEventId,
-			"appId":          appId,
-		}).Error("Payment hash is missing for make_hold_invoice")
+		logger.Logger.Error().
+			Interface("requestEventId", requestEventId).
+			Interface("appId", appId).
+			Msg("Payment hash is missing for make_hold_invoice")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{
@@ -45,16 +44,16 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventId":  requestEventId,
-		"appId":           appId,
-		"amount":          makeHoldInvoiceParams.Amount,
-		"description":     makeHoldInvoiceParams.Description,
-		"descriptionHash": makeHoldInvoiceParams.DescriptionHash,
-		"expiry":          makeHoldInvoiceParams.Expiry,
-		"paymentHash":     makeHoldInvoiceParams.PaymentHash,
-		"metadata":        makeHoldInvoiceParams.Metadata,
-	}).Info("Making hold invoice")
+	logger.Logger.Info().
+		Interface("requestEventId", requestEventId).
+		Interface("appId", appId).
+		Interface("amount", makeHoldInvoiceParams.Amount).
+		Interface("description", makeHoldInvoiceParams.Description).
+		Interface("descriptionHash", makeHoldInvoiceParams.DescriptionHash).
+		Interface("expiry", makeHoldInvoiceParams.Expiry).
+		Interface("paymentHash", makeHoldInvoiceParams.PaymentHash).
+		Interface("metadata", makeHoldInvoiceParams.Metadata).
+		Msg("Making hold invoice")
 
 	requestEventIdUint := uint(requestEventId)
 	transaction, err := controller.transactionsService.MakeHoldInvoice(
@@ -71,15 +70,15 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 	)
 
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"appId":            appId,
-			"amount":           makeHoldInvoiceParams.Amount,
-			"description":      makeHoldInvoiceParams.Description,
-			"descriptionHash":  makeHoldInvoiceParams.DescriptionHash,
-			"expiry":           makeHoldInvoiceParams.Expiry,
-			"paymentHash":      makeHoldInvoiceParams.PaymentHash,
-		}).WithError(err).Error("Failed to make invoice")
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("appId", appId).
+			Interface("amount", makeHoldInvoiceParams.Amount).
+			Interface("description", makeHoldInvoiceParams.Description).
+			Interface("descriptionHash", makeHoldInvoiceParams.DescriptionHash).
+			Interface("expiry", makeHoldInvoiceParams.Expiry).
+			Interface("paymentHash", makeHoldInvoiceParams.PaymentHash).
+			Msg("Failed to make invoice")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

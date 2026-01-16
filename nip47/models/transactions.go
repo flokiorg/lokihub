@@ -7,7 +7,6 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/sirupsen/logrus"
 )
 
 func ToNip47Transaction(transaction *transactions.Transaction) *Transaction {
@@ -34,10 +33,10 @@ func ToNip47Transaction(transaction *transactions.Transaction) *Transaction {
 	if transaction.Metadata != nil {
 		jsonErr := json.Unmarshal(transaction.Metadata, &metadata)
 		if jsonErr != nil {
-			logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-				"payment_hash": transaction.PaymentHash,
-				"metadata":     transaction.Metadata,
-			}).Error("Failed to deserialize transaction metadata")
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("metadata", transaction.Metadata).
+				Msg("Failed to deserialize transaction metadata")
 		}
 	}
 

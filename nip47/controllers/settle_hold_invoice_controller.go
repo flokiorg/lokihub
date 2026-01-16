@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type settleHoldInvoiceParams struct {
@@ -22,19 +21,19 @@ func (controller *nip47Controller) HandleSettleHoldInvoiceEvent(ctx context.Cont
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventId": requestEventId,
-		"appId":          appId,
-		"preimage":       settleHoldInvoiceParams.Preimage,
-	}).Info("Settling hold invoice")
+	logger.Logger.Info().
+		Interface("requestEventId", requestEventId).
+		Interface("appId", appId).
+		Interface("preimage", settleHoldInvoiceParams.Preimage).
+		Msg("Settling hold invoice")
 
 	_, err := controller.transactionsService.SettleHoldInvoice(ctx, settleHoldInvoiceParams.Preimage, controller.lnClient)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"appId":            appId,
-			"preimage":         settleHoldInvoiceParams.Preimage,
-		}).WithError(err).Error("Failed to settle hold invoice")
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("appId", appId).
+			Interface("preimage", settleHoldInvoiceParams.Preimage).
+			Msg("Failed to settle hold invoice")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

@@ -8,7 +8,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -24,9 +23,9 @@ type getBalanceResponse struct {
 // TODO: remove checkPermission - can it be a middleware?
 func (controller *nip47Controller) HandleGetBalanceEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
 
-	logger.Logger.WithFields(logrus.Fields{
-		"request_event_id": requestEventId,
-	}).Debug("Getting balance")
+	logger.Logger.Debug().
+		Interface("request_event_id", requestEventId).
+		Msg("Getting balance")
 
 	balance := int64(0)
 	if app.Isolated {
@@ -35,9 +34,9 @@ func (controller *nip47Controller) HandleGetBalanceEvent(ctx context.Context, ni
 		balances, err := controller.lnClient.GetBalances(ctx, true)
 		balance = balances.Lightning.TotalSpendable
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"request_event_id": requestEventId,
-			}).WithError(err).Error("Failed to fetch balance")
+			logger.Logger.Error().Err(err).
+				Interface("request_event_id", requestEventId).
+				Msg("Failed to fetch balance")
 			publishResponse(&models.Response{
 				ResultType: nip47Request.Method,
 				Error:      mapNip47Error(err),

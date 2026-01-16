@@ -12,7 +12,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/utils"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -47,12 +46,12 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 	}
 	expiresAt := appPermission.ExpiresAt
 	if expiresAt != nil && expiresAt.Before(time.Now()) {
-		logger.Logger.WithFields(logrus.Fields{
-			"scope":     scope,
-			"expiresAt": expiresAt.Unix(),
-			"appId":     app.ID,
-			"pubkey":    app.AppPubkey,
-		}).Info("This pubkey is expired")
+		logger.Logger.Info().
+			Str("scope", scope).
+			Int64("expiresAt", expiresAt.Unix()).
+			Uint("appId", app.ID).
+			Str("pubkey", app.AppPubkey).
+			Msg("This pubkey is expired")
 
 		return false, constants.ERROR_EXPIRED, "This app has expired"
 	}
@@ -170,7 +169,7 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 	case models.CREATE_CONNECTION_METHOD:
 		return constants.SUPERUSER_SCOPE, nil
 	}
-	logger.Logger.WithField("request_method", requestMethod).Error("Unsupported request method")
+	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")
 	return "", fmt.Errorf("unsupported request method: %s", requestMethod)
 }
 

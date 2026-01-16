@@ -51,7 +51,7 @@ func (app *WailsApp) onBeforeClose(ctx context.Context) bool {
 		DefaultButton: "No",
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to show confirmation dialog")
+		logger.Logger.Error().Err(err).Msg("failed to show confirmation dialog")
 		return false
 	}
 	return response != "Yes"
@@ -97,7 +97,7 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte) {
 	})
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to run Wails app")
+		logger.Logger.Error().Err(err).Msg("failed to run Wails app")
 	}
 }
 
@@ -109,29 +109,29 @@ type WailsLogger struct {
 }
 
 func (wailsLogger WailsLogger) Print(message string) {
-	logger.Logger.WithField("wails", true).Print(message)
+	logger.Logger.Info().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Trace(message string) {
-	logger.Logger.WithField("wails", true).Trace(message)
+	logger.Logger.Trace().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Debug(message string) {
-	logger.Logger.WithField("wails", true).Debug(message)
+	logger.Logger.Debug().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Info(message string) {
-	logger.Logger.WithField("wails", true).Info(message)
+	logger.Logger.Info().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Warning(message string) {
-	logger.Logger.WithField("wails", true).Warning(message)
+	logger.Logger.Warn().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Error(message string) {
-	logger.Logger.WithField("wails", true).Error(message)
+	logger.Logger.Error().Bool("wails", true).Msg(message)
 }
 
 func (wailsLogger WailsLogger) Fatal(message string) {
-	logger.Logger.WithField("wails", true).Fatal(message)
+	logger.Logger.Fatal().Bool("wails", true).Msg(message)
 }

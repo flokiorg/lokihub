@@ -9,7 +9,6 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/sirupsen/logrus"
 )
 
 func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*MakeInvoiceResponse, error) {
@@ -109,10 +108,10 @@ func toApiTransaction(transaction *transactions.Transaction) *Transaction {
 	if transaction.Metadata != nil {
 		jsonErr := json.Unmarshal(transaction.Metadata, &metadata)
 		if jsonErr != nil {
-			logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-				"payment_hash": transaction.PaymentHash,
-				"metadata":     transaction.Metadata,
-			}).Error("Failed to deserialize transaction metadata")
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("metadata", transaction.Metadata).
+				Msg("Failed to deserialize transaction metadata")
 		}
 	}
 
@@ -121,10 +120,10 @@ func toApiTransaction(transaction *transactions.Transaction) *Transaction {
 		var txBoostagram transactions.Boostagram
 		jsonErr := json.Unmarshal(transaction.Boostagram, &txBoostagram)
 		if jsonErr != nil {
-			logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-				"payment_hash": transaction.PaymentHash,
-				"boostagram":   transaction.Boostagram,
-			}).Error("Failed to deserialize transaction boostagram info")
+			logger.Logger.Error().Err(jsonErr).
+				Str("payment_hash", transaction.PaymentHash).
+				Interface("boostagram", transaction.Boostagram).
+				Msg("Failed to deserialize transaction boostagram info")
 		}
 		boostagram = toApiBoostagram(&txBoostagram)
 	}

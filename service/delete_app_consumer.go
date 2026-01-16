@@ -24,23 +24,23 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 	}
 	properties, ok := event.Properties.(map[string]interface{})
 	if !ok {
-		logger.Logger.WithField("event", event).Error("Failed to cast event.Properties to map")
+		logger.Logger.Error().Interface("event", event).Msg("Failed to cast event.Properties to map")
 		return
 	}
 	id, ok := properties["id"].(uint)
 	if !ok {
-		logger.Logger.WithField("event", event).Error("missing id in properties event")
+		logger.Logger.Error().Interface("event", event).Msg("missing id in properties event")
 		return
 	}
 
 	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
 	if err != nil {
-		logger.Logger.WithError(err).WithField("id", id).Error("Failed to calculate app wallet priv key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet priv key")
 		return
 	}
 	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
 	if err != nil {
-		logger.Logger.WithError(err).WithField("id", id).Error("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
 		return
 	}
 	// Note: for legacy apps this check will always return false as the wallet pubkey
@@ -56,13 +56,13 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		// get nip47 event info for this app wallet key
 		nip47InfoEvent, err := s.svc.GetNip47Service().GetNip47Info(ctx, s.pool, s.walletPubkey)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Could not get nip47 info event")
+			logger.Logger.Error().Err(err).Msg("Could not get nip47 info event")
 			return
 		}
 		if nip47InfoEvent != nil {
 			err = s.svc.nip47Service.PublishNip47InfoDeletion(ctx, s.pool, walletPubKey, walletPrivKey, nip47InfoEvent.ID)
 			if err != nil {
-				logger.Logger.WithError(err).WithField("event", event).Error("Failed to publish nip47 info deletion")
+				logger.Logger.Error().Err(err).Interface("event", event).Msg("Failed to publish nip47 info deletion")
 			}
 		}
 	}

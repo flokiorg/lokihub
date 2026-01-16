@@ -17,14 +17,13 @@ import (
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUnlock_IncorrectPassword(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -58,7 +57,7 @@ func TestUnlock_IncorrectPassword(t *testing.T) {
 
 func TestUnlock_UnknownPermission(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -92,7 +91,7 @@ func TestUnlock_UnknownPermission(t *testing.T) {
 
 func TestGetApps_NoToken(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -121,7 +120,7 @@ func TestGetApps_NoToken(t *testing.T) {
 
 func TestGetApps_ReadonlyPermission(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -174,7 +173,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 
 func TestGetApps_FullPermission(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -227,7 +226,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 
 func TestCreateApp_NoToken(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -259,7 +258,7 @@ func TestCreateApp_NoToken(t *testing.T) {
 
 func TestCreateApp_FullPermission(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)
@@ -321,7 +320,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 
 func TestCreateApp_ReadonlyPermission(t *testing.T) {
 	e := echo.New()
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 	mockSvc := mocks.NewMockService(t)
 	gormDb, err := db.NewDB(t)
 	require.NoError(t, err)

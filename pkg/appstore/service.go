@@ -61,16 +61,16 @@ func (s *appStoreService) GetLogoPath(appId string) (string, error) {
 }
 
 func (s *appStoreService) Sync() {
-	logger.Logger.Info("App Store Sync started")
+	logger.Logger.Info().Msg("App Store Sync started")
 
 	// 1. Fetch remote apps
 	remoteApps, err := s.fetchRemoteApps()
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch remote apps")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch remote apps")
 		// If fetch fails, try to load from cache
 		if len(s.apps) == 0 {
 			if err := s.loadFromCache(); err != nil {
-				logger.Logger.WithError(err).Error("Failed to load apps from cache")
+				logger.Logger.Error().Err(err).Msg("Failed to load apps from cache")
 			}
 		}
 		return
@@ -96,7 +96,7 @@ func (s *appStoreService) Sync() {
 	logosDir := filepath.Join(cacheDir, "logos")
 
 	if err := os.MkdirAll(logosDir, 0755); err != nil {
-		logger.Logger.WithError(err).Error("Failed to create app store cache directories")
+		logger.Logger.Error().Err(err).Msg("Failed to create app store cache directories")
 		return
 	}
 
@@ -111,7 +111,7 @@ func (s *appStoreService) Sync() {
 			// Check version
 			isNewer, err := isVersionNewer(remoteApp.Version, localApp.Version)
 			if err != nil {
-				logger.Logger.WithField("app", remoteApp.ID).WithError(err).Warn("Invalid version format, skipping update check")
+				logger.Logger.Warn().Err(err).Str("app", remoteApp.ID).Msg("Invalid version format, skipping update check")
 				// Fallback: if versions don't parse, maybe just check string equality?
 				// User specific requirement: "keep the app that has the last version field following semantic version format"
 				// If parsing fails, we might assume it's NOT newer or handle it gracefully.
@@ -125,9 +125,9 @@ func (s *appStoreService) Sync() {
 		}
 
 		if shouldDownloadLogo {
-			logger.Logger.WithField("app", remoteApp.ID).Info("Downloading app logo")
+			logger.Logger.Info().Str("app", remoteApp.ID).Msg("Downloading app logo")
 			if err := s.downloadLogo(remoteApp.Logo, remoteApp.ID, logosDir); err != nil {
-				logger.Logger.WithField("app", remoteApp.ID).WithError(err).Error("Failed to download logo")
+				logger.Logger.Error().Err(err).Str("app", remoteApp.ID).Msg("Failed to download logo")
 				// If logo download fails, we might still want to update the app info,
 				// or maybe keep the old one?
 				// "if in this case the version has changed we must download the logo"
@@ -144,7 +144,7 @@ func (s *appStoreService) Sync() {
 	s.mu.Unlock()
 
 	if err := s.saveToCache(updatedApps); err != nil {
-		logger.Logger.WithError(err).Error("Failed to save apps to cache")
+		logger.Logger.Error().Err(err).Msg("Failed to save apps to cache")
 	}
 
 	// 5. Cleanup old logos (optional, but good practice)
@@ -155,7 +155,7 @@ func (s *appStoreService) Sync() {
 	// We can list files in logosDir and remove those not in updatedApps.
 	s.cleanupOldLogos(updatedApps, logosDir)
 
-	logger.Logger.Info("App Store Sync completed")
+	logger.Logger.Info().Msg("App Store Sync completed")
 }
 
 func (s *appStoreService) fetchRemoteApps() ([]App, error) {
@@ -258,7 +258,7 @@ func (s *appStoreService) cleanupOldLogos(currentApps []App, logosDir string) {
 
 	entries, err := os.ReadDir(logosDir)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to read logos dir for cleanup")
+		logger.Logger.Error().Err(err).Msg("Failed to read logos dir for cleanup")
 		return
 	}
 
@@ -275,7 +275,7 @@ func (s *appStoreService) cleanupOldLogos(currentApps []App, logosDir string) {
 
 		id := filename[0 : len(filename)-len(ext)]
 		if !validIds[id] {
-			logger.Logger.WithField("file", filename).Info("Removing orphaned logo")
+			logger.Logger.Info().Str("file", filename).Msg("Removing orphaned logo")
 			os.Remove(filepath.Join(logosDir, filename))
 		}
 	}

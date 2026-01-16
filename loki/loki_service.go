@@ -11,7 +11,6 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/sirupsen/logrus"
 )
 
 type lokiService struct {
@@ -37,20 +36,20 @@ func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, e
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"currency": currency,
-			"error":    err,
-		}).Error("Error creating request to Flokicoin rate endpoint")
+		logger.Logger.Error().
+			Str("currency", currency).
+			Err(err).
+			Msg("Error creating request to Flokicoin rate endpoint")
 		return nil, err
 	}
 	setDefaultRequestHeaders(req)
 
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"currency": currency,
-			"error":    err,
-		}).Error("Failed to fetch Flokicoin rate from API")
+		logger.Logger.Error().
+			Str("currency", currency).
+			Err(err).
+			Msg("Failed to fetch Flokicoin rate from API")
 		return nil, err
 	}
 
@@ -58,29 +57,29 @@ func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, e
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to read response body")
+		logger.Logger.Error().Err(err).
+			Str("url", url).
+			Msg("Failed to read response body")
 		return nil, errors.New("failed to read response body")
 	}
 
 	if res.StatusCode >= 300 {
-		logger.Logger.WithFields(logrus.Fields{
-			"currency":    currency,
-			"body":        string(body),
-			"status_code": res.StatusCode,
-		}).Error("Flokicoin rate endpoint returned non-success code")
+		logger.Logger.Error().
+			Str("currency", currency).
+			Str("body", string(body)).
+			Int("status_code", res.StatusCode).
+			Msg("Flokicoin rate endpoint returned non-success code")
 		return nil, fmt.Errorf("flokicoin rate endpoint returned non-success code: %s", string(body))
 	}
 
 	var rate = &FlokicoinRate{}
 	err = json.Unmarshal(body, rate)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"currency": currency,
-			"body":     string(body),
-			"error":    err,
-		}).Error("Failed to decode Flokicoin rate API response")
+		logger.Logger.Error().
+			Str("currency", currency).
+			Str("body", string(body)).
+			Err(err).
+			Msg("Failed to decode Flokicoin rate API response")
 		return nil, err
 	}
 
@@ -99,14 +98,14 @@ func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurre
 
 	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Error creating request to rates endpoint")
+		logger.Logger.Error().Err(err).Msg("Error creating request to rates endpoint")
 		return nil, err
 	}
 	setDefaultRequestHeaders(req)
 
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch rates from API")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch rates from API")
 		// Wrap error to help debugging on frontend
 		return nil, fmt.Errorf("backend failed to fetch rates: %w", err)
 	}
@@ -115,27 +114,27 @@ func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurre
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to read response body")
+		logger.Logger.Error().Err(err).
+			Str("url", url).
+			Msg("Failed to read response body")
 		return nil, errors.New("failed to read response body")
 	}
 
 	if res.StatusCode >= 300 {
-		logger.Logger.WithFields(logrus.Fields{
-			"body":        string(body),
-			"status_code": res.StatusCode,
-		}).Error("Rates endpoint returned non-success code")
+		logger.Logger.Error().
+			Str("body", string(body)).
+			Int("status_code", res.StatusCode).
+			Msg("Rates endpoint returned non-success code")
 		return nil, fmt.Errorf("rates endpoint returned non-success code: %s", string(body))
 	}
 
 	var currencies map[string]LokiCurrency
 	err = json.Unmarshal(body, &currencies)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"body":  string(body),
-			"error": err,
-		}).Error("Failed to decode rates API response")
+		logger.Logger.Error().
+			Str("body", string(body)).
+			Err(err).
+			Msg("Failed to decode rates API response")
 		return nil, err
 	}
 

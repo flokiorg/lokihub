@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -379,10 +378,10 @@ func TestHandleMultiPayInvoiceEvent_LNClient_OnePaymentFailed(t *testing.T) {
 	var mu sync.Mutex
 
 	publishResponse := func(response *models.Response, tags nostr.Tags) {
-		logger.Logger.WithFields(logrus.Fields{
-			"response": response,
-			"tags":     tags,
-		}).Info("Publish response")
+		logger.Logger.Info().
+			Interface("response", response).
+			Interface("tags", tags).
+			Msg("Publish response")
 		mu.Lock()
 		defer mu.Unlock()
 		responses = append(responses, response)
@@ -399,7 +398,7 @@ func TestHandleMultiPayInvoiceEvent_LNClient_OnePaymentFailed(t *testing.T) {
 	assert.Equal(t, 2, len(responses))
 	assert.Equal(t, 2, len(dTags))
 
-	logger.Logger.WithField("dTags", dTags).WithField("responses", responses).Info("Got responses")
+	logger.Logger.Info().Interface("dTags", dTags).Interface("responses", responses).Msg("Got responses")
 	// we can't guarantee which request was processed first
 	// so swap them if they are back to front
 	if responses[0].Result == nil {

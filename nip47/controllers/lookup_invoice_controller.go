@@ -10,7 +10,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type lookupInvoiceParams struct {
@@ -31,21 +30,21 @@ func (controller *nip47Controller) HandleLookupInvoiceEvent(ctx context.Context,
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"invoice":          lookupInvoiceParams.Invoice,
-		"payment_hash":     lookupInvoiceParams.PaymentHash,
-		"request_event_id": requestEventId,
-	}).Info("Looking up invoice")
+	logger.Logger.Info().
+		Interface("invoice", lookupInvoiceParams.Invoice).
+		Interface("payment_hash", lookupInvoiceParams.PaymentHash).
+		Interface("request_event_id", requestEventId).
+		Msg("Looking up invoice")
 
 	paymentHash := lookupInvoiceParams.PaymentHash
 
 	if paymentHash == "" {
 		paymentRequest, err := decodepay.Decodepay(strings.ToLower(lookupInvoiceParams.Invoice))
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"request_event_id": requestEventId,
-				"invoice":          lookupInvoiceParams.Invoice,
-			}).WithError(err).Error("Failed to decode bolt11 invoice")
+			logger.Logger.Error().Err(err).
+				Interface("request_event_id", requestEventId).
+				Interface("invoice", lookupInvoiceParams.Invoice).
+				Msg("Failed to decode bolt11 invoice")
 
 			publishResponse(&models.Response{
 				ResultType: nip47Request.Method,
@@ -61,11 +60,11 @@ func (controller *nip47Controller) HandleLookupInvoiceEvent(ctx context.Context,
 
 	dbTransaction, err := controller.transactionsService.LookupTransaction(ctx, paymentHash, nil, controller.lnClient, &appId)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"invoice":          lookupInvoiceParams.Invoice,
-			"payment_hash":     paymentHash,
-		}).Infof("Failed to lookup invoice: %v", err)
+		logger.Logger.Info().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("invoice", lookupInvoiceParams.Invoice).
+			Interface("payment_hash", paymentHash).
+			Msg("Failed to lookup invoice")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

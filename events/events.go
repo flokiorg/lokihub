@@ -7,7 +7,6 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/pkg/version"
-	"github.com/sirupsen/logrus"
 )
 
 type eventPublisher struct {
@@ -55,7 +54,7 @@ func (ep *eventPublisher) PublishSync(event *Event) {
 func (ep *eventPublisher) publish(event *Event, sync bool) {
 	ep.subscriberMtx.Lock()
 	defer ep.subscriberMtx.Unlock()
-	logger.Logger.WithFields(logrus.Fields{"event": event, "global": ep.globalProperties}).Debug("Publishing event")
+	logger.Logger.Debug().Interface("event", event).Interface("global", ep.globalProperties).Msg("Publishing event")
 	for _, listener := range ep.listeners {
 		if sync {
 			listener.ConsumeEvent(context.Background(), event, ep.globalProperties)

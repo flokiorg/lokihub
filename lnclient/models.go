@@ -108,6 +108,8 @@ type LNClient interface {
 
 	// Channel Acceptor
 	SubscribeChannelAcceptor(ctx context.Context) (<-chan ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error)
+
+	SetNodeAlias(ctx context.Context, alias string) error
 }
 
 type ChannelAcceptRequest struct {

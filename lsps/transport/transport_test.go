@@ -143,6 +143,10 @@ func (m *mockLNClient) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnc
 	return nil, nil, nil
 }
 
+func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
+	return nil
+}
+
 // Tests
 
 func TestLNDTransport_SendCustomMessage(t *testing.T) {

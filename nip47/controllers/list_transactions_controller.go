@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type listTransactionsParams struct {
@@ -34,10 +33,10 @@ func (controller *nip47Controller) HandleListTransactionsEvent(ctx context.Conte
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"params":           listParams,
-		"request_event_id": requestEventId,
-	}).Debug("Fetching transactions")
+	logger.Logger.Debug().
+		Interface("params", listParams).
+		Interface("request_event_id", requestEventId).
+		Msg("Fetching transactions")
 
 	limit := listParams.Limit
 	maxLimit := uint64(50)
@@ -52,10 +51,10 @@ func (controller *nip47Controller) HandleListTransactionsEvent(ctx context.Conte
 
 	dbTransactions, totalCount, err := controller.transactionsService.ListTransactions(ctx, listParams.From, listParams.Until, limit, listParams.Offset, listParams.Unpaid || listParams.UnpaidOutgoing, listParams.Unpaid || listParams.UnpaidIncoming, transactionType, controller.lnClient, &appId, false)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"params":           listParams,
-			"request_event_id": requestEventId,
-		}).WithError(err).Error("Failed to fetch transactions")
+		logger.Logger.Error().Err(err).
+			Interface("params", listParams).
+			Interface("request_event_id", requestEventId).
+			Msg("Failed to fetch transactions")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

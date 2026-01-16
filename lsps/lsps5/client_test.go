@@ -126,6 +126,10 @@ func (m *mockLNClient) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnc
 	return nil, nil, nil
 }
 
+func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
+	return nil
+}
+
 func TestClient_SetWebhook(t *testing.T) {
 	mockLN := newMockLNClient()
 	transport := transport.NewLNDTransport(mockLN)

@@ -120,6 +120,10 @@ func (m *mockLNClient) ExecuteCustomNodeCommand(ctx context.Context, command *ln
 	return nil, nil
 }
 
+func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
+	return nil
+}
+
 // Mock KVStore
 type mockKVStore struct {
 	data map[string][]byte

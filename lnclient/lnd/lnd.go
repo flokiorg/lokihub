@@ -27,8 +27,8 @@ import (
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/notifications"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/rs/zerolog"
 
-	"github.com/sirupsen/logrus"
 	// "gorm.io/gorm"
 
 	"github.com/flokiorg/flnd/lnrpc"
@@ -42,7 +42,7 @@ type LNDService struct {
 	cancel         context.CancelFunc
 	ctx            context.Context
 	eventPublisher events.EventPublisher
-	logger         *logrus.Entry
+	logger         zerolog.Logger
 
 	txCache      []lnclient.OnchainTransaction
 	txCacheMtx   sync.RWMutex
@@ -60,7 +60,7 @@ func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, ln
 		MacaroonHex: lndMacaroonHex,
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to create new FLND client")
+		logger.Logger.Error().Err(err).Msg("Failed to create new FLND client")
 		return nil, err
 	}
 
@@ -71,20 +71,20 @@ func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, ln
 		if err == nil {
 			break
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"iteration": i,
-		}).WithError(err).Error("Failed to connect to FLND, retrying in 2s")
+		logger.Logger.Error().Err(err).
+			Int("iteration", i).
+			Msg("Failed to connect to FLND, retrying in 2s")
 
 		select {
 		case <-time.After(2 * time.Second):
 		case <-ctx.Done():
-			logger.Logger.WithError(ctx.Err()).Error("Context cancelled during FLND connection retries")
+			logger.Logger.Error().Err(ctx.Err()).Msg("Context cancelled during FLND connection retries")
 			return nil, ctx.Err()
 		}
 	}
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to connect to FLND on final attempt, not attempting further retries")
+		logger.Logger.Error().Err(err).Msg("Failed to connect to FLND on final attempt, not attempting further retries")
 		return nil, err
 	}
 
@@ -96,7 +96,7 @@ func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, ln
 		cancel:         cancel,
 		ctx:            lndCtx,
 		eventPublisher: eventPublisher,
-		logger:         logger.Logger.WithField("frontend", "LND"),
+		logger:         logger.Logger.With().Str("frontend", "LND").Logger(),
 	}
 
 	go lndService.subscribePayments(lndCtx)
@@ -106,7 +106,7 @@ func NewLNDService(ctx context.Context, eventPublisher events.EventPublisher, ln
 	go lndService.subscribeTransactions(lndCtx)
 	go lndService.trackForwardedPayments(lndCtx)
 
-	logger.Logger.WithField("alias", nodeInfo.Alias).Info("Connected to FLND")
+	logger.Logger.Info().Str("alias", nodeInfo.Alias).Msg("Connected to FLND")
 
 	return lndService, nil
 }
@@ -126,7 +126,7 @@ func (svc *LNDService) trackForwardedPayments(ctx context.Context) {
 				EndTime:   uint64(nextTime.Unix()),
 			})
 			if err != nil {
-				logger.Logger.WithError(err).Error("failed to read forwarding history")
+				logger.Logger.Error().Err(err).Msg("failed to read forwarding history")
 				continue
 			}
 			for _, forwardingEvent := range forwardedPayments.ForwardingEvents {
@@ -153,7 +153,7 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 				NoInflightUpdates: true,
 			})
 			if err != nil {
-				logger.Logger.WithError(err).Error("Error subscribing to payments")
+				logger.Logger.Error().Err(err).Msg("Error subscribing to payments")
 				select {
 				case <-ctx.Done():
 					return
@@ -165,7 +165,7 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 			for {
 				payment, err := paymentStream.Recv()
 				if err != nil {
-					logger.Logger.WithError(err).Error("Failed to receive payment")
+					logger.Logger.Error().Err(err).Msg("Failed to receive payment")
 					select {
 					case <-ctx.Done():
 						return
@@ -176,9 +176,7 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 
 				switch payment.Status {
 				case lnrpc.Payment_FAILED:
-					logger.Logger.WithFields(logrus.Fields{
-						"payment": payment,
-					}).Info("Received payment failed notification")
+					logger.Logger.Info().Interface("payment", payment).Msg("Received payment failed notification")
 
 					transaction, err := lndPaymentToTransaction(payment)
 					if err != nil {
@@ -192,9 +190,7 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 						},
 					})
 				case lnrpc.Payment_SUCCEEDED:
-					logger.Logger.WithFields(logrus.Fields{
-						"payment": payment,
-					}).Info("Received payment sent notification")
+					logger.Logger.Info().Interface("payment", payment).Msg("Received payment sent notification")
 
 					transaction, err := lndPaymentToTransaction(payment)
 					if err != nil {
@@ -220,7 +216,7 @@ func (svc *LNDService) subscribeInvoices(ctx context.Context) {
 		default:
 			invoiceStream, err := svc.client.SubscribeInvoices(ctx, &lnrpc.InvoiceSubscription{})
 			if err != nil {
-				logger.Logger.WithError(err).Error("Error subscribing to invoices")
+				logger.Logger.Error().Err(err).Msg("Error subscribing to invoices")
 				select {
 				case <-ctx.Done():
 					return
@@ -232,7 +228,7 @@ func (svc *LNDService) subscribeInvoices(ctx context.Context) {
 			for {
 				invoice, err := invoiceStream.Recv()
 				if err != nil {
-					logger.Logger.WithError(err).Error("Failed to receive invoice")
+					logger.Logger.Error().Err(err).Msg("Failed to receive invoice")
 					select {
 					case <-ctx.Done():
 						return
@@ -245,9 +241,7 @@ func (svc *LNDService) subscribeInvoices(ctx context.Context) {
 					continue
 				}
 
-				logger.Logger.WithFields(logrus.Fields{
-					"invoice": invoice,
-				}).Info("Received new invoice")
+				logger.Logger.Info().Interface("invoice", invoice).Msg("Received new invoice")
 
 				svc.eventPublisher.Publish(&events.Event{
 					Event:      "nwc_lnclient_payment_received",
@@ -266,7 +260,7 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 		default:
 			channelEvents, err := svc.client.SubscribeChannelEvents(ctx, &lnrpc.ChannelEventSubscription{})
 			if err != nil {
-				logger.Logger.WithError(err).Error("Error subscribing to channel events")
+				logger.Logger.Error().Err(err).Msg("Error subscribing to channel events")
 				select {
 				case <-ctx.Done():
 					return
@@ -278,7 +272,7 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 			for {
 				event, err := channelEvents.Recv()
 				if err != nil {
-					logger.Logger.WithError(err).Error("Failed to receive channel event")
+					logger.Logger.Error().Err(err).Msg("Failed to receive channel event")
 					select {
 					case <-ctx.Done():
 						return
@@ -290,12 +284,12 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 				switch update := event.Channel.(type) {
 				case *lnrpc.ChannelEventUpdate_OpenChannel:
 					channel := update.OpenChannel
-					logger.Logger.WithFields(logrus.Fields{
-						"counterparty_node_id": channel.RemotePubkey,
-						"public":               !channel.Private,
-						"capacity":             channel.Capacity,
-						"is_outbound":          channel.Initiator,
-					}).Info("Channel opened")
+					logger.Logger.Info().
+						Str("counterparty_node_id", channel.RemotePubkey).
+						Bool("public", !channel.Private).
+						Int64("capacity", channel.Capacity).
+						Bool("is_outbound", channel.Initiator).
+						Msg("Channel opened")
 
 					svc.eventPublisher.Publish(&events.Event{
 						Event: "nwc_channel_ready",
@@ -311,10 +305,10 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 					closureReason := update.ClosedChannel.CloseType.String()
 					counterpartyNodeId := update.ClosedChannel.RemotePubkey
 
-					logger.Logger.WithFields(logrus.Fields{
-						"counterparty_node_id": counterpartyNodeId,
-						"reason":               closureReason,
-					}).Info("Channel closed")
+					logger.Logger.Info().
+						Str("counterparty_node_id", counterpartyNodeId).
+						Str("reason", closureReason).
+						Msg("Channel closed")
 
 					svc.eventPublisher.Publish(&events.Event{
 						Event: "nwc_channel_closed",
@@ -339,17 +333,17 @@ func (svc *LNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 		CreationDateStart: uint64(oneWeekAgo),
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to list invoices for open hold invoices subscription")
+		logger.Logger.Error().Err(err).Msg("Failed to list invoices for open hold invoices subscription")
 		return
 	}
 
 	for _, invoice := range listInvoicesResponse.Invoices {
 		if invoice.State == lnrpc.Invoice_OPEN {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
-			logger.Logger.WithFields(logrus.Fields{
-				"paymentHash": paymentHashHex,
-				"addIndex":    invoice.AddIndex,
-			}).Info("Resubscribing to pending hold invoice")
+			logger.Logger.Info().
+				Str("paymentHash", paymentHashHex).
+				Uint64("addIndex", invoice.AddIndex).
+				Msg("Resubscribing to pending hold invoice")
 			go svc.subscribeSingleInvoice(invoice.RHash)
 		}
 	}
@@ -363,9 +357,9 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 	defer cancel() // Ensure cancellation happens on exit
 
 	paymentHashHex := hex.EncodeToString(paymentHashBytes)
-	log := logger.Logger.WithField("paymentHash", paymentHashHex)
+	log := logger.Logger.With().Str("paymentHash", paymentHashHex).Logger()
 
-	log.Info("Starting subscribeSingleInvoice goroutine")
+	log.Info().Msg("Starting subscribeSingleInvoice goroutine")
 
 	subReq := &invoicesrpc.SubscribeSingleInvoiceRequest{
 		RHash: paymentHashBytes,
@@ -373,17 +367,17 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 
 	invoiceStream, err := svc.client.SubscribeSingleInvoice(ctx, subReq)
 	if err != nil {
-		log.WithError(err).Error("SubscribeSingleInvoice call failed")
+		log.Error().Err(err).Msg("SubscribeSingleInvoice call failed")
 		// Goroutine will exit
 		return
 	}
 
-	log.Info("Successfully subscribed to single invoice stream")
+	log.Info().Msg("Successfully subscribed to single invoice stream")
 
 	defer func() {
-		log.Info("Exiting subscribeSingleInvoice goroutine")
+		log.Info().Msg("Exiting subscribeSingleInvoice goroutine")
 		if r := recover(); r != nil {
-			log.WithField("panic", r).Errorf("PANIC recovered in single invoice stream processing")
+			log.Error().Interface("panic", r).Msg("PANIC recovered in single invoice stream processing")
 		}
 	}()
 
@@ -391,24 +385,24 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 		invoice, err := invoiceStream.Recv()
 
 		if err != nil {
-			log.WithError(err).Error("Failed to receive single invoice update from stream")
+			log.Error().Err(err).Msg("Failed to receive single invoice update from stream")
 			return
 		}
 		if ctx.Err() != nil {
-			log.Info("Context cancelled, exiting single invoice subscription loop")
+			log.Info().Msg("Context cancelled, exiting single invoice subscription loop")
 			return
 		}
 
-		log.WithFields(logrus.Fields{
-			"rawState":     invoice.State.String(),
-			"addIndex":     invoice.AddIndex,
-			"settleIndex":  invoice.SettleIndex,
-			"amtPaidMloki": invoice.AmtPaidMsat,
-		}).Info("Raw update received from single invoice stream")
+		log.Info().
+			Str("rawState", invoice.State.String()).
+			Uint64("addIndex", invoice.AddIndex).
+			Uint64("settleIndex", invoice.SettleIndex).
+			Int64("amtPaidMloki", invoice.AmtPaidMsat).
+			Msg("Raw update received from single invoice stream")
 
 		switch invoice.State {
 		case lnrpc.Invoice_ACCEPTED:
-			log.Info("Hold invoice accepted, publishing internal event")
+			log.Info().Msg("Hold invoice accepted, publishing internal event")
 			transaction := lndInvoiceToTransaction(invoice)
 			var minExpiry uint32
 			for _, htlc := range invoice.Htlcs {
@@ -422,7 +416,7 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 				Properties: transaction,
 			})
 		case lnrpc.Invoice_CANCELED:
-			log.Info("Hold invoice canceled, ending subscription")
+			log.Info().Msg("Hold invoice canceled, ending subscription")
 			return // Invoice reached final state, exit goroutine
 		case lnrpc.Invoice_SETTLED:
 			return // Invoice reached final state, exit goroutine
@@ -433,7 +427,7 @@ func (svc *LNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 }
 
 func (svc *LNDService) Shutdown() error {
-	logger.Logger.Info("cancelling FLND context")
+	logger.Logger.Info().Msg("cancelling FLND context")
 	svc.cancel()
 	return nil
 }
@@ -443,9 +437,9 @@ func (svc *LNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclient
 
 	paymentRequest, err := decodepay.Decodepay(payReq)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"bolt11": payReq,
-		}).WithError(err).Error("Failed to decode bolt11 invoice")
+		logger.Logger.Error().Err(err).
+			Str("bolt11", payReq).
+			Msg("Failed to decode bolt11 invoice")
 		return nil, err
 	}
 
@@ -465,27 +459,27 @@ func (svc *LNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclient
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendRequest)
 	if err != nil {
-		logger.Logger.WithField("bolt11", payReq).WithError(err).Error("SendPayment failed")
+		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("SendPayment failed")
 		return nil, err
 	}
 
 	resp, err := svc.getPaymentResult(payStream)
 	if err != nil {
-		logger.Logger.WithField("bolt11", payReq).WithError(err).Error("Couldn't get response from paystream")
+		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("Couldn't get response from paystream")
 		return nil, err
 	}
 
 	if resp.Status != lnrpc.Payment_SUCCEEDED {
 		failureReasonMessage := resp.FailureReason.String()
-		logger.Logger.WithFields(logrus.Fields{
-			"bolt11": payReq,
-			"reason": failureReasonMessage,
-		}).Error("Payment not successful")
+		logger.Logger.Error().
+			Str("bolt11", payReq).
+			Str("reason", failureReasonMessage).
+			Msg("Payment not successful")
 		return nil, errors.New(failureReasonMessage)
 	}
 
 	if resp.PaymentPreimage == "" {
-		logger.Logger.WithField("bolt11", payReq).Error("No payment preimage in response")
+		logger.Logger.Error().Str("bolt11", payReq).Msg("No payment preimage in response")
 		return nil, errors.New("no preimage in response")
 	}
 
@@ -498,18 +492,18 @@ func (svc *LNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclient
 func (svc *LNDService) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
 	destBytes, err := hex.DecodeString(destination)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"payee_pubkey": destination,
-			"preimage":     preimage,
-		}).WithError(err).Error("Failed to decode payee pubkey")
+		logger.Logger.Error().Err(err).
+			Str("payee_pubkey", destination).
+			Str("preimage", preimage).
+			Msg("Failed to decode payee pubkey")
 		return nil, err
 	}
 	preImageBytes, err := hex.DecodeString(preimage)
 	if err != nil || len(preImageBytes) != 32 {
-		logger.Logger.WithFields(logrus.Fields{
-			"payee_pubkey": destination,
-			"preimage":     preimage,
-		}).WithError(err).Error("Invalid preimage")
+		logger.Logger.Error().Err(err).
+			Str("payee_pubkey", destination).
+			Str("preimage", preimage).
+			Msg("Invalid preimage")
 		return nil, err
 	}
 
@@ -522,10 +516,10 @@ func (svc *LNDService) SendKeysend(amount uint64, destination string, custom_rec
 	for _, record := range custom_records {
 		decodedValue, err := hex.DecodeString(record.Value)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"payment_hash": paymentHash,
-				"preimage":     preimage,
-			}).WithError(err).Error("Failed to decode custom records")
+			logger.Logger.Error().Err(err).
+				Str("payment_hash", paymentHash).
+				Str("preimage", preimage).
+				Msg("Failed to decode custom records")
 			return nil, err
 		}
 		destCustomRecords[record.Type] = decodedValue
@@ -547,43 +541,43 @@ func (svc *LNDService) SendKeysend(amount uint64, destination string, custom_rec
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-			"preimage":     preimage,
-		}).WithError(err).Error("Failed to make keysend payment")
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Failed to make keysend payment")
 		return nil, err
 	}
 
 	resp, err := svc.getPaymentResult(payStream)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-			"preimage":     preimage,
-		}).WithError(err).Error("Couldn't get response from paystream")
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Couldn't get response from paystream")
 		return nil, err
 	}
 
 	if resp.Status != lnrpc.Payment_SUCCEEDED {
 		failureReasonMessage := resp.FailureReason.String()
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-			"preimage":     preimage,
-			"reason":       failureReasonMessage,
-		}).Error("Keysend not successful")
+		logger.Logger.Error().
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Str("reason", failureReasonMessage).
+			Msg("Keysend not successful")
 		return nil, errors.New(failureReasonMessage)
 	}
 
 	if resp.PaymentPreimage != preimage {
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-			"preimage":     preimage,
-		}).Error("Preimage in keysend response does not match")
+		logger.Logger.Error().
+			Str("payment_hash", paymentHash).
+			Str("preimage", preimage).
+			Msg("Preimage in keysend response does not match")
 		return nil, errors.New("preimage in keysend response does not match")
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"payment_hash": paymentHash,
-		"preimage":     preimage,
-	}).Info("Keysend payment successful")
+	logger.Logger.Info().
+		Str("payment_hash", paymentHash).
+		Str("preimage", preimage).
+		Msg("Keysend payment successful")
 
 	return &lnclient.PayKeysendResponse{
 		Fee: uint64(resp.FeeMsat),
@@ -612,9 +606,9 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 			if err == nil {
 				err = errors.New("description hash must be 32 bytes hex")
 			}
-			logger.Logger.WithFields(logrus.Fields{
-				"descriptionHash": descriptionHash,
-			}).WithError(err).Error("Invalid description hash")
+			logger.Logger.Error().Err(err).
+				Str("descriptionHash", descriptionHash).
+				Msg("Invalid description hash")
 			return nil, err
 		}
 	}
@@ -642,7 +636,7 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 		// Parse SCID
 		scid, err := strconv.ParseUint(*lspJitChannelSCID, 10, 64)
 		if err != nil {
-			logger.Logger.WithField("scid", *lspJitChannelSCID).WithError(err).Error("Invalid LSP JIT Channel SCID")
+			logger.Logger.Error().Err(err).Str("scid", *lspJitChannelSCID).Msg("Invalid LSP JIT Channel SCID")
 			return nil, err
 		}
 
@@ -680,9 +674,9 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 				ChanId: channel.ChanId,
 			})
 			if err != nil {
-				logger.Logger.WithFields(logrus.Fields{
-					"channel_id": channel.ChanId,
-				}).WithError(err).Error("Unable to get channel info")
+				logger.Logger.Error().Err(err).
+					Uint64("channel_id", channel.ChanId).
+					Msg("Unable to get channel info")
 				continue
 			}
 
@@ -694,9 +688,9 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 			}
 
 			if remotePolicy == nil {
-				logger.Logger.WithFields(logrus.Fields{
-					"channel_id": channel.ChanId,
-				}).WithError(err).Error("Remote channel policy does not exist")
+				logger.Logger.Error().Err(err).
+					Uint64("channel_id", channel.ChanId).
+					Msg("Remote channel policy does not exist")
 				continue
 			}
 
@@ -741,13 +735,13 @@ func (svc *LNDService) MakeInvoice(ctx context.Context, amount int64, descriptio
 
 	resp, err := svc.client.AddInvoice(ctx, addInvoiceRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to create invoice")
+		logger.Logger.Error().Err(err).Msg("Failed to create invoice")
 		return nil, err
 	}
 
 	inv, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: resp.RHash})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to lookup invoice")
+		logger.Logger.Error().Err(err).Msg("Failed to lookup invoice")
 		return nil, err
 	}
 
@@ -765,9 +759,9 @@ func (svc *LNDService) MakeHoldInvoice(ctx context.Context, amount int64, descri
 			if err == nil {
 				err = errors.New("description hash must be 32 bytes hex")
 			}
-			logger.Logger.WithFields(logrus.Fields{
-				"descriptionHash": descriptionHash,
-			}).WithError(err).Error("Invalid description hash")
+			logger.Logger.Error().Err(err).
+				Str("descriptionHash", descriptionHash).
+				Msg("Invalid description hash")
 			return nil, err
 		}
 	}
@@ -777,9 +771,9 @@ func (svc *LNDService) MakeHoldInvoice(ctx context.Context, amount int64, descri
 		if err == nil {
 			err = errors.New("payment hash must be 32 bytes hex")
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"paymentHash": paymentHash,
-		}).WithError(err).Error("Invalid payment hash")
+		logger.Logger.Error().Err(err).
+			Str("paymentHash", paymentHash).
+			Msg("Invalid payment hash")
 		return nil, err
 	}
 
@@ -810,17 +804,17 @@ func (svc *LNDService) MakeHoldInvoice(ctx context.Context, amount int64, descri
 
 	_, err = svc.client.AddHoldInvoice(ctx, addInvoiceRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to create hold invoice")
+		logger.Logger.Error().Err(err).Msg("Failed to create hold invoice")
 		return nil, err
 	}
 
 	// Start subscribing to updates for this specific hold invoice in a separate goroutine
 	go svc.subscribeSingleInvoice(paymentHashBytes)
-	logger.Logger.WithField("paymentHash", paymentHash).Info("Launched single invoice subscription goroutine")
+	logger.Logger.Info().Str("paymentHash", paymentHash).Msg("Launched single invoice subscription goroutine")
 
 	inv, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: paymentHashBytes})
 	if err != nil {
-		logger.Logger.WithField("paymentHash", paymentHash).WithError(err).Error("Failed to lookup hold invoice after creation")
+		logger.Logger.Error().Err(err).Str("paymentHash", paymentHash).Msg("Failed to lookup hold invoice after creation")
 		return nil, err
 	}
 
@@ -834,9 +828,9 @@ func (svc *LNDService) SettleHoldInvoice(ctx context.Context, preimage string) (
 		if err == nil {
 			err = errors.New("preimage must be 32 bytes hex")
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"preimage": preimage,
-		}).WithError(err).Error("Invalid preimage")
+		logger.Logger.Error().Err(err).
+			Str("preimage", preimage).
+			Msg("Invalid preimage")
 		return err
 	}
 
@@ -844,9 +838,9 @@ func (svc *LNDService) SettleHoldInvoice(ctx context.Context, preimage string) (
 		Preimage: preimageBytes,
 	})
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"preimage": preimage,
-		}).WithError(err).Error("Failed to settle hold invoice")
+		logger.Logger.Error().Err(err).
+			Str("preimage", preimage).
+			Msg("Failed to settle hold invoice")
 		return err
 	}
 	return nil
@@ -858,9 +852,9 @@ func (svc *LNDService) CancelHoldInvoice(ctx context.Context, paymentHash string
 		if err == nil {
 			err = errors.New("payment hash must be 32 bytes hex")
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"paymentHash": paymentHash,
-		}).WithError(err).Error("Invalid payment hash")
+		logger.Logger.Error().Err(err).
+			Str("paymentHash", paymentHash).
+			Msg("Invalid payment hash")
 		return err
 	}
 
@@ -868,9 +862,9 @@ func (svc *LNDService) CancelHoldInvoice(ctx context.Context, paymentHash string
 		PaymentHash: paymentHashBytes,
 	})
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"paymentHash": paymentHash,
-		}).WithError(err).Error("Failed to cancel hold invoice")
+		logger.Logger.Error().Err(err).
+			Str("paymentHash", paymentHash).
+			Msg("Failed to cancel hold invoice")
 		return err
 	}
 	return nil
@@ -882,17 +876,17 @@ func (svc *LNDService) LookupInvoice(ctx context.Context, paymentHash string) (t
 		if err == nil {
 			err = errors.New("payment hash must be 32 bytes hex")
 		}
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-		}).WithError(err).Error("Invalid payment hash")
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Invalid payment hash")
 		return nil, err
 	}
 
 	lndInvoice, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: paymentHashBytes})
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"payment_hash": paymentHash,
-		}).WithError(err).Error("Failed to lookup invoice")
+		logger.Logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
+			Msg("Failed to lookup invoice")
 		return nil, err
 	}
 
@@ -907,7 +901,7 @@ func (svc *LNDService) ListTransactions(ctx context.Context, from, until, limit,
 	if invoiceType == "" || invoiceType == "incoming" {
 		incomingResp, err := svc.client.ListInvoices(ctx, &lnrpc.ListInvoiceRequest{Reversed: true, NumMaxInvoices: limit, IndexOffset: offset})
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to fetch incoming invoices")
+			logger.Logger.Error().Err(err).Msg("Failed to fetch incoming invoices")
 			return nil, err
 		}
 		invoices = incomingResp.Invoices
@@ -927,7 +921,7 @@ func (svc *LNDService) ListTransactions(ctx context.Context, from, until, limit,
 		// Not just pending but failed payments will also be included because of IncludeIncomplete
 		outgoingResp, err := svc.client.ListPayments(ctx, &lnrpc.ListPaymentsRequest{Reversed: true, MaxPayments: limit, IndexOffset: offset, IncludeIncomplete: unpaid})
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to fetch outgoing invoices")
+			logger.Logger.Error().Err(err).Msg("Failed to fetch outgoing invoices")
 			return nil, err
 		}
 		payments = outgoingResp.Payments
@@ -962,18 +956,18 @@ func (svc *LNDService) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, er
 func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, error) {
 	activeResp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch channels")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
 		return nil, err
 	}
 	pendingResp, err := svc.client.PendingChannels(ctx, &lnrpc.PendingChannelsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch pending channels")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch pending channels")
 		return nil, err
 	}
 
 	nodeInfo, err := svc.client.GetInfo(ctx, &lnrpc.GetInfoRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch node info")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
 		return nil, err
 	}
 
@@ -984,7 +978,7 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 		StartHeight: int32(nodeInfo.BlockHeight - confirmationsRequired),
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch onchain transactions")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch onchain transactions")
 		return nil, err
 	}
 
@@ -1078,7 +1072,7 @@ func (svc *LNDService) parseChannelPoint(channelPointStr string) (*lnrpc.Channel
 	channelPointParts := strings.Split(channelPointStr, ":")
 
 	if len(channelPointParts) != 2 {
-		logger.Logger.WithField("channel_point", channelPointStr).Error("Invalid channel point")
+		logger.Logger.Error().Str("channel_point", channelPointStr).Msg("Invalid channel point")
 		return nil, errors.New("invalid channel point")
 	}
 
@@ -1089,7 +1083,7 @@ func (svc *LNDService) parseChannelPoint(channelPointStr string) (*lnrpc.Channel
 
 	outputIndex, err := strconv.ParseUint(channelPointParts[1], 10, 32)
 	if err != nil {
-		logger.Logger.WithField("channel_point", channelPointStr).WithError(err).Error("Failed to parse channel point")
+		logger.Logger.Error().Err(err).Str("channel_point", channelPointStr).Msg("Failed to parse channel point")
 		return nil, err
 	}
 	channelPoint.OutputIndex = uint32(outputIndex)
@@ -1107,25 +1101,25 @@ func (svc *LNDService) GetNodeConnectionInfo(ctx context.Context) (nodeConnectio
 		PubKey: pubkey,
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch node info")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
 		return nodeConnectionInfo, nil
 	}
 
 	addresses := nodeInfo.Node.Addresses
 	if len(addresses) < 1 {
-		logger.Logger.Warn("No available listening addresses")
+		logger.Logger.Warn().Msg("No available listening addresses")
 		return nodeConnectionInfo, nil
 	}
 
 	firstAddress := addresses[0]
 	parts := strings.Split(firstAddress.Addr, ":")
 	if len(parts) != 2 {
-		logger.Logger.Error("Failed to fetch node address")
+		logger.Logger.Error().Msg("Failed to fetch node address")
 		return nodeConnectionInfo, nil
 	}
 	port, err := strconv.Atoi(parts[1])
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch node port")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node port")
 		return nodeConnectionInfo, nil
 	}
 
@@ -1170,7 +1164,7 @@ func (svc *LNDService) OpenChannel(ctx context.Context, openChannelRequest *lncl
 		return nil, errors.New("node is not peered yet")
 	}
 
-	logger.Logger.WithField("peer_id", foundPeer.NodeId).Info("Opening channel")
+	logger.Logger.Info().Str("peer_id", foundPeer.NodeId).Msg("Opening channel")
 
 	nodePub, err := hex.DecodeString(openChannelRequest.Pubkey)
 	if err != nil {
@@ -1185,7 +1179,7 @@ func (svc *LNDService) OpenChannel(ctx context.Context, openChannelRequest *lncl
 		BaseFee: 100_000_000,
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to open channel")
+		logger.Logger.Error().Err(err).Msg("Failed to open channel")
 		return nil, fmt.Errorf("failed to open channel with %s: %s", foundPeer.NodeId, err)
 	}
 
@@ -1202,13 +1196,13 @@ func (svc *LNDService) OpenChannel(ctx context.Context, openChannelRequest *lncl
 }
 
 func (svc *LNDService) UpdateChannel(ctx context.Context, updateChannelRequest *lnclient.UpdateChannelRequest) error {
-	logger.Logger.WithFields(logrus.Fields{
-		"request": updateChannelRequest,
-	}).Info("Updating Channel")
+	logger.Logger.Info().
+		Interface("request", updateChannelRequest).
+		Msg("Updating Channel")
 
 	chanId64, err := strconv.ParseUint(updateChannelRequest.ChannelId, 10, 64)
 	if err != nil {
-		logger.Logger.WithField("request", updateChannelRequest).Error("Failed to parse channel id")
+		logger.Logger.Error().Interface("request", updateChannelRequest).Msg("Failed to parse channel id")
 		return err
 	}
 
@@ -1216,7 +1210,7 @@ func (svc *LNDService) UpdateChannel(ctx context.Context, updateChannelRequest *
 		ChanId: chanId64,
 	})
 	if err != nil {
-		logger.Logger.WithField("request", updateChannelRequest).Error("Failed to fetch channel info")
+		logger.Logger.Error().Interface("request", updateChannelRequest).Msg("Failed to fetch channel info")
 		return err
 	}
 
@@ -1242,7 +1236,7 @@ func (svc *LNDService) UpdateChannel(ctx context.Context, updateChannelRequest *
 		MaxHtlcMsat:   nodePolicy.MaxHtlcMsat,
 	})
 	if err != nil {
-		logger.Logger.WithField("request", updateChannelRequest).WithError(err).Error("Failed to update channel")
+		logger.Logger.Error().Err(err).Interface("request", updateChannelRequest).Msg("Failed to update channel")
 		return err
 	}
 
@@ -1250,13 +1244,13 @@ func (svc *LNDService) UpdateChannel(ctx context.Context, updateChannelRequest *
 }
 
 func (svc *LNDService) CloseChannel(ctx context.Context, closeChannelRequest *lnclient.CloseChannelRequest) (*lnclient.CloseChannelResponse, error) {
-	logger.Logger.WithFields(logrus.Fields{
-		"request": closeChannelRequest,
-	}).Info("Closing Channel")
+	logger.Logger.Info().
+		Interface("request", closeChannelRequest).
+		Msg("Closing Channel")
 
 	resp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch channels")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
 		return nil, err
 	}
 
@@ -1270,7 +1264,7 @@ func (svc *LNDService) CloseChannel(ctx context.Context, closeChannelRequest *ln
 	}
 
 	if foundChannel == nil {
-		logger.Logger.WithField("request", closeChannelRequest).Error("Failed to find channel to close")
+		logger.Logger.Error().Interface("request", closeChannelRequest).Msg("Failed to find channel to close")
 		return nil, errors.New("no channel exists with the given id")
 	}
 
@@ -1284,7 +1278,7 @@ func (svc *LNDService) CloseChannel(ctx context.Context, closeChannelRequest *ln
 		Force:        closeChannelRequest.Force,
 	})
 	if err != nil {
-		logger.Logger.WithField("request", closeChannelRequest).WithError(err).Error("Failed to close channel")
+		logger.Logger.Error().Err(err).Interface("request", closeChannelRequest).Msg("Failed to close channel")
 		return nil, err
 	}
 
@@ -1301,9 +1295,9 @@ func (svc *LNDService) CloseChannel(ctx context.Context, closeChannelRequest *ln
 			if err != nil {
 				return nil, err
 			}
-			logger.Logger.WithFields(logrus.Fields{
-				"closingTxid": txid.String(),
-			}).Info("Channel close pending")
+			logger.Logger.Info().
+				Str("closingTxid", txid.String()).
+				Msg("Channel close pending")
 			// TODO: return the closing tx id or fire an event
 			return &lnclient.CloseChannelResponse{}, nil
 		}
@@ -1315,7 +1309,7 @@ func (svc *LNDService) GetNewOnchainAddress(ctx context.Context) (string, error)
 		Type: lnrpc.AddressType_WITNESS_PUBKEY_HASH,
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to generate onchain address")
+		logger.Logger.Error().Err(err).Msg("Failed to generate onchain address")
 		return "", err
 	}
 	return resp.Address, nil
@@ -1324,12 +1318,12 @@ func (svc *LNDService) GetNewOnchainAddress(ctx context.Context) (string, error)
 func (svc *LNDService) GetOnchainBalance(ctx context.Context) (*lnclient.OnchainBalanceResponse, error) {
 	balances, err := svc.client.WalletBalance(ctx, &lnrpc.WalletBalanceRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch wallet balance")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch wallet balance")
 		return nil, err
 	}
 	pendingChannels, err := svc.client.PendingChannels(ctx, &lnrpc.PendingChannelsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to list pending channels")
+		logger.Logger.Error().Err(err).Msg("Failed to list pending channels")
 		return nil, err
 	}
 	pendingBalancesFromChannelClosures := uint64(0)
@@ -1349,9 +1343,9 @@ func (svc *LNDService) GetOnchainBalance(ctx context.Context) (*lnclient.Onchain
 			})
 		}
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"balances": balances,
-	}).Debug("Listed Balances")
+	logger.Logger.Debug().
+		Interface("balances", balances).
+		Msg("Listed Balances")
 	return &lnclient.OnchainBalanceResponse{
 		Spendable:                          int64(balances.ConfirmedBalance),
 		Total:                              int64(balances.TotalBalance),
@@ -1381,7 +1375,7 @@ func (svc *LNDService) RedeemOnchainFunds(ctx context.Context, toAddress string,
 
 	resp, err := svc.client.SendCoins(ctx, sendCoinsRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to send onchain funds")
+		logger.Logger.Error().Err(err).Msg("Failed to send onchain funds")
 		return "", err
 	}
 	return resp.Txid, nil
@@ -1394,7 +1388,7 @@ func (svc *LNDService) ResetRouter(key string) error {
 func (svc *LNDService) SignMessage(ctx context.Context, message string) (string, error) {
 	resp, err := svc.client.SignMessage(ctx, &lnrpc.SignMessageRequest{Msg: []byte(message)})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to sign message")
+		logger.Logger.Error().Err(err).Msg("Failed to sign message")
 		return "", err
 	}
 
@@ -1412,7 +1406,7 @@ func (svc *LNDService) SendSpontaneousPaymentProbes(ctx context.Context, amountM
 func (svc *LNDService) ListPeers(ctx context.Context) ([]lnclient.PeerDetails, error) {
 	resp, err := svc.client.ListPeers(ctx, &lnrpc.ListPeersRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to list peers")
+		logger.Logger.Error().Err(err).Msg("Failed to list peers")
 		return nil, err
 	}
 	ret := make([]lnclient.PeerDetails, 0, len(resp.Peers))
@@ -1430,7 +1424,7 @@ func (svc *LNDService) ListPeers(ctx context.Context) ([]lnclient.PeerDetails, e
 func (svc *LNDService) GetNetworkGraph(ctx context.Context, nodeIds []string) (lnclient.NetworkGraphResponse, error) {
 	graph, err := svc.client.DescribeGraph(ctx, &lnrpc.ChannelGraphRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch network graph")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch network graph")
 		return "", err
 	}
 
@@ -1467,7 +1461,7 @@ func (svc *LNDService) GetNetworkGraph(ctx context.Context, nodeIds []string) (l
 func (svc *LNDService) GetLogOutput(ctx context.Context, maxLen int) ([]byte, error) {
 	resp, err := svc.client.GetDebugInfo(ctx, &lnrpc.GetDebugInfoRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch debug info")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch debug info")
 		return nil, err
 	}
 	jsonBytes, err := json.MarshalIndent(resp.Log, "", "")
@@ -1500,7 +1494,7 @@ func (svc *LNDService) GetBalances(ctx context.Context, includeInactiveChannels 
 
 	resp, err := svc.client.ListChannels(ctx, &lnrpc.ListChannelsRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch channels")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch channels")
 		return nil, err
 	}
 
@@ -1552,12 +1546,12 @@ func (svc *LNDService) GetNodeStatus(ctx context.Context) (nodeStatus *lnclient.
 		PubKey: svc.GetPubkey(),
 	})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch node info")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
 		return nil, err
 	}
 	state, err := svc.client.GetState(ctx, &lnrpc.GetStateRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch wallet state")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch wallet state")
 		return nil, err
 	}
 	return &lnclient.NodeStatus{
@@ -1573,7 +1567,7 @@ func (svc *LNDService) GetNodeStatus(ctx context.Context) (nodeStatus *lnclient.
 func (svc *LNDService) DisconnectPeer(ctx context.Context, peerId string) error {
 	_, err := svc.client.DisconnectPeer(ctx, &lnrpc.DisconnectPeerRequest{PubKey: peerId})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to disconnect peer")
+		logger.Logger.Error().Err(err).Msg("Failed to disconnect peer")
 		return err
 	}
 
@@ -1609,10 +1603,14 @@ func (svc *LNDService) GetPubkey() string {
 	return svc.nodeInfo.Pubkey
 }
 
+func (svc *LNDService) SetNodeAlias(ctx context.Context, alias string) error {
+	return errors.New("SetNodeAlias not implemented for FLND")
+}
+
 func fetchNodeInfo(ctx context.Context, client *wrapper.LNDWrapper) (*lnclient.NodeInfo, error) {
 	resp, err := client.GetInfo(ctx, &lnrpc.GetInfoRequest{})
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch node info")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
 		return nil, err
 	}
 	network := resp.Chains[0].Network
@@ -1636,9 +1634,9 @@ func lndPaymentToTransaction(payment *lnrpc.Payment) (*lnclient.Transaction, err
 	if payment.PaymentRequest != "" {
 		paymentRequest, err := decodepay.Decodepay(strings.ToLower(payment.PaymentRequest))
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"bolt11": payment.PaymentRequest,
-			}).WithError(err).Error("Failed to decode bolt11 invoice")
+			logger.Logger.Error().Err(err).
+				Str("bolt11", payment.PaymentRequest).
+				Msg("Failed to decode bolt11 invoice")
 			return nil, err
 		}
 		expiresAtUnix := time.UnixMilli(int64(paymentRequest.CreatedAt) * 1000).Add(time.Duration(paymentRequest.Expiry) * time.Second).Unix()
@@ -1723,7 +1721,7 @@ func (svc *LNDService) ExecuteCustomNodeCommand(ctx context.Context, command *ln
 func (svc *LNDService) subscribeTransactions(ctx context.Context) {
 	stream, err := svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
 	if err != nil {
-		svc.logger.WithError(err).Error("Failed to subscribe to transactions")
+		svc.logger.Error().Err(err).Msg("Failed to subscribe to transactions")
 		return
 	}
 
@@ -1736,7 +1734,7 @@ func (svc *LNDService) subscribeTransactions(ctx context.Context) {
 				var err error
 				stream, err = svc.client.SubscribeTransactions(ctx, &lnrpc.GetTransactionsRequest{})
 				if err != nil {
-					svc.logger.WithError(err).Error("Failed to subscribe to transactions, retrying in 5s")
+					svc.logger.Error().Err(err).Msg("Failed to subscribe to transactions, retrying in 5s")
 					select {
 					case <-ctx.Done():
 						return
@@ -1751,7 +1749,7 @@ func (svc *LNDService) subscribeTransactions(ctx context.Context) {
 				if errors.Is(ctx.Err(), context.Canceled) {
 					return
 				}
-				svc.logger.WithError(err).Error("Failed to receive transaction update")
+				svc.logger.Error().Err(err).Msg("Failed to receive transaction update")
 				stream = nil                // Mark stream as invalid so it gets re-created in next iteration
 				time.Sleep(1 * time.Second) // Small backoff before retrying connection
 				continue
@@ -1761,7 +1759,7 @@ func (svc *LNDService) subscribeTransactions(ctx context.Context) {
 			svc.txCacheMtx.Lock()
 			svc.txCacheValid = false
 			svc.txCacheMtx.Unlock()
-			svc.logger.Info("Invalidated on-chain transaction cache due to new event")
+			svc.logger.Info().Msg("Invalidated on-chain transaction cache due to new event")
 		}
 	}
 }
@@ -1843,7 +1841,7 @@ func (svc *LNDService) ListOnchainTransactions(ctx context.Context, from, until,
 		// Note: This might block the first request after invalidation, but ensures consistency.
 		// For better UX, could do it in background if stale data is acceptable, but user wants newest.
 		if err := svc.refreshTransactionCache(ctx); err != nil {
-			logger.Logger.WithError(err).Error("Failed to refresh onchain transaction cache")
+			logger.Logger.Error().Err(err).Msg("Failed to refresh onchain transaction cache")
 			return nil, err
 		}
 	}
@@ -1881,7 +1879,7 @@ func (svc *LNDService) ListOnchainTransactions(ctx context.Context, from, until,
 func (svc *LNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
 	stream, err := svc.client.ChannelAcceptor(ctx)
 	if err != nil {
-		svc.logger.WithError(err).Error("Failed to subscribe to channel acceptor")
+		svc.logger.Error().Err(err).Msg("Failed to subscribe to channel acceptor")
 		return nil, nil, err
 	}
 
@@ -1897,7 +1895,7 @@ func (svc *LNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnc
 			if err != nil {
 				// Don't log if context canceled
 				if ctx.Err() == nil {
-					svc.logger.WithError(err).Error("Channel acceptor stream failed")
+					svc.logger.Error().Err(err).Msg("Channel acceptor stream failed")
 				}
 				return
 			}
@@ -1940,12 +1938,12 @@ func (svc *LNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnc
 			}
 		}
 
-		logger.Logger.WithFields(logrus.Fields{
-			"id":             id,
-			"accept":         accept,
-			"minAcceptDepth": response.MinAcceptDepth,
-			"zeroConf":       response.ZeroConf,
-		}).Info("Sending ChannelAcceptResponse")
+		logger.Logger.Info().
+			Str("id", id).
+			Bool("accept", accept).
+			Uint32("minAcceptDepth", response.MinAcceptDepth).
+			Bool("zeroConf", response.ZeroConf).
+			Msg("Sending ChannelAcceptResponse")
 
 		return stream.Send(response)
 	}

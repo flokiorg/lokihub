@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type cancelHoldInvoiceParams struct {
@@ -22,19 +21,19 @@ func (controller *nip47Controller) HandleCancelHoldInvoiceEvent(ctx context.Cont
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"requestEventId": requestEventId,
-		"appId":          appId,
-		"paymentHash":    cancelHoldInvoiceParams.PaymentHash,
-	}).Info("Canceling hold invoice")
+	logger.Logger.Info().
+		Interface("requestEventId", requestEventId).
+		Interface("appId", appId).
+		Interface("paymentHash", cancelHoldInvoiceParams.PaymentHash).
+		Msg("Canceling hold invoice")
 
 	err := controller.transactionsService.CancelHoldInvoice(ctx, cancelHoldInvoiceParams.PaymentHash, controller.lnClient)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"appId":            appId,
-			"paymentHash":      cancelHoldInvoiceParams.PaymentHash,
-		}).WithError(err).Error("Failed to cancel hold invoice")
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("appId", appId).
+			Interface("paymentHash", cancelHoldInvoiceParams.PaymentHash).
+			Msg("Failed to cancel hold invoice")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

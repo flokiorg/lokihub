@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type signMessageParams struct {
@@ -26,15 +25,15 @@ func (controller *nip47Controller) HandleSignMessageEvent(ctx context.Context, n
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"request_event_id": requestEventId,
-	}).Info("Signing message")
+	logger.Logger.Info().
+		Interface("request_event_id", requestEventId).
+		Msg("Signing message")
 
 	signature, err := controller.lnClient.SignMessage(ctx, signParams.Message)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-		}).WithError(err).Error("Failed to sign message")
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Msg("Failed to sign message")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      mapNip47Error(err),

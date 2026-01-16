@@ -21,22 +21,22 @@ func (s *updateAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 
 	properties, ok := event.Properties.(map[string]interface{})
 	if !ok {
-		logger.Logger.WithField("event", event).Error("Failed to cast event.Properties to map")
+		logger.Logger.Error().Interface("event", event).Msg("Failed to cast event.Properties to map")
 		return
 	}
 	id, ok := properties["id"].(uint)
 	if !ok {
-		logger.Logger.WithField("event", event).Error("Failed to get app id")
+		logger.Logger.Error().Interface("event", event).Msg("Failed to get app id")
 		return
 	}
 	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to calculate app wallet priv key")
+		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet priv key")
 		return
 	}
 	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet pub key")
 		return
 	}
 

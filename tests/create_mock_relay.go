@@ -16,7 +16,7 @@ func NewMockSimplePool() *mockSimplePool {
 }
 
 func (relay *mockSimplePool) PublishMany(ctx context.Context, relayUrls []string, event nostr.Event) chan nostr.PublishResult {
-	logger.Logger.WithField("event", event).Info("Mock Publishing event")
+	logger.Logger.Info().Interface("event", event).Msg("Mock Publishing event")
 	relay.PublishedEvents = append(relay.PublishedEvents, &event)
 
 	channel := make(chan nostr.PublishResult)
@@ -35,6 +35,6 @@ func (relay *mockSimplePool) QuerySingle(
 	filter nostr.Filter,
 	opts ...nostr.SubscriptionOption,
 ) *nostr.RelayEvent {
-	logger.Logger.Error("Mock pool QuerySingle is not supported yet")
+	logger.Logger.Error().Msg("Mock pool QuerySingle is not supported yet")
 	return nil
 }

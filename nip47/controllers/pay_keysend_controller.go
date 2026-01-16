@@ -8,7 +8,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type payKeysendParams struct {
@@ -29,19 +28,19 @@ func (controller *nip47Controller) HandlePayKeysendEvent(ctx context.Context, ni
 }
 
 func (controller *nip47Controller) payKeysend(ctx context.Context, payKeysendParams *payKeysendParams, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
-	logger.Logger.WithFields(logrus.Fields{
-		"request_event_id": requestEventId,
-		"appId":            app.ID,
-		"senderPubkey":     payKeysendParams.Pubkey,
-	}).Info("Sending keysend payment")
+	logger.Logger.Info().
+		Interface("request_event_id", requestEventId).
+		Interface("appId", app.ID).
+		Interface("senderPubkey", payKeysendParams.Pubkey).
+		Msg("Sending keysend payment")
 
 	transaction, err := controller.transactionsService.SendKeysend(payKeysendParams.Amount, payKeysendParams.Pubkey, payKeysendParams.TLVRecords, payKeysendParams.Preimage, controller.lnClient, &app.ID, &requestEventId)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"appId":            app.ID,
-			"recipientPubkey":  payKeysendParams.Pubkey,
-		}).Infof("Failed to send keysend payment: %v", err)
+		logger.Logger.Info().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("appId", app.ID).
+			Interface("recipientPubkey", payKeysendParams.Pubkey).
+			Msg("Failed to send keysend payment")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      mapNip47Error(err),

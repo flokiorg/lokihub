@@ -9,7 +9,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type getInfoResponse struct {
@@ -41,15 +40,15 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 	// so that get_info does not require its own scope. This would require a change in the NIP-47 spec.
 	hasPermission, _, _ := controller.permissionsService.HasPermission(app, constants.GET_INFO_SCOPE)
 	if hasPermission {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-		}).Debug("Getting info")
+		logger.Logger.Debug().
+			Interface("request_event_id", requestEventId).
+			Msg("Getting info")
 
 		info, err := controller.lnClient.GetInfo(ctx)
 		if err != nil {
-			logger.Logger.WithFields(logrus.Fields{
-				"request_event_id": requestEventId,
-			}).Infof("Failed to fetch node info: %v", err)
+			logger.Logger.Info().Err(err).
+				Interface("request_event_id", requestEventId).
+				Msg("Failed to fetch node info")
 
 			publishResponse(&models.Response{
 				ResultType: nip47Request.Method,
@@ -76,10 +75,10 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 			if app.Metadata != nil {
 				jsonErr := json.Unmarshal(app.Metadata, &metadata)
 				if jsonErr != nil {
-					logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-						"id":       app.ID,
-						"metadata": app.Metadata,
-					}).Error("Failed to deserialize app metadata")
+					logger.Logger.Error().Err(jsonErr).
+						Uint("id", app.ID).
+						Interface("metadata", app.Metadata).
+						Msg("Failed to deserialize app metadata")
 				}
 			}
 			if metadata["id"] == nil {

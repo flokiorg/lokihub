@@ -13,11 +13,10 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/labstack/echo/v4"
-	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	log.Info("Lokihub Starting in HTTP mode")
+	logger.Logger.Info().Msg("Lokihub Starting in HTTP mode")
 
 	// Create a channel to receive OS signals.
 	osSignalChannel := make(chan os.Signal, 1)
@@ -31,10 +30,10 @@ func main() {
 		for {
 			// wait for exit signal
 			signal = <-osSignalChannel
-			logger.Logger.WithField("signal", signal).Info("Received OS signal")
+			logger.Logger.Info().Interface("signal", signal).Msg("Received OS signal")
 
 			if signal == syscall.SIGPIPE {
-				logger.Logger.WithField("signal", signal).Warn("Ignoring SIGPIPE signal")
+				logger.Logger.Warn().Interface("signal", signal).Msg("Ignoring SIGPIPE signal")
 				continue
 			}
 
@@ -45,7 +44,7 @@ func main() {
 
 	svc, err := service.NewService(ctx)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to create service")
+		logger.Logger.Fatal().Err(err).Msg("Failed to create service")
 		return
 	}
 
@@ -57,23 +56,23 @@ func main() {
 	//start Echo server
 	go func() {
 		if err := e.Start(fmt.Sprintf(":%v", svc.GetConfig().GetEnv().Port)); err != nil && err != nethttp.ErrServerClosed {
-			logger.Logger.WithError(err).Error("echo server failed to start")
+			logger.Logger.Error().Err(err).Msg("echo server failed to start")
 			cancel()
 		}
 	}()
 
 	//handle graceful shutdown
 	<-ctx.Done()
-	logger.Logger.WithField("signal", signal).Info("Context Done")
-	logger.Logger.Info("Shutting down echo server...")
+	logger.Logger.Info().Interface("signal", signal).Msg("Context Done")
+	logger.Logger.Info().Msg("Shutting down echo server...")
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err = e.Shutdown(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to shutdown echo server")
+		logger.Logger.Error().Err(err).Msg("Failed to shutdown echo server")
 	}
-	logger.Logger.Info("Echo server exited")
+	logger.Logger.Info().Msg("Echo server exited")
 	svc.Shutdown()
-	logger.Logger.Info("Service exited")
-	logger.Logger.Info("Lokihub needs to stay online to send and receive transactions. ")
+	logger.Logger.Info().Msg("Service exited")
+	logger.Logger.Info().Msg("Lokihub needs to stay online to send and receive transactions. ")
 }

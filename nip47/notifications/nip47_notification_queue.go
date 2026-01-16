@@ -29,7 +29,7 @@ func (q *nip47NotificationQueue) AddToQueue(event *events.Event) {
 		// successfully sent to channel
 	default:
 		// channel full
-		logger.Logger.WithField("event", event).Error("NIP47NotificationQueue channel full. Discarding value")
+		logger.Logger.Error().Interface("event", event).Msg("NIP47NotificationQueue channel full. Discarding value")
 	}
 }
 

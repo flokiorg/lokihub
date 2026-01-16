@@ -24,7 +24,7 @@ func (c *paymentForwardedConsumer) ConsumeEvent(ctx context.Context, event *even
 
 	properties, ok := event.Properties.(*lnclient.PaymentForwardedEventProperties)
 	if !ok {
-		logger.Logger.WithField("event", event).Error("Failed to cast event.Properties to payment forwarded event properties")
+		logger.Logger.Error().Interface("event", event).Msg("Failed to cast event.Properties to payment forwarded event properties")
 		return
 	}
 	forward := &db.Forward{
@@ -33,6 +33,6 @@ func (c *paymentForwardedConsumer) ConsumeEvent(ctx context.Context, event *even
 	}
 	err := c.db.Create(forward).Error
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to save forward to db")
+		logger.Logger.Error().Err(err).Msg("failed to save forward to db")
 	}
 }

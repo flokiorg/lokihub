@@ -10,7 +10,6 @@ import (
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type createConnectionParams struct {
@@ -38,10 +37,10 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"request_event_id": requestEventId,
-		"params":           params,
-	}).Info("creating app")
+	logger.Logger.Info().
+		Interface("request_event_id", requestEventId).
+		Interface("params", params).
+		Msg("creating app")
 
 	var expiresAt *time.Time
 	if params.ExpiresAt != nil {
@@ -111,9 +110,9 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 
 	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, params.Isolated, params.Metadata)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-		}).WithError(err).Error("Failed to create app")
+		logger.Logger.Error().Err(err).
+			Interface("request_event_id", requestEventId).
+			Msg("Failed to create app")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      mapNip47Error(err),

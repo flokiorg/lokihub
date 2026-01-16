@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
 	"github.com/joho/godotenv"
@@ -62,11 +61,11 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	logger.Init(appConfig.LogLevel)
-	logger.Logger.Info("Lokihub " + version.Tag)
+	logger.Logger.Info().Msg("Lokihub " + version.Tag)
 
 	if appConfig.Workdir == "" {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
-		logger.Logger.WithField("workdir", appConfig.Workdir).Info("No workdir specified, using default")
+		logger.Logger.Info().Interface("workdir", appConfig.Workdir).Msg("No workdir specified, using default")
 	}
 	// make sure workdir exists
 	os.MkdirAll(appConfig.Workdir, os.ModePerm)
@@ -80,7 +79,7 @@ func NewService(ctx context.Context) (*service, error) {
 
 	err = finishRestoreNode(appConfig.Workdir)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to restore backup")
+		logger.Logger.Error().Err(err).Msg("failed to restore backup")
 		return nil, err
 	}
 
@@ -181,17 +180,17 @@ func NewService(ctx context.Context) (*service, error) {
 }
 
 func (svc *service) noticeHandler(notice string) {
-	logger.Logger.Infof("Received a notice %s", notice)
+	logger.Logger.Info().Msgf("Received a notice %s", notice)
 }
 
 func finishRestoreNode(workDir string) error {
 	restoreDir := filepath.Join(workDir, "restore")
 	if restoreDirStat, err := os.Stat(restoreDir); err == nil && restoreDirStat.IsDir() {
-		logger.Logger.WithField("restoreDir", restoreDir).Infof("Restore directory found. Finishing Node restore")
+		logger.Logger.Info().Str("restoreDir", restoreDir).Msgf("Restore directory found. Finishing Node restore")
 
 		existingFiles, err := os.ReadDir(restoreDir)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to read WORK_DIR")
+			logger.Logger.Error().Err(err).Msg("Failed to read WORK_DIR")
 			return err
 		}
 
@@ -199,32 +198,32 @@ func finishRestoreNode(workDir string) error {
 			if file.Name() != "restore" {
 				err = os.RemoveAll(filepath.Join(workDir, file.Name()))
 				if err != nil {
-					logger.Logger.WithField("filename", file.Name()).WithError(err).Error("Failed to remove file")
+					logger.Logger.Error().Err(err).Str("filename", file.Name()).Msg("Failed to remove file")
 					return err
 				}
-				logger.Logger.WithField("filename", file.Name()).Info("removed file")
+				logger.Logger.Info().Str("filename", file.Name()).Msg("removed file")
 			}
 		}
 
 		files, err := os.ReadDir(restoreDir)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to read restore directory")
+			logger.Logger.Error().Err(err).Msg("Failed to read restore directory")
 			return err
 		}
 		for _, file := range files {
 			err = os.Rename(filepath.Join(restoreDir, file.Name()), filepath.Join(workDir, file.Name()))
 			if err != nil {
-				logger.Logger.WithField("filename", file.Name()).WithError(err).Error("Failed to move file")
+				logger.Logger.Error().Err(err).Str("filename", file.Name()).Msg("Failed to move file")
 				return err
 			}
-			logger.Logger.WithField("filename", file.Name()).Info("copied file from restore directory")
+			logger.Logger.Info().Str("filename", file.Name()).Msg("copied file from restore directory")
 		}
 		err = os.RemoveAll(restoreDir)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to remove restore directory")
+			logger.Logger.Error().Err(err).Msg("Failed to remove restore directory")
 			return err
 		}
-		logger.Logger.WithField("restoreDir", restoreDir).Info("removed restore directory")
+		logger.Logger.Info().Interface("restoreDir", restoreDir).Msg("removed restore directory")
 	}
 	return nil
 }
@@ -278,7 +277,7 @@ func (svc *service) InitSwapsService() {
 		return
 	}
 	if svc.lnClient == nil {
-		logger.Logger.Error("Cannot init swaps service: LNClient not started")
+		logger.Logger.Error().Msg("Cannot init swaps service: LNClient not started")
 		return
 	}
 	svc.swapsService = swaps.NewSwapsService(svc.ctx, svc.db, svc.cfg, svc.keys, svc.eventPublisher, svc.lnClient, svc.transactionsService)
@@ -301,7 +300,7 @@ func (svc *service) GetAppStoreSvc() appstore.Service {
 }
 
 func (svc *service) removeExcessEvents() {
-	logger.Logger.Debug("Cleaning up excess events")
+	logger.Logger.Debug().Msg("Cleaning up excess events")
 
 	maxEvents := 1000
 	// estimated less than 1 second to delete, it should not lock the DB
@@ -312,7 +311,7 @@ func (svc *service) removeExcessEvents() {
 	var events []db.RequestEvent
 	err := svc.db.Select("id").Order("id asc").Limit(maxEvents + maxEventsToDelete).Find(&events).Error
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch request events")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch request events")
 	}
 
 	numEventsToDelete := len(events) - maxEvents
@@ -322,34 +321,34 @@ func (svc *service) removeExcessEvents() {
 	}
 	deleteEventsBelowId := events[numEventsToDelete].ID
 
-	logger.Logger.WithFields(logrus.Fields{
-		"amount":   numEventsToDelete,
-		"below_id": deleteEventsBelowId,
-	}).Debug("Removing excess events")
+	logger.Logger.Debug().
+		Int("amount", numEventsToDelete).
+		Uint("below_id", deleteEventsBelowId).
+		Msg("Removing excess events")
 
 	startTime := time.Now()
 	err = svc.db.Exec("delete from request_events where id < ?", deleteEventsBelowId).Error
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"amount":   numEventsToDelete,
-			"below_id": deleteEventsBelowId,
-		}).Error("Failed to delete excess request events")
+		logger.Logger.Error().Err(err).
+			Int("amount", numEventsToDelete).
+			Uint("below_id", deleteEventsBelowId).
+			Msg("Failed to delete excess request events")
 		return
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"amount":           numEventsToDelete,
-		"below_id":         deleteEventsBelowId,
-		"duration_seconds": time.Since(startTime).Seconds(),
-	}).Info("Removed excess events")
+	logger.Logger.Info().
+		Int("amount", numEventsToDelete).
+		Uint("below_id", deleteEventsBelowId).
+		Float64("duration_seconds", time.Since(startTime).Seconds()).
+		Msg("Removed excess events")
 
 	// TODO: REMOVE AFTER 2026-01-01
 	// this is needed due to cascading delete previously not working
 	err = svc.db.Exec("delete from response_events where request_id < ?", deleteEventsBelowId).Error
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"amount":   numEventsToDelete,
-			"below_id": deleteEventsBelowId,
-		}).Error("Failed to delete excess response events")
+		logger.Logger.Error().Err(err).
+			Int("amount", numEventsToDelete).
+			Uint("below_id", deleteEventsBelowId).
+			Msg("Failed to delete excess response events")
 		return
 	}
 }

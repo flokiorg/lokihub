@@ -20,7 +20,6 @@ import (
 
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/go-flokicoin/chainutil"
-	"github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
@@ -195,9 +194,9 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 					if userApp.Metadata != nil {
 						err := json.Unmarshal(userApp.Metadata, &existingMetadata)
 						if err != nil {
-							logger.Logger.WithError(err).WithFields(logrus.Fields{
-								"app_id": userApp.ID,
-							}).Error("Failed to deserialize app metadata")
+							logger.Logger.Error().Err(err).
+								Uint("app_id", userApp.ID).
+								Msg("Failed to deserialize app metadata")
 							return err
 						}
 						if existingMetadata["app_store_app_id"] == constants.SUBWALLET_APPSTORE_APP_ID {
@@ -219,7 +218,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 			var err error
 			metadataBytes, err = json.Marshal(*updateAppRequest.Metadata)
 			if err != nil {
-				logger.Logger.WithError(err).Error("Failed to serialize metadata")
+				logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
 				return err
 			}
 			err = tx.Model(&db.App{}).Where("id", userApp.ID).Update("metadata", datatypes.JSON(metadataBytes)).Error
@@ -347,9 +346,7 @@ func (api *api) DeleteApp(userApp *db.App) error {
 	// if api.appsSvc.HasLightningAddress(userApp) {
 	// 	err := api.DeleteLightningAddress(context.Background(), userApp.ID)
 	// 	if err != nil {
-	// 		logger.Logger.WithError(err).WithFields(logrus.Fields{
-	// 			"app_id": userApp.ID,
-	// 		}).Error("Failed to delete lightning address during app deletion")
+	// 		logger.Logger.Error().Err(err).Uint("app_id", userApp.ID).Msg("Failed to delete lightning address during app deletion")
 	// 	}
 	// }
 
@@ -382,9 +379,9 @@ func (api *api) GetApp(dbApp *db.App) *App {
 	if dbApp.Metadata != nil {
 		jsonErr := json.Unmarshal(dbApp.Metadata, &metadata)
 		if jsonErr != nil {
-			logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-				"app_id": dbApp.ID,
-			}).Error("Failed to deserialize app metadata")
+			logger.Logger.Error().Err(jsonErr).
+				Uint("app_id", dbApp.ID).
+				Msg("Failed to deserialize app metadata")
 		}
 	}
 
@@ -470,7 +467,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 	var totalCount int64
 	result := query.Model(&db.App{}).Count(&totalCount)
 	if result.Error != nil {
-		logger.Logger.WithError(result.Error).Error("Failed to count DB apps")
+		logger.Logger.Error().Err(result.Error).Msg("Failed to count DB apps")
 		return nil, result.Error
 	}
 	query = query.Offset(int(offset)).Limit(int(limit))
@@ -478,7 +475,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 	err := query.Find(&dbApps).Error
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to list apps")
+		logger.Logger.Error().Err(err).Msg("Failed to list apps")
 		return nil, err
 	}
 
@@ -490,7 +487,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 	appPermissions := []db.AppPermission{}
 	err = api.db.Where("app_id IN ?", appIds).Find(&appPermissions).Error
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to list app permissions")
+		logger.Logger.Error().Err(err).Msg("Failed to list app permissions")
 		return nil, err
 	}
 
@@ -538,9 +535,9 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		if dbApp.Metadata != nil {
 			jsonErr := json.Unmarshal(dbApp.Metadata, &metadata)
 			if jsonErr != nil {
-				logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-					"app_id": dbApp.ID,
-				}).Error("Failed to deserialize app metadata")
+				logger.Logger.Error().Err(jsonErr).
+					Uint("app_id", dbApp.ID).
+					Msg("Failed to deserialize app metadata")
 			}
 			apiApp.Metadata = metadata
 		}
@@ -644,7 +641,7 @@ func (api *api) ChangeUnlockPassword(changeUnlockPasswordRequest *ChangeUnlockPa
 	err = api.cfg.ChangeUnlockPassword(changeUnlockPasswordRequest.CurrentUnlockPassword, changeUnlockPasswordRequest.NewUnlockPassword)
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to change unlock password")
+		logger.Logger.Error().Err(err).Msg("failed to change unlock password")
 		return err
 	}
 
@@ -661,7 +658,7 @@ func (api *api) SetAutoUnlockPassword(unlockPassword string) error {
 	err := api.cfg.SetAutoUnlockPassword(unlockPassword)
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to set auto unlock password")
+		logger.Logger.Error().Err(err).Msg("failed to set auto unlock password")
 		return err
 	}
 
@@ -675,7 +672,7 @@ func (api *api) Stop() error {
 	}
 	defer startMutex.Unlock()
 
-	logger.Logger.Info("Running Stop command")
+	logger.Logger.Info().Msg("Running Stop command")
 	if api.svc.GetLNClient() == nil {
 		return errors.New("LNClient not started")
 	}
@@ -733,7 +730,7 @@ func (api *api) LookupSwap(swapId string) (*LookupSwapResponse, error) {
 	}
 	dbSwap, err := api.svc.GetSwapsService().GetSwap(swapId)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to fetch swap info")
+		logger.Logger.Error().Err(err).Msg("failed to fetch swap info")
 		return nil, err
 	}
 
@@ -787,7 +784,7 @@ func (api *api) GetSwapInInfo() (*SwapInfoResponse, error) {
 	}
 	swapInInfo, err := api.svc.GetSwapsService().GetSwapInInfo()
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to calculate fee info")
+		logger.Logger.Error().Err(err).Msg("failed to calculate fee info")
 		return nil, err
 	}
 
@@ -806,7 +803,7 @@ func (api *api) GetSwapOutInfo() (*SwapInfoResponse, error) {
 	}
 	swapOutInfo, err := api.svc.GetSwapsService().GetSwapOutInfo()
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to calculate fee info")
+		logger.Logger.Error().Err(err).Msg("failed to calculate fee info")
 		return nil, err
 	}
 
@@ -838,10 +835,10 @@ func (api *api) InitiateSwapOut(ctx context.Context, initiateSwapOutRequest *Ini
 
 	swapOutResponse, err := api.svc.GetSwapsService().SwapOut(amount, destination, false, false)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"amount":      amount,
-			"destination": destination,
-		}).WithError(err).Error("Failed to initiate swap out")
+		logger.Logger.Error().Err(err).
+			Uint64("amount", amount).
+			Str("destination", destination).
+			Msg("Failed to initiate swap out")
 		return nil, err
 	}
 
@@ -866,9 +863,9 @@ func (api *api) InitiateSwapIn(ctx context.Context, initiateSwapInRequest *Initi
 
 	swapInResponse, err := api.svc.GetSwapsService().SwapIn(amount, false)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"amount": amount,
-		}).WithError(err).Error("Failed to initiate swap in")
+		logger.Logger.Error().Err(err).
+			Uint64("amount", amount).
+			Msg("Failed to initiate swap in")
 		return nil, err
 	}
 
@@ -878,19 +875,19 @@ func (api *api) InitiateSwapIn(ctx context.Context, initiateSwapInRequest *Initi
 func (api *api) EnableAutoSwapOut(ctx context.Context, enableAutoSwapsRequest *EnableAutoSwapRequest) error {
 	err := api.cfg.SetUpdate(config.AutoSwapBalanceThresholdKey, strconv.FormatUint(enableAutoSwapsRequest.BalanceThreshold, 10), "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save autoswap balance threshold to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save autoswap balance threshold to config")
 		return err
 	}
 
 	err = api.cfg.SetUpdate(config.AutoSwapAmountKey, strconv.FormatUint(enableAutoSwapsRequest.SwapAmount, 10), "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save autoswap amount to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save autoswap amount to config")
 		return err
 	}
 
 	err = api.cfg.SetUpdate(config.AutoSwapDestinationKey, enableAutoSwapsRequest.Destination, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save autoswap destination to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save autoswap destination to config")
 		return err
 	}
 
@@ -905,7 +902,7 @@ func (api *api) DisableAutoSwap() error {
 
 	for _, key := range keys {
 		if err := api.cfg.SetUpdate(key, "", ""); err != nil {
-			logger.Logger.WithError(err).Errorf("Failed to remove autoswap config for key: %s", key)
+			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to remove autoswap config")
 			return err
 		}
 	}
@@ -952,9 +949,7 @@ func (api *api) DisconnectPeer(ctx context.Context, peerId string) error {
 	if api.svc.GetLNClient() == nil {
 		return errors.New("LNClient not started")
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"peer_id": peerId,
-	}).Info("Disconnecting peer")
+	logger.Logger.Info().Str("peer_id", peerId).Msg("Disconnecting peer")
 	return api.svc.GetLNClient().DisconnectPeer(ctx, peerId)
 }
 
@@ -962,11 +957,11 @@ func (api *api) CloseChannel(ctx context.Context, peerId, channelId string, forc
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"peer_id":    peerId,
-		"channel_id": channelId,
-		"force":      force,
-	}).Info("Closing channel")
+	logger.Logger.Info().
+		Str("peer_id", peerId).
+		Str("channel_id", channelId).
+		Bool("force", force).
+		Msg("Closing channel")
 	return api.svc.GetLNClient().CloseChannel(ctx, &lnclient.CloseChannelRequest{
 		NodeId:    peerId,
 		ChannelId: channelId,
@@ -978,9 +973,7 @@ func (api *api) UpdateChannel(ctx context.Context, updateChannelRequest *UpdateC
 	if api.svc.GetLNClient() == nil {
 		return errors.New("LNClient not started")
 	}
-	logger.Logger.WithFields(logrus.Fields{
-		"request": updateChannelRequest,
-	}).Info("updating channel")
+	logger.Logger.Info().Interface("request", updateChannelRequest).Msg("updating channel")
 	return api.svc.GetLNClient().UpdateChannel(ctx, updateChannelRequest)
 }
 
@@ -995,7 +988,7 @@ func (api *api) GetNewOnchainAddress(ctx context.Context) (string, error) {
 
 	err = api.cfg.SetUpdate(config.OnchainAddressKey, address, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save new onchain address to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save new onchain address to config")
 	}
 
 	return address, nil
@@ -1008,7 +1001,7 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 
 	currentAddress, err := api.cfg.Get(config.OnchainAddressKey, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get current address from config")
+		logger.Logger.Error().Err(err).Msg("Failed to get current address from config")
 		return "", err
 	}
 
@@ -1016,13 +1009,13 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to get current address transactions")
+			logger.Logger.Error().Err(err).Msg("Failed to get current address transactions")
 			return currentAddress, nil
 		}
 
 		transactions, ok := response.([]interface{})
 		if !ok {
-			logger.Logger.WithField("response", response).Error("Failed to cast mempool address txs response", response)
+			logger.Logger.Error().Interface("response", response).Msg("Failed to cast mempool address txs response")
 			return currentAddress, nil
 		}
 
@@ -1034,7 +1027,7 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 
 	newAddress, err := api.GetNewOnchainAddress(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to retrieve new onchain address")
+		logger.Logger.Error().Err(err).Msg("Failed to retrieve new onchain address")
 		return "", err
 	}
 	return newAddress, nil
@@ -1088,17 +1081,13 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to create http request")
+		logger.Logger.Error().Err(err).Str("url", url).Msg("Failed to create http request")
 		return nil, err
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to send request")
+		logger.Logger.Error().Err(err).Str("url", url).Msg("Failed to send request")
 		return nil, err
 	}
 
@@ -1106,18 +1095,14 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 
 	body, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to read response body")
+		logger.Logger.Error().Err(readErr).Str("url", url).Msg("Failed to read response body")
 		return nil, errors.New("failed to read response body")
 	}
 
 	var jsonContent interface{}
 	jsonErr := json.Unmarshal(body, &jsonContent)
 	if jsonErr != nil {
-		logger.Logger.WithError(jsonErr).WithFields(logrus.Fields{
-			"url": url,
-		}).Error("Failed to deserialize json")
+		logger.Logger.Error().Err(jsonErr).Str("url", url).Msg("Failed to deserialize json")
 		return nil, fmt.Errorf("failed to deserialize json %s", url)
 	}
 	return jsonContent, nil
@@ -1149,10 +1134,12 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.MessageboardNwcUrl = api.cfg.GetMessageboardNwcUrl()
 
 	lnClient := api.svc.GetLNClient()
+	var nodeInfo *lnclient.NodeInfo
 	if lnClient != nil {
-		nodeInfo, err := lnClient.GetInfo(ctx)
+		var err error
+		nodeInfo, err = lnClient.GetInfo(ctx)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to get nodeInfo")
+			logger.Logger.Error().Err(err).Msg("Failed to get nodeInfo")
 			return nil, err
 		}
 		info.Network = nodeInfo.Network
@@ -1160,6 +1147,9 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 
 	info.NodeAlias, _ = api.cfg.Get("NodeAlias", "")
+	if info.NodeAlias == "" && nodeInfo != nil {
+		info.NodeAlias = nodeInfo.Alias
+	}
 	info.LokihubServicesURL = api.cfg.GetLokihubServicesURL()
 	info.SwapServiceUrl = api.cfg.GetSwapServiceURL()
 	info.Relay = api.cfg.GetRelay()
@@ -1195,7 +1185,7 @@ func (api *api) SetCurrency(currency string) error {
 
 	err := api.cfg.SetCurrency(currency)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update currency")
+		logger.Logger.Error().Err(err).Msg("Failed to update currency")
 		return err
 	}
 
@@ -1209,7 +1199,7 @@ func (api *api) SetFlokicoinDisplayFormat(format string) error {
 
 	err := api.cfg.SetFlokicoinDisplayFormat(format)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update flokicoin display format")
+		logger.Logger.Error().Err(err).Msg("Failed to update flokicoin display format")
 		return err
 	}
 
@@ -1281,7 +1271,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			return fmt.Errorf("failed to set Relay: %w", err)
 		}
 		if err := api.svc.ReloadNostr(); err != nil {
-			logger.Logger.WithError(err).Error("Failed to reload Nostr service")
+			logger.Logger.Error().Err(err).Msg("Failed to reload Nostr service")
 		}
 	}
 
@@ -1366,24 +1356,24 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			if _, stillExists := newMap[pubkey]; !stillExists {
 				// Safety check: never delete community LSPs
 				if communityPubkeys[pubkey] {
-					logger.Logger.WithField("pubkey", pubkey).Warn("Skipping deletion of community LSP")
+					logger.Logger.Warn().Interface("pubkey", pubkey).Msg("Skipping deletion of community LSP")
 					continue
 				}
 
 				// Remove from selected if it was active
 				if existing.Active {
 					if err := api.RemoveSelectedLSP(pubkey); err != nil {
-						logger.Logger.WithError(err).WithField("pubkey", pubkey).Warn("Failed to deactivate LSP during removal")
+						logger.Logger.Warn().Err(err).Str("pubkey", pubkey).Msg("Failed to deactivate LSP during removal")
 					}
 				}
 				// Remove the LSP
 				if err := api.RemoveLSP(pubkey); err != nil {
-					logger.Logger.WithError(err).WithField("pubkey", pubkey).Error("Failed to remove LSP")
+					logger.Logger.Error().Err(err).Str("pubkey", pubkey).Msg("Failed to remove LSP")
 					return fmt.Errorf("failed to remove LSP %s: %w", pubkey, err)
 				}
 				// Disconnect peer
 				if err := api.DisconnectPeer(context.Background(), pubkey); err != nil {
-					logger.Logger.WithError(err).WithField("pubkey", pubkey).Warn("Failed to disconnect peer after LSP removal")
+					logger.Logger.Warn().Err(err).Str("pubkey", pubkey).Msg("Failed to disconnect peer after LSP removal")
 				}
 			}
 		}
@@ -1398,7 +1388,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 					// Connect peer first
 					address, port, err := parseHostPort(newLSP.Host)
 					if err != nil {
-						logger.Logger.WithError(err).WithField("host", newLSP.Host).Error("Failed to parse host:port for new LSP")
+						logger.Logger.Error().Err(err).Str("host", newLSP.Host).Msg("Failed to parse host:port for new LSP")
 						return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
 					}
 					if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
@@ -1406,10 +1396,10 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 						Address: address,
 						Port:    port,
 					}); err != nil {
-						logger.Logger.WithError(err).WithFields(map[string]interface{}{
-							"pubkey": newLSP.Pubkey,
-							"host":   newLSP.Host,
-						}).Error("Failed to connect peer for new LSP")
+						logger.Logger.Error().Err(err).
+							Str("pubkey", newLSP.Pubkey).
+							Str("host", newLSP.Host).
+							Msg("Failed to connect peer for new LSP")
 						return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
 					}
 				}
@@ -1417,17 +1407,17 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 				// Add LSP
 				uri := newLSP.Pubkey + "@" + newLSP.Host
 				if err := api.AddLSP(newLSP.Name, uri); err != nil {
-					logger.Logger.WithError(err).WithFields(map[string]interface{}{
-						"name": newLSP.Name,
-						"uri":  uri,
-					}).Error("Failed to add new LSP")
+					logger.Logger.Error().Err(err).
+						Str("name", newLSP.Name).
+						Str("uri", uri).
+						Msg("Failed to add new LSP")
 					return fmt.Errorf("failed to add LSP %s: %w", newLSP.Name, err)
 				}
 
 				// Activate if needed
 				if newLSP.Active {
 					if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
-						logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to activate new LSP")
+						logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to activate new LSP")
 						return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
 					}
 				}
@@ -1438,7 +1428,7 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 						// Activating - connect peer first
 						address, port, err := parseHostPort(newLSP.Host)
 						if err != nil {
-							logger.Logger.WithError(err).WithField("host", newLSP.Host).Error("Failed to parse host:port when activating LSP")
+							logger.Logger.Error().Err(err).Str("host", newLSP.Host).Msg("Failed to parse host:port when activating LSP")
 							return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
 						}
 						if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
@@ -1446,26 +1436,26 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 							Address: address,
 							Port:    port,
 						}); err != nil {
-							logger.Logger.WithError(err).WithFields(map[string]interface{}{
-								"pubkey": newLSP.Pubkey,
-								"host":   newLSP.Host,
-							}).Error("Failed to connect peer when activating LSP")
+							logger.Logger.Error().Err(err).
+								Str("pubkey", newLSP.Pubkey).
+								Str("host", newLSP.Host).
+								Msg("Failed to connect peer when activating LSP")
 							return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
 						}
 						// Then activate
 						if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
-							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to activate LSP")
+							logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to activate LSP")
 							return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
 						}
 					} else {
 						// Deactivating - deactivate first, then disconnect
 						if err := api.RemoveSelectedLSP(newLSP.Pubkey); err != nil {
-							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Error("Failed to deactivate LSP")
+							logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to deactivate LSP")
 							return fmt.Errorf("failed to deactivate LSP %s: %w", newLSP.Name, err)
 						}
 						// Disconnect peer
 						if err := api.DisconnectPeer(context.Background(), newLSP.Pubkey); err != nil {
-							logger.Logger.WithError(err).WithField("pubkey", newLSP.Pubkey).Warn("Failed to disconnect peer after LSP deactivation")
+							logger.Logger.Warn().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to disconnect peer after LSP deactivation")
 						}
 					}
 				}
@@ -1476,11 +1466,20 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	return nil
 }
 
-func (api *api) SetNodeAlias(nodeAlias string) error {
+func (api *api) SetNodeAlias(ctx context.Context, nodeAlias string) error {
 	err := api.cfg.SetUpdate("NodeAlias", nodeAlias, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save node alias to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save node alias to config")
 		return err
+	}
+
+	// Also implement this on the LND node
+	if api.svc.GetLNClient() != nil {
+		err = api.svc.GetLNClient().SetNodeAlias(ctx, nodeAlias)
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to set node alias on LND node")
+			return err
+		}
 	}
 
 	return nil
@@ -1506,7 +1505,7 @@ func (api *api) GetMnemonic(unlockPassword string) (*MnemonicResponse, error) {
 func (api *api) SetNextBackupReminder(backupReminderRequest *BackupReminderRequest) error {
 	err := api.cfg.SetUpdate("NextBackupReminder", backupReminderRequest.NextBackupReminder, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save next backup reminder to config")
+		logger.Logger.Error().Err(err).Msg("Failed to save next backup reminder to config")
 	}
 	return nil
 }
@@ -1517,7 +1516,7 @@ func (api *api) Start(startRequest *StartRequest) error {
 	api.startupError = nil
 	err := api.startInternal(startRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to start node")
+		logger.Logger.Error().Err(err).Msg("Failed to start node")
 		api.startupError = err
 		api.startupErrorTime = time.Now()
 		return err
@@ -1570,11 +1569,11 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	defer startMutex.Unlock()
 	info, err := api.GetInfo(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get info")
+		logger.Logger.Error().Err(err).Msg("Failed to get info")
 		return err
 	}
 	if info.SetupCompleted {
-		logger.Logger.Error("Cannot re-setup node")
+		logger.Logger.Error().Msg("Cannot re-setup node")
 		return errors.New("setup already completed")
 	}
 
@@ -1590,21 +1589,21 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	// update next backup reminder
 	err = api.cfg.SetUpdate("NextBackupReminder", setupRequest.NextBackupReminder, "")
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save next backup reminder")
+		logger.Logger.Error().Err(err).Msg("Failed to save next backup reminder")
 	}
 
 	// only update non-empty values
 	if setupRequest.LNBackendType != "" {
 		err = api.cfg.SetUpdate("LNBackendType", setupRequest.LNBackendType, "")
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save backend type")
+			logger.Logger.Error().Err(err).Msg("Failed to save backend type")
 			return err
 		}
 	}
 	if setupRequest.Mnemonic != "" {
 		err = api.cfg.SetUpdate("Mnemonic", setupRequest.Mnemonic, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save encrypted mnemonic")
+			logger.Logger.Error().Err(err).Msg("Failed to save encrypted mnemonic")
 			return err
 		}
 	}
@@ -1648,7 +1647,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		if customDataDir != "" {
 			err = api.cfg.SetUpdate("LNDDataDir", customDataDir, setupRequest.UnlockPassword)
 			if err != nil {
-				logger.Logger.WithError(err).Error("Failed to save lnd data dir")
+				logger.Logger.Error().Err(err).Msg("Failed to save lnd data dir")
 				return err
 			}
 		}
@@ -1657,21 +1656,21 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.LNDAddress != "" {
 		err = api.cfg.SetUpdate("LNDAddress", setupRequest.LNDAddress, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save lnd address")
+			logger.Logger.Error().Err(err).Msg("Failed to save lnd address")
 			return err
 		}
 	}
 	if setupRequest.LNDCertHex != "" {
 		err = api.cfg.SetUpdate("LNDCertHex", setupRequest.LNDCertHex, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save lnd cert hex")
+			logger.Logger.Error().Err(err).Msg("Failed to save lnd cert hex")
 			return err
 		}
 	}
 	if setupRequest.LNDMacaroonHex != "" {
 		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.LNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save lnd macaroon hex")
+			logger.Logger.Error().Err(err).Msg("Failed to save lnd macaroon hex")
 			return err
 		}
 	}
@@ -1679,7 +1678,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.LSP != "" {
 		err = api.cfg.SetLSP(setupRequest.LSP)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save LSP")
+			logger.Logger.Error().Err(err).Msg("Failed to save LSP")
 			return err
 		}
 	}
@@ -1687,7 +1686,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.LokihubServicesURL != "" {
 		err = api.cfg.SetLokihubServicesURL(setupRequest.LokihubServicesURL)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save LokihubServicesURL")
+			logger.Logger.Error().Err(err).Msg("Failed to save LokihubServicesURL")
 			return err
 		}
 	}
@@ -1695,7 +1694,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.SwapServiceUrl != "" {
 		err = api.cfg.SetSwapServiceURL(setupRequest.SwapServiceUrl)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save SwapServiceUrl")
+			logger.Logger.Error().Err(err).Msg("Failed to save SwapServiceUrl")
 			return err
 		}
 	}
@@ -1703,7 +1702,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.Relay != "" {
 		err = api.cfg.SetRelay(setupRequest.Relay)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save Relay")
+			logger.Logger.Error().Err(err).Msg("Failed to save Relay")
 			return err
 		}
 	}
@@ -1711,21 +1710,21 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.MempoolApi != "" {
 		err = api.cfg.SetMempoolApi(setupRequest.MempoolApi)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save MempoolApi")
+			logger.Logger.Error().Err(err).Msg("Failed to save MempoolApi")
 			return err
 		}
 	}
 
 	if setupRequest.EnableSwap != nil {
 		if err := api.cfg.SetEnableSwap(*setupRequest.EnableSwap); err != nil {
-			logger.Logger.WithError(err).Error("Failed to save EnableSwap")
+			logger.Logger.Error().Err(err).Msg("Failed to save EnableSwap")
 		}
 	}
 
 	if setupRequest.MessageboardNwcUrl != "" {
 		err = api.cfg.SetMessageboardNwcUrl(setupRequest.MessageboardNwcUrl)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to save MessageboardNwcUrl")
+			logger.Logger.Error().Err(err).Msg("Failed to save MessageboardNwcUrl")
 			return err
 		}
 	}
@@ -1996,7 +1995,7 @@ func (api *api) parseExpiresAt(expiresAtString string) (*time.Time, error) {
 		var err error
 		expiresAtValue, err := time.Parse(time.RFC3339, expiresAtString)
 		if err != nil {
-			logger.Logger.WithField("expiresAt", expiresAtString).Error("Invalid expiresAt")
+			logger.Logger.Error().Interface("expiresAt", expiresAtString).Msg("Invalid expiresAt")
 			return nil, fmt.Errorf("invalid expiresAt: %v", err)
 		}
 		expiresAt = &expiresAtValue
@@ -2037,11 +2036,11 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	// Preliminary checks
 	info, err := api.GetInfo(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get info")
+		logger.Logger.Error().Err(err).Msg("Failed to get info")
 		return err
 	}
 	if info.SetupCompleted {
-		logger.Logger.Error("Cannot re-setup node")
+		logger.Logger.Error().Msg("Cannot re-setup node")
 		return errors.New("setup already completed")
 	}
 	if req.UnlockPassword == "" {
@@ -2063,7 +2062,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 
 	// 3. Verify Connection
 	if err := api.verifyLNDConnection(ctx, address, certHex, macaroonHex); err != nil {
-		logger.Logger.WithError(err).Error("Failed to verify FLND connection")
+		logger.Logger.Error().Err(err).Msg("Failed to verify FLND connection")
 		return fmt.Errorf("failed to verify connection: %w", err)
 	}
 
@@ -2144,11 +2143,11 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	// Preliminary checks
 	info, err := api.GetInfo(ctx)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to get info")
+		logger.Logger.Error().Err(err).Msg("Failed to get info")
 		return err
 	}
 	if info.SetupCompleted {
-		logger.Logger.Error("Cannot re-setup node")
+		logger.Logger.Error().Msg("Cannot re-setup node")
 		return errors.New("setup already completed")
 	}
 	if req.UnlockPassword == "" {
@@ -2162,7 +2161,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 
 	// 1. Verify Connection
 	if err := api.verifyLNDConnection(ctx, req.LNDAddress, req.LNDCertHex, req.LNDMacaroonHex); err != nil {
-		logger.Logger.WithError(err).Error("Failed to verify FLND connection")
+		logger.Logger.Error().Err(err).Msg("Failed to verify FLND connection")
 		return fmt.Errorf("failed to verify connection: %w", err)
 	}
 
@@ -2236,7 +2235,7 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 
 // verifyLNDConnection attempts to connect to FLND with retries to ensure credentials are valid
 func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macaroonHex string) error {
-	logger.Logger.Info("Verifying FLND connection...")
+	logger.Logger.Info().Msg("Verifying FLND connection...")
 
 	// Using wrapper directly to avoid main app wrapper logic
 	lndClient, err := wrapper.NewLNDclient(wrapper.LNDoptions{
@@ -2262,7 +2261,7 @@ func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macar
 			return nil
 		}
 		lastErr = err
-		logger.Logger.WithError(err).Warnf("Verification attempt %d failed", i+1)
+		logger.Logger.Warn().Err(err).Msgf("Verification attempt %d failed", i+1)
 	}
 
 	return lastErr

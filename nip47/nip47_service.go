@@ -16,7 +16,6 @@ import (
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -75,10 +74,10 @@ func (svc *nip47Service) StartNotifier(ctx context.Context, pool *nostr.SimplePo
 				// app exited
 				return
 			case event := <-svc.nip47NotificationQueue.Channel():
-				logger.Logger.WithField("event", event).Debug("Consuming event from notification queue")
+				logger.Logger.Debug().Interface("event", event).Msg("Consuming event from notification queue")
 				err := nip47Notifier.ConsumeEvent(ctx, event)
 				if err != nil {
-					logger.Logger.WithError(err).WithField("event", event).Error("Failed to consume event from notification queue")
+					logger.Logger.Error().Err(err).Interface("event", event).Msg("Failed to consume event from notification queue")
 					// wait and then re-add the item to the queue
 					time.Sleep(5 * time.Second)
 					svc.nip47NotificationQueue.AddToQueue(event)
@@ -112,10 +111,10 @@ func (svc *nip47Service) StartNip47InfoPublisher(ctx context.Context, pool *nost
 			case req := <-svc.nip47InfoPublishQueue.Channel():
 				_, err := svc.PublishNip47Info(ctx, pool, req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, lnClient)
 				if err != nil {
-					logger.Logger.WithError(err).WithFields(logrus.Fields{
-						"wallet_pubkey": req.AppWalletPubKey,
-						"relay_url":     req.RelayUrl,
-					}).Error("Failed to publish NIP47 info from queue")
+					logger.Logger.Error().Err(err).
+						Str("wallet_pubkey", req.AppWalletPubKey).
+						Str("relay_url", req.RelayUrl).
+						Msg("Failed to publish NIP47 info from queue")
 
 					// wait and then re-add the item to the queue
 					// done async to ensure an offline relay does not delay

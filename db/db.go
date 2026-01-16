@@ -80,11 +80,11 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 		}
 	}
 
-	logger.Logger.WithField("db_backend", ret.Dialector.Name()).Debug("loaded database")
+	logger.Logger.Debug().Str("db_backend", ret.Dialector.Name()).Msg("loaded database")
 
 	err := migrations.Migrate(ret)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to migrate")
+		logger.Logger.Error().Err(err).Msg("Failed to migrate")
 		return nil, err
 	}
 
@@ -116,11 +116,11 @@ func Stop(db *gorm.DB) error {
 	}
 
 	dbBackend := db.Dialector.Name()
-	logger.Logger.WithField("db_backend", dbBackend).Debug("shutting down database")
+	logger.Logger.Debug().Str("db_backend", dbBackend).Msg("shutting down database")
 	if dbBackend == "sqlite" {
 		err = db.Exec("PRAGMA wal_checkpoint(FULL)", nil).Error
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to execute wal endpoint")
+			logger.Logger.Error().Err(err).Msg("Failed to execute wal endpoint")
 		}
 	}
 

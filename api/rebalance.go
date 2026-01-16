@@ -14,7 +14,6 @@ import (
 	decodepay "github.com/flokiorg/lokihub/lndecodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/pkg/version"
-	"github.com/sirupsen/logrus"
 )
 
 func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *RebalanceChannelRequest) (*RebalanceChannelResponse, error) {
@@ -32,7 +31,7 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 
 	receiveInvoice, err := api.svc.GetTransactionsService().MakeInvoice(ctx, rebalanceChannelRequest.AmountLoki*1000, "Lokihub Rebalance through "+rebalanceChannelRequest.ReceiveThroughNodePubkey, "", 0, receiveMetadata, api.svc.GetLNClient(), nil, nil, &rebalanceChannelRequest.ReceiveThroughNodePubkey, nil, nil, nil, nil)
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to generate rebalance receive invoice")
+		logger.Logger.Error().Err(err).Msg("failed to generate rebalance receive invoice")
 		return nil, err
 	}
 
@@ -56,9 +55,9 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, api.cfg.GetRebalanceServiceUrl(), bodyReader)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"request": newRspCreateOrderRequest,
-		}).Error("Failed to create new rebalance request")
+		logger.Logger.Error().Err(err).
+			Interface("request", newRspCreateOrderRequest).
+			Msg("Failed to create new rebalance request")
 		return nil, err
 	}
 
@@ -71,9 +70,9 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"request": newRspCreateOrderRequest,
-		}).Error("Failed to request new rebalance order")
+		logger.Logger.Error().Err(err).
+			Interface("request", newRspCreateOrderRequest).
+			Msg("Failed to request new rebalance order")
 		return nil, err
 	}
 
@@ -81,18 +80,18 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"request": newRspCreateOrderRequest,
-		}).Error("Failed to read response body")
+		logger.Logger.Error().Err(err).
+			Interface("request", newRspCreateOrderRequest).
+			Msg("Failed to read response body")
 		return nil, errors.New("failed to read response body")
 	}
 
 	if res.StatusCode >= 300 {
-		logger.Logger.WithFields(logrus.Fields{
-			"request":    newRspCreateOrderRequest,
-			"body":       string(body),
-			"statusCode": res.StatusCode,
-		}).Error("rebalance create_order endpoint returned non-success code")
+		logger.Logger.Error().
+			Interface("request", newRspCreateOrderRequest).
+			Str("body", string(body)).
+			Int("statusCode", res.StatusCode).
+			Msg("rebalance create_order endpoint returned non-success code")
 		return nil, fmt.Errorf("rebalance create_order endpoint returned non-success code: %s", string(body))
 	}
 
@@ -105,17 +104,17 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 
 	err = json.Unmarshal(body, &rebalanceCreateOrderResponse)
 	if err != nil {
-		logger.Logger.WithError(err).WithFields(logrus.Fields{
-			"request": newRspCreateOrderRequest,
-		}).Error("Failed to deserialize json")
+		logger.Logger.Error().Err(err).
+			Interface("request", newRspCreateOrderRequest).
+			Msg("Failed to deserialize json")
 		return nil, fmt.Errorf("failed to deserialize json from rebalance create order response: %s", string(body))
 	}
 
-	logger.Logger.WithField("response", rebalanceCreateOrderResponse).Info("New rebalance order created")
+	logger.Logger.Info().Interface("response", rebalanceCreateOrderResponse).Msg("New rebalance order created")
 
 	paymentRequest, err := decodepay.Decodepay(rebalanceCreateOrderResponse.PayRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to decode bolt11 invoice")
+		logger.Logger.Error().Err(err).Msg("Failed to decode bolt11 invoice")
 		return nil, err
 	}
 
@@ -132,7 +131,7 @@ func (api *api) RebalanceChannel(ctx context.Context, rebalanceChannelRequest *R
 	payRebalanceInvoiceResponse, err := api.svc.GetTransactionsService().SendPaymentSync(rebalanceCreateOrderResponse.PayRequest, nil, payMetadata, api.svc.GetLNClient(), nil, nil)
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("failed to pay rebalance invoice")
+		logger.Logger.Error().Err(err).Msg("failed to pay rebalance invoice")
 		return nil, err
 	}
 

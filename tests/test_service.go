@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/logger"
@@ -23,7 +22,7 @@ func CreateTestService(t *testing.T) (svc *TestService, err error) {
 }
 
 func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword string) (svc *TestService, err error) {
-	logger.Init(strconv.Itoa(int(logrus.DebugLevel)))
+	logger.Init(strconv.Itoa(int(4)))
 
 	gormDb, err := db.NewDB(t)
 	if err != nil {

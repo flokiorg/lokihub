@@ -84,7 +84,7 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		//validate public key
 		decoded, err := hex.DecodeString(pairingPublicKey)
 		if err != nil || len(decoded) != 32 {
-			logger.Logger.WithField("pairingPublicKey", pairingPublicKey).Error("Invalid public key format")
+			logger.Logger.Error().Interface("pairingPublicKey", pairingPublicKey).Msg("Invalid public key format")
 			return nil, "", fmt.Errorf("invalid public key format: %s", pairingPublicKey)
 		}
 	}
@@ -94,7 +94,7 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		var err error
 		metadataBytes, err = json.Marshal(metadata)
 		if err != nil {
-			logger.Logger.WithError(err).Error("Failed to serialize metadata")
+			logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
 			return nil, "", err
 		}
 	}
@@ -156,7 +156,7 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 	})
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to save app")
+		logger.Logger.Error().Err(err).Msg("Failed to save app")
 		return nil, "", err
 	}
 
@@ -218,13 +218,13 @@ func (svc *appsService) SetAppMetadata(id uint, metadata map[string]interface{})
 	var metadataBytes []byte
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to serialize metadata")
+		logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
 		return err
 	}
 
 	err = svc.db.Model(&db.App{}).Where("id", id).Update("metadata", datatypes.JSON(metadataBytes)).Error
 	if err != nil {
-		logger.Logger.WithError(err).WithField("metadata", metadata).Error("failed to update transaction metadata")
+		logger.Logger.Error().Err(err).Interface("metadata", metadata).Msg("failed to update transaction metadata")
 		return err
 	}
 

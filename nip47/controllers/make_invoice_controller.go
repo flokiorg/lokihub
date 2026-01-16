@@ -6,7 +6,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type makeInvoiceParams struct {
@@ -29,27 +28,27 @@ func (controller *nip47Controller) HandleMakeInvoiceEvent(ctx context.Context, n
 		return
 	}
 
-	logger.Logger.WithFields(logrus.Fields{
-		"app_id":           appId,
-		"request_event_id": requestEventId,
-		"amount":           makeInvoiceParams.Amount,
-		"description":      makeInvoiceParams.Description,
-		"description_hash": makeInvoiceParams.DescriptionHash,
-		"expiry":           makeInvoiceParams.Expiry,
-		"metadata":         makeInvoiceParams.Metadata,
-	}).Debug("Handling make_invoice request")
+	logger.Logger.Debug().
+		Interface("app_id", appId).
+		Interface("request_event_id", requestEventId).
+		Interface("amount", makeInvoiceParams.Amount).
+		Interface("description", makeInvoiceParams.Description).
+		Interface("description_hash", makeInvoiceParams.DescriptionHash).
+		Interface("expiry", makeInvoiceParams.Expiry).
+		Interface("metadata", makeInvoiceParams.Metadata).
+		Msg("Handling make_invoice request")
 
 	expiry := makeInvoiceParams.Expiry
 
 	transaction, err := controller.transactionsService.MakeInvoice(ctx, makeInvoiceParams.Amount, makeInvoiceParams.Description, makeInvoiceParams.DescriptionHash, expiry, makeInvoiceParams.Metadata, controller.lnClient, &appId, &requestEventId, nil, nil, nil, nil, nil)
 	if err != nil {
-		logger.Logger.WithFields(logrus.Fields{
-			"request_event_id": requestEventId,
-			"amount":           makeInvoiceParams.Amount,
-			"description":      makeInvoiceParams.Description,
-			"descriptionHash":  makeInvoiceParams.DescriptionHash,
-			"expiry":           makeInvoiceParams.Expiry,
-		}).Infof("Failed to make invoice: %v", err)
+		logger.Logger.Info().Err(err).
+			Interface("request_event_id", requestEventId).
+			Interface("amount", makeInvoiceParams.Amount).
+			Interface("description", makeInvoiceParams.Description).
+			Interface("descriptionHash", makeInvoiceParams.DescriptionHash).
+			Interface("expiry", makeInvoiceParams.Expiry).
+			Msg("Failed to make invoice")
 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,

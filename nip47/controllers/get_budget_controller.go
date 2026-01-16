@@ -9,7 +9,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
-	"github.com/sirupsen/logrus"
 )
 
 type getBudgetResponse struct {
@@ -21,9 +20,9 @@ type getBudgetResponse struct {
 
 func (controller *nip47Controller) HandleGetBudgetEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
 
-	logger.Logger.WithFields(logrus.Fields{
-		"request_event_id": requestEventId,
-	}).Debug("Getting budget")
+	logger.Logger.Debug().
+			Interface("request_event_id", requestEventId).
+			Msg("Getting budget")
 
 	appPermission := db.AppPermission{}
 	controller.db.Where("app_id = ? AND scope = ?", app.ID, models.PAY_INVOICE_METHOD).First(&appPermission)

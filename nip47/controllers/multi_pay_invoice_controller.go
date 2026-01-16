@@ -12,7 +12,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/sirupsen/logrus"
 )
 
 type multiPayInvoiceElement struct {
@@ -31,7 +30,7 @@ func (controller *nip47Controller) HandleMultiPayInvoiceEvent(ctx context.Contex
 		publishResponse(resp, nostr.Tags{})
 		return
 	}
-	logger.Logger.WithField("multiPayParams", multiPayParams).Debug("sending multi payment")
+	logger.Logger.Debug().Interface("multiPayParams", multiPayParams).Msg("sending multi payment")
 
 	var wg sync.WaitGroup
 	wg.Add(len(multiPayParams.Invoices))
@@ -44,11 +43,11 @@ func (controller *nip47Controller) HandleMultiPayInvoiceEvent(ctx context.Contex
 			bolt11 = strings.ToLower(bolt11)
 			paymentRequest, err := decodepay.Decodepay(bolt11)
 			if err != nil {
-				logger.Logger.WithFields(logrus.Fields{
-					"request_event_id": requestEventId,
-					"appId":            app.ID,
-					"bolt11":           bolt11,
-				}).Errorf("Failed to decode bolt11 invoice: %v", err)
+				logger.Logger.Error().Err(err).
+					Interface("request_event_id", requestEventId).
+					Interface("appId", app.ID).
+					Interface("bolt11", bolt11).
+					Msg("Failed to decode bolt11 invoice")
 
 				// TODO: Decide what to do if id is empty
 				dTag := []string{"d", invoiceInfo.Id}

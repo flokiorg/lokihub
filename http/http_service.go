@@ -15,7 +15,6 @@ import (
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -80,14 +79,14 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 		LogHost:      true,
 		LogRequestID: true,
 		LogValuesFunc: func(c echo.Context, values middleware.RequestLoggerValues) error {
-			logger.HttpLogger.WithFields(logrus.Fields{
-				"uri":        values.URI,
-				"status":     values.Status,
-				"remote_ip":  values.RemoteIP,
-				"user_agent": values.UserAgent,
-				"host":       values.Host,
-				"request_id": values.RequestID,
-			}).Info("handled API request")
+			logger.HttpLogger.Info().
+				Str("uri", values.URI).
+				Int("status", values.Status).
+				Str("remote_ip", values.RemoteIP).
+				Str("user_agent", values.UserAgent).
+				Str("host", values.Host).
+				Str("request_id", values.RequestID).
+				Msg("handled API request")
 			return nil
 		},
 	}))
@@ -766,7 +765,7 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 
 	response, err := httpSvc.api.RequestMempoolApi(c.Request().Context(), endpoint)
 	if err != nil {
-		logger.Logger.WithField("endpoint", endpoint).WithError(err).Error("Failed to request mempool API")
+		logger.Logger.Error().Err(err).Str("endpoint", endpoint).Msg("Failed to request mempool API")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to request mempool API: %s", err.Error()),
 		})
@@ -778,7 +777,7 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 func (httpSvc *HttpService) getServicesHandler(c echo.Context) error {
 	response, err := httpSvc.api.GetServices(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to fetch services")
+		logger.Logger.Error().Err(err).Msg("Failed to fetch services")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to fetch services: %s", err.Error()),
 		})
@@ -790,7 +789,7 @@ func (httpSvc *HttpService) getServicesHandler(c echo.Context) error {
 func (httpSvc *HttpService) capabilitiesHandler(c echo.Context) error {
 	response, err := httpSvc.api.GetWalletCapabilities(c.Request().Context())
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to request wallet capabilities")
+		logger.Logger.Error().Err(err).Msg("Failed to request wallet capabilities")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to request wallet capabilities: %s", err.Error()),
 		})
@@ -1015,9 +1014,9 @@ func (httpSvc *HttpService) appsListHandler(c echo.Context) error {
 	if filtersJSON != "" {
 		err := json.Unmarshal([]byte(filtersJSON), &filters)
 		if err != nil {
-			logger.Logger.WithError(err).WithFields(logrus.Fields{
-				"filters": filtersJSON,
-			}).Error("Failed to deserialize app filters")
+			logger.Logger.Error().Err(err).
+				Str("filters", filtersJSON).
+				Msg("Failed to deserialize app filters")
 			return err
 		}
 	}
@@ -1096,7 +1095,7 @@ func (httpSvc *HttpService) appsUpdateHandler(c echo.Context) error {
 	err := httpSvc.api.UpdateApp(dbApp, &requestData)
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to update app")
+		logger.Logger.Error().Err(err).Msg("Failed to update app")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to update app: %v", err),
 		})
@@ -1116,7 +1115,7 @@ func (httpSvc *HttpService) transfersHandler(c echo.Context) error {
 	err := httpSvc.api.Transfer(c.Request().Context(), requestData.FromAppId, requestData.ToAppId, requestData.AmountLoki*1000)
 
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to transfer funds")
+		logger.Logger.Error().Err(err).Msg("Failed to transfer funds")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to transfer funds: %v", err),
 		})
@@ -1152,7 +1151,7 @@ func (httpSvc *HttpService) appsCreateHandler(c echo.Context) error {
 	responseBody, err := httpSvc.api.CreateApp(&requestData)
 
 	if err != nil {
-		logger.Logger.WithField("requestData", requestData).WithError(err).Error("Failed to save app")
+		logger.Logger.Error().Err(err).Interface("requestData", requestData).Msg("Failed to save app")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to save app: %v", err),
 		})
@@ -1516,7 +1515,7 @@ func (httpSvc *HttpService) setNodeAliasHandler(c echo.Context) error {
 		})
 	}
 
-	err := httpSvc.api.SetNodeAlias(setNodeAliasRequest.NodeAlias)
+	err := httpSvc.api.SetNodeAlias(c.Request().Context(), setNodeAliasRequest.NodeAlias)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to set node alias: %s", err.Error()),
@@ -1547,7 +1546,7 @@ func (httpSvc *HttpService) setupLocalHandler(c echo.Context) error {
 
 	err := httpSvc.api.SetupLocal(c.Request().Context(), &setupRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to setup local connection")
+		logger.Logger.Error().Err(err).Msg("Failed to setup local connection")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to setup: %s", err.Error()),
 		})
@@ -1566,7 +1565,7 @@ func (httpSvc *HttpService) setupManualHandler(c echo.Context) error {
 
 	err := httpSvc.api.SetupManual(c.Request().Context(), &setupRequest)
 	if err != nil {
-		logger.Logger.WithError(err).Error("Failed to setup manual connection")
+		logger.Logger.Error().Err(err).Msg("Failed to setup manual connection")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to setup: %s", err.Error()),
 		})
