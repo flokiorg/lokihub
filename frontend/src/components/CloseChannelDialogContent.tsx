@@ -22,12 +22,13 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { Channel, CloseChannelResponse } from "src/types";
 import { request } from "src/utils/request";
 import {
+    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
-    AlertDialogTitle,
+    AlertDialogTitle
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -217,7 +218,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            {!loading && <AlertDialogCancel>Cancel</AlertDialogCancel>}
             <Button onClick={closeChannel} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {loading ? "Closing..." : "Close Channel"}
@@ -251,14 +252,14 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
+            <AlertDialogAction
               onClick={async () => {
                 await reloadChannels();
                 await reloadBalances();
               }}
             >
               Done
-            </AlertDialogCancel>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </>
       )}
