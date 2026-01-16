@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
@@ -138,7 +139,7 @@ func (h *ClientHandler) SelectOpeningParams(ctx context.Context, lspPubkey strin
 	}
 
 	// Debug log
-	fmt.Printf("Sending BuyRequest: %s\n", string(data))
+	logger.Logger.WithField("peer", lspPubkey).Info("Sending BuyRequest")
 
 	if err := h.transport.SendCustomMessage(ctx, lspPubkey, lsps0.LSPS_MESSAGE_TYPE_ID, data); err != nil {
 		peerState.mu.Lock()
@@ -202,7 +203,7 @@ func (h *ClientHandler) handleGetInfoResponse(peerPubkey, requestID string, resp
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 	// Debug log
-	fmt.Printf("GetInfo Response Result: %s\n", string(resultBytes))
+	logger.Logger.WithField("peer", peerPubkey).Info("Received GetInfo response")
 
 	if err := json.Unmarshal(resultBytes, &result); err != nil {
 		return fmt.Errorf("failed to unmarshal get_info response: %w", err)
