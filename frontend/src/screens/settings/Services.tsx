@@ -11,6 +11,7 @@ import SettingsHeader from "src/components/SettingsHeader";
 import { Button } from "src/components/ui/button";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPSManagement } from "src/hooks/useLSPSManagement";
+import { LSP } from "src/types";
 import { request } from "src/utils/request";
 
 
@@ -81,7 +82,9 @@ export function Services() {
 
   // Track dirty state
   useEffect(() => {
-    if (!info) return;
+    if (!info) {
+        return;
+    }
     
     // Check general settings dirty
     const settingsDirty =
@@ -105,10 +108,12 @@ export function Services() {
     // So comparing `config.lsps` (merged) with `backendLSPs` (raw) will ALWAYS be different if descriptions are added.
     // We should compare the "Saveable" parts: pubkey, host, name, active.
     
-    // Helper to strip extra fields
-    const strip = (lsps: any[]) => lsps.map(l => ({ 
-        pubkey: l.pubkey, host: l.host, name: l.name, active: l.active 
-    })).sort((a,b) => a.pubkey.localeCompare(b.pubkey));
+    // Helper to strip extra fields and ignore inactive community LSPs
+    const strip = (lsps: LSP[]) => lsps
+        .filter(l => !(l.isCommunity && !l.active))
+        .map(l => ({ 
+            pubkey: l.pubkey, host: l.host, name: l.name, active: l.active 
+        })).sort((a,b) => a.pubkey.localeCompare(b.pubkey));
     
     const lspDirtySmart = JSON.stringify(strip(config.lsps)) !== JSON.stringify(strip(backendLSPs));
 
