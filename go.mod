@@ -33,7 +33,7 @@ require (
 	github.com/flokiorg/flnd v0.1.18-beta
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/rs/zerolog v1.15.0
+	github.com/rs/zerolog v1.34.0
 	github.com/tidwall/gjson v1.18.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
