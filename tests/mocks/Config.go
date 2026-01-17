@@ -1021,50 +1021,6 @@ func (_c *MockConfig_Unlock_Call) RunAndReturn(run func(encryptionKey string) er
 	return _c
 }
 
-// EnableRebalance provides a mock function for the type MockConfig
-func (_mock *MockConfig) EnableRebalance() bool {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for EnableRebalance")
-	}
-
-	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func() bool); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-	return r0
-}
-
-// MockConfig_EnableRebalance_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EnableRebalance'
-type MockConfig_EnableRebalance_Call struct {
-	*mock.Call
-}
-
-// EnableRebalance is a helper method to define mock.On call
-func (_e *MockConfig_Expecter) EnableRebalance() *MockConfig_EnableRebalance_Call {
-	return &MockConfig_EnableRebalance_Call{Call: _e.mock.On("EnableRebalance")}
-}
-
-func (_c *MockConfig_EnableRebalance_Call) Run(run func()) *MockConfig_EnableRebalance_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockConfig_EnableRebalance_Call) Return(b bool) *MockConfig_EnableRebalance_Call {
-	_c.Call.Return(b)
-	return _c
-}
-
-func (_c *MockConfig_EnableRebalance_Call) RunAndReturn(run func() bool) *MockConfig_EnableRebalance_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // EnableSwap provides a mock function for the type MockConfig
 func (_mock *MockConfig) EnableSwap() bool {
 	ret := _mock.Called()
@@ -1105,50 +1061,6 @@ func (_c *MockConfig_EnableSwap_Call) Return(b bool) *MockConfig_EnableSwap_Call
 }
 
 func (_c *MockConfig_EnableSwap_Call) RunAndReturn(run func() bool) *MockConfig_EnableSwap_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetRebalanceServiceUrl provides a mock function for the type MockConfig
-func (_mock *MockConfig) GetRebalanceServiceUrl() string {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetRebalanceServiceUrl")
-	}
-
-	var r0 string
-	if returnFunc, ok := ret.Get(0).(func() string); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-	return r0
-}
-
-// MockConfig_GetRebalanceServiceUrl_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRebalanceServiceUrl'
-type MockConfig_GetRebalanceServiceUrl_Call struct {
-	*mock.Call
-}
-
-// GetRebalanceServiceUrl is a helper method to define mock.On call
-func (_e *MockConfig_Expecter) GetRebalanceServiceUrl() *MockConfig_GetRebalanceServiceUrl_Call {
-	return &MockConfig_GetRebalanceServiceUrl_Call{Call: _e.mock.On("GetRebalanceServiceUrl")}
-}
-
-func (_c *MockConfig_GetRebalanceServiceUrl_Call) Run(run func()) *MockConfig_GetRebalanceServiceUrl_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockConfig_GetRebalanceServiceUrl_Call) Return(s string) *MockConfig_GetRebalanceServiceUrl_Call {
-	_c.Call.Return(s)
-	return _c
-}
-
-func (_c *MockConfig_GetRebalanceServiceUrl_Call) RunAndReturn(run func() string) *MockConfig_GetRebalanceServiceUrl_Call {
 	_c.Call.Return(run)
 	return _c
 }
