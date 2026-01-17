@@ -561,14 +561,6 @@ func (cfg *config) SetRelay(value string) error {
 	return nil
 }
 
-func (cfg *config) GetRebalanceServiceUrl() string {
-	return cfg.Env.RebalanceServiceUrl
-}
-
-func (cfg *config) EnableRebalance() bool {
-	return cfg.Env.EnableRebalance
-}
-
 func (cfg *config) EnableSwap() bool {
 	value, err := cfg.Get("EnableSwap", "")
 	if err != nil {

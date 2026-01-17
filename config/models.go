@@ -28,16 +28,15 @@ type AppConfig struct {
 	BaseUrl         string `envconfig:"BASE_URL"`
 	FrontendUrl     string `envconfig:"FRONTEND_URL"`
 
-	GoProfilerAddr        string `envconfig:"GO_PROFILER_ADDR"`
-	EnableAdvancedSetup   bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
-	AutoUnlockPassword    string `envconfig:"AUTO_UNLOCK_PASSWORD"`
-	LogDBQueries          bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
-	SwapServiceUrl        string `envconfig:"SWAP_SERVICE_URL"`
-	LokihubServicesURL    string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
-	LokihubStoreURL       string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
-	MessageboardNwcUrl    string `envconfig:"MESSAGEBOARD_NWC_URL"`
-	RebalanceServiceUrl   string `envconfig:"REBALANCE_SERVICE_URL"`
-	EnableRebalance       bool   `envconfig:"ENABLE_REBALANCE" default:"false"`
+	GoProfilerAddr      string `envconfig:"GO_PROFILER_ADDR"`
+	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
+	AutoUnlockPassword  string `envconfig:"AUTO_UNLOCK_PASSWORD"`
+	LogDBQueries        bool   `envconfig:"LOG_DB_QUERIES" default:"false"`
+	SwapServiceUrl      string `envconfig:"SWAP_SERVICE_URL"`
+	LokihubServicesURL  string `envconfig:"LOKIHUB_SERVICES_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-services/refs/heads/main"`
+	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
+	MessageboardNwcUrl  string `envconfig:"MESSAGEBOARD_NWC_URL"`
+
 	EnableSwap            bool   `envconfig:"ENABLE_SWAP" default:"false"`
 	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 	LSP                   string `envconfig:"LSP"`
@@ -81,8 +80,7 @@ type Config interface {
 	SetMessageboardNwcUrl(value string) error
 	GetRelay() string
 	SetRelay(value string) error
-	GetRebalanceServiceUrl() string
-	EnableRebalance() bool
+
 	EnableSwap() bool
 	SetEnableSwap(value bool) error
 	EnableMessageboardNwc() bool
