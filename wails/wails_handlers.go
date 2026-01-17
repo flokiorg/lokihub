@@ -506,22 +506,6 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: openChannelResponse, Error: ""}
 		}
 
-	case "/api/channels/rebalance":
-		rebalanceChannelRequest := &api.RebalanceChannelRequest{}
-		err := json.Unmarshal([]byte(body), rebalanceChannelRequest)
-		if err != nil {
-			logger.Logger.Error().Fields(map[string]interface{}{
-				"route":  route,
-				"method": method,
-				"body":   body,
-			}).Err(err).Msg("Failed to decode request to wails router")
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-		}
-		rebalanceChannelResponse, err := app.api.RebalanceChannel(ctx, rebalanceChannelRequest)
-		if err != nil {
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-		}
-		return WailsRequestRouterResponse{Body: rebalanceChannelResponse, Error: ""}
 	case "/api/balances":
 		balancesResponse, err := app.api.GetBalances(ctx)
 		if err != nil {
