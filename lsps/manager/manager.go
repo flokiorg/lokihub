@@ -272,29 +272,13 @@ func (m *LiquidityManager) SetActiveLSP(pubkey string) error {
 		if existing[i].Pubkey == pubkey {
 			existing[i].Active = true
 			found = true
-		} else {
-			existing[i].Active = false // Enforce single active LSP for now?
-			// User request says "select multiple... or add it self"
-			// "only a name field is added to repsent the the lsp and we gonna use as label intead of display the URI"
-			// If multi-select is allowed, we shouldn't disable others.
-			// BUT user request says "Settings > Services > LSPs user could select multiple".
-			// Let's assume multi-active is allowed.
-			// RE-READING: "user could select multiple from community added sps or add it self"
-			// Usually this means adding to a "My LSPs" list.
-			// Active status usually implies "I want to use this one".
-			// Mult-active LSPs is complex for "Receive" flow (which one to ask?).
-			// Let's stick to single active for JIT/Receive for simplicity unless specified.
-			// Wait, user said "select multiple...".
-			// Let's assume we toggle the specific one requested.
+			break
 		}
 	}
 
 	if !found {
 		return errors.New("LSP not found")
 	}
-
-	// If sticking to single active:
-	// The above loop disables others.
 
 	return m.saveLSPsToDB(existing)
 }

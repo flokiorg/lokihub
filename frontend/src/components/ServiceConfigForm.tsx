@@ -1,8 +1,8 @@
 import {
     AlertCircle,
+    ArrowLeftRight,
     Globe,
     MessageCircle,
-    Server,
     Zap
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -204,7 +204,7 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <CardTitle className="text-lg flex items-center gap-2">
-                                <Server className="w-5 h-5 text-primary" />
+                                <ArrowLeftRight className="w-5 h-5 text-primary" />
                                 Swap Service
                             </CardTitle>
                             <CardDescription>
