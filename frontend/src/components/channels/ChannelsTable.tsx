@@ -4,25 +4,25 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading.tsx";
 import { Badge } from "src/components/ui/badge.tsx";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress.tsx";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "src/components/ui/table.tsx";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { Channel, LongUnconfirmedZeroConfChannel } from "src/types";
@@ -140,7 +140,6 @@ export function ChannelsTable({
                         key={channel.id}
                         channel={channel}
                         unconfirmedChannel={unconfirmedChannel}
-                        hasMultipleChannels={channels.length > 1}
                       />
                     );
                   })}
@@ -163,13 +162,11 @@ export function ChannelsTable({
 type ChannelTableRowProps = {
   channel: Channel;
   unconfirmedChannel: LongUnconfirmedZeroConfChannel | undefined;
-  hasMultipleChannels: boolean;
 };
 
 function ChannelTableRow({
   channel,
   unconfirmedChannel,
-  hasMultipleChannels,
 }: ChannelTableRowProps) {
   const { data: peerDetails } = useNodeDetails(channel.remotePubkey);
   const capacity = channel.localBalance + channel.remoteBalance;
@@ -239,7 +236,6 @@ function ChannelTableRow({
         <ChannelDropdownMenu
           alias={alias}
           channel={channel}
-          hasMultipleChannels={hasMultipleChannels}
         />
       </TableCell>
     </TableRow>

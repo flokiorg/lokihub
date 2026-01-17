@@ -4,19 +4,19 @@ import { ChannelWarning } from "src/components/channels/ChannelWarning";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { Badge } from "src/components/ui/badge.tsx";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress.tsx";
 import { Separator } from "src/components/ui/separator";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { formatAmount } from "src/lib/utils.ts";
@@ -57,7 +57,6 @@ export function ChannelsCards({
                 addSeparator={index > 0}
                 channel={channel}
                 unconfirmedChannel={unconfirmedChannel}
-                hasMultipleChannels={channels.length > 1}
               />
             );
           })}
@@ -69,14 +68,12 @@ type ChannelCardProps = {
   channel: Channel;
   unconfirmedChannel: LongUnconfirmedZeroConfChannel | undefined;
   addSeparator: boolean;
-  hasMultipleChannels: boolean;
 };
 
 function ChannelCard({
   channel,
   unconfirmedChannel,
   addSeparator,
-  hasMultipleChannels,
 }: ChannelCardProps) {
   const { data: node } = useNodeDetails(channel.remotePubkey);
   const alias = node?.alias || "Unknown";
@@ -95,7 +92,6 @@ function ChannelCard({
               <ChannelDropdownMenu
                 alias={alias}
                 channel={channel}
-                hasMultipleChannels={hasMultipleChannels}
               />
             </div>
           </CardTitle>
