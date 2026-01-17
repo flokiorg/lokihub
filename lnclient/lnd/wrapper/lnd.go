@@ -9,6 +9,7 @@ import (
 
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
+	"github.com/flokiorg/flnd/lnrpc/peersrpc"
 	"github.com/flokiorg/flnd/lnrpc/routerrpc"
 	"github.com/flokiorg/flnd/macaroons"
 	"google.golang.org/grpc"
@@ -35,6 +36,7 @@ type LNDWrapper struct {
 	routerClient   routerrpc.RouterClient
 	stateClient    lnrpc.StateClient
 	invoicesClient invoicesrpc.InvoicesClient
+	peersClient    peersrpc.PeersClient
 	IdentityPubkey string
 	conn           *grpc.ClientConn
 }
@@ -100,6 +102,7 @@ func NewLNDclient(lndOptions LNDoptions) (result *LNDWrapper, err error) {
 		routerClient:   routerrpc.NewRouterClient(conn),
 		stateClient:    lnrpc.NewStateClient(conn),
 		invoicesClient: invoicesrpc.NewInvoicesClient(conn),
+		peersClient:    peersrpc.NewPeersClient(conn),
 		conn:           conn,
 	}, nil
 }
@@ -262,4 +265,8 @@ func (wrapper *LNDWrapper) SubscribeTransactions(ctx context.Context, req *lnrpc
 
 func (wrapper *LNDWrapper) ChannelAcceptor(ctx context.Context, options ...grpc.CallOption) (lnrpc.Lightning_ChannelAcceptorClient, error) {
 	return wrapper.client.ChannelAcceptor(ctx, options...)
+}
+
+func (wrapper *LNDWrapper) UpdateNodeAnnouncement(ctx context.Context, req *peersrpc.NodeAnnouncementUpdateRequest, options ...grpc.CallOption) (*peersrpc.NodeAnnouncementUpdateResponse, error) {
+	return wrapper.peersClient.UpdateNodeAnnouncement(ctx, req, options...)
 }

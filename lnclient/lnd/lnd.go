@@ -19,6 +19,10 @@ import (
 	decodepay "github.com/flokiorg/lokihub/lndecodepay"
 	"google.golang.org/grpc/status"
 
+	"github.com/flokiorg/flnd/lnrpc"
+	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
+	"github.com/flokiorg/flnd/lnrpc/peersrpc"
+	"github.com/flokiorg/flnd/lnrpc/routerrpc"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -28,12 +32,7 @@ import (
 	"github.com/flokiorg/lokihub/nip47/notifications"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/rs/zerolog"
-
 	// "gorm.io/gorm"
-
-	"github.com/flokiorg/flnd/lnrpc"
-	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
-	"github.com/flokiorg/flnd/lnrpc/routerrpc"
 )
 
 type LNDService struct {
@@ -1678,7 +1677,14 @@ func (svc *LNDService) GetPubkey() string {
 }
 
 func (svc *LNDService) SetNodeAlias(ctx context.Context, alias string) error {
-	return errors.New("SetNodeAlias not implemented for FLND")
+	_, err := svc.client.UpdateNodeAnnouncement(ctx, &peersrpc.NodeAnnouncementUpdateRequest{
+		Alias: alias,
+	})
+	if err != nil {
+		svc.logger.Error().Err(err).Str("alias", alias).Msg("Failed to remove node alias")
+		return err
+	}
+	return nil
 }
 
 func fetchNodeInfo(ctx context.Context, client *wrapper.LNDWrapper) (*lnclient.NodeInfo, error) {
