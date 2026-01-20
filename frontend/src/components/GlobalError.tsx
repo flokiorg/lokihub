@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
     ServiceConfigForm,
     ServiceConfigState,
-    mergeLSPs,
     validateServiceConfig
 } from "src/components/ServiceConfigForm";
 import { Button } from "src/components/ui/button";
@@ -57,7 +56,18 @@ export function GlobalError({ message }: GlobalErrorProps) {
                   messageboardNwcUrl: info.messageboardNwcUrl || "",
                   enableSwap: info.enableSwap ?? true,
                   enableMessageboardNwc: info.enableMessageboardNwc ?? true,
-                  lsps: mergeLSPs(info.lsps || [], communityLSPs),
+
+                  lsps: (info.lsps || []).length > 0 ? info.lsps : communityLSPs.map((opt: any) => {
+                        const [pubkeyRaw, host] = opt.uri?.split('@') || ['', ''];
+                        return {
+                            name: opt.name,
+                            pubkey: pubkeyRaw,
+                            host: host,
+                            active: false,
+                            isCommunity: true,
+                            description: opt.description
+                        } as import("src/types").LSP;
+                  }),
                 });
             }
         })
