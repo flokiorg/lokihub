@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
@@ -93,6 +94,10 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	gormDB, err := db.NewDB(appConfig.DatabaseUri, appConfig.LogDBQueries)
+	if err != nil {
+		return nil, err
+	}
+	err = migrations.Migrate(gormDB)
 	if err != nil {
 		return nil, err
 	}

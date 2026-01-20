@@ -21,7 +21,6 @@ var expectedTables = []string{
 	"transactions",
 	"swaps",
 	"user_configs",
-	"migrations",
 	"forwards",
 }
 

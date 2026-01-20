@@ -9,7 +9,6 @@ import (
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
 
-	"github.com/flokiorg/lokihub/db/migrations"
 	sqlite_wrapper "github.com/flokiorg/lokihub/db/sqlite-wrapper"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -81,12 +80,6 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 	}
 
 	logger.Logger.Debug().Str("db_backend", ret.Dialector.Name()).Msg("loaded database")
-
-	err := migrations.Migrate(ret)
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to migrate")
-		return nil, err
-	}
 
 	return ret, nil
 }

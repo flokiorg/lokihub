@@ -8,7 +8,7 @@ import (
 
 type UserConfig struct {
 	ID        uint
-	Key       string
+	Key       string `gorm:"unique;not null"`
 	Value     string
 	Encrypted bool
 	CreatedAt time.Time
@@ -19,7 +19,7 @@ type App struct {
 	ID           uint
 	Name         string `validate:"required"`
 	Description  string
-	AppPubkey    string `validate:"required"`
+	AppPubkey    string `validate:"required" gorm:"unique;not null"`
 	WalletPubkey *string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -30,8 +30,8 @@ type App struct {
 
 type AppPermission struct {
 	ID            uint
-	AppId         uint `validate:"required"`
-	App           App
+	AppId         uint   `validate:"required"`
+	App           App    `gorm:"constraint:OnDelete:CASCADE;"`
 	Scope         string `validate:"required"`
 	MaxAmountLoki int
 	BudgetRenewal string
@@ -43,8 +43,8 @@ type AppPermission struct {
 type RequestEvent struct {
 	ID          uint
 	AppId       *uint
-	App         App
-	NostrId     string `validate:"required"`
+	App         App    `gorm:"constraint:OnDelete:CASCADE;"`
+	NostrId     string `validate:"required" gorm:"unique;not null"`
 	ContentData string
 	Method      string
 	State       string
@@ -53,13 +53,14 @@ type RequestEvent struct {
 }
 
 type ResponseEvent struct {
-	ID        uint
-	NostrId   string `validate:"required"`
-	RequestId uint   `validate:"required"`
-	State     string
-	RepliedAt time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID           uint
+	NostrId      string       `validate:"required" gorm:"unique;not null"`
+	RequestId    uint         `validate:"required"`
+	RequestEvent RequestEvent `gorm:"constraint:OnDelete:CASCADE;foreignKey:RequestId"`
+	State        string
+	RepliedAt    time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 type Transaction struct {
@@ -92,7 +93,7 @@ type Transaction struct {
 
 type Swap struct {
 	ID                 uint
-	SwapId             string `validate:"required"`
+	SwapId             string `validate:"required" gorm:"unique;not null"`
 	Type               string
 	State              string
 	Invoice            string
