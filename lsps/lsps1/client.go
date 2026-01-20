@@ -232,6 +232,7 @@ func (h *ClientHandler) handleCreateOrderResponse(peerPubkey, requestID string, 
 		CounterpartyNodeID: peerPubkey,
 		OrderID:            result.OrderID,
 		Order:              result.Order,
+		OrderState:         result.OrderState, // Populating new field
 		Payment:            result.Payment,
 		Channel:            result.Channel,
 	})
@@ -262,6 +263,7 @@ func (h *ClientHandler) handleGetOrderResponse(peerPubkey, requestID string, res
 		CounterpartyNodeID: peerPubkey,
 		OrderID:            result.OrderID,
 		Order:              result.Order,
+		OrderState:         result.OrderState, // Populating new field
 		Payment:            result.Payment,
 		Channel:            result.Channel,
 	})

@@ -41,8 +41,8 @@ type CreateOrderRequest struct {
 
 // OrderParams represents channel order parameters
 type OrderParams struct {
-	LspBalanceLoki               uint64  `json:"lsp_balance_loki,string"`
-	ClientBalanceLoki            uint64  `json:"client_balance_loki,string"`
+	LspBalanceLoki               uint64  `json:"lsp_balance_loki"`
+	ClientBalanceLoki            uint64  `json:"client_balance_loki"`
 	RequiredChannelConfirmations uint16  `json:"required_channel_confirmations"`
 	FundingConfirmsWithinBlocks  uint16  `json:"funding_confirms_within_blocks"`
 	ChannelExpiryBlocks          uint32  `json:"channel_expiry_blocks"`

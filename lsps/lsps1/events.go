@@ -35,6 +35,7 @@ type OrderCreatedEvent struct {
 	CounterpartyNodeID string
 	OrderID            string
 	Order              OrderParams
+	OrderState         string // Added field
 	Payment            PaymentInfo
 	Channel            *ChannelInfo
 }
@@ -58,6 +59,7 @@ type OrderStatusEvent struct {
 	CounterpartyNodeID string
 	OrderID            string
 	Order              OrderParams
+	OrderState         string // Added field
 	Payment            PaymentInfo
 	Channel            *ChannelInfo
 }
