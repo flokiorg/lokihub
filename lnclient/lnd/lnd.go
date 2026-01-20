@@ -17,6 +17,7 @@ import (
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
 	decodepay "github.com/flokiorg/lokihub/lndecodepay"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/flokiorg/flnd/lnrpc"
@@ -152,6 +153,9 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 				NoInflightUpdates: true,
 			})
 			if err != nil {
+				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					return
+				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to payments")
 				select {
 				case <-ctx.Done():
@@ -164,6 +168,9 @@ func (svc *LNDService) subscribePayments(ctx context.Context) {
 			for {
 				payment, err := paymentStream.Recv()
 				if err != nil {
+					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+						return
+					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive payment")
 					select {
 					case <-ctx.Done():
@@ -215,6 +222,9 @@ func (svc *LNDService) subscribeInvoices(ctx context.Context) {
 		default:
 			invoiceStream, err := svc.client.SubscribeInvoices(ctx, &lnrpc.InvoiceSubscription{})
 			if err != nil {
+				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					return
+				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to invoices")
 				select {
 				case <-ctx.Done():
@@ -227,6 +237,9 @@ func (svc *LNDService) subscribeInvoices(ctx context.Context) {
 			for {
 				invoice, err := invoiceStream.Recv()
 				if err != nil {
+					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+						return
+					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive invoice")
 					select {
 					case <-ctx.Done():
@@ -259,6 +272,9 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 		default:
 			channelEvents, err := svc.client.SubscribeChannelEvents(ctx, &lnrpc.ChannelEventSubscription{})
 			if err != nil {
+				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					return
+				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to channel events")
 				select {
 				case <-ctx.Done():
@@ -271,6 +287,9 @@ func (svc *LNDService) subscribeChannelEvents(ctx context.Context) {
 			for {
 				event, err := channelEvents.Recv()
 				if err != nil {
+					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+						return
+					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive channel event")
 					select {
 					case <-ctx.Done():
