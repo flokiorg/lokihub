@@ -99,6 +99,12 @@ type API interface {
 	LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error)
 
 	// LSP Management
+	HandleListLSPs(ctx context.Context) ([]manager.SettingsLSP, error)
+	HandleAddLSP(ctx context.Context, req *AddLSPRequest) (*manager.SettingsLSP, error)
+	HandleUpdateLSP(ctx context.Context, pubkey string, req *UpdateLSPRequest) error
+	HandleDeleteLSP(ctx context.Context, pubkey string) error
+
+	// Legacy wrappers (to be deprecated)
 	ListLSPs() ([]manager.SettingsLSP, error)
 	GetSelectedLSPs() ([]manager.SettingsLSP, error)
 	AddSelectedLSP(pubkey string) error
@@ -281,28 +287,30 @@ type SetupRequest struct {
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	SwapServiceUrl        string `json:"swapServiceUrl"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	LSP                   string `json:"lsp"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword        string            `json:"unlockPassword"`
+	LokihubServicesURL    string            `json:"lokihubServicesURL"`
+	SwapServiceUrl        string            `json:"swapServiceUrl"`
+	Relay                 string            `json:"relay"`
+	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
+	MempoolApi            string            `json:"mempoolApi"`
+	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
+	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
+	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword        string `json:"unlockPassword"`
-	LNDAddress            string `json:"lndAddress"`
-	LNDCertHex            string `json:"lndCertHex"`
-	LNDMacaroonHex        string `json:"lndMacaroonHex"`
-	LokihubServicesURL    string `json:"lokihubServicesURL"`
-	SwapServiceUrl        string `json:"swapServiceUrl"`
-	Relay                 string `json:"relay"`
-	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
-	MempoolApi            string `json:"mempoolApi"`
-	LSP                   string `json:"lsp"`
-	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
+	UnlockPassword        string            `json:"unlockPassword"`
+	LNDAddress            string            `json:"lndAddress"`
+	LNDCertHex            string            `json:"lndCertHex"`
+	LNDMacaroonHex        string            `json:"lndMacaroonHex"`
+	LokihubServicesURL    string            `json:"lokihubServicesURL"`
+	SwapServiceUrl        string            `json:"swapServiceUrl"`
+	Relay                 string            `json:"relay"`
+	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
+	MempoolApi            string            `json:"mempoolApi"`
+	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
+	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
+	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
 }
 
 type SetupStatusResponse struct {
@@ -383,10 +391,11 @@ type UpdateSettingsRequest struct {
 }
 
 type LSPSettingInput struct {
-	Name   string `json:"name"`
-	Pubkey string `json:"pubkey"`
-	Host   string `json:"host"`
-	Active bool   `json:"active"`
+	Name        string `json:"name"`
+	Pubkey      string `json:"pubkey"`
+	Host        string `json:"host"`
+	Active      bool   `json:"active"`
+	IsCommunity bool   `json:"isCommunity"`
 }
 
 type SetNodeAliasRequest struct {

@@ -40,7 +40,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	ctx := app.ctx
 
 	appv2Regex := regexp.MustCompile(
-		`/api/v2/apps/([0-9a-f]+)`,
+		`/api/apps/([0-9a-f]+)`,
 	)
 
 	appv2Match := appv2Regex.FindStringSubmatch(route)
@@ -608,15 +608,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	// LSPS Settings Routes
 	case "/api/lsps/all":
-		// Get LiquidityManager
-		lm := app.svc.GetLiquidityManager()
-		if lm == nil {
-			return WailsRequestRouterResponse{Body: nil, Error: "LiquidityManager not available"}
-		}
-
 		switch method {
 		case "GET":
-			lsps, err := lm.GetLSPs()
+			lsps, err := app.api.ListLSPs()
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -633,7 +627,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			err = lm.AddLSP(req.Name, req.URI)
+			err = app.api.AddLSP(req.Name, req.URI)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -653,7 +647,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			if pubkey == "" {
 				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
 			}
-			err := lm.RemoveLSP(pubkey)
+			err := app.api.RemoveLSP(pubkey)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -669,7 +663,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			err = lm.SetActiveLSP(req.Pubkey)
+			err = app.api.AddSelectedLSP(req.Pubkey)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -678,16 +672,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 
 	case "/api/lsps/selected":
-		// Manage selected LSPs (multiple active selection)
-		lm := app.svc.GetLiquidityManager()
-		if lm == nil {
-			return WailsRequestRouterResponse{Body: nil, Error: "LiquidityManager not available"}
-		}
-
 		switch method {
 		case "GET":
 			// Return list of selected LSP pubkeys
-			selected, err := lm.GetSelectedLSPs()
+			selected, err := app.api.GetSelectedLSPs()
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -703,7 +691,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			err = lm.AddSelectedLSP(req.Pubkey)
+			err = app.api.AddSelectedLSP(req.Pubkey)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -721,7 +709,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			if pubkey == "" {
 				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
 			}
-			err := lm.RemoveSelectedLSP(pubkey)
+			err := app.api.RemoveSelectedLSP(pubkey)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -750,11 +738,11 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	case "/api/lsps1/info":
 		req := &api.LSPS1GetInfoRequest{}
-		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp|token)=([^&]+)`)
+		paramRegex := regexp.MustCompile(`[?&](lsp|token)=([^&]+)`)
 		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
 		for _, match := range paramMatches {
 			switch match[1] {
-			case "lspPubkey", "lsp":
+			case "lsp":
 				req.LSPPubkey = match[2]
 			case "token":
 				req.Token = match[2]
@@ -762,7 +750,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 
 		if req.LSPPubkey == "" {
-			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey is required"}
+			return WailsRequestRouterResponse{Body: nil, Error: "lsp is required"}
 		}
 
 		resp, err := app.api.LSPS1GetInfo(ctx, req)
@@ -845,16 +833,16 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	case "/api/lsps5/webhooks":
 		req := &api.LSPS5ListWebhooksRequest{}
-		paramRegex := regexp.MustCompile(`[?&](lspPubkey)=([^&]+)`)
+		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp)=([^&]+)`)
 		paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
 		for _, match := range paramMatches {
-			if match[1] == "lspPubkey" {
+			if match[1] == "lspPubkey" || match[1] == "lsp" {
 				req.LSPPubkey = match[2]
 			}
 		}
 
 		if req.LSPPubkey == "" {
-			return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey is required"}
+			return WailsRequestRouterResponse{Body: nil, Error: "lsp (or lspPubkey) is required"}
 		}
 
 		resp, err := app.api.LSPS5ListWebhooks(ctx, req)
@@ -883,11 +871,11 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 				_ = json.Unmarshal([]byte(body), req)
 			}
 			// Fallback/Override with query params
-			paramRegex := regexp.MustCompile(`[?&](lspPubkey|url)=([^&]+)`)
+			paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp|url)=([^&]+)`)
 			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
 			for _, match := range paramMatches {
 				switch match[1] {
-				case "lspPubkey":
+				case "lspPubkey", "lsp":
 					req.LSPPubkey = match[2]
 				case "url":
 					unescaped, _ := url.QueryUnescape(match[2])
@@ -896,7 +884,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 
 			if req.LSPPubkey == "" || req.URL == "" {
-				return WailsRequestRouterResponse{Body: nil, Error: "lspPubkey and url are required"}
+				return WailsRequestRouterResponse{Body: nil, Error: "lsp (or lspPubkey) and url are required"}
 			}
 
 			resp, err := app.api.LSPS5RemoveWebhook(ctx, req)

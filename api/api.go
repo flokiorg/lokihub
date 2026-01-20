@@ -58,6 +58,7 @@ type api struct {
 	startupError     error
 	startupErrorTime time.Time
 	eventPublisher   events.EventPublisher
+	lspManager       *manager.LSPManager
 }
 
 func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, lokiSvc loki.LokiService, eventPublisher events.EventPublisher) *api {
@@ -70,6 +71,7 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		keys:           keys,
 		lokiSvc:        lokiSvc,
 		eventPublisher: eventPublisher,
+		lspManager:     manager.NewLSPManager(gormDB),
 	}
 }
 
@@ -1295,171 +1297,10 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		}
 	}
 
-	// Helper function to parse host:port into address and port
-	parseHostPort := func(hostPort string) (string, uint16, error) {
-		parts := strings.Split(hostPort, ":")
-		if len(parts) != 2 {
-			return "", 0, fmt.Errorf("invalid host:port format: %s", hostPort)
-		}
-		port, err := strconv.ParseUint(parts[1], 10, 16)
-		if err != nil {
-			return "", 0, fmt.Errorf("invalid port number: %w", err)
-		}
-		return parts[0], uint16(port), nil
-	}
-
-	// Process LSP updates (including deletions when array is empty)
-	// Note: We check if LSPs field is present in the request (non-nil)
-	// An empty array means "delete all custom LSPs", so we process it
+	// Process LSP updates using new helper (which uses LSPManager and atomic updates)
 	if updateSettingsRequest.LSPs != nil {
-		// Get current LSPs from backend
-		existingLSPs, err := api.ListLSPs()
-		if err != nil {
-			return fmt.Errorf("failed to list existing LSPs: %w", err)
-		}
-
-		// Get community LSPs to ensure we never delete them
-		communityPubkeys := make(map[string]bool)
-		servicesData, err := api.GetServices(context.Background())
-		if err == nil {
-			if servicesMap, ok := servicesData.(map[string]interface{}); ok {
-				if lspsData, ok := servicesMap["lsps"].([]interface{}); ok {
-					for _, lspItem := range lspsData {
-						if lspMap, ok := lspItem.(map[string]interface{}); ok {
-							if uri, ok := lspMap["uri"].(string); ok {
-								// Extract pubkey from URI (format: pubkey@host:port)
-								parts := strings.Split(uri, "@")
-								if len(parts) == 2 {
-									communityPubkeys[parts[0]] = true
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Create maps for easier comparison
-		existingMap := make(map[string]manager.SettingsLSP)
-		for _, lsp := range existingLSPs {
-			existingMap[lsp.Pubkey] = lsp
-		}
-
-		newMap := make(map[string]LSPSettingInput)
-		for _, lsp := range updateSettingsRequest.LSPs {
-			newMap[lsp.Pubkey] = lsp
-		}
-
-		// Process removals (LSPs in existing but not in new)
-		// ONLY delete custom LSPs (not community ones)
-		for pubkey, existing := range existingMap {
-			if _, stillExists := newMap[pubkey]; !stillExists {
-				// Safety check: never delete community LSPs
-				if communityPubkeys[pubkey] {
-					logger.Logger.Warn().Interface("pubkey", pubkey).Msg("Skipping deletion of community LSP")
-					continue
-				}
-
-				// Remove from selected if it was active
-				if existing.Active {
-					if err := api.RemoveSelectedLSP(pubkey); err != nil {
-						logger.Logger.Warn().Err(err).Str("pubkey", pubkey).Msg("Failed to deactivate LSP during removal")
-					}
-				}
-				// Remove the LSP
-				if err := api.RemoveLSP(pubkey); err != nil {
-					logger.Logger.Error().Err(err).Str("pubkey", pubkey).Msg("Failed to remove LSP")
-					return fmt.Errorf("failed to remove LSP %s: %w", pubkey, err)
-				}
-				// Disconnect peer
-				if err := api.DisconnectPeer(context.Background(), pubkey); err != nil {
-					logger.Logger.Warn().Err(err).Str("pubkey", pubkey).Msg("Failed to disconnect peer after LSP removal")
-				}
-			}
-		}
-
-		// Process additions and updates
-		for _, newLSP := range updateSettingsRequest.LSPs {
-			existing, alreadyExists := existingMap[newLSP.Pubkey]
-
-			if !alreadyExists {
-				// New LSP - Add it and connect peer if active
-				if newLSP.Active {
-					// Connect peer first
-					address, port, err := parseHostPort(newLSP.Host)
-					if err != nil {
-						logger.Logger.Error().Err(err).Str("host", newLSP.Host).Msg("Failed to parse host:port for new LSP")
-						return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
-					}
-					if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
-						Pubkey:  newLSP.Pubkey,
-						Address: address,
-						Port:    port,
-					}); err != nil {
-						logger.Logger.Error().Err(err).
-							Str("pubkey", newLSP.Pubkey).
-							Str("host", newLSP.Host).
-							Msg("Failed to connect peer for new LSP")
-						return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
-					}
-				}
-
-				// Add LSP
-				uri := newLSP.Pubkey + "@" + newLSP.Host
-				if err := api.AddLSP(newLSP.Name, uri); err != nil {
-					logger.Logger.Error().Err(err).
-						Str("name", newLSP.Name).
-						Str("uri", uri).
-						Msg("Failed to add new LSP")
-					return fmt.Errorf("failed to add LSP %s: %w", newLSP.Name, err)
-				}
-
-				// Activate if needed
-				if newLSP.Active {
-					if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
-						logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to activate new LSP")
-						return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
-					}
-				}
-			} else {
-				// Existing LSP - handle activation/deactivation
-				if newLSP.Active != existing.Active {
-					if newLSP.Active {
-						// Activating - connect peer first
-						address, port, err := parseHostPort(newLSP.Host)
-						if err != nil {
-							logger.Logger.Error().Err(err).Str("host", newLSP.Host).Msg("Failed to parse host:port when activating LSP")
-							return fmt.Errorf("failed to parse host:port for LSP %s: %w", newLSP.Name, err)
-						}
-						if err := api.ConnectPeer(context.Background(), &ConnectPeerRequest{
-							Pubkey:  newLSP.Pubkey,
-							Address: address,
-							Port:    port,
-						}); err != nil {
-							logger.Logger.Error().Err(err).
-								Str("pubkey", newLSP.Pubkey).
-								Str("host", newLSP.Host).
-								Msg("Failed to connect peer when activating LSP")
-							return fmt.Errorf("failed to connect peer for LSP %s: %w", newLSP.Name, err)
-						}
-						// Then activate
-						if err := api.AddSelectedLSP(newLSP.Pubkey); err != nil {
-							logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to activate LSP")
-							return fmt.Errorf("failed to activate LSP %s: %w", newLSP.Name, err)
-						}
-					} else {
-						// Deactivating - deactivate first, then disconnect
-						if err := api.RemoveSelectedLSP(newLSP.Pubkey); err != nil {
-							logger.Logger.Error().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to deactivate LSP")
-							return fmt.Errorf("failed to deactivate LSP %s: %w", newLSP.Name, err)
-						}
-						// Disconnect peer
-						if err := api.DisconnectPeer(context.Background(), newLSP.Pubkey); err != nil {
-							logger.Logger.Warn().Err(err).Str("pubkey", newLSP.Pubkey).Msg("Failed to disconnect peer after LSP deactivation")
-						}
-					}
-				}
-			}
+		if err := api.saveLSPsToDatabase(updateSettingsRequest.LSPs); err != nil {
+			return fmt.Errorf("failed to update LSPs: %w", err)
 		}
 	}
 
@@ -2131,6 +1972,18 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		}
 	}
 
+	// Process LSPs array (new approach)
+	if len(req.LSPs) > 0 {
+		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
+			return fmt.Errorf("failed to save LSPs: %w", err)
+		}
+	} else if req.LSP != "" {
+		// Backward compatibility: single LSP string (deprecated)
+		if err := api.cfg.SetLSP(req.LSP); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -2226,6 +2079,18 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
+			return err
+		}
+	}
+
+	// Process LSPs array (new approach)
+	if len(req.LSPs) > 0 {
+		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
+			return fmt.Errorf("failed to save LSPs: %w", err)
+		}
+	} else if req.LSP != "" {
+		// Backward compatibility: single LSP string (deprecated)
+		if err := api.cfg.SetLSP(req.LSP); err != nil {
 			return err
 		}
 	}
