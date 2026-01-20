@@ -1,4 +1,4 @@
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, Zap } from "lucide-react";
 import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -160,6 +160,23 @@ function NewChannelInternal({
           the channel and using it regularly, there is more chance the channel
           will stay open.
         </p>
+
+        <Alert className="bg-muted/50">
+          <InfoIcon className="h-4 w-4" />
+          <AlertDescription className="flex flex-col gap-2">
+            <p className="text-sm">
+              Looking to receive funds instead? You might need incoming capacity.
+            </p>
+            <LinkButton
+              to="/channels/inbound"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+            >
+              Buy Inbound Liquidity
+            </LinkButton>
+          </AlertDescription>
+        </Alert>
         <form
           onSubmit={onSubmit}
           className="md:max-w-md max-w-full flex flex-col gap-5 flex-1"
@@ -260,10 +277,20 @@ function NewChannelInternal({
             pubkey={order?.pubkey}
             name={"Custom"}
           />
-          <Button size="lg">{openImmediately ? "Open Channel" : "Next"}</Button>
+          <Button size="lg">
+            <Zap className="mr-2 h-4 w-4" />
+            {openImmediately ? "Open Channel" : "Next"}
+          </Button>
         </form>
 
         <div className="flex-1 flex flex-col justify-end items-center gap-4">
+          <LinkButton
+            to="/channels/inbound"
+            variant="link"
+            className="text-muted-foreground text-xs"
+          >
+            Need incoming capacity instead?
+          </LinkButton>
         </div>
       </div>
 
@@ -433,7 +460,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
         {props.showCustomOptions && (
           <>
             <div className="grid gap-1.5">
-                <Label htmlFor="provider-select">Peer / Provider</Label>
+                <Label htmlFor="provider-select">Peer / LSP</Label>
                 {/* LSP Selector */}
                 <Select 
                     value={selection} 

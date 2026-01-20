@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
     ServiceConfigForm,
     ServiceConfigState,
-    mergeLSPs,
     validateServiceConfig
 } from "src/components/ServiceConfigForm";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
@@ -71,7 +70,22 @@ export function SetupServices() {
                  // LSPs
                  if (newConfig.lsps.length === 0) {
                      const existingLSPs = (info.lsps as LSP[]) || [];
-                     newConfig.lsps = mergeLSPs(existingLSPs, communityLSPs);
+                     if (existingLSPs.length > 0) {
+                        newConfig.lsps = existingLSPs;
+                     } else {
+                        // Use community LSPs as defaults
+                        newConfig.lsps = communityLSPs.map((opt: any) => {
+                            const [pubkeyRaw, host] = opt.uri?.split('@') || ['', ''];
+                            return {
+                                name: opt.name,
+                                pubkey: pubkeyRaw,
+                                host: host,
+                                active: false, // Default to inactive until user selects
+                                isCommunity: true,
+                                description: opt.description
+                            } as LSP;
+                        });
+                     }
                  }
                  
                  return newConfig;

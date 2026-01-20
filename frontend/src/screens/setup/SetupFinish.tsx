@@ -135,7 +135,13 @@ const finishSetup = async (
                 relay: nodeInfo.relay,
                 messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
                 mempoolApi: nodeInfo.mempoolApi,
-                // dataDir and rpcListen are removed from API
+                lsps: (nodeInfo.lsps || []).map(lsp => ({
+                  name: lsp.name,
+                  pubkey: lsp.pubkey,
+                  host: lsp.host,
+                  active: lsp.active,
+                  isCommunity: lsp.isCommunity,
+                })),
             }),
         });
       } else {
@@ -160,6 +166,13 @@ const finishSetup = async (
                 relay: nodeInfo.relay,
                 messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
                 mempoolApi: nodeInfo.mempoolApi,
+                lsps: (nodeInfo.lsps || []).map(lsp => ({
+                  name: lsp.name,
+                  pubkey: lsp.pubkey,
+                  host: lsp.host,
+                  active: lsp.active,
+                  isCommunity: lsp.isCommunity,
+                })),
             }),
         });
       }

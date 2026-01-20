@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Loading from "src/components/Loading";
 import {
-    ServiceConfigForm,
-    ServiceConfigState,
-    mergeLSPs,
-    validateServiceConfig
+  ServiceConfigForm,
+  ServiceConfigState,
+  validateServiceConfig
 } from "src/components/ServiceConfigForm";
 import SettingsHeader from "src/components/SettingsHeader";
 import { Button } from "src/components/ui/button";
@@ -29,7 +28,7 @@ export function Services() {
   });
 
   // LSP Management Hook
-  const { lsps: backendLSPs, fetchLSPs } = useLSPSManagement();
+  const { lsps: backendLSPs, fetchLSPs, saveLSPChanges, initialized: lspInitialized } = useLSPSManagement();
   
   // Track changes for Save button
   const [servicesDirty, setServicesDirty] = useState(false);
@@ -59,25 +58,23 @@ export function Services() {
 
   // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
   // Also merge with community LSPs
+  // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
+  const hasSyncedLSPs = useRef(false);
+
+  // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
+  // We use hasSyncedLSPs to force the initial sync once backend data is ready
   useEffect(() => {
-    if (backendLSPs && !servicesDirty) {
-        async function merge() {
-            try {
-                const services = await request<any>("/api/setup/config");
-                const communityLSPs = services?.lsps || [];
-                
-                const merged = mergeLSPs(backendLSPs, communityLSPs);
-                setConfig(prev => ({ ...prev, lsps: merged }));
-            } catch (e) {
-                console.error("Failed to fetch community config for LSP merge", e);
-                // Fallback to minimal merge if fetch fails? Or just use backend.
-                // For now, if failed, just use backendLSPs
-                setConfig(prev => ({ ...prev, lsps: backendLSPs }));
-            }
+    if (lspInitialized) {
+        if (!hasSyncedLSPs.current) {
+             // First load: force sync
+             setConfig(prev => ({ ...prev, lsps: backendLSPs }));
+             hasSyncedLSPs.current = true;
+        } else if (!servicesDirty) {
+             // Subsequent updates: sync if clean
+             setConfig(prev => ({ ...prev, lsps: backendLSPs }));
         }
-        merge();
     }
-  }, [backendLSPs, servicesDirty]); // removed communityOptions dependency as we fetch ad-hoc or should check if already fetched
+  }, [backendLSPs, servicesDirty, lspInitialized]);
 
 
   // Track dirty state
@@ -108,9 +105,8 @@ export function Services() {
     // So comparing `config.lsps` (merged) with `backendLSPs` (raw) will ALWAYS be different if descriptions are added.
     // We should compare the "Saveable" parts: pubkey, host, name, active.
     
-    // Helper to strip extra fields and ignore inactive community LSPs
+    // Helper to strip extra fields
     const strip = (lsps: LSP[]) => lsps
-        .filter(l => !(l.isCommunity && !l.active))
         .map(l => ({ 
             pubkey: l.pubkey, host: l.host, name: l.name, active: l.active 
         })).sort((a,b) => a.pubkey.localeCompare(b.pubkey));
@@ -159,7 +155,14 @@ export function Services() {
     }
 
     try {
-      // Save all settings including LSPs in one request
+      // 1. Save LSPs via atomic hook
+      // We pass the ORIGINAL backendLSPs and the NEW config.lsps
+      // The hook calculates diffs and issues Add/Delete/Toggle requests
+      if (config.lsps && backendLSPs) {
+          await saveLSPChanges(backendLSPs, config.lsps);
+      }
+
+      // 2. Save other settings via UpdateSettings
       await updateSettings({
         relay: config.relay,
         mempoolApi: config.mempoolApi,
@@ -167,12 +170,7 @@ export function Services() {
         messageboardNwcUrl: config.messageboardNwcUrl,
         enableSwap: config.enableSwap,
         enableMessageboardNwc: config.enableMessageboardNwc,
-        lsps: config.lsps.map(lsp => ({
-          name: lsp.name,
-          pubkey: lsp.pubkey,
-          host: lsp.host,
-          active: lsp.active,
-        })),
+        // LSPs omitted, handled above
       });
 
       // Reload

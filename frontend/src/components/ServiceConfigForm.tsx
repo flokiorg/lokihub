@@ -165,6 +165,8 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                         onChange={(val) => onChange({ ...state, mempoolApi: val })}
                         options={communityOptions.mempool}
                         placeholder="https://..."
+                        customIcon={<Globe className="w-4 h-4" />}
+                        customLabel="Custom Explorer"
                     />
                 </CardContent>
             </Card>
@@ -225,6 +227,8 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                             options={communityOptions.swap}
                             placeholder="https://..."
                             disabled={!state.enableSwap}
+                            customIcon={<ArrowLeftRight className="w-4 h-4" />}
+                            customLabel="Custom Swap Service"
                         />
                     </CardContent>
                 )}
@@ -257,6 +261,8 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                             options={communityOptions.messageboard}
                             placeholder="nostr+walletconnect://..."
                             disabled={!state.enableMessageboardNwc}
+                            customIcon={<MessageCircle className="w-4 h-4" />}
+                            customLabel="Custom Message Board"
                         />
                     </CardContent>
                 )}
@@ -283,40 +289,4 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
     );
 }
 
-// Helper to merge community LSPs with existing LSPs
-export function mergeLSPs(existingLSPs: LSP[], communityLSPConfig: ServiceOption[]): LSP[] {
-    if (!communityLSPConfig) return existingLSPs;
-    
-    const communityCards = communityLSPConfig.map(opt => {
-        const [pubkeyRaw, host] = opt.uri?.split('@') || ['', ''];
-        const pubkey = pubkeyRaw.toLowerCase();
-        
-        // Find existing case-insensitively
-        const existing = existingLSPs.find(l => l.pubkey.toLowerCase() === pubkey);
-        
-        if (existing) {
-            return {
-                ...existing,
-                isCommunity: true,
-                description: opt.description
-            };
-        }
-        
-        return {
-            name: opt.name,
-            pubkey: pubkey,
-            host: host,
-            active: false,
-            isCommunity: true,
-            description: opt.description
-        } as LSP;
-    });
-    
-    // Use lower case set for checking presence
-    const communityPubkeys = new Set(communityCards.map(c => c.pubkey.toLowerCase()));
-    
-    // Filter custom cards (ensure comparison is robust)
-    const customCards = existingLSPs.filter(l => !communityPubkeys.has(l.pubkey.toLowerCase()));
-    
-    return [...communityCards, ...customCards];
-}
+

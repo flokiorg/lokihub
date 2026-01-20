@@ -4,10 +4,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -178,6 +178,7 @@ export function LNDForm() {
               onChange={(e) => setLndAddress(e.target.value)}
               value={lndAddress}
               id="lnd-address"
+              autoComplete="off"
             />
           </div>
           
@@ -190,6 +191,7 @@ export function LNDForm() {
               value={lndMacaroonHex}
               type="text"
               id="lnd-macaroon-hex"
+              autoComplete="off"
             />
           </div>
           
@@ -201,6 +203,7 @@ export function LNDForm() {
               value={lndCertHex}
               type="text"
               id="lnd-cert-hex"
+              autoComplete="off"
             />
             {!lndCertHex && (
               <div className="flex flex-row gap-2 items-center justify-start text-sm text-muted-foreground mt-2">

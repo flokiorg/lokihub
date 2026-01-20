@@ -140,9 +140,9 @@ export function ServiceCardSelector({
       <div
         onClick={handleSelectCustom}
         className={cn(
-          "relative flex flex-col p-3 rounded-lg border border-dashed transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group",
+          "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group col-span-full",
           isCustom
-            ? "border-yellow-500 ring-1 ring-yellow-500 shadow-sm bg-card"
+            ? "border-primary ring-1 ring-primary shadow-sm bg-card"
             : "border-border hover:border-primary hover:shadow-sm bg-transparent",
           disabled && "opacity-50 pointer-events-none"
         )}
@@ -163,15 +163,15 @@ export function ServiceCardSelector({
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                          <div className="relative p-1.5 rounded-md overflow-hidden">
-                             <div className="absolute inset-0 bg-yellow-500 opacity-10" />
-                             <div className="relative z-10 text-yellow-600 dark:text-yellow-400">
-                                <Server className="w-4 h-4" />
+                             <div className="absolute inset-0 bg-primary opacity-10" />
+                             <div className="relative z-10 text-primary">
+                                {customIcon || <Server className="w-4 h-4" />}
                              </div>
                          </div>
                          <span className="font-semibold text-sm">{customLabel || "Custom Service"}</span>
                     </div>
                     {isCustom && (
-                        <div className="bg-yellow-500 text-white rounded-full p-0.5">
+                        <div className="bg-primary text-primary-foreground rounded-full p-0.5 shrink-0">
                           <Check className="w-3 h-3" />
                         </div>
                     )}
@@ -183,7 +183,7 @@ export function ServiceCardSelector({
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={placeholder || "https://example.com"}
-                        className="h-8 text-xs font-mono bg-background border-yellow-500 focus-visible:ring-yellow-500 px-2"
+                        className="h-8 text-xs font-mono bg-background px-2"
                         onClick={(e) => e.stopPropagation()} 
                          onBlur={onBlur}
                     />

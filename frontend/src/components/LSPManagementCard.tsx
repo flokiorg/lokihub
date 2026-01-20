@@ -1,4 +1,4 @@
-import { Check, Droplet, Plus, Server, Trash2 } from "lucide-react";
+import { Check, Copy, Droplet, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "src/components/ui/button";
@@ -11,6 +11,12 @@ import {
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "src/components/ui/tooltip";
 import { LSP } from "src/hooks/useLSPSManagement";
 import { centerTrim, cn } from "src/lib/utils";
 import { validateLSPURI } from "src/utils/validation";
@@ -102,8 +108,6 @@ export function LSPManagementCard({
 
   const removeLocalLSP = (pubkey: string) => {
     setLocalLSPs(localLSPs.filter((l) => l.pubkey !== pubkey));
-    // Provide immediate feedback about the need to save
-    toast.info("LSP removed. Save changes to persist.");
   };
 
   const toggleLocalLSP = (pubkey: string, active: boolean) => {
@@ -125,17 +129,20 @@ export function LSPManagementCard({
           {/* Community LSPs */}
           {communityCards.map((provider) => (
             <div
-              key={provider.pubkey}
+              key={`${provider.pubkey}-${provider.active}`}
               onClick={() => toggleLocalLSP(provider.pubkey, !provider.active)}
               className={cn(
-                "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none",
+                "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none overflow-hidden",
                 "hover:shadow-md active:scale-[0.98]",
                 provider.active
-                  ? "border-primary relative overflow-hidden before:absolute before:inset-0 before:bg-primary before:opacity-5 before:pointer-events-none shadow-sm"
+                  ? "border-primary shadow-sm"
                   : "border-border bg-card hover:border-primary/50"
               )}
             >
-              <div className="flex items-start justify-between">
+              {provider.active && (
+                <div className="absolute inset-0 bg-primary opacity-5 pointer-events-none" />
+              )}
+              <div className="relative z-10 flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div
                     className={cn(
@@ -148,9 +155,21 @@ export function LSPManagementCard({
                     <Droplet className="w-4 h-4" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-semibold text-sm leading-none">
-                      {provider.name}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-sm leading-none">
+                        {provider.name}
+                      </span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Users className="w-3 h-3 text-muted-foreground/70" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Proposed by the community</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <span className="text-[10px] text-muted-foreground font-medium mt-1">
                       {provider.active ? "Active" : "Inactive"}
                     </span>
@@ -164,19 +183,32 @@ export function LSPManagementCard({
               </div>
 
               {provider.description && (
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-3">
+                <p className="relative z-10 text-xs text-muted-foreground line-clamp-2 leading-snug mt-3">
                   {provider.description}
                 </p>
               )}
 
-              <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-border/50">
+              <div className="relative z-10 flex flex-col gap-1.5 mt-3 pt-3 border-t border-border/50">
                 <div className="flex items-center justify-between gap-2">
                   <p
-                    className="text-[10px] text-muted-foreground opacity-50 font-mono truncate cursor-help"
+                    className="text-[10px] text-muted-foreground opacity-50 font-mono truncate"
                     title={`${provider.pubkey}@${provider.host}`}
                   >
                     {centerTrim(provider.pubkey)}@{provider.host}
                   </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 -mr-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
+                        toast.success("LSP URI copied to clipboard");
+                    }}
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -184,21 +216,24 @@ export function LSPManagementCard({
 
           {customCards.map((provider) => (
             <div
-              key={provider.pubkey}
+              key={`${provider.pubkey}-${provider.active}`}
               onClick={(e) => {
                 // Don't toggle if clicking delete
                 if ((e.target as HTMLElement).closest("button")) return;
                 toggleLocalLSP(provider.pubkey, !provider.active);
               }}
               className={cn(
-                "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none",
+                "relative group flex flex-col p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none overflow-hidden",
                 "hover:shadow-md active:scale-[0.98]",
                 provider.active
-                  ? "border-primary relative overflow-hidden before:absolute before:inset-0 before:bg-primary before:opacity-5 before:pointer-events-none shadow-sm"
+                  ? "border-primary shadow-sm"
                   : "border-border bg-card hover:border-primary/50"
               )}
             >
-              <div className="flex items-start justify-between">
+              {provider.active && (
+                <div className="absolute inset-0 bg-primary opacity-5 pointer-events-none" />
+              )}
+              <div className="relative z-10 flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div
                     className={cn(
@@ -239,14 +274,26 @@ export function LSPManagementCard({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-border/50">
+              <div className="relative z-10 flex flex-col gap-1.5 mt-3 pt-3 border-t border-border/50">
                 <div className="flex items-center justify-between gap-2">
                   <p
-                    className="text-[10px] text-muted-foreground opacity-50 font-mono truncate cursor-help"
+                    className="text-[10px] text-muted-foreground opacity-50 font-mono truncate"
                     title={`${provider.pubkey}@${provider.host}`}
                   >
                     {centerTrim(provider.pubkey)}@{provider.host}
                   </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 -mr-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
+                        toast.success("LSP URI copied to clipboard");
+                    }}
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -255,10 +302,10 @@ export function LSPManagementCard({
           {/* Add New LSP Card */}
           <div
             className={cn(
-              "relative flex flex-col p-4 rounded-xl border border-dashed border-border transition-all duration-200",
+              "relative flex flex-col p-4 rounded-xl border transition-all duration-200 col-span-full",
               isAddingLSP
-                ? "bg-card shadow-md ring-1 ring-primary border-primary"
-                : "bg-transparent hover:border-primary hover:shadow-sm cursor-pointer group"
+                ? "bg-card shadow-sm border-primary ring-1 ring-primary"
+                : "bg-transparent border-border hover:border-primary hover:shadow-sm cursor-pointer group"
             )}
             onClick={() => !isAddingLSP && setIsAddingLSP(true)}
           >
@@ -266,15 +313,15 @@ export function LSPManagementCard({
               <div className="flex flex-col items-center justify-center h-full py-6 text-muted-foreground group-hover:text-primary transition-colors">
                 <div className="relative flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full mb-3 group-hover:scale-110 transition-all duration-300 overflow-hidden">
                   <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-colors duration-300" />
-                  <Plus className="w-5 h-5 relative z-10" />
+                  <Droplet className="w-5 h-5 relative z-10" />
                 </div>
                 <span className="font-medium text-sm">Add Custom LSP</span>
               </div>
             ) : (
               <div className="flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="font-semibold text-sm">New Service</span>
-                  <Server className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-semibold text-sm">New LSP</span>
+                  <Droplet className="w-4 h-4 text-muted-foreground" />
                 </div>
 
                 <div className="flex-1 space-y-3">
@@ -286,7 +333,7 @@ export function LSPManagementCard({
                       id="lsp-name"
                       value={newLSPName}
                       onChange={(e) => setNewLSPName(e.target.value)}
-                      placeholder="My Node"
+                      placeholder="LSP name"
                       className="h-8 text-xs bg-background"
                       autoFocus
                       onKeyDown={(e) => {

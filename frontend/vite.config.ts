@@ -125,7 +125,7 @@ const insertDevCSPPlugin: Plugin = {
           content="
             default-src 'self' 'unsafe-inline';
             script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEVELOPMENT_NONCE};
-            connect-src 'self' wss: http://localhost:* ws://localhost:*;
+            connect-src 'self' wss: http://localhost:* ws://localhost:* ws://wails.localhost:*;
             style-src 'self' 'unsafe-inline';
             img-src 'self' data: blob:;
           "

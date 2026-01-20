@@ -370,7 +370,7 @@ const routes: RouteObject[] = [
             handle: { crumb: () => "Current Order" },
           },
           {
-            path: "lsp-order",
+            path: "inbound",
             element: <OrderChannel />,
             handle: { crumb: () => "Increase Inbound Liquidity" },
           },
