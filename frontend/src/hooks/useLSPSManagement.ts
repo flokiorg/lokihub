@@ -8,6 +8,7 @@ export interface LSP {
     host: string;
     active: boolean;
     isCommunity?: boolean;
+    isSystem?: boolean; // Added
     description?: string;
 }
 
@@ -16,25 +17,41 @@ export function useLSPSManagement() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [initialized, setInitialized] = useState(false);
+
     const fetchLSPs = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await request<LSP[]>('/api/lsps/all');
-            // If null is returned (no LSPs yet), treat as empty array
-            setLsps(data || []);
+            const data = await request<LSP[]>('/api/lsps');
+            // Map backend isSystem to isCommunity for UI compatibility
+            const mapped = (data || []).map(l => ({
+                ...l,
+                isCommunity: l.isSystem || l.isCommunity
+            }));
+            setLsps(mapped);
             setError(null);
         } catch (e: any) {
             setError(e.message || 'Failed to fetch LSPs');
         } finally {
             setLoading(false);
+            setInitialized(true);
         }
     }, []);
 
     const addLSP = useCallback(async (name: string, uri: string) => {
         try {
-            await request('/api/lsps/all', {
+             // Basic parsing match for pubkey@host:port or just host:port?
+             // Backend expects { name, pubkey, host }
+             // UI sends URI: pubkey@host:port
+             const parts = uri.split('@');
+             if (parts.length !== 2) throw new Error("Invalid URI format");
+             
+             await request('/api/lsps', {
                 method: 'POST',
-                body: JSON.stringify({ name, uri }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name, pubkey: parts[0], host: parts[1] }),
             });
             await fetchLSPs();
             return true;
@@ -45,7 +62,7 @@ export function useLSPSManagement() {
 
     const removeLSP = useCallback(async (pubkey: string) => {
         try {
-            await request(`/api/lsps/all?pubkey=${pubkey}`, {
+            await request(`/api/lsps/${pubkey}`, {
                 method: 'DELETE',
             });
             await fetchLSPs();
@@ -56,9 +73,12 @@ export function useLSPSManagement() {
 
     const setActiveLSP = useCallback(async (pubkey: string) => {
         try {
-            await request('/api/lsps/selected', {
-                method: 'POST',
-                body: JSON.stringify({ pubkey }),
+            await request(`/api/lsps/${pubkey}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ active: true }),
             });
             await fetchLSPs();
         } catch (e: any) {
@@ -68,8 +88,12 @@ export function useLSPSManagement() {
 
     const deactivateLSP = useCallback(async (pubkey: string) => {
         try {
-            await request(`/api/lsps/selected?pubkey=${pubkey}`, {
-                method: 'DELETE',
+            await request(`/api/lsps/${pubkey}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ active: false }),
             });
             await fetchLSPs();
         } catch (e: any) {
@@ -85,11 +109,8 @@ export function useLSPSManagement() {
             const currentPubkeys = new Set(current.map(l => l.pubkey));
             for (const lsp of original) {
                 if (!currentPubkeys.has(lsp.pubkey)) {
-                    // Remove LSP then Disconnect
                     promises.push(
-                        request(`/api/lsps/all?pubkey=${lsp.pubkey}`, { method: 'DELETE' })
-                        .then(() => request(`/api/peers/${lsp.pubkey}`, { method: 'DELETE' }))
-                        .catch(e => console.warn(`Failed to disconnect ${lsp.name}:`, e))
+                        request(`/api/lsps/${lsp.pubkey}`, { method: 'DELETE' })
                     );
                 }
             }
@@ -99,81 +120,32 @@ export function useLSPSManagement() {
             for (const lsp of current) {
                 if (!originalMap.has(lsp.pubkey)) {
                     // New LSP
-                    const uri = `${lsp.pubkey}@${lsp.host}`;
-                    
-                    promises.push((async () => {
-                        // 1. Connect Peer (Fail if connection fails)
-                        try {
-                            await request('/api/peers', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                    host: lsp.host, 
-                                    pubkey: lsp.pubkey,
-                                    perm: true 
-                                })
-                            });
-                        } catch (e: any) {
-                             throw new Error(`Failed to connect to ${lsp.name}: ${e.message}`);
-                        }
-
-                        // 2. Add LSP
-                        await request('/api/lsps/all', {
+                    promises.push(
+                        request('/api/lsps', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: lsp.name, uri }),
-                        });
-
-                        // 3. Activate if needed
-                        if (lsp.active) {
-                            await request('/api/lsps/selected', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ pubkey: lsp.pubkey }),
-                            });
-                        }
-                    })());
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ 
+                                name: lsp.name, 
+                                pubkey: lsp.pubkey, 
+                                host: lsp.host 
+                            }),
+                        })
+                    );
                 } else {
                     // 3. Handle Status Changes
                     const originalLSP = originalMap.get(lsp.pubkey)!;
                     if (originalLSP.active !== lsp.active) {
-                         if (lsp.active) {
-                             // Enabling: Connect Peer first
-                             promises.push((async () => {
-                                 try {
-                                     await request('/api/peers', {
-                                         method: 'POST',
-                                         headers: { 'Content-Type': 'application/json' },
-                                         body: JSON.stringify({ 
-                                             host: lsp.host, 
-                                             pubkey: lsp.pubkey,
-                                             perm: true 
-                                         })
-                                     });
-                                 } catch (e: any) {
-                                     throw new Error(`Failed to connect to ${lsp.name}: ${e.message}`);
-                                 }
-
-                                 await request('/api/lsps/selected', {
-                                     method: 'POST',
-                                     headers: { 'Content-Type': 'application/json' },
-                                     body: JSON.stringify({ pubkey: lsp.pubkey }),
-                                 });
-                             })());
-                         } else {
-                             // Disabling: Deselect then Disconnect
-                             promises.push((async () => {
-                                 await request(`/api/lsps/selected?pubkey=${lsp.pubkey}`, {
-                                     method: 'DELETE',
-                                 });
-                                 // Attempt disconnect, but don't fail hard if it fails
-                                 try {
-                                     await request(`/api/peers/${lsp.pubkey}`, { method: 'DELETE' });
-                                 } catch (e) {
-                                     console.warn("Failed to disconnect peer", e);
-                                 }
-                             })());
-                         }
+                        promises.push(
+                            request(`/api/lsps/${lsp.pubkey}`, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ active: lsp.active }),
+                            })
+                        );
                     }
                 }
             }
@@ -189,6 +161,7 @@ export function useLSPSManagement() {
     return {
         lsps,
         loading,
+        initialized,
         error,
         fetchLSPs,
         addLSP,

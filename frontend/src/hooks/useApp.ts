@@ -9,7 +9,7 @@ const pollConfiguration: SWRConfiguration = {
 
 export function useApp(id: number | undefined, poll = false) {
   return useSWR<App>(
-    !!id && `/api/v2/apps/${id}`,
+    !!id && `/api/apps/${id}`,
     swrFetcher,
     poll ? pollConfiguration : undefined
   );

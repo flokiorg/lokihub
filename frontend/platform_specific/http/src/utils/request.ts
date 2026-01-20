@@ -26,10 +26,11 @@ export const request = async <T>(
 
     let body: T | undefined;
     if (fetchResponse.status !== 204) {
+      const text = await fetchResponse.text();
       try {
-        body = await fetchResponse.json();
+        body = text ? JSON.parse(text) : undefined;
       } catch (error) {
-        console.error(error);
+        console.error("Failed to parse JSON response", error);
       }
     }
 

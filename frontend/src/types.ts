@@ -645,6 +645,7 @@ export type LSPS1GetOrderResponse = {
     order_id: string;
     state: string;
     payment_invoice: string;
+    order_total_loki?: number;
 };
 
 export type ListAppsResponse = {
