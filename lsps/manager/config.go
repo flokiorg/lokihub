@@ -5,19 +5,18 @@ import (
 	"io"
 
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
 type ManagerConfig struct {
 	LNClient      lnclient.LNClient
-	KVStore       persist.KVStore
+	LSPManager    *LSPManager
 	EntropySource io.Reader
 }
 
-func NewManagerConfig(lnClient lnclient.LNClient, kvStore persist.KVStore) *ManagerConfig {
+func NewManagerConfig(lnClient lnclient.LNClient, lspManager *LSPManager) *ManagerConfig {
 	return &ManagerConfig{
 		LNClient:      lnClient,
-		KVStore:       kvStore,
+		LSPManager:    lspManager,
 		EntropySource: rand.Reader,
 	}
 }

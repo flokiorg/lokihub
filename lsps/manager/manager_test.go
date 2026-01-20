@@ -8,7 +8,10 @@ import (
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/events"
+	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/lsps/transport"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // Mock LNClient for Manager tests
@@ -124,30 +127,6 @@ func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
 	return nil
 }
 
-// Mock KVStore
-type mockKVStore struct {
-	data map[string][]byte
-}
-
-func newMockKVStore() *mockKVStore {
-	return &mockKVStore{
-		data: make(map[string][]byte),
-	}
-}
-
-func (m *mockKVStore) Read(key string) ([]byte, error) {
-	val, ok := m.data[key]
-	if !ok {
-		return nil, nil // Not found
-	}
-	return val, nil
-}
-
-func (m *mockKVStore) Write(key string, data []byte) error {
-	m.data[key] = data
-	return nil
-}
-
 func TestLiquidityManager_StartInterceptor(t *testing.T) {
 	// Setup
 	mockLN := &mockLNClient{
@@ -166,11 +145,21 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 		return nil
 	}
 
-	mockKV := newMockKVStore()
+	// Setup In-Memory DB for LSPManager
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open valid DB: %v", err)
+	}
+	// Migrate
+	if err := db.AutoMigrate(&persist.LSP{}); err != nil {
+		t.Fatalf("Failed to migrate DB: %v", err)
+	}
+
+	lspManager := NewLSPManager(db)
 
 	cfg := &ManagerConfig{
-		LNClient: mockLN,
-		KVStore:  mockKV,
+		LNClient:   mockLN,
+		LSPManager: lspManager,
 	}
 
 	// Create manager using internal fields via casting/setup or NewLiquidityManager if possible.
@@ -187,7 +176,7 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	// Add an Active LSP
 	activeLSPPubkey := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	err := m.AddLSP("TrustedLSP", activeLSPPubkey+"@1.2.3.4:9735")
+	err = m.AddLSP("TrustedLSP", activeLSPPubkey+"@1.2.3.4:9735")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}

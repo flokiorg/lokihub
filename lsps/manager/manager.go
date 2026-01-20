@@ -3,13 +3,11 @@ package manager
 import (
 	"context"
 	"fmt"
-	"sync" // Added import
+	"sync"
 	"time"
 
 	"github.com/flokiorg/lokihub/logger" // Added import
 
-	"encoding/json"
-	"errors"
 	"strings"
 
 	"github.com/flokiorg/lokihub/lnclient"
@@ -43,10 +41,12 @@ type LiquidityManager struct {
 
 // SettingsLSP represents a configured LSP in the settings
 type SettingsLSP struct {
-	Name   string `json:"name"`
-	Pubkey string `json:"pubkey"`
-	Host   string `json:"host"`
-	Active bool   `json:"active"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Pubkey      string `json:"pubkey"`
+	Host        string `json:"host"`
+	Active      bool   `json:"active"`
+	IsCommunity bool   `json:"isCommunity"`
 }
 
 var ()
@@ -178,112 +178,83 @@ func (m *LiquidityManager) EventQueue() *events.EventQueue {
 
 // LSP Management API
 
+// getLSPsFromDB fetches LSPs from the new DB manager and converts to internal SettingsLSP
+func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
+	dbLSPs, err := m.cfg.LSPManager.ListLSPs()
+	if err != nil {
+		return nil, err
+	}
+
+	var lspList []SettingsLSP
+	for _, l := range dbLSPs {
+		lspList = append(lspList, SettingsLSP{
+			Name:        l.Name,
+			Description: l.Description,
+			Pubkey:      l.Pubkey,
+			Host:        l.Host,
+			Active:      l.IsActive,
+			IsCommunity: l.IsCommunity,
+		})
+	}
+	return lspList, nil
+}
+
+// AddLSP adds a new LSP via the LSPManager
 func (m *LiquidityManager) AddLSP(name, uri string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 1. Validate Name
-	if strings.TrimSpace(name) == "" {
-		return errors.New("name cannot be empty")
-	}
-
-	// Check duplicates in DB
-	existing, err := m.getLSPsFromDB()
-	if err != nil {
-		return fmt.Errorf("failed to read LSPs: %w", err)
-	}
-
-	for _, lsp := range existing {
-		if strings.EqualFold(lsp.Name, name) {
-			return fmt.Errorf("LSP with name '%s' already exists", name)
-		}
-	}
-
-	// 2. Validate URI
-	// Format: pubkey@host:port
 	pubkey, host, err := utils.ParseLSPURI(uri)
 	if err != nil {
 		return err
 	}
 
-	// Check for duplicate pubkey
-	for _, lsp := range existing {
-		if lsp.Pubkey == pubkey {
-			return fmt.Errorf("LSP with pubkey '%s' already exists", pubkey)
-		}
+	// Determine if it should be active (if it's the first one?)
+	// For now default to true as per old logic? Old logic: active = len(existing) == 0
+	// We can check existing count
+	all, err := m.cfg.LSPManager.ListLSPs()
+	if err != nil {
+		return err
 	}
+	active := len(all) == 0
 
-	// 3. Save
-	newLSP := SettingsLSP{
-		Name:   name,
-		Pubkey: pubkey,
-		Host:   host,
-		Active: len(existing) == 0, // Auto-activate if first
-	}
-	existing = append(existing, newLSP)
-
-	return m.saveLSPsToDB(existing)
+	_, err = m.cfg.LSPManager.AddLSP(name, pubkey, host, active, false)
+	return err
 }
 
+// RemoveLSP removes an LSP via LSPManager
+func (m *LiquidityManager) RemoveLSP(pubkey string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.LSPManager.DeleteCustomLSP(strings.ToLower(pubkey))
+}
+
+// SetActiveLSP enables an LSP
+func (m *LiquidityManager) SetActiveLSP(pubkey string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.LSPManager.ToggleLSP(strings.ToLower(pubkey), true)
+}
+
+// AddSelectedLSP marks an LSP as active
+func (m *LiquidityManager) AddSelectedLSP(pubkey string) error {
+	return m.SetActiveLSP(pubkey)
+}
+
+// RemoveSelectedLSP marks an LSP as inactive
+func (m *LiquidityManager) RemoveSelectedLSP(pubkey string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.LSPManager.ToggleLSP(strings.ToLower(pubkey), false)
+}
+
+// GetLSPs returns all LSPs
 func (m *LiquidityManager) GetLSPs() ([]SettingsLSP, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.getLSPsFromDB()
 }
 
-func (m *LiquidityManager) RemoveLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pubkey = strings.ToLower(pubkey)
-
-	existing, err := m.getLSPsFromDB()
-	if err != nil {
-		return err
-	}
-
-	var updated []SettingsLSP
-	for _, lsp := range existing {
-		if lsp.Pubkey != pubkey {
-			updated = append(updated, lsp)
-		}
-	}
-
-	if len(updated) == len(existing) {
-		return errors.New("LSP not found")
-	}
-
-	return m.saveLSPsToDB(updated)
-}
-
-func (m *LiquidityManager) SetActiveLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pubkey = strings.ToLower(pubkey)
-
-	existing, err := m.getLSPsFromDB()
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for i := range existing {
-		if existing[i].Pubkey == pubkey {
-			existing[i].Active = true
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return errors.New("LSP not found")
-	}
-
-	return m.saveLSPsToDB(existing)
-}
-
-// GetSelectedLSPs returns all LSPs marked as active (selected)
 func (m *LiquidityManager) GetSelectedLSPs() ([]SettingsLSP, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -299,97 +270,7 @@ func (m *LiquidityManager) GetSelectedLSPs() ([]SettingsLSP, error) {
 			selected = append(selected, lsp)
 		}
 	}
-
 	return selected, nil
-}
-
-// AddSelectedLSP marks an LSP as selected/active (supports multiple active LSPs)
-func (m *LiquidityManager) AddSelectedLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pubkey = strings.ToLower(pubkey)
-
-	existing, err := m.getLSPsFromDB()
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for i := range existing {
-		if existing[i].Pubkey == pubkey {
-			existing[i].Active = true
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return errors.New("LSP not found")
-	}
-
-	return m.saveLSPsToDB(existing)
-}
-
-// RemoveSelectedLSP marks an LSP as not selected/inactive
-func (m *LiquidityManager) RemoveSelectedLSP(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pubkey = strings.ToLower(pubkey)
-
-	existing, err := m.getLSPsFromDB()
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for i := range existing {
-		if existing[i].Pubkey == pubkey {
-			existing[i].Active = false
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return errors.New("LSP not found")
-	}
-
-	return m.saveLSPsToDB(existing)
-}
-
-// Internal DB helpers
-const dbKeyLSPs = "lsps_settings_list"
-
-func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
-	if m.cfg.KVStore == nil {
-		return nil, nil // Should error? Or just empty list matching "no persistence"
-	}
-	data, err := m.cfg.KVStore.Read(dbKeyLSPs)
-	if err != nil {
-		return nil, nil // Assume not found / empty
-	}
-	if len(data) == 0 {
-		return []SettingsLSP{}, nil
-	}
-
-	var list []SettingsLSP
-	if err := json.Unmarshal(data, &list); err != nil {
-		return nil, err
-	}
-	return list, nil
-}
-
-func (m *LiquidityManager) saveLSPsToDB(list []SettingsLSP) error {
-	if m.cfg.KVStore == nil {
-		return errors.New("no persistence available")
-	}
-	data, err := json.Marshal(list)
-	if err != nil {
-		return err
-	}
-	return m.cfg.KVStore.Write(dbKeyLSPs, data)
 }
 
 // Event Dispatching
@@ -409,6 +290,17 @@ func (m *LiquidityManager) processInternalEvents(ctx context.Context) {
 		case *lsps2.InvoiceParametersReadyEvent:
 			requestID = e.RequestID
 		case *lsps2.BuyRequestFailedEvent:
+			requestID = e.RequestID
+		// LSPS1 Events
+		case *lsps1.SupportedOptionsReadyEvent:
+			requestID = e.RequestID
+		case *lsps1.SupportedOptionsFailedEvent:
+			requestID = e.RequestID
+		case *lsps1.OrderCreatedEvent:
+			requestID = e.RequestID
+		case *lsps1.OrderRequestFailedEvent:
+			requestID = e.RequestID
+		case *lsps1.OrderStatusEvent:
 			requestID = e.RequestID
 		default:
 			// Unhandled event type
@@ -488,6 +380,96 @@ func (m *LiquidityManager) OpenJitChannel(ctx context.Context, pubkey string, pa
 	case *lsps2.InvoiceParametersReadyEvent:
 		return e, nil
 	case *lsps2.BuyRequestFailedEvent:
+		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
+	default:
+		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
+	}
+}
+
+// Synchronous LSPS1 Wrappers
+
+func (m *LiquidityManager) GetLSPS1Info(ctx context.Context, pubkey string) (lsps1.Options, error) {
+	reqID, err := m.lsps1Client.RequestSupportedOptions(ctx, pubkey)
+	if err != nil {
+		return lsps1.Options{}, err
+	}
+
+	event, err := m.waitForEvent(ctx, reqID)
+	if err != nil {
+		return lsps1.Options{}, err
+	}
+
+	switch e := event.(type) {
+	case *lsps1.SupportedOptionsReadyEvent:
+		// Assuming we just return the single options object
+		// But SupportedOptions in event is type Options? Check events.go/client.go
+		// In client.go: SupportedOptions is type Options (struct).
+		return e.SupportedOptions, nil
+	case *lsps1.SupportedOptionsFailedEvent:
+		return lsps1.Options{}, fmt.Errorf("LSP returned error: %s", e.Error)
+	default:
+		return lsps1.Options{}, fmt.Errorf("unexpected event type: %s", event.EventType())
+	}
+}
+
+func (m *LiquidityManager) GetLSPS1InfoList(ctx context.Context, pubkey string) ([]lsps1.Options, error) {
+	reqID, err := m.lsps1Client.RequestSupportedOptions(ctx, pubkey)
+	if err != nil {
+		return nil, err
+	}
+
+	event, err := m.waitForEvent(ctx, reqID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch e := event.(type) {
+	case *lsps1.SupportedOptionsReadyEvent:
+		// Return slice containing the single options object
+		return []lsps1.Options{e.SupportedOptions}, nil
+	case *lsps1.SupportedOptionsFailedEvent:
+		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
+	default:
+		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
+	}
+}
+
+func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, orderParams lsps1.OrderParams, refundAddr *string) (*lsps1.OrderCreatedEvent, error) {
+	reqID, err := m.lsps1Client.CreateOrder(ctx, pubkey, orderParams, refundAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	event, err := m.waitForEvent(ctx, reqID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch e := event.(type) {
+	case *lsps1.OrderCreatedEvent:
+		return e, nil
+	case *lsps1.OrderRequestFailedEvent:
+		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
+	default:
+		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
+	}
+}
+
+func (m *LiquidityManager) GetLSPS1Order(ctx context.Context, pubkey, orderID string) (*lsps1.OrderStatusEvent, error) {
+	reqID, err := m.lsps1Client.CheckOrderStatus(ctx, pubkey, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	event, err := m.waitForEvent(ctx, reqID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch e := event.(type) {
+	case *lsps1.OrderStatusEvent:
+		return e, nil
+	case *lsps1.OrderRequestFailedEvent:
 		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
 	default:
 		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
