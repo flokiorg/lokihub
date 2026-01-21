@@ -344,13 +344,6 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 }
 
 func (api *api) DeleteApp(userApp *db.App) error {
-	// Delete lightning address if one exists
-	// if api.appsSvc.HasLightningAddress(userApp) {
-	// 	err := api.DeleteLightningAddress(context.Background(), userApp.ID)
-	// 	if err != nil {
-	// 		logger.Logger.Error().Err(err).Uint("app_id", userApp.ID).Msg("Failed to delete lightning address during app deletion")
-	// 	}
-	// }
 
 	return api.appsSvc.DeleteApp(userApp)
 }

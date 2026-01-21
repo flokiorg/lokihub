@@ -11,7 +11,13 @@ export const useAppStore = () => {
         const fetchApps = async () => {
             try {
                 const data = (await swrFetcher("/api/appstore/apps")) as AppStoreApp[];
-                setApps(data);
+                console.log("App Store Apps:", data);
+                if (Array.isArray(data)) {
+                    setApps(data);
+                } else {
+                    console.error("App Store Apps data is not an array:", data);
+                    setApps([]);
+                }
             } catch (e: any) {
                 setError(e.message || "Failed to fetch apps");
             } finally {

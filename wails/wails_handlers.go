@@ -168,7 +168,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	}
 
 	// list apps
-	if strings.HasPrefix(route, "/api/apps") && method == "GET" {
+	if strings.HasPrefix(route, "/api/apps") && !strings.HasPrefix(route, "/api/appstore") && method == "GET" {
 		limit := uint64(0)
 		offset := uint64(0)
 		var filtersJSON string
