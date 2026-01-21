@@ -138,6 +138,35 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: encoded, Error: ""}
 	}
 
+	lspsResourceRegex := regexp.MustCompile(
+		`/api/lsps/([^/]+)`,
+	)
+	lspsResourceMatch := lspsResourceRegex.FindStringSubmatch(route)
+
+	switch {
+	case len(lspsResourceMatch) > 1:
+		pubkey := lspsResourceMatch[1]
+		switch method {
+		case "PUT":
+			req := &api.UpdateLSPRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			err = app.api.HandleUpdateLSP(ctx, pubkey, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		case "DELETE":
+			err := app.api.HandleDeleteLSP(ctx, pubkey)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		}
+	}
+
 	// list apps
 	if strings.HasPrefix(route, "/api/apps") && method == "GET" {
 		limit := uint64(0)
@@ -606,7 +635,29 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		}
 
-	// LSPS Settings Routes
+	// LSPS Settings Routes (RESTful)
+	case "/api/lsps":
+		switch method {
+		case "GET":
+			lsps, err := app.api.HandleListLSPs(ctx)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: lsps, Error: ""}
+		case "POST":
+			req := &api.AddLSPRequest{}
+			err := json.Unmarshal([]byte(body), req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			l, err := app.api.HandleAddLSP(ctx, req)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: l, Error: ""}
+		}
+
+	// LSPS Settings Routes (Legacy - kept for backward compatibility if any)
 	case "/api/lsps/all":
 		switch method {
 		case "GET":

@@ -1,9 +1,9 @@
 import {
-    ArrowLeftIcon,
-    CopyIcon,
-    InfoIcon,
-    LinkIcon,
-    PlusIcon
+  ArrowLeftIcon,
+  CopyIcon,
+  InfoIcon,
+  LinkIcon,
+  PlusIcon
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -17,11 +17,11 @@ import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { LinkButton } from "src/components/ui/custom/link-button";
@@ -215,7 +215,7 @@ export default function ReceiveInvoice() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6">
-                      <QRCode value={transaction.invoice} />
+                      <QRCode value={transaction.invoice} className="w-full max-w-[250px]" />
                       <div className="flex flex-col gap-1 items-center">
                         <p className="text-2xl font-medium slashed-zero">
                           <FormattedFlokicoinAmount amount={transaction.amount} />

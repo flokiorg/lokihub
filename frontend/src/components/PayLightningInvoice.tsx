@@ -2,7 +2,6 @@ import { Invoice, getFiatValue } from "@lightz/lightning-tools";
 import { CopyIcon } from "lucide-react";
 import React from "react";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
-import { LightningIcon } from "src/components/icons/Lightning";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Button } from "src/components/ui/button";
@@ -34,9 +33,6 @@ export function PayLightningInvoice({ invoice }: PayLightningInvoiceProps) {
       </div>
       <div className="w-full relative flex items-center justify-center">
         <QRCode value={invoice} className="w-full" />
-        <div className="bg-white absolute rounded-full p-1">
-          <LightningIcon className="w-12 h-12" />
-        </div>
       </div>
       <div>
         <p className="text-lg font-semibold">

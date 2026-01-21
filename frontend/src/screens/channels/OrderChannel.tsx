@@ -34,7 +34,6 @@ import { request } from "src/utils/request";
 
 import LightningNetworkDark from "src/assets/illustrations/lightning-network-dark.svg?react";
 import LightningNetworkLight from "src/assets/illustrations/lightning-network-light.svg?react";
-import LokiHead from "src/assets/loki.svg?react";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 
@@ -381,9 +380,6 @@ export default function OrderChannel() {
 
                         <div className="relative flex items-center justify-center w-full">
                             <QRCode value={paymentInvoice} className="w-full max-w-[250px]" />
-                            <div className="absolute rounded-full p-1 bg-white">
-                                <LokiHead className="w-12 h-12" />
-                            </div>
                         </div>
 
                         <div className="flex flex-col items-center gap-1">

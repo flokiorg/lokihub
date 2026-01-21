@@ -93,7 +93,7 @@ func (h *ClientHandler) CreateOrder(ctx context.Context, lspPubkey string, order
 		Jsonrpc: "2.0",
 		Method:  MethodCreateOrder,
 		Params: &CreateOrderRequest{
-			Order:                order,
+			OrderParams:          order,
 			RefundOnchainAddress: refundAddr,
 		},
 		ID: requestID,
@@ -231,7 +231,7 @@ func (h *ClientHandler) handleCreateOrderResponse(peerPubkey, requestID string, 
 		RequestID:          requestID,
 		CounterpartyNodeID: peerPubkey,
 		OrderID:            result.OrderID,
-		Order:              result.Order,
+		Order:              result.OrderParams,
 		OrderState:         result.OrderState, // Populating new field
 		Payment:            result.Payment,
 		Channel:            result.Channel,
@@ -262,7 +262,7 @@ func (h *ClientHandler) handleGetOrderResponse(peerPubkey, requestID string, res
 		RequestID:          requestID,
 		CounterpartyNodeID: peerPubkey,
 		OrderID:            result.OrderID,
-		Order:              result.Order,
+		Order:              result.OrderParams,
 		OrderState:         result.OrderState, // Populating new field
 		Payment:            result.Payment,
 		Channel:            result.Channel,

@@ -6,10 +6,10 @@ import QRCode from "src/components/QRCode";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { copyToClipboard } from "src/lib/clipboard";
@@ -72,7 +72,7 @@ export function ConnectAppCard({
               className={cn(!isQRCodeVisible && "blur-md cursor-pointer")}
               onClick={() => setIsQRCodeVisible(true)}
             >
-              <QRCode value={pairingUri} />
+              <QRCode value={pairingUri} withIcon={false} />
               {appStoreApp && (
                 <img
                   src={appStoreApp.logo}

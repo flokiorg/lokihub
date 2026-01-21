@@ -222,8 +222,8 @@ func TestClient_CreateOrder(t *testing.T) {
 		Jsonrpc: "2.0",
 		ID:      reqID,
 		Result: CreateOrderResponse{
-			OrderID: "order123",
-			Order:   order,
+			OrderID:     "order123",
+			OrderParams: order,
 			Payment: PaymentInfo{
 				Bolt11: &Bolt11PaymentInfo{
 					State:   "EXPECT_PAYMENT",

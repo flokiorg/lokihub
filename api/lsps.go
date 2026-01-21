@@ -61,8 +61,8 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 // LSPS1CreateOrder creates a channel order
 func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderRequest) (interface{}, error) {
 	orderParams := lsps1.OrderParams{
-		LspBalanceLoki:               0,                  // Inbound-only: LSP doesn't provide outbound liquidity
-		ClientBalanceLoki:            req.LSPBalanceLoki, // Amount of inbound liquidity requested (from amount_loki)
+		LspBalanceLoki:               req.LSPBalanceLoki, // Amount of inbound liquidity requested (from amount_loki)
+		ClientBalanceLoki:            0,                  // Client typically provides 0 for inbound-only buy
 		RequiredChannelConfirmations: 0,                  // Accept unconfirmed (LSP can override based on their policy)
 		FundingConfirmsWithinBlocks:  6,                  // Standard Bitcoin confirmation window
 		ChannelExpiryBlocks:          req.ChannelExpiryBlocks,
@@ -70,10 +70,7 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 		AnnounceChannel:              req.AnnounceChannel,
 	}
 
-	logger.Logger.Info().
-		Uint64("client_balance", orderParams.ClientBalanceLoki).
-		Uint64("lsp_balance", orderParams.LspBalanceLoki).
-		Msg("Creating LSPS1 order")
+	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
 
 	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress)
 	if err != nil {

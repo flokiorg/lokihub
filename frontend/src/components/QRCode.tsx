@@ -1,4 +1,5 @@
 import ReactQRCode from "react-qr-code";
+import LokiHead from "src/assets/loki.svg?react";
 import { cn } from "src/lib/utils";
 
 export type Props = {
@@ -14,25 +15,34 @@ export type Props = {
   // for invoices that contain larger amount of data those QR codes can get "harder" to read.
   // (meaning you have to aim your phone very precisely and have to wait longer for the reader
   // to recognize the QR code)
-  level?: "Q" | undefined;
+  level?: "L" | "M" | "Q" | "H";
+  withIcon?: boolean;
 };
 
-function QRCode({ value, size, level, className }: Props) {
+function QRCode({ value, size, level, className, withIcon = true }: Props) {
   // Do not use dark mode: some apps do not handle it well (e.g. Phoenix)
   // const { isDarkMode } = useTheme();
   const fgColor = "#242424"; // isDarkMode ? "#FFFFFF" : "#242424";
   const bgColor = "#FFFFFF"; // isDarkMode ? "#242424" : "#FFFFFF";
 
+  // Use Q level by default if there is an icon overlay to ensure better scannability
+  const qrLevel = withIcon ? "Q" : (level || "L");
+
   return (
-    <div className="bg-white p-2 rounded-md">
+    <div className={cn("bg-white p-2 rounded-md relative flex items-center justify-center w-fit mx-auto", className)}>
       <ReactQRCode
         value={value}
         size={size}
         fgColor={fgColor}
         bgColor={bgColor}
-        className={cn("rounded", className)}
-        level={level}
+        className="rounded"
+        level={qrLevel}
       />
+      {withIcon && (
+        <div className="absolute rounded-full p-1 bg-white">
+          <LokiHead className="w-12 h-12" />
+        </div>
+      )}
     </div>
   );
 }

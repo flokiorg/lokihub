@@ -1,10 +1,10 @@
 import {
-    CircleAlertIcon,
-    CircleCheckIcon,
-    CircleHelpIcon,
-    CircleXIcon,
-    CopyIcon,
-    ExternalLinkIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleHelpIcon,
+  CircleXIcon,
+  CopyIcon,
+  ExternalLinkIcon,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -18,18 +18,18 @@ import LottieLoading from "src/components/LottieLoading";
 import QRCode from "src/components/QRCode";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
@@ -197,7 +197,7 @@ export default function SwapInStatus() {
                     <LottieLoading />
                   ) : (
                     <QRCode
-                      value={`flokicoin:${swap.lockupAddress}?amount=${swap.sendAmount / 100_000_000}`}
+                       value={`flokicoin:${swap.lockupAddress}?amount=${swap.sendAmount / 100_000_000}`}
                     />
                   ))}
                 <div className="flex flex-col gap-2 items-center">

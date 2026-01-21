@@ -35,14 +35,14 @@ type GetInfoResponse struct {
 
 // CreateOrderRequest requests to create a channel order
 type CreateOrderRequest struct {
-	Order                OrderParams `json:"order"`
-	RefundOnchainAddress *string     `json:"refund_onchain_address,omitempty"`
+	OrderParams
+	RefundOnchainAddress *string `json:"refund_onchain_address,omitempty"`
 }
 
 // OrderParams represents channel order parameters
 type OrderParams struct {
-	LspBalanceLoki               uint64  `json:"lsp_balance_loki"`
-	ClientBalanceLoki            uint64  `json:"client_balance_loki"`
+	LspBalanceLoki               uint64  `json:"lsp_balance_loki,string"`
+	ClientBalanceLoki            uint64  `json:"client_balance_loki,string"`
 	RequiredChannelConfirmations uint16  `json:"required_channel_confirmations"`
 	FundingConfirmsWithinBlocks  uint16  `json:"funding_confirms_within_blocks"`
 	ChannelExpiryBlocks          uint32  `json:"channel_expiry_blocks"`
@@ -52,8 +52,8 @@ type OrderParams struct {
 
 // CreateOrderResponse contains order details and payment info
 type CreateOrderResponse struct {
-	OrderID    string       `json:"order_id"`
-	Order      OrderParams  `json:"order"`
+	OrderID string `json:"order_id"`
+	OrderParams
 	CreatedAt  time.Time    `json:"created_at"`
 	OrderState string       `json:"order_state"`
 	Payment    PaymentInfo  `json:"payment"`
