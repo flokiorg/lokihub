@@ -22,6 +22,9 @@ const lspsRequestTimeout = 5 * time.Second
 
 // LSPS0ListProtocols lists supported protocols
 func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	client := api.svc.GetLiquidityManager().LSPS0Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS0 client not available")
@@ -29,6 +32,7 @@ func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsR
 
 	protocols, err := client.ListProtocols(ctx, req.LSPPubkey)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS0 ListProtocols failed")
 		return nil, err
 	}
 
@@ -39,6 +43,9 @@ func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsR
 
 // LSPS1GetInfo gets channel ordering info
 func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	// Use synchronous manager method
 	// Note: manager returns []lsps1.LSPS1Option or similar?
 	// The manager method signature I added in manager.go checks `GetLSPS1InfoList` returns `[]lsps1.LSPS1Option`?
@@ -50,6 +57,11 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 	// Assuming manager is fixed:
 	options, err := api.svc.GetLiquidityManager().GetLSPS1InfoList(ctx, req.LSPPubkey)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Logger.Warn().Str("lsp", req.LSPPubkey).Msg("LSPS1 GetInfo timeout")
+			return nil, fmt.Errorf("time out, please retry")
+		}
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS1 GetInfo failed")
 		return nil, err
 	}
 
@@ -60,6 +72,8 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 
 // LSPS1CreateOrder creates a channel order
 func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
 	orderParams := lsps1.OrderParams{
 		LspBalanceLoki:               req.LSPBalanceLoki, // Amount of inbound liquidity requested (from amount_loki)
 		ClientBalanceLoki:            0,                  // Client typically provides 0 for inbound-only buy
@@ -74,24 +88,49 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 
 	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Interface("params", orderParams).Msg("LSPS1 CreateOrder failed")
 		return nil, err
 	}
 
 	invoice := ""
+	var feeTotalLoki uint64
+	var orderTotalLoki uint64
 	if event.Payment.Bolt11 != nil {
 		invoice = event.Payment.Bolt11.Invoice
+		feeTotalLoki = event.Payment.Bolt11.FeeTotalLoki
+		orderTotalLoki = event.Payment.Bolt11.OrderTotalLoki
+		// Fallback: if fee is not provided but total is, and we know client balance is 0,
+		// then fee must be the total payload (for LSPS1 buy-inbound).
+		if feeTotalLoki == 0 && orderTotalLoki > 0 {
+			feeTotalLoki = orderTotalLoki
+		}
 	}
 
+	// Register webhook for notifications (on-demand, async so as not to block response)
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := api.svc.GetLiquidityManager().EnsureWebhookRegistered(bgCtx, req.LSPPubkey); err != nil {
+			logger.Logger.Warn().Err(err).Str("lsp", req.LSPPubkey).Msg("Failed to register webhook")
+		}
+	}()
+
 	return map[string]interface{}{
-		"order_id":        event.OrderID,
-		"payment_invoice": invoice,
+		"order_id":         event.OrderID,
+		"payment_invoice":  invoice,
+		"fee_total_loki":   feeTotalLoki,
+		"order_total_loki": orderTotalLoki,
 	}, nil
 }
 
 // LSPS1GetOrder checks order status
 func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	event, err := api.svc.GetLiquidityManager().GetLSPS1Order(ctx, req.LSPPubkey, req.OrderID)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("order_id", req.OrderID).Msg("LSPS1 GetOrder failed")
 		return nil, err
 	}
 
@@ -127,8 +166,10 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 	fees, err := api.svc.GetLiquidityManager().GetLSPS2FeeParams(ctx, req.LSPPubkey)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Logger.Warn().Str("lsp", req.LSPPubkey).Msg("LSPS2 GetInfo timeout")
 			return nil, fmt.Errorf("time out, please retry")
 		}
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS2 GetInfo failed")
 		return nil, err
 	}
 
@@ -141,6 +182,9 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 
 // LSPS2Buy buys a JIT channel
 func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	if api.svc.GetLiquidityManager() == nil {
 		return nil, fmt.Errorf("LiquidityManager not started")
 	}
@@ -149,21 +193,34 @@ func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyRe
 		return nil, fmt.Errorf("payment_size_mloki is required")
 	}
 
-	resp, err := api.svc.GetLiquidityManager().OpenJitChannel(ctx, req.LSPPubkey, *req.PaymentSizeMloki, req.OpeningFeeParams)
+	// Use the new robust BuyLiquidity method which handles retries
+	hints, err := api.svc.GetLiquidityManager().BuyLiquidity(ctx, req.LSPPubkey, *req.PaymentSizeMloki, &req.OpeningFeeParams)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Uint64("amount", *req.PaymentSizeMloki).Msg("LSPS2 BuyLiquidity failed")
 		return nil, err
 	}
 
+	// Helper to parse SCID string back to uint64 for response compatibility
+	scid, err := strconv.ParseUint(hints.SCID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SCID returned from manager: %w", err)
+	}
+
 	return &LSPS2BuyResponse{
-		RequestID:       resp.RequestID,
-		InterceptSCID:   resp.InterceptSCID,
-		CLTVExpiryDelta: resp.CLTVExpiryDelta,
-		LSPNodeID:       resp.LSPNodeID,
+		// RequestID is less relevant in this abstracted flow, but we can leave it empty or generated if needed.
+		// The frontend typically just needs the SCID and CltvDelta.
+		RequestID:       "",
+		InterceptSCID:   scid,
+		CLTVExpiryDelta: hints.CLTVExpiryDelta,
+		LSPNodeID:       hints.LSPNodeID,
 	}, nil
 }
 
 // LSPS5SetWebhook registers a webhook
 func (api *api) LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -173,9 +230,16 @@ func (api *api) LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest
 	// The LSPS5SetWebhookRequest has URL, Events, Signature (optional?)
 	// The client.SetWebhook signature might strictly match.
 
-	// TODO: Use correct params
-	reqID, err := client.SetWebhook(ctx, req.LSPPubkey, "lokihub", req.URL)
+	// Assume https if not specified? Or maybe allow empty if inferred?
+	// The struct now has Transport field
+	transport := req.Transport
+	if transport == "" {
+		transport = "https"
+	}
+
+	reqID, err := client.SetWebhook(ctx, req.LSPPubkey, "lokihub", req.URL, transport)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("url", req.URL).Msg("LSPS5 SetWebhook failed")
 		return nil, err
 	}
 
@@ -184,6 +248,9 @@ func (api *api) LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest
 
 // LSPS5ListWebhooks lists webhooks
 func (api *api) LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -191,6 +258,7 @@ func (api *api) LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksReq
 
 	reqID, err := client.ListWebhooks(ctx, req.LSPPubkey)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Msg("LSPS5 ListWebhooks failed")
 		return nil, err
 	}
 
@@ -199,6 +267,9 @@ func (api *api) LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksReq
 
 // LSPS5RemoveWebhook removes a webhook
 func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
+	defer cancel()
+
 	client := api.svc.GetLiquidityManager().LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
@@ -206,6 +277,7 @@ func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookR
 
 	reqID, err := client.RemoveWebhook(ctx, req.LSPPubkey, req.URL)
 	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Str("url", req.URL).Msg("LSPS5 RemoveWebhook failed")
 		return nil, err
 	}
 

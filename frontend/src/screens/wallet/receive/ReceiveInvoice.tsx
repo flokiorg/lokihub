@@ -56,6 +56,8 @@ export default function ReceiveInvoice() {
     transaction ? transaction.paymentHash : "",
     true
   );
+  const [displayGrossAmount, setDisplayGrossAmount] = React.useState<number>(0);
+  const [displayFee, setDisplayFee] = React.useState<number>(0);
 
   React.useEffect(() => {
     if (invoiceData?.settledAt) {
@@ -111,8 +113,12 @@ export default function ReceiveInvoice() {
       let jitLSP = "";
 
       const firstLSP = info?.lsps?.[0]?.pubkey;
+      // Calculate amount in mloki (1 sat = 1000 mloki)
+      const amountMloki = (parseInt(amount) || 0) * 1000;
+      let invoiceAmountMloki = amountMloki;
+      let feeMloki = 0;
+
           if (needsJit && jitFeeParams && firstLSP) {
-            const amountMloki = (parseInt(amount) || 0) * 1000;
             
             // Check limits
             const minPaymentSize = parseInt(jitFeeParams.min_payment_size_mloki);
@@ -130,6 +136,17 @@ export default function ReceiveInvoice() {
                  return;
             }
 
+            // Calculate Fee: Max(MinFee, Proportional)
+            const minFee = parseInt(jitFeeParams.min_fee_mloki);
+            const proportionalFee = Math.ceil((amountMloki * jitFeeParams.proportional) / 1000000);
+            feeMloki = Math.max(minFee, proportionalFee);
+
+            // Calculate Net Amount for Invoice
+            // The invoice monitors the amount RECEIVED.
+            // LSP receives Gross -> Deducts Fee -> Fowards Net.
+            // So Invoice MUST expect Net.
+            invoiceAmountMloki = amountMloki - feeMloki;
+
             try {
                 toast("Buying inbound liquidity...");
                 const buyRes = await request<LSPS2BuyResponse>("/api/lsps2/buy", {
@@ -137,7 +154,7 @@ export default function ReceiveInvoice() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                     lspPubkey: firstLSP,
-                    paymentSizeMloki: amountMloki,
+                    paymentSizeMloki: amountMloki, // Buy liquidity for GROSS amount
                     openingFeeParams: jitFeeParams
                 } as LSPS2BuyRequest)
             });
@@ -146,9 +163,11 @@ export default function ReceiveInvoice() {
                  cltvDelta = buyRes.cltvExpiryDelta;
                  jitLSP = buyRes.lspNodeID;
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Failed to buy liquidity", e);
-                toast.error("Failed to buy liquidity. Please try again later.");
+                toast.error("Failed to buy liquidity", {
+                    description: e.message || "Unknown error"
+                });
                 return;
             }
           }
@@ -159,13 +178,13 @@ export default function ReceiveInvoice() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: (parseInt(amount) || 0) * 1000,
+          amount: invoiceAmountMloki, // Invoice uses NET amount
           description,
           lspJitChannelSCID: jitSCID,
           lspCltvExpiryDelta: cltvDelta,
           lspPubkey: jitSCID ? (jitLSP || info?.lsps?.[0]?.pubkey) : undefined,
-          lspFeeBaseMloki: jitSCID ? 0 : undefined,
-          lspFeeProportionalMillionths: jitSCID ? 0 : undefined,
+          lspFeeBaseMloki: jitSCID ? feeMloki : undefined, // Base Fee = Calculated Fee
+          lspFeeProportionalMillionths: jitSCID ? 0 : undefined, // Proportional Fee = 0 (All fees in base)
         } as CreateInvoiceRequest),
       });
 
@@ -174,14 +193,19 @@ export default function ReceiveInvoice() {
         // If we got a JIT SCID, we consider JIT applied
         if (jitSCID) {
            setJitApplied(true);
+           setDisplayGrossAmount(amountMloki);
+           setDisplayFee(feeMloki);
+        } else {
+           setDisplayGrossAmount(0);
+           setDisplayFee(0);
         }
         setAmount("");
         setDescription("");
         toast("Successfully created invoice");
       }
-    } catch (e) {
+    } catch (e: any) {
       toast.error("Failed to create invoice", {
-        description: "" + e,
+        description: e.message || "Unknown error",
       });
       console.error(e);
     } finally {
@@ -215,15 +239,20 @@ export default function ReceiveInvoice() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6">
-                      <QRCode value={transaction.invoice} className="w-full max-w-[250px]" />
+                      <QRCode value={transaction.invoice} />
                       <div className="flex flex-col gap-1 items-center">
                         <p className="text-2xl font-medium slashed-zero">
-                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                          <FormattedFlokicoinAmount amount={displayGrossAmount || transaction.amount} />
                         </p>
-                        <FormattedFiatAmount
-                          amount={Math.floor(transaction.amount / 1000)}
-                          className="text-xl"
-                        />
+                        <div className="flex flex-col items-center">
+                            <FormattedFiatAmount
+                              amount={Math.floor((displayGrossAmount || transaction.amount) / 1000)}
+                              className="text-xl"
+                            />
+                            {displayFee > 0 && (
+                                <p className="text-xs text-muted-foreground mt-1">Includes <FormattedFlokicoinAmount amount={displayFee} /> JIT Fee</p>
+                            )}
+                        </div>
                       </div>
                     </CardContent>
                     <CardFooter className="flex flex-col gap-2">
@@ -248,12 +277,17 @@ export default function ReceiveInvoice() {
                       <Tick className="w-48" />
                       <div className="flex flex-col gap-1 items-center">
                         <p className="text-2xl font-medium slashed-zero">
-                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                          <FormattedFlokicoinAmount amount={displayGrossAmount || transaction.amount} />
                         </p>
-                        <FormattedFiatAmount
-                          amount={Math.floor(transaction.amount / 1000)}
-                          className="text-xl"
-                        />
+                        <div className="flex flex-col items-center">
+                            <FormattedFiatAmount
+                              amount={Math.floor((displayGrossAmount || transaction.amount) / 1000)}
+                              className="text-xl"
+                            />
+                            {displayFee > 0 && (
+                                <p className="text-xs text-muted-foreground mt-1">Includes <FormattedFlokicoinAmount amount={displayFee} /> JIT Fee</p>
+                            )}
+                        </div>
                       </div>
                     </CardContent>
                     <CardFooter className="flex flex-col gap-2 pt-2">
@@ -319,7 +353,7 @@ export default function ReceiveInvoice() {
                               Your LSP (<span className="text-primary">{info.lsps[0].name || `${info.lsps[0].pubkey.slice(0, 6)}...${info.lsps[0].pubkey.slice(-6)}@${info.lsps[0].host}`}</span>) will provide liquidity.
                             </p>
                             <p>
-                              Estimated Fee: {Math.ceil((parseInt(jitFeeParams.min_fee_mloki) + (parseInt(amount)*1000 * jitFeeParams.proportional / 1000000)) / 1000)} loki.
+                              Estimated Fee: {Math.ceil(Math.max(parseInt(jitFeeParams.min_fee_mloki), (parseInt(amount)*1000 * jitFeeParams.proportional / 1000000)) / 1000)} loki.
                             </p>
                          </>
                       ) : (

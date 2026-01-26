@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flokiorg/lokihub/logger" // Added import
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/logger"
 
 	"strings"
 
@@ -37,6 +38,17 @@ type LiquidityManager struct {
 
 	listeners       map[string]chan events.Event
 	unclaimedEvents map[string]events.Event
+
+	// cache for dynamic nostr pubkeys (LSP Pubkey -> Nostr Pubkey)
+	nostrPubkeys map[string]string
+
+	pendingOrders map[string]PendingOrder
+}
+
+type PendingOrder struct {
+	OrderID   string
+	LSPPubkey string
+	CreatedAt time.Time
 }
 
 // SettingsLSP represents a configured LSP in the settings
@@ -47,6 +59,15 @@ type SettingsLSP struct {
 	Host        string `json:"host"`
 	Active      bool   `json:"active"`
 	IsCommunity bool   `json:"isCommunity"`
+	NostrPubkey string `json:"nostrPubkey,omitempty"`
+}
+
+// JITJitChannelHints represents hints gathered from a JIT channel request
+type JitChannelHints struct {
+	SCID            string
+	LSPNodeID       string
+	CLTVExpiryDelta uint16
+	FeeMloki        uint64
 }
 
 var ()
@@ -66,6 +87,8 @@ func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 		eventQueue:      eq,
 		listeners:       make(map[string]chan events.Event),
 		unclaimedEvents: make(map[string]events.Event),
+		nostrPubkeys:    make(map[string]string),
+		pendingOrders:   make(map[string]PendingOrder),
 	}
 
 	// Initialize Clients
@@ -88,7 +111,63 @@ func (m *LiquidityManager) Start(ctx context.Context) error {
 	go m.processInternalEvents(ctx)
 	go m.StartInterceptor(ctx)
 
+	// Start polling for pending orders
+	go m.pollOrders(ctx)
+
 	return nil
+}
+
+func (m *LiquidityManager) pollOrders(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.mu.RLock()
+			orders := make([]PendingOrder, 0, len(m.pendingOrders))
+			for _, order := range m.pendingOrders {
+				orders = append(orders, order)
+			}
+			m.mu.RUnlock()
+
+			for _, order := range orders {
+				statusEvent, err := m.GetLSPS1Order(ctx, order.LSPPubkey, order.OrderID)
+				if err != nil {
+					logger.Logger.Warn().Err(err).Str("order_id", order.OrderID).Msg("Failed to poll order status")
+					continue
+				}
+
+				logger.Logger.Info().
+					Str("order_id", order.OrderID).
+					Str("state", statusEvent.OrderState).
+					Msg("Polled order status")
+
+				// Publish event
+				m.eventQueue.Enqueue(statusEvent)
+
+				state := strings.ToUpper(statusEvent.OrderState)
+				if state == "COMPLETED" || state == "FAILED" || state == "CANCELLED" || state == "CLOSED" {
+					m.mu.Lock()
+					delete(m.pendingOrders, order.OrderID)
+					m.mu.Unlock()
+				}
+			}
+		}
+	}
+}
+
+func (m *LiquidityManager) MonitorOrder(lspPubkey, orderID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pendingOrders[orderID] = PendingOrder{
+		OrderID:   orderID,
+		LSPPubkey: lspPubkey,
+		CreatedAt: time.Now(),
+	}
+	logger.Logger.Info().Str("order_id", orderID).Msg("Started monitoring order")
 }
 
 func (m *LiquidityManager) processMessages(ctx context.Context, msgs <-chan lnclient.CustomMessage, errs <-chan error) {
@@ -187,6 +266,11 @@ func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
 
 	var lspList []SettingsLSP
 	for _, l := range dbLSPs {
+		nostrPub := ""
+		if val, ok := m.nostrPubkeys[l.Pubkey]; ok {
+			nostrPub = val
+		}
+
 		lspList = append(lspList, SettingsLSP{
 			Name:        l.Name,
 			Description: l.Description,
@@ -194,9 +278,80 @@ func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
 			Host:        l.Host,
 			Active:      l.IsActive,
 			IsCommunity: l.IsCommunity,
+			NostrPubkey: nostrPub,
 		})
 	}
 	return lspList, nil
+}
+
+// GetNostrPubkey returns the cached Nostr Pubkey for a given LSP
+func (m *LiquidityManager) GetNostrPubkey(pubkey string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.nostrPubkeys[pubkey]
+}
+
+// RefreshLSPInfo fetches LSPS0 info for a specific LSP and updates the nostr pubkey cache
+func (m *LiquidityManager) RefreshLSPInfo(ctx context.Context, pubkey string) (string, error) {
+	lsps0Info, err := m.lsps0Client.GetInfo(ctx, pubkey)
+	if err != nil {
+		return "", err
+	}
+
+	nostrPubkey := lsps0Info.NotificationNostrPubkey
+	if nostrPubkey != "" {
+		m.mu.Lock()
+		m.nostrPubkeys[pubkey] = nostrPubkey
+		m.mu.Unlock()
+
+		logger.Logger.Debug().
+			Str("lsp", pubkey).
+			Str("nostr_pubkey", nostrPubkey).
+			Msg("Cached LSP Nostr Pubkey")
+	}
+
+	return nostrPubkey, nil
+}
+
+// EnsureWebhookRegistered registers webhook for an LSP (called on-demand during order creation)
+func (m *LiquidityManager) EnsureWebhookRegistered(ctx context.Context, lspPubkey string) error {
+	if m.cfg.GetWebhookConfig == nil {
+		return nil // Webhook config not available
+	}
+
+	webhookURL, transport := m.cfg.GetWebhookConfig()
+	if webhookURL == "" || transport == "" {
+		return nil // No webhook configured
+	}
+
+	// Get LSP's Nostr pubkey (try cache first, then fetch)
+	m.mu.RLock()
+	nostrPubkey := m.nostrPubkeys[lspPubkey]
+	m.mu.RUnlock()
+
+	if nostrPubkey == "" {
+		// Fetch from LSPS0
+		var err error
+		nostrPubkey, err = m.RefreshLSPInfo(ctx, lspPubkey)
+		if err != nil {
+			logger.Logger.Warn().Err(err).Str("lsp", lspPubkey).Msg("Failed to get LSP info for webhook registration")
+			// Continue anyway - webhook might still work
+		}
+	}
+
+	if nostrPubkey == "" && transport == "nostr" {
+		logger.Logger.Warn().Str("lsp", lspPubkey).Msg("Skipping Nostr webhook: LSP Nostr pubkey unknown")
+		return nil
+	}
+
+	_, err := m.lsps5Client.SetWebhook(ctx, lspPubkey, constants.APP_IDENTIFIER, webhookURL, transport)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("lsp", lspPubkey).Msg("Failed to register webhook")
+		return err
+	}
+
+	logger.Logger.Info().Str("lsp", lspPubkey).Str("transport", transport).Msg("Registered webhook with LSP")
+	return nil
 }
 
 // AddLSP adds a new LSP via the LSPManager
@@ -246,6 +401,38 @@ func (m *LiquidityManager) RemoveSelectedLSP(pubkey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.cfg.LSPManager.ToggleLSP(strings.ToLower(pubkey), false)
+}
+
+// ConnectLSP attempts to connect to a specific LSP
+func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error {
+	lsps, err := m.GetLSPs()
+	if err != nil {
+		return err
+	}
+
+	var targetLSP *SettingsLSP
+	for _, lsp := range lsps {
+		if lsp.Pubkey == pubkey {
+			targetLSP = &lsp
+			break
+		}
+	}
+
+	if targetLSP == nil {
+		return fmt.Errorf("LSP %s not found in settings", pubkey)
+	}
+
+	host := targetLSP.Host
+	if host == "" {
+		return fmt.Errorf("LSP %s has no host configured", pubkey)
+	}
+
+	logger.Logger.Info().Str("lsp", pubkey).Str("host", host).Msg("Connecting to LSP due to notification")
+
+	return m.cfg.LNClient.ConnectPeer(ctx, &lnclient.ConnectPeerRequest{
+		Pubkey:  pubkey,
+		Address: host,
+	})
 }
 
 // GetLSPs returns all LSPs
@@ -342,6 +529,185 @@ func (m *LiquidityManager) waitForEvent(ctx context.Context, requestID string) (
 	}
 }
 
+// EnsureInboundLiquidity checks if the node has sufficient inbound liquidity for the amount.
+// If NOT, it automatically performs a JIT channel opening with the active LSP.
+// This handles the "JIT Smart Logic" on the backend.
+func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMloki uint64) (*JitChannelHints, error) {
+	// 1. Check current liquidity
+	balances, err := m.cfg.LNClient.GetBalances(ctx, false)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to check balances for JIT")
+		// if we can't check balance, we probably shouldn't blindly try to buy liquidity?
+		// Or should we fail safe? Let's return error.
+		return nil, err
+	}
+
+	inboundCapacity := balances.Lightning.TotalReceivable
+	// Safety buffer? Frontend used 0.8 factor.
+	// Let's be explicit: if inbound < amount * factor?
+	// The problem is simple: if amount > inbound, payment WILL fail.
+	// So we should check strict amount > inbound.
+	// But giving 0.8 buffer helps avoid edge cases.
+	// Wait, balances.Lightning.Total is "Total Balance" or "Inbound"?
+	// GetBalances returns BalancesResponse which has Lightning.TotalReceivable (int64).
+	// amountMloki is unit64.
+	// TotalReceivable is usually in SATOSHIS in some APIs?
+	// Let's double check models.go for BalancesResponse.
+	// Assuming TotalReceivable is milli-satoshis if the variable is called Mloki?
+	// Looking at models.go earlier:
+	// type Channel struct { ... LocalBalance int64 ... }  (usually satoshis in LND)
+	// But LNClient.GetBalances returns BalancesResponse.
+	// In LND service GetBalances likely returns satoshis.
+	// amountMloki is millisats.
+	// So we need to compare apples to apples.
+	// inboundCapacityMsat = inboundCapacity * 1000
+
+	inboundCapacityMsat := uint64(inboundCapacity) * 1000
+	if inboundCapacityMsat >= amountMloki {
+		// Sufficient liquidity
+		return nil, nil
+	}
+
+	logger.Logger.Info().
+		Uint64("amount_mloki", amountMloki).
+		Uint64("inbound_mloki", inboundCapacityMsat).
+		Msg("Insufficient inbound liquidity, attempting JIT channel buy")
+
+	// 2. Get Active LSP
+	lsps, err := m.GetSelectedLSPs()
+	if err != nil || len(lsps) == 0 {
+		return nil, fmt.Errorf("no active LSP to buy liquidity from")
+	}
+	activeLSP := lsps[0] // Use first active
+
+	// 3. Helper to perform the Buy flow
+	performBuy := func() (*JitChannelHints, error) {
+		// A. Get Fee Params
+		feeParamsMenu, err := m.GetLSPS2FeeParams(ctx, activeLSP.Pubkey)
+		if err != nil {
+			return nil, err
+		}
+		if len(feeParamsMenu) == 0 {
+			return nil, fmt.Errorf("LSP returned no fee parameters")
+		}
+		// Select first param for now (simplest strategy)
+		// We could implement "cheapest" later
+		selectedParams := feeParamsMenu[0]
+
+		// Calculate Fee logic (Standardized with Frontend)
+		// Fee = Max(MinFee, Proportional)
+		minFee := selectedParams.MinFeeMloki
+		// Proportional is parts per million
+		// amount * proportional / 1000000
+		// We ceiling the result to be safe? JS used math.Ceil.
+		// Integer math: (amount * prop + 999999) / 1000000
+		proportionalFee := (amountMloki*uint64(selectedParams.Proportional) + 999999) / 1000000
+
+		feeMloki := minFee
+		if proportionalFee > feeMloki {
+			feeMloki = proportionalFee
+		}
+
+		// B. Buy
+		res, err := m.OpenJitChannel(ctx, activeLSP.Pubkey, amountMloki, selectedParams)
+		if err != nil {
+			return nil, err
+		}
+
+		return &JitChannelHints{
+			SCID:            fmt.Sprintf("%d", res.InterceptSCID),
+			LSPNodeID:       res.LSPNodeID,
+			CLTVExpiryDelta: res.CLTVExpiryDelta,
+			FeeMloki:        feeMloki,
+		}, nil
+	}
+
+	// 4. Try Buy (with retry logic)
+	hints, err := performBuy()
+	if err != nil {
+		// Check for specific error codes if possible
+		// Since OpenJitChannel wraps error strings, we check substring or improve OpenJitChannel.
+		// BLIP-52 Code 201: invalid_opening_fee_params
+		// flspd Code 100: "Invalid promise or expired params" (maps to same retryable condition)
+		if strings.Contains(err.Error(), "invalid_opening_fee_params") || strings.Contains(err.Error(), "LSP error 100") {
+			logger.Logger.Warn().Msg("JIT Buy failed due to stale params, retrying once...")
+			// Simple Retry
+			return performBuy()
+		}
+		return nil, err
+	}
+
+	return hints, nil
+}
+
+// BuyLiquidity buys inbound liquidity from a specific LSP with robust error handling (retries on stale params).
+func (m *LiquidityManager) BuyLiquidity(ctx context.Context, lspPubkey string, amountMloki uint64, manualParams *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
+	// Helper to perform the Buy flow
+	performBuy := func(params *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
+		var selectedParams lsps2.OpeningFeeParams
+		if params != nil {
+			selectedParams = *params
+		} else {
+			// A. Get Fee Params
+			feeParamsMenu, err := m.GetLSPS2FeeParams(ctx, lspPubkey)
+			if err != nil {
+				return nil, err
+			}
+			if len(feeParamsMenu) == 0 {
+				return nil, fmt.Errorf("LSP returned no fee parameters")
+			}
+			// Select first param for now (simplest strategy)
+			selectedParams = feeParamsMenu[0]
+		}
+
+		// B. Buy
+		res, err := m.OpenJitChannel(ctx, lspPubkey, amountMloki, selectedParams)
+		if err != nil {
+			return nil, err
+		}
+
+		// Calculate Fee logic
+		minFee := selectedParams.MinFeeMloki
+		proportionalFee := (amountMloki*uint64(selectedParams.Proportional) + 999999) / 1000000
+		feeMloki := minFee
+		if proportionalFee > feeMloki {
+			feeMloki = proportionalFee
+		}
+
+		// Success
+		return &JitChannelHints{
+			SCID:            fmt.Sprintf("%d", res.InterceptSCID),
+			LSPNodeID:       res.LSPNodeID,
+			CLTVExpiryDelta: res.CLTVExpiryDelta,
+			FeeMloki:        feeMloki,
+		}, nil
+	}
+
+	// If manual params provided, try once (no retry, as invoice logic depends on these specific params)
+	if manualParams != nil {
+		hints, err := performBuy(manualParams)
+		if err != nil {
+			return nil, err
+		}
+		return hints, nil
+	}
+
+	// Automatic flow with retry
+	hints, err := performBuy(nil)
+	if err != nil {
+		// BLIP-52 Code 201: invalid_opening_fee_params
+		// flspd Code 100: "Invalid promise or expired params" (maps to same retryable condition)
+		if strings.Contains(err.Error(), "invalid_opening_fee_params") || strings.Contains(err.Error(), "LSP error 100") {
+			logger.Logger.Warn().Msg("Manual Buy failed due to stale params, retrying once...")
+			// Simple Retry will fetch fresh params
+			return performBuy(nil)
+		}
+		return nil, err
+	}
+
+	return hints, nil
+}
+
 // Synchronous LSPS2 Wrappers
 
 func (m *LiquidityManager) GetLSPS2FeeParams(ctx context.Context, pubkey string) ([]lsps2.OpeningFeeParams, error) {
@@ -359,7 +725,7 @@ func (m *LiquidityManager) GetLSPS2FeeParams(ctx context.Context, pubkey string)
 	case *lsps2.OpeningParametersReadyEvent:
 		return e.OpeningFeeParamsMenu, nil
 	case *lsps2.GetInfoFailedEvent:
-		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
+		return nil, fmt.Errorf("LSP returned error (code %d): %s", e.ErrorCode, e.Error)
 	default:
 		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
 	}
@@ -380,7 +746,16 @@ func (m *LiquidityManager) OpenJitChannel(ctx context.Context, pubkey string, pa
 	case *lsps2.InvoiceParametersReadyEvent:
 		return e, nil
 	case *lsps2.BuyRequestFailedEvent:
-		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
+		// We embed the Code in the error string or use a custom error type?
+		// For simplicity in this function, we embed it so EnsureInboundLiquidity can parse it via string (as error types need more boilerplate)
+		// Or return a formatted error: "LSP error 201: invalid_..."
+		if e.ErrorCode == 201 {
+			return nil, fmt.Errorf("LSP error 201: invalid_opening_fee_params: %s", e.Error)
+		}
+		if e.ErrorCode == 100 {
+			return nil, fmt.Errorf("LSP error 100: invalid_opening_fee_params: %s", e.Error)
+		}
+		return nil, fmt.Errorf("LSP returned error (code %d): %s", e.ErrorCode, e.Error)
 	default:
 		return nil, fmt.Errorf("unexpected event type: %s", event.EventType())
 	}
@@ -447,6 +822,8 @@ func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, 
 
 	switch e := event.(type) {
 	case *lsps1.OrderCreatedEvent:
+		// Start monitoring
+		m.MonitorOrder(pubkey, e.OrderID)
 		return e, nil
 	case *lsps1.OrderRequestFailedEvent:
 		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
