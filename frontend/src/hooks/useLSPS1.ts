@@ -35,7 +35,6 @@ export function useLSPS1(lspPubkey: string) {
           });
           return response;
       } catch (e: any) {
-          console.log('[useLSPS1] createOrder error:', e.message);
           setError(e.message || "Failed to create order");
           return null;
       } finally {

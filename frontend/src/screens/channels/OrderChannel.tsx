@@ -1,5 +1,5 @@
-import { Check, Copy, InfoIcon, Zap } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { Copy, InfoIcon, Zap } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -26,14 +26,18 @@ import {
 } from "src/components/ui/tooltip";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
+import { useLSPEvents } from "src/hooks/useLSPEvents";
 import { useLSPS1 } from "src/hooks/useLSPS1";
+import { useLSPS2 } from "src/hooks/useLSPS2";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn, formatAmount } from "src/lib/utils";
-import { LSPS1CreateOrderRequest, LSPS1Option } from "src/types";
+import { LSPS1CreateOrderRequest, LSPS1Option, LSPS2OpeningFeeParams } from "src/types";
+import { LSPS5EventType } from "src/types/lspsEvents";
 import { request } from "src/utils/request";
 
 import LightningNetworkDark from "src/assets/illustrations/lightning-network-dark.svg?react";
 import LightningNetworkLight from "src/assets/illustrations/lightning-network-light.svg?react";
+import TickIcon from "src/assets/illustrations/tick.svg?react";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 
@@ -42,15 +46,18 @@ export default function OrderChannel() {
   const { data: balances } = useBalances();
   const [selectedLSP, setSelectedLSP] = useState<string>("");
   const { getInfo, createOrder, getOrder, isLoading, error: lspsError } = useLSPS1(selectedLSP);
+  const { getInfo: getLSPS2Info } = useLSPS2(selectedLSP);
+  const { lastEvent } = useLSPEvents(); // Listen for real-time events (webhooks/SSE)
   
   const [options, setOptions] = useState<LSPS1Option[]>([]);
   const [amount, setAmount] = useState<string>("250000"); // Default similar to preset
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
   const [orderId, setOrderId] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(false);
+  const [orderFee, setOrderFee] = useState<number>(0);
+  const [feeParams, setFeeParams] = useState<LSPS2OpeningFeeParams | null>(null);
 
   useEffect(() => {
-    console.log('[OrderChannel] lspsError changed:', lspsError);
     if (lspsError) {
       toast.error(lspsError);
     }
@@ -70,6 +77,7 @@ export default function OrderChannel() {
   useEffect(() => {
     if (selectedLSP) {
       (async () => {
+        // Fetch LSPS1 Options
         const res = await getInfo();
         if (res && res.options) {
           setOptions(res.options);
@@ -81,73 +89,127 @@ export default function OrderChannel() {
               }
           }
         }
+        
+        // Fetch LSPS2 Fee Params for estimation (since LSPS1 usually uses same logic or we use JIT params as proxy)
+        // Ideally LSPS1 GetInfo would return fee params too, but the spec separates them.
+        // We use LSPS2 params as a best-effort estimate if LSPS1 doesn't provide them upfront.
+        const feeRes = await getLSPS2Info();
+        if (feeRes && feeRes.opening_fee_params_menu && feeRes.opening_fee_params_menu.length > 0) {
+             setFeeParams(feeRes.opening_fee_params_menu[0]);
+        }
       })();
     }
-  }, [selectedLSP, getInfo, amount]);
+  }, [selectedLSP, getInfo, getLSPS2Info]);
+
+  // Real-time fee estimation
+  useEffect(() => {
+      if (!amount || !feeParams || isPaid) return;
+      
+      const amountMloki = parseInt(amount) * 1000;
+      const minFee = parseInt(feeParams.min_fee_mloki);
+      const proportionalFee = Math.ceil((amountMloki * feeParams.proportional) / 1000000);
+      
+      const estimatedFeeMloki = Math.max(minFee, proportionalFee);
+      
+      // Update fee display if we haven't created an order yet
+      if (!orderId) {
+          setOrderFee(estimatedFeeMloki / 1000); // UI expects Loki (satoshis) for orderFee state currently?
+          // Wait, orderFee state usage:
+          // FormattedFlokicoinAmount amount={orderFee * 1000}
+          // So orderFee is in Satoshis.
+          // feeMloki / 1000 = Satoshis.
+      }
+  }, [amount, feeParams, orderId, isPaid]);
+
+  const checkOrderStatus = useCallback(async () => {
+    if (!orderId || isPaid) return;
+    
+    const res = await getOrder(orderId);
+    if (res) {
+        if (res.state === "PAID") {
+            // Trigger channel opening by paying self
+            try {
+              toast.info("Triggering channel opening...");
+              
+              const amountSats = res.order_total_loki 
+                  ? Math.ceil(res.order_total_loki) 
+                  : parseInt(amount);
+
+              const invRes = await request<{invoice: string}>("/api/invoices", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                      amount: amountSats,
+                      description: "LSPS1 JIT Channel Opening Trigger"
+                  })
+              });
+
+              if (invRes && invRes.invoice) {
+                  await request(`/api/payments/${invRes.invoice}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ amount: amountSats, metadata: {} })
+                  });
+              }
+            } catch (e: any) {
+                console.error('[OrderChannel] Trigger failed:', e);
+                toast.error("Channel opening trigger failed", {
+                    description: e.message || "Payment failure"
+                });
+            }
+
+            setIsPaid(true);
+            toast.success("Payment received! Channel opening in progress...");
+        } else if (res.state === "COMPLETED") {
+            setIsPaid(true);
+             toast.success("Channel order completed!");
+        } else if (res.state === "FAILED") {
+            toast.error("Channel order failed");
+        }
+    }
+  }, [orderId, isPaid, getOrder, amount]);
+
+  // Trigger check on real-time events
+  useEffect(() => {
+    if (!orderId || isPaid) return;
+    
+    if (lastEvent?.properties.order_id === orderId) {
+       
+       if (lastEvent.event === LSPS5EventType.OrderStateChanged) {
+           const { state, error: errMsg, channel_point } = lastEvent.properties;
+           
+           if (state === "FAILED") {
+               toast.error("Channel order failed", {
+                   description: errMsg || "Unknown error from LSP"
+               });
+               // Optionally stop polling here or update local state
+           } else if (state === "COMPLETED") {
+               toast.success("Channel order completed!", {
+                   description: `Channel Point: ${channel_point}`
+               });
+               setIsPaid(true); // Move to success view
+           }
+           
+           // Always refresh status to be sure
+           checkOrderStatus();
+       } else if (lastEvent.event === LSPS5EventType.PaymentIncoming) {
+           checkOrderStatus();
+       }
+    }
+  }, [lastEvent, orderId, isPaid, checkOrderStatus]);
 
   // Poll order status if we have an orderId
+  // Poll order status if we have an orderId and polling is enabled
   useEffect(() => {
       let interval: NodeJS.Timeout;
-      if (orderId && selectedLSP && !isPaid) {
-          interval = setInterval(async () => {
-              const res = await getOrder(orderId);
-              if (res) {
-                  console.log('[OrderChannel] Order status:', res.state);
-                  if (res.state === "PAID") {
-                      clearInterval(interval);
-                      
-                      // Trigger channel opening by paying self
-                      try {
-                        console.log('[OrderChannel] Triggering channel opening...');
-                        toast.info("Triggering channel opening...");
-                        
-                        // 1. Create self-invoice
-                        // Parse amount from order_total_loki if available, else use requested amount
-                        const amountSats = res.order_total_loki 
-                            ? Math.ceil(res.order_total_loki) 
-                            : parseInt(amount); // fallback (should match closely)
-
-                        const invRes = await request<{invoice: string}>("/api/invoices", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                amount: amountSats,
-                                description: "LSPS1 JIT Channel Opening Trigger"
-                            })
-                        });
-
-                        if (invRes && invRes.invoice) {
-                            console.log('[OrderChannel] Created self-invoice:', invRes.invoice);
-                            
-                            // 2. Pay self-invoice
-                            // Note: Invoice in URL must be encoded if it contains special chars, but usually alphanumeric
-                            await request(`/api/payments/${invRes.invoice}`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ amount: amountSats, metadata: {} })
-                            });
-                            console.log('[OrderChannel] Payment-to-self sent');
-                        }
-                      } catch (e) {
-                          console.error('[OrderChannel] Trigger failed:', e);
-                          // We continue anyway because maybe it worked partially or LSP will handle it
-                      }
-
-                      setIsPaid(true);
-                      toast.success("Payment received! Channel opening in progress...");
-                  } else if (res.state === "COMPLETED") {
-                      clearInterval(interval);
-                      setIsPaid(true);
-                       toast.success("Channel order completed!");
-                  } else if (res.state === "FAILED") {
-                      clearInterval(interval);
-                      toast.error("Channel order failed");
-                  }
-              }
-          }, 2000);
+      // Strict check: Only poll if explicitly enabled in backend config
+      if (orderId && selectedLSP && !isPaid && info?.enablePolling) {
+          interval = setInterval(() => {
+              checkOrderStatus();
+          }, 5000); // Polling every 5s if enabled
       }
       return () => clearInterval(interval);
-  }, [orderId, selectedLSP, getOrder, isPaid, amount]);
+  }, [orderId, selectedLSP, isPaid, checkOrderStatus, info?.enablePolling]);
 
   const handleCreateOrder = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -166,16 +228,14 @@ export default function OrderChannel() {
           if (res) {
               setOrderId(res.order_id);
               setPaymentInvoice(res.payment_invoice);
+              if (res.fee_total_loki) {
+                  setOrderFee(res.fee_total_loki);
+              }
               toast.success("Order created! Please pay the invoice.");
           }
       } catch (e) {
          console.error(e);
       }
-  };
-
-  const copyInvoice = () => {
-      copyToClipboard(paymentInvoice);
-      toast.success("Invoice copied to clipboard");
   };
 
   if (!info || !balances) return <Loading />;
@@ -269,7 +329,7 @@ export default function OrderChannel() {
                     </div>
 
                     <div className="grid gap-1.5">
-                         <Label htmlFor="lsp-select">LSP Provider</Label>
+                         <Label htmlFor="lsp-select">LSP</Label>
                          {info.lsps && info.lsps.length > 0 ? (
                              <Select value={selectedLSP} onValueChange={setSelectedLSP}>
                                 <SelectTrigger className="w-full">
@@ -293,6 +353,18 @@ export default function OrderChannel() {
                             </LinkButton>
                          </div>
                     </div>
+
+                    {orderFee > 0 && !orderId && (
+                        <div className="flex justify-between items-center text-sm p-3 bg-muted/50 rounded-md">
+                            <span className="text-muted-foreground">Estimated Fee</span>
+                            <div className="text-right">
+                                <div className="font-medium">
+                                    <FormattedFlokicoinAmount amount={orderFee * 1000} />
+                                </div>
+                                <FormattedFiatAmount amount={orderFee} className="text-xs text-muted-foreground" />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex gap-4 mt-2">
                         <LoadingButton 
@@ -325,8 +397,8 @@ export default function OrderChannel() {
                 />
                 <Card className="mt-5">
                     <CardContent className="flex flex-col items-center gap-6 pt-6">
-                        <div className="rounded-full bg-green-500/10 p-3">
-                            <Check className="w-12 h-12 text-green-500" />
+                        <div className="p-3">
+                            <TickIcon className="w-16 h-16" />
                         </div>
                         <div className="text-center space-y-2">
                             <p className="text-lg font-semibold">Payment Complete</p>
@@ -360,13 +432,20 @@ export default function OrderChannel() {
                                 <FormattedFiatAmount amount={parseInt(amount)} className="text-muted-foreground text-xs" />
                             </div>
                         </div>
+                        {orderFee > 0 && (
+                            <div className="flex justify-between p-4 pt-0 text-sm">
+                                <span className="text-muted-foreground">LSP Fee</span>
+                                <div className="text-right">
+                                    <div className="font-semibold">
+                                        <FormattedFlokicoinAmount amount={orderFee * 1000} />
+                                    </div>
+                                    <FormattedFiatAmount amount={orderFee} className="text-muted-foreground text-xs" />
+                                </div>
+                            </div>
+                        )}
                         <div className="flex justify-between p-4 pt-0 text-sm">
                              <span className="text-muted-foreground">Amount to pay</span>
                              <div className="text-right">
-                                {/* We can use PayLightningInvoice inside here or decode manually. 
-                                    PayLightningInvoice handles decoding internally. 
-                                    Let's manually decode for the table to show the fee BEFORE the QR code.
-                                */}
                                 <FeeDisplay invoice={paymentInvoice} />
                             </div>
                         </div>
@@ -386,12 +465,11 @@ export default function OrderChannel() {
                              <FeeDisplay invoice={paymentInvoice} size="lg" />
                         </div>
 
-                        <div className="flex gap-2 w-full">
-                            <Button variant="outline" className="flex-1" onClick={copyInvoice}>
-                                <Copy className="mr-2 h-4 w-4" />
-                                Copy Invoice
-                            </Button>
-                        </div>
+                        <PayInvoiceButtons
+                          paymentInvoice={paymentInvoice}
+                          balances={balances}
+                          onPaid={() => setIsPaid(true)}
+                        />
                     </CardContent>
                 </Card>
             </div>
@@ -433,5 +511,69 @@ function FeeDisplay({ invoice, size = "sm" }: { invoice: string; size?: "sm" | "
           </div>
           <FormattedFiatAmount amount={sats} className="text-muted-foreground text-xs" />
       </div>
+  );
+}
+
+type PayInvoiceButtonsProps = {
+  paymentInvoice: string;
+  balances: { lightning: { nextMaxSpendableMPP: number } } | null;
+  onPaid: () => void;
+};
+
+function PayInvoiceButtons({ paymentInvoice, balances, onPaid }: PayInvoiceButtonsProps) {
+  const [isPaying, setIsPaying] = React.useState(false);
+  const [invoiceAmount, setInvoiceAmount] = React.useState(0);
+
+  React.useEffect(() => {
+    import("@lightz/lightning-tools").then(({ Invoice }) => {
+      const inv = new Invoice({ pr: paymentInvoice });
+      setInvoiceAmount(inv.satoshi);
+    }).catch(console.error);
+  }, [paymentInvoice]);
+
+  const canPayInternally =
+    balances &&
+    invoiceAmount > 0 &&
+    balances.lightning.nextMaxSpendableMPP / 1000 > invoiceAmount;
+
+  const handlePayNow = async () => {
+    try {
+      setIsPaying(true);
+      await request(`/api/payments/${paymentInvoice}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      toast.success("Payment sent!");
+      onPaid();
+    } catch (e) {
+      toast.error("Payment failed", { description: "" + e });
+      console.error(e);
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const copyInvoice = () => {
+    copyToClipboard(paymentInvoice);
+    toast.success("Invoice copied to clipboard");
+  };
+
+  return (
+    <div className="flex gap-2 w-full flex-wrap">
+      {canPayInternally && (
+        <LoadingButton
+          loading={isPaying}
+          className="flex-1"
+          onClick={handlePayNow}
+        >
+          <Zap className="mr-2 h-4 w-4" />
+          Pay Now
+        </LoadingButton>
+      )}
+      <Button variant="outline" className="flex-1" onClick={copyInvoice}>
+        <Copy className="mr-2 h-4 w-4" />
+        Copy Invoice
+      </Button>
+    </div>
   );
 }
