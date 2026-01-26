@@ -217,7 +217,6 @@ func (cfg *config) Get(key string, encryptionKey string) (string, error) {
 
 	if keyCache, ok := cfg.cache[key]; ok {
 		if cachedValue, ok := keyCache[encKeyHash]; ok {
-			logger.Logger.Debug().Str("key", key).Msg("hit config cache")
 			return cachedValue, nil
 		}
 	}

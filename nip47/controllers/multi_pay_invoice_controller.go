@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	decodepay "github.com/flokiorg/flndecodepay"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	decodepay "github.com/flokiorg/lokihub/lndecodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"

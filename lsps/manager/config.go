@@ -8,9 +8,10 @@ import (
 )
 
 type ManagerConfig struct {
-	LNClient      lnclient.LNClient
-	LSPManager    *LSPManager
-	EntropySource io.Reader
+	LNClient         lnclient.LNClient
+	LSPManager       *LSPManager
+	EntropySource    io.Reader
+	GetWebhookConfig func() (string, string)
 }
 
 func NewManagerConfig(lnClient lnclient.LNClient, lspManager *LSPManager) *ManagerConfig {

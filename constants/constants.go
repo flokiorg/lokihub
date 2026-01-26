@@ -89,3 +89,30 @@ const (
 	APP_STORE_SYNC_INTERVAL = 6 * time.Hour
 	APP_STORE_CACHE_DIR     = "appstore"
 )
+
+const (
+	DEFAULT_ENABLE_NOSTR_NOTIFICATIONS = true
+	DEFAULT_ENABLE_HTTP_WEBHOOKS       = false
+	DEFAULT_ENABLE_POLLING             = false
+	APP_IDENTIFIER                     = "lokihub"
+)
+
+// LSPS5 Internal Event Names
+const (
+	LSPS5_EVENT_NOTIFICATION                = "lsps5.notification"
+	LSPS5_EVENT_PAYMENT_INCOMING            = "lsps5.payment_incoming"
+	LSPS5_EVENT_EXPIRY_SOON                 = "lsps5.expiry_soon"
+	LSPS5_EVENT_LIQUIDITY_REQUEST           = "lsps5.liquidity_request"
+	LSPS5_EVENT_ONION_MESSAGE               = "lsps5.onion_message"
+	LSPS5_EVENT_ORDER_STATE_CHANGED         = "lsps5.order_state_changed"
+	LSPS5_EVENT_WEBHOOK_REGISTERED          = "lsps5.webhook_registered"
+	LSPS5_EVENT_WEBHOOK_REGISTRATION_FAILED = "lsps5.webhook_registration_failed"
+	LSPS5_EVENT_WEBHOOKS_LISTED             = "lsps5.webhooks_listed"
+	LSPS5_EVENT_WEBHOOK_REMOVED             = "lsps5.webhook_removed"
+	LSPS5_EVENT_WEBHOOK_REMOVAL_FAILED      = "lsps5.webhook_removal_failed"
+)
+
+// LSPS1 Internal Event Names
+const (
+	LSPS1_EVENT_NOTIFICATION = "lsps1.notification"
+)

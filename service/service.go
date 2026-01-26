@@ -28,6 +28,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 	"github.com/flokiorg/lokihub/nip47"
 )
 
@@ -44,6 +45,7 @@ type service struct {
 	ctx                 context.Context
 	wg                  *sync.WaitGroup
 	nip47Service        nip47.Nip47Service
+	lsps5Listener       *lspsnostr.Listener
 	liquidityManager    *manager.LiquidityManager
 	appCancelFn         context.CancelFunc
 	nostrCancelFn       context.CancelFunc

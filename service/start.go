@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/pkg/version"
 	"github.com/flokiorg/lokihub/swaps"
+	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -20,6 +22,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient/lnd"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
 )
 
 func (svc *service) ReloadNostr() error {
@@ -110,6 +113,31 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 	svc.nip47Service.StartNotifier(ctx, pool)
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
+
+	// Start LSPS5 listener
+	svc.lsps5Listener = lspsnostr.NewListener(svc.keys, svc.cfg, svc.eventPublisher, func() []string {
+		if svc.liquidityManager == nil {
+			return nil
+		}
+		lsps, err := svc.liquidityManager.GetSelectedLSPs()
+		if err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to get trusted LSPs for Nostr listener")
+			return nil
+		}
+		var keys []string
+		for _, l := range lsps {
+			if l.NostrPubkey != "" {
+				keys = append(keys, l.NostrPubkey)
+			}
+		}
+		return keys
+	})
+	if err := svc.lsps5Listener.Start(ctx, pool); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to start LSPS5 Nostr listener")
+	}
+	// Register LSPS5 event consumer
+	lspsConsumer := &lspsEventConsumer{svc: svc}
+	svc.eventPublisher.RegisterSubscriber(lspsConsumer)
 
 	// register a subscriber for events of "nwc_app_created" which handles creation of nostr subscription for new app
 	createAppEventListener := &createAppConsumer{svc: svc, pool: pool}
@@ -321,12 +349,36 @@ func (svc *service) StartApp(encryptionKey string) error {
 	// Initialize and start LiquidityManager (LSPS)
 	lspManager := manager.NewLSPManager(svc.db)
 	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager)
+
+	// Inject webhook configuration logic to allow LiquidityManager to auto-register
+	lmCfg.GetWebhookConfig = func() (string, string) {
+		// Try Nostr transport first
+		if constants.DEFAULT_ENABLE_NOSTR_NOTIFICATIONS {
+			if svc.GetKeys() != nil {
+				privKey := svc.GetKeys().GetNostrSecretKey()
+				if privKey == "" {
+					return "", ""
+				}
+
+				lsps5 := nostrlsps5.NewLSPS5(privKey)
+				uri, err := lsps5.GenerateLsp5Uri(svc.cfg.GetRelayUrls())
+				if err == nil {
+					return uri, "nostr"
+				}
+				logger.Logger.Warn().Err(err).Msg("Failed to generate LSPS5 URI via library")
+			}
+		}
+		// Possible HTTP fallback in the future
+		return "", ""
+	}
+
 	lm, err := manager.NewLiquidityManager(lmCfg)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to initialize LiquidityManager")
 		// We don't fail startup for this yet, but we should log it
 	} else {
 		svc.liquidityManager = lm
+		svc.transactionsService.SetLiquidityManager(lm)
 		if err := lm.Start(ctx); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to start LiquidityManager")
 		} else {

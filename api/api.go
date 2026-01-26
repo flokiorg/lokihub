@@ -1169,6 +1169,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.EnableSwap = api.cfg.EnableSwap()
 	info.EnableMessageboardNwc = api.cfg.EnableMessageboardNwc()
 	info.WorkDir = api.cfg.GetDefaultWorkDir()
+	info.EnablePolling = constants.DEFAULT_ENABLE_POLLING
 
 	return &info, nil
 }

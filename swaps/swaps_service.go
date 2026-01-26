@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	decodepay "github.com/flokiorg/flndecodepay"
 	"github.com/flokiorg/go-flokicoin/chaincfg"
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	"github.com/flokiorg/go-flokicoin/chainutil/hdkeychain"
@@ -24,7 +25,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
-	decodepay "github.com/flokiorg/lokihub/lndecodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/transactions"

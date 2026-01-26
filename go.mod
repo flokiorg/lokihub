@@ -1,6 +1,6 @@
 module github.com/flokiorg/lokihub
 
-go 1.24.9
+go 1.25.5
 
 require (
 	github.com/adrg/xdg v0.5.3
@@ -30,10 +30,12 @@ require (
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/flokiorg/flnd v0.1.18-beta
+	github.com/flokiorg/flndecodepay v1.0.0
+	github.com/flowgate-lsp/nostr-lsps5 v1.0.1
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
 	github.com/rs/zerolog v1.34.0
-	github.com/tidwall/gjson v1.18.0
+	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
@@ -161,6 +163,7 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
