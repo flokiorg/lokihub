@@ -15,22 +15,25 @@ import (
 	"sync"
 	"time"
 
+	decodepay "github.com/flokiorg/flndecodepay"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
-	decodepay "github.com/flokiorg/lokihub/lndecodepay"
 	"github.com/flokiorg/lokihub/logger"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/flokiorg/lokihub/lsps/manager"
 )
 
 type transactionsService struct {
-	db             *gorm.DB
-	eventPublisher events.EventPublisher
+	db               *gorm.DB
+	eventPublisher   events.EventPublisher
+	liquidityManager *manager.LiquidityManager
 }
 
 type TransactionsService interface {
@@ -44,6 +47,8 @@ type TransactionsService interface {
 	SettleHoldInvoice(ctx context.Context, preimage string, lnClient lnclient.LNClient) (*Transaction, error)
 	CancelHoldInvoice(ctx context.Context, paymentHash string, lnClient lnclient.LNClient) error
 	SetTransactionMetadata(ctx context.Context, id uint, metadata map[string]interface{}) error
+	SetLiquidityManager(lm *manager.LiquidityManager)
+	EstimateFee(payReq string) (uint64, error)
 }
 
 const (
@@ -139,6 +144,10 @@ func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *
 	}
 }
 
+func (svc *transactionsService) SetLiquidityManager(lm *manager.LiquidityManager) {
+	svc.liquidityManager = lm
+}
+
 func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (*Transaction, error) {
 	logger.Logger.Debug().
 		Interface("app_id", appId).
@@ -173,7 +182,38 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		appId = &overwriteAppId
 	}
 
-	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths)
+	// JIT Liquidity Check
+	invoiceAmount := amount // Default to requested amount
+	if svc.liquidityManager != nil && lspJitChannelSCID == nil {
+		jitHints, err := svc.liquidityManager.EnsureInboundLiquidity(ctx, amount) // Buy for GROSS amount
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to ensure inbound liquidity")
+			// We continue anyway, but log error
+		} else if jitHints != nil {
+			logger.Logger.Info().Msg("Applying JIT channel hints to invoice")
+			throughNodePubkey = &jitHints.LSPNodeID
+			lspJitChannelSCID = &jitHints.SCID
+			lspCltvExpiryDelta = &jitHints.CLTVExpiryDelta
+
+			// APPLY ROUTE HINT FEE LOGIC
+			// 1. Fee is declared in Route Hint
+			fee := jitHints.FeeMloki
+			lspFeeBaseMloki = &fee
+
+			zero32 := uint32(0)
+			lspFeeProportionalMillionths = &zero32 // All fee in base
+
+			// 2. Invoice Amount = Net Amount (Gross - Fee)
+			if amount > fee {
+				invoiceAmount = amount - fee
+			} else {
+				logger.Logger.Warn().Uint64("amount", amount).Uint64("fee", fee).Msg("JIT Fee exceeds payment amount! Invoice will be 0 net.")
+				invoiceAmount = 0 // Should probably fail?
+			}
+		}
+	}
+
+	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(invoiceAmount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to create transaction")
 		return nil, err
@@ -853,6 +893,17 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				}
 
 				if result.RowsAffected == 0 {
+					// check if it was already settled
+					result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
+						Type:        constants.TRANSACTION_TYPE_OUTGOING,
+						State:       constants.TRANSACTION_STATE_SETTLED,
+						PaymentHash: lnClientTransaction.PaymentHash,
+					})
+					if result.RowsAffected > 0 {
+						logger.Logger.Debug().Str("payment_hash", lnClientTransaction.PaymentHash).Msg("payment already settled, ignoring payment sent event")
+						return nil
+					}
+
 					// Note: payments made from outside cannot be associated with an app
 					// for now this is disabled as it only applies to FLND, and we do not import FLND transactions either.
 					logger.Logger.Error().Str("payment_hash", lnClientTransaction.PaymentHash).Msg("failed to mark payment as sent: payment not found")
@@ -1462,10 +1513,32 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 		return err
 	}
 	logger.Logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("Marked transaction as failed")
-
 	svc.eventPublisher.Publish(&events.Event{
 		Event:      "nwc_payment_failed",
 		Properties: dbTransaction,
 	})
 	return nil
+}
+
+// EstimateFee calculates potential fees based on route hints in the invoice
+func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
+	paymentRequest, err := decodepay.Decodepay(payReq)
+	if err != nil {
+		return 0, err
+	}
+
+	var maxHintFeeMloki uint64 = 0
+
+	for _, route := range paymentRequest.Route {
+		var routeFeeMloki uint64 = 0
+		for _, hop := range route {
+			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MLoki) * uint64(hop.FeeProportionalMillionths) / 1000000)
+			routeFeeMloki += fee
+		}
+		if routeFeeMloki > maxHintFeeMloki {
+			maxHintFeeMloki = routeFeeMloki
+		}
+	}
+
+	return maxHintFeeMloki, nil
 }

@@ -193,3 +193,9 @@ func toApiBoostagram(boostagram *transactions.Boostagram) *Boostagram {
 		ValueMlokiTotal: boostagram.ValueMlokiTotal,
 	}
 }
+func (api *api) EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error) {
+	if api.svc.GetLNClient() == nil {
+		return 0, errors.New("LNClient not started")
+	}
+	return api.svc.GetTransactionsService().EstimateFee(invoice)
+}

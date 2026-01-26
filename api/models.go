@@ -111,6 +111,9 @@ type API interface {
 	RemoveSelectedLSP(pubkey string) error
 	AddLSP(name, uri string) error
 	RemoveLSP(pubkey string) error
+
+	// Invoice Fee Estimation
+	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
 }
 
 type App struct {
@@ -375,6 +378,7 @@ type InfoResponse struct {
 	EnableSwap                  bool                `json:"enableSwap"`
 	EnableMessageboardNwc       bool                `json:"enableMessageboardNwc"`
 	WorkDir                     string              `json:"workDir"`
+	EnablePolling               bool                `json:"enablePolling"`
 }
 
 type UpdateSettingsRequest struct {
@@ -590,6 +594,7 @@ type LSPS5SetWebhookRequest struct {
 	URL       string   `json:"url"`
 	Events    []string `json:"events"`
 	Signature string   `json:"signature"`
+	Transport string   `json:"transport,omitempty"`
 }
 
 type LSPS5ListWebhooksRequest struct {

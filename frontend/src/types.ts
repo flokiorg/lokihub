@@ -173,6 +173,7 @@ export interface InfoResponse {
   enableSwap: boolean;
   enableMessageboardNwc: boolean;
   workDir: string;
+  enablePolling?: boolean;
 }
 
 export type FlokicoinDisplayFormat = "loki" | "bip177";
@@ -623,12 +624,15 @@ export type LSPS1CreateOrderRequest = {
 export type LSPS1CreateOrderResponse = {
   order_id: string;
   payment_invoice: string;
+  fee_total_loki?: number;
+  order_total_loki?: number;
 };
 
 export type LSPS1GetOrderResponse = {
     order_id: string;
     state: string;
     payment_invoice: string;
+    fee_total_loki?: number;
     order_total_loki?: number;
 };
 
@@ -699,13 +703,13 @@ export interface LSPS2GetInfoResponse {
 
 export interface LSPS2BuyRequest {
   lspPubkey: string;
-  paymentSizeMloki: number;
-  openingFeeParams: LSPS2OpeningFeeParams;
+  paymentSizeMloki?: number;
+  openingFeeParams?: LSPS2OpeningFeeParams;
 }
 
 export interface LSPS2BuyResponse {
   requestId: string;
-  interceptScid: string;
+  interceptScid: string; // Backend returns as string
   cltvExpiryDelta: number;
   lspNodeID: string;
 }

@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,6 +138,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 			}
 			return []byte(secret), nil
 		},
+		TokenLookup: "header:Authorization:Bearer ,query:token",
 	}
 	// Read-only API group - accessible to both full and readonly tokens
 	readOnlyApiGroup := e.Group("/api")
@@ -146,6 +148,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/apps/:pubkey", httpSvc.appsShowByPubkeyHandler)
 	readOnlyApiGroup.GET("/apps/:id", httpSvc.appsShowHandler)
 	readOnlyApiGroup.GET("/channels", httpSvc.channelsListHandler)
+	readOnlyApiGroup.POST("/invoices/estimate-fee", httpSvc.estimateInvoiceFeeHandler)
 
 	readOnlyApiGroup.GET("/node/connection-info", httpSvc.nodeConnectionInfoHandler)
 	readOnlyApiGroup.GET("/node/status", httpSvc.nodeStatusHandler)
@@ -227,6 +230,13 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/lsps5/webhooks", httpSvc.lsps5ListWebhooksHandler)
 	fullAccessApiGroup.POST("/lsps5/webhook", httpSvc.lsps5SetWebhookHandler)
 	fullAccessApiGroup.DELETE("/lsps5/webhook", httpSvc.lsps5RemoveWebhookHandler)
+
+	// LSPS5 webhook callback - public endpoint for LSPs to send notifications
+	// This must be accessible without auth as external LSPs will call it
+	e.POST("/api/lsps5/webhook-callback", httpSvc.lsps5WebhookCallbackHandler)
+
+	// SSE endpoint for LSPS events - requires auth to subscribe
+	fullAccessApiGroup.GET("/lsps5/events", httpSvc.lsps5EventsSSEHandler)
 
 	httpSvc.lokiHttpSvc.RegisterSharedRoutes(readOnlyApiGroup, fullAccessApiGroup, e)
 }
@@ -1569,10 +1579,13 @@ func (httpSvc *HttpService) getAppStoreLogoHandler(c echo.Context) error {
 }
 
 func (httpSvc *HttpService) getLSPS2InfoHandler(c echo.Context) error {
-	lspPubkey := c.QueryParam("lspPubkey")
+	lspPubkey := c.QueryParam("lsp")
+	if lspPubkey == "" {
+		lspPubkey = c.QueryParam("lspPubkey")
+	}
 	if lspPubkey == "" {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Message: "lspPubkey is required",
+			Message: "lsp (or lspPubkey) is required",
 		})
 	}
 
@@ -1582,9 +1595,7 @@ func (httpSvc *HttpService) getLSPS2InfoHandler(c echo.Context) error {
 
 	response, err := httpSvc.api.LSPS2GetInfo(c.Request().Context(), req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: fmt.Sprintf("Failed to get LSPS2 Info: %s", err.Error()),
-		})
+		return handleErrorWithTimeout(c, err)
 	}
 
 	return c.JSON(http.StatusOK, response)
@@ -1600,12 +1611,18 @@ func (httpSvc *HttpService) buyLSPS2LiquidityHandler(c echo.Context) error {
 
 	response, err := httpSvc.api.LSPS2Buy(c.Request().Context(), &req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Message: err.Error(),
-		})
+		return handleErrorWithTimeout(c, err)
 	}
 
 	return c.JSON(http.StatusOK, response)
+}
+
+// Helper to check for timeouts
+func handleErrorWithTimeout(c echo.Context, err error) error {
+	if strings.Contains(strings.ToLower(err.Error()), "time out") || errors.Is(err, context.DeadlineExceeded) {
+		return c.JSON(http.StatusGatewayTimeout, ErrorResponse{Message: "Request timed out, please retry"})
+	}
+	return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 }
 
 func (httpSvc *HttpService) lsps0ListProtocolsHandler(c echo.Context) error {
@@ -1618,7 +1635,7 @@ func (httpSvc *HttpService) lsps0ListProtocolsHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS0ListProtocols(c.Request().Context(), &api.LSPS0ListProtocolsRequest{LSPPubkey: lspPubkey})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1631,7 +1648,7 @@ func (httpSvc *HttpService) lsps1GetInfoHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS1GetInfo(c.Request().Context(), &api.LSPS1GetInfoRequest{LSPPubkey: lspPubkey, Token: token})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1643,7 +1660,7 @@ func (httpSvc *HttpService) lsps1CreateOrderHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS1CreateOrder(c.Request().Context(), &req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1660,7 +1677,7 @@ func (httpSvc *HttpService) lsps1GetOrderHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS1GetOrder(c.Request().Context(), &api.LSPS1GetOrderRequest{LSPPubkey: lspPubkey, OrderID: orderId, Token: token})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1675,7 +1692,7 @@ func (httpSvc *HttpService) lsps5ListWebhooksHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS5ListWebhooks(c.Request().Context(), &api.LSPS5ListWebhooksRequest{LSPPubkey: lspPubkey})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1687,7 +1704,7 @@ func (httpSvc *HttpService) lsps5SetWebhookHandler(c echo.Context) error {
 	}
 	resp, err := httpSvc.api.LSPS5SetWebhook(c.Request().Context(), &req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -1709,7 +1726,27 @@ func (httpSvc *HttpService) lsps5RemoveWebhookHandler(c echo.Context) error {
 
 	resp, err := httpSvc.api.LSPS5RemoveWebhook(c.Request().Context(), &req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return handleErrorWithTimeout(c, err)
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) estimateInvoiceFeeHandler(c echo.Context) error {
+	type EstimateFeeRequest struct {
+		Invoice string `json:"invoice"`
+	}
+	req := &EstimateFeeRequest{}
+	if err := c.Bind(req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
+	if req.Invoice == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invoice is required"})
+	}
+
+	fee, err := httpSvc.api.EstimateInvoiceFee(c.Request().Context(), req.Invoice)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]uint64{"estimatedFeeMloki": fee})
 }

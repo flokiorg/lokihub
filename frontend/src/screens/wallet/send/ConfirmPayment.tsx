@@ -14,11 +14,11 @@ import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import { PendingPaymentAlert } from "src/components/PendingPaymentAlert";
 import { SpendingAlert } from "src/components/SpendingAlert";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useBalances } from "src/hooks/useBalances";
 import { PayInvoiceResponse, TransactionMetadata } from "src/types";
@@ -33,6 +33,24 @@ export default function ConfirmPayment() {
   const metadata = state?.args?.metadata as TransactionMetadata;
   const [isLoading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+
+  const [estimatedFee, setEstimatedFee] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (invoice?.paymentRequest) {
+      request<{ estimatedFeeMloki: number }>("/api/invoices/estimate-fee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice: invoice.paymentRequest }),
+      })
+        .then((res) => {
+          if (res?.estimatedFeeMloki) {
+            setEstimatedFee(res.estimatedFeeMloki);
+          }
+        })
+        .catch((e) => console.error("Failed to estimate fee", e));
+    }
+  }, [invoice]);
 
   const confirmPayment = async () => {
     setErrorMessage("");
@@ -103,10 +121,10 @@ export default function ConfirmPayment() {
           <CardContent className="flex flex-col items-center gap-6 pt-2">
             <div className="flex flex-col gap-1 items-center">
               <p className="text-2xl font-medium slashed-zero">
-                <FormattedFlokicoinAmount amount={invoice.satoshi * 1000} />
+                <FormattedFlokicoinAmount amount={invoice.satoshi * 1000 + estimatedFee} />
               </p>
               <FormattedFiatAmount
-                amount={invoice.satoshi}
+                amount={invoice.satoshi + Math.floor(estimatedFee / 1000)}
                 className="text-xl"
               />
             </div>
@@ -117,7 +135,7 @@ export default function ConfirmPayment() {
             )}
           </CardContent>
           <CardFooter className="flex flex-col gap-2 pt-2">
-            <SpendingAlert className="mb-2" amount={invoice.satoshi} />
+            <SpendingAlert className="mb-2" amount={invoice.satoshi + Math.floor(estimatedFee / 1000)} />
             <LoadingButton
               onClick={confirmPayment}
               loading={isLoading}

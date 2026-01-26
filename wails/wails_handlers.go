@@ -559,6 +559,20 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		res := WailsRequestRouterResponse{Body: invoice, Error: ""}
 		return res
+	case "/api/invoices/estimate-fee":
+		type EstimateFeeRequest struct {
+			Invoice string `json:"invoice"`
+		}
+		req := &EstimateFeeRequest{}
+		err := json.Unmarshal([]byte(body), req)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		fee, err := app.api.EstimateInvoiceFee(ctx, req.Invoice)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: map[string]uint64{"estimatedFeeMloki": fee}, Error: ""}
 	case "/api/wallet/sync":
 		app.api.SyncWallet()
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
