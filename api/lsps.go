@@ -18,7 +18,7 @@ import (
 )
 
 // lspsRequestTimeout is the timeout for LSPS protocol requests
-const lspsRequestTimeout = 5 * time.Second
+const lspsRequestTimeout = 15 * time.Second
 
 // LSPS0ListProtocols lists supported protocols
 func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error) {
