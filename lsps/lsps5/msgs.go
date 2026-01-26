@@ -19,8 +19,9 @@ const (
 
 // SetWebhookRequest parameters
 type SetWebhookRequest struct {
-	AppName string `json:"app_name"`
-	Webhook string `json:"webhook"`
+	AppName   string `json:"app_name"`
+	Webhook   string `json:"webhook"`
+	Transport string `json:"transport,omitempty"`
 }
 
 // SetWebhookResponse response

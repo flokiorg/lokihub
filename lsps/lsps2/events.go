@@ -25,6 +25,7 @@ type GetInfoFailedEvent struct {
 	RequestID          string
 	CounterpartyNodeID string
 	Error              string
+	ErrorCode          int
 }
 
 func (e *GetInfoFailedEvent) EventType() string {
@@ -50,6 +51,7 @@ type BuyRequestFailedEvent struct {
 	RequestID          string
 	CounterpartyNodeID string
 	Error              string
+	ErrorCode          int
 }
 
 func (e *BuyRequestFailedEvent) EventType() string {

@@ -66,7 +66,7 @@ func (h *ClientHandler) ensurePeerState(lspPubkey string) *PeerState {
 	return h.perPeerState[lspPubkey]
 }
 
-func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appName, webhookURL string) (string, error) {
+func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appName, webhookURL, transport string) (string, error) {
 	if err := validateWebhookURL(webhookURL); err != nil {
 		return "", err
 	}
@@ -85,8 +85,9 @@ func (h *ClientHandler) SetWebhook(ctx context.Context, lspPubkey string, appNam
 		Jsonrpc: "2.0",
 		Method:  MethodSetWebhook,
 		Params: &SetWebhookRequest{
-			AppName: appName,
-			Webhook: webhookURL,
+			AppName:   appName,
+			Webhook:   webhookURL,
+			Transport: transport,
 		},
 		ID: requestID,
 	}

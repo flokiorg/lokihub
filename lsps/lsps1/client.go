@@ -187,6 +187,8 @@ func (h *ClientHandler) handleGetInfoResponse(peerPubkey, requestID string, resp
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
 			Error:              resp.Error.Message,
+			ErrorCode:          resp.Error.Code,
+			ErrorData:          safeCastErrorData(resp.Error.Data),
 		})
 		return nil
 	}
@@ -214,6 +216,8 @@ func (h *ClientHandler) handleCreateOrderResponse(peerPubkey, requestID string, 
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
 			Error:              resp.Error.Message,
+			ErrorCode:          resp.Error.Code,
+			ErrorData:          safeCastErrorData(resp.Error.Data),
 		})
 		return nil
 	}
@@ -245,6 +249,8 @@ func (h *ClientHandler) handleGetOrderResponse(peerPubkey, requestID string, res
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
 			Error:              resp.Error.Message,
+			ErrorCode:          resp.Error.Code,
+			ErrorData:          safeCastErrorData(resp.Error.Data),
 		})
 		return nil
 	}
@@ -267,5 +273,15 @@ func (h *ClientHandler) handleGetOrderResponse(peerPubkey, requestID string, res
 		Payment:            result.Payment,
 		Channel:            result.Channel,
 	})
+	return nil
+}
+
+func safeCastErrorData(data interface{}) map[string]interface{} {
+	if data == nil {
+		return nil
+	}
+	if m, ok := data.(map[string]interface{}); ok {
+		return m
+	}
 	return nil
 }

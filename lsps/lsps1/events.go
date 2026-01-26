@@ -24,6 +24,8 @@ type SupportedOptionsFailedEvent struct {
 	RequestID          string
 	CounterpartyNodeID string
 	Error              string
+	ErrorCode          int
+	ErrorData          map[string]interface{}
 }
 
 func (e *SupportedOptionsFailedEvent) EventType() string {
@@ -48,6 +50,8 @@ type OrderRequestFailedEvent struct {
 	RequestID          string
 	CounterpartyNodeID string
 	Error              string
+	ErrorCode          int
+	ErrorData          map[string]interface{}
 }
 
 func (e *OrderRequestFailedEvent) EventType() string {

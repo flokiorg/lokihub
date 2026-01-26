@@ -1,13 +1,8 @@
 package lsps5
 
-import "github.com/flokiorg/lokihub/lsps/events"
-
-const (
-	EventTypeWebhookRegistered         = "lsps5_webhook_registered"
-	EventTypeWebhookRegistrationFailed = "lsps5_webhook_registration_failed"
-	EventTypeWebhooksListed            = "lsps5_webhooks_listed"
-	EventTypeWebhookRemoved            = "lsps5_webhook_removed"
-	EventTypeWebhookRemovalFailed      = "lsps5_webhook_removal_failed"
+import (
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/lsps/events"
 )
 
 type WebhookRegisteredEvent struct {
@@ -21,7 +16,7 @@ type WebhookRegisteredEvent struct {
 }
 
 func (e *WebhookRegisteredEvent) EventType() string {
-	return EventTypeWebhookRegistered
+	return constants.LSPS5_EVENT_WEBHOOK_REGISTERED
 }
 
 type WebhookRegistrationFailedEvent struct {
@@ -33,7 +28,7 @@ type WebhookRegistrationFailedEvent struct {
 }
 
 func (e *WebhookRegistrationFailedEvent) EventType() string {
-	return EventTypeWebhookRegistrationFailed
+	return constants.LSPS5_EVENT_WEBHOOK_REGISTRATION_FAILED
 }
 
 type WebhooksListedEvent struct {
@@ -44,7 +39,7 @@ type WebhooksListedEvent struct {
 }
 
 func (e *WebhooksListedEvent) EventType() string {
-	return EventTypeWebhooksListed
+	return constants.LSPS5_EVENT_WEBHOOKS_LISTED
 }
 
 type WebhookRemovedEvent struct {
@@ -54,7 +49,7 @@ type WebhookRemovedEvent struct {
 }
 
 func (e *WebhookRemovedEvent) EventType() string {
-	return EventTypeWebhookRemoved
+	return constants.LSPS5_EVENT_WEBHOOK_REMOVED
 }
 
 type WebhookRemovalFailedEvent struct {
@@ -65,7 +60,7 @@ type WebhookRemovalFailedEvent struct {
 }
 
 func (e *WebhookRemovalFailedEvent) EventType() string {
-	return EventTypeWebhookRemovalFailed
+	return constants.LSPS5_EVENT_WEBHOOK_REMOVAL_FAILED
 }
 
 // Ensure events implement Event interface

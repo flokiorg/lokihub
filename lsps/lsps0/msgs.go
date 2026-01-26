@@ -12,6 +12,7 @@ const LSPS_MESSAGE_TYPE_ID = 51610
 // Method names for LSPS0
 const (
 	MethodListProtocols = "lsps0.list_protocols"
+	MethodGetInfo       = "lsps0.get_info"
 )
 
 // JsonRpcRequest represents a JSON-RPC 2.0 request
@@ -48,6 +49,15 @@ type ListProtocolsRequest struct{}
 // ListProtocolsResponse contains the list of supported protocols
 type ListProtocolsResponse struct {
 	Protocols []int `json:"protocols"`
+}
+
+// GetInfoRequest represents a request to get LSPS0 info
+type GetInfoRequest struct{}
+
+// GetInfoResponse represents the response to lsps0.get_info
+type GetInfoResponse struct {
+	SupportedVersions       []int  `json:"supported_versions"`
+	NotificationNostrPubkey string `json:"notification_nostr_pubkey"`
 }
 
 // EncodeJsonRpc encodes a JSON-RPC request or response

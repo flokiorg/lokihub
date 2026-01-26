@@ -193,6 +193,7 @@ func (h *ClientHandler) handleGetInfoResponse(peerPubkey, requestID string, resp
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
 			Error:              resp.Error.Message,
+			ErrorCode:          resp.Error.Code,
 		})
 		return nil
 	}
@@ -224,6 +225,7 @@ func (h *ClientHandler) handleBuyResponse(peerPubkey, requestID string, jitChann
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
 			Error:              resp.Error.Message,
+			ErrorCode:          resp.Error.Code,
 		})
 		return nil
 	}

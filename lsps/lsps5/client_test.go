@@ -142,7 +142,7 @@ func TestClient_SetWebhook(t *testing.T) {
 	webhook := "https://example.com/hook"
 
 	// 1. Send SetWebhook
-	reqID, err := client.SetWebhook(ctx, peer, appName, webhook)
+	reqID, err := client.SetWebhook(ctx, peer, appName, webhook, "https")
 	if err != nil {
 		t.Fatalf("SetWebhook failed: %v", err)
 	}

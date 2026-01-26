@@ -85,6 +85,62 @@ func (h *ClientHandler) ListProtocols(ctx context.Context, peerPubkey string) ([
 	}
 }
 
+// GetInfo requests general info from the LSP
+func (h *ClientHandler) GetInfo(ctx context.Context, peerPubkey string) (*GetInfoResponse, error) {
+	requestID := uuid.New().String()
+
+	req := &JsonRpcRequest{
+		Jsonrpc: "2.0",
+		Method:  MethodGetInfo,
+		Params:  &GetInfoRequest{},
+		ID:      requestID,
+	}
+
+	data, err := EncodeJsonRpc(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	// Create response channel
+	responseChan := make(chan *JsonRpcResponse, 1)
+	h.mu.Lock()
+	h.pendingReqs[requestID] = responseChan
+	h.mu.Unlock()
+
+	defer func() {
+		h.mu.Lock()
+		delete(h.pendingReqs, requestID)
+		h.mu.Unlock()
+	}()
+
+	// Send message
+	if err := h.transport.SendCustomMessage(ctx, peerPubkey, LSPS_MESSAGE_TYPE_ID, data); err != nil {
+		return nil, fmt.Errorf("failed to send custom message: %w", err)
+	}
+
+	// Wait for response
+	select {
+	case resp := <-responseChan:
+		if resp.Error != nil {
+			return nil, resp.Error
+		}
+
+		// Parse result
+		var result GetInfoResponse
+		resultBytes, err := json.Marshal(resp.Result)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal result: %w", err)
+		}
+		if err := json.Unmarshal(resultBytes, &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal result: %w", err)
+		}
+
+		return &result, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // HandleMessage processes incoming LSPS0 messages
 func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {
 	resp, err := DecodeJsonRpcResponse(data)
