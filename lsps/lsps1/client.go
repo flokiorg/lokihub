@@ -212,6 +212,15 @@ func (h *ClientHandler) handleGetInfoResponse(peerPubkey, requestID string, resp
 
 func (h *ClientHandler) handleCreateOrderResponse(peerPubkey, requestID string, resp *lsps0.JsonRpcResponse) error {
 	if resp.Error != nil {
+		// Specific error handling
+		switch resp.Error.Code {
+		case 1: // invalid_params
+			// We could enrich the error message here
+			resp.Error.Message = fmt.Sprintf("Invalid parameters: %s", resp.Error.Message)
+		case 2: // option_mismatch
+			resp.Error.Message = fmt.Sprintf("Option mismatch: %s", resp.Error.Message)
+		}
+
 		h.eventQueue.Enqueue(&OrderRequestFailedEvent{
 			RequestID:          requestID,
 			CounterpartyNodeID: peerPubkey,
