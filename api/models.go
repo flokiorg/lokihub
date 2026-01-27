@@ -97,6 +97,8 @@ type API interface {
 	LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest) (interface{}, error)
 	LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksRequest) (interface{}, error)
 	LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error)
+	UpdateLSPS1OrderState(ctx context.Context, orderID, state string) error
+	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
 
 	// LSP Management
 	HandleListLSPs(ctx context.Context) ([]manager.SettingsLSP, error)
@@ -550,6 +552,7 @@ type LSPS1GetInfoRequest struct {
 type LSPS1CreateOrderRequest struct {
 	LSPPubkey            string  `json:"lsp_pubkey"`
 	LSPBalanceLoki       uint64  `json:"amount_loki"`
+	ClientBalanceLoki    uint64  `json:"client_balance_loki"`
 	ChannelExpiryBlocks  uint32  `json:"channel_expiry_blocks"`
 	Token                *string `json:"token,omitempty"`
 	RefundOnchainAddress *string `json:"refund_onchain_address,omitempty"`
@@ -560,6 +563,23 @@ type LSPS1GetOrderRequest struct {
 	LSPPubkey string `json:"lspPubkey"`
 	OrderID   string `json:"orderId"`
 	Token     string `json:"token,omitempty"`
+}
+
+type LSPS1ListOrdersResponse struct {
+	Orders []LSPS1Order `json:"orders"`
+}
+
+type LSPS1Order struct {
+	OrderID           string    `json:"orderId"`
+	LSPPubkey         string    `json:"lspPubkey"`
+	State             string    `json:"state"`
+	PaymentInvoice    string    `json:"paymentInvoice"`
+	FeeTotal          uint64    `json:"feeTotal"`
+	OrderTotal        uint64    `json:"orderTotal"`
+	LSPBalanceLoki    uint64    `json:"lspBalanceLoki"`
+	ClientBalanceLoki uint64    `json:"clientBalanceLoki"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 // LSPS2

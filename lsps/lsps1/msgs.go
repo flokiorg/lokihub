@@ -14,7 +14,6 @@ const (
 type GetInfoRequest struct{}
 
 // Options represents supported protocol options
-// Options represents supported protocol options
 type Options struct {
 	MinRequiredChannelConfirmations uint16 `json:"min_required_channel_confirmations"`
 	MinFundingConfirmsWithinBlocks  uint16 `json:"min_funding_confirms_within_blocks"`

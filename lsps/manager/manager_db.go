@@ -17,6 +17,7 @@ type LSPManager struct {
 func NewLSPManager(db *gorm.DB) *LSPManager {
 	m := &LSPManager{db: db}
 	_ = db.AutoMigrate(&persist.LSP{})
+	_ = db.AutoMigrate(&persist.LSPS1Order{})
 	_ = m.CleanupInvalidLSPs()
 	return m
 }
@@ -162,4 +163,52 @@ func (m *LSPManager) SyncSystemLSPs(inputs []CommunityLSPInput) error {
 		}
 	}
 	return nil
+}
+
+// LSPS1 Order Persistence
+
+// CreateOrder saves a new LSPS1 order
+func (m *LSPManager) CreateOrder(order *persist.LSPS1Order) error {
+	return m.db.Create(order).Error
+}
+
+// GetOrder fetches an order by ID
+func (m *LSPManager) GetOrder(orderID string) (*persist.LSPS1Order, error) {
+	var order persist.LSPS1Order
+	if err := m.db.First(&order, "order_id = ?", orderID).Error; err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+// UpdateOrderState updates the state of an existing order
+func (m *LSPManager) UpdateOrderState(orderID, state string) error {
+	return m.db.Model(&persist.LSPS1Order{}).Where("order_id = ?", orderID).Update("state", state).Error
+}
+
+// ListAllOrders returns all orders (history)
+func (m *LSPManager) ListAllOrders() ([]persist.LSPS1Order, error) {
+	var orders []persist.LSPS1Order
+	// Sort by created_at desc
+	err := m.db.Order("created_at desc").Find(&orders).Error
+	return orders, err
+}
+
+// ListPendingOrders returns orders that are not in a terminal state
+func (m *LSPManager) ListPendingOrders() ([]persist.LSPS1Order, error) {
+	var orders []persist.LSPS1Order
+	// Define terminal states that don't need tracking.
+	// We might want to keep checking "CREATED" logic.
+	// Typically, terminal states are: "COMPLETED", "FAILED", "CANCELLED", "CLOSED" (from previous logic)
+	// We filter where state NOT IN (...)
+	terminalStates := []string{"COMPLETED", "FAILED", "CANCELLED", "CLOSED"}
+	if err := m.db.Where("state NOT IN ?", terminalStates).Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+// DeleteOrder removes an order (used if we want to clean up old ones or purely temporary)
+func (m *LSPManager) DeleteOrder(orderID string) error {
+	return m.db.Delete(&persist.LSPS1Order{}, "order_id = ?", orderID).Error
 }
