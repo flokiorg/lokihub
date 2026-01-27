@@ -649,6 +649,17 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		}
 
+	// LSPS1 Routes
+	case "/api/lsps1/orders":
+		if method == "GET" {
+			resp, err := app.api.LSPS1ListOrders(ctx)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		}
+
+
 	// LSPS Settings Routes (RESTful)
 	case "/api/lsps":
 		switch method {

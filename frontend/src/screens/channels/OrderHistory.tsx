@@ -111,7 +111,7 @@ function OrderHistory() {
           <p className="text-muted-foreground text-center max-w-sm mx-auto mt-2">
             You haven't ordered any inbound liquidity yet. Inbound liquidity provides the capacity needed to receive Lightning payments.
           </p>
-          <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto">
+          <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto mt-1">
             <Zap className="mr-2 h-4 w-4" />
             Order Inbound Liquidity
           </LinkButton>
