@@ -75,10 +75,10 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 	orderParams := lsps1.OrderParams{
-		LspBalanceLoki:               req.LSPBalanceLoki, // Amount of inbound liquidity requested (from amount_loki)
-		ClientBalanceLoki:            0,                  // Client typically provides 0 for inbound-only buy
-		RequiredChannelConfirmations: 0,                  // Accept unconfirmed (LSP can override based on their policy)
-		FundingConfirmsWithinBlocks:  6,                  // Standard Bitcoin confirmation window
+		LspBalanceLoki:               req.LSPBalanceLoki,    // Amount of inbound liquidity requested (from amount_loki)
+		ClientBalanceLoki:            req.ClientBalanceLoki, // Use requested client balance
+		RequiredChannelConfirmations: 0,                     // Accept unconfirmed (LSP can override based on their policy)
+		FundingConfirmsWithinBlocks:  6,                     // Standard Bitcoin confirmation window
 		ChannelExpiryBlocks:          req.ChannelExpiryBlocks,
 		Token:                        req.Token,
 		AnnounceChannel:              req.AnnounceChannel,
@@ -116,10 +116,12 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 	}()
 
 	return map[string]interface{}{
-		"order_id":         event.OrderID,
-		"payment_invoice":  invoice,
-		"fee_total_loki":   feeTotalLoki,
-		"order_total_loki": orderTotalLoki,
+		"order_id":            event.OrderID,
+		"payment_invoice":     invoice,
+		"fee_total_loki":      feeTotalLoki,
+		"order_total_loki":    orderTotalLoki,
+		"lsp_balance_loki":    orderParams.LspBalanceLoki,
+		"client_balance_loki": orderParams.ClientBalanceLoki,
 	}, nil
 }
 
@@ -147,10 +149,20 @@ func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (i
 	// If OrderState is empty/unknown, maybe fallback to Payment state?
 	// For now trust OrderState.
 
+	var feeTotalLoki, orderTotalLoki uint64
+	if event.Payment.Bolt11 != nil {
+		feeTotalLoki = event.Payment.Bolt11.FeeTotalLoki
+		orderTotalLoki = event.Payment.Bolt11.OrderTotalLoki
+	}
+
 	return map[string]interface{}{
-		"order_id":        event.OrderID,
-		"state":           state,
-		"payment_invoice": invoice,
+		"order_id":            event.OrderID,
+		"state":               state,
+		"payment_invoice":     invoice,
+		"fee_total_loki":      feeTotalLoki,
+		"order_total_loki":    orderTotalLoki,
+		"lsp_balance_loki":    event.Order.LspBalanceLoki,
+		"client_balance_loki": event.Order.ClientBalanceLoki,
 	}, nil
 }
 
@@ -595,4 +607,44 @@ func (api *api) saveLSPsToDatabase(lsps []LSPSettingInput) error {
 	}
 
 	return nil
+}
+
+// UpdateLSPS1OrderState updates the state of an LSPS1 order from a webhook notification
+func (api *api) UpdateLSPS1OrderState(ctx context.Context, orderID, state string) error {
+	if api.svc.GetLiquidityManager() == nil {
+		return fmt.Errorf("LiquidityManager not started")
+	}
+	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state)
+	return nil
+}
+
+func (api *api) LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error) {
+	if api.svc.GetLiquidityManager() == nil {
+		return nil, fmt.Errorf("LiquidityManager not started")
+	}
+	orders, err := api.svc.GetLiquidityManager().ListLSPS1Orders()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LSPS1ListOrdersResponse{
+		Orders: make([]LSPS1Order, len(orders)),
+	}
+
+	for i, o := range orders {
+		response.Orders[i] = LSPS1Order{
+			OrderID:           o.OrderID,
+			LSPPubkey:         o.LSPPubkey,
+			State:             o.State,
+			PaymentInvoice:    o.PaymentInvoice,
+			FeeTotal:          o.FeeTotal,
+			OrderTotal:        o.OrderTotal,
+			LSPBalanceLoki:    o.LSPBalance,
+			ClientBalanceLoki: o.ClientBalance,
+			CreatedAt:         o.CreatedAt,
+			UpdatedAt:         o.UpdatedAt,
+		}
+	}
+
+	return response, nil
 }
