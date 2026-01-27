@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getAuthToken } from "src/lib/auth";
 import { LSPS1EventType, LSPS5EventType } from "src/types/lspsEvents";
@@ -18,13 +18,17 @@ export interface LSPS5Event {
   };
 }
 
-/**
- * Hook to listen for LSPS5 events via SSE
- * Falls back to polling if connection fails (polling logic is usually handled in the calling component)
- */
-export function useLSPEvents() {
+interface LSPEventContextType {
+  lastEvent: LSPS5Event | null;
+  isConnected: boolean;
+}
+
+const LSPEventContext = createContext<LSPEventContextType | undefined>(undefined);
+
+export function LSPEventProvider({ children }: { children: ReactNode }) {
   const { mutate } = useSWRConfig();
   const [lastEvent, setLastEvent] = useState<LSPS5Event | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -45,10 +49,13 @@ export function useLSPEvents() {
     eventSourceRef.current = es;
 
     es.onopen = () => {
+      setIsConnected(true);
     };
 
     es.onerror = (err) => {
-      console.error("[useLSPEvents] EventSource error:", err);
+      console.error("[LSPEventProvider] EventSource error:", err);
+      setIsConnected(false);
+      // Optional: Add reconnection logic or let browser handle partial retries
     };
 
     // Listen for specific event types defined in the backend
@@ -82,11 +89,11 @@ export function useLSPEvents() {
               break;
           }
 
-          // Trigger SWR revalidation for relevant endpoints (if any)
+          // Trigger SWR revalidation for relevant endpoints
           mutate("/api/channels");
 
         } catch (err) {
-          console.error(`[useLSPEvents] Failed to parse ${eventType} data:`, err);
+          console.error(`[LSPEventProvider] Failed to parse ${eventType} data:`, err);
         }
       });
     });
@@ -94,12 +101,22 @@ export function useLSPEvents() {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        setIsConnected(false);
       }
     };
   }, [mutate]);
 
-  return {
-    lastEvent,
-    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN
-  };
+  return (
+    <LSPEventContext.Provider value={{ lastEvent, isConnected }}>
+      {children}
+    </LSPEventContext.Provider>
+  );
+}
+
+export function useLSPEventContext() {
+  const context = useContext(LSPEventContext);
+  if (context === undefined) {
+    throw new Error("useLSPEventContext must be used within a LSPEventProvider");
+  }
+  return context;
 }

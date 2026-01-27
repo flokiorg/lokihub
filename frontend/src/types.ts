@@ -636,6 +636,24 @@ export type LSPS1GetOrderResponse = {
     order_total_loki?: number;
 };
 
+export interface LSPS1Order {
+  orderId: string;
+  lspPubkey: string;
+  state: string;
+  paymentInvoice: string;
+  feeTotal: number;
+  orderTotal: number;
+  lspBalanceLoki?: number;
+  clientBalanceLoki: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type LSPS1ListOrdersResponse = {
+  orders: LSPS1Order[];
+};
+
+
 export type ListAppsResponse = {
   apps: App[];
   totalCount: number;

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { LSPS1CreateOrderRequest, LSPS1CreateOrderResponse, LSPS1GetInfoResponse, LSPS1GetOrderResponse } from "src/types";
+import { LSPS1CreateOrderRequest, LSPS1CreateOrderResponse, LSPS1GetInfoResponse, LSPS1GetOrderResponse, LSPS1ListOrdersResponse } from "src/types";
 import { request } from "src/utils/request";
 
 export function useLSPS1(lspPubkey: string) {
@@ -56,5 +56,20 @@ export function useLSPS1(lspPubkey: string) {
       }
   }, [lspPubkey]);
 
-  return { getInfo, createOrder, getOrder, isLoading, error };
+  const listOrders = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+        const response = await request<LSPS1ListOrdersResponse>("/api/lsps1/orders");
+        return response?.orders || [];
+    } catch (e: any) {
+        setError(e.message || "Failed to list orders");
+        return [];
+    } finally {
+        setIsLoading(false);
+    }
+  }, []);
+
+  return { getInfo, createOrder, getOrder, listOrders, isLoading, error };
 }
+
