@@ -20,6 +20,8 @@ const router = createRouterFunc(routes, {
     import.meta.env.BASE_URL !== "/" ? import.meta.env.BASE_URL : undefined,
 });
 
+import { LSPEventProvider } from "src/context/LSPEventContext";
+
 function App() {
   const { data: info, error, isLoading } = useInfo();
 
@@ -33,7 +35,11 @@ function App() {
         >
           {isLoading && <Loading />}
           {error && <GlobalError message={error.message} />}
-          {info && <RouterProvider router={router} />}
+          {info && (
+            <LSPEventProvider>
+              <RouterProvider router={router} />
+            </LSPEventProvider>
+          )}
           <Toaster position="bottom-right" richColors={true} />
         </ThemeProvider>
       </TouchProvider>

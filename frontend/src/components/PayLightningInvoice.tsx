@@ -1,6 +1,5 @@
-import { Invoice, getFiatValue } from "@lightz/lightning-tools";
+import { Invoice } from "@lightz/lightning-tools";
 import { CopyIcon } from "lucide-react";
-import React from "react";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
@@ -15,12 +14,7 @@ export function PayLightningInvoice({ invoice }: PayLightningInvoiceProps) {
   const amount = new Invoice({
     pr: invoice,
   }).satoshi;
-  const [fiatAmount, setFiatAmount] = React.useState(0);
-  React.useEffect(() => {
-    getFiatValue({ satoshi: amount, currency: "USD" }).then((fiatAmount) =>
-      setFiatAmount(fiatAmount)
-    );
-  }, [amount]);
+
   const copy = () => {
     copyToClipboard(invoice);
   };
@@ -37,12 +31,6 @@ export function PayLightningInvoice({ invoice }: PayLightningInvoiceProps) {
       <div>
         <p className="text-lg font-semibold">
           <FormattedFlokicoinAmount amount={amount * 1000} />
-        </p>
-        <p className="flex flex-col items-center justify-center">
-          {new Intl.NumberFormat("en-US", {
-            currency: "USD",
-            style: "currency",
-          }).format(fiatAmount)}
         </p>
       </div>
       <div className="flex gap-4 w-full">

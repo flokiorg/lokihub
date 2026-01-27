@@ -253,6 +253,15 @@ export default function Channels() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
+                    <DropdownMenuLabel>History</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link to="/channels/history">
+                        Liquidity Orders
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
                     <DropdownMenuLabel>Management</DropdownMenuLabel>
                     <DropdownMenuItem>
                       <Link className="w-full" to="/peers">

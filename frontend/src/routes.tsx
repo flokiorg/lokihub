@@ -23,6 +23,7 @@ import Channels from "src/screens/channels/Channels";
 import { CurrentChannelOrder } from "src/screens/channels/CurrentChannelOrder";
 import IncreaseOutgoingCapacity from "src/screens/channels/IncreaseOutgoingCapacity";
 import OrderChannel from "src/screens/channels/OrderChannel";
+import OrderHistory from "src/screens/channels/OrderHistory";
 import { AutoChannel } from "src/screens/channels/auto/AutoChannel";
 import { OpenedAutoChannel } from "src/screens/channels/auto/OpenedAutoChannel";
 import { OpeningAutoChannel } from "src/screens/channels/auto/OpeningAutoChannel";
@@ -373,6 +374,11 @@ const routes: RouteObject[] = [
             path: "inbound",
             element: <OrderChannel />,
             handle: { crumb: () => "Increase Inbound Liquidity" },
+          },
+          {
+            path: "history",
+            element: <OrderHistory />,
+            handle: { crumb: () => "Liquidity Orders" },
           },
           {
             path: "onchain/deposit-flokicoin",

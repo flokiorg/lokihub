@@ -1,4 +1,4 @@
-import { Copy, InfoIcon, Zap } from "lucide-react";
+import { History, InfoIcon, Zap } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
@@ -7,7 +7,6 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription } from "src/components/ui/alert";
-import { Button } from "src/components/ui/button";
 import { Card, CardContent } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -24,12 +23,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "src/components/ui/tooltip";
+import { useLSPEventContext } from "src/context/LSPEventContext"; // Use global context
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
-import { useLSPEvents } from "src/hooks/useLSPEvents";
 import { useLSPS1 } from "src/hooks/useLSPS1";
 import { useLSPS2 } from "src/hooks/useLSPS2";
-import { copyToClipboard } from "src/lib/clipboard";
 import { cn, formatAmount } from "src/lib/utils";
 import { LSPS1CreateOrderRequest, LSPS1Option, LSPS2OpeningFeeParams } from "src/types";
 import { LSPS5EventType } from "src/types/lspsEvents";
@@ -38,6 +36,8 @@ import { request } from "src/utils/request";
 import LightningNetworkDark from "src/assets/illustrations/lightning-network-dark.svg?react";
 import LightningNetworkLight from "src/assets/illustrations/lightning-network-light.svg?react";
 import TickIcon from "src/assets/illustrations/tick.svg?react";
+import { FeeDisplay } from "src/components/lsps/FeeDisplay";
+import { PayInvoiceButtons } from "src/components/lsps/PayInvoiceButtons";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 
@@ -47,7 +47,7 @@ export default function OrderChannel() {
   const [selectedLSP, setSelectedLSP] = useState<string>("");
   const { getInfo, createOrder, getOrder, isLoading, error: lspsError } = useLSPS1(selectedLSP);
   const { getInfo: getLSPS2Info } = useLSPS2(selectedLSP);
-  const { lastEvent } = useLSPEvents(); // Listen for real-time events (webhooks/SSE)
+  const { lastEvent } = useLSPEventContext(); // Use global context
   
   const [options, setOptions] = useState<LSPS1Option[]>([]);
   const [amount, setAmount] = useState<string>("250000"); // Default similar to preset
@@ -243,10 +243,20 @@ export default function OrderChannel() {
   return (
     <div className="flex flex-col gap-5">
       {!paymentInvoice && (
-        <AppHeader
-          title="Increase Inbound Liquidity"
-          description="Order a channel from your LSP to increase your receiving capacity"
-        />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4 mb-5">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold font-sans">Increase Inbound Liquidity</h1>
+            <p className="text-sm text-muted-foreground">
+              Order a channel from your LSP to increase your receiving capacity
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <LinkButton to="/channels/history" variant="secondary" size="sm" className="hidden sm:flex">
+              <History className="w-4 h-4 mr-2" />
+              History
+            </LinkButton>
+          </div>
+        </div>
       )}
 
         {!paymentInvoice ? (
@@ -409,8 +419,8 @@ export default function OrderChannel() {
                                 This may take a few minutes. You'll see the new channel in your channels list once it's confirmed.
                             </p>
                         </div>
-                        <LinkButton to="/channels" className="w-full">
-                            View Channels
+                        <LinkButton to="/channels/history" className="w-full">
+                            View Order History
                         </LinkButton>
                     </CardContent>
                 </Card>
@@ -478,102 +488,3 @@ export default function OrderChannel() {
   );
 }
 
-function FeeDisplay({ invoice, size = "sm" }: { invoice: string; size?: "sm" | "lg" }) {
-  const [sats, setSats] = React.useState(0);
-  
-  React.useEffect(() => {
-     try {
-         // Dynamic import to avoid breaking if not available top level, though it should be fine
-         import("@lightz/lightning-tools").then(({ Invoice }) => {
-             const inv = new Invoice({ pr: invoice });
-             setSats(inv.satoshi);
-         });
-     } catch (e) {
-         console.error(e);
-     }
-  }, [invoice]);
-
-  if (size === "lg") {
-      return (
-          <div className="text-center">
-              <div className="text-2xl font-semibold">
-                  <FormattedFlokicoinAmount amount={sats * 1000} />
-              </div>
-              <FormattedFiatAmount amount={sats} className="text-muted-foreground" />
-          </div>
-      );
-  }
-
-  return (
-      <div className="text-right">
-          <div className="font-semibold">
-              <FormattedFlokicoinAmount amount={sats * 1000} />
-          </div>
-          <FormattedFiatAmount amount={sats} className="text-muted-foreground text-xs" />
-      </div>
-  );
-}
-
-type PayInvoiceButtonsProps = {
-  paymentInvoice: string;
-  balances: { lightning: { nextMaxSpendableMPP: number } } | null;
-  onPaid: () => void;
-};
-
-function PayInvoiceButtons({ paymentInvoice, balances, onPaid }: PayInvoiceButtonsProps) {
-  const [isPaying, setIsPaying] = React.useState(false);
-  const [invoiceAmount, setInvoiceAmount] = React.useState(0);
-
-  React.useEffect(() => {
-    import("@lightz/lightning-tools").then(({ Invoice }) => {
-      const inv = new Invoice({ pr: paymentInvoice });
-      setInvoiceAmount(inv.satoshi);
-    }).catch(console.error);
-  }, [paymentInvoice]);
-
-  const canPayInternally =
-    balances &&
-    invoiceAmount > 0 &&
-    balances.lightning.nextMaxSpendableMPP / 1000 > invoiceAmount;
-
-  const handlePayNow = async () => {
-    try {
-      setIsPaying(true);
-      await request(`/api/payments/${paymentInvoice}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      toast.success("Payment sent!");
-      onPaid();
-    } catch (e) {
-      toast.error("Payment failed", { description: "" + e });
-      console.error(e);
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  const copyInvoice = () => {
-    copyToClipboard(paymentInvoice);
-    toast.success("Invoice copied to clipboard");
-  };
-
-  return (
-    <div className="flex gap-2 w-full flex-wrap">
-      {canPayInternally && (
-        <LoadingButton
-          loading={isPaying}
-          className="flex-1"
-          onClick={handlePayNow}
-        >
-          <Zap className="mr-2 h-4 w-4" />
-          Pay Now
-        </LoadingButton>
-      )}
-      <Button variant="outline" className="flex-1" onClick={copyInvoice}>
-        <Copy className="mr-2 h-4 w-4" />
-        Copy Invoice
-      </Button>
-    </div>
-  );
-}
