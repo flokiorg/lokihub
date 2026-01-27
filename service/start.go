@@ -348,7 +348,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 	// Initialize and start LiquidityManager (LSPS)
 	// Initialize and start LiquidityManager (LSPS)
 	lspManager := manager.NewLSPManager(svc.db)
-	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager)
+	lmCfg := manager.NewManagerConfig(svc.lnClient, lspManager, svc.eventPublisher)
 
 	// Inject webhook configuration logic to allow LiquidityManager to auto-register
 	lmCfg.GetWebhookConfig = func() (string, string) {

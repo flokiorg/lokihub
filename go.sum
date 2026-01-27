@@ -148,6 +148,8 @@ github.com/flokiorg/walletd v0.1.6-beta h1:kmY+e2dJizQAK6uH6jERqo1Pp/jRYbh0h+XLa
 github.com/flokiorg/walletd v0.1.6-beta/go.mod h1:zlepMaVRL4fXHhuYex0CfecyJX8Eek5dCA7n2roofJU=
 github.com/flowgate-lsp/nostr-lsps5 v1.0.1 h1:LPg9/Y6US1JYrRlYSXsMiP7Efgc5hTyZJLmjK2UEKns=
 github.com/flowgate-lsp/nostr-lsps5 v1.0.1/go.mod h1:ZyiLDRaUNoOyckimfhygGPllURiS0lZ91xYWbKmP10E=
+github.com/flowgate-lsp/nostr-lsps5 v1.0.2 h1:Xd1G90nPMoZJ4Aq21njhpXnXtGRP4Ex+3DVtBvMCHI0=
+github.com/flowgate-lsp/nostr-lsps5 v1.0.2/go.mod h1:ZyiLDRaUNoOyckimfhygGPllURiS0lZ91xYWbKmP10E=
 github.com/frankban/quicktest v1.0.0/go.mod h1:R98jIehRai+d1/3Hv2//jOVCTJhW1VBavT6B6CuGq2k=
 github.com/frankban/quicktest v1.1.0/go.mod h1:R98jIehRai+d1/3Hv2//jOVCTJhW1VBavT6B6CuGq2k=
 github.com/frankban/quicktest v1.2.2/go.mod h1:Qh/WofXFeiAFII1aEBu529AtJo6Zg2VHscnEsbBnJ20=

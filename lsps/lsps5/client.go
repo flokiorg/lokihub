@@ -12,6 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/flokiorg/lokihub/lsps/transport"
+	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 )
 
 // ClientHandler handles LSPS5 client-side operations
@@ -283,9 +284,18 @@ func validateWebhookURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid webhook URL: %w", err)
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("webhook URL must use http or https scheme")
+
+	if parsed.Scheme == "nostr+lsps5" {
+		if _, _, err := nostrlsps5.ParseLsp5Uri(rawURL); err != nil {
+			return fmt.Errorf("invalid nostr+lsps5 URI: %w", err)
+		}
+		return nil
 	}
+
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("webhook URL must use http, https, or nostr+lsps5 scheme")
+	}
+
 	if parsed.Host == "" {
 		return fmt.Errorf("webhook URL must have a host")
 	}

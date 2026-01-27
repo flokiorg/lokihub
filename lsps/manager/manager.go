@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/constants"
+	globalevents "github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
 	"github.com/flokiorg/lokihub/lsps/lsps5"
+	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/lsps/transport"
 	"github.com/flokiorg/lokihub/utils"
 )
@@ -41,8 +43,6 @@ type LiquidityManager struct {
 
 	// cache for dynamic nostr pubkeys (LSP Pubkey -> Nostr Pubkey)
 	nostrPubkeys map[string]string
-
-	pendingOrders map[string]PendingOrder
 }
 
 type PendingOrder struct {
@@ -88,7 +88,6 @@ func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 		listeners:       make(map[string]chan events.Event),
 		unclaimedEvents: make(map[string]events.Event),
 		nostrPubkeys:    make(map[string]string),
-		pendingOrders:   make(map[string]PendingOrder),
 	}
 
 	// Initialize Clients
@@ -121,17 +120,19 @@ func (m *LiquidityManager) pollOrders(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
+	// Initial load of orders if needed (already handled by DB query inside loop which is fine)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.mu.RLock()
-			orders := make([]PendingOrder, 0, len(m.pendingOrders))
-			for _, order := range m.pendingOrders {
-				orders = append(orders, order)
+			// Fetch pending orders from DB
+			orders, err := m.cfg.LSPManager.ListPendingOrders()
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to list pending orders")
+				continue
 			}
-			m.mu.RUnlock()
 
 			for _, order := range orders {
 				statusEvent, err := m.GetLSPS1Order(ctx, order.LSPPubkey, order.OrderID)
@@ -145,29 +146,70 @@ func (m *LiquidityManager) pollOrders(ctx context.Context) {
 					Str("state", statusEvent.OrderState).
 					Msg("Polled order status")
 
-				// Publish event
+				// Update DB with full details (state + amounts if available)
+				if err := m.cfg.LSPManager.UpdateOrderState(order.OrderID, statusEvent.OrderState); err != nil {
+					logger.Logger.Error().Err(err).Str("order_id", order.OrderID).Msg("Failed to update order state in DB")
+				}
+
+				// Publish event to internal queue (for any internal listeners)
 				m.eventQueue.Enqueue(statusEvent)
 
-				state := strings.ToUpper(statusEvent.OrderState)
-				if state == "COMPLETED" || state == "FAILED" || state == "CANCELLED" || state == "CLOSED" {
-					m.mu.Lock()
-					delete(m.pendingOrders, order.OrderID)
-					m.mu.Unlock()
+				// Also publish to global event bus for Frontend updates (SSE)
+				if m.cfg.EventPublisher != nil {
+					m.cfg.EventPublisher.Publish(&globalevents.Event{
+						Event: constants.LSPS5_EVENT_ORDER_STATE_CHANGED,
+						Properties: map[string]interface{}{
+							"order_id":   order.OrderID,
+							"state":      statusEvent.OrderState,
+							"lsp_pubkey": order.LSPPubkey,
+							"timestamp":  time.Now().UTC().Format(time.RFC3339),
+						},
+					})
 				}
 			}
 		}
 	}
 }
 
-func (m *LiquidityManager) MonitorOrder(lspPubkey, orderID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.pendingOrders[orderID] = PendingOrder{
-		OrderID:   orderID,
-		LSPPubkey: lspPubkey,
-		CreatedAt: time.Now(),
+func (m *LiquidityManager) MonitorOrder(lspPubkey, orderID string, invoice string, feeTotal, orderTotal, lspBalance, clientBalance uint64) {
+	// Save to DB
+	order := &persist.LSPS1Order{
+		OrderID:        orderID,
+		LSPPubkey:      lspPubkey,
+		State:          "CREATED",
+		PaymentInvoice: invoice,
+		FeeTotal:       feeTotal,
+		OrderTotal:     orderTotal,
+		LSPBalance:     lspBalance,
+		ClientBalance:  clientBalance,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
-	logger.Logger.Info().Str("order_id", orderID).Msg("Started monitoring order")
+
+	if err := m.cfg.LSPManager.CreateOrder(order); err != nil {
+		logger.Logger.Error().Err(err).Str("order_id", orderID).Msg("Failed to persist new order")
+	} else {
+		logger.Logger.Info().Str("order_id", orderID).Msg("Persisted new order for monitoring")
+	}
+}
+
+// HandleOrderStateUpdate processes state updates from other sources (e.g. Webhook)
+func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state string) {
+	logger.Logger.Info().Str("order_id", orderID).Str("state", state).Msg("Received external order state update")
+
+	// Update DB
+	if err := m.cfg.LSPManager.UpdateOrderState(orderID, state); err != nil {
+		logger.Logger.Error().Err(err).Str("order_id", orderID).Msg("Failed to update order state from webhook")
+		return
+	}
+
+	// We could also fetch the full order details if we needed more than just state,
+	// but usually the notification payload (if rich) or just the state change is enough to notify frontend.
+	// For now, let's just create a synthetic event or fetch fresh?
+	// The webhook handler in http_service already publishes an event.
+	// But `pollOrders` relies on DB state. Updating DB here is enough for `pollOrders` stop logic if it was stateful,
+	// but pollOrders iterates over "non-terminal".
+	// By updating to "COMPLETED" here, the next poll loop simply won't pick it up. Efficient!
 }
 
 func (m *LiquidityManager) processMessages(ctx context.Context, msgs <-chan lnclient.CustomMessage, errs <-chan error) {
@@ -197,17 +239,8 @@ func (m *LiquidityManager) dispatchMessage(msg lnclient.CustomMessage) {
 	}
 
 	// We try to let each client handle it.
-	// Ideally we parse once and dispatch, but for now delegating raw usage
-	// to handlers is simpler, though less efficient if they all re-parse.
-	// But since `HandleMessage` checks specific IDs/Types, it should be fine.
-	// Actually, the handlers look up by RequestID or dispatch by Method.
-	//
-	// Since we are strictly clients for now, we are mostly expecting RESPONSES.
-	// Responses don't have a "method" field in JSON-RPC 2.0 usually,
-	// they match by ID.
-	// So we need each client to check if it owns the ID.
-
-	// We can try them sequentially.
+	// Since we are strictly clients for now, we are mostly expecting RESPONSES
+	// which match by ID.
 
 	// LSPS0
 	if err := m.lsps0Client.HandleMessage(msg.PeerPubkey, msg.Data); err == nil {
@@ -532,7 +565,13 @@ func (m *LiquidityManager) waitForEvent(ctx context.Context, requestID string) (
 // EnsureInboundLiquidity checks if the node has sufficient inbound liquidity for the amount.
 // If NOT, it automatically performs a JIT channel opening with the active LSP.
 // This handles the "JIT Smart Logic" on the backend.
+// ListLSPS1Orders returns all tracked LSPS1 orders
+func (m *LiquidityManager) ListLSPS1Orders() ([]persist.LSPS1Order, error) {
+	return m.cfg.LSPManager.ListAllOrders()
+}
+
 func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMloki uint64) (*JitChannelHints, error) {
+
 	// 1. Check current liquidity
 	balances, err := m.cfg.LNClient.GetBalances(ctx, false)
 	if err != nil {
@@ -543,24 +582,7 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 	}
 
 	inboundCapacity := balances.Lightning.TotalReceivable
-	// Safety buffer? Frontend used 0.8 factor.
-	// Let's be explicit: if inbound < amount * factor?
-	// The problem is simple: if amount > inbound, payment WILL fail.
-	// So we should check strict amount > inbound.
-	// But giving 0.8 buffer helps avoid edge cases.
-	// Wait, balances.Lightning.Total is "Total Balance" or "Inbound"?
-	// GetBalances returns BalancesResponse which has Lightning.TotalReceivable (int64).
-	// amountMloki is unit64.
-	// TotalReceivable is usually in SATOSHIS in some APIs?
-	// Let's double check models.go for BalancesResponse.
-	// Assuming TotalReceivable is milli-satoshis if the variable is called Mloki?
-	// Looking at models.go earlier:
-	// type Channel struct { ... LocalBalance int64 ... }  (usually satoshis in LND)
-	// But LNClient.GetBalances returns BalancesResponse.
-	// In LND service GetBalances likely returns satoshis.
-	// amountMloki is millisats.
-	// So we need to compare apples to apples.
-	// inboundCapacityMsat = inboundCapacity * 1000
+	// We ensure we compare apples to apples (mloki).
 
 	inboundCapacityMsat := uint64(inboundCapacity) * 1000
 	if inboundCapacityMsat >= amountMloki {
@@ -822,8 +844,16 @@ func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, 
 
 	switch e := event.(type) {
 	case *lsps1.OrderCreatedEvent:
-		// Start monitoring
-		m.MonitorOrder(pubkey, e.OrderID)
+		invoice := ""
+		fee := uint64(0)
+		total := uint64(0)
+		if e.Payment.Bolt11 != nil {
+			invoice = e.Payment.Bolt11.Invoice
+			fee = e.Payment.Bolt11.FeeTotalLoki
+			total = e.Payment.Bolt11.OrderTotalLoki
+		}
+		// Start monitoring with persistence
+		m.MonitorOrder(pubkey, e.OrderID, invoice, fee, total, orderParams.LspBalanceLoki, orderParams.ClientBalanceLoki)
 		return e, nil
 	case *lsps1.OrderRequestFailedEvent:
 		return nil, fmt.Errorf("LSP returned error: %s", e.Error)
@@ -890,45 +920,24 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 
 			if err != nil {
 				logger.Logger.Error().Err(err).Msg("Failed to get LSPs from DB")
-				// Default accept? Or Reject?
-				// To be safe, let's accept but maybe without zero-conf (by passing false? logic in LNDService handles true=ZeroConf, false=Reject?)
-				// Wait, the respond func I wrote sends Accept: accept.
-				// If I send true, it sets ZeroConf=true.
-				// This might be too aggressive for non-whitelisted peers.
-				// Let's adjust LNDService logic or here.
-				// Since LNDService logic is hardcoded to "If accept -> set ZeroConf=true",
-				// I should ONLY call respond(..., true) for WHITELISTED peers.
-				// For others, I might want to let LND handle it?
-				// The ChannelAcceptor RPC blocks LND until response.
-				// So I MUST respond.
-				// Use Case:
-				// 1. Whitelisted LSP -> Accept (Zero Conf)
-				// 2. Random Peer -> Accept (Normal) OR Reject?
-				// The user likely wants normal behavior for others.
-				// But `ChannelAcceptResponse` has `zero_conf` field.
-				// If I set `Accept: true` and `ZeroConf: false`, it's a normal accept.
+				// Check if whitelisted for ZeroConf
+				whitelisted := false
+				requestPubkey := strings.ToLower(req.NodePubkey)
+				for _, lsp := range activeLSPs {
+					if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
+						whitelisted = true
+						break
+					}
+				}
 
-				// I need to update LNDService respond function to allow specifying zero-conf.
-				// But for now, let's assuming "Active LSPs" are the ONLY ones we trust for Zero Conf.
-				// And we probably want to Accept others normally?
-				// But wait, if I use ChannelAcceptor, I assume full control.
-
-				// Let's implement strict whitelist for ZeroConf, and Normal Accept for others?
-				// But to do Normal Accept via RPC, I just send Accept=true, ZeroConf=false.
-				// My LNDService `respond` function currently hardcodes ZeroConf=true if Accept=true.
-				// I should fix LNDService first to be more flexible, or just accept the limitation for now?
-				// Limiting to ONLY whitelisted LSPs for the interceptor seems safer?
-				// "all other channels regarding if they are zero conf or not should be rejected?"
-				// PROBABLY NOT.
-
-				// Let's fix LNDService logic first. It is bad practice to hardcode ZeroConf=true.
-				// I should pass it as arg.
-
-				// Since I cannot change LNDService in same tool call, and I already wrote it...
-				// I will rewrite LNDService respond function in next step.
-
-				// For now, let's write the loop logic assuming I can fix respond later.
-				respond(req.ID, true, false)
+				if whitelisted {
+					logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
+					respond(req.ID, true, true)
+				} else {
+					// Standard accept (ZeroConf=false)
+					logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
+					respond(req.ID, true, false)
+				}
 				continue
 			}
 

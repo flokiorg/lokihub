@@ -227,6 +227,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/lsps1/info", httpSvc.lsps1GetInfoHandler)
 	fullAccessApiGroup.POST("/lsps1/order", httpSvc.lsps1CreateOrderHandler)
 	fullAccessApiGroup.GET("/lsps1/order", httpSvc.lsps1GetOrderHandler)
+	fullAccessApiGroup.GET("/lsps1/orders", httpSvc.lsps1ListOrdersHandler)
 	fullAccessApiGroup.GET("/lsps5/webhooks", httpSvc.lsps5ListWebhooksHandler)
 	fullAccessApiGroup.POST("/lsps5/webhook", httpSvc.lsps5SetWebhookHandler)
 	fullAccessApiGroup.DELETE("/lsps5/webhook", httpSvc.lsps5RemoveWebhookHandler)
@@ -1676,6 +1677,14 @@ func (httpSvc *HttpService) lsps1GetOrderHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "lsp (or lspPubkey) and orderId are required"})
 	}
 	resp, err := httpSvc.api.LSPS1GetOrder(c.Request().Context(), &api.LSPS1GetOrderRequest{LSPPubkey: lspPubkey, OrderID: orderId, Token: token})
+	if err != nil {
+		return handleErrorWithTimeout(c, err)
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) lsps1ListOrdersHandler(c echo.Context) error {
+	resp, err := httpSvc.api.LSPS1ListOrders(c.Request().Context())
 	if err != nil {
 		return handleErrorWithTimeout(c, err)
 	}

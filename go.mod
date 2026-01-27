@@ -31,7 +31,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/flokiorg/flnd v0.1.18-beta
 	github.com/flokiorg/flndecodepay v1.0.0
-	github.com/flowgate-lsp/nostr-lsps5 v1.0.1
+	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
 	github.com/rs/zerolog v1.34.0
