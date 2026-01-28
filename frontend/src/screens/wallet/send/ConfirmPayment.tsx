@@ -14,11 +14,11 @@ import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import { PendingPaymentAlert } from "src/components/PendingPaymentAlert";
 import { SpendingAlert } from "src/components/SpendingAlert";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import { useBalances } from "src/hooks/useBalances";
 import { PayInvoiceResponse, TransactionMetadata } from "src/types";
@@ -121,10 +121,10 @@ export default function ConfirmPayment() {
           <CardContent className="flex flex-col items-center gap-6 pt-2">
             <div className="flex flex-col gap-1 items-center">
               <p className="text-2xl font-medium slashed-zero">
-                <FormattedFlokicoinAmount amount={invoice.satoshi * 1000 + estimatedFee} />
+                <FormattedFlokicoinAmount amount={invoice.satoshi * 1000} />
               </p>
               <FormattedFiatAmount
-                amount={invoice.satoshi + Math.floor(estimatedFee / 1000)}
+                amount={invoice.satoshi}
                 className="text-xl"
               />
             </div>
