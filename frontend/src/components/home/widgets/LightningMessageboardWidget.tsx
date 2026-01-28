@@ -314,7 +314,7 @@ import { useInfo } from "src/hooks/useInfo";
 
     return (
       <>
-        <Card>
+        <Card className="mx-[-1rem] md:mx-0 rounded-none md:rounded-xl border-x-0 md:border">
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="flex items-center gap-2">

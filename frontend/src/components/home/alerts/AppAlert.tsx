@@ -18,7 +18,7 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
   const navigate = useNavigate();
 
   return (
-    <Card className="relative overflow-hidden mb-4 border-primary/20 bg-primary/5">
+    <Card className="relative overflow-hidden mb-4 border-y border-primary/20 md:border bg-primary/5 mx-[-1rem] md:mx-0 rounded-none md:rounded-xl">
       <button
         onClick={(e) => {
           e.stopPropagation();
