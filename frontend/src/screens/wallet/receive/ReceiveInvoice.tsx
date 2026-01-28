@@ -58,6 +58,7 @@ export default function ReceiveInvoice() {
   const { data: balances } = useBalances();
 
   const [isLoading, setLoading] = React.useState(false);
+  const [isFetchingJitParams, setIsFetchingJitParams] = React.useState(false);
   const [amount, setAmount] = React.useState<string>("");
   const [description, setDescription] = React.useState<string>("");
   const [transaction, setTransaction] = React.useState<Transaction | null>(
@@ -104,8 +105,9 @@ export default function ReceiveInvoice() {
     if (!selectedLspPubkey) return;
     
     setJitError(null);
+    setIsFetchingJitParams(true);
     try {
-        const res = await request<LSPS2GetInfoResponse>(`/api/lsps2/info?lspPubkey=${selectedLspPubkey}`, {
+        const res = await request<LSPS2GetInfoResponse>(`/api/lsps2/info?lsp=${selectedLspPubkey}`, {
             method: "GET",
         });
         if (res && res.opening_fee_params_menu && res.opening_fee_params_menu.length > 0) {
@@ -113,25 +115,21 @@ export default function ReceiveInvoice() {
         }
     } catch (e: any) {
         console.error("Failed to fetch JIT fees", e);
-        setJitError(e.message || "Failed to fetch fee information");
+        const errorMessage = e.message || "Failed to fetch fee information";
+        setJitError(errorMessage);
+        toast.error(errorMessage);
+    } finally {
+        setIsFetchingJitParams(false);
     }
   }, [selectedLspPubkey]);
 
   React.useEffect(() => {
-    // Only fetch if we need JIT and haven't fetched for the selected LSP yet (or if info changed)
-    // We re-fetch if selectedLspPubkey changes.
-    if (needsJit && selectedLspPubkey && (!jitFeeParams || jitError)) {
+    // Only fetch if we need JIT and haven't fetched for the selected LSP yet
+    // Do NOT fetch if there is an error (user must retry manually)
+    if (needsJit && selectedLspPubkey && !jitFeeParams && !jitError && !isFetchingJitParams) {
         fetchJitFees();
     }
-    // Also re-fetch if selected lsp changes
-  }, [needsJit, selectedLspPubkey, jitFeeParams, jitError, fetchJitFees]);
-
-  // Effect to refetch when LSP changes
-  React.useEffect(() => {
-    if (needsJit && selectedLspPubkey) {
-        fetchJitFees();
-    }
-  }, [selectedLspPubkey, needsJit, fetchJitFees]);
+  }, [needsJit, selectedLspPubkey, jitFeeParams, jitError, isFetchingJitParams, fetchJitFees]);
 
   if (!balances || !info) {
     return <Loading />;
@@ -470,7 +468,12 @@ export default function ReceiveInvoice() {
                                 </DialogContent>
                              </Dialog>
                         </div>
-                        {jitFeeParams && (
+                        {isFetchingJitParams ? (
+                            <div className="flex items-center justify-end text-sm text-muted-foreground">
+                                <Loading className="size-4 mr-2" />
+                                <span>Loading fees...</span>
+                            </div>
+                        ) : jitFeeParams ? (
                             <div className="text-right text-sm">
                                 <div className="font-medium">
                                     Fee: <FormattedFlokicoinAmount amount={(() => {
@@ -516,8 +519,15 @@ export default function ReceiveInvoice() {
                                     </div>
                                 )}
                             </div>
-                        )}
+                        ) : null}
                      </div>
+
+                       {jitError && (
+                            <div className="text-destructive text-sm bg-destructive/10 p-2 rounded flex items-center justify-between gap-2">
+                                <span className="break-all">{jitError}</span>
+                                <Button variant="ghost" size="sm" onClick={fetchJitFees} className="h-6 px-2 hover:bg-destructive/20">Retry</Button>
+                            </div>
+                       )}
 
                      <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
                         <div className="grid gap-1.5 flex-1 min-w-[200px]">
@@ -527,6 +537,7 @@ export default function ReceiveInvoice() {
                                 onValueChange={(val) => {
                                     setSelectedLspPubkey(val);
                                     setJitFeeParams(null); // Reset params to force refetch
+                                    setJitError(null);
                                 }}
                             >
                                 <SelectTrigger className="bg-background">
@@ -542,12 +553,7 @@ export default function ReceiveInvoice() {
                             </Select>
                        </div>
 
-                       {jitError ? (
-                            <div className="text-destructive text-sm flex items-center justify-between gap-2 pb-2">
-                                <span>{jitError}</span>
-                                <Button variant="outline" size="sm" onClick={fetchJitFees}>Retry</Button>
-                            </div>
-                       ) : (
+                       {!jitError && (
                              <div className="flex items-center space-x-2 pb-2.5">
                                 <Checkbox 
                                     id="senderPays" 
@@ -577,9 +583,9 @@ export default function ReceiveInvoice() {
                 </div>
                 <LoadingButton
                   className="w-full md:w-fit"
-                  loading={isLoading}
+                  loading={isLoading || isFetchingJitParams}
                   type="submit"
-                  disabled={!amount}
+                  disabled={!amount || (needsJit && !jitFeeParams)}
                 >
                   Create Invoice
                 </LoadingButton>
