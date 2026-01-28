@@ -111,7 +111,7 @@ function OrderHistory() {
           <p className="text-muted-foreground text-center max-w-sm mx-auto mt-2">
             You haven't ordered any inbound liquidity yet. Inbound liquidity provides the capacity needed to receive Lightning payments.
           </p>
-          <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto mt-1">
+          <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto mt-4">
             <Zap className="mr-2 h-4 w-4" />
             Order Inbound Liquidity
           </LinkButton>
@@ -123,9 +123,9 @@ function OrderHistory() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Date</TableHead>
                 <TableHead>Order ID</TableHead>
                 <TableHead>LSP</TableHead>
-                <TableHead>Date</TableHead>
                 <TableHead>State</TableHead>
                 <TableHead className="text-right">Total Fee</TableHead>
                 <TableHead className="text-right">Capacity</TableHead>
@@ -139,9 +139,9 @@ function OrderHistory() {
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => setSelectedOrder(order)}
                 >
+                  <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
                   <TableCell className="font-mono">{middleTruncate(order.orderId, 8)}</TableCell>
                   <TableCell className="font-medium">{getLSPName(order.lspPubkey)}</TableCell>
-                  <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
                   <TableCell>
                     <span
                       className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
