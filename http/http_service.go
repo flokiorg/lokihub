@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -1569,16 +1570,31 @@ func (httpSvc *HttpService) getAppStoreAppsHandler(c echo.Context) error {
 
 func (httpSvc *HttpService) getAppStoreLogoHandler(c echo.Context) error {
 	appId := c.Param("appId")
+	logger.Logger.Info().Str("appId", appId).Msg("getAppStoreLogoHandler called")
 	if appId == "" {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "appId is required"})
 	}
 
 	logoPath, err := httpSvc.appStoreSvc.GetLogoPath(appId)
 	if err != nil {
+		logger.Logger.Error().Err(err).Msg("GetLogoPath failed")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 	}
+	logger.Logger.Info().Str("path", logoPath).Msg("Resolved logo path")
 
-	return c.File(logoPath)
+	// Manual file serving to debug issues
+	f, err := os.Open(logoPath)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("path", logoPath).Msg("Failed to open logo file")
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusNotFound, ErrorResponse{Message: "Logo not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: fmt.Sprintf("Failed to open file: %s", err.Error())})
+	}
+	defer f.Close()
+
+	// Detect content type or assume png
+	return c.Stream(http.StatusOK, "image/png", f)
 }
 
 func (httpSvc *HttpService) getLSPS2InfoHandler(c echo.Context) error {
