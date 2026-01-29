@@ -5,6 +5,7 @@ import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import { NostrWalletConnectIcon } from "src/components/icons/NostrWalletConnectIcon";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import { Badge } from "src/components/ui/badge";
+import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
 
 // TODO: remove once new connection wizard is added
@@ -16,6 +17,7 @@ export function AppStoreDetailHeader({
   contentRight?: React.ReactNode | null;
 }) {
   const connectedApps = useAppsForAppStoreApp(appStoreApp);
+  const logoSrc = useAppLogo(appStoreApp?.id);
   if (!connectedApps || !appStoreApp) {
     return null;
   }
@@ -27,7 +29,7 @@ export function AppStoreDetailHeader({
           <>
             <div className="flex flex-row items-center">
               <img
-                src={`/api/appstore/logos/${appStoreApp.id}`}
+                src={logoSrc}
                 className="w-14 h-14 rounded-lg mr-4"
               />
               <div className="flex flex-col">

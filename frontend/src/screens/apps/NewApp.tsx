@@ -43,6 +43,7 @@ import {
   DEFAULT_APP_BUDGET_RENEWAL
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
+import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import { handleRequestError } from "src/utils/handleRequestError";
@@ -78,6 +79,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
   const appId = queryParams.get("app") ?? "";
   const appStoreApp = appStoreApps.find((app) => app.id === appId);
+  const logoSrc = useAppLogo(appId);
   const isInstallable =
     appStoreApp?.appleLink ||
     appStoreApp?.playLink ||
@@ -333,9 +335,9 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
       <AppHeader
         title={appName ? `Connect to ${appName}` : "Connect a new app"}
         icon={
-          appStoreApp?.logo ? (
+          appStoreApp?.logo && logoSrc ? (
             <img
-              src={`/api/appstore/logos/${appStoreApp.id}`}
+              src={logoSrc}
               alt="logo"
               className="inline rounded-lg w-12 h-12"
             />
