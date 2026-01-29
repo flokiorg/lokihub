@@ -4,20 +4,25 @@ import { AboutAppCard } from "src/components/connections/AboutAppCard";
 import { AppLinksCard } from "src/components/connections/AppLinksCard";
 import { AppStoreDetailHeader } from "src/components/connections/AppStoreDetailHeader";
 import {
-  AppStoreApp,
-  appStoreApps,
+    AppStoreApp
 } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
+import { useAppStore } from "src/hooks/useAppStore";
 
 export function AppStoreDetail() {
   const { appStoreId } = useParams() as { appStoreId: string };
-  const appStoreApp = appStoreApps.find((x) => x.id === appStoreId);
+  const { apps, loading } = useAppStore();
   const navigate = useNavigate();
 
+  if (loading) {
+    return <Loading />;
+  }
+
+  const appStoreApp = apps.find((x) => x.id === appStoreId);
+
   if (!appStoreApp) {
-    navigate("/apps?tab=app-store");
-    return null;
+    return <div className="p-8 text-center">App not found</div>;
   }
 
   // Redirect internal apps to their dedicated pages

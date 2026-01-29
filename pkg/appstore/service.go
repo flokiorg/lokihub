@@ -109,18 +109,18 @@ func (s *appStoreService) Sync() {
 			shouldDownloadLogo = true
 		} else {
 			// Check version
-			isNewer, err := isVersionNewer(remoteApp.Version, localApp.Version)
-			if err != nil {
-				logger.Logger.Warn().Err(err).Str("app", remoteApp.ID).Msg("Invalid version format, skipping update check")
-				// Fallback: if versions don't parse, maybe just check string equality?
-				// User specific requirement: "keep the app that has the last version field following semantic version format"
-				// If parsing fails, we might assume it's NOT newer or handle it gracefully.
-				// Let's assume if it's different and not parseable, we might just update it to match remote.
-				if remoteApp.Version != localApp.Version {
+			if localApp.Version == "" {
+				shouldDownloadLogo = true
+			} else {
+				isNewer, err := isVersionNewer(remoteApp.Version, localApp.Version)
+				if err != nil {
+					logger.Logger.Warn().Err(err).Str("app", remoteApp.ID).Msg("Invalid version format, skipping update check")
+					if remoteApp.Version != localApp.Version {
+						shouldDownloadLogo = true
+					}
+				} else if isNewer {
 					shouldDownloadLogo = true
 				}
-			} else if isNewer {
-				shouldDownloadLogo = true
 			}
 		}
 
