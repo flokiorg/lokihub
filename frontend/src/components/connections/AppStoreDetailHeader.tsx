@@ -27,7 +27,7 @@ export function AppStoreDetailHeader({
           <>
             <div className="flex flex-row items-center">
               <img
-                src={appStoreApp.logo}
+                src={`/api/appstore/logos/${appStoreApp.id}`}
                 className="w-14 h-14 rounded-lg mr-4"
               />
               <div className="flex flex-col">

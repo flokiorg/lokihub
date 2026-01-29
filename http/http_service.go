@@ -103,6 +103,9 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.POST("/api/setup/manual", httpSvc.setupManualHandler)
 	e.POST("/api/restore", httpSvc.restoreBackupHandler)
 
+	// Public app store routes
+	e.GET("/api/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
+
 	// allow one unlock request per second
 	unlockRateLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(1))
 	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter)
@@ -172,7 +175,6 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/autoswap", httpSvc.getAutoSwapConfigHandler)
 	readOnlyApiGroup.GET("/forwards", httpSvc.forwardsHandler)
 	readOnlyApiGroup.GET("/appstore/apps", httpSvc.getAppStoreAppsHandler)
-	readOnlyApiGroup.GET("/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
 	readOnlyApiGroup.GET("/lsps2/info", httpSvc.getLSPS2InfoHandler)
 
 	// Full access API group - requires a token with full permissions
