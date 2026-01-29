@@ -5,16 +5,15 @@ import React from "react";
 import { toast } from "sonner";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
-import { appStoreApps } from "src/components/connections/SuggestedAppData";
 import PasswordInput from "src/components/password/PasswordInput";
 import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
@@ -22,15 +21,15 @@ import { Label } from "src/components/ui/label";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { createApp } from "src/requests/createApp";
 import {
-    AppPermissions,
-    BudgetRenewalType,
-    CreateAppRequest,
-    CreateAppResponse,
-    Nip47NotificationType,
-    Nip47RequestMethod,
-    Scope,
-    WalletCapabilities,
-    validBudgetRenewals,
+  AppPermissions,
+  BudgetRenewalType,
+  CreateAppRequest,
+  CreateAppResponse,
+  Nip47NotificationType,
+  Nip47RequestMethod,
+  Scope,
+  WalletCapabilities,
+  validBudgetRenewals,
 } from "src/types";
 
 import AppHeader from "src/components/AppHeader";
@@ -40,10 +39,11 @@ import { defineStepper } from "src/components/stepper";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Input } from "src/components/ui/input";
 import {
-    DEFAULT_APP_BUDGET_LOKI,
-    DEFAULT_APP_BUDGET_RENEWAL
+  DEFAULT_APP_BUDGET_LOKI,
+  DEFAULT_APP_BUDGET_RENEWAL
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
+import { useAppStore } from "src/hooks/useAppStore";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import { handleRequestError } from "src/utils/handleRequestError";
 import Permissions from "../../components/Permissions";
@@ -51,18 +51,21 @@ import { AppStoreApp } from "../../components/connections/SuggestedAppData";
 
 const NewApp = () => {
   const { data: capabilities } = useCapabilities();
-  if (!capabilities) {
+  const { apps: appStoreApps, loading: loadingApps } = useAppStore();
+
+  if (!capabilities || loadingApps) {
     return <Loading />;
   }
 
-  return <NewAppInternal capabilities={capabilities} />;
+  return <NewAppInternal capabilities={capabilities} appStoreApps={appStoreApps} />;
 };
 
 type NewAppInternalProps = {
   capabilities: WalletCapabilities;
+  appStoreApps: AppStoreApp[];
 };
 
-const NewAppInternal = ({ capabilities }: NewAppInternalProps) => {
+const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => {
   const location = useLocation();
 
   const [unsupportedError, setUnsupportedError] = useState<string>();
@@ -89,6 +92,12 @@ const NewAppInternal = ({ capabilities }: NewAppInternalProps) => {
   const [appName, setAppName] = useState(
     appStoreApp ? appStoreApp.title : nameParam
   );
+
+  React.useEffect(() => {
+    if (appStoreApp && !appName) {
+      setAppName(appStoreApp.title);
+    }
+  }, [appStoreApp, appName]);
 
   const budgetRenewalParam = queryParams.get(
     "budget_renewal"
@@ -326,7 +335,7 @@ const NewAppInternal = ({ capabilities }: NewAppInternalProps) => {
         icon={
           appStoreApp?.logo ? (
             <img
-              src={appStoreApp.logo}
+              src={`/api/appstore/logos/${appStoreApp.id}`}
               alt="logo"
               className="inline rounded-lg w-12 h-12"
             />
