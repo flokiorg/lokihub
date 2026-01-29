@@ -44,6 +44,10 @@ func NewApp(svc service.Service) *WailsApp {
 // so we can call the runtime methods
 func (app *WailsApp) startup(ctx context.Context) {
 	app.ctx = ctx
+
+	// Register Wails event subscriber
+	subscriber := NewWailsEventSubscriber(ctx)
+	app.svc.GetEventPublisher().RegisterSubscriber(subscriber)
 }
 
 func (app *WailsApp) onBeforeClose(ctx context.Context) bool {
@@ -74,6 +78,9 @@ func (app *WailsApp) SelectDirectory() (string, error) {
 }
 
 func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte) {
+	// Start background HTTP server ONLY if in 'dev' build mode (see dev_server.go)
+	StartDevServer(app)
+
 	err := wails.Run(&options.App{
 		Title:  "Lokihub",
 		Width:  1055,
