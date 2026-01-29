@@ -33,6 +33,8 @@ type LiquidityManager struct {
 	lsps2Client *lsps2.ClientHandler
 	lsps5Client *lsps5.ClientHandler
 
+	connectionManager *ConnectionManager
+
 	// Future service handlers
 	// lsps2Service *lsps2.ServiceHandler
 
@@ -96,6 +98,8 @@ func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 	m.lsps2Client = lsps2.NewClientHandler(t, eq)
 	m.lsps5Client = lsps5.NewClientHandler(t, eq)
 
+	m.connectionManager = NewConnectionManager(cfg)
+
 	return m, nil
 }
 
@@ -109,6 +113,9 @@ func (m *LiquidityManager) Start(ctx context.Context) error {
 	go m.processMessages(ctx, msgs, errs)
 	go m.processInternalEvents(ctx)
 	go m.StartInterceptor(ctx)
+
+	// Start Connection Manager
+	m.connectionManager.Start(ctx)
 
 	// Start polling for pending orders
 	go m.pollOrders(ctx)
