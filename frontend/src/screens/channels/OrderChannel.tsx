@@ -11,25 +11,24 @@ import { Card, CardContent } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "src/components/ui/select";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useLSPEventContext } from "src/context/LSPEventContext"; // Use global context
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
-import { useLSPS2 } from "src/hooks/useLSPS2";
 import { cn, formatAmount } from "src/lib/utils";
-import { LSPS1CreateOrderRequest, LSPS1Option, LSPS2OpeningFeeParams } from "src/types";
+import { LSPS1CreateOrderRequest, LSPS1GetInfoResponse } from "src/types";
 import { LSPS5EventType } from "src/types/lspsEvents";
 import { request } from "src/utils/request";
 
@@ -45,81 +44,87 @@ export default function OrderChannel() {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
   const [selectedLSP, setSelectedLSP] = useState<string>("");
-  const { getInfo, createOrder, getOrder, isLoading, error: lspsError } = useLSPS1(selectedLSP);
-  const { getInfo: getLSPS2Info } = useLSPS2(selectedLSP);
-  const { lastEvent } = useLSPEventContext(); // Use global context
+  // Unified loading and error state handling
+  const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
+  const { lastEvent } = useLSPEventContext(); 
   
-  const [options, setOptions] = useState<LSPS1Option[]>([]);
-  const [amount, setAmount] = useState<string>("250000"); // Default similar to preset
+  const [amount, setAmount] = useState<string>(""); // Start empty to allow smart prefill
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
   const [orderId, setOrderId] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(false);
   const [orderFee, setOrderFee] = useState<number>(0);
-  const [feeParams, setFeeParams] = useState<LSPS2OpeningFeeParams | null>(null);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [lsps1Info, setLsps1Info] = useState<LSPS1GetInfoResponse | null>(null);
 
+  // Initialize selectedLSP with the first available LSP
   useEffect(() => {
-    if (lspsError) {
-      toast.error(lspsError);
-    }
-  }, [lspsError]);
-  
-  const presetAmounts = [250_000, 500_000, 1_000_000];
-
-  useEffect(() => {
-    if (info?.lsps && info.lsps.length > 0) {
-      // Default to first LSP if not set
-      if (!selectedLSP) {
-          setSelectedLSP(info.lsps[0].pubkey);
-      }
+    if (info?.lsps?.length && !selectedLSP) {
+      setSelectedLSP(info.lsps[0].pubkey);
     }
   }, [info, selectedLSP]);
 
+  // Unified loading state
+  const isLoading = lsps1Loading;
+
+  const fetchData = useCallback(async () => {
+    if (!selectedLSP) return;
+    
+    setDataLoadError(null);
+    try {
+        const lsps1Res = await getInfo();
+
+        // Handle LSPS1 Options
+        if (lsps1Res) {
+            setLsps1Info(lsps1Res);
+        }
+
+    } catch (e: any) {
+        console.error("Failed to fetch LSP data", e);
+        setDataLoadError(e.message || "Failed to load LSP data");
+        toast.error("Failed to connect to LSP. Please try again.");
+    }
+  }, [selectedLSP, getInfo]); // Removed amount dependency to avoid prefill triggers
+
   useEffect(() => {
     if (selectedLSP) {
-      (async () => {
-        // Fetch LSPS1 Options
-        const res = await getInfo();
-        if (res && res.options) {
-          setOptions(res.options);
-          // Only override amount if it's invalid for new options
-          if (res.options.length > 0) {
-              const min = res.options[0].min_initial_client_balance_loki;
-              if (parseInt(amount) < min) {
-                  setAmount(Math.ceil(min).toString());
-              }
-          }
-        }
-        
-        // Fetch LSPS2 Fee Params for estimation (since LSPS1 usually uses same logic or we use JIT params as proxy)
-        // Ideally LSPS1 GetInfo would return fee params too, but the spec separates them.
-        // We use LSPS2 params as a best-effort estimate if LSPS1 doesn't provide them upfront.
-        const feeRes = await getLSPS2Info();
-        if (feeRes && feeRes.opening_fee_params_menu && feeRes.opening_fee_params_menu.length > 0) {
-             setFeeParams(feeRes.opening_fee_params_menu[0]);
-        }
-      })();
+        fetchData();
     }
-  }, [selectedLSP, getInfo, getLSPS2Info]);
+  }, [selectedLSP]); // Removed fetchData from deps to avoid loop if fetchData changes unnecessarily, though useCallback handles it.
 
-  // Real-time fee estimation
-  useEffect(() => {
-      if (!amount || !feeParams || isPaid) return;
+  const validationError = React.useMemo(() => {
+      if (!amount || !lsps1Info) return null;
       
-      const amountMloki = parseInt(amount) * 1000;
-      const minFee = parseInt(feeParams.min_fee_mloki);
-      const proportionalFee = Math.ceil((amountMloki * feeParams.proportional) / 1000000);
-      
-      const estimatedFeeMloki = Math.max(minFee, proportionalFee);
-      
-      // Update fee display if we haven't created an order yet
-      if (!orderId) {
-          setOrderFee(estimatedFeeMloki / 1000); // UI expects Loki (satoshis) for orderFee state currently?
-          // Wait, orderFee state usage:
-          // FormattedFlokicoinAmount amount={orderFee * 1000}
-          // So orderFee is in Satoshis.
-          // feeMloki / 1000 = Satoshis.
+      const amtNum = parseInt(amount);
+      if (isNaN(amtNum)) return "Invalid amount";
+
+      const minNum = Number(lsps1Info.min_initial_lsp_balance_loki);
+      const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
+
+      if (!isNaN(minNum) && amtNum < minNum) {
+          return `Amount below minimum of ${minNum} Loki`;
       }
-  }, [amount, feeParams, orderId, isPaid]);
+      if (!isNaN(maxNum) && maxNum > 0 && amtNum > maxNum) {
+          return `Amount exceeds maximum of ${maxNum} Loki`;
+      }
+      
+      return null;
+  }, [amount, lsps1Info]);
+
+  const estimatedFee = React.useMemo(() => {
+    if (!amount || !lsps1Info?.opening_fee_params?.length) return 0;
+    
+    const amtLoki = parseInt(amount);
+    if (isNaN(amtLoki)) return 0;
+    
+    const amtMloki = amtLoki * 1000;
+    const params = lsps1Info.opening_fee_params[0];
+    
+    const minFee = parseInt(params.min_fee_mloki);
+    const proportionalFee = Math.ceil((amtMloki * params.proportional) / 1000000);
+    
+    return Math.max(minFee, proportionalFee) / 1000;
+  }, [amount, lsps1Info]);
+
 
   const checkOrderStatus = useCallback(async () => {
     if (!orderId || isPaid) return;
@@ -222,6 +227,7 @@ export default function OrderChannel() {
               amount_loki: amountSats,
               channel_expiry_blocks: 144 * 30, 
               announce_channel: false, 
+              opening_fee_params: lsps1Info?.opening_fee_params?.[0]
           };
           
           const res = await createOrder(req);
@@ -233,10 +239,15 @@ export default function OrderChannel() {
               }
               toast.success("Order created! Please pay the invoice.");
           }
-      } catch (e) {
+      } catch (e: any) {
          console.error(e);
+         toast.error("Failed to create order", {
+             description: e.message || "Unknown error"
+         });
       }
   };
+
+  const presetAmounts = [250_000, 500_000, 1_000_000];
 
   if (!info || !balances) return <Loading />;
 
@@ -258,6 +269,8 @@ export default function OrderChannel() {
           </div>
         </div>
       )}
+
+
 
         {!paymentInvoice ? (
            <div className="md:max-w-md max-w-full flex flex-col gap-5 flex-1">
@@ -309,16 +322,20 @@ export default function OrderChannel() {
                           required
                           value={amount}
                           onChange={(e) => setAmount(e.target.value.trim())}
-                          min={options[0]?.min_initial_client_balance_loki}
-                          max={options[0]?.max_initial_client_balance_loki}
+                          min={lsps1Info?.min_initial_lsp_balance_loki}
+                          max={lsps1Info?.max_initial_lsp_balance_loki}
                         />
 
                         {/* Helper text for limits or balance if needed */}
-                         {options.length > 0 && (
-                             <p className="text-muted-foreground text-xs">
-                                 Min: <FormattedFlokicoinAmount amount={options[0].min_initial_client_balance_loki * 1000} /> - 
-                                 Max: <FormattedFlokicoinAmount amount={options[0].max_initial_client_balance_loki * 1000} />
-                             </p>
+                          {lsps1Info && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
+                                    <span className="opacity-70">Order Range:</span>
+                                    <div className="flex items-center gap-1.5 text-foreground/90">
+                                        <FormattedFlokicoinAmount amount={Number(lsps1Info.min_initial_lsp_balance_loki) * 1000} />
+                                        <span className="opacity-40">—</span>
+                                        <FormattedFlokicoinAmount amount={Number(lsps1Info.max_initial_lsp_balance_loki) * 1000} />
+                                    </div>
+                                </div>
                          )}
 
                         <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
@@ -364,17 +381,47 @@ export default function OrderChannel() {
                          </div>
                     </div>
 
-                    {orderFee > 0 && !orderId && (
-                        <div className="flex justify-between items-center text-sm p-3 bg-muted/50 rounded-md">
-                            <span className="text-muted-foreground">Estimated Fee</span>
-                            <div className="text-right">
-                                <div className="font-medium">
-                                    <FormattedFlokicoinAmount amount={orderFee * 1000} />
-                                </div>
-                                <FormattedFiatAmount amount={orderFee} className="text-xs text-muted-foreground" />
+                    {/* Error and Fee Display Zone */}
+                    <div className="flex flex-col gap-3 mt-4">
+                        {(dataLoadError || lsps1Error) && (
+                            <Alert variant="destructive">
+                                <AlertDescription className="flex flex-row items-center justify-between text-xs">
+                                    <span>{dataLoadError || lsps1Error}</span>
+                                    <LoadingButton 
+                                        variant="outline" 
+                                        size="sm" 
+                                        onClick={fetchData} 
+                                        loading={isLoading}
+                                        className="h-7 bg-background text-foreground"
+                                    >
+                                        Retry
+                                    </LoadingButton>
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
+                        {validationError && (
+                            <div className="text-[11px] text-destructive bg-destructive/5 px-3 py-2 rounded border border-destructive/10 flex items-center gap-2">
+                                <InfoIcon className="h-3 w-3" />
+                                {validationError}
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {/* Show either estimated fee or actual fee if already created */}
+                        {(estimatedFee > 0 || orderFee > 0) && !orderId && (
+                            <div className="flex justify-between items-center text-sm p-3 bg-muted/50 rounded-md">
+                                <span className="text-muted-foreground font-medium">
+                                    {orderFee > 0 ? "Fee" : "Estimated Fee"}
+                                </span>
+                                <div className="text-right">
+                                    <div className="font-semibold text-primary">
+                                        <FormattedFlokicoinAmount amount={(orderFee || estimatedFee) * 1000} />
+                                    </div>
+                                    <FormattedFiatAmount amount={orderFee || estimatedFee} className="text-[10px] text-muted-foreground" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     <div className="flex gap-4 mt-2">
                         <LoadingButton 
@@ -382,7 +429,7 @@ export default function OrderChannel() {
                             size="lg"
                             className="w-full"
                             loading={isLoading}
-                            disabled={!selectedLSP || !amount}
+                            disabled={!selectedLSP || !amount || !!validationError}
                         >
                             <Zap className="mr-2 h-4 w-4" />
                             Order Channel

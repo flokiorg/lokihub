@@ -1,14 +1,14 @@
 import {
-    BellIcon,
-    CirclePlusIcon,
-    CrownIcon,
-    HandCoinsIcon,
-    InfoIcon,
-    LucideIcon,
-    NotebookTabsIcon,
-    PenLineIcon,
-    SearchIcon,
-    WalletMinimalIcon,
+  BellIcon,
+  CirclePlusIcon,
+  CrownIcon,
+  HandCoinsIcon,
+  InfoIcon,
+  LucideIcon,
+  NotebookTabsIcon,
+  PenLineIcon,
+  SearchIcon,
+  WalletMinimalIcon,
 } from "lucide-react";
 
 export type BackendType = "FLND";
@@ -598,9 +598,7 @@ export type OnchainTransaction = {
   txId: string;
 };
 
-export type LSPS1GetInfoResponse = {
-  options: LSPS1Option[];
-};
+export type LSPS1GetInfoResponse = LSPS1Option;
 
 export type LSPS1Option = {
   min_required_channel_confirmations: number;
@@ -610,7 +608,19 @@ export type LSPS1Option = {
   max_initial_lsp_balance_loki: number;
   min_channel_balance_loki: number;
   max_channel_balance_loki: number;
+  opening_fee_params: LSPS1OpeningFeeParams[];
 };
+
+export interface LSPS1OpeningFeeParams {
+  min_fee_mloki: string;
+  proportional: number;
+  valid_until: string;
+  min_lifetime: number;
+  max_client_to_self_delay: number;
+  min_payment_size_mloki: string;
+  max_payment_size_mloki: string;
+  promise: string;
+}
 
 export type LSPS1CreateOrderRequest = {
   lsp_pubkey: string;
@@ -619,6 +629,7 @@ export type LSPS1CreateOrderRequest = {
   token?: string;
   refund_onchain_address?: string;
   announce_channel?: boolean;
+  opening_fee_params?: LSPS1OpeningFeeParams;
 };
 
 export type LSPS1CreateOrderResponse = {
@@ -715,9 +726,7 @@ export interface LSPS2OpeningFeeParams {
   promise: string;
 }
 
-export interface LSPS2GetInfoResponse {
-  opening_fee_params_menu: LSPS2OpeningFeeParams[];
-}
+export type LSPS2GetInfoResponse = LSPS2OpeningFeeParams;
 
 export interface LSPS2BuyRequest {
   lspPubkey: string;

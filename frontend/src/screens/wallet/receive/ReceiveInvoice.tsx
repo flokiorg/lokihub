@@ -101,6 +101,36 @@ export default function ReceiveInvoice() {
     return amountSat * 1000 > balances.lightning.totalReceivable;
   }, [balances, amount]);
 
+  const validationError = React.useMemo(() => {
+    if (!needsJit || !jitFeeParams || !amount) return null;
+    
+    const inputAmt = (parseInt(amount)||0)*1000;
+    const minFee = parseInt(jitFeeParams.min_fee_mloki);
+    const rate = jitFeeParams.proportional / 1000000;
+    let grossAmt = 0;
+    
+    if (senderPaysFee) {
+        // Gross = Amount + Fee(Gross)
+        const grossCandidate = Math.floor(inputAmt / (1 - rate));
+        const feeCandidate = Math.floor(grossCandidate * rate);
+        grossAmt = inputAmt + Math.max(minFee, feeCandidate);
+    } else {
+        // Gross = Amount
+        grossAmt = inputAmt;
+    }
+    
+    const minSize = parseInt(jitFeeParams.min_payment_size_mloki);
+    const maxSize = parseInt(jitFeeParams.max_payment_size_mloki);
+    
+    if (grossAmt < minSize) {
+        return `Below min limit (${minSize/1000} Loki).`;
+    }
+    if (maxSize > 0 && grossAmt > maxSize) {
+        return `Exceeds max limit (${maxSize/1000} Loki).`;
+    }
+    return null;
+  }, [needsJit, jitFeeParams, amount, senderPaysFee]);
+
   const fetchJitFees = React.useCallback(async () => {
     if (!selectedLspPubkey) return;
     
@@ -110,8 +140,8 @@ export default function ReceiveInvoice() {
         const res = await request<LSPS2GetInfoResponse>(`/api/lsps2/info?lsp=${selectedLspPubkey}`, {
             method: "GET",
         });
-        if (res && res.opening_fee_params_menu && res.opening_fee_params_menu.length > 0) {
-            setJitFeeParams(res.opening_fee_params_menu[0]);
+        if (res) {
+            setJitFeeParams(res);
         }
     } catch (e: any) {
         console.error("Failed to fetch JIT fees", e);
@@ -394,11 +424,35 @@ export default function ReceiveInvoice() {
                   />
                 </div>
                 {needsJit && info?.lsps && info.lsps.length > 0 && (
-                  <div className="rounded-lg border bg-muted/40 p-3 grid gap-3">
-                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                             <span className="text-sm font-medium">JIT Payment</span>
-                             <Dialog>
+                  <div className="rounded-lg border bg-muted/50 p-4 grid gap-4">
+                     {/* 1. LSP Selection Header */}
+                     <div className="flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
+                        <div className="grid gap-1.5 flex-1 w-full">
+                            <Label htmlFor="lsp-select">Liquidity Provider</Label>
+                            <Select 
+                                value={selectedLspPubkey} 
+                                onValueChange={(val) => {
+                                    setSelectedLspPubkey(val);
+                                    setJitFeeParams(null); // Reset params to force refetch
+                                    setJitError(null);
+                                }}
+                            >
+                                <SelectTrigger id="lsp-select">
+                                    <SelectValue placeholder="Select LSP" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {info.lsps.map((lsp) => (
+                                        <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
+                                            {lsp.name || `${lsp.pubkey.slice(0, 8)}...`}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                       </div>
+                       
+                       <div className="flex items-center gap-2 pb-1">
+                            <span className="text-sm font-medium">JIT Payment</span>
+                            <Dialog>
                                 <DialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
                                         <InfoIcon className="h-4 w-4" />
@@ -438,6 +492,12 @@ export default function ReceiveInvoice() {
                                                         
                                                         <span className="text-muted-foreground">Proportional Rate:</span>
                                                         <span className="font-medium text-right">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
+
+                                                        <span className="text-muted-foreground">Min :</span>
+                                                        <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} /></span>
+
+                                                        <span className="text-muted-foreground">Max :</span>
+                                                        <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} /></span>
                                                         
                                                         <div className="col-span-2 text-xs text-muted-foreground mt-2 border-t pt-2">
                                                             The fee is the <strong>higher</strong> of the Minimum Fee or the calculated Proportional Fee.
@@ -468,107 +528,113 @@ export default function ReceiveInvoice() {
                                 </DialogContent>
                              </Dialog>
                         </div>
-                        {isFetchingJitParams ? (
-                            <div className="flex items-center justify-end text-sm text-muted-foreground">
-                                <Loading className="size-4 mr-2" />
-                                <span>Loading fees...</span>
-                            </div>
-                        ) : jitFeeParams ? (
-                            <div className="text-right text-sm">
-                                <div className="font-medium">
-                                    Fee: <FormattedFlokicoinAmount amount={(() => {
-                                      const inputAmt = (parseInt(amount)||0)*1000;
-                                      const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                      const rate = jitFeeParams.proportional / 1000000;
-                                      let finalFee = 0;
-                                      
-                                      if (senderPaysFee) {
-                                          const gross = Math.floor(inputAmt / (1 - rate));
-                                          const feeCand = Math.floor(gross * rate);
-                                          finalFee = Math.max(minFee, feeCand);
-                                      } else {
-                                          const prop = Math.floor(inputAmt * rate);
-                                          finalFee = Math.max(minFee, prop);
-                                      }
-                                      return Math.round(finalFee / 1000) * 1000;
-                                  })()} />
-                                </div>
-                                {senderPaysFee ? (
-                                    <div className="text-muted-foreground text-xs">
-                                         Sender pays: <FormattedFlokicoinAmount amount={(() => {
-                                          const inputAmt = (parseInt(amount)||0)*1000;
-                                          const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                          const rate = jitFeeParams.proportional / 1000000;
-                                          const gross = Math.floor(inputAmt / (1 - rate));
-                                          const fee = Math.max(minFee, Math.floor(gross * rate));
-                                          const total = inputAmt + fee;
-                                          return Math.round(total / 1000) * 1000;
-                                         })()} />
-                                    </div>
-                                ) : (
-                                    <div className="text-muted-foreground text-xs">
-                                         You receive: <FormattedFlokicoinAmount amount={(() => {
-                                          const inputAmt = (parseInt(amount)||0)*1000;
-                                          const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                          const rate = jitFeeParams.proportional / 1000000;
-                                          const prop = Math.floor(inputAmt * rate);
-                                          const fee = Math.max(minFee, prop);
-                                          const receive = inputAmt - fee;
-                                          return Math.max(0, Math.round(receive / 1000) * 1000);
-                                         })()} />
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
                      </div>
 
-                       {jitError && (
-                            <div className="text-destructive text-sm bg-destructive/10 p-2 rounded flex items-center justify-between gap-2">
-                                <span className="break-all">{jitError}</span>
-                                <Button variant="ghost" size="sm" onClick={fetchJitFees} className="h-6 px-2 hover:bg-destructive/20">Retry</Button>
+                     {/* 2. Fees and Amounts Display */}
+                     <div className="grid gap-3">
+                        {isFetchingJitParams ? (
+                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground border border-dashed rounded-md">
+                                <Loading className="size-4 mr-2" />
+                                <span>Loading JIT details...</span>
                             </div>
-                       )}
+                        ) : jitFeeParams ? (
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-md border">
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground uppercase">Estimated Fee</span>
+                                    <div className="text-lg">
+                                        <FormattedFlokicoinAmount amount={(() => {
+                                          const inputAmt = (parseInt(amount)||0)*1000;
+                                          const minFee = parseInt(jitFeeParams.min_fee_mloki);
+                                          const rate = jitFeeParams.proportional / 1000000;
+                                          let finalFee = 0;
+                                          
+                                          if (senderPaysFee) {
+                                              const gross = Math.floor(inputAmt / (1 - rate));
+                                              const feeCand = Math.floor(gross * rate);
+                                              finalFee = Math.max(minFee, feeCand);
+                                          } else {
+                                              const prop = Math.floor(inputAmt * rate);
+                                              finalFee = Math.max(minFee, prop);
+                                          }
+                                          return Math.round(finalFee / 1000) * 1000;
+                                      })()} />
+                                    </div>
+                                </div>
 
-                     <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-                        <div className="grid gap-1.5 flex-1 min-w-[200px]">
-                            <Label className="text-xs font-medium text-muted-foreground">Liquidity Provider</Label>
-                            <Select 
-                                value={selectedLspPubkey} 
-                                onValueChange={(val) => {
-                                    setSelectedLspPubkey(val);
-                                    setJitFeeParams(null); // Reset params to force refetch
-                                    setJitError(null);
-                                }}
+                                <div className="flex flex-col gap-1 text-right">
+                                    <span className="text-xs text-muted-foreground uppercase">
+                                        {senderPaysFee ? "Total to Send" : "You Receive"}
+                                    </span>
+                                    <div className="text-lg">
+                                        {senderPaysFee ? (
+                                             <FormattedFlokicoinAmount amount={(() => {
+                                              const inputAmt = (parseInt(amount)||0)*1000;
+                                              const minFee = parseInt(jitFeeParams.min_fee_mloki);
+                                              const rate = jitFeeParams.proportional / 1000000;
+                                              const gross = Math.floor(inputAmt / (1 - rate));
+                                              const fee = Math.max(minFee, Math.floor(gross * rate));
+                                              const total = inputAmt + fee;
+                                              return Math.round(total / 1000) * 1000;
+                                             })()} />
+                                        ) : (
+                                             <FormattedFlokicoinAmount amount={(() => {
+                                              const inputAmt = (parseInt(amount)||0)*1000;
+                                              const minFee = parseInt(jitFeeParams.min_fee_mloki);
+                                              const rate = jitFeeParams.proportional / 1000000;
+                                              const prop = Math.floor(inputAmt * rate);
+                                              const fee = Math.max(minFee, prop);
+                                              const receive = inputAmt - fee;
+                                              return Math.max(0, Math.round(receive / 1000) * 1000);
+                                             })()} />
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {jitError && (
+                            <div className="text-destructive text-sm bg-destructive/10 p-3 rounded-md border border-destructive/20 flex items-center justify-between gap-2">
+                                <span className="flex-1">{jitError}</span>
+                                <Button variant="outline" size="sm" onClick={fetchJitFees}>Retry</Button>
+                            </div>
+                        )}
+                     </div>
+
+                     {/* 3. Limits Row */}
+                     {jitFeeParams && (
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
+                                <span className="opacity-70">Payment Range:</span>
+                                <div className="flex items-center gap-1.5 text-foreground/90">
+                                    <FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} />
+                                    <span className="opacity-40">—</span>
+                                    <FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} />
+                                </div>
+                            </div>
+                            {validationError && (
+                                <div className="text-[11px] text-destructive bg-destructive/5 px-2 py-1 rounded border border-destructive/10 animate-in fade-in slide-in-from-top-1">
+                                    {validationError}
+                                </div>
+                            )}
+                        </div>
+                     )}
+
+                     {/* 4. Checkbox Toggle */}
+                     {!jitError && (
+                         <div className="flex items-center space-x-2">
+                            <Checkbox 
+                                id="senderPays" 
+                                checked={senderPaysFee}
+                                onCheckedChange={(checked) => setSenderPaysFee(checked as boolean)}
+                            />
+                            <label
+                                htmlFor="senderPays"
+                                    className="text-sm text-foreground cursor-pointer"
                             >
-                                <SelectTrigger className="bg-background">
-                                    <SelectValue placeholder="Select LSP" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {info.lsps.map((lsp) => (
-                                        <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                                            {lsp.name || `${lsp.pubkey.slice(0, 8)}...`}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                       </div>
-
-                       {!jitError && (
-                             <div className="flex items-center space-x-2 pb-2.5">
-                                <Checkbox 
-                                    id="senderPays" 
-                                    checked={senderPaysFee}
-                                    onCheckedChange={(checked) => setSenderPaysFee(checked as boolean)}
-                                />
-                                <label
-                                    htmlFor="senderPays"
-                                        className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                >
-                                    Include fee in invoice (Sender pays)
-                                </label>
-                            </div>
-                       )}
-                    </div>
+                                Include fee in invoice (Sender pays)
+                            </label>
+                        </div>
+                     )}
                   </div>
                 )}
                 <div className="grid gap-2">
@@ -585,7 +651,7 @@ export default function ReceiveInvoice() {
                   className="w-full md:w-fit"
                   loading={isLoading || isFetchingJitParams}
                   type="submit"
-                  disabled={!amount || (needsJit && !jitFeeParams)}
+                  disabled={!amount || (needsJit && (!jitFeeParams || !!validationError))}
                 >
                   Create Invoice
                 </LoadingButton>
