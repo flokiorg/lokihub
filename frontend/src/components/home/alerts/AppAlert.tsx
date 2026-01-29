@@ -18,7 +18,7 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
   const navigate = useNavigate();
 
   return (
-    <Card className="relative overflow-hidden mb-4 border-y border-primary/20 md:border bg-primary/5 mx-[-1rem] md:mx-0 rounded-none md:rounded-xl">
+    <Card className="relative overflow-hidden mb-4 rounded-xl">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -30,7 +30,7 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
       </button>
       <div
         className="cursor-pointer"
-        onClick={() => navigate("/app-store")}
+        onClick={() => navigate(`/appstore/${app.id}`)}
       >
         <CardHeader className="flex flex-row items-center gap-4">
           <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
