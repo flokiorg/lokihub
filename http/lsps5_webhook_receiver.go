@@ -327,21 +327,9 @@ type LSPS5WebhookEvent struct {
 
 // lsps5EventsSSEHandler provides Server-Sent Events for LSPS5 notifications
 func (httpSvc *HttpService) lsps5EventsSSEHandler(c echo.Context) error {
-	logger.Logger.Info().Msg("lsps5EventsSSEHandler connection attempt")
-
-	// Check if flushing is supported
-	if _, ok := c.Response().Writer.(http.Flusher); !ok {
-		logger.Logger.Error().Msg("Streaming not supported: ResponseWriter does not implement http.Flusher")
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "Streaming not supported by server"})
-	}
-
 	c.Response().Header().Set("Content-Type", "text/event-stream")
 	c.Response().Header().Set("Cache-Control", "no-cache")
 	c.Response().Header().Set("Connection", "keep-alive")
-	c.Response().Header().Set("X-Accel-Buffering", "no")
-
-	// Flush headers immediately
-	c.Response().Flush()
 
 	// Create a channel for this client
 	eventChan := make(chan *events.Event, 16)
