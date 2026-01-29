@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/flokiorg/lokihub/lnclient"
@@ -75,7 +76,9 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 	// Create a set of connected peer pubkeys for fast lookup
 	connectedPeers := make(map[string]bool)
 	for _, p := range peers {
-		connectedPeers[p.NodeId] = true
+		if p.NodeId != "" {
+			connectedPeers[strings.ToLower(p.NodeId)] = true
+		}
 	}
 
 	// 3. Connect to missing ones
