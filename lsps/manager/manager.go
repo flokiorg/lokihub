@@ -120,6 +120,9 @@ func (m *LiquidityManager) Start(ctx context.Context) error {
 	// Start polling for pending orders
 	go m.pollOrders(ctx)
 
+	// Warmup LSP cache (fetch Nostr pubkeys)
+	go m.warmupLSPCache(ctx)
+
 	return nil
 }
 
@@ -173,6 +176,31 @@ func (m *LiquidityManager) pollOrders(ctx context.Context) {
 						},
 					})
 				}
+			}
+		}
+	}
+}
+
+func (m *LiquidityManager) warmupLSPCache(ctx context.Context) {
+	// Wait a bit for connection manager to establish connections
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(5 * time.Second):
+	}
+
+	lsps, err := m.GetSelectedLSPs()
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to get selected LSPs for warmup")
+		return
+	}
+
+	for _, l := range lsps {
+		// Only refresh if Nostr pubkey is missing
+		if l.NostrPubkey == "" {
+			logger.Logger.Info().Str("lsp", l.Pubkey).Msg("Warming up LSP Nostr Pubkey...")
+			if _, err := m.RefreshLSPInfo(ctx, l.Pubkey); err != nil {
+				logger.Logger.Warn().Err(err).Str("lsp", l.Pubkey).Msg("Failed to refresh LSP info during warmup")
 			}
 		}
 	}
@@ -306,8 +334,8 @@ func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
 
 	var lspList []SettingsLSP
 	for _, l := range dbLSPs {
-		nostrPub := ""
-		if val, ok := m.nostrPubkeys[l.Pubkey]; ok {
+		nostrPub := l.NostrPubkey
+		if val, ok := m.nostrPubkeys[l.Pubkey]; ok && val != "" {
 			nostrPub = val
 		}
 
@@ -343,6 +371,11 @@ func (m *LiquidityManager) RefreshLSPInfo(ctx context.Context, pubkey string) (s
 		m.mu.Lock()
 		m.nostrPubkeys[pubkey] = nostrPubkey
 		m.mu.Unlock()
+
+		// Persist to DB
+		if err := m.cfg.LSPManager.UpdateLSPNostrPubkey(pubkey, nostrPubkey); err != nil {
+			logger.Logger.Warn().Err(err).Str("lsp", pubkey).Msg("Failed to persist LSP Nostr Pubkey to DB")
+		}
 
 		logger.Logger.Debug().
 			Str("lsp", pubkey).
@@ -452,7 +485,7 @@ func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error 
 
 	var targetLSP *SettingsLSP
 	for _, lsp := range lsps {
-		if lsp.Pubkey == pubkey {
+		if lsp.Pubkey == pubkey || lsp.NostrPubkey == pubkey {
 			targetLSP = &lsp
 			break
 		}
@@ -470,7 +503,7 @@ func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error 
 	logger.Logger.Info().Str("lsp", pubkey).Str("host", host).Msg("Connecting to LSP due to notification")
 
 	return m.cfg.LNClient.ConnectPeer(ctx, &lnclient.ConnectPeerRequest{
-		Pubkey:  pubkey,
+		Pubkey:  targetLSP.Pubkey,
 		Address: host,
 	})
 }
