@@ -7,7 +7,7 @@ export type AppStoreApp = {
   extendedDescription: string;
 
   logo?: string;
-  categories: (keyof typeof appStoreCategories)[];
+  category: keyof typeof appStoreCategories;
 
   // General links
   webLink?: string;

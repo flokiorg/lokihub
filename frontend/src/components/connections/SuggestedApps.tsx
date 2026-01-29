@@ -5,31 +5,26 @@ import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import { Badge } from "src/components/ui/badge";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardTitle,
 } from "src/components/ui/card";
 import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
-import { swrFetcher } from "src/utils/swr";
-import useSWR from "swr";
 import {
-  AppStoreApp,
-  sortedAppStoreCategories
+    AppStoreApp,
+    sortedAppStoreCategories
 } from "./SuggestedAppData";
 
-function SuggestedAppCard({ id, title, description }: AppStoreApp) {
-  const { data: logoBase64 } = useSWR(`/api/appstore/logos/${id}`, swrFetcher);
-  const image = logoBase64 ? `data:image/png;base64,${logoBase64}` : null;
-
+function SuggestedAppCard({ id, title, description, logo }: AppStoreApp) {
   return (
     <Link to={`/appstore/${id}`}>
       <Card className="h-full">
         <CardContent>
           <div className="flex gap-3 items-center">
-            {image ? (
-                <img src={image} alt="logo" className="inline rounded-lg size-12" />
+            {logo ? (
+                <img src={logo} alt="logo" className="inline rounded-lg size-12" />
             ) : (
                 <div className="inline rounded-lg size-12 bg-muted/50" />
             )}
@@ -95,7 +90,7 @@ export default function SuggestedApps() {
         {sortedAppStoreCategories.map(([categoryId, category]) => {
           // Check if category has any apps
           const hasApps = appStoreApps.some((app) =>
-            (app.categories as string[]).includes(categoryId)
+            app.category === categoryId
           );
 
           if (!hasApps) return null;
@@ -135,7 +130,7 @@ export default function SuggestedApps() {
           )
           .map(([categoryId, category]) => {
             const categoryApps = appStoreApps.filter((app) =>
-              (app.categories as string[]).includes(categoryId)
+              app.category === categoryId
             );
 
             if (categoryApps.length === 0) {
