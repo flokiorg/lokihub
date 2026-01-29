@@ -110,7 +110,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	}
 
 	appLogoRegex := regexp.MustCompile(
-		`/api/appstore/logos/([0-9a-f]+)`,
+		`/api/appstore/logos/([^/]+)`,
 	)
 	appLogoMatch := appLogoRegex.FindStringSubmatch(route)
 
@@ -503,11 +503,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		apps := app.svc.GetAppStoreSvc().ListApps()
 		return WailsRequestRouterResponse{Body: apps, Error: ""}
 
-	case "/api/appstore/logos/:appId":
-		// This regex matching is handled by the manual regex block below if I don't use the switch case structure cleanly
-		// But wait, the switch is on `route` usually?
-		// No, the code uses regex finding earlier.
-		// I should stick to the pattern used in the file.
+	// Logo route handled by regex above
 	case "/api/channels":
 		switch method {
 		case "GET":
@@ -658,7 +654,6 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: resp, Error: ""}
 		}
-
 
 	// LSPS Settings Routes (RESTful)
 	case "/api/lsps":
