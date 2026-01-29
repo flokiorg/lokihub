@@ -11,6 +11,7 @@ type LSP struct {
 	Host        string    `gorm:"not null" json:"host"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`                      // Description of the LSP service
+	NostrPubkey string    `json:"nostrPubkey"`                      // Notification pubkey for LSPS5
 	IsActive    bool      `gorm:"default:false" json:"isActive"`    // Whether the user has selected/enabled this LSP
 	IsCommunity bool      `gorm:"default:false" json:"isCommunity"` // True for LSPs from community config, False for user-added
 	CreatedAt   time.Time `json:"createdAt"`

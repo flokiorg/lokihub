@@ -87,6 +87,12 @@ func (m *LSPManager) ToggleLSP(pubkey string, active bool) error {
 	return nil
 }
 
+// UpdateLSPNostrPubkey updates the nostr pubkey for an LSP
+func (m *LSPManager) UpdateLSPNostrPubkey(pubkey, nostrPubkey string) error {
+	pubkey = strings.ToLower(pubkey)
+	return m.db.Model(&persist.LSP{}).Where("pubkey = ?", pubkey).Update("nostr_pubkey", nostrPubkey).Error
+}
+
 // DeleteCustomLSP removes a custom LSP. System LSPs cannot be deleted.
 func (m *LSPManager) DeleteCustomLSP(pubkey string) error {
 	pubkey = strings.ToLower(pubkey)

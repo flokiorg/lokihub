@@ -7,6 +7,7 @@ import (
 
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
@@ -550,13 +551,14 @@ type LSPS1GetInfoRequest struct {
 }
 
 type LSPS1CreateOrderRequest struct {
-	LSPPubkey            string  `json:"lsp_pubkey"`
-	LSPBalanceLoki       uint64  `json:"amount_loki"`
-	ClientBalanceLoki    uint64  `json:"client_balance_loki"`
-	ChannelExpiryBlocks  uint32  `json:"channel_expiry_blocks"`
-	Token                *string `json:"token,omitempty"`
-	RefundOnchainAddress *string `json:"refund_onchain_address,omitempty"`
-	AnnounceChannel      bool    `json:"announce_channel"`
+	LSPPubkey            string                  `json:"lsp_pubkey"`
+	LSPBalanceLoki       uint64                  `json:"amount_loki"`
+	ClientBalanceLoki    uint64                  `json:"client_balance_loki"`
+	ChannelExpiryBlocks  uint32                  `json:"channel_expiry_blocks"`
+	Token                *string                 `json:"token,omitempty"`
+	RefundOnchainAddress *string                 `json:"refund_onchain_address,omitempty"`
+	AnnounceChannel      bool                    `json:"announce_channel"`
+	OpeningFeeParams     *lsps1.OpeningFeeParams `json:"opening_fee_params,omitempty"`
 }
 
 type LSPS1GetOrderRequest struct {

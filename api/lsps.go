@@ -10,7 +10,6 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
-	"github.com/flokiorg/lokihub/lsps/lsps2"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/utils"
@@ -65,9 +64,12 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 		return nil, err
 	}
 
-	return map[string]interface{}{
-		"options": options,
-	}, nil
+	// Return the first option directly for simpler consumption, matching LSPS2 style
+	if len(options) == 0 {
+		return nil, fmt.Errorf("no options provided by LSP")
+	}
+
+	return options[0], nil
 }
 
 // LSPS1CreateOrder creates a channel order
@@ -82,6 +84,7 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 		ChannelExpiryBlocks:          req.ChannelExpiryBlocks,
 		Token:                        req.Token,
 		AnnounceChannel:              req.AnnounceChannel,
+		OpeningFeeParams:             req.OpeningFeeParams,
 	}
 
 	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
@@ -185,11 +188,12 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 		return nil, err
 	}
 
-	// Wrap in expected response struct or return directly
-	// The frontend likely expects { opening_fee_params_menu: [...] } matching LSPS2 spec
-	return lsps2.GetInfoResponse{
-		OpeningFeeParamsMenu: fees,
-	}, nil
+	if len(fees) == 0 {
+		return nil, fmt.Errorf("no fee parameters provided by LSP")
+	}
+
+	// Return the first fee parameter set as a flat object
+	return fees[0], nil
 }
 
 // LSPS2Buy buys a JIT channel
