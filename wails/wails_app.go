@@ -3,6 +3,7 @@ package wails
 import (
 	"context"
 	"embed"
+	nethttp "net/http"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/apps"
@@ -15,6 +16,9 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/http"
+	"github.com/labstack/echo/v4"
 )
 
 type WailsApp struct {
@@ -23,6 +27,7 @@ type WailsApp struct {
 	api     api.API
 	db      *gorm.DB
 	appsSvc apps.AppsService
+	httpSvc *http.HttpService
 }
 
 func NewApp(svc service.Service) *WailsApp {
@@ -31,6 +36,7 @@ func NewApp(svc service.Service) *WailsApp {
 		api:     api.NewAPI(svc, svc.GetDB(), svc.GetConfig(), svc.GetKeys(), svc.GetLokiSvc(), svc.GetEventPublisher()),
 		db:      svc.GetDB(),
 		appsSvc: apps.NewAppsService(svc.GetDB(), svc.GetEventPublisher(), svc.GetKeys(), svc.GetConfig()),
+		httpSvc: http.NewHttpService(svc, svc.GetEventPublisher()),
 	}
 }
 
@@ -73,7 +79,8 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte) {
 		Width:  1055,
 		Height: 768,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets:  assets,
+			Handler: NewAssetHandler(app.httpSvc),
 		},
 		Logger: NewWailsLogger(),
 		// HideWindowOnClose: true, // with this on, there is no way to close the app - wait for v3
@@ -134,4 +141,10 @@ func (wailsLogger WailsLogger) Error(message string) {
 
 func (wailsLogger WailsLogger) Fatal(message string) {
 	logger.Logger.Fatal().Bool("wails", true).Msg(message)
+}
+
+func NewAssetHandler(httpSvc *http.HttpService) nethttp.Handler {
+	e := echo.New()
+	httpSvc.RegisterSharedRoutes(e)
+	return e
 }
