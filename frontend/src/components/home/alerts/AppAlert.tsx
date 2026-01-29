@@ -7,6 +7,7 @@ import {
     CardHeader,
     CardTitle,
 } from "src/components/ui/card";
+import { useAppLogo } from "src/hooks/useAppLogo";
 
 type Props = {
   app: AppStoreApp;
@@ -16,6 +17,7 @@ type Props = {
 
 export default function AppAlert({ app, type, onDismiss }: Props) {
   const navigate = useNavigate();
+  const logoSrc = useAppLogo(app.id);
 
   return (
     <Card className="relative overflow-hidden mb-4 rounded-xl">
@@ -34,9 +36,9 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
       >
         <CardHeader className="flex flex-row items-center gap-4">
           <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0">
-            {app.logo ? (
+            {app.logo && logoSrc ? (
               <img
-                src={`/api/appstore/logos/${app.id}`}
+                src={logoSrc}
                 alt={app.title}
                 className="w-full h-full object-cover"
               />

@@ -1,10 +1,9 @@
 import UserAvatar from "src/components/UserAvatar";
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
+import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
 import { App } from "src/types";
-import { swrFetcher } from "src/utils/swr";
-import useSWR from "swr";
 
 type Props = {
   app: App;
@@ -21,12 +20,7 @@ export default function AppAvatar({ app, className }: Props) {
       app.name.toLowerCase().includes(suggestedApp.title.toLowerCase())
   );
 
-  const { data: logoBase64 } = useSWR(
-    appStoreApp?.id ? `/api/appstore/logos/${appStoreApp.id}` : null,
-    swrFetcher
-  );
-
-  const image = logoBase64 ? `data:image/png;base64,${logoBase64}` : null;
+  const logoSrc = useAppLogo(appStoreApp?.id);
 
   if (app.name === LOKI_ACCOUNT_APP_NAME) {
     return <UserAvatar className={className} />;
@@ -41,17 +35,17 @@ export default function AppAvatar({ app, className }: Props) {
     <div
       className={cn(
         "rounded-lg relative overflow-hidden",
-        !image && `avatar-gradient-${gradient}`,
+        !logoSrc && `avatar-gradient-${gradient}`,
         className
       )}
     >
-      {image && (
+      {logoSrc && (
         <img
-          src={image}
+          src={logoSrc}
           className={cn("absolute w-full h-full rounded-lg", className)}
         />
       )}
-      {!image && (
+      {!logoSrc && (
         <span className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm font-medium capitalize pointer-events-none">
           {app.name.charAt(0)}
         </span>

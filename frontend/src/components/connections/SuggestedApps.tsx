@@ -10,6 +10,7 @@ import {
     CardDescription,
     CardTitle,
 } from "src/components/ui/card";
+import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
 import {
@@ -18,13 +19,14 @@ import {
 } from "./SuggestedAppData";
 
 function SuggestedAppCard({ id, title, description, logo }: AppStoreApp) {
+  const logoSrc = useAppLogo(id);
   return (
     <Link to={`/appstore/${id}`}>
       <Card className="h-full">
         <CardContent>
           <div className="flex gap-3 items-center">
-            {logo ? (
-                <img src={logo} alt="logo" className="inline rounded-lg size-12" />
+            {logo && logoSrc ? (
+                <img src={logoSrc} alt="logo" className="inline rounded-lg size-12" />
             ) : (
                 <div className="inline rounded-lg size-12 bg-muted/50" />
             )}
@@ -145,7 +147,7 @@ export default function SuggestedApps() {
                     app.internal ? (
                       <InternalAppCard key={app.id} {...app} />
                     ) : ( // @ts-ignore
-                      <SuggestedAppCard key={app.id} {...app} logo={`/api/appstore/logos/${app.id}`} />
+                      <SuggestedAppCard key={app.id} {...app} />
                     )
                   )}
                 </div>
