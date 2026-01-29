@@ -56,7 +56,7 @@ run-2:
 
 # Run Wails app locally
 run-wails:
-    wails dev -tags wails -ldflags "-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"
+    wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"
 
 # Run HTTP server locally (Account 3)
 run-3:
