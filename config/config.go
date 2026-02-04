@@ -651,3 +651,21 @@ func (cfg *config) SetLSP(value string) error {
 	}
 	return nil
 }
+
+func (cfg *config) GetCachedServicesJSON() string {
+	json, err := cfg.Get("CachedServicesJSON", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch CachedServicesJSON")
+	}
+	return json
+}
+
+func (cfg *config) SetCachedServicesJSON(value string) error {
+	// We use SetUpdate to persist it unencrypted (it's public data)
+	err := cfg.SetUpdate("CachedServicesJSON", value, "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update CachedServicesJSON")
+		return err
+	}
+	return nil
+}

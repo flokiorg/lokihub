@@ -88,4 +88,6 @@ type Config interface {
 	GetDefaultWorkDir() string
 	GetLSP() string
 	SetLSP(value string) error
+	GetCachedServicesJSON() string
+	SetCachedServicesJSON(json string) error
 }

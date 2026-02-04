@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -70,11 +72,27 @@ func (m *LiquidityManager) syncRPC(ctx context.Context, url string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
+	// Read full body first to cache it
+	// We read up to 10MB to avoid memory issues, though service.json is tiny
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return err
+	}
+
+	// Persist to cache for Frontend API
+	if err := m.cfg.AppConfig.SetCachedServicesJSON(string(bodyBytes)); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to cache services.json")
+	} else {
+		logger.Logger.Info().Msg("Cached services.json for local API access")
+	}
+
 	type ExternalLSP struct {
 		Name        string `json:"name"`
 		URI         string `json:"uri"`
+		Connection  string `json:"connection"` // Support new schema
 		Pubkey      string `json:"pubkey"`
 		Host        string `json:"host"`
+		URL         string `json:"url"` // Website URL
 		Description string `json:"description"`
 	}
 	type ServiceConfig struct {
@@ -82,7 +100,7 @@ func (m *LiquidityManager) syncRPC(ctx context.Context, url string) error {
 	}
 
 	var result ServiceConfig
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return err
 	}
 
@@ -95,7 +113,16 @@ func (m *LiquidityManager) syncRPC(ctx context.Context, url string) error {
 		pubkey := l.Pubkey
 		host := l.Host
 
-		if l.URI != "" {
+		// Try parsing from Connection string first (new schema priority)
+		// "pubkey@host:port"
+		if l.Connection != "" {
+			parts := strings.Split(l.Connection, "@")
+			if len(parts) == 2 {
+				pubkey = parts[0]
+				host = parts[1]
+			}
+		} else if l.URI != "" {
+			// Fallback to legacy URI parsing if present
 			pk, h, err := utils.ParseLSPURI(l.URI)
 			if err == nil {
 				pubkey = pk
@@ -106,6 +133,7 @@ func (m *LiquidityManager) syncRPC(ctx context.Context, url string) error {
 		inputs = append(inputs, CommunityLSPInput{
 			Name:        l.Name,
 			Description: l.Description,
+			Website:     l.URL,
 			Pubkey:      pubkey,
 			Host:        host,
 		})

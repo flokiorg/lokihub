@@ -1358,3 +1358,37 @@ func (_c *MockConfig_SetLokihubStoreURL_Call) RunAndReturn(run func(string) erro
 	_c.Call.Return(run)
 	return _c
 }
+
+// GetCachedServicesJSON provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetCachedServicesJSON() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCachedServicesJSON")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// SetCachedServicesJSON provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetCachedServicesJSON(value string) error {
+	ret := _mock.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetCachedServicesJSON")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
