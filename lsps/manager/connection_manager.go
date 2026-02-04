@@ -7,6 +7,7 @@ import (
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/utils"
 )
 
 // ConnectionManager maintains connections to active LSPs
@@ -86,9 +87,17 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 		if !connectedPeers[lsp.Pubkey] {
 			logger.Logger.Info().Str("lsp", lsp.Pubkey).Msg("ConnectionManager: LSP disconnected, attempting to connect")
 
-			err := cm.cfg.LNClient.ConnectPeer(ctx, &lnclient.ConnectPeerRequest{
+			// Parse host and port
+			host, port, err := utils.ParseHostPort(lsp.Host)
+			if err != nil {
+				logger.Logger.Warn().Err(err).Str("lsp", lsp.Pubkey).Str("host", lsp.Host).Msg("ConnectionManager: Failed to parse LSP host")
+				continue
+			}
+
+			err = cm.cfg.LNClient.ConnectPeer(ctx, &lnclient.ConnectPeerRequest{
 				Pubkey:  lsp.Pubkey,
-				Address: lsp.Host,
+				Address: host,
+				Port:    port,
 			})
 			if err != nil {
 				// Log as warning so we don't spam errors for temporary network issues

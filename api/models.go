@@ -350,10 +350,11 @@ type InfoResponseRelay struct {
 }
 
 type LSPInfo struct {
-	Name   string `json:"name"`
-	Pubkey string `json:"pubkey"`
-	Host   string `json:"host"`
-	Active bool   `json:"active"`
+	Name    string `json:"name"`
+	Pubkey  string `json:"pubkey"`
+	Host    string `json:"host"`
+	Website string `json:"website"`
+	Active  bool   `json:"active"`
 }
 
 type InfoResponse struct {
