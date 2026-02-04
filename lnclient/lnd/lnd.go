@@ -1053,8 +1053,8 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 	}
 	pendingResp, err := svc.client.PendingChannels(ctx, &lnrpc.PendingChannelsRequest{})
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch pending channels")
-		return nil, err
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch pending channels")
+		pendingResp = &lnrpc.PendingChannelsResponse{}
 	}
 
 	nodeInfo, err := svc.client.GetInfo(ctx, &lnrpc.GetInfoRequest{})
@@ -1070,8 +1070,8 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 		StartHeight: int32(nodeInfo.BlockHeight - confirmationsRequired),
 	})
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch onchain transactions")
-		return nil, err
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch onchain transactions")
+		recentOnchainTransactions = &lnrpc.TransactionDetails{}
 	}
 
 	channels := make([]lnclient.Channel, len(activeResp.Channels)+len(pendingResp.PendingOpenChannels))
@@ -1093,18 +1093,20 @@ func (svc *LNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, er
 				ChanId: lndChannel.ChanId,
 			})
 			if err != nil {
-				return nil, err
-			}
-
-			var policy *lnrpc.RoutingPolicy
-			if channelEdge.Node1Pub == nodeInfo.IdentityPubkey {
-				policy = channelEdge.Node1Policy
+				// GetChanInfo failure (e.g. edge not found) shouldn't crash the whole app
+				logger.Logger.Warn().Err(err).Uint64("chan_id", lndChannel.ChanId).Msg("Failed to get channel info, fees will be 0")
+				// continue without policy info (fees 0)
 			} else {
-				policy = channelEdge.Node2Policy
-			}
-			if policy != nil {
-				forwardingFeeBaseMloki = uint32(policy.FeeBaseMsat)
-				forwardingFeeProportionalMillionths = uint32(policy.FeeRateMilliMsat)
+				var policy *lnrpc.RoutingPolicy
+				if channelEdge.Node1Pub == nodeInfo.IdentityPubkey {
+					policy = channelEdge.Node1Policy
+				} else {
+					policy = channelEdge.Node2Policy
+				}
+				if policy != nil {
+					forwardingFeeBaseMloki = uint32(policy.FeeBaseMsat)
+					forwardingFeeProportionalMillionths = uint32(policy.FeeRateMilliMsat)
+				}
 			}
 		}
 
@@ -1221,11 +1223,18 @@ func (svc *LNDService) GetNodeConnectionInfo(ctx context.Context) (nodeConnectio
 	return nodeConnectionInfo, nil
 }
 
+func formatConnectionAddress(address string, port uint16) string {
+	if port == 0 {
+		return address
+	}
+	return address + ":" + strconv.Itoa(int(port))
+}
+
 func (svc *LNDService) ConnectPeer(ctx context.Context, connectPeerRequest *lnclient.ConnectPeerRequest) error {
 	_, err := svc.client.ConnectPeer(ctx, &lnrpc.ConnectPeerRequest{
 		Addr: &lnrpc.LightningAddress{
 			Pubkey: connectPeerRequest.Pubkey,
-			Host:   connectPeerRequest.Address + ":" + strconv.Itoa(int(connectPeerRequest.Port)),
+			Host:   formatConnectionAddress(connectPeerRequest.Address, connectPeerRequest.Port),
 		},
 	})
 
