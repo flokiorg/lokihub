@@ -57,6 +57,7 @@ type PendingOrder struct {
 type SettingsLSP struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Website     string `json:"website"`
 	Pubkey      string `json:"pubkey"`
 	Host        string `json:"host"`
 	Active      bool   `json:"active"`
@@ -342,6 +343,7 @@ func (m *LiquidityManager) getLSPsFromDB() ([]SettingsLSP, error) {
 		lspList = append(lspList, SettingsLSP{
 			Name:        l.Name,
 			Description: l.Description,
+			Website:     l.Website,
 			Pubkey:      l.Pubkey,
 			Host:        l.Host,
 			Active:      l.IsActive,

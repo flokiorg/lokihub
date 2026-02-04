@@ -1156,10 +1156,11 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 			info.LSPs = make([]LSPInfo, len(selected))
 			for i, lsp := range selected {
 				info.LSPs[i] = LSPInfo{
-					Name:   lsp.Name,
-					Pubkey: lsp.Pubkey,
-					Host:   lsp.Host,
-					Active: lsp.Active,
+					Name:    lsp.Name,
+					Pubkey:  lsp.Pubkey,
+					Host:    lsp.Host,
+					Website: lsp.Website,
+					Active:  lsp.Active,
 				}
 			}
 		}
@@ -2127,6 +2128,17 @@ func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macar
 }
 
 func (api *api) GetServices(ctx context.Context) (interface{}, error) {
+	// 1. Try Cache
+	cachedJSON := api.cfg.GetCachedServicesJSON()
+	if cachedJSON != "" {
+		var result interface{}
+		if err := json.Unmarshal([]byte(cachedJSON), &result); err == nil {
+			return result, nil
+		}
+		logger.Logger.Error().Msg("Failed to unmarshal cached services JSON, falling back to network")
+	}
+
+	// 2. Fallback to Network (only if cache empty or invalid)
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}

@@ -394,6 +394,7 @@ func (api *api) HandleListLSPs(ctx context.Context) ([]manager.SettingsLSP, erro
 			Description: l.Description,
 			Pubkey:      l.Pubkey,
 			Host:        l.Host,
+			Website:     l.Website,
 			Active:      l.IsActive,
 			IsCommunity: l.IsCommunity,
 		})
