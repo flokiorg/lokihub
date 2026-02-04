@@ -75,14 +75,16 @@ export function SetupServices() {
                      } else {
                         // Use community LSPs as defaults
                         newConfig.lsps = communityLSPs.map((opt: any) => {
-                            const [pubkeyRaw, host] = opt.uri?.split('@') || ['', ''];
+                            const connection = opt.connection || opt.uri || "";
+                            const [pubkeyRaw, host] = connection.split('@');
                             return {
                                 name: opt.name,
                                 pubkey: pubkeyRaw,
                                 host: host,
                                 active: false, // Default to inactive until user selects
                                 isCommunity: true,
-                                description: opt.description
+                                description: opt.description,
+                                website: opt.url || opt.website
                             } as LSP;
                         });
                      }
