@@ -46,7 +46,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	err := m.AddLSP("TestLSPManual", lspPubkey+"@host:9735")
+	err := m.AddLSP("TestLSPManual", lspPubkey+"@host:5521")
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -60,8 +60,8 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 	errChan := make(chan error, 1)
 
 	go func() {
-		// Call BuyLiquidity explicitly
-		hints, err := m.BuyLiquidity(ctx, "lsp1", 100000, nil)
+		// Call BuyLiquidity explicitly with the correct lspPubkey
+		hints, err := m.BuyLiquidity(ctx, lspPubkey, 100000, nil)
 		if err != nil {
 			errChan <- err
 		} else {
@@ -136,7 +136,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 	assert.Equal(t, lsps2.MethodGetInfo, req3.Method)
 
 	// Reply with Fresh Params
-	resp3 := maxCopy(resp1)
+	resp3 := resp1 // Copy response
 	resp3.ID = req3.ID
 	data3, _ := json.Marshal(resp3)
 	mockLN.msgChan <- lnclient.CustomMessage{PeerPubkey: lspPubkey, Type: lsps0.LSPS_MESSAGE_TYPE_ID, Data: data3}

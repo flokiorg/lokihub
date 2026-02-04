@@ -16,7 +16,8 @@ import (
 type mockLNClientConnection struct {
 	mockLNClient
 	peers             []lnclient.PeerDetails
-	connectedPeers    map[string]string // pubkey -> address
+	connectedPeers    map[string]string                       // pubkey -> address (legacy for other tests)
+	peerRequests      map[string]*lnclient.ConnectPeerRequest // capture requests for detailed verification
 	connectPeerCalled bool
 	connectPeerErr    error
 }
@@ -31,6 +32,7 @@ func (m *mockLNClientConnection) ConnectPeer(ctx context.Context, req *lnclient.
 		return m.connectPeerErr
 	}
 	m.connectedPeers[req.Pubkey] = req.Address
+	m.peerRequests[req.Pubkey] = req
 	return nil
 }
 
@@ -50,6 +52,7 @@ func setupTestEnvironment(t *testing.T) (*mockLNClientConnection, *LSPManager, *
 	// Setup Mock LN
 	mockLN := &mockLNClientConnection{
 		connectedPeers: make(map[string]string),
+		peerRequests:   make(map[string]*lnclient.ConnectPeerRequest),
 	}
 
 	cfg := &ManagerConfig{
@@ -78,7 +81,7 @@ func TestMaintainConnections_InactiveLSPs(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	// Setup
-	_, err := lspManager.AddLSP("InactiveLSP", "pubkey1", "1.2.3.4:9735", false, false)
+	_, err := lspManager.AddLSP("InactiveLSP", "pubkey1", "1.2.3.4:5521", false, false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -96,7 +99,7 @@ func TestMaintainConnections_ActiveLSP_AlreadyConnected(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	pubkey := "pubkey_active"
-	_, err := lspManager.AddLSP("ActiveLSP", pubkey, "1.2.3.4:9735", true, false)
+	_, err := lspManager.AddLSP("ActiveLSP", pubkey, "1.2.3.4:5521", true, false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -105,7 +108,7 @@ func TestMaintainConnections_ActiveLSP_AlreadyConnected(t *testing.T) {
 	mockLN.peers = []lnclient.PeerDetails{
 		{
 			NodeId:      pubkey,
-			Address:     "1.2.3.4:9735",
+			Address:     "1.2.3.4:5521",
 			IsConnected: true,
 		},
 	}
@@ -123,7 +126,7 @@ func TestMaintainConnections_ActiveLSP_Disconnected_Success(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	pubkey := "pubkey_disconnected"
-	host := "1.2.3.4:9735"
+	host := "1.2.3.4:5521"
 	_, err := lspManager.AddLSP("DisconnectedLSP", pubkey, host, true, false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
@@ -139,10 +142,18 @@ func TestMaintainConnections_ActiveLSP_Disconnected_Success(t *testing.T) {
 	if !mockLN.connectPeerCalled {
 		t.Error("ConnectPeer should have been called")
 	}
-	if addr, ok := mockLN.connectedPeers[pubkey]; !ok {
+	if req, ok := mockLN.peerRequests[pubkey]; !ok {
 		t.Errorf("Expected connection attempt to %s, got none", pubkey)
-	} else if addr != host {
-		t.Errorf("Expected connection to host %s, got %s", host, addr)
+	} else {
+		// Expect split host and port
+		expectedHost := "1.2.3.4"
+		expectedPort := uint16(5521)
+		if req.Address != expectedHost {
+			t.Errorf("Expected Address %s, got %s", expectedHost, req.Address)
+		}
+		if req.Port != expectedPort {
+			t.Errorf("Expected Port %d, got %d", expectedPort, req.Port)
+		}
 	}
 }
 
@@ -150,7 +161,7 @@ func TestMaintainConnections_ActiveLSP_Disconnected_Failure(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	pubkey := "pubkey_fail"
-	_, err := lspManager.AddLSP("FailLSP", pubkey, "1.2.3.4:9735", true, false)
+	_, err := lspManager.AddLSP("FailLSP", pubkey, "1.2.3.4:5521", true, false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -175,7 +186,7 @@ func TestMaintainConnections_SyncsCaseInsensitively(t *testing.T) {
 
 	// User adds LSP (stored as lowercase in DB internally by AddLSP)
 	pubkeyLower := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	_, err := lspManager.AddLSP("MixedCaseLSP", pubkeyLower, "1.2.3.4:9735", true, false)
+	_, err := lspManager.AddLSP("MixedCaseLSP", pubkeyLower, "1.2.3.4:5521", true, false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -185,7 +196,7 @@ func TestMaintainConnections_SyncsCaseInsensitively(t *testing.T) {
 	mockLN.peers = []lnclient.PeerDetails{
 		{
 			NodeId:      pubkeyUpper,
-			Address:     "1.2.3.4:9735",
+			Address:     "1.2.3.4:5521",
 			IsConnected: true,
 		},
 	}

@@ -35,10 +35,10 @@ func (m *MockEventPublisher) SetGlobalProperty(key string, value interface{}) {
 }
 
 func TestLNDConnection(t *testing.T) {
-	// Skip if TEST_LND env var is not set, unless we are running in a specific mode.
-	// For this user request, we want to run it, but good practice to gate integration tests.
-	// However, since the user explicitly asked for this test to "test the open lnd server connection",
-	// we will default to using the provided credentials if env vars are missing, or fail if completely unavailable.
+	// Skip if TEST_LND env var is not set
+	if os.Getenv("TEST_LND") == "" {
+		t.Skip("Skipping integration test: TEST_LND not set")
+	}
 
 	// Default credentials provided by user
 	lndAddress := os.Getenv("LND_ADDRESS")

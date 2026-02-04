@@ -149,7 +149,8 @@ func (m *mockLNClientJIT) ExecuteCustomNodeCommand(ctx context.Context, command 
 func (m *mockLNClientJIT) SetNodeAlias(ctx context.Context, alias string) error { return nil }
 
 func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
-	jitSCID := uint64(8796093087745)
+	// SCID for 800000x1x1: (800000<<40) | (1<<16) | 1 = 879609302220865537
+	jitSCID := uint64(879609302220865537)
 	// Setup DB
 	db, _ := gorm.Open(sqlite.Open("file:memdb_jit?mode=memory&cache=shared"), &gorm.Config{})
 	db.AutoMigrate(&persist.LSP{})
@@ -179,7 +180,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	err := m.AddLSP("TestLSP", lspPubkey+"@host:9735")
+	err := m.AddLSP("TestLSP", lspPubkey+"@host:5521")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}

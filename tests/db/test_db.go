@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -66,10 +67,19 @@ func NewDBWithURI(t *testing.T, uri string) (*gorm.DB, error) {
 		uri = config.URL()
 	}
 
-	return db.NewDBWithConfig(&db.Config{
+	gormDB, err := db.NewDBWithConfig(&db.Config{
 		URI:        uri,
 		LogQueries: true,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := migrations.Migrate(gormDB); err != nil {
+		return nil, fmt.Errorf("failed to migrate test DB: %w", err)
+	}
+
+	return gormDB, nil
 }
 
 func CloseDB(d *gorm.DB) {
