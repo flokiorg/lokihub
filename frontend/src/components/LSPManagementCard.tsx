@@ -1,6 +1,7 @@
 import { Check, Copy, Droplet, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import ExternalLink from "src/components/ExternalLink";
 import { Button } from "src/components/ui/button";
 import {
   Card,
@@ -17,8 +18,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "src/components/ui/tooltip";
-import { LSP } from "src/hooks/useLSPSManagement";
 import { centerTrim, cn } from "src/lib/utils";
+import { LSP } from "src/types";
 import { validateLSPURI } from "src/utils/validation";
 
 interface LSPManagementCardProps {
@@ -116,6 +117,8 @@ export function LSPManagementCard({
     );
   };
 
+  console.log("communityCards", communityCards);
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -170,9 +173,26 @@ export function LSPManagementCard({
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-medium mt-1">
-                      {provider.active ? "Active" : "Inactive"}
-                    </span>
+                    {provider.website ? (
+                      <div onClick={(e) => e.stopPropagation()} className="inline-block">
+                        <ExternalLink
+                          to={provider.website}
+                          className="text-[10px] text-muted-foreground font-medium mt-0.5 hover:underline hover:text-foreground truncate max-w-[150px] inline-block"
+                        >
+                        {(() => {
+                            try {
+                              return new URL(provider.website).hostname;
+                            } catch {
+                              return provider.website;
+                            }
+                          })()}
+                        </ExternalLink>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-medium mt-1">
+                        {provider.active ? "Active" : "Inactive"}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {provider.active && (
@@ -209,6 +229,7 @@ export function LSPManagementCard({
                   >
                     <Copy className="w-3 h-3" />
                   </Button>
+
                 </div>
               </div>
             </div>

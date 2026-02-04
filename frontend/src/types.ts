@@ -1,14 +1,14 @@
 import {
-  BellIcon,
-  CirclePlusIcon,
-  CrownIcon,
-  HandCoinsIcon,
-  InfoIcon,
-  LucideIcon,
-  NotebookTabsIcon,
-  PenLineIcon,
-  SearchIcon,
-  WalletMinimalIcon,
+    BellIcon,
+    CirclePlusIcon,
+    CrownIcon,
+    HandCoinsIcon,
+    InfoIcon,
+    LucideIcon,
+    NotebookTabsIcon,
+    PenLineIcon,
+    SearchIcon,
+    WalletMinimalIcon,
 } from "lucide-react";
 
 export type BackendType = "FLND";
@@ -146,6 +146,7 @@ export interface LSP {
   active: boolean;
   isCommunity?: boolean;
   description?: string;
+  website?: string;
 }
 
 export interface InfoResponse {

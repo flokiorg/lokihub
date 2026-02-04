@@ -111,17 +111,47 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
             try {
                 const services = await request<any>("/api/setup/config");
                 if (services) {
+                    const mapUrlService = (s: any) => ({
+                        name: s.name,
+                        value: s.url,
+                        description: s.description
+                    });
+
+                    const mapNwcService = (s: any) => ({
+                        name: s.name,
+                        value: s.nwc,
+                        description: s.description
+                    });
+
+                    // Parse LSPs special format
+                    const mapLSP = (s: any) => {
+                        // "connection": "pubkey@host:port"
+                        const connection = s.connection || s.uri || "";
+                        const parts = connection.split("@");
+                        const pubkey = parts[0] || "";
+                        const host = parts[1] || "";
+                        
+                        return {
+                            name: s.name,
+                            pubkey: pubkey,
+                            host: host,
+                            active: false, // Default to inactive when just fetching options
+                            isCommunity: true,
+                            description: s.description,
+                            website: s.url || s.website // Map url/website to website field
+                        } as LSP;
+                    };
+
                     setCommunityOptions({
-                        swap: services.swap_service || [],
-                        relay: services.nostr_relay || [],
-                        messageboard: services.messageboard_nwc || [],
-                        mempool: services.flokicoin_explorer || [],
-                        lsp: services.lsps || [],
+                        swap: (services.swap_service || []).map(mapUrlService),
+                        relay: (services.nostr_relay || []).map(mapUrlService),
+                        messageboard: (services.messageboard_nwc || []).map(mapNwcService),
+                        mempool: (services.flokicoin_explorer || []).map(mapUrlService),
+                        lsp: (services.lsps || []).map(mapLSP),
                     });
                 }
             } catch (error) {
                 console.error("Failed to fetch community services", error);
-                // toast.error("Failed to fetch community services"); // Optional: suppress toast to avoid noise on simple load failures
             }
         }
         fetchServices();

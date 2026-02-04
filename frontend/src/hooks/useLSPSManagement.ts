@@ -10,6 +10,7 @@ export interface LSP {
     isCommunity?: boolean;
     isSystem?: boolean; // Added
     description?: string;
+    website?: string;
 }
 
 export function useLSPSManagement() {
