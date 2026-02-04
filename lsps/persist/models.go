@@ -10,6 +10,7 @@ type LSP struct {
 	Pubkey      string    `gorm:"primaryKey" json:"pubkey"`
 	Host        string    `gorm:"not null" json:"host"`
 	Name        string    `json:"name"`
+	Website     string    `json:"website"`                          // URL to the LSP website
 	Description string    `json:"description"`                      // Description of the LSP service
 	NostrPubkey string    `json:"nostrPubkey"`                      // Notification pubkey for LSPS5
 	IsActive    bool      `gorm:"default:false" json:"isActive"`    // Whether the user has selected/enabled this LSP

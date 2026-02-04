@@ -113,6 +113,7 @@ func (m *LSPManager) DeleteCustomLSP(pubkey string) error {
 type CommunityLSPInput struct {
 	Name        string
 	Description string
+	Website     string
 	Pubkey      string
 	Host        string
 }
@@ -136,6 +137,7 @@ func (m *LSPManager) SyncSystemLSPs(inputs []CommunityLSPInput) error {
 				Pubkey:      input.Pubkey,
 				Host:        input.Host,
 				Name:        input.Name,
+				Website:     input.Website,
 				Description: input.Description,
 				IsActive:    false, // Default to inactive for new ones
 				IsCommunity: true,
@@ -146,10 +148,11 @@ func (m *LSPManager) SyncSystemLSPs(inputs []CommunityLSPInput) error {
 				return err
 			}
 		} else if err == nil {
-			// Update properties (Host/Name/Description) but NOT IsActive
+			// Update properties (Host/Name/Description/Website) but NOT IsActive
 			// Also ensure IsCommunity is true
 			existing.Host = input.Host
 			existing.Name = input.Name
+			existing.Website = input.Website
 			existing.Description = input.Description
 			existing.IsCommunity = true
 			existing.UpdatedAt = time.Now()
@@ -158,6 +161,7 @@ func (m *LSPManager) SyncSystemLSPs(inputs []CommunityLSPInput) error {
 			if err := m.db.Model(&existing).Where("pubkey = ?", existing.Pubkey).Updates(map[string]interface{}{
 				"host":         input.Host,
 				"name":         input.Name,
+				"website":      input.Website,
 				"description":  input.Description,
 				"is_community": true,
 				"updated_at":   time.Now(),
