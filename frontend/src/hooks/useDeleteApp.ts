@@ -12,7 +12,7 @@ export function useDeleteApp(app: App, onSuccess?: () => void) {
     setDeleting(true);
     try {
       // Delete the app/sub-wallet
-      await request(`/api/apps/${app.appPubkey}`, {
+      await request(`/api/apps/${app.id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
