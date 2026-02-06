@@ -2,23 +2,23 @@ import React from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import {
-    App,
-    AppPermissions,
-    UpdateAppRequest,
-    WalletCapabilities,
+  App,
+  AppPermissions,
+  UpdateAppRequest,
+  WalletCapabilities,
 } from "src/types";
 
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request"; // build the project for this to appear
 
 import {
-    CheckCircleIcon,
-    ChevronDownIcon,
-    EllipsisIcon,
-    InfoIcon,
-    PlusIcon,
-    SquarePenIcon,
-    UnplugIcon
+  CheckCircleIcon,
+  ChevronDownIcon,
+  EllipsisIcon,
+  InfoIcon,
+  PlusIcon,
+  SquarePenIcon,
+  UnplugIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import AppAvatar from "src/components/AppAvatar";
@@ -34,33 +34,33 @@ import Loading from "src/components/Loading";
 import Permissions from "src/components/Permissions";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import {
-    LOKI_ACCOUNT_APP_NAME
+  LOKI_ACCOUNT_APP_NAME
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
@@ -134,7 +134,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
         isolated: permissions.isolated,
       };
 
-      await request(`/api/apps/${app.appPubkey}`, {
+      await request(`/api/apps/${app.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -156,8 +156,29 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   const appName =
     app.name === LOKI_ACCOUNT_APP_NAME ? "Loki Account" : app.name;
 
-  const appStoreApp = getAppStoreApp(app);
+  let appStoreApp = getAppStoreApp(app);
+  if (!appStoreApp) {
+    appStoreApp = {
+      id: (app.metadata?.app_store_app_id as string) || "",
+      title: app.name,
+      description: "",
+      extendedDescription: "",
+      category: "misc",
+      version: "",
+      createdAt: 0,
+      updatedAt: 0,
+    };
+  }
   const connectedApps = useAppsForAppStoreApp(appStoreApp);
+  
+  const addAnotherUrl = React.useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("name", appName);
+    if (appStoreApp?.id) {
+      params.set("app", appStoreApp.id);
+    }
+    return `/apps/new?${params.toString()}`;
+  }, [appName, appStoreApp?.id]);
 
   return (
     <>
@@ -229,17 +250,15 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                       <DropdownMenuContent align="end">
 
                         <DropdownMenuGroup>
-                          {appStoreApp && (
-                            <DropdownMenuItem asChild>
-                              <Link
-                                to={`/apps/new?app=${appStoreApp.id}`}
-                                className="flex flex-1 items-center gap-2"
-                              >
-                                <PlusIcon className="size-4" /> Add Another
-                                Connection
-                              </Link>
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem asChild>
+                            <Link
+                              to={addAnotherUrl}
+                              className="flex flex-1 items-center gap-2"
+                            >
+                              <PlusIcon className="size-4" /> Add Another
+                              Connection
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <div
                               className="flex items-center gap-2"
@@ -349,7 +368,9 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
             <>
               {appStoreApp && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {!!appStoreApp?.description && (
                   <AboutAppCard appStoreApp={appStoreApp} />
+                )}
                   <AppLinksCard appStoreApp={appStoreApp} />
                 </div>
               )}

@@ -7,13 +7,13 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
@@ -21,15 +21,15 @@ import { Label } from "src/components/ui/label";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { createApp } from "src/requests/createApp";
 import {
-  AppPermissions,
-  BudgetRenewalType,
-  CreateAppRequest,
-  CreateAppResponse,
-  Nip47NotificationType,
-  Nip47RequestMethod,
-  Scope,
-  WalletCapabilities,
-  validBudgetRenewals,
+    AppPermissions,
+    BudgetRenewalType,
+    CreateAppRequest,
+    CreateAppResponse,
+    Nip47NotificationType,
+    Nip47RequestMethod,
+    Scope,
+    WalletCapabilities,
+    validBudgetRenewals,
 } from "src/types";
 
 import AppHeader from "src/components/AppHeader";
@@ -39,8 +39,8 @@ import { defineStepper } from "src/components/stepper";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Input } from "src/components/ui/input";
 import {
-  DEFAULT_APP_BUDGET_LOKI,
-  DEFAULT_APP_BUDGET_RENEWAL
+    DEFAULT_APP_BUDGET_LOKI,
+    DEFAULT_APP_BUDGET_RENEWAL
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useAppLogo } from "src/hooks/useAppLogo";
@@ -269,7 +269,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         returnTo: returnTo,
         isolated: permissions.isolated,
         metadata: {
-          app_store_app_id: appStoreApp?.id,
+          app_store_app_id: appStoreApp?.id || (appId ? appId : undefined),
         },
         unlockPassword,
       };
