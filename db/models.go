@@ -66,7 +66,7 @@ type ResponseEvent struct {
 type Transaction struct {
 	ID              uint
 	AppId           *uint
-	App             *App
+	App             *App `gorm:"constraint:OnDelete:CASCADE;"`
 	RequestEventId  *uint
 	RequestEvent    *RequestEvent
 	Type            string
