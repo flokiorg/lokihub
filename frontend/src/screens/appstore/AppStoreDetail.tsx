@@ -4,7 +4,7 @@ import { AboutAppCard } from "src/components/connections/AboutAppCard";
 import { AppLinksCard } from "src/components/connections/AppLinksCard";
 import { AppStoreDetailHeader } from "src/components/connections/AppStoreDetailHeader";
 import {
-    AppStoreApp
+  AppStoreApp
 } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
@@ -56,29 +56,6 @@ function AppStoreDetailInternal({ appStoreApp }: { appStoreApp: AppStoreApp }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <AboutAppCard appStoreApp={appStoreApp} />
         <AppLinksCard appStoreApp={appStoreApp} />
-        {/* <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">How to Connect</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {appStoreApp.guide || (
-              <ul className="list-inside list-decimal">
-                <li>Install the app</li>
-                <li>
-                  Click{" "}
-                  <Link to={`/apps/new?app=${appStoreId}`}>
-                    <Button variant="link" className="px-0">
-                      Connect to {appStoreApp.title}
-                    </Button>
-                  </Link>
-                </li>
-                <li>
-                  Open the Loki Go app on your mobile and scan the QR code
-                </li>
-              </ul>
-            )}
-          </CardContent>
-        </Card> */}
       </div>
     </div>
   );
