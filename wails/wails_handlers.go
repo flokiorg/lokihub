@@ -40,7 +40,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	ctx := app.ctx
 
 	appv2Regex := regexp.MustCompile(
-		`/api/apps/([0-9a-f]+)`,
+		`/api/apps/([0-9]+)`,
 	)
 
 	appv2Match := appv2Regex.FindStringSubmatch(route)
