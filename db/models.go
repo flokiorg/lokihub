@@ -19,7 +19,7 @@ type App struct {
 	ID           uint
 	Name         string `validate:"required"`
 	Description  string
-	AppPubkey    string `validate:"required" gorm:"unique;not null"`
+	AppPubkey    string `validate:"required" gorm:"not null"`
 	WalletPubkey *string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

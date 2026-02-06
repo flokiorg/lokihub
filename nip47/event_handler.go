@@ -69,14 +69,27 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			Msg("Failed to save nostr event")
 		return
 	}
+	// check for a p tag
+	var walletPubkey string
+	pTag := event.Tags.GetFirst([]string{"p", ""})
+	if pTag != nil {
+		walletPubkey = (*pTag)[1]
+	}
+
 	app := db.App{}
-	err = svc.db.First(&app, &db.App{
-		AppPubkey: event.PubKey,
-	}).Error
+
+	query := svc.db.Where("app_pubkey = ?", event.PubKey)
+
+	if walletPubkey != "" {
+		query = query.Where("wallet_pubkey = ?", walletPubkey)
+	}
+
+	err = query.First(&app).Error
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("appPubkey", event.PubKey).
-			Msg("Failed to find app for nostr pubkey")
+			Str("walletPubkey", walletPubkey).
+			Msg("Failed to find app for nostr pubkey and wallet pubkey")
 		return
 	}
 
