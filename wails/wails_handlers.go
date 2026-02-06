@@ -39,43 +39,21 @@ type WailsRequestRouterResponse struct {
 func (app *WailsApp) WailsRequestRouter(route string, method string, body string) WailsRequestRouterResponse {
 	ctx := app.ctx
 
-	appv2Regex := regexp.MustCompile(
-		`/api/apps/([0-9]+)`,
-	)
-
-	appv2Match := appv2Regex.FindStringSubmatch(route)
-
-	switch {
-	case len(appv2Match) > 1:
-		appIdStr := appv2Match[1]
-
-		appId, err := strconv.ParseUint(appIdStr, 10, 64)
-		if err != nil {
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-		}
-
-		dbApp := app.appsSvc.GetAppById(uint(appId))
-		if dbApp == nil {
-			return WailsRequestRouterResponse{Body: nil, Error: "App does not exist"}
-		}
-
-		switch method {
-		case "GET":
-			app := app.api.GetApp(dbApp)
-			return WailsRequestRouterResponse{Body: app, Error: ""}
-		}
-	}
-
 	appRegex := regexp.MustCompile(
-		`/api/apps/([0-9a-f]+)`,
+		`/api/apps/([0-9]+)`,
 	)
 
 	appMatch := appRegex.FindStringSubmatch(route)
 
 	switch {
 	case len(appMatch) > 1:
-		pubkey := appMatch[1]
-		dbApp := app.appsSvc.GetAppByPubkey(pubkey)
+		appIdStr := appMatch[1]
+		appId, err := strconv.ParseUint(appIdStr, 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+
+		dbApp := app.appsSvc.GetAppById(uint(appId))
 		if dbApp == nil {
 			return WailsRequestRouterResponse{Body: nil, Error: "App does not exist"}
 		}

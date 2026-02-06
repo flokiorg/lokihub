@@ -21,6 +21,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/config"
+	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/pkg/appstore"
@@ -1073,7 +1074,13 @@ func (httpSvc *HttpService) appsUpdateHandler(c echo.Context) error {
 		})
 	}
 
-	dbApp := httpSvc.appsSvc.GetAppByPubkey(c.Param("pubkey"))
+	param := c.Param("pubkey")
+	var dbApp *lokidb.App
+	if id, err := strconv.ParseUint(param, 10, 64); err == nil {
+		dbApp = httpSvc.appsSvc.GetAppById(uint(id))
+	} else {
+		dbApp = httpSvc.appsSvc.GetAppByPubkey(param)
+	}
 
 	if dbApp == nil {
 		return c.JSON(http.StatusNotFound, ErrorResponse{
@@ -1114,7 +1121,13 @@ func (httpSvc *HttpService) transfersHandler(c echo.Context) error {
 }
 
 func (httpSvc *HttpService) appsDeleteHandler(c echo.Context) error {
-	dbApp := httpSvc.appsSvc.GetAppByPubkey(c.Param("pubkey"))
+	param := c.Param("pubkey")
+	var dbApp *lokidb.App
+	if id, err := strconv.ParseUint(param, 10, 64); err == nil {
+		dbApp = httpSvc.appsSvc.GetAppById(uint(id))
+	} else {
+		dbApp = httpSvc.appsSvc.GetAppByPubkey(param)
+	}
 	if dbApp == nil {
 		return c.JSON(http.StatusNotFound, ErrorResponse{
 			Message: "App not found",
