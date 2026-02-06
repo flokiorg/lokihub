@@ -184,7 +184,16 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 
 	// JIT Liquidity Check
 	invoiceAmount := amount // Default to requested amount
-	if svc.liquidityManager != nil && lspJitChannelSCID == nil {
+	isInternalTransfer := false
+	if metadata != nil {
+		if val, ok := metadata["internal_transfer"]; ok {
+			if boolVal, ok := val.(bool); ok && boolVal {
+				isInternalTransfer = true
+			}
+		}
+	}
+
+	if svc.liquidityManager != nil && lspJitChannelSCID == nil && !isInternalTransfer {
 		jitHints, err := svc.liquidityManager.EnsureInboundLiquidity(ctx, amount) // Buy for GROSS amount
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to ensure inbound liquidity")

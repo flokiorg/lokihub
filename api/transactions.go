@@ -165,7 +165,7 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 		}
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, nil, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, map[string]interface{}{"internal_transfer": true}, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil)
 
 	if err != nil {
 		return err
