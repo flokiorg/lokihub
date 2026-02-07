@@ -2,23 +2,23 @@ import React from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import {
-  App,
-  AppPermissions,
-  UpdateAppRequest,
-  WalletCapabilities,
+    App,
+    AppPermissions,
+    UpdateAppRequest,
+    WalletCapabilities,
 } from "src/types";
 
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request"; // build the project for this to appear
 
 import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  EllipsisIcon,
-  InfoIcon,
-  PlusIcon,
-  SquarePenIcon,
-  UnplugIcon
+    CheckCircleIcon,
+    ChevronDownIcon,
+    EllipsisIcon,
+    InfoIcon,
+    PlusIcon,
+    SquarePenIcon,
+    UnplugIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import AppAvatar from "src/components/AppAvatar";
@@ -34,33 +34,33 @@ import Loading from "src/components/Loading";
 import Permissions from "src/components/Permissions";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogTitle,
+    AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "src/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import {
-  LOKI_ACCOUNT_APP_NAME
+    LOKI_ACCOUNT_APP_NAME
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
@@ -82,6 +82,7 @@ function AppDetails() {
 
   return (
     <AppInternal
+      key={app.id}
       app={app}
       refetchApp={refetchApp}
       capabilities={capabilities}
