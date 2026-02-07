@@ -1314,10 +1314,10 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@lightz/lightning-tools@^1.0.1":
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/@lightz/lightning-tools/-/lightning-tools-1.0.1.tgz#dad2ba6c49309d83c7bdba4f7fc1fbfcd20748c0"
-  integrity sha512-yU7pFk7Ug8lr+3woPWm8OZLIrznd4vjckIRdnCz9rFF5THtC9W3lgNmTZjdvWMLqtvUcTNpO/b/4NCloJRL5nQ==
+"@lightz/lightning-tools@^1.0.4":
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/@lightz/lightning-tools/-/lightning-tools-1.0.4.tgz#84676fca2092597edb89552d2093bd205bd1c769"
+  integrity sha512-u6x94L8umbnhDjOfM/comFL7nQyGOfdoeJV3+RyC1ToUwnA6/6RoAxf+2nogx1pbYCWGgH0CTGhaxZ4a1GrTGg==
 
 "@napi-rs/wasm-runtime@^1.1.0":
   version "1.1.0"
