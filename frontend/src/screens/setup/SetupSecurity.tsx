@@ -1,7 +1,7 @@
 import {
-  HandCoinsIcon,
-  ShieldAlertIcon,
-  UnlockIcon
+    HandCoinsIcon,
+    ShieldAlertIcon,
+    UnlockIcon
 } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,20 +17,17 @@ import { useInfo } from "src/hooks/useInfo";
 
 export function SetupSecurity() {
   const navigate = useNavigate();
-  const { data: info, isLoading } = useInfo();
+  const { data: info, isLoading } = useInfo(true); // Enable polling to wait for backend
   const [hasConfirmed, setConfirmed] = useState<boolean>(false);
+
+  // Backend is ready when setupCompleted and running are both true
+  const isBackendReady = info?.setupCompleted && info?.running;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isLoading) return; // Prevent action while loading
+    if (isLoading || !isBackendReady) return; // Prevent action while loading or backend not ready
     
-    if (info?.setupCompleted) {
-      navigate("/");
-    } else {
-        // If setup is logically complete (we are here), but info says no, 
-        // force a hard reload to sync state.
-        window.location.href = "/";
-    }
+    navigate("/");
   }
 
   return (
@@ -84,9 +81,9 @@ export function SetupSecurity() {
                 I understand how to secure and recover funds
               </Label>
             </div>
-            <Button className="w-full" disabled={!hasConfirmed || isLoading} type="submit">
-              {isLoading ? <Loading className="w-4 h-4 mr-2" /> : null}
-              Continue
+            <Button className="w-full" disabled={!hasConfirmed || isLoading || !isBackendReady} type="submit">
+              {(isLoading || !isBackendReady) ? <Loading className="w-4 h-4 mr-2" /> : null}
+              {!isBackendReady ? "Starting..." : "Continue"}
             </Button>
           </div>
         </form>

@@ -1,5 +1,6 @@
 import React from "react";
 import { toast } from "sonner";
+import { useSWRConfig } from "swr";
 
 import { App } from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
@@ -7,6 +8,7 @@ import { request } from "src/utils/request";
 
 export function useDeleteApp(app: App, onSuccess?: () => void) {
   const [isDeleting, setDeleting] = React.useState(false);
+  const { mutate } = useSWRConfig();
 
   const deleteApp = React.useCallback(async () => {
     setDeleting(true);
@@ -19,6 +21,13 @@ export function useDeleteApp(app: App, onSuccess?: () => void) {
         },
       });
 
+      // Invalidate all /api/apps cache entries to force refetch
+      await mutate(
+        (key) => typeof key === "string" && key.startsWith("/api/apps"),
+        undefined,
+        { revalidate: true }
+      );
+
       toast("Connection deleted");
 
       if (onSuccess) {
@@ -29,7 +38,7 @@ export function useDeleteApp(app: App, onSuccess?: () => void) {
     } finally {
       setDeleting(false);
     }
-  }, [onSuccess, app]);
+  }, [onSuccess, app, mutate]);
 
   return React.useMemo(
     () => ({ deleteApp, isDeleting }),
