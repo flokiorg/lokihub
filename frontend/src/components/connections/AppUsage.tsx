@@ -1,7 +1,7 @@
 
 import {
-    CircleMinusIcon,
-    CirclePlusIcon
+  CircleMinusIcon,
+  CirclePlusIcon
 } from "lucide-react";
 import React from "react";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -10,10 +10,10 @@ import { IsolatedAppDrawDownDialog } from "src/components/IsolatedAppDrawDownDia
 import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress";
 import { useTransactions } from "src/hooks/useTransactions";
@@ -26,21 +26,35 @@ export function AppUsage({ app }: { app: App }) {
     app.id,
     false,
     100,
-    page
+    page,
+    `${app.updatedAt}-${app.balance}`
   );
   const [allTransactions, setAllTransactions] = React.useState<Transaction[]>(
     []
   );
+  // Track the last page we fetched to detect fresh data vs pagination
+  const [lastFetchedPage, setLastFetchedPage] = React.useState(0);
+
   React.useEffect(() => {
     if (transactionsResponse?.transactions.length) {
-      setAllTransactions((current) =>
-        [...current, ...transactionsResponse.transactions].filter(
-          (v, i, a) => a.findIndex((t) => t.paymentHash === v.paymentHash) === i // remove duplicates
-        )
-      );
-      setPage((current) => current + 1);
+      if (page === 1) {
+        // Fresh fetch (first page) - replace all transactions
+        setAllTransactions(transactionsResponse.transactions);
+      } else {
+        // Pagination - append and deduplicate
+        setAllTransactions((current) =>
+          [...current, ...transactionsResponse.transactions].filter(
+            (v, i, a) => a.findIndex((t) => t.paymentHash === v.paymentHash) === i
+          )
+        );
+      }
+      // Only advance page if we haven't fetched this page yet
+      if (page > lastFetchedPage) {
+        setLastFetchedPage(page);
+        setPage((current) => current + 1);
+      }
     }
-  }, [transactionsResponse?.transactions]);
+  }, [transactionsResponse?.transactions, page, lastFetchedPage]);
 
   const totalSpent = allTransactions
     .filter((tx) => tx.type === "outgoing" && tx.state === "settled")
