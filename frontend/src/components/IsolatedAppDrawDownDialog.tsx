@@ -2,19 +2,20 @@ import React from "react";
 import { toast } from "sonner";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
 } from "src/components/ui/dialog";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { useApp } from "src/hooks/useApp";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
+import { useSWRConfig } from "swr";
 
 type IsolatedAppTopupProps = {
   appId: number;
@@ -25,6 +26,7 @@ export function IsolatedAppDrawDownDialog({
   children,
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
   const { mutate: reloadApp } = useApp(appId);
+  const { mutate } = useSWRConfig();
   const [amountLoki, setAmountLoki] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -43,6 +45,12 @@ export function IsolatedAppDrawDownDialog({
         }),
       });
       await reloadApp();
+      // Invalidate global caches to update other components
+      await mutate(
+        (key) => typeof key === "string" && (key.startsWith("/api/balances") || key.startsWith("/api/transactions")),
+        undefined,
+        { revalidate: true }
+      );
       toast(`Successfully reduced balance by ${+amountLoki} loki`);
       reset();
     } catch (error) {
