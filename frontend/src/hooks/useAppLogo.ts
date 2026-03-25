@@ -1,4 +1,13 @@
+import { useEffect } from "react";
+
 export function useAppLogo(appId?: string) {
-  if (!appId) return undefined;
-  return `/api/appstore/logos/${appId}`;
+  const url = appId ? `/api/appstore/logos/${appId}` : undefined;
+
+  useEffect(() => {
+    if (!url) return;
+    const img = new Image();
+    img.src = url;
+  }, [url]);
+
+  return url;
 }

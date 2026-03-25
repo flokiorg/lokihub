@@ -371,8 +371,20 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                           appStoreApp && (
                             <InstallApp appStoreApp={appStoreApp} />
                           ),
-                        configure: () => (
-                          <div className="flex flex-col gap-4">
+                        configure: () => {
+                          if (pubkey && createAppResponse) {
+                            return (
+                              <div className="flex flex-col items-center justify-center p-8 gap-4">
+                                <div className="flex flex-row items-center gap-2 text-sm z-10">
+                                  <Loading className="size-4" />
+                                  <p className="text-muted-foreground font-medium">Waiting for app to connect...</p>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-4">
                             <SuperuserConfirmPasswordDialog
                               open={showSuperuserConfirmPasswordDialog}
                               setOpen={setShowSuperuserConfirmPasswordDialog}
@@ -447,7 +459,8 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                               </p>
                             )}
                           </div>
-                        ),
+                          );
+                        },
                         finalize: () =>
                           createAppResponse && (
                             <div className="pl-8 max-w-md">

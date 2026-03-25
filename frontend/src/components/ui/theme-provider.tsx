@@ -39,7 +39,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = "default",
-  defaultDarkMode = "system",
+  defaultDarkMode = "dark",
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {

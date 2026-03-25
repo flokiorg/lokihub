@@ -91,9 +91,8 @@ export const appStoreApps: AppStoreApp[] = (
 // .sort((a, b) => (a.title.toUpperCase() > b.title.toUpperCase() ? 1 : -1));
 
 export const getAppStoreApp = (app: App) => {
+  if (!app.metadata?.app_store_app_id) return undefined;
   return appStoreApps.find(
-    (suggestedApp) =>
-      suggestedApp.id === (app.metadata?.app_store_app_id ?? "") ||
-      app.name.includes(suggestedApp.title)
+    (suggestedApp) => suggestedApp.id === app.metadata?.app_store_app_id
   );
 };

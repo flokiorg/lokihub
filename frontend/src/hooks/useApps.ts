@@ -28,6 +28,8 @@ export function useApps(
 }
 
 export function useAppsForAppStoreApp(appStoreApp: AppStoreApp | undefined) {
+  const isStoreApp = !!appStoreApp?.id;
+
   const { data: connectedAppsByAppStoreId } = useApps(
     undefined,
     undefined,
@@ -35,27 +37,22 @@ export function useAppsForAppStoreApp(appStoreApp: AppStoreApp | undefined) {
       appStoreAppId: appStoreApp?.id,
     },
     undefined,
-    !!appStoreApp
-  );
-  const { data: connectedAppsByAppName } = useApps(
-    undefined,
-    undefined,
-    {
-      name: appStoreApp?.title,
-    },
-    undefined,
-    !!appStoreApp
+    isStoreApp
   );
 
   const connectedApps = React.useMemo(
-    () =>
-      connectedAppsByAppStoreId?.apps && connectedAppsByAppName?.apps
-        ? [
-            ...connectedAppsByAppStoreId.apps,
-            ...connectedAppsByAppName.apps,
-          ].filter((v, i, a) => a.findIndex((value) => value.id === v.id) === i)
-        : undefined,
-    [connectedAppsByAppName, connectedAppsByAppStoreId]
+    () => {
+      if (!isStoreApp) {
+        return undefined;
+      }
+      
+      return connectedAppsByAppStoreId?.apps
+        ? [...connectedAppsByAppStoreId.apps].filter(
+            (v, i, a) => a.findIndex((value) => value.id === v.id) === i
+          )
+        : undefined;
+    },
+    [connectedAppsByAppStoreId, isStoreApp]
   );
   return connectedApps;
 }

@@ -4,6 +4,7 @@ import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Badge } from "src/components/ui/badge";
+import { useAppLogo } from "src/hooks/useAppLogo";
 import { Button } from "src/components/ui/button";
 import {
     Card,
@@ -27,6 +28,8 @@ export function ConnectAppCard({
 }) {
   const [timeout, setTimeout] = useState(false);
   const [isQRCodeVisible, setIsQRCodeVisible] = useState(false);
+  const logoSrc = useAppLogo(appStoreApp?.id);
+
   const copy = () => {
     copyToClipboard(pairingUri);
   };
@@ -51,14 +54,14 @@ export function ConnectAppCard({
               <Loading className="size-4" />
               <p>Waiting for app to connect</p>
             </div>
-            {timeout && (
+            {timeout ? (
               <div className="text-sm flex flex-col gap-2 items-center text-center">
                 Connecting is taking longer than usual.
                 <LinkButton to={`/apps/${app?.id}`} variant="secondary">
                   Continue anyway
                 </LinkButton>
               </div>
-            )}
+            ) : null}
           </>
         ) : (
           <Badge variant="positive">
@@ -66,21 +69,21 @@ export function ConnectAppCard({
             App connected
           </Badge>
         )}
-        {!appStoreApp?.hideConnectionQr && (
+        {!appStoreApp?.hideConnectionQr ? (
           <div className="relative">
             <div
-              className={cn(!isQRCodeVisible && "blur-md cursor-pointer")}
+              className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
               onClick={() => setIsQRCodeVisible(true)}
             >
               <QRCode value={pairingUri} withIcon={false} />
-              {appStoreApp && (
+              {logoSrc ? (
                 <img
-                  src={appStoreApp.logo}
+                  src={logoSrc}
                   className="absolute w-12 h-12 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-muted p-1 rounded-xl"
                 />
-              )}
+              ) : null}
             </div>
-            {!isQRCodeVisible && (
+            {!isQRCodeVisible ? (
               <Button
                 onClick={() => {
                   setIsQRCodeVisible(true);
@@ -90,9 +93,9 @@ export function ConnectAppCard({
                 <EyeIcon />
                 Reveal QR
               </Button>
-            )}
+            ) : null}
           </div>
-        )}
+        ) : null}
         <div className="flex gap-2">
           <Button onClick={copy} variant="outline">
             <CopyIcon />

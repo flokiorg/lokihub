@@ -11,9 +11,15 @@ The application can run in two modes:
 
 Ideally the app runs 24/7 (on a node, VPS or always-online desktop/laptop machine) so it can be connected to a lightning address and receive online payments.
 
-## Self Hosted
- 
-Go to the [Deploy it yourself](#deploy-it-yourself) section below.
+## Documentation
+
+Full documentation for Lokihub is available at **[docs.flokicoin.org/lokihub](https://docs.flokicoin.org/lokihub)**. The documentation covers:
+
+- **Downloads** — [Get the latest version of Lokihub](https://docs.flokicoin.org/lokihub/downloads) for your platform
+- **Setup & Installation** — Connecting to your FLND node (integrated within tWallet)
+- **Features** — Managing Lightning funds, creating sub-wallets, and controlling channels
+- **App Connections** — Connecting external applications via [Nostr WalletConnect (NWC)](https://nwc.dev) 
+- **Services** — Configuring your LSP, Nostr relay, and block explorer
 
 
 ## Development
