@@ -59,7 +59,8 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 			// _journal_mode: enables write-ahead log so that your reads do not block writes and vice-versa.
 			// _synchronous: sqlite will sync less frequently and be more performant, still safe to use because of the enabled WAL mode
 			// _cache_size: 20MB memory cache
-			sqliteURI = sqliteURI + "?_txlock=immediate&_foreign_keys=1&_auto_vacuum=1&_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-20000"
+			// _pragma=temp_store=MEMORY: set the temp_store setting to memory (required for modernc.org/sqlite)
+			sqliteURI = sqliteURI + "?_txlock=immediate&_foreign_keys=1&_auto_vacuum=1&_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-20000&_pragma=temp_store=MEMORY"
 		}
 
 		driverName := sqlite_wrapper.Sqlite3WrapperDriverName
