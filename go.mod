@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/flokiorg/go-flokicoin v0.25.12-alpha
+	github.com/flokiorg/go-flokicoin v0.25.13-alpha
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/nbd-wtf/go-nostr v0.52.3
@@ -29,7 +29,7 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/flokiorg/flnd v0.1.18-beta
+	github.com/flokiorg/flnd v0.1.20-beta
 	github.com/flokiorg/flndecodepay v1.0.0
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/google/uuid v1.6.0
@@ -72,10 +72,10 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.33.0 // indirect
-	github.com/flokiorg/flokicoin-neutrino v0.16.4-beta // indirect
+	github.com/flokiorg/flokicoin-neutrino v0.16.6-beta // indirect
 	github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
-	github.com/flokiorg/walletd v0.1.6-beta // indirect
-	github.com/frankban/quicktest v1.14.0 // indirect
+	github.com/flokiorg/lightning-onion v1.0.1-alpha // indirect
+	github.com/flokiorg/walletd v0.1.8-beta // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-macaroon-bakery/macaroonpb v1.0.0 // indirect
@@ -83,14 +83,12 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0 // indirect
@@ -124,7 +122,6 @@ require (
 	github.com/leaanthony/u v1.1.1 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20191113021534-d20a764486bf // indirect
-	github.com/lightningnetwork/lightning-onion v1.2.1-0.20240815225420-8b40adf04ab9 // indirect
 	github.com/lightningnetwork/lnd/clock v1.1.1 // indirect
 	github.com/lightningnetwork/lnd/fn/v2 v2.0.8 // indirect
 	github.com/lightningnetwork/lnd/queue v1.1.1 // indirect
@@ -142,7 +139,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/onsi/gomega v1.36.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.2.8 // indirect
@@ -215,7 +211,6 @@ require (
 	gopkg.in/macaroon-bakery.v2 v2.3.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
-	gotest.tools/v3 v3.5.2 // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
