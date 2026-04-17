@@ -15,7 +15,7 @@ func init() {
 	// we execute the PRAGMA statement in the sqlite3's connection hook.
 	sql.Register(Sqlite3WrapperDriverName, &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-			_, err := conn.Exec("PRAGMA temp_store = MEMORY", nil)
+			_, err := conn.Execute("PRAGMA temp_store = MEMORY", nil)
 			return err
 		},
 	})
