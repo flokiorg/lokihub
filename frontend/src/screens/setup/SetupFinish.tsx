@@ -80,7 +80,7 @@ export function SetupFinish() {
         const nodeInfo = useSetupStore.getState().nodeInfo;
         let step = "selection";
         if (nodeInfo.backendType === "FLND") {
-           if (nodeInfo.lndAddress) {
+           if (nodeInfo.flndAddress) {
              step = "form";
            }
         }
@@ -147,9 +147,9 @@ const finishSetup = async (
       } else {
         // Setup Manual (Advanced)
         // Ensure values are strings not undefined
-        const lndAddress = nodeInfo.lndAddress || "";
-        const lndCertHex = nodeInfo.lndCertHex || "";
-        const lndMacaroonHex = nodeInfo.lndMacaroonHex || "";
+        const flndAddress = nodeInfo.flndAddress || "";
+        const flndCertHex = nodeInfo.flndCertHex || "";
+        const flndMacaroonHex = nodeInfo.flndMacaroonHex || "";
         
         await request("/api/setup/manual", {
             method: "POST",
@@ -158,9 +158,9 @@ const finishSetup = async (
             },
             body: JSON.stringify({
                 unlockPassword,
-                lndAddress,
-                lndCertHex,
-                lndMacaroonHex,
+                flndAddress,
+                flndCertHex,
+                flndMacaroonHex,
                 lokihubServicesURL: nodeInfo.lokihubServicesURL,
                 swapServiceUrl: nodeInfo.swapServiceUrl,
                 relay: nodeInfo.relay,

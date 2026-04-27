@@ -17,7 +17,7 @@ import { SetupLayout } from "../SetupLayout";
 
 type Step = "selection" | "form";
 
-export function LNDForm() {
+export function FLNDForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const setupStore = useSetupStore();
@@ -26,14 +26,14 @@ export function LNDForm() {
   const step: Step = location.state?.step || "selection";
   const [isHovered, setIsHovered] = useState<string | null>(null);
 
-  const [lndAddress, setLndAddress] = React.useState<string>(
-    setupStore.nodeInfo.lndAddress || ""
+  const [flndAddress, setFlndAddress] = React.useState<string>(
+    setupStore.nodeInfo.flndAddress || ""
   );
-  const [lndCertHex, setLndCertHex] = React.useState<string>(
-    setupStore.nodeInfo.lndCertHex || ""
+  const [flndCertHex, setFlndCertHex] = React.useState<string>(
+    setupStore.nodeInfo.flndCertHex || ""
   );
-  const [lndMacaroonHex, setLndMacaroonHex] = React.useState<string>(
-    setupStore.nodeInfo.lndMacaroonHex || ""
+  const [flndMacaroonHex, setFlndMacaroonHex] = React.useState<string>(
+    setupStore.nodeInfo.flndMacaroonHex || ""
   );
 
   const [setupStatus, setSetupStatus] = useState<{ active: boolean } | null>(
@@ -73,9 +73,9 @@ export function LNDForm() {
   function onAdvancedSubmit(e: React.FormEvent) {
     e.preventDefault();
     handleSubmit({
-      lndAddress: lndAddress.replace(/\s/g, ""),
-      lndCertHex: lndCertHex.replace(/\s/g, ""),
-      lndMacaroonHex: lndMacaroonHex.replace(/\s/g, ""),
+      flndAddress: flndAddress.replace(/\s/g, ""),
+      flndCertHex: flndCertHex.replace(/\s/g, ""),
+      flndMacaroonHex: flndMacaroonHex.replace(/\s/g, ""),
       autoConnect: false,
     });
   }
@@ -83,9 +83,9 @@ export function LNDForm() {
   const handleDefaultConnect = () => {
     handleSubmit({
       autoConnect: true,
-      lndAddress: undefined,
-      lndCertHex: undefined,
-      lndMacaroonHex: undefined,
+      flndAddress: undefined,
+      flndCertHex: undefined,
+      flndMacaroonHex: undefined,
     });
   };
 
@@ -171,41 +171,41 @@ export function LNDForm() {
           />
 
           <div className="grid gap-1.5">
-            <Label htmlFor="lnd-address">FLND Address (GRPC)</Label>
+            <Label htmlFor="flnd-address">FLND Address (GRPC)</Label>
             <Input
               required
-              name="lnd-address"
-              onChange={(e) => setLndAddress(e.target.value)}
-              value={lndAddress}
-              id="lnd-address"
+              name="flnd-address"
+              onChange={(e) => setFlndAddress(e.target.value)}
+              value={flndAddress}
+              id="flnd-address"
               autoComplete="off"
             />
           </div>
           
           <div className="grid gap-1.5">
-            <Label htmlFor="lnd-macaroon-hex">Admin Macaroon (Hex)</Label>
+            <Label htmlFor="flnd-macaroon-hex">Admin Macaroon (Hex)</Label>
             <Input
               required
-              name="lnd-macaroon-hex"
-              onChange={(e) => setLndMacaroonHex(e.target.value)}
-              value={lndMacaroonHex}
+              name="flnd-macaroon-hex"
+              onChange={(e) => setFlndMacaroonHex(e.target.value)}
+              value={flndMacaroonHex}
               type="text"
-              id="lnd-macaroon-hex"
+              id="flnd-macaroon-hex"
               autoComplete="off"
             />
           </div>
           
           <div className="grid gap-1.5">
-            <Label htmlFor="lnd-cert-hex">TLS Certificate (Hex) (optional)</Label>
+            <Label htmlFor="flnd-cert-hex">TLS Certificate (Hex) (optional)</Label>
             <Input
-              name="lnd-cert-hex"
-              onChange={(e) => setLndCertHex(e.target.value)}
-              value={lndCertHex}
+              name="flnd-cert-hex"
+              onChange={(e) => setFlndCertHex(e.target.value)}
+              value={flndCertHex}
               type="text"
-              id="lnd-cert-hex"
+              id="flnd-cert-hex"
               autoComplete="off"
             />
-            {!lndCertHex && (
+            {!flndCertHex && (
               <div className="flex flex-row gap-2 items-center justify-start text-sm text-muted-foreground mt-2">
                 <InfoIcon className="h-4 w-4 shrink-0" />
                 Skipping TLS certificate is not recommended as it may expose your

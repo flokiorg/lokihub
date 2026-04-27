@@ -49,7 +49,7 @@ import { SetupFinish } from "src/screens/setup/SetupFinish";
 import { SetupPassword } from "src/screens/setup/SetupPassword";
 import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
-import { LNDForm } from "src/screens/setup/node/LNDForm";
+import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { NewSubwallet } from "src/screens/subwallets/NewSubwallet";
 import { SubwalletCreated } from "src/screens/subwallets/SubwalletCreated";
 import { SubwalletList } from "src/screens/subwallets/SubwalletList";
@@ -461,7 +461,7 @@ const routes: RouteObject[] = [
             children: [
               {
                 index: true,
-                element: <LNDForm />,
+                element: <FLNDForm />,
               },
             ],
           },

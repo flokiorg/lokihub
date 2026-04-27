@@ -440,9 +440,9 @@ export type SetupNodeInfo = Partial<{
   mnemonic?: string;
   nextBackupReminder?: string;
 
-  lndAddress?: string;
-  lndCertHex?: string;
-  lndMacaroonHex?: string;
+  flndAddress?: string;
+  flndCertHex?: string;
+  flndMacaroonHex?: string;
 
   autoConnect?: boolean;
   // customConfig removed
