@@ -30,7 +30,7 @@ import (
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lnclient/lnd/wrapper"
+	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
@@ -159,7 +159,7 @@ func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error
 		}, nil
 	}
 
-	err = api.verifyLNDConnection(ctx, address, certHex, macaroonHex)
+	err = api.verifyFLNDConnection(ctx, address, certHex, macaroonHex)
 	active := err == nil
 
 	return &SetupStatusResponse{
@@ -1309,11 +1309,11 @@ func (api *api) SetNodeAlias(ctx context.Context, nodeAlias string) error {
 		return err
 	}
 
-	// Also implement this on the LND node
+	// Also implement this on the FLND node
 	if api.svc.GetLNClient() != nil {
 		err = api.svc.GetLNClient().SetNodeAlias(ctx, nodeAlias)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to set node alias on LND node")
+			logger.Logger.Error().Err(err).Msg("Failed to set node alias on FLND node")
 			return err
 		}
 	}
@@ -1447,8 +1447,8 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	if setupRequest.AutoConnect || setupRequest.CustomConfig != nil {
 		var customDataDir string
 		// Default address, but if custom config has rpcListen (port), we might need to adjust.
-		// However, user requirement says 'Uses the parsed datadir to find Macaroon/Cert, uses rpc.lnd for port'
-		// Note from plan: 'Backend Logic: Uses datadir to find Macaroon/Cert, uses rpc.lnd for port (combined with localhost)'
+		// However, user requirement says 'Uses the parsed datadir to find Macaroon/Cert, uses rpc.flnd for port'
+		// Note from plan: 'Backend Logic: Uses datadir to find Macaroon/Cert, uses rpc.flnd for port (combined with localhost)'
 
 		if setupRequest.CustomConfig != nil {
 			customDataDir = setupRequest.CustomConfig.DataDir
@@ -1475,38 +1475,38 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 			}
 		}
 
-		setupRequest.LNDAddress = address
-		setupRequest.LNDMacaroonHex = macaroonHex
-		setupRequest.LNDCertHex = certHex
-		setupRequest.LNBackendType = "FLND"
+		setupRequest.FLNDAddress = address
+		setupRequest.FLNDMacaroonHex = macaroonHex
+		setupRequest.FLNDCertHex = certHex
+		setupRequest.LNBackendType = config.FLNDBackendType
 
 		if customDataDir != "" {
-			err = api.cfg.SetUpdate("LNDDataDir", customDataDir, setupRequest.UnlockPassword)
+			err = api.cfg.SetUpdate("FLNDDataDir", customDataDir, setupRequest.UnlockPassword)
 			if err != nil {
-				logger.Logger.Error().Err(err).Msg("Failed to save lnd data dir")
+				logger.Logger.Error().Err(err).Msg("Failed to save FLND data dir")
 				return err
 			}
 		}
 	}
 
-	if setupRequest.LNDAddress != "" {
-		err = api.cfg.SetUpdate("LNDAddress", setupRequest.LNDAddress, setupRequest.UnlockPassword)
+	if setupRequest.FLNDAddress != "" {
+		err = api.cfg.SetUpdate("FLNDAddress", setupRequest.FLNDAddress, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save lnd address")
+			logger.Logger.Error().Err(err).Msg("Failed to save FLND address")
 			return err
 		}
 	}
-	if setupRequest.LNDCertHex != "" {
-		err = api.cfg.SetUpdate("LNDCertHex", setupRequest.LNDCertHex, setupRequest.UnlockPassword)
+	if setupRequest.FLNDCertHex != "" {
+		err = api.cfg.SetUpdate("FLNDCertHex", setupRequest.FLNDCertHex, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save lnd cert hex")
+			logger.Logger.Error().Err(err).Msg("Failed to save FLND cert hex")
 			return err
 		}
 	}
-	if setupRequest.LNDMacaroonHex != "" {
-		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.LNDMacaroonHex, setupRequest.UnlockPassword)
+	if setupRequest.FLNDMacaroonHex != "" {
+		err = api.cfg.SetUpdate("FLNDMacaroonHex", setupRequest.FLNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save lnd macaroon hex")
+			logger.Logger.Error().Err(err).Msg("Failed to save FLND macaroon hex")
 			return err
 		}
 	}
@@ -1897,23 +1897,23 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	// 2. Override Address logic removed (always use discovered default)
 
 	// 3. Verify Connection
-	if err := api.verifyLNDConnection(ctx, address, certHex, macaroonHex); err != nil {
+	if err := api.verifyFLNDConnection(ctx, address, certHex, macaroonHex); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to verify FLND connection")
 		return fmt.Errorf("failed to verify connection: %w", err)
 	}
 
 	// 4. Save Config
-	if err := api.cfg.SetUpdate("LNDAddress", address, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDAddress", address, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("LNDCertHex", certHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDCertHex", certHex, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("LNDMacaroonHex", macaroonHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDMacaroonHex", macaroonHex, req.UnlockPassword); err != nil {
 		return err
 	}
 	// Set Backend Type last
-	if err := api.cfg.SetUpdate("LNBackendType", "FLND", ""); err != nil {
+	if err := api.cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""); err != nil {
 		return err
 	}
 
@@ -2008,23 +2008,23 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	// 1. Verify Connection
-	if err := api.verifyLNDConnection(ctx, req.LNDAddress, req.LNDCertHex, req.LNDMacaroonHex); err != nil {
+	if err := api.verifyFLNDConnection(ctx, req.FLNDAddress, req.FLNDCertHex, req.FLNDMacaroonHex); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to verify FLND connection")
 		return fmt.Errorf("failed to verify connection: %w", err)
 	}
 
 	// 2. Save Config
-	if err := api.cfg.SetUpdate("LNDAddress", req.LNDAddress, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDAddress", req.FLNDAddress, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("LNDCertHex", req.LNDCertHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDCertHex", req.FLNDCertHex, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("LNDMacaroonHex", req.LNDMacaroonHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("FLNDMacaroonHex", req.FLNDMacaroonHex, req.UnlockPassword); err != nil {
 		return err
 	}
 	// Set Backend Type last
-	if err := api.cfg.SetUpdate("LNBackendType", "FLND", ""); err != nil {
+	if err := api.cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""); err != nil {
 		return err
 	}
 
@@ -2093,12 +2093,12 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	return nil
 }
 
-// verifyLNDConnection attempts to connect to FLND with retries to ensure credentials are valid
-func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macaroonHex string) error {
+// verifyFLNDConnection attempts to connect to FLND with retries to ensure credentials are valid
+func (api *api) verifyFLNDConnection(ctx context.Context, address, certHex, macaroonHex string) error {
 	logger.Logger.Info().Msg("Verifying FLND connection...")
 
 	// Using wrapper directly to avoid main app wrapper logic
-	lndClient, err := wrapper.NewLNDclient(wrapper.LNDoptions{
+	flndClient, err := wrapper.NewFLNDclient(wrapper.FLNDoptions{
 		Address:     address,
 		CertHex:     certHex,
 		MacaroonHex: macaroonHex,
@@ -2106,7 +2106,7 @@ func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macar
 	if err != nil {
 		return err
 	}
-	defer lndClient.Close()
+	defer flndClient.Close()
 
 	// Retry 3 times
 	var lastErr error
@@ -2116,7 +2116,7 @@ func (api *api) verifyLNDConnection(ctx context.Context, address, certHex, macar
 		}
 
 		// Try GetInfo
-		_, err := lndClient.GetInfo(ctx, &lnrpc.GetInfoRequest{})
+		_, err := flndClient.GetInfo(ctx, &lnrpc.GetInfoRequest{})
 		if err == nil {
 			return nil
 		}

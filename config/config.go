@@ -62,39 +62,41 @@ func (cfg *config) init(env *AppConfig) error {
 	}
 
 	// FLND specific to support env variables
-	if cfg.Env.LNDAddress != "" {
-		err := cfg.SetUpdate("LNDAddress", cfg.Env.LNDAddress, "")
+	if cfg.Env.FLNDAddress != "" {
+		err := cfg.SetUpdate("FLNDAddress", cfg.Env.FLNDAddress, "")
 		if err != nil {
 			return err
 		}
 	}
-	if cfg.Env.LNDCertFile != "" {
-		certBytes, err := os.ReadFile(cfg.Env.LNDCertFile)
+
+	if cfg.Env.FLNDCertFile != "" {
+		certBytes, err := os.ReadFile(cfg.Env.FLNDCertFile)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to read FLND cert file")
 			return err
 		}
 		certHex := hex.EncodeToString(certBytes)
-		err = cfg.SetUpdate("LNDCertHex", certHex, "")
+		err = cfg.SetUpdate("FLNDCertHex", certHex, "")
 		if err != nil {
 			return err
 		}
 	} else {
-		// If no LNDCertFile is provided, clear any stored certificate
+		// If no FLNDCertFile is provided, clear any stored certificate
 		// hex value so that no certificate is used for TLS verification.
-		err := cfg.SetUpdate("LNDCertHex", "", "")
+		err := cfg.SetUpdate("FLNDCertHex", "", "")
 		if err != nil {
 			return err
 		}
 	}
-	if cfg.Env.LNDMacaroonFile != "" {
-		macBytes, err := os.ReadFile(cfg.Env.LNDMacaroonFile)
+
+	if cfg.Env.FLNDMacaroonFile != "" {
+		macBytes, err := os.ReadFile(cfg.Env.FLNDMacaroonFile)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to read FLND macaroon file")
 			return err
 		}
 		macHex := hex.EncodeToString(macBytes)
-		err = cfg.SetUpdate("LNDMacaroonHex", macHex, "")
+		err = cfg.SetUpdate("FLNDMacaroonHex", macHex, "")
 		if err != nil {
 			return err
 		}

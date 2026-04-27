@@ -276,11 +276,11 @@ type SetupRequest struct {
 	CustomConfig *CustomConfig `json:"customConfig"`
 
 	// FLND fields
-	LNDAddress      string `json:"lndAddress"`
-	LNDCertFile     string `json:"lndCertFile"`
-	LNDMacaroonFile string `json:"lndMacaroonFile"`
-	LNDCertHex      string `json:"lndCertHex"`
-	LNDMacaroonHex  string `json:"lndMacaroonHex"`
+	FLNDAddress      string `json:"flndAddress"`
+	FLNDCertFile     string `json:"flndCertFile"`
+	FLNDMacaroonFile string `json:"flndMacaroonFile"`
+	FLNDCertHex      string `json:"flndCertHex"`
+	FLNDMacaroonHex  string `json:"flndMacaroonHex"`
 
 	LokihubServicesURL    string `json:"lokihubServicesURL"`
 	SwapServiceUrl        string `json:"swapServiceUrl"`
@@ -306,9 +306,9 @@ type SetupLocalRequest struct {
 
 type SetupManualRequest struct {
 	UnlockPassword        string            `json:"unlockPassword"`
-	LNDAddress            string            `json:"lndAddress"`
-	LNDCertHex            string            `json:"lndCertHex"`
-	LNDMacaroonHex        string            `json:"lndMacaroonHex"`
+	FLNDAddress           string            `json:"flndAddress"`
+	FLNDCertHex           string            `json:"flndCertHex"`
+	FLNDMacaroonHex       string            `json:"flndMacaroonHex"`
 	LokihubServicesURL    string            `json:"lokihubServicesURL"`
 	SwapServiceUrl        string            `json:"swapServiceUrl"`
 	Relay                 string            `json:"relay"`

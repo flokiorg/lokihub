@@ -81,7 +81,7 @@ func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 	}
 
 	// Initialize basic components
-	t := transport.NewLNDTransport(cfg.LNClient)
+	t := transport.NewFLNDTransport(cfg.LNClient)
 	eq := events.NewEventQueue(100) // Buffer size 100
 
 	m := &LiquidityManager{
@@ -998,7 +998,7 @@ func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 				respond(req.ID, true, true)
 			} else {
 				logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
-				// Accept normally (LND default validation)
+				// Accept normally (FLND default validation)
 				respond(req.ID, true, false)
 			}
 		}

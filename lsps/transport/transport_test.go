@@ -149,9 +149,9 @@ func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
 
 // Tests
 
-func TestLNDTransport_SendCustomMessage(t *testing.T) {
+func TestFLNDTransport_SendCustomMessage(t *testing.T) {
 	mock := newMockLNClient()
-	transport := NewLNDTransport(mock)
+	transport := NewFLNDTransport(mock)
 
 	ctx := context.Background()
 	peerPubkey := "03abcdef"
@@ -179,9 +179,9 @@ func TestLNDTransport_SendCustomMessage(t *testing.T) {
 	}
 }
 
-func TestLNDTransport_SubscribeCustomMessages(t *testing.T) {
+func TestFLNDTransport_SubscribeCustomMessages(t *testing.T) {
 	mock := newMockLNClient()
-	transport := NewLNDTransport(mock)
+	transport := NewFLNDTransport(mock)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

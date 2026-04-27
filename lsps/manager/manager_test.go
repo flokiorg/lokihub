@@ -169,7 +169,7 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	m := &LiquidityManager{
 		cfg:        cfg,
-		transport:  transport.NewLNDTransport(mockLN),
+		transport:  transport.NewFLNDTransport(mockLN),
 		eventQueue: events.NewEventQueue(10),
 		listeners:  make(map[string]chan events.Event),
 	}
@@ -276,7 +276,7 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	req4 := lnclient.ChannelAcceptRequest{
 		ID: "04",
-		// Request comes in lowercase usually from LND (hex encoded), but strictly checking if handle logic normalizes request too
+		// Request comes in lowercase usually from FLND (hex encoded), but strictly checking if handle logic normalizes request too
 		NodePubkey: strings.ToLower(mixedCasePubkey),
 		Capacity:   100000,
 	}

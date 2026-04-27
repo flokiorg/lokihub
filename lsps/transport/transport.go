@@ -31,20 +31,20 @@ type Transport interface {
 	MessageReceiver
 }
 
-// LNDTransport implements Transport using an LNClient
-type LNDTransport struct {
+// FLNDTransport implements Transport using an LNClient
+type FLNDTransport struct {
 	lnClient lnclient.LNClient
 }
 
-// NewLNDTransport creates a new LND-based transport
-func NewLNDTransport(lnClient lnclient.LNClient) *LNDTransport {
-	return &LNDTransport{
+// NewFLNDTransport creates a new FLND-based transport
+func NewFLNDTransport(lnClient lnclient.LNClient) *FLNDTransport {
+	return &FLNDTransport{
 		lnClient: lnClient,
 	}
 }
 
 // SendCustomMessage sends a custom message to a peer
-func (t *LNDTransport) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
+func (t *FLNDTransport) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
 	if len(data) > 65535 {
 		return fmt.Errorf("message too large: %d bytes (max 65535)", len(data))
 	}
@@ -52,7 +52,7 @@ func (t *LNDTransport) SendCustomMessage(ctx context.Context, peerPubkey string,
 }
 
 // SubscribeCustomMessages subscribes to incoming custom messages
-func (t *LNDTransport) SubscribeCustomMessages(ctx context.Context) (<-chan CustomMessage, <-chan error, error) {
+func (t *FLNDTransport) SubscribeCustomMessages(ctx context.Context) (<-chan CustomMessage, <-chan error, error) {
 	msgChan, errChan, err := t.lnClient.SubscribeCustomMessages(ctx)
 	if err != nil {
 		return nil, nil, err

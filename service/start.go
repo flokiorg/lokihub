@@ -19,7 +19,7 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/lnclient/lnd"
+	"github.com/flokiorg/lokihub/lnclient/flnd"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
@@ -419,13 +419,13 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		svc.stopLNClient()
 	}()
 
-	logger.Logger.Info().Msgf("Connecting to FLN Backend: %s", config.LNDBackendType)
+	logger.Logger.Info().Msgf("Connecting to FLN Backend: %s", config.FLNDBackendType)
 
-	LNDAddress, _ := svc.cfg.Get("LNDAddress", encryptionKey)
-	LNDCertHex, _ := svc.cfg.Get("LNDCertHex", encryptionKey)
-	LNDMacaroonHex, _ := svc.cfg.Get("LNDMacaroonHex", encryptionKey)
+	FLNDAddress, _ := svc.cfg.Get("FLNDAddress", encryptionKey)
+	FLNDCertHex, _ := svc.cfg.Get("FLNDCertHex", encryptionKey)
+	FLNDMacaroonHex, _ := svc.cfg.Get("FLNDMacaroonHex", encryptionKey)
 
-	lnClient, err := lnd.NewLNDService(ctx, svc.eventPublisher, LNDAddress, LNDCertHex, LNDMacaroonHex)
+	lnClient, err := flnd.NewFLNDService(ctx, svc.eventPublisher, FLNDAddress, FLNDCertHex, FLNDMacaroonHex)
 
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to connect to FLN backend")
@@ -456,7 +456,7 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	svc.eventPublisher.Publish(&events.Event{
 		Event: "nwc_node_started",
 		Properties: map[string]interface{}{
-			"node_type": config.LNDBackendType,
+			"node_type": config.FLNDBackendType,
 		},
 	})
 

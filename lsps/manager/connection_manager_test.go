@@ -191,7 +191,7 @@ func TestMaintainConnections_SyncsCaseInsensitively(t *testing.T) {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
 
-	// Mock LND returning UPPERCASE pubkey (simulating case mismatch)
+	// Mock FLND returning UPPERCASE pubkey (simulating case mismatch)
 	pubkeyUpper := strings.ToUpper(pubkeyLower)
 	mockLN.peers = []lnclient.PeerDetails{
 		{

@@ -131,7 +131,7 @@ func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
 
 func TestClient_ListProtocols(t *testing.T) {
 	mockLN := newMockLNClient()
-	transport := transport.NewLNDTransport(mockLN)
+	transport := transport.NewFLNDTransport(mockLN)
 	eq := events.NewEventQueue(10)
 	client := NewClientHandler(transport, eq)
 

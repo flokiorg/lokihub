@@ -132,7 +132,7 @@ func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
 
 func TestClient_SetWebhook(t *testing.T) {
 	mockLN := newMockLNClient()
-	transport := transport.NewLNDTransport(mockLN)
+	transport := transport.NewFLNDTransport(mockLN)
 	eq := events.NewEventQueue(10)
 	client := NewClientHandler(transport, eq)
 
@@ -196,7 +196,7 @@ func TestClient_SetWebhook(t *testing.T) {
 
 func TestClient_ListWebhooks(t *testing.T) {
 	mockLN := newMockLNClient()
-	transport := transport.NewLNDTransport(mockLN)
+	transport := transport.NewFLNDTransport(mockLN)
 	eq := events.NewEventQueue(10)
 	client := NewClientHandler(transport, eq)
 

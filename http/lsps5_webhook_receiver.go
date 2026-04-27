@@ -418,7 +418,7 @@ func verifyLSPS5Signature(message, signatureStr, expectedPubkey string) (bool, s
 	}
 
 	// Per LSPS5 spec, the message is hashed with double-SHA256
-	// Note: LSPS5 does NOT use the "Lightning Signed Message:" prefix like LND's SignMessage
+	// Note: LSPS5 does NOT use the "Lightning Signed Message:" prefix like FLND's SignMessage
 	// The raw message is hashed directly
 	digest := chainhash.DoubleHashB([]byte(message))
 

@@ -34,7 +34,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 	cfg := &ManagerConfig{LNClient: mockLN, LSPManager: lspManager}
 	m := &LiquidityManager{
 		cfg:             cfg,
-		transport:       transport.NewLNDTransport(mockLN),
+		transport:       transport.NewFLNDTransport(mockLN),
 		eventQueue:      events.NewEventQueue(10),
 		listeners:       make(map[string]chan events.Event),
 		unclaimedEvents: make(map[string]events.Event),

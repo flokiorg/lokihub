@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	decodepay "github.com/flokiorg/flndecodepay"
+	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -330,7 +330,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	}
 
 	payReq = strings.ToLower(payReq)
-	paymentRequest, err := decodepay.Decodepay(payReq)
+	paymentRequest, err := decodepay.Decode(payReq)
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("bolt11", payReq).
@@ -362,8 +362,8 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 
 	var dbTransaction db.Transaction
 
-	paymentAmount := uint64(paymentRequest.MLoki)
-	if amountMloki != nil && paymentRequest.MLoki == 0 {
+	paymentAmount := uint64(paymentRequest.MSat)
+	if amountMloki != nil && paymentRequest.MSat == 0 {
 		paymentAmount = *amountMloki
 	}
 
@@ -432,7 +432,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		Uint64("amount", paymentAmount).
 		Str("description", paymentRequest.Description).
 		Str("description_hash", paymentRequest.DescriptionHash).
-		Int("expiry", paymentRequest.Expiry).
+		Int64("expiry", paymentRequest.Expiry).
 		Bool("self_payment", selfPayment).
 		Interface("metadata", metadata).
 		Msg("Initiating payment")
@@ -1531,7 +1531,7 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 
 // EstimateFee calculates potential fees based on route hints in the invoice
 func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
-	paymentRequest, err := decodepay.Decodepay(payReq)
+	paymentRequest, err := decodepay.Decode(payReq)
 	if err != nil {
 		return 0, err
 	}
@@ -1541,7 +1541,7 @@ func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
 	for _, route := range paymentRequest.Route {
 		var routeFeeMloki uint64 = 0
 		for _, hop := range route {
-			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MLoki) * uint64(hop.FeeProportionalMillionths) / 1000000)
+			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MSat) * uint64(hop.FeeProportionalMillionths) / 1000000)
 			routeFeeMloki += fee
 		}
 		if routeFeeMloki > maxHintFeeMloki {

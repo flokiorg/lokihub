@@ -132,7 +132,7 @@ func (m *mockLNClient) SetNodeAlias(ctx context.Context, alias string) error {
 
 func TestClient_RequestSupportedOptions(t *testing.T) {
 	mockLN := newMockLNClient()
-	transport := transport.NewLNDTransport(mockLN)
+	transport := transport.NewFLNDTransport(mockLN)
 	eq := events.NewEventQueue(10)
 	client := NewClientHandler(transport, eq)
 
@@ -199,7 +199,7 @@ func TestClient_RequestSupportedOptions(t *testing.T) {
 
 func TestClient_CreateOrder(t *testing.T) {
 	mockLN := newMockLNClient()
-	transport := transport.NewLNDTransport(mockLN)
+	transport := transport.NewFLNDTransport(mockLN)
 	eq := events.NewEventQueue(10)
 	client := NewClientHandler(transport, eq)
 

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	decodepay "github.com/flokiorg/flndecodepay"
+	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/go-flokicoin/chaincfg"
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	"github.com/flokiorg/go-flokicoin/chainutil/hdkeychain"
@@ -384,14 +384,14 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 			return err
 		}
 
-		paymentRequest, err := decodepay.Decodepay(swap.Invoice)
+		paymentRequest, err := decodepay.Decode(swap.Invoice)
 		if err != nil {
 			return fmt.Errorf("failed to decode bolt11 invoice")
 		}
 
 		err = tx.Model(&dbSwap).Updates(&db.Swap{
 			SwapId:             swap.Id,
-			SendAmount:         uint64(paymentRequest.MLoki / 1000),
+			SendAmount:         uint64(paymentRequest.MSat / 1000),
 			Invoice:            swap.Invoice,
 			LockupAddress:      swap.LockupAddress,
 			TimeoutBlockHeight: swap.TimeoutBlockHeight,
@@ -994,8 +994,8 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 		return
 	}
 
-	paymentRequest, _ := decodepay.Decodepay(swap.Invoice)
-	amount := uint64(paymentRequest.MLoki / 1000)
+	paymentRequest, _ := decodepay.Decode(swap.Invoice)
+	amount := uint64(paymentRequest.MSat / 1000)
 
 	for {
 		select {

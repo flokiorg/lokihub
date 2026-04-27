@@ -166,10 +166,10 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	// Manually construct manager to use our mock interactions
 	m := &LiquidityManager{
 		cfg:         cfg,
-		transport:   transport.NewLNDTransport(mockLN),
+		transport:   transport.NewFLNDTransport(mockLN),
 		eventQueue:  events.NewEventQueue(10),
 		listeners:   make(map[string]chan events.Event),
-		lsps2Client: lsps2.NewClientHandler(transport.NewLNDTransport(mockLN), events.NewEventQueue(10)), // Need m.lsps2Client set
+		lsps2Client: lsps2.NewClientHandler(transport.NewFLNDTransport(mockLN), events.NewEventQueue(10)), // Need m.lsps2Client set
 	}
 	// Fix: m.lsps2Client needs to use the SAME event queue as processInternalEvents
 	m.lsps2Client = lsps2.NewClientHandler(m.transport, m.eventQueue)

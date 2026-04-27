@@ -1,7 +1,7 @@
 package config
 
 const (
-	LNDBackendType = "FLND"
+	FLNDBackendType = "FLND"
 )
 
 const (
@@ -13,12 +13,15 @@ const (
 )
 
 type AppConfig struct {
-	Relay           string `envconfig:"RELAY"`
-	LNBackendType   string `envconfig:"LN_BACKEND_TYPE"`
-	LNDAddress      string `envconfig:"LND_ADDRESS"`
-	LNDCertFile     string `envconfig:"LND_CERT_FILE"`
-	LNDMacaroonFile string `envconfig:"LND_MACAROON_FILE"`
-	Workdir         string `envconfig:"WORK_DIR"`
+	Relay         string `envconfig:"RELAY"`
+	LNBackendType string `envconfig:"LN_BACKEND_TYPE"`
+
+	// FLND (Flokicoin) Backend
+	FLNDAddress      string `envconfig:"FLND_ADDRESS"`
+	FLNDCertFile     string `envconfig:"FLND_CERT_FILE"`
+	FLNDMacaroonFile string `envconfig:"FLND_MACAROON_FILE"`
+
+	Workdir             string `envconfig:"WORK_DIR"`
 	Port            string `envconfig:"PORT" default:"1610"`
 	DatabaseUri     string `envconfig:"DATABASE_URI" default:"nwc.db"`
 	LogLevel        string `envconfig:"LOG_LEVEL" default:"4"`
