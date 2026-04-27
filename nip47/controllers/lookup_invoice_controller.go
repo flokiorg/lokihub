@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	decodepay "github.com/flokiorg/flndecodepay"
+	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -39,7 +39,7 @@ func (controller *nip47Controller) HandleLookupInvoiceEvent(ctx context.Context,
 	paymentHash := lookupInvoiceParams.PaymentHash
 
 	if paymentHash == "" {
-		paymentRequest, err := decodepay.Decodepay(strings.ToLower(lookupInvoiceParams.Invoice))
+		paymentRequest, err := decodepay.Decode(strings.ToLower(lookupInvoiceParams.Invoice))
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Interface("request_event_id", requestEventId).

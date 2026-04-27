@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	decodepay "github.com/flokiorg/flndecodepay"
+	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -30,7 +30,7 @@ func (controller *nip47Controller) HandlePayInvoiceEvent(ctx context.Context, ni
 	bolt11 := payParams.Invoice
 	// Convert invoice to lowercase string
 	bolt11 = strings.ToLower(bolt11)
-	paymentRequest, err := decodepay.Decodepay(bolt11)
+	paymentRequest, err := decodepay.Decode(bolt11)
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Interface("request_event_id", requestEventId).
@@ -48,7 +48,7 @@ func (controller *nip47Controller) HandlePayInvoiceEvent(ctx context.Context, ni
 		return
 	}
 
-	controller.pay(bolt11, payParams.Amount, payParams.Metadata, &paymentRequest, nip47Request, requestEventId, app, publishResponse, tags)
+	controller.pay(bolt11, payParams.Amount, payParams.Metadata, paymentRequest, nip47Request, requestEventId, app, publishResponse, tags)
 }
 
 func (controller *nip47Controller) pay(bolt11 string, amount *uint64, metadata map[string]interface{}, paymentRequest *decodepay.Bolt11, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {

@@ -89,7 +89,7 @@ func TestHandleGetInfoEvent_SubwalletNoPermission(t *testing.T) {
 		"lud16":            lightningAddress,
 	}
 
-	svc.Cfg.SetUpdate("LNBackendType", config.LNDBackendType, "")
+	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
 
 	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, true, metadata)
 	assert.NoError(t, err)
@@ -253,7 +253,7 @@ func TestHandleGetInfoEvent_SubwalletWithMetadata(t *testing.T) {
 		"a":                123,
 	}
 
-	svc.Cfg.SetUpdate("LNBackendType", config.LNDBackendType, "")
+	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
 	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, true, metadata)
 	assert.NoError(t, err)
 
