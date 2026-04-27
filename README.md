@@ -17,7 +17,7 @@ Full documentation for Lokihub is available at **[docs.flokicoin.org/lokihub](ht
 
 - **Downloads** — [Get the latest version of Lokihub](https://docs.flokicoin.org/lokihub/downloads) for your platform
 - **Setup & Installation** — Connecting to your FLND node (integrated within tWallet)
-- **Features** — Managing Lightning funds, creating sub-wallets, and controlling channels
+- **Features** — Managing Flokicoin Lightning funds, creating sub-wallets, and controlling channels
 - **App Connections** — Connecting external applications via [Nostr WalletConnect (NWC)](https://nwc.dev) 
 - **Services** — Configuring your LSP, Nostr relay, and block explorer
 
@@ -153,7 +153,7 @@ The following configuration options can be set as environment variables or in a 
 - `AUTO_UNLOCK_PASSWORD`: Provide unlock password to auto-unlock Lokihub on startup (e.g. after a machine restart). Unlock password still be required to access the interface.
 - `LOKIHUB_SERVICES_URL`: The URL for Lokihub's backend services API.
 - `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
-- `ESPLORA_SERVER`: The Esplora server URL.
+- `ESPLORA_SERVER`: The Flokicoin Esplora server URL.
 - `SWAP_SERVICE_URL`: The swap service URL.
 
 - `ENABLE_SWAP`: Enable swap feature (default: true).
@@ -217,7 +217,7 @@ If the client creates the secret the client only needs to share the public key o
 - `pubkey`: the public key of the client's secret for the user to authorize
 - `return_to`: (optional) if a `return_to` URL is provided the user will be redirected to that URL after authorization. The `lud16`, `relay` and `pubkey` query parameters will be added to the URL.
 - `expires_at` (optional) connection cannot be used after this date. Unix timestamp in seconds.
-- `max_amount` (optional) maximum amount in millis that can be sent per renewal period
+- `max_amount` (optional) maximum amount in mloki that can be sent per renewal period
 - `budget_renewal` (optional) reset the budget at the end of the given budget renewal. Can be `never` (default), `daily`, `weekly`, `monthly`, `yearly`
 - `request_methods` (optional) url encoded, space separated list of request types that you need permission for: `pay_invoice` (default), `get_balance` (see NIP47). For example: `..&request_methods=pay_invoice%20get_balance`
 - `notification_types` (optional) url encoded, space separated list of notification types that you need permission for: For example: `..&notification_types=payment_received%20payment_sent`
@@ -286,7 +286,7 @@ At a high level Lokihub is an [NWC](https://nwc.dev) wallet service which allows
 
 ### LNClient
 
-The LNClient interface abstracts the differences between wallet implementations and allows users to run Lokihub with their preferred wallet, which currently is FLND.
+The LNClient interface abstracts the differences between wallet implementations and allows users to run Lokihub with their preferred Flokicoin wallet, which currently is FLND.
 
 ### Transactions Service
 
@@ -314,12 +314,12 @@ Internally Lokihub uses a basic implementation of the pubsub messaging pattern w
     - `nwc_outgoing_liquidity_required` - when user tries to pay an invoice more than their current outgoing liquidity across active channels
     - `nwc_incoming_liquidity_required` - when user tries to creates an invoice more than their current incoming liquidity across active channels
     - `nwc_permission_denied` - a NIP-47 request was denied - either due to the app connection not having permission for a certain command, or the app does not have insufficient balance or budget to make the payment.
-    - `nwc_payment_failed` - failed to make a lightning payment
-    - `nwc_payment_sent` - successfully made a lightning payment
-    - `nwc_payment_received` - received a lightning payment
-    - `nwc_hold_invoice_accepted` - accepted a lightning payment, but it needs to be cancelled or settled
+    - `nwc_payment_failed` - failed to make a Flokicoin Lightning payment
+    - `nwc_payment_sent` - successfully made a Flokicoin Lightning payment
+    - `nwc_payment_received` - received a Flokicoin Lightning payment
+    - `nwc_hold_invoice_accepted` - accepted a Flokicoin Lightning payment, but it needs to be cancelled or settled
     - `nwc_hold_invoice_canceled` - accepted hold payment was explicitly cancelled
-    - `nwc_budget_warning` - successfully made a lightning payment, but budget is nearly exceeded
+    - `nwc_budget_warning` - successfully made a Flokicoin Lightning payment, but budget is nearly exceeded
     - `nwc_app_created` - a new app connection was created
     - `nwc_app_deleted` - a new app connection was deleted
     - `nwc_lnclient_*` - underlying LNClient events, consumed only by the transactions service.
