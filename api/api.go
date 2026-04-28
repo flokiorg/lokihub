@@ -151,7 +151,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 }
 
 func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error) {
-	address, macaroonHex, certHex, err := api.discoverFlndConfig()
+	address, macaroonHex, certHex, err := api.discoverFlndConfig(ctx)
 	if err != nil {
 		// If we can't find credentials, the node is not "ready" for us
 		return &SetupStatusResponse{
@@ -1369,10 +1369,23 @@ func (api *api) startInternal(startRequest *StartRequest) (err error) {
 	return api.svc.StartApp(startRequest.UnlockPassword)
 }
 
-func (api *api) discoverFlndConfig() (string, string, string, error) {
-	// Use default local address
+func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string, error) {
+	// First check if we have valid credentials from environment variables/database
+	address, _ := api.cfg.Get("FLNDAddress", "")
+	certHex, _ := api.cfg.Get("FLNDCertHex", "")
+	macaroonHex, _ := api.cfg.Get("FLNDMacaroonHex", "")
 
-	address := FlndEndpoint
+	if address != "" && macaroonHex != "" {
+		err := api.verifyFLNDConnection(ctx, address, certHex, macaroonHex)
+		if err == nil {
+			logger.Logger.Info().Str("address", address).Msg("Using FLND credentials from environment/config")
+			return address, macaroonHex, certHex, nil
+		}
+		logger.Logger.Warn().Err(err).Msg("FLND credentials from environment/config failed verification, falling back to discovery")
+	}
+
+	// Use default local address
+	address = FlndEndpoint
 
 	flndDir := chainutil.AppDataDir("flnd", false)
 	// flnd data dir structure: [DataDir]/data/chain/flokicoin/main/admin.macaroon
@@ -1389,7 +1402,7 @@ func (api *api) discoverFlndConfig() (string, string, string, error) {
 		return "", "", "", fmt.Errorf("failed to read tls.cert: %w", err)
 	}
 
-	certHex := ""
+	certHex = ""
 	if len(certBytes) > 0 {
 		certHex = hex.EncodeToString(certBytes)
 	}
@@ -1457,7 +1470,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 			customDataDir = api.cfg.GetDefaultWorkDir()
 		}
 
-		address, macaroonHex, certHex, err := api.discoverFlndConfig()
+		address, macaroonHex, certHex, err := api.discoverFlndConfig(ctx)
 		if err != nil {
 			return err
 		}
@@ -1889,7 +1902,7 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	// 1. Discover Config from Default DataDir
-	address, macaroonHex, certHex, err := api.discoverFlndConfig()
+	address, macaroonHex, certHex, err := api.discoverFlndConfig(ctx)
 	if err != nil {
 		return err
 	}
