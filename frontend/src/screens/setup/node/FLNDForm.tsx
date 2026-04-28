@@ -11,6 +11,7 @@ import {
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import { Skeleton } from "src/components/ui/skeleton";
 import useSetupStore from "src/state/SetupStore";
 import { request } from "src/utils/request";
 import { SetupLayout } from "../SetupLayout";
@@ -110,7 +111,7 @@ export function FLNDForm() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 Local Node
-                {setupStatus && (
+                {setupStatus ? (
                   <span
                     className="flex items-center text-xs font-normal ml-auto"
                     title={
@@ -124,6 +125,8 @@ export function FLNDForm() {
                     )}
                     {setupStatus.active ? "Ready" : "Offline"}
                   </span>
+                ) : (
+                    <Skeleton className="h-4 w-16 ml-auto" />
                 )}
               </CardTitle>
               <CardDescription>
