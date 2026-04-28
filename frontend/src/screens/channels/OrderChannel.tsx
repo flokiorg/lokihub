@@ -247,7 +247,7 @@ export default function OrderChannel() {
       }
   };
 
-  const presetAmounts = [250_000, 500_000, 1_000_000];
+  const presetAmounts = [21 * 100_000_000, 50 * 100_000_000, 500 * 100_000_000];
 
   if (!info || !balances) return <Loading />;
 
@@ -305,7 +305,7 @@ export default function OrderChannel() {
                             <TooltipTrigger type="button">
                               <div className="flex flex-row gap-2 items-center justify-start text-sm">
                                 <Label htmlFor="amount">
-                                  Increase inbound liquidity (loki)
+                                  Increase inbound liquidity
                                 </Label>
                                 <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                               </div>
@@ -349,7 +349,7 @@ export default function OrderChannel() {
                               )}
                               onClick={() => setAmount(preset.toString())}
                             >
-                              {formatAmount(preset * 1000, 0)}
+                              <FormattedFlokicoinAmount amount={preset * 1000} />
                             </div>
                           ))}
                         </div>
