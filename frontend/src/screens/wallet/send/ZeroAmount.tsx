@@ -16,6 +16,7 @@ import { InputWithAdornment } from "src/components/ui/custom/input-with-adornmen
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { useBalances } from "src/hooks/useBalances";
+import { useUnit } from "src/hooks/useUnit";
 import { PayInvoiceResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -23,6 +24,7 @@ export default function ZeroAmount() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
+  const unit = useUnit();
 
   const invoice = state?.args?.paymentRequest as Invoice;
   const [amount, setAmount] = React.useState("");
@@ -120,7 +122,7 @@ export default function ZeroAmount() {
             id="amount"
             type="number"
             value={amount}
-            placeholder="Amount in Loki..."
+            placeholder={`Amount in ${unit}...`}
             onChange={(e) => {
               setAmount(e.target.value.trim());
             }}

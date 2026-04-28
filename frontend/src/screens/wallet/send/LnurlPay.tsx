@@ -17,6 +17,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { useBalances } from "src/hooks/useBalances";
+import { useUnit } from "src/hooks/useUnit";
 import { PayInvoiceResponse, TransactionMetadata } from "src/types";
 import { request } from "src/utils/request";
 
@@ -24,6 +25,7 @@ export default function LnurlPay() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
+  const unit = useUnit();
 
   const lnAddress = state?.args?.lnAddress as LightningAddress;
   const identifier = lnAddress.lnurlpData?.identifier;
@@ -131,7 +133,7 @@ export default function LnurlPay() {
             id="amount"
             type="number"
             value={amount}
-            placeholder="Amount in Loki..."
+            placeholder={`Amount in ${unit}...`}
             onChange={(e) => {
               setAmount(e.target.value.trim());
             }}

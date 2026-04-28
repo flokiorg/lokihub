@@ -34,6 +34,7 @@ import { PayInvoiceResponse } from "src/types";
 import { request } from "src/utils/request";
 
 import { useInfo } from "src/hooks/useInfo";
+import { useUnit } from "src/hooks/useUnit";
 
   // Must be a sub-wallet connection with only make invoice and list transactions permissions!
 
@@ -82,6 +83,7 @@ import { useInfo } from "src/hooks/useInfo";
     const [currentTab, setCurrentTab] = React.useState<TabType>("latest");
     const [error, setError] = React.useState<string | undefined>();
     const { data: info } = useInfo();
+    const unit = useUnit();
     const messageboardNwcUrl = info?.messageboardNwcUrl;
     const enableMessageboardNwc = info?.enableMessageboardNwc ?? true;
   
@@ -196,7 +198,7 @@ import { useInfo } from "src/hooks/useInfo";
   
       if (+amount < 1000) {
         toast.error("Amount too low", {
-          description: "Minimum payment is 1000 loki",
+          description: `Minimum payment is 1000 ${unit}`,
         });
         return;
       }
@@ -398,7 +400,7 @@ import { useInfo } from "src/hooks/useInfo";
                 <DialogTitle>Post Message</DialogTitle>
                 <DialogDescription>
                   Pay to post on the Lokihub message board. The messages with the
-                  highest number of loki will be shown first.
+                  highest number of {unit} will be shown first.
                 </DialogDescription>
               </DialogHeader>
   
@@ -420,7 +422,7 @@ import { useInfo } from "src/hooks/useInfo";
   
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="amount" className="text-right">
-                    Amount (loki)
+                    Amount ({unit})
                   </Label>
                   <div className="col-span-2">
                     <Input

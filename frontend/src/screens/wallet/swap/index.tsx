@@ -34,6 +34,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { useSwapInfo } from "src/hooks/useSwaps";
+import { useUnit } from "src/hooks/useUnit";
 import { SwapResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -91,6 +92,7 @@ function SwapInForm() {
   const { data: balances } = useBalances();
   const { data: swapInfo, error } = useSwapInfo("in");
   const { data: channels } = useChannels();
+  const unit = useUnit();
   const navigate = useNavigate();
 
   const [swapAmount, setSwapAmount] = useState("");
@@ -184,7 +186,7 @@ function SwapInForm() {
         <Input
           type="number"
           autoFocus
-          placeholder="Amount in loki"
+          placeholder={`Amount in ${unit}`}
           value={swapAmount}
           min={swapInfo.minAmount}
           max={Math.min(
@@ -302,6 +304,7 @@ function SwapOutForm() {
   const { data: info } = useInfo();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
+  const unit = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
   const [swapAmount, setSwapAmount] = useState("");
@@ -387,7 +390,7 @@ function SwapOutForm() {
         <Input
           type="number"
           autoFocus
-          placeholder="Amount in loki"
+          placeholder={`Amount in ${unit}`}
           value={swapAmount}
           min={swapInfo.minAmount}
           max={Math.min(

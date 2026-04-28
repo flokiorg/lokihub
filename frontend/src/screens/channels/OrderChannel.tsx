@@ -27,6 +27,7 @@ import { useLSPEventContext } from "src/context/LSPEventContext"; // Use global 
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
+import { useUnit } from "src/hooks/useUnit";
 import { cn, formatAmount } from "src/lib/utils";
 import { LSPS1CreateOrderRequest, LSPS1GetInfoResponse } from "src/types";
 import { LSPS5EventType } from "src/types/lspsEvents";
@@ -47,6 +48,7 @@ export default function OrderChannel() {
   // Unified loading and error state handling
   const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext(); 
+  const unit = useUnit();
   
   const [amount, setAmount] = useState<string>(""); // Start empty to allow smart prefill
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
@@ -101,10 +103,10 @@ export default function OrderChannel() {
       const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
 
       if (!isNaN(minNum) && amtNum < minNum) {
-          return `Amount below minimum of ${minNum} Loki`;
+          return `Amount below minimum of ${minNum} ${unit}`;
       }
       if (!isNaN(maxNum) && maxNum > 0 && amtNum > maxNum) {
-          return `Amount exceeds maximum of ${maxNum} Loki`;
+          return `Amount exceeds maximum of ${maxNum} ${unit}`;
       }
       
       return null;

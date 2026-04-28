@@ -13,6 +13,7 @@ import {
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { useApp } from "src/hooks/useApp";
+import { useUnit } from "src/hooks/useUnit";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 import { useSWRConfig } from "swr";
@@ -27,6 +28,7 @@ export function IsolatedAppDrawDownDialog({
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
+  const unit = useUnit();
   const [amountLoki, setAmountLoki] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -51,7 +53,7 @@ export function IsolatedAppDrawDownDialog({
         undefined,
         { revalidate: true }
       );
-      toast(`Successfully reduced balance by ${+amountLoki} loki`);
+      toast(`Successfully reduced balance by ${+amountLoki} ${unit}`);
       reset();
     } catch (error) {
       handleRequestError("Failed to decrease sub-wallet balance", error);
@@ -76,7 +78,7 @@ export function IsolatedAppDrawDownDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">Amount (loki)</Label>
+            <Label htmlFor="amount">Amount ({unit})</Label>
             <Input
               autoFocus
               id="amount"

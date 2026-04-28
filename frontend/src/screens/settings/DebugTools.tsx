@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useInfo } from "src/hooks/useInfo";
+import { useUnit } from "src/hooks/useUnit";
 
 import { request } from "src/utils/request";
 
@@ -84,6 +85,7 @@ function ProbeInvoiceDialogContent({ apiRequest }: Props) {
 function ProbeKeysendDialogContent({ apiRequest }: Props) {
   const [amount, setAmount] = React.useState<string>("");
   const [nodeId, setNodeId] = React.useState<string>("");
+  const unit = useUnit();
 
   async function onConfirm() {
     await apiRequest("/api/send-spontaneous-payment-probes", "POST", {
@@ -101,7 +103,7 @@ function ProbeKeysendDialogContent({ apiRequest }: Props) {
         <AlertDialogDescription className="text-start">
           <div>
             <Label htmlFor="amount" className="block mb-2">
-              Enter Amount (loki)
+              Enter Amount ({unit})
             </Label>
             <Input
               id="amount"

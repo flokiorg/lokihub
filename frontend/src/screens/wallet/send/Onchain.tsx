@@ -29,6 +29,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useSwapInfo } from "src/hooks/useSwaps";
+import { useUnit } from "src/hooks/useUnit";
 import { RedeemOnchainFundsResponse, SwapResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -114,6 +115,7 @@ function OnchainForm({
   const navigate = useNavigate();
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
+  const unit = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -139,7 +141,7 @@ function OnchainForm({
       }
       if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
         throw new Error(
-          "You currently don't have enough loki to pay for an on-chain transaction. Consider swapping from Spending Balance."
+          `You currently don't have enough ${unit} to pay for an on-chain transaction. Consider swapping from Spending Balance.`
         );
       }
       setLoading(true);
@@ -189,7 +191,7 @@ function OnchainForm({
           id="amount"
           type="number"
           value={amount}
-          placeholder="Amount in Loki..."
+          placeholder={`Amount in ${unit}...`}
           onChange={(e) => {
             setAmount(e.target.value.trim());
           }}
@@ -229,7 +231,7 @@ function OnchainForm({
               onClick={() => setEditFee(true)}
             >
               {feeRate ? (
-                <p>{feeRate} loki/vB</p>
+                <p>{feeRate} {unit}/vB</p>
               ) : (
                 <Loading className="w-4 h-4" />
               )}
@@ -238,7 +240,7 @@ function OnchainForm({
           </div>
         ) : (
           <div className="grid gap-2">
-            <Label htmlFor="fee-rate">Fee Rate (Loki/vB)</Label>
+            <Label htmlFor="fee-rate">Fee Rate ({unit}/vB)</Label>
             {mempoolError && (
               <div className="text-muted-foreground text-xs flex gap-1 items-center">
                 <AlertTriangleIcon className="h-3 w-3" />
@@ -327,6 +329,7 @@ function SwapForm({
   const navigate = useNavigate();
   const { data: balances } = useBalances();
   const { data: swapInfo } = useSwapInfo("out");
+  const unit = useUnit();
 
   const [isLoading, setLoading] = React.useState(false);
 
@@ -374,7 +377,7 @@ function SwapForm({
           id="amount"
           type="number"
           value={amount}
-          placeholder="Amount in Loki..."
+          placeholder={`Amount in ${unit}...`}
           onChange={(e) => {
             setAmount(e.target.value.trim());
           }}
@@ -426,7 +429,7 @@ function SwapForm({
           <p>
             {/* ~{new Intl.NumberFormat().format(swapInfo.boltzNetworkFee)} loki */}
             {recommendedFees?.fastestFee ? (
-              <p>{recommendedFees?.fastestFee} loki/vB</p>
+              <p>{recommendedFees?.fastestFee} {unit}/vB</p>
             ) : (
               <Loading className="w-4 h-4" />
             )}

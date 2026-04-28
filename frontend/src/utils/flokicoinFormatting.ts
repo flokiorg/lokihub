@@ -25,3 +25,13 @@ export function formatFlokicoinAmount(
     return `${formattedNumber} loki`;
   }
 }
+
+/**
+ * Returns the unit symbol/name based on display format
+ */
+export function getFlokicoinUnit(displayFormat: FlokicoinDisplayFormat): string {
+  if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_BIP177) {
+    return "FLC";
+  }
+  return "loki";
+}

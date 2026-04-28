@@ -1,5 +1,6 @@
 import { FLOKICOIN_DISPLAY_FORMAT_BIP177 } from "src/constants";
 import { useInfo } from "src/hooks/useInfo";
+import { getFlokicoinUnit } from "src/utils/flokicoinFormatting";
 
 interface FormattedFlokicoinAmountProps {
   amount: number; // Amount in milliloki
@@ -30,6 +31,8 @@ export function FormattedFlokicoinAmount({
   // Get display format from settings
   const displayFormat = info.flokicoinDisplayFormat;
 
+  const unit = getFlokicoinUnit(displayFormat);
+
   if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_BIP177) {
     const flc = loki / 100_000_000;
     const formattedNumber = new Intl.NumberFormat(undefined, {
@@ -40,7 +43,7 @@ export function FormattedFlokicoinAmount({
     if (!showSymbol) {
         return <span className={className}>{formattedNumber}</span>;
     }
-    return <span className={className}>FLC {formattedNumber}</span>;
+    return <span className={className}>{unit} {formattedNumber}</span>;
   }
 
   const formattedNumber = new Intl.NumberFormat().format(loki);
@@ -49,5 +52,5 @@ export function FormattedFlokicoinAmount({
     return <span className={className}>{formattedNumber}</span>;
   }
 
-  return <span className={className}>{formattedNumber} loki</span>;
+  return <span className={className}>{formattedNumber} {unit}</span>;
 }

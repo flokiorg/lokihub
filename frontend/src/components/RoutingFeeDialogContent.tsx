@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { useChannels } from "src/hooks/useChannels";
+import { useUnit } from "src/hooks/useUnit";
 import { Channel, UpdateChannelRequest } from "src/types";
 import { request } from "src/utils/request";
 import {
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export function RoutingFeeDialogContent({ channel }: Props) {
+  const unit = useUnit();
   const currentBaseFeeLoki: number = Math.floor(
     channel.forwardingFeeBaseMloki / 1000
   );
@@ -76,12 +78,12 @@ export function RoutingFeeDialogContent({ channel }: Props) {
         <AlertDialogDescription>
           <p className="mb-4">
             Adjust the fee you charge for each payment routed through this
-            channel. A high fee (e.g. 100,000 loki) can be set to prevent
+            channel. A high fee (e.g. 100,000 {unit}) can be set to prevent
             unwanted routing. No matter the fee, you can still receive
             payments.{" "}
           </p>
           <Label htmlFor="fee" className="block mb-2">
-            Base Routing Fee (loki)
+            Base Routing Fee ({unit})
           </Label>
           <Input
             id="fee"
@@ -96,7 +98,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
             }}
           />
           <Label htmlFor="fee" className="block mt-4 mb-2">
-            PPM Fee (1 PPM = 1 per 1 million loki)
+            PPM Fee (1 PPM = 1 per 1 million {unit})
           </Label>
           <Input
             id="fee"

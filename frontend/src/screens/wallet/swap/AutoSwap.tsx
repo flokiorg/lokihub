@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useAutoSwapsConfig, useSwapInfo } from "src/hooks/useSwaps";
+import { useUnit } from "src/hooks/useUnit";
 import { AutoSwapConfig } from "src/types";
 import { request } from "src/utils/request";
 
@@ -58,6 +59,7 @@ function AutoSwapOutForm() {
   const { mutate } = useAutoSwapsConfig();
   const { data: swapInfo } = useSwapInfo("out");
   const { data: info } = useInfo();
+  const unit = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
   const [balanceThreshold, setBalanceThreshold] = useState("");
@@ -131,7 +133,7 @@ function AutoSwapOutForm() {
         <Label>Spending balance threshold</Label>
         <Input
           type="number"
-          placeholder="Amount in loki"
+          placeholder={`Amount in ${unit}`}
           value={balanceThreshold}
           min={swapAmount}
           onChange={(e) => setBalanceThreshold(e.target.value)}
@@ -146,7 +148,7 @@ function AutoSwapOutForm() {
         <Label>Swap amount</Label>
         <Input
           type="number"
-          placeholder="Amount in loki"
+          placeholder={`Amount in ${unit}`}
           value={swapAmount}
           min={swapInfo.minAmount}
           max={swapInfo.maxAmount}

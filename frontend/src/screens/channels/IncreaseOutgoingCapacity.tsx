@@ -40,6 +40,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { usePeers } from "src/hooks/usePeers";
+import { useUnit } from "src/hooks/useUnit";
 import { cn, formatAmount } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
 import {
@@ -74,6 +75,7 @@ function NewChannelInternal({
 }) {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
+  const unit = useUnit();
   const navigate = useNavigate();
 
   const presetAmounts = [250_000, 500_000, 1_000_000];
@@ -187,7 +189,7 @@ function NewChannelInternal({
                 <TooltipTrigger type="button">
                   <div className="flex flex-row gap-2 items-center justify-start text-sm">
                     <Label htmlFor="amount">
-                      Increase spending balance (loki)
+                      Increase spending balance ({unit})
                     </Label>
                     <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
@@ -234,7 +236,7 @@ function NewChannelInternal({
                   )}
                   onClick={() => setAmount(amount.toString())}
                 >
-                  {formatAmount(amount * 1000, 0)}
+                  <FormattedFlokicoinAmount amount={amount * 1000} />
                 </div>
               ))}
             </div>

@@ -3,6 +3,7 @@ import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import { useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { budgetOptions as defaultBudgetOptions } from "src/types";
 
@@ -20,6 +21,7 @@ function BudgetAmountSelect({
   const [customBudget, setCustomBudget] = React.useState(
     value ? !Object.values(budgetOptions).includes(value) : false
   );
+  const unit = useUnit();
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs mb-4">
@@ -78,7 +80,7 @@ function BudgetAmountSelect({
       </div>
       {customBudget && (
         <div className="grid gap-2 mb-5">
-          <Label htmlFor="budget">Custom budget amount (loki)</Label>
+          <Label htmlFor="budget">Custom budget amount ({unit})</Label>
           <Input
             id="budget"
             name="budget"

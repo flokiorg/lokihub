@@ -25,6 +25,7 @@ import {
     TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
+import { useUnit } from "src/hooks/useUnit";
 import { Channel, LongUnconfirmedZeroConfChannel } from "src/types";
 import { ChannelDropdownMenu } from "./ChannelDropdownMenu";
 
@@ -171,6 +172,7 @@ function ChannelTableRow({
   const { data: peerDetails } = useNodeDetails(channel.remotePubkey);
   const capacity = channel.localBalance + channel.remoteBalance;
   const alias = peerDetails?.alias || "Unknown";
+  const unit = useUnit();
 
   return (
     <TableRow key={channel.id} className="channel">
@@ -196,7 +198,7 @@ function ChannelTableRow({
       <TableCell>
         <FormattedFlokicoinAmount amount={capacity} />
       </TableCell>
-      <TableCell title={channel.unspendablePunishmentReserve + " loki"}>
+      <TableCell title={channel.unspendablePunishmentReserve + " " + unit}>
         {channel.localBalance < channel.unspendablePunishmentReserve * 1000 && (
           <>
             <FormattedFlokicoinAmount

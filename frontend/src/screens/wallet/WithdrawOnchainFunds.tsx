@@ -32,6 +32,7 @@ import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
+import { useUnit } from "src/hooks/useUnit";
 
 import { copyToClipboard } from "src/lib/clipboard";
 import { RedeemOnchainFundsResponse } from "src/types";
@@ -41,6 +42,7 @@ export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
+  const unit = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -157,7 +159,7 @@ export default function WithdrawOnchainFunds() {
   if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
     return (
       <p>
-        You currently don't have enough loki to pay for an onchain transaction.
+        You currently don't have enough {unit} to pay for an onchain transaction.
       </p>
     );
   }
@@ -249,7 +251,7 @@ export default function WithdrawOnchainFunds() {
           <>
             {showAdvanced && (
               <div className="grid gap-2">
-                <Label htmlFor="fee-rate">Fee Rate (Loki/vB)</Label>
+                <Label htmlFor="fee-rate">Fee Rate ({unit}/vB)</Label>
                 {mempoolError && (
                   <div className="text-muted-foreground text-xs flex gap-1 items-center">
                     <AlertTriangleIcon className="h-3 w-3" />
@@ -322,7 +324,7 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} loki/vB</span> fee
+                  <span className="font-semibold">{feeRate} {unit}/vB</span> fee
                 </div>
               )}
 
@@ -355,7 +357,7 @@ export default function WithdrawOnchainFunds() {
                           <span className="font-bold slashed-zero">
                             {feeRate}
                           </span>{" "}
-                          loki/vB
+                          {unit}/vB
                         </p>
                       )}
                     </div>
