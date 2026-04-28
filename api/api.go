@@ -1370,7 +1370,32 @@ func (api *api) startInternal(startRequest *StartRequest) (err error) {
 }
 
 func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string, error) {
-	// First check if we have valid credentials from environment variables/database
+	// 1. First priority: Raw environment variables from AppConfig
+	env := api.cfg.GetEnv()
+	if env.FLNDAddress != "" && env.FLNDMacaroonFile != "" {
+		// Read files from env paths
+		macBytes, err := os.ReadFile(env.FLNDMacaroonFile)
+		if err == nil {
+			certHex := ""
+			if env.FLNDCertFile != "" {
+				certBytes, err := os.ReadFile(env.FLNDCertFile)
+				if err == nil {
+					certHex = hex.EncodeToString(certBytes)
+				}
+			}
+			macaroonHex := hex.EncodeToString(macBytes)
+			
+			// Verify if the node is actually up (important for Docker startup order)
+			err = api.verifyFLNDConnection(ctx, env.FLNDAddress, certHex, macaroonHex)
+			if err == nil {
+				logger.Logger.Info().Str("address", env.FLNDAddress).Msg("Using FLND credentials directly from environment variables")
+				return env.FLNDAddress, macaroonHex, certHex, nil
+			}
+			logger.Logger.Warn().Err(err).Msg("FLND environment variables failed verification, checking database next")
+		}
+	}
+
+	// 2. Second priority: Database values (already saved from previous runs or env processing)
 	address, _ := api.cfg.Get("FLNDAddress", "")
 	certHex, _ := api.cfg.Get("FLNDCertHex", "")
 	macaroonHex, _ := api.cfg.Get("FLNDMacaroonHex", "")
@@ -1378,13 +1403,36 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 	if address != "" && macaroonHex != "" {
 		err := api.verifyFLNDConnection(ctx, address, certHex, macaroonHex)
 		if err == nil {
-			logger.Logger.Info().Str("address", address).Msg("Using FLND credentials from environment/config")
+			logger.Logger.Info().Str("address", address).Msg("Using FLND credentials from database")
 			return address, macaroonHex, certHex, nil
 		}
-		logger.Logger.Warn().Err(err).Msg("FLND credentials from environment/config failed verification, falling back to discovery")
+		logger.Logger.Warn().Err(err).Msg("FLND credentials from database failed verification, falling back to discovery")
 	}
 
-	// Use default local address
+	// 3. Fallback: Standard Local Discovery (only if no explicit address was provided in Env)
+	if env.FLNDAddress != "" {
+		// If the user provided an address but it failed verification, we return what they provided
+		// instead of falling back to localhost (which would be wrong in Docker).
+		// This ensures the UI shows "Offline" but with the CORRECT address/port.
+		logger.Logger.Info().Msg("Returning unverified environment credentials to UI")
+		
+		// Try to at least get hex values for the UI/Setup
+		macaroonHex := ""
+		macBytes, err := os.ReadFile(env.FLNDMacaroonFile)
+		if err == nil {
+			macaroonHex = hex.EncodeToString(macBytes)
+		}
+		certHex := ""
+		if env.FLNDCertFile != "" {
+			certBytes, err := os.ReadFile(env.FLNDCertFile)
+			if err == nil {
+				certHex = hex.EncodeToString(certBytes)
+			}
+		}
+		return env.FLNDAddress, macaroonHex, certHex, nil
+	}
+
+	// Traditional discovery (localhost)
 	address = FlndEndpoint
 
 	flndDir := chainutil.AppDataDir("flnd", false)
