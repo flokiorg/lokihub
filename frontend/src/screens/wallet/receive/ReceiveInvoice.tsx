@@ -93,20 +93,20 @@ export default function ReceiveInvoice() {
   }, [info, selectedLspPubkey]);
 
   const needsJit = React.useMemo(() => {
-    if (!balances || !amount) return false;
-    // Check if amount > inbound capacity
+    if (!balances || !amountDisplay) return false;
+    // Check if amountDisplay > inbound capacity
     // 0.8 safety factor? Original code used it.
-    // (+amount * 1000 || transaction?.amount || 0) >= 0.8 * balances.lightning.totalReceivable
-    const amountSat = parseInt(amount) || 0;
+    // (+amountDisplay * 1000 || transaction?.amount || 0) >= 0.8 * balances.lightning.totalReceivable
+    const amountSat = parseAmount(+amountDisplay) || 0;
     // Note: This check relies on the raw input amount to determine if JIT is needed. 
     // In "Sender Pays" mode, the actual incoming amount might be higher, making JIT even more likely.
     return amountSat * 1000 > balances.lightning.totalReceivable;
-  }, [balances, amount]);
+  }, [balances, amountDisplay, parseAmount]);
 
   const validationError = React.useMemo(() => {
-    if (!needsJit || !jitFeeParams || !amount) return null;
+    if (!needsJit || !jitFeeParams || !amountDisplay) return null;
     
-    const inputAmt = (parseInt(amount)||0)*1000;
+    const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
     const minFee = parseInt(jitFeeParams.min_fee_mloki);
     const rate = jitFeeParams.proportional / 1000000;
     let grossAmt = 0;
@@ -131,7 +131,7 @@ export default function ReceiveInvoice() {
         return `Exceeds max limit (${scaleAmount(maxSize/1000)} ${unit()}).`;
     }
     return null;
-  }, [needsJit, jitFeeParams, amount, senderPaysFee]);
+  }, [needsJit, jitFeeParams, amountDisplay, senderPaysFee, parseAmount, scaleAmount, unit]);
 
   const fetchJitFees = React.useCallback(async () => {
     if (!selectedLspPubkey) return;
@@ -178,7 +178,7 @@ export default function ReceiveInvoice() {
 
       const firstLSP = selectedLspPubkey || info?.lsps?.[0]?.pubkey;
       // Calculate amount in mloki (1 sat = 1000 mloki)
-      const inputAmountMloki = (parseInt(amount) || 0) * 1000;
+      const inputAmountMloki = (parseAmount(+amountDisplay) || 0) * 1000;
       let invoiceAmountMloki = inputAmountMloki;
       let buyLiquidityAmountMloki = inputAmountMloki;
       let feeMloki = 0;
@@ -292,7 +292,7 @@ export default function ReceiveInvoice() {
         if (jitSCID) {
            setJitApplied(true);
         }
-        setAmount("");
+        setAmountDisplay("");
         setDescription("");
         toast("Successfully created invoice");
       }
@@ -318,7 +318,7 @@ export default function ReceiveInvoice() {
       <div className="flex flex-col md:flex-row gap-12">
         <div className="w-full md:max-w-lg grid gap-6">
           {hasChannelManagement &&
-            (+amount * 1000 || transaction?.amount || 0) >=
+            (parseAmount(+amountDisplay) * 1000 || transaction?.amount || 0) >=
               0.8 * balances.lightning.totalReceivable && !jitApplied && (
               <LowReceivingCapacityAlert jitAvailable={!!info?.lsps?.length} />
             )}
@@ -422,7 +422,7 @@ export default function ReceiveInvoice() {
                     min={1}
                     autoFocus
                     endAdornment={
-                      <FormattedFiatAmount amount={+amount} className="mr-2" />
+                      <FormattedFiatAmount amount={parseAmount(+amountDisplay)} className="mr-2" />
                     }
                   />
                 </div>
@@ -546,7 +546,7 @@ export default function ReceiveInvoice() {
                                     <span className="text-xs text-muted-foreground uppercase">Estimated Fee</span>
                                     <div className="text-lg">
                                         <FormattedFlokicoinAmount amount={(() => {
-                                          const inputAmt = (parseInt(amount)||0)*1000;
+                                          const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
                                           const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                           const rate = jitFeeParams.proportional / 1000000;
                                           let finalFee = 0;
@@ -571,7 +571,7 @@ export default function ReceiveInvoice() {
                                     <div className="text-lg">
                                         {senderPaysFee ? (
                                              <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseInt(amount)||0)*1000;
+                                              const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
                                               const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                               const rate = jitFeeParams.proportional / 1000000;
                                               const gross = Math.floor(inputAmt / (1 - rate));
@@ -581,7 +581,7 @@ export default function ReceiveInvoice() {
                                              })()} />
                                         ) : (
                                              <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseInt(amount)||0)*1000;
+                                              const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
                                               const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                               const rate = jitFeeParams.proportional / 1000000;
                                               const prop = Math.floor(inputAmt * rate);
@@ -654,7 +654,7 @@ export default function ReceiveInvoice() {
                   className="w-full md:w-fit"
                   loading={isLoading || isFetchingJitParams}
                   type="submit"
-                  disabled={!amount || (needsJit && (!jitFeeParams || !!validationError))}
+                  disabled={!amountDisplay || (needsJit && (!jitFeeParams || !!validationError))}
                 >
                   Create Invoice
                 </LoadingButton>

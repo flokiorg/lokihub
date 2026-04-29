@@ -41,7 +41,7 @@ import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { usePeers } from "src/hooks/usePeers";
 import { useUnit } from "src/hooks/useUnit";
-import { cn, formatAmount } from "src/lib/utils";
+import { cn } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
 import {
   Channel,
@@ -80,8 +80,7 @@ function NewChannelInternal({
 
   const presetAmounts = [250_000, 500_000, 1_000_000];
 
-  const [order, setOrder] = React.useState<Partial<OnchainOrder>>({});
-
+  const [order, setOrder] = React.useState<Partial<OnchainOrder>>({
     paymentMethod: "onchain",
     status: "pay",
     amount: presetAmounts[0].toString(),

@@ -84,14 +84,13 @@ function ProbeInvoiceDialogContent({ apiRequest }: Props) {
 function ProbeKeysendDialogContent({ apiRequest }: Props) {
   const [amount, setAmount] = React.useState<string>("");
   const [nodeId, setNodeId] = React.useState<string>("");
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, parseAmount } = useUnit();
 
   async function onConfirm() {
     await apiRequest("/api/send-spontaneous-payment-probes", "POST", {
       amount: parseAmount(parseFloat(amount) || 0) * 1000,
       nodeId,
     });
-  }
 
     setAmount("");
     setNodeId("");

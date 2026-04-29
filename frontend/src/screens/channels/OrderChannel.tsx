@@ -28,7 +28,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
 import { useUnit } from "src/hooks/useUnit";
-import { cn, formatAmount } from "src/lib/utils";
+import { cn } from "src/lib/utils";
 import { LSPS1CreateOrderRequest, LSPS1GetInfoResponse } from "src/types";
 import { LSPS5EventType } from "src/types/lspsEvents";
 import { request } from "src/utils/request";
@@ -48,7 +48,7 @@ export default function OrderChannel() {
   // Unified loading and error state handling
   const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext(); 
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
   
   const [amountDisplay, setAmountDisplay] = useState<string>(""); // Start empty to allow smart prefill
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
@@ -103,10 +103,10 @@ export default function OrderChannel() {
       const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
 
       if (!isNaN(minNum) && amtLoki < minNum) {
-          return `Amount below minimum of ${formatAmount(minNum)} ${unit()}`;
+          return `Amount below minimum of ${scaleAmount(minNum)} ${unit()}`;
       }
       if (!isNaN(maxNum) && maxNum > 0 && amtLoki > maxNum) {
-          return `Amount exceeds maximum of ${formatAmount(maxNum)} ${unit()}`;
+          return `Amount exceeds maximum of ${scaleAmount(maxNum)} ${unit()}`;
       }
       
       return null;
@@ -125,7 +125,7 @@ export default function OrderChannel() {
     const proportionalFee = Math.ceil((amtMloki * params.proportional) / 1000000);
     
     return Math.max(minFee, proportionalFee) / 1000;
-  }, [amount, lsps1Info]);
+  }, [amountDisplay, lsps1Info]);
 
 
   const checkOrderStatus = useCallback(async () => {
@@ -140,7 +140,7 @@ export default function OrderChannel() {
               
               const amountSats = res.order_total_loki 
                   ? Math.ceil(res.order_total_loki) 
-                  : parseInt(amount);
+                  : parseAmount(+amountDisplay);
 
               const invRes = await request<{invoice: string}>("/api/invoices", {
                   method: "POST",
@@ -174,7 +174,7 @@ export default function OrderChannel() {
             toast.error("Channel order failed");
         }
     }
-  }, [orderId, isPaid, getOrder, amount]);
+  }, [orderId, isPaid, getOrder, amountDisplay]);
 
   // Trigger check on real-time events
   useEffect(() => {
@@ -325,8 +325,8 @@ export default function OrderChannel() {
                           step="any"
                           value={amountDisplay}
                           onChange={(e) => setAmountDisplay(e.target.value.trim())}
-                          min={lsps1Info?.min_initial_lsp_balance_loki ? formatAmount(lsps1Info.min_initial_lsp_balance_loki) : undefined}
-                          max={lsps1Info?.max_initial_lsp_balance_loki ? formatAmount(lsps1Info.max_initial_lsp_balance_loki) : undefined}
+                          min={lsps1Info?.min_initial_lsp_balance_loki ? scaleAmount(lsps1Info.min_initial_lsp_balance_loki) : undefined}
+                          max={lsps1Info?.max_initial_lsp_balance_loki ? scaleAmount(lsps1Info.max_initial_lsp_balance_loki) : undefined}
                         />
 
                         {/* Helper text for limits or balance if needed */}
@@ -350,7 +350,7 @@ export default function OrderChannel() {
                                 +(parseAmount(+amountDisplay) || "0") === preset &&
                                   "border-primary hover:border-primary"
                               )}
-                              onClick={() => setAmountDisplay(formatAmount(preset).toString())}
+                              onClick={() => setAmountDisplay(scaleAmount(preset).toString())}
                             >
                               <FormattedFlokicoinAmount amount={preset * 1000} />
                             </div>
@@ -432,7 +432,7 @@ export default function OrderChannel() {
                             size="lg"
                             className="w-full"
                             loading={isLoading}
-                            disabled={!selectedLSP || !amount || !!validationError}
+                            disabled={!selectedLSP || !amountDisplay || !!validationError}
                         >
                             <Zap className="mr-2 h-4 w-4" />
                             Order Channel
@@ -487,9 +487,9 @@ export default function OrderChannel() {
                             <span className="text-muted-foreground">Incoming Liquidity</span>
                             <div className="text-right">
                                 <div className="font-semibold">
-                                    <FormattedFlokicoinAmount amount={parseInt(amount) * 1000} />
+                                    <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} />
                                 </div>
-                                <FormattedFiatAmount amount={parseInt(amount)} className="text-muted-foreground text-xs" />
+                                <FormattedFiatAmount amount={parseAmount(+amountDisplay)} className="text-muted-foreground text-xs" />
                             </div>
                         </div>
                         {orderFee > 0 && (

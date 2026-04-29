@@ -63,7 +63,8 @@ export function IsolatedAppTopupDialog({
 
   function reset() {
     setOpen(false);
-    setAmountLoki("");
+    setAmountDisplay("");
+
   }
 
   return (
@@ -89,9 +90,6 @@ export function IsolatedAppTopupDialog({
               step="any"
               value={amountDisplay}
               onChange={(e) => setAmountDisplay(e.target.value.trim())}
-            />
-          </div>
-
             />
           </div>
           <DialogFooter className="mt-5">

@@ -176,7 +176,7 @@ function SwapInForm() {
       </div>
       <div className="grid gap-1.5">
         {hasChannelManagement &&
-          parseInt(swapAmount || "0") * 1000 >=
+          parseAmount(+swapAmountDisplay) * 1000 >=
             0.8 * balances.lightning.totalReceivable && (
             <div className="mb-4">
               <LowReceivingCapacityAlert />

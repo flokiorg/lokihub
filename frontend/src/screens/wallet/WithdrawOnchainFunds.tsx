@@ -42,7 +42,7 @@ export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, parseAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
