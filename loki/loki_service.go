@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/flokiorg/lokihub/config"
@@ -15,6 +16,14 @@ import (
 
 type lokiService struct {
 	cfg config.Config
+
+	rateCache      *FlokicoinRate
+	rateCacheTime  time.Time
+	rateCacheMutex sync.RWMutex
+
+	currenciesCache      map[string]LokiCurrency
+	currenciesCacheTime  time.Time
+	currenciesCacheMutex sync.RWMutex
 }
 
 func NewLokiService(cfg config.Config) *lokiService {
@@ -25,12 +34,21 @@ func NewLokiService(cfg config.Config) *lokiService {
 }
 
 func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
 	currency := svc.cfg.GetCurrency()
 
 	if currency != "USD" {
 		return nil, errors.New("only USD is supported for now")
 	}
+
+	svc.rateCacheMutex.RLock()
+	if svc.rateCache != nil && time.Since(svc.rateCacheTime) < 5*time.Minute {
+		rate := svc.rateCache
+		svc.rateCacheMutex.RUnlock()
+		return rate, nil
+	}
+	svc.rateCacheMutex.RUnlock()
+
+	client := &http.Client{Timeout: 10 * time.Second}
 
 	url := fmt.Sprintf("%s/rates.json", svc.cfg.GetLokihubServicesURL())
 
@@ -83,10 +101,23 @@ func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, e
 		return nil, err
 	}
 
+	svc.rateCacheMutex.Lock()
+	svc.rateCache = rate
+	svc.rateCacheTime = time.Now()
+	svc.rateCacheMutex.Unlock()
+
 	return rate, nil
 }
 
 func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurrency, error) {
+	svc.currenciesCacheMutex.RLock()
+	if svc.currenciesCache != nil && time.Since(svc.currenciesCacheTime) < 24*time.Hour {
+		cache := svc.currenciesCache
+		svc.currenciesCacheMutex.RUnlock()
+		return cache, nil
+	}
+	svc.currenciesCacheMutex.RUnlock()
+
 	// Create a new context with timeout to avoid issues with parent context (e.g. Wails context)
 	// being cancelled or behaving unexpectedly during the request.
 	reqCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -143,6 +174,11 @@ func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurre
 	if usd, ok := currencies["USD"]; ok {
 		filteredCurrencies["USD"] = usd
 	}
+
+	svc.currenciesCacheMutex.Lock()
+	svc.currenciesCache = filteredCurrencies
+	svc.currenciesCacheTime = time.Now()
+	svc.currenciesCacheMutex.Unlock()
 
 	return filteredCurrencies, nil
 }
