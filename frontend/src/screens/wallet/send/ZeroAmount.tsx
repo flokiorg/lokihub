@@ -24,10 +24,10 @@ export default function ZeroAmount() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   const invoice = state?.args?.paymentRequest as Invoice;
-  const [amount, setAmount] = React.useState("");
+  const [amountDisplay, setAmountDisplay] = React.useState("");
   const [isLoading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
@@ -39,6 +39,7 @@ export default function ZeroAmount() {
         throw new Error("no invoice set");
       }
       setLoading(true);
+      const amountLoki = parseAmount(+amountDisplay);
       const payInvoiceResponse = await request<PayInvoiceResponse>(
         `/api/payments/${invoice.paymentRequest}`,
         {
@@ -47,7 +48,7 @@ export default function ZeroAmount() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            amount: +amount * 1000,
+            amount: amountLoki * 1000,
           }),
         }
       );
@@ -59,7 +60,7 @@ export default function ZeroAmount() {
           preimage: payInvoiceResponse.preimage,
           pageTitle: "Pay Invoice",
           invoice,
-          amount,
+          amount: amountDisplay,
         },
       });
       toast("Successfully paid invoice");
@@ -121,17 +122,18 @@ export default function ZeroAmount() {
           <InputWithAdornment
             id="amount"
             type="number"
-            value={amount}
-            placeholder={`Amount in ${unit}...`}
+            value={amountDisplay}
+            step="any"
+            placeholder={`Amount in ${unit()}...`}
             onChange={(e) => {
-              setAmount(e.target.value.trim());
+              setAmountDisplay(e.target.value.trim());
             }}
             min={1}
-            max={Math.floor(balances.lightning.totalSpendable / 1000)}
+            max={scaleAmount(balances.lightning.totalSpendable)}
             required
             autoFocus
             endAdornment={
-              <FormattedFiatAmount amount={Number(amount)} className="mr-2" />
+              <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
             }
           />
           <div className="grid gap-2">
@@ -149,7 +151,7 @@ export default function ZeroAmount() {
             </div>
           </div>
         </div>
-        <SpendingAlert amount={+amount} />
+        <SpendingAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
         <div className="flex gap-2">
           <LinkButton to="/wallet/send" variant="outline">
             Back

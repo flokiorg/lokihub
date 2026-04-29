@@ -75,12 +75,13 @@ function NewChannelInternal({
 }) {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
   const navigate = useNavigate();
 
   const presetAmounts = [250_000, 500_000, 1_000_000];
 
-  const [order, setOrder] = React.useState<Partial<OnchainOrder>>({
+  const [order, setOrder] = React.useState<Partial<OnchainOrder>>({});
+
     paymentMethod: "onchain",
     status: "pay",
     amount: presetAmounts[0].toString(),
@@ -143,7 +144,7 @@ function NewChannelInternal({
   const openImmediately =
     order.amount &&
     order.paymentMethod === "onchain" &&
-    +order.amount < balances.onchain.spendable;
+    parseAmount(parseFloat(order.amount)) < balances.onchain.spendable;
 
   return (
     <>
@@ -189,7 +190,7 @@ function NewChannelInternal({
                 <TooltipTrigger type="button">
                   <div className="flex flex-row gap-2 items-center justify-start text-sm">
                     <Label htmlFor="amount">
-                      Increase spending balance ({unit})
+                      Increase spending balance ({unit()})
                     </Label>
                     <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
@@ -202,7 +203,7 @@ function NewChannelInternal({
               </Tooltip>
             </TooltipProvider>
 
-            {order.amount && +order.amount < 200_000 && (
+            {order.amount && parseAmount(parseFloat(order.amount)) < 200_000 && (
               <p className="text-muted-foreground text-xs">
                 For a smooth experience consider a opening a channel of{" "}
                 <FormattedFlokicoinAmount amount={200_000 * 1000} /> in size or
@@ -213,7 +214,8 @@ function NewChannelInternal({
               id="amount"
               type="number"
               required
-              min={100000}
+              min={scaleAmount(100_000)}
+              step="any"
               value={order.amount}
               onChange={(e) => {
                 setAmount(e.target.value.trim());
@@ -231,10 +233,10 @@ function NewChannelInternal({
                   key={amount}
                   className={cn(
                     "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                    +(order.amount || "0") === amount &&
+                    +(parseAmount(parseFloat(order.amount || "0")) || "0") === amount &&
                       "border-primary hover:border-primary"
                   )}
-                  onClick={() => setAmount(amount.toString())}
+                  onClick={() => setAmount(scaleAmount(amount).toString())}
                 >
                   <FormattedFlokicoinAmount amount={amount * 1000} />
                 </div>

@@ -21,5 +21,6 @@ export const LOKI_ACCOUNT_APP_NAME = "loki-account";
 export const DEFAULT_APP_BUDGET_LOKI = 10_000;
 export const DEFAULT_APP_BUDGET_RENEWAL = "monthly";
 
-export const FLOKICOIN_DISPLAY_FORMAT_BIP177 = "bip177";
+export const FLOKICOIN_DISPLAY_FORMAT_FLC = "flc";
 export const FLOKICOIN_DISPLAY_FORMAT_LOKI = "loki";
+export const FLOKICOIN_DISPLAY_FORMAT_AUTO = "auto";

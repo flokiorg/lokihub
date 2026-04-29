@@ -177,7 +177,7 @@ export interface InfoResponse {
   enablePolling?: boolean;
 }
 
-export type FlokicoinDisplayFormat = "loki" | "bip177";
+export type FlokicoinDisplayFormat = "loki" | "flc" | "auto";
 
 export type HealthAlarmKind =
   | "node_not_ready"

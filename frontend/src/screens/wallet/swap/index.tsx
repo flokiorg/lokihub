@@ -92,15 +92,16 @@ function SwapInForm() {
   const { data: balances } = useBalances();
   const { data: swapInfo, error } = useSwapInfo("in");
   const { data: channels } = useChannels();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
   const navigate = useNavigate();
 
-  const [swapAmount, setSwapAmount] = useState("");
+  const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const amountLoki = parseAmount(+swapAmountDisplay);
     try {
       setLoading(true);
       const swapInResponse = await request<SwapResponse>("/api/swaps/in", {
@@ -109,7 +110,7 @@ function SwapInForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          swapAmount: parseInt(swapAmount),
+          swapAmount: amountLoki,
         }),
       });
       if (!swapInResponse) {
@@ -181,24 +182,26 @@ function SwapInForm() {
               <LowReceivingCapacityAlert />
             </div>
           )}
+const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
+...
+      <Input
+        type="number"
+        autoFocus
+        placeholder={`Amount in ${unit()}`}
+        value={swapAmountDisplay}
+        step="any"
+        min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 1}
+        max={Math.min(
+          swapInfo.maxAmount,
+          ...(isInternalSwap
+            ? [spendableOnchainBalanceWithAnchorReserves]
+            : []),
+          (balances.lightning.totalReceivable / 1000) * 0.99
+        )}
+        onChange={(e) => setSwapAmountDisplay(e.target.value)}
+        required
+      />
 
-        <Label>Swap amount</Label>
-        <Input
-          type="number"
-          autoFocus
-          placeholder={`Amount in ${unit}`}
-          value={swapAmount}
-          min={swapInfo.minAmount}
-          max={Math.min(
-            swapInfo.maxAmount,
-            ...(isInternalSwap
-              ? [spendableOnchainBalanceWithAnchorReserves]
-              : []),
-            (balances.lightning.totalReceivable / 1000) * 0.99
-          )}
-          onChange={(e) => setSwapAmount(e.target.value)}
-          required
-        />
 
         <div className="flex justify-between">
           {balances && (
@@ -304,16 +307,17 @@ function SwapOutForm() {
   const { data: info } = useInfo();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
-  const [swapAmount, setSwapAmount] = useState("");
+  const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const amountLoki = parseAmount(+swapAmountDisplay);
     try {
       setLoading(true);
       const swapOutResponse = await request<SwapResponse>("/api/swaps/out", {
@@ -322,7 +326,7 @@ function SwapOutForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          swapAmount: parseInt(swapAmount),
+          swapAmount: amountLoki,
           destination,
         }),
       });
@@ -390,14 +394,15 @@ function SwapOutForm() {
         <Input
           type="number"
           autoFocus
-          placeholder={`Amount in ${unit}`}
-          value={swapAmount}
-          min={swapInfo.minAmount}
+          placeholder={`Amount in ${unit()}`}
+          value={swapAmountDisplay}
+          step="any"
+          min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 1}
           max={Math.min(
-            swapInfo.maxAmount,
-            Math.floor(balances.lightning.totalSpendable / 1000)
+            swapInfo.maxAmount ? scaleAmount(swapInfo.maxAmount) : Infinity,
+            scaleAmount(balances.lightning.totalSpendable)
           )}
-          onChange={(e) => setSwapAmount(e.target.value)}
+          onChange={(e) => setSwapAmountDisplay(e.target.value)}
           required
         />
 

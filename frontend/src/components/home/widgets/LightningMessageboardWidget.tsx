@@ -72,9 +72,10 @@ import { useUnit } from "src/hooks/useUnit";
   }
   
   export function LightningMessageboardWidget() {
+    const { unit, scaleAmount, parseAmount } = useUnit();
     const [messageText, setMessageText] = React.useState("");
     const [senderName, setSenderName] = React.useState("");
-    const [amount, setAmount] = React.useState("");
+    const [amountDisplay, setAmountDisplay] = React.useState("");
     const [messages, setMessages] = React.useState<Message[]>();
     const [isLoading, setLoading] = React.useState(false);
     const [isSubmitting, setSubmitting] = React.useState(false);
@@ -83,7 +84,6 @@ import { useUnit } from "src/hooks/useUnit";
     const [currentTab, setCurrentTab] = React.useState<TabType>("latest");
     const [error, setError] = React.useState<string | undefined>();
     const { data: info } = useInfo();
-    const unit = useUnit();
     const messageboardNwcUrl = info?.messageboardNwcUrl;
     const enableMessageboardNwc = info?.enableMessageboardNwc ?? true;
   
@@ -196,14 +196,15 @@ import { useUnit } from "src/hooks/useUnit";
     async function handleSubmit(e: React.FormEvent) {
       e.preventDefault();
   
-      if (+amount < 1000) {
+      const amountLoki = parseAmount(+amountDisplay);
+      if (amountLoki < 1000) {
         toast.error("Amount too low", {
-          description: `Minimum payment is 1000 ${unit}`,
+          description: `Minimum payment is ${scaleAmount(1000)} ${unit()}`,
         });
         return;
       }
   
-      const amountMloki = +amount * 1000;
+      const amountMloki = amountLoki * 1000;
       setSubmitting(true);
       try {
         const transaction = await getNWCClient(messageboardNwcUrl!).makeInvoice({
@@ -244,6 +245,7 @@ import { useUnit } from "src/hooks/useUnit";
       1000,
       ...(messages?.map((message) => message.amount + 1) || [])
     );
+    const topPlaceDisplay = scaleAmount(topPlace);
     
     if (!enableMessageboardNwc) {
       return (
@@ -400,7 +402,7 @@ import { useUnit } from "src/hooks/useUnit";
                 <DialogTitle>Post Message</DialogTitle>
                 <DialogDescription>
                   Pay to post on the Lokihub message board. The messages with the
-                  highest number of {unit} will be shown first.
+                  highest number of {unit()} will be shown first.
                 </DialogDescription>
               </DialogHeader>
   
@@ -422,20 +424,21 @@ import { useUnit } from "src/hooks/useUnit";
   
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="amount" className="text-right">
-                    Amount ({unit})
+                    Amount ({unit()})
                   </Label>
                   <div className="col-span-2">
                     <Input
                       id="amount"
                       required
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      value={amountDisplay}
+                      step="any"
+                      onChange={(e) => setAmountDisplay(e.target.value)}
                     />
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setAmount("" + topPlace)}
+                    onClick={() => setAmountDisplay("" + topPlaceDisplay)}
                   >
                     <ChevronUpIcon />
                     Top

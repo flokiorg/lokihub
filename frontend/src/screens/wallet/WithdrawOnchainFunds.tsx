@@ -42,7 +42,7 @@ export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -50,7 +50,7 @@ export default function WithdrawOnchainFunds() {
     minimumFee: number;
   }>("/v1/fees/recommended");
   const [onchainAddress, setOnchainAddress] = React.useState("");
-  const [amount, setAmount] = React.useState("");
+  const [amountDisplay, setAmountDisplay] = React.useState("");
   const [feeRate, setFeeRate] = React.useState("");
   const [sendAll, setSendAll] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -92,6 +92,8 @@ export default function WithdrawOnchainFunds() {
     }
 
     try {
+      setLoading(true);
+      const amountLoki = parseAmount(+amountDisplay);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -101,12 +103,12 @@ export default function WithdrawOnchainFunds() {
           },
           body: JSON.stringify({
             toAddress: onchainAddress,
-            amount: +amount,
-            sendAll,
+            amount: amountLoki,
             feeRate: +feeRate,
           }),
         }
       );
+
       console.info("Redeemed onchain funds", response);
       if (!response?.txId) {
         throw new Error("No address in response");
@@ -119,7 +121,7 @@ export default function WithdrawOnchainFunds() {
       });
     }
     setLoading(false);
-  }, [amount, feeRate, onchainAddress, sendAll]);
+  }, [amountDisplay, feeRate, onchainAddress, sendAll]);
 
   if (transactionId) {
     return (
@@ -159,7 +161,7 @@ export default function WithdrawOnchainFunds() {
   if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
     return (
       <p>
-        You currently don't have enough {unit} to pay for an onchain transaction.
+        You currently don't have enough {unit()} to pay for an onchain transaction.
       </p>
     );
   }
@@ -207,10 +209,11 @@ export default function WithdrawOnchainFunds() {
                 <Input
                   id="amount"
                   type="number"
-                  value={amount}
+                  value={amountDisplay}
                   required
+                  step="any"
                   onChange={(e) => {
-                    setAmount(e.target.value);
+                    setAmountDisplay(e.target.value);
                   }}
                 />
               )}
@@ -228,7 +231,7 @@ export default function WithdrawOnchainFunds() {
               </Alert>
             )}
             <AnchorReserveAlert
-              amount={sendAll ? balances.onchain.spendable : +amount}
+              amount={sendAll ? balances.onchain.spendable : parseAmount(+amountDisplay)}
               className="mt-4"
             />
           </div>
@@ -251,7 +254,7 @@ export default function WithdrawOnchainFunds() {
           <>
             {showAdvanced && (
               <div className="grid gap-2">
-                <Label htmlFor="fee-rate">Fee Rate ({unit}/vB)</Label>
+                <Label htmlFor="fee-rate">Fee Rate ({unit()}/vB)</Label>
                 {mempoolError && (
                   <div className="text-muted-foreground text-xs flex gap-1 items-center">
                     <AlertTriangleIcon className="h-3 w-3" />
@@ -324,7 +327,7 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} {unit}/vB</span> fee
+                  <span className="font-semibold">{feeRate} {unit()}/vB</span> fee
                 </div>
               )}
 
@@ -346,7 +349,7 @@ export default function WithdrawOnchainFunds() {
                             "entire on-chain balance"
                           ) : (
                             <>
-                              <FormattedFlokicoinAmount amount={+amount * 1000} />
+                              <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} />
                             </>
                           )}
                         </span>
@@ -357,7 +360,7 @@ export default function WithdrawOnchainFunds() {
                           <span className="font-bold slashed-zero">
                             {feeRate}
                           </span>{" "}
-                          {unit}/vB
+                          {unit()}/vB
                         </p>
                       )}
                     </div>

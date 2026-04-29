@@ -18,10 +18,10 @@ function BudgetAmountSelect({
   minAmount?: number;
   budgetOptions?: typeof defaultBudgetOptions;
 }) {
+  const { unit, scaleAmount, parseAmount } = useUnit();
   const [customBudget, setCustomBudget] = React.useState(
     value ? !Object.values(budgetOptions).includes(value) : false
   );
-  const unit = useUnit();
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs mb-4">
@@ -80,20 +80,22 @@ function BudgetAmountSelect({
       </div>
       {customBudget && (
         <div className="grid gap-2 mb-5">
-          <Label htmlFor="budget">Custom budget amount ({unit})</Label>
+          <Label htmlFor="budget">Custom budget amount ({unit()})</Label>
           <Input
             id="budget"
             name="budget"
             type="number"
             required
-            autoFocus
-            min={minAmount || 1}
-            value={value || ""}
+            step="any"
+            min={minAmount ? scaleAmount(minAmount) : scaleAmount(1)}
+            value={scaleAmount(value) || ""}
             onChange={(e) => {
-              onChange(parseInt(e.target.value));
+              onChange(parseAmount(parseFloat(e.target.value)));
             }}
           />
         </div>
+      )}
+
       )}
     </>
   );

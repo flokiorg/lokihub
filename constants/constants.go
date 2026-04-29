@@ -81,8 +81,9 @@ const (
 const SUBWALLET_APPSTORE_APP_ID = "uncle-jim" // Thanks jim
 
 const (
-	FLOKICOIN_DISPLAY_FORMAT_BIP177 = "bip177"
+	FLOKICOIN_DISPLAY_FORMAT_FLC = "flc"
 	FLOKICOIN_DISPLAY_FORMAT_LOKI   = "loki"
+	FLOKICOIN_DISPLAY_FORMAT_AUTO   = "auto"
 )
 
 const (

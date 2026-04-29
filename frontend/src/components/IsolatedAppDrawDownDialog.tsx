@@ -28,8 +28,8 @@ export function IsolatedAppDrawDownDialog({
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
-  const unit = useUnit();
-  const [amountLoki, setAmountLoki] = React.useState("");
+  const { unit, parseAmount } = useUnit();
+  const [amountDisplay, setAmountDisplay] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   async function onSubmit(e: React.FormEvent) {
@@ -43,7 +43,7 @@ export function IsolatedAppDrawDownDialog({
         },
         body: JSON.stringify({
           fromAppId: appId,
-          amountLoki: +amountLoki,
+          amountLoki: parseAmount(+amountDisplay),
         }),
       });
       await reloadApp();
@@ -53,7 +53,7 @@ export function IsolatedAppDrawDownDialog({
         undefined,
         { revalidate: true }
       );
-      toast(`Successfully reduced balance by ${+amountLoki} ${unit}`);
+      toast(`Successfully reduced balance by ${+amountDisplay} ${unit()}`);
       reset();
     } catch (error) {
       handleRequestError("Failed to decrease sub-wallet balance", error);
@@ -78,16 +78,18 @@ export function IsolatedAppDrawDownDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">Amount ({unit})</Label>
+            <Label htmlFor="amount">Amount ({unit()})</Label>
             <Input
               autoFocus
               id="amount"
               type="number"
               required
-              value={amountLoki}
-              onChange={(e) => {
-                setAmountLoki(e.target.value.trim());
-              }}
+              step="any"
+              value={amountDisplay}
+              onChange={(e) => setAmountDisplay(e.target.value.trim())}
+            />
+          </div>
+
             />
           </div>
           <DialogFooter className="mt-5">

@@ -19,7 +19,8 @@ import {
   useTheme,
 } from "src/components/ui/theme-provider";
 import {
-  FLOKICOIN_DISPLAY_FORMAT_BIP177,
+  FLOKICOIN_DISPLAY_FORMAT_AUTO,
+  FLOKICOIN_DISPLAY_FORMAT_FLC,
   FLOKICOIN_DISPLAY_FORMAT_LOKI,
 } from "src/constants";
 import { useInfo } from "src/hooks/useInfo";
@@ -180,7 +181,10 @@ function Settings() {
                   <SelectValue placeholder="Select a display format" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_BIP177}>
+                  <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_AUTO}>
+                    Auto
+                  </SelectItem>
+                  <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_FLC}>
                     FLC
                   </SelectItem>
                   <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_LOKI}>

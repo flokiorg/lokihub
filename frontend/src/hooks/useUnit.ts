@@ -1,15 +1,22 @@
 import { useInfo } from "src/hooks/useInfo";
-import { getFlokicoinUnit } from "src/utils/flokicoinFormatting";
+import {
+  displayToLoki,
+  getFlokicoinUnit,
+  lokiToDisplay,
+} from "src/utils/flokicoinFormatting";
 
 /**
- * Hook to get the current Flokicoin unit (FLC or loki)
+ * Hook to get the current Flokicoin unit and conversion functions
  */
 export function useUnit() {
   const { data: info } = useInfo();
   
-  if (!info) {
-    return "loki"; // Default fallback
-  }
+  const displayFormat = info?.flokicoinDisplayFormat || "loki";
 
-  return getFlokicoinUnit(info.flokicoinDisplayFormat);
+  return {
+    unit: (amountLoki?: number) => getFlokicoinUnit(displayFormat, amountLoki),
+    scaleAmount: (amountLoki: number) => lokiToDisplay(amountLoki, displayFormat),
+    parseAmount: (amountDisplay: number) => displayToLoki(amountDisplay, displayFormat),
+    displayFormat,
+  };
 }

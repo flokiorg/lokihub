@@ -172,7 +172,7 @@ function ChannelTableRow({
   const { data: peerDetails } = useNodeDetails(channel.remotePubkey);
   const capacity = channel.localBalance + channel.remoteBalance;
   const alias = peerDetails?.alias || "Unknown";
-  const unit = useUnit();
+  const { unit } = useUnit();
 
   return (
     <TableRow key={channel.id} className="channel">
@@ -198,7 +198,7 @@ function ChannelTableRow({
       <TableCell>
         <FormattedFlokicoinAmount amount={capacity} />
       </TableCell>
-      <TableCell title={channel.unspendablePunishmentReserve + " " + unit}>
+      <TableCell title={channel.unspendablePunishmentReserve + " " + unit(channel.unspendablePunishmentReserve * 1000)}>
         {channel.localBalance < channel.unspendablePunishmentReserve * 1000 && (
           <>
             <FormattedFlokicoinAmount

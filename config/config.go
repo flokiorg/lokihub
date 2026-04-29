@@ -402,7 +402,7 @@ func randomHex(n int) (string, error) {
 }
 
 const defaultCurrency = "USD"
-const defaultFlokicoinDisplayFormat = constants.FLOKICOIN_DISPLAY_FORMAT_BIP177
+const defaultFlokicoinDisplayFormat = constants.FLOKICOIN_DISPLAY_FORMAT_FLC
 
 func (cfg *config) GetCurrency() string {
 	currency, err := cfg.Get("Currency", "")

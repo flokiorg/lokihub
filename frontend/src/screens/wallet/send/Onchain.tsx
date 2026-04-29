@@ -37,7 +37,7 @@ export default function Onchain() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const [isSwap, setSwap] = React.useState(true);
-  const [amount, setAmount] = React.useState("");
+  const [amountDisplay, setAmountDisplay] = React.useState("");
 
   const address = state?.args?.address as string;
 
@@ -85,15 +85,15 @@ export default function Onchain() {
           <SwapForm
             address={address}
             setSwap={setSwap}
-            amount={amount}
-            setAmount={setAmount}
+            amount={amountDisplay}
+            setAmount={setAmountDisplay}
           />
         ) : (
           <OnchainForm
             address={address}
             setSwap={setSwap}
-            amount={amount}
-            setAmount={setAmount}
+            amount={amountDisplay}
+            setAmount={setAmountDisplay}
           />
         )}
       </div>
@@ -104,8 +104,8 @@ export default function Onchain() {
 function OnchainForm({
   address,
   setSwap,
-  amount,
-  setAmount,
+  amount: amountDisplay,
+  setAmount: setAmountDisplay,
 }: {
   address: string;
   amount: string;
@@ -115,7 +115,7 @@ function OnchainForm({
   const navigate = useNavigate();
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -141,10 +141,11 @@ function OnchainForm({
       }
       if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
         throw new Error(
-          `You currently don't have enough ${unit} to pay for an on-chain transaction. Consider swapping from Spending Balance.`
+          `You currently don't have enough ${unit()} to pay for an on-chain transaction. Consider swapping from Spending Balance.`
         );
       }
       setLoading(true);
+      const amountLoki = parseAmount(+amountDisplay);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -154,7 +155,7 @@ function OnchainForm({
           },
           body: JSON.stringify({
             toAddress: address,
-            amount: +amount,
+            amount: amountLoki,
             feeRate: +feeRate,
           }),
         }
@@ -164,7 +165,7 @@ function OnchainForm({
       }
       navigate(`/wallet/send/onchain-success`, {
         state: {
-          amount: +amount,
+          amount: +amountDisplay,
           txId: response.txId,
         },
       });
@@ -190,17 +191,18 @@ function OnchainForm({
         <InputWithAdornment
           id="amount"
           type="number"
-          value={amount}
-          placeholder={`Amount in ${unit}...`}
+          value={amountDisplay}
+          step="any"
+          placeholder={`Amount in ${unit()}...`}
           onChange={(e) => {
-            setAmount(e.target.value.trim());
+            setAmountDisplay(e.target.value.trim());
           }}
-          min={ONCHAIN_DUST_LOKI}
-          max={balances.onchain.spendable}
+          min={scaleAmount(ONCHAIN_DUST_LOKI)}
+          max={scaleAmount(balances.onchain.spendable)}
           required
           autoFocus
           endAdornment={
-            <FormattedFiatAmount amount={Number(amount)} className="mr-2" />
+            <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
           }
         />
         <div className="flex justify-between text-muted-foreground text-xs sensitive slashed-zero">
@@ -231,7 +233,7 @@ function OnchainForm({
               onClick={() => setEditFee(true)}
             >
               {feeRate ? (
-                <p>{feeRate} {unit}/vB</p>
+                <p>{feeRate} {unit()}/vB</p>
               ) : (
                 <Loading className="w-4 h-4" />
               )}
@@ -240,7 +242,7 @@ function OnchainForm({
           </div>
         ) : (
           <div className="grid gap-2">
-            <Label htmlFor="fee-rate">Fee Rate ({unit}/vB)</Label>
+            <Label htmlFor="fee-rate">Fee Rate ({unit()}/vB)</Label>
             {mempoolError && (
               <div className="text-muted-foreground text-xs flex gap-1 items-center">
                 <AlertTriangleIcon className="h-3 w-3" />
@@ -292,17 +294,17 @@ function OnchainForm({
           </div>
         )}
       </div>
-      {amount && +amount < 10_000 && (
+      {amountDisplay && parseAmount(parseFloat(amountDisplay)) < 10_000 && (
         <Alert>
           <InfoIcon className="h-4 w-4" />
           <AlertTitle>Amount not ideal for On-chain transaction</AlertTitle>
           <AlertDescription>
             Small amounts can become unspendable when mempool fees increase.
-            Consider using Lightning instead.
+            Consider using Lightning instead or sending at least {scaleAmount(10_000)} {unit()}.
           </AlertDescription>
         </Alert>
       )}
-      <AnchorReserveAlert amount={+amount} />
+      <AnchorReserveAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back
@@ -318,8 +320,8 @@ function OnchainForm({
 function SwapForm({
   address,
   setSwap,
-  amount,
-  setAmount,
+  amount: amountDisplay,
+  setAmount: setAmountDisplay,
 }: {
   address: string;
   amount: string;
@@ -329,7 +331,7 @@ function SwapForm({
   const navigate = useNavigate();
   const { data: balances } = useBalances();
   const { data: swapInfo } = useSwapInfo("out");
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   const [isLoading, setLoading] = React.useState(false);
 
@@ -337,13 +339,14 @@ function SwapForm({
     event.preventDefault();
     try {
       setLoading(true);
+      const amountLoki = parseAmount(+amountDisplay);
       const swapOutResponse = await request<SwapResponse>("/api/swaps/out", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          swapAmount: +amount,
+          swapAmount: amountLoki,
           destination: address,
         }),
       });
@@ -376,20 +379,21 @@ function SwapForm({
         <InputWithAdornment
           id="amount"
           type="number"
-          value={amount}
-          placeholder={`Amount in ${unit}...`}
+          value={amountDisplay}
+          step="any"
+          placeholder={`Amount in ${unit()}...`}
           onChange={(e) => {
-            setAmount(e.target.value.trim());
+            setAmountDisplay(e.target.value.trim());
           }}
-          min={swapInfo.minAmount}
+          min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 1}
           max={Math.min(
-            swapInfo.maxAmount,
-            Math.floor(balances.lightning.totalSpendable / 1000)
+            swapInfo.maxAmount ? scaleAmount(swapInfo.maxAmount) : Infinity,
+            scaleAmount(balances.lightning.totalSpendable)
           )}
           required
           autoFocus
           endAdornment={
-            <FormattedFiatAmount amount={Number(amount)} className="mr-2" />
+            <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
           }
         />
         <div className="grid gap-1">
@@ -429,7 +433,7 @@ function SwapForm({
           <p>
             {/* ~{new Intl.NumberFormat().format(swapInfo.boltzNetworkFee)} loki */}
             {recommendedFees?.fastestFee ? (
-              <p>{recommendedFees?.fastestFee} {unit}/vB</p>
+              <p>{recommendedFees?.fastestFee} {unit()}/vB</p>
             ) : (
               <Loading className="w-4 h-4" />
             )}
@@ -440,7 +444,7 @@ function SwapForm({
           <p>{swapInfo.lokiServiceFee + swapInfo.boltzServiceFee}%</p>
         </div>
       </div>
-      <SpendingAlert amount={+amount} />
+      <SpendingAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back

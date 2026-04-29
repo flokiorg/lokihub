@@ -1190,8 +1190,8 @@ func (api *api) SetCurrency(currency string) error {
 }
 
 func (api *api) SetFlokicoinDisplayFormat(format string) error {
-	if format != constants.FLOKICOIN_DISPLAY_FORMAT_LOKI && format != constants.FLOKICOIN_DISPLAY_FORMAT_BIP177 {
-		return fmt.Errorf("flokicoin display format must be '%s' or '%s'", constants.FLOKICOIN_DISPLAY_FORMAT_LOKI, constants.FLOKICOIN_DISPLAY_FORMAT_BIP177)
+	if format != constants.FLOKICOIN_DISPLAY_FORMAT_LOKI && format != constants.FLOKICOIN_DISPLAY_FORMAT_FLC && format != constants.FLOKICOIN_DISPLAY_FORMAT_AUTO {
+		return fmt.Errorf("flokicoin display format must be '%s', '%s' or '%s'", constants.FLOKICOIN_DISPLAY_FORMAT_LOKI, constants.FLOKICOIN_DISPLAY_FORMAT_FLC, constants.FLOKICOIN_DISPLAY_FORMAT_AUTO)
 	}
 
 	err := api.cfg.SetFlokicoinDisplayFormat(format)

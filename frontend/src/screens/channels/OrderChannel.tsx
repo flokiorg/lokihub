@@ -50,7 +50,7 @@ export default function OrderChannel() {
   const { lastEvent } = useLSPEventContext(); 
   const unit = useUnit();
   
-  const [amount, setAmount] = useState<string>(""); // Start empty to allow smart prefill
+  const [amountDisplay, setAmountDisplay] = useState<string>(""); // Start empty to allow smart prefill
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
   const [orderId, setOrderId] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -94,28 +94,28 @@ export default function OrderChannel() {
   }, [selectedLSP]); // Removed fetchData from deps to avoid loop if fetchData changes unnecessarily, though useCallback handles it.
 
   const validationError = React.useMemo(() => {
-      if (!amount || !lsps1Info) return null;
+      if (!amountDisplay || !lsps1Info) return null;
       
-      const amtNum = parseInt(amount);
-      if (isNaN(amtNum)) return "Invalid amount";
+      const amtLoki = parseAmount(+amountDisplay);
+      if (isNaN(amtLoki)) return "Invalid amount";
 
       const minNum = Number(lsps1Info.min_initial_lsp_balance_loki);
       const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
 
-      if (!isNaN(minNum) && amtNum < minNum) {
-          return `Amount below minimum of ${minNum} ${unit}`;
+      if (!isNaN(minNum) && amtLoki < minNum) {
+          return `Amount below minimum of ${formatAmount(minNum)} ${unit()}`;
       }
-      if (!isNaN(maxNum) && maxNum > 0 && amtNum > maxNum) {
-          return `Amount exceeds maximum of ${maxNum} ${unit}`;
+      if (!isNaN(maxNum) && maxNum > 0 && amtLoki > maxNum) {
+          return `Amount exceeds maximum of ${formatAmount(maxNum)} ${unit()}`;
       }
       
       return null;
-  }, [amount, lsps1Info]);
+  }, [amountDisplay, lsps1Info]);
 
   const estimatedFee = React.useMemo(() => {
-    if (!amount || !lsps1Info?.opening_fee_params?.length) return 0;
+    if (!amountDisplay || !lsps1Info?.opening_fee_params?.length) return 0;
     
-    const amtLoki = parseInt(amount);
+    const amtLoki = parseAmount(+amountDisplay);
     if (isNaN(amtLoki)) return 0;
     
     const amtMloki = amtLoki * 1000;
@@ -220,13 +220,13 @@ export default function OrderChannel() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!selectedLSP || !amount) return;
+      if (!selectedLSP || !amountDisplay) return;
       
       try {
-          const amountSats = parseInt(amount);
+          const amountLoki = parseAmount(+amountDisplay);
           const req: LSPS1CreateOrderRequest = {
               lsp_pubkey: selectedLSP,
-              amount_loki: amountSats,
+              amount_loki: amountLoki,
               channel_expiry_blocks: 144 * 30, 
               announce_channel: false, 
               opening_fee_params: lsps1Info?.opening_fee_params?.[0]
@@ -322,10 +322,11 @@ export default function OrderChannel() {
                           id="amount"
                           type="number"
                           required
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value.trim())}
-                          min={lsps1Info?.min_initial_lsp_balance_loki}
-                          max={lsps1Info?.max_initial_lsp_balance_loki}
+                          step="any"
+                          value={amountDisplay}
+                          onChange={(e) => setAmountDisplay(e.target.value.trim())}
+                          min={lsps1Info?.min_initial_lsp_balance_loki ? formatAmount(lsps1Info.min_initial_lsp_balance_loki) : undefined}
+                          max={lsps1Info?.max_initial_lsp_balance_loki ? formatAmount(lsps1Info.max_initial_lsp_balance_loki) : undefined}
                         />
 
                         {/* Helper text for limits or balance if needed */}
@@ -346,10 +347,10 @@ export default function OrderChannel() {
                               key={preset}
                               className={cn(
                                 "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                                +(amount || "0") === preset &&
+                                +(parseAmount(+amountDisplay) || "0") === preset &&
                                   "border-primary hover:border-primary"
                               )}
-                              onClick={() => setAmount(preset.toString())}
+                              onClick={() => setAmountDisplay(formatAmount(preset).toString())}
                             >
                               <FormattedFlokicoinAmount amount={preset * 1000} />
                             </div>
@@ -462,7 +463,7 @@ export default function OrderChannel() {
                         <div className="text-center space-y-2">
                             <p className="text-lg font-semibold">Payment Complete</p>
                             <p className="text-muted-foreground text-sm">
-                                The LSP is now opening a channel to provide you with <FormattedFlokicoinAmount amount={parseInt(amount) * 1000} /> of inbound liquidity.
+                                The LSP is now opening a channel to provide you with <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} /> of inbound liquidity.
                             </p>
                             <p className="text-muted-foreground text-xs">
                                 This may take a few minutes. You'll see the new channel in your channels list once it's confirmed.

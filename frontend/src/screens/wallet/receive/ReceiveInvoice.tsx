@@ -57,11 +57,11 @@ import { request } from "src/utils/request";
 export default function ReceiveInvoice() {
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   const [isLoading, setLoading] = React.useState(false);
   const [isFetchingJitParams, setIsFetchingJitParams] = React.useState(false);
-  const [amount, setAmount] = React.useState<string>("");
+  const [amountDisplay, setAmountDisplay] = React.useState<string>("");
   const [description, setDescription] = React.useState<string>("");
   const [transaction, setTransaction] = React.useState<Transaction | null>(
     null
@@ -125,10 +125,10 @@ export default function ReceiveInvoice() {
     const maxSize = parseInt(jitFeeParams.max_payment_size_mloki);
     
     if (grossAmt < minSize) {
-        return `Below min limit (${minSize/1000} ${unit}).`;
+        return `Below min limit (${scaleAmount(minSize/1000)} ${unit()}).`;
     }
     if (maxSize > 0 && grossAmt > maxSize) {
-        return `Exceeds max limit (${maxSize/1000} ${unit}).`;
+        return `Exceeds max limit (${scaleAmount(maxSize/1000)} ${unit()}).`;
     }
     return null;
   }, [needsJit, jitFeeParams, amount, senderPaysFee]);
@@ -228,13 +228,13 @@ export default function ReceiveInvoice() {
             const maxPaymentSize = parseInt(jitFeeParams.max_payment_size_mloki);
 
             if (buyLiquidityAmountMloki < minPaymentSize) {
-                toast.error(`Amount too small for JIT payment. Minimum: ${minPaymentSize / 1000} ${unit}.`);
+                toast.error(`Amount too small for JIT payment. Minimum: ${scaleAmount(minPaymentSize / 1000)} ${unit()}.`);
                 setLoading(false);
                 return;
             }
 
             if (maxPaymentSize > 0 && buyLiquidityAmountMloki > maxPaymentSize) {
-                 toast.error(`Amount too large for JIT payment. Maximum: ${maxPaymentSize / 1000} ${unit}.`);
+                 toast.error(`Amount too large for JIT payment. Maximum: ${scaleAmount(maxPaymentSize / 1000)} ${unit()}.`);
                  setLoading(false);
                  return;
             }
@@ -409,14 +409,15 @@ export default function ReceiveInvoice() {
             ) : (
               <form onSubmit={handleSubmit} className="grid gap-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount ({unit})</Label>
+                  <Label htmlFor="amount">Amount ({unit()})</Label>
                   <InputWithAdornment
                     id="amount"
                     type="number"
-                    value={amount?.toString()}
-                    placeholder={`Amount in ${unit}...`}
+                    value={amountDisplay}
+                    step="any"
+                    placeholder={`Amount in ${unit()}...`}
                     onChange={(e) => {
-                      setAmount(e.target.value.trim());
+                      setAmountDisplay(e.target.value.trim());
                     }}
                     min={1}
                     autoFocus
@@ -490,7 +491,7 @@ export default function ReceiveInvoice() {
                                                     <h4 className="font-semibold text-sm mb-2">Fee Structure</h4>
                                                     <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
                                                         <span className="text-muted-foreground">Minimum Fee:</span>
-                                                        <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? parseInt(jitFeeParams.min_fee_mloki)/1000 : 0} {unit}</span>
+                                                        <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? scaleAmount(parseInt(jitFeeParams.min_fee_mloki)/1000) : 0} {unit()}</span>
                                                         
                                                         <span className="text-muted-foreground">Proportional Rate:</span>
                                                         <span className="font-medium text-right">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>

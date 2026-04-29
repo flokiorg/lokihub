@@ -1,4 +1,4 @@
-import { FLOKICOIN_DISPLAY_FORMAT_BIP177 } from "src/constants";
+import { FLOKICOIN_DISPLAY_FORMAT_AUTO, FLOKICOIN_DISPLAY_FORMAT_FLC } from "src/constants";
 import { useInfo } from "src/hooks/useInfo";
 import { getFlokicoinUnit } from "src/utils/flokicoinFormatting";
 
@@ -31,9 +31,9 @@ export function FormattedFlokicoinAmount({
   // Get display format from settings
   const displayFormat = info.flokicoinDisplayFormat;
 
-  const unit = getFlokicoinUnit(displayFormat);
+  const unit = getFlokicoinUnit(displayFormat, loki);
 
-  if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_BIP177) {
+  if (displayFormat === FLOKICOIN_DISPLAY_FORMAT_FLC || (displayFormat === FLOKICOIN_DISPLAY_FORMAT_AUTO && unit === "FLC")) {
     const flc = loki / 100_000_000;
     const formattedNumber = new Intl.NumberFormat(undefined, {
       minimumFractionDigits: 0,

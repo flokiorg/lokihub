@@ -21,14 +21,14 @@ type Props = {
 };
 
 export function RoutingFeeDialogContent({ channel }: Props) {
-  const unit = useUnit();
-  const currentBaseFeeLoki: number = Math.floor(
+  const { unit, scaleAmount, parseAmount } = useUnit();
+  const currentBaseFeeDisplay: number = scaleAmount(
     channel.forwardingFeeBaseMloki / 1000
   );
   const currentFeePPM: number = channel.forwardingFeeProportionalMillionths;
 
-  const [baseFeeLoki, setBaseFeeLoki] = React.useState(
-    currentBaseFeeLoki !== undefined ? currentBaseFeeLoki.toString() : ""
+  const [baseFeeDisplay, setBaseFeeDisplay] = React.useState(
+    currentBaseFeeDisplay !== undefined ? currentBaseFeeDisplay.toString() : ""
   );
   const [
     forwardingFeeProportionalMillionths,
@@ -40,7 +40,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
 
   async function updateFee() {
     try {
-      const forwardingFeeBaseMloki = +baseFeeLoki * 1000;
+      const forwardingFeeBaseMloki = parseAmount(+baseFeeDisplay) * 1000;
 
       console.info(
         `🎬 Updating channel ${channel.id} with ${channel.remotePubkey}`
@@ -78,12 +78,12 @@ export function RoutingFeeDialogContent({ channel }: Props) {
         <AlertDialogDescription>
           <p className="mb-4">
             Adjust the fee you charge for each payment routed through this
-            channel. A high fee (e.g. 100,000 {unit}) can be set to prevent
+            channel. A high fee (e.g. {scaleAmount(100_000)} {unit()}) can be set to prevent
             unwanted routing. No matter the fee, you can still receive
             payments.{" "}
           </p>
           <Label htmlFor="fee" className="block mb-2">
-            Base Routing Fee ({unit})
+            Base Routing Fee ({unit()})
           </Label>
           <Input
             id="fee"
@@ -92,13 +92,14 @@ export function RoutingFeeDialogContent({ channel }: Props) {
             required
             autoFocus
             min={0}
-            value={baseFeeLoki}
+            step="any"
+            value={baseFeeDisplay}
             onChange={(e) => {
-              setBaseFeeLoki(e.target.value.trim());
+              setBaseFeeDisplay(e.target.value.trim());
             }}
           />
           <Label htmlFor="fee" className="block mt-4 mb-2">
-            PPM Fee (1 PPM = 1 per 1 million {unit})
+            PPM Fee (1 PPM = 1 per 1 million)
           </Label>
           <Input
             id="fee"
@@ -118,7 +119,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
         <AlertDialogCancel>Cancel</AlertDialogCancel>
         <AlertDialogAction
           disabled={
-            (parseInt(baseFeeLoki) || 0) === currentBaseFeeLoki &&
+            (parseFloat(baseFeeDisplay) || 0) === currentBaseFeeDisplay &&
             (parseInt(forwardingFeeProportionalMillionths) || 0) ===
               currentFeePPM
           }

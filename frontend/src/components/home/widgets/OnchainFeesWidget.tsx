@@ -8,7 +8,7 @@ import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useUnit } from "src/hooks/useUnit";
 
 export function OnchainFeesWidget() {
-  const unit = useUnit();
+  const { unit, scaleAmount } = useUnit();
   const { data: recommendedFees } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -48,7 +48,7 @@ export function OnchainFeesWidget() {
         {entries.map((entry) => (
           <div key={entry.title}>
             <p className="text-muted-foreground text-xs">{entry.title}</p>
-            <p className="text-xl font-semibold">{entry.value} {unit}/vB</p>
+            <p className="text-xl font-semibold">{scaleAmount(entry.value)} {unit()}/vB</p>
           </div>
         ))}
       </CardContent>

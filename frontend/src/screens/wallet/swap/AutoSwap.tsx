@@ -59,11 +59,11 @@ function AutoSwapOutForm() {
   const { mutate } = useAutoSwapsConfig();
   const { data: swapInfo } = useSwapInfo("out");
   const { data: info } = useInfo();
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
-  const [balanceThreshold, setBalanceThreshold] = useState("");
-  const [swapAmount, setSwapAmount] = useState("");
+  const [balanceThresholdDisplay, setBalanceThresholdDisplay] = useState("");
+  const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
   const [destination, setDestination] = useState("");
   const [externalType, setExternalType] = useState<"address" | "xpub">(
     "address"
@@ -73,7 +73,10 @@ function AutoSwapOutForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (swapAmount > balanceThreshold) {
+    const balanceThresholdNum = parseAmount(+balanceThresholdDisplay);
+    const swapAmountNum = parseAmount(+swapAmountDisplay);
+
+    if (swapAmountNum > balanceThresholdNum) {
       toast.info(
         "Balance threshold must be greater than or equal to swap amount"
       );
@@ -88,8 +91,8 @@ function AutoSwapOutForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          swapAmount: parseInt(swapAmount),
-          balanceThreshold: parseInt(balanceThreshold),
+          swapAmount: swapAmountNum,
+          balanceThreshold: balanceThresholdNum,
           destination,
         }),
       });
@@ -133,10 +136,11 @@ function AutoSwapOutForm() {
         <Label>Spending balance threshold</Label>
         <Input
           type="number"
-          placeholder={`Amount in ${unit}`}
-          value={balanceThreshold}
-          min={swapAmount}
-          onChange={(e) => setBalanceThreshold(e.target.value)}
+          placeholder={`Amount in ${unit()}`}
+          value={balanceThresholdDisplay}
+          step="any"
+          min={swapAmountDisplay}
+          onChange={(e) => setBalanceThresholdDisplay(e.target.value)}
           required
         />
         <p className="text-xs text-muted-foreground">
@@ -148,11 +152,12 @@ function AutoSwapOutForm() {
         <Label>Swap amount</Label>
         <Input
           type="number"
-          placeholder={`Amount in ${unit}`}
-          value={swapAmount}
-          min={swapInfo.minAmount}
-          max={swapInfo.maxAmount}
-          onChange={(e) => setSwapAmount(e.target.value)}
+          placeholder={`Amount in ${unit()}`}
+          value={swapAmountDisplay}
+          step="any"
+          min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 0}
+          max={swapInfo.maxAmount ? scaleAmount(swapInfo.maxAmount) : undefined}
+          onChange={(e) => setSwapAmountDisplay(e.target.value)}
           required
         />
         <p className="text-xs text-muted-foreground">

@@ -81,17 +81,18 @@ function ProbeInvoiceDialogContent({ apiRequest }: Props) {
     </AlertDialogContent>
   );
 }
-
 function ProbeKeysendDialogContent({ apiRequest }: Props) {
   const [amount, setAmount] = React.useState<string>("");
   const [nodeId, setNodeId] = React.useState<string>("");
-  const unit = useUnit();
+  const { unit, scaleAmount, parseAmount } = useUnit();
 
   async function onConfirm() {
     await apiRequest("/api/send-spontaneous-payment-probes", "POST", {
-      amount: (parseInt(amount) || 0) * 1000,
+      amount: parseAmount(parseFloat(amount) || 0) * 1000,
       nodeId,
     });
+  }
+
     setAmount("");
     setNodeId("");
   }
@@ -103,13 +104,14 @@ function ProbeKeysendDialogContent({ apiRequest }: Props) {
         <AlertDialogDescription className="text-start">
           <div>
             <Label htmlFor="amount" className="block mb-2">
-              Enter Amount ({unit})
+              Enter Amount ({unit()})
             </Label>
             <Input
               id="amount"
               name="amount"
               type="number"
               min={0}
+              step="any"
               autoFocus
               value={amount}
               onChange={(e) => {
@@ -135,7 +137,7 @@ function ProbeKeysendDialogContent({ apiRequest }: Props) {
       <AlertDialogFooter>
         <AlertDialogCancel>Cancel</AlertDialogCancel>
         <AlertDialogAction
-          disabled={!parseInt(amount) || !nodeId}
+          disabled={!parseFloat(amount) || !nodeId}
           onClick={onConfirm}
         >
           Confirm
