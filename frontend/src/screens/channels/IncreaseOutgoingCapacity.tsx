@@ -12,6 +12,8 @@ import { MempoolAlert } from "src/components/MempoolAlert";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
+import { Input } from "src/components/ui/input";
+import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
   Dialog,
@@ -21,8 +23,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "src/components/ui/dialog";
-import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+
 import {
   Select,
   SelectContent,
@@ -209,7 +212,7 @@ function NewChannelInternal({
                 more.
               </p>
             )}
-            <Input
+            <InputWithAdornment
               id="amount"
               type="number"
               required
@@ -219,6 +222,9 @@ function NewChannelInternal({
               onChange={(e) => {
                 setAmount(e.target.value.trim());
               }}
+              endAdornment={
+                <FormattedFiatAmount amount={parseAmount(parseFloat(order.amount || "0"))} className="mr-2" />
+              }
             />
             <div className="text-muted-foreground text-sm sensitive slashed-zero">
               Current on-chain balance:{" "}
@@ -237,7 +243,12 @@ function NewChannelInternal({
                   )}
                   onClick={() => setAmount(scaleAmount(amount).toString())}
                 >
-                  <FormattedFlokicoinAmount amount={amount * 1000} />
+                  <div className="font-medium">
+                    <FormattedFlokicoinAmount amount={amount * 1000} />
+                  </div>
+                  <div className="text-muted-foreground mt-1 opacity-70">
+                    <FormattedFiatAmount amount={amount} />
+                  </div>
                 </div>
               ))}
             </div>
