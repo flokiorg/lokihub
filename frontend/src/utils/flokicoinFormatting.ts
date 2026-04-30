@@ -28,7 +28,7 @@ export function formatFlokicoinAmount(
         minimumFractionDigits: 0,
         maximumFractionDigits: 8,
       }).format(flc);
-    return showSymbol ? `FLC ${formattedNumber}` : formattedNumber;
+    return showSymbol ? `${formattedNumber} FLC` : formattedNumber;
   } else {
     const formattedNumber = new Intl.NumberFormat().format(loki);
     return showSymbol ? `${formattedNumber} loki` : formattedNumber;

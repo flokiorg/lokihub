@@ -11,7 +11,7 @@ import {
 export function useUnit() {
   const { data: info } = useInfo();
   
-  const displayFormat = info?.flokicoinDisplayFormat || "loki";
+  const displayFormat = info?.flokicoinDisplayFormat || "auto";
 
   return {
     unit: (amountLoki?: number) => getFlokicoinUnit(displayFormat, amountLoki),

@@ -43,7 +43,7 @@ export function FormattedFlokicoinAmount({
     if (!showSymbol) {
         return <span className={className}>{formattedNumber}</span>;
     }
-    return <span className={className}>{unit} {formattedNumber}</span>;
+    return <span className={className}>{formattedNumber} {unit}</span>;
   }
 
   const formattedNumber = new Intl.NumberFormat().format(loki);
