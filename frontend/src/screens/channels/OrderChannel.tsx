@@ -9,7 +9,6 @@ import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Card, CardContent } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
-import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { Label } from "src/components/ui/label";
 import {
     Select,
@@ -319,7 +318,7 @@ export default function OrderChannel() {
                           </Tooltip>
                         </TooltipProvider>
 
-                        <InputWithAdornment
+                        <Input
                           id="amountDisplay"
                           type="number"
                           required
@@ -328,9 +327,6 @@ export default function OrderChannel() {
                           onChange={(e) => setAmountDisplay(e.target.value.trim())}
                           min={lsps1Info?.min_initial_lsp_balance_loki ? scaleAmount(lsps1Info.min_initial_lsp_balance_loki) : undefined}
                           max={lsps1Info?.max_initial_lsp_balance_loki ? scaleAmount(lsps1Info.max_initial_lsp_balance_loki) : undefined}
-                          endAdornment={
-                            <FormattedFiatAmount amount={parseAmount(+amountDisplay)} className="mr-2" />
-                          }
                         />
 
                         {/* Helper text for limits or balance if needed */}
@@ -356,12 +352,7 @@ export default function OrderChannel() {
                               )}
                               onClick={() => setAmountDisplay(scaleAmount(preset).toString())}
                             >
-                              <div className="font-medium">
-                                <FormattedFlokicoinAmount amount={preset * 1000} />
-                              </div>
-                              <div className="text-muted-foreground mt-1 opacity-70">
-                                <FormattedFiatAmount amount={preset} />
-                              </div>
+                              <FormattedFlokicoinAmount amount={preset * 1000} />
                             </div>
                           ))}
                         </div>
