@@ -51,12 +51,32 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
     );
   };
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Strip everything except digits and decimal point
+    let rawValue = e.target.value.replace(/[^0-9.]/g, "");
+    
+    // Prevent multiple decimal points
+    const parts = rawValue.split(".");
+    if (parts.length > 2) {
+      rawValue = parts[0] + "." + parts.slice(1).join("");
+    }
+
+    onAmountChange(rawValue);
+  };
+
+  let displayValue = amount;
+  if (amount) {
+    const parts = amount.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    displayValue = parts.join(".");
+  }
+
   return (
     <InputWithAdornment
-      type="number"
-      step="any"
-      value={amount}
-      onChange={(e) => onAmountChange(e.target.value.trim())}
+      type="text"
+      inputMode="decimal"
+      value={displayValue}
+      onChange={handleAmountChange}
       endAdornment={<Adornment />}
       {...props}
     />
