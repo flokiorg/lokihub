@@ -250,7 +250,7 @@ function NewChannelInternal({
                   )}
                   onClick={() => setAmount(scaleInputAmount(amount, inputUnit).toString())}
                 >
-                  <FormattedFlokicoinAmount amount={amount * 1000} />
+                  <FormattedFlokicoinAmount amount={amount * 1000} showSymbol={false} />
                 </div>
               ))}
             </div>

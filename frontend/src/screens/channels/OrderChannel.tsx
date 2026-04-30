@@ -356,7 +356,7 @@ export default function OrderChannel() {
                               )}
                               onClick={() => setAmountDisplay(scaleInputAmount(preset, inputUnit).toString())}
                             >
-                              <FormattedFlokicoinAmount amount={preset * 1000} />
+                              <FormattedFlokicoinAmount amount={preset * 1000} showSymbol={false} />
                             </div>
                           ))}
                         </div>
