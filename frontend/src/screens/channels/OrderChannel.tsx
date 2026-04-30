@@ -341,13 +341,11 @@ export default function OrderChannel() {
 
                         {/* Helper text for limits or balance if needed */}
                           {lsps1Info && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
-                                    <span className="opacity-70">Order Range:</span>
-                                    <div className="flex items-center gap-1.5 text-foreground/90">
-                                        <FormattedFlokicoinAmount amount={Number(lsps1Info.min_initial_lsp_balance_loki) * 1000} />
-                                        <span className="opacity-40">—</span>
-                                        <FormattedFlokicoinAmount amount={Number(lsps1Info.max_initial_lsp_balance_loki) * 1000} />
-                                    </div>
+                                <div className="text-muted-foreground text-sm sensitive slashed-zero">
+                                  Order Range:{" "}
+                                  <FormattedFlokicoinAmount amount={Number(lsps1Info.min_initial_lsp_balance_loki) * 1000} />
+                                  {" - "}
+                                  <FormattedFlokicoinAmount amount={Number(lsps1Info.max_initial_lsp_balance_loki) * 1000} />
                                 </div>
                          )}
 
