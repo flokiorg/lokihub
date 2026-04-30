@@ -266,20 +266,16 @@ export default function OrderChannel() {
   return (
     <div className="flex flex-col gap-5">
       {!paymentInvoice && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4 mb-5">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-bold font-sans">Increase Inbound Liquidity</h1>
-            <p className="text-sm text-muted-foreground">
-              Order a channel from your LSP to increase your receiving capacity
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        <AppHeader
+          title="Increase Inbound Liquidity"
+          description="Order a channel from your LSP to increase your receiving capacity"
+          contentRight={
             <LinkButton to="/channels/history" variant="secondary" size="sm" className="hidden sm:flex">
               <History className="w-4 h-4 mr-2" />
               History
             </LinkButton>
-          </div>
-        </div>
+          }
+        />
       )}
 
 
