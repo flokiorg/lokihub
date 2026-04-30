@@ -17,6 +17,8 @@ export function useUnit() {
     unit: (amountLoki?: number) => getFlokicoinUnit(displayFormat, amountLoki),
     scaleAmount: (amountLoki: number) => lokiToDisplay(amountLoki, displayFormat),
     parseAmount: (amountDisplay: number) => displayToLoki(amountDisplay, displayFormat),
+    scaleInputAmount: (amountLoki: number, inputUnit: "FLC" | "loki") => lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki"),
+    parseInputAmount: (amountDisplay: number, inputUnit: "FLC" | "loki") => displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki"),
     displayFormat,
   };
 }

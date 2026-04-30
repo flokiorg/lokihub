@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Input } from "src/components/ui/input";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
   Dialog,
@@ -76,8 +77,15 @@ function NewChannelInternal({
 }) {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
   const navigate = useNavigate();
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
 
   const presetAmounts = [250_000, 500_000, 1_000_000];
 
@@ -87,6 +95,12 @@ function NewChannelInternal({
     amount: presetAmounts[0].toString(),
     isPublic: !!channels.length && channels.every((channel) => channel.public),
   });
+
+  // Adjust initial amount based on inputUnit on mount
+  React.useEffect(() => {
+    setOrder(current => ({ ...current, amount: scaleInputAmount(presetAmounts[0], inputUnit).toString() }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
 
@@ -144,7 +158,7 @@ function NewChannelInternal({
   const openImmediately =
     order.amount &&
     order.paymentMethod === "onchain" &&
-    parseAmount(parseFloat(order.amount)) < balances.onchain.spendable;
+    parseInputAmount(parseFloat(order.amount), inputUnit) < balances.onchain.spendable;
 
   return (
     <>
@@ -203,23 +217,21 @@ function NewChannelInternal({
               </Tooltip>
             </TooltipProvider>
 
-            {order.amount && parseAmount(parseFloat(order.amount)) < 200_000 && (
+            {order.amount && parseInputAmount(parseFloat(order.amount), inputUnit) < 200_000 && (
               <p className="text-muted-foreground text-xs">
                 For a smooth experience consider a opening a channel of{" "}
                 <FormattedFlokicoinAmount amount={200_000 * 1000} /> in size or
                 more.
               </p>
             )}
-            <Input
+            <CurrencyInput
               id="amount"
-              type="number"
               required
-              min={scaleAmount(100_000)}
-              step="any"
-              value={order.amount}
-              onChange={(e) => {
-                setAmount(e.target.value.trim());
-              }}
+              min={scaleInputAmount(100_000, inputUnit)}
+              amount={order.amount || ""}
+              onAmountChange={(val) => setAmount(val)}
+              inputUnit={inputUnit}
+              onInputUnitChange={setInputUnit}
             />
             <div className="text-muted-foreground text-sm sensitive slashed-zero">
               Current on-chain balance:{" "}
@@ -233,10 +245,10 @@ function NewChannelInternal({
                   key={amount}
                   className={cn(
                     "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                    +(parseAmount(parseFloat(order.amount || "0")) || "0") === amount &&
+                    +(parseInputAmount(parseFloat(order.amount || "0"), inputUnit) || "0") === amount &&
                       "border-primary hover:border-primary"
                   )}
-                  onClick={() => setAmount(scaleAmount(amount).toString())}
+                  onClick={() => setAmount(scaleInputAmount(amount, inputUnit).toString())}
                 >
                   <FormattedFlokicoinAmount amount={amount * 1000} />
                 </div>

@@ -8,6 +8,7 @@ import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Card, CardContent } from "src/components/ui/card";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
@@ -48,9 +49,20 @@ export default function OrderChannel() {
   // Unified loading and error state handling
   const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext(); 
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
   
-  const [amountDisplay, setAmountDisplay] = useState<string>(""); // Start empty to allow smart prefill
+  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
+  useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const presetAmounts = [21 * 100_000_000, 50 * 100_000_000, 500 * 100_000_000];
+
+  const [amountDisplay, setAmountDisplay] = useState<string>(
+    scaleInputAmount(presetAmounts[0], displayFormat === "flc" ? "FLC" : "loki").toString()
+  );
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
   const [orderId, setOrderId] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -96,26 +108,26 @@ export default function OrderChannel() {
   const validationError = React.useMemo(() => {
       if (!amountDisplay || !lsps1Info) return null;
       
-      const amtLoki = parseAmount(+amountDisplay);
+      const amtLoki = parseInputAmount(+amountDisplay, inputUnit);
       if (isNaN(amtLoki)) return "Invalid amount";
 
       const minNum = Number(lsps1Info.min_initial_lsp_balance_loki);
       const maxNum = Number(lsps1Info.max_initial_lsp_balance_loki);
 
       if (!isNaN(minNum) && amtLoki < minNum) {
-          return `Amount below minimum of ${scaleAmount(minNum)} ${unit()}`;
+          return `Amount below minimum of ${scaleInputAmount(minNum, inputUnit)} ${inputUnit}`;
       }
       if (!isNaN(maxNum) && maxNum > 0 && amtLoki > maxNum) {
-          return `Amount exceeds maximum of ${scaleAmount(maxNum)} ${unit()}`;
+          return `Amount exceeds maximum of ${scaleInputAmount(maxNum, inputUnit)} ${inputUnit}`;
       }
       
       return null;
-  }, [amountDisplay, lsps1Info]);
+  }, [amountDisplay, lsps1Info, inputUnit, parseInputAmount, scaleInputAmount]);
 
   const estimatedFee = React.useMemo(() => {
     if (!amountDisplay || !lsps1Info?.opening_fee_params?.length) return 0;
     
-    const amtLoki = parseAmount(+amountDisplay);
+    const amtLoki = parseInputAmount(+amountDisplay, inputUnit);
     if (isNaN(amtLoki)) return 0;
     
     const amtMloki = amtLoki * 1000;
@@ -125,7 +137,7 @@ export default function OrderChannel() {
     const proportionalFee = Math.ceil((amtMloki * params.proportional) / 1000000);
     
     return Math.max(minFee, proportionalFee) / 1000;
-  }, [amountDisplay, lsps1Info]);
+  }, [amountDisplay, lsps1Info, inputUnit, parseInputAmount]);
 
 
   const checkOrderStatus = useCallback(async () => {
@@ -140,7 +152,7 @@ export default function OrderChannel() {
               
               const amountSats = res.order_total_loki 
                   ? Math.ceil(res.order_total_loki) 
-                  : parseAmount(+amountDisplay);
+                  : parseInputAmount(+amountDisplay, inputUnit);
 
               const invRes = await request<{invoice: string}>("/api/invoices", {
                   method: "POST",
@@ -223,7 +235,7 @@ export default function OrderChannel() {
       if (!selectedLSP || !amountDisplay) return;
       
       try {
-          const amountLoki = parseAmount(+amountDisplay);
+          const amountLoki = parseInputAmount(+amountDisplay, inputUnit);
           const req: LSPS1CreateOrderRequest = {
               lsp_pubkey: selectedLSP,
               amount_loki: amountLoki,
@@ -248,8 +260,6 @@ export default function OrderChannel() {
          });
       }
   };
-
-  const presetAmounts = [21 * 100_000_000, 50 * 100_000_000, 500 * 100_000_000];
 
   if (!info || !balances) return <Loading />;
 
@@ -318,15 +328,15 @@ export default function OrderChannel() {
                           </Tooltip>
                         </TooltipProvider>
 
-                        <Input
+                        <CurrencyInput
                           id="amountDisplay"
-                          type="number"
                           required
-                          step="any"
-                          value={amountDisplay}
-                          onChange={(e) => setAmountDisplay(e.target.value.trim())}
-                          min={lsps1Info?.min_initial_lsp_balance_loki ? scaleAmount(lsps1Info.min_initial_lsp_balance_loki) : undefined}
-                          max={lsps1Info?.max_initial_lsp_balance_loki ? scaleAmount(lsps1Info.max_initial_lsp_balance_loki) : undefined}
+                          amount={amountDisplay}
+                          onAmountChange={(val) => setAmountDisplay(val)}
+                          inputUnit={inputUnit}
+                          onInputUnitChange={setInputUnit}
+                          min={lsps1Info?.min_initial_lsp_balance_loki ? scaleInputAmount(lsps1Info.min_initial_lsp_balance_loki, inputUnit) : undefined}
+                          max={lsps1Info?.max_initial_lsp_balance_loki ? scaleInputAmount(lsps1Info.max_initial_lsp_balance_loki, inputUnit) : undefined}
                         />
 
                         {/* Helper text for limits or balance if needed */}
@@ -347,10 +357,10 @@ export default function OrderChannel() {
                               key={preset}
                               className={cn(
                                 "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                                +(parseAmount(+amountDisplay) || "0") === preset &&
+                                +(parseInputAmount(+amountDisplay, inputUnit) || "0") === preset &&
                                   "border-primary hover:border-primary"
                               )}
-                              onClick={() => setAmountDisplay(scaleAmount(preset).toString())}
+                              onClick={() => setAmountDisplay(scaleInputAmount(preset, inputUnit).toString())}
                             >
                               <FormattedFlokicoinAmount amount={preset * 1000} />
                             </div>
@@ -463,7 +473,7 @@ export default function OrderChannel() {
                         <div className="text-center space-y-2">
                             <p className="text-lg font-semibold">Payment Complete</p>
                             <p className="text-muted-foreground text-sm">
-                                The LSP is now opening a channel to provide you with <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} /> of inbound liquidity.
+                                The LSP is now opening a channel to provide you with <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} /> of inbound liquidity.
                             </p>
                             <p className="text-muted-foreground text-xs">
                                 This may take a few minutes. You'll see the new channel in your channels list once it's confirmed.
@@ -487,9 +497,9 @@ export default function OrderChannel() {
                             <span className="text-muted-foreground">Incoming Liquidity</span>
                             <div className="text-right">
                                 <div className="font-semibold">
-                                    <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} />
+                                    <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} />
                                 </div>
-                                <FormattedFiatAmount amount={parseAmount(+amountDisplay)} className="text-muted-foreground text-xs" />
+                                <FormattedFiatAmount amount={parseInputAmount(+amountDisplay, inputUnit)} className="text-muted-foreground text-xs" />
                             </div>
                         </div>
                         {orderFee > 0 && (
