@@ -1396,9 +1396,9 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 	}
 
 	// 2. Second priority: Database values (already saved from previous runs or env processing)
-	address, _ := api.cfg.Get("FLNDAddress", "")
-	certHex, _ := api.cfg.Get("FLNDCertHex", "")
-	macaroonHex, _ := api.cfg.Get("FLNDMacaroonHex", "")
+	address, _ := api.cfg.Get("LNDAddress", "")
+	certHex, _ := api.cfg.Get("LNDCertHex", "")
+	macaroonHex, _ := api.cfg.Get("LNDMacaroonHex", "")
 
 	if address != "" && macaroonHex != "" {
 		err := api.verifyFLNDConnection(ctx, address, certHex, macaroonHex)
@@ -1542,7 +1542,7 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		setupRequest.LNBackendType = config.FLNDBackendType
 
 		if customDataDir != "" {
-			err = api.cfg.SetUpdate("FLNDDataDir", customDataDir, setupRequest.UnlockPassword)
+			err = api.cfg.SetUpdate("LNDDataDir", customDataDir, setupRequest.UnlockPassword)
 			if err != nil {
 				logger.Logger.Error().Err(err).Msg("Failed to save FLND data dir")
 				return err
@@ -1551,21 +1551,21 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 	}
 
 	if setupRequest.FLNDAddress != "" {
-		err = api.cfg.SetUpdate("FLNDAddress", setupRequest.FLNDAddress, setupRequest.UnlockPassword)
+		err = api.cfg.SetUpdate("LNDAddress", setupRequest.FLNDAddress, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save FLND address")
 			return err
 		}
 	}
 	if setupRequest.FLNDCertHex != "" {
-		err = api.cfg.SetUpdate("FLNDCertHex", setupRequest.FLNDCertHex, setupRequest.UnlockPassword)
+		err = api.cfg.SetUpdate("LNDCertHex", setupRequest.FLNDCertHex, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save FLND cert hex")
 			return err
 		}
 	}
 	if setupRequest.FLNDMacaroonHex != "" {
-		err = api.cfg.SetUpdate("FLNDMacaroonHex", setupRequest.FLNDMacaroonHex, setupRequest.UnlockPassword)
+		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.FLNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save FLND macaroon hex")
 			return err
@@ -1964,13 +1964,13 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 	}
 
 	// 4. Save Config
-	if err := api.cfg.SetUpdate("FLNDAddress", address, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDAddress", address, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("FLNDCertHex", certHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDCertHex", certHex, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("FLNDMacaroonHex", macaroonHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDMacaroonHex", macaroonHex, req.UnlockPassword); err != nil {
 		return err
 	}
 	// Set Backend Type last
@@ -2075,13 +2075,13 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 	}
 
 	// 2. Save Config
-	if err := api.cfg.SetUpdate("FLNDAddress", req.FLNDAddress, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDAddress", req.FLNDAddress, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("FLNDCertHex", req.FLNDCertHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDCertHex", req.FLNDCertHex, req.UnlockPassword); err != nil {
 		return err
 	}
-	if err := api.cfg.SetUpdate("FLNDMacaroonHex", req.FLNDMacaroonHex, req.UnlockPassword); err != nil {
+	if err := api.cfg.SetUpdate("LNDMacaroonHex", req.FLNDMacaroonHex, req.UnlockPassword); err != nil {
 		return err
 	}
 	// Set Backend Type last

@@ -421,9 +421,9 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 
 	logger.Logger.Info().Msgf("Connecting to FLN Backend: %s", config.FLNDBackendType)
 
-	FLNDAddress, _ := svc.cfg.Get("FLNDAddress", encryptionKey)
-	FLNDCertHex, _ := svc.cfg.Get("FLNDCertHex", encryptionKey)
-	FLNDMacaroonHex, _ := svc.cfg.Get("FLNDMacaroonHex", encryptionKey)
+	FLNDAddress, _ := svc.cfg.Get("LNDAddress", encryptionKey)
+	FLNDCertHex, _ := svc.cfg.Get("LNDCertHex", encryptionKey)
+	FLNDMacaroonHex, _ := svc.cfg.Get("LNDMacaroonHex", encryptionKey)
 
 	lnClient, err := flnd.NewFLNDService(ctx, svc.eventPublisher, FLNDAddress, FLNDCertHex, FLNDMacaroonHex)
 

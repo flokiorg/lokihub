@@ -63,7 +63,7 @@ func (cfg *config) init(env *AppConfig) error {
 
 	// FLND specific to support env variables
 	if cfg.Env.FLNDAddress != "" {
-		err := cfg.SetUpdate("FLNDAddress", cfg.Env.FLNDAddress, "")
+		err := cfg.SetUpdate("LNDAddress", cfg.Env.FLNDAddress, "")
 		if err != nil {
 			return err
 		}
@@ -76,14 +76,14 @@ func (cfg *config) init(env *AppConfig) error {
 			return err
 		}
 		certHex := hex.EncodeToString(certBytes)
-		err = cfg.SetUpdate("FLNDCertHex", certHex, "")
+		err = cfg.SetUpdate("LNDCertHex", certHex, "")
 		if err != nil {
 			return err
 		}
 	} else {
 		// If no FLNDCertFile is provided, clear any stored certificate
 		// hex value so that no certificate is used for TLS verification.
-		err := cfg.SetUpdate("FLNDCertHex", "", "")
+		err := cfg.SetUpdate("LNDCertHex", "", "")
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func (cfg *config) init(env *AppConfig) error {
 			return err
 		}
 		macHex := hex.EncodeToString(macBytes)
-		err = cfg.SetUpdate("FLNDMacaroonHex", macHex, "")
+		err = cfg.SetUpdate("LNDMacaroonHex", macHex, "")
 		if err != nil {
 			return err
 		}
