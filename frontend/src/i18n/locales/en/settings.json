@@ -19,7 +19,7 @@
   },
   "units": {
     "displayUnit": "Display Unit",
-    "displayUnitDescription": "Choose how amounts are shown",
+    "displayUnitDescription": "Choose how amounts are displayed",
     "fiatCurrency": "Fiat Currency",
     "fiatCurrencyDescription": "Your preferred fiat reference currency",
     "auto": "Auto"
@@ -28,6 +28,63 @@
     "label": "Language",
     "description": "Choose your preferred interface language",
     "updated": "Language updated."
+  },
+  "nav": {
+    "general": "General",
+    "services": "Services",
+    "autoUnlock": "Auto Unlock",
+    "unlockPassword": "Unlock Password",
+    "backup": "Backup",
+    "migrate": "Migrate Lokihub",
+    "developer": "Developer",
+    "debugTools": "Debug Tools",
+    "about": "About"
+  },
+  "shutdown": {
+    "dialogTitle": "Do you want to turn off your Lokihub?",
+    "dialogDesc": "This will turn off your Lokihub and make your node offline. You won't be able to send or receive flokicoin until you unlock it.",
+    "cancel": "Cancel",
+    "confirm": "Continue",
+    "toast": "Your node has been turned off.",
+    "failedToast": "Failed to shutdown node"
+  },
+  "header": {
+    "title": "Settings"
+  },
+  "changePassword": {
+    "title": "Change Unlock Password",
+    "important": "Important!",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNew": "Confirm New Password",
+    "save": "Save"
+  },
+  "backup": {
+    "title": "Backup",
+    "important": "Important",
+    "passwordLabel": "Password",
+    "active": "Active"
+  },
+  "autoUnlock": {
+    "title": "Auto Unlock",
+    "attention": "Attention",
+    "passwordLabel": "Unlock Password"
+  },
+  "developer": {
+    "title": "Developer",
+    "tokenType": "Token Type",
+    "tokenExpiry": "Token Expiry (Days)",
+    "passwordLabel": "Unlock Password",
+    "createToken": "Create Token"
+  },
+  "debugTools": {
+    "title": "Debug Tools",
+    "probeInvoice": "Probe Invoice",
+    "probeKeysend": "Probe Keysend",
+    "networkGraph": "Get Network Graph",
+    "refundTo": "Refund to",
+    "onchainAddress": "On-chain address",
+    "cancel": "Cancel"
   },
   "toasts": {
     "themeUpdated": "Theme updated.",

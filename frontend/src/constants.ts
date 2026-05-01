@@ -5,6 +5,7 @@ export const localStorageKeys = {
   authToken: "authToken",
   supportLokiSidebarHintHiddenUntil: "supportLokiSidebarHintHiddenUntil",
   appAlertsHiddenUntil: "appAlertsHiddenUntil",
+  lokihubLang: "lokihub-lang",
 };
 
 export const ONCHAIN_DUST_LOKI = 1000;

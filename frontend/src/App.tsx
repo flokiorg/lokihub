@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import {
     RouterProvider,
     createBrowserRouter,
@@ -26,7 +27,7 @@ function App() {
   const { data: info, error, isLoading } = useInfo();
 
   return (
-    <>
+    <Suspense fallback={<Loading />}>
       <TouchProvider>
         <ThemeProvider
           defaultTheme="default"
@@ -43,7 +44,7 @@ function App() {
           <Toaster position="bottom-right" richColors={true} />
         </ThemeProvider>
       </TouchProvider>
-    </>
+    </Suspense>
   );
 }
 

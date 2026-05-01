@@ -16,6 +16,26 @@
     "failed": "Failed",
     "viewAll": "View all"
   },
+  "header": {
+    "title": "Wallet",
+    "receive": "Receive",
+    "send": "Send",
+    "swap": "Swap"
+  },
+  "alerts": {
+    "channelReservesUnmet": "Channel Reserves Unmet",
+    "channelReservesDesc": "You won't be able to make payments until you fill your channel reserve.",
+    "viewChannelReserves": "View channel reserves",
+    "openFirstChannel": "Open Your First Channel",
+    "openFirstChannelDesc": "You won't be able to receive or send payments until you",
+    "openFirstChannelLink": "open your first channel",
+    "onchainShownOnNode": "On-chain transactions are shown on the Node page",
+    "viewOnchain": "View On-chain transactions"
+  },
+  "onboarding": {
+    "title": "Get started with your Lokihub",
+    "description": "Follow these initial steps to set up and make the most of your Loki Hub."
+  },
   "receive": {
     "title": "Receive",
     "invoice": "Lightning Invoice",
@@ -25,7 +45,62 @@
     "generate": "Generate Invoice",
     "copyInvoice": "Copy Invoice",
     "copyAddress": "Copy Address",
-    "shareInvoice": "Share Invoice"
+    "shareInvoice": "Share Invoice",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    },
+    "buyingLiquidity": "Buying inbound liquidity...",
+    "amountTooSmall": "Amount too small for JIT payment. Minimum: {{amount}} {{unit}}.",
+    "amountTooLarge": "Amount too large for JIT payment. Maximum: {{amount}} {{unit}}.",
+    "failedToBuyLiquidity": "Failed to buy liquidity",
+    "successCreated": "Successfully created invoice",
+    "failedToCreate": "Failed to create invoice",
+    "lightningInvoice": "Lightning Invoice",
+    "createInvoice": "Create Invoice",
+    "waiting": "Waiting for payment",
+    "paymentReceived": "Payment Received",
+    "createAnother": "Create Another Invoice",
+    "backToWallet": "Back to Wallet",
+    "amountPlaceholder": "Amount in {{unit}}...",
+    "liquidityProvider": "Liquidity Provider",
+    "selectLSP": "Select LSP",
+    "jitPayment": "JIT Payment",
+    "jitExplainedTitle": "JIT Payment Explained",
+    "jitWhyNeededTitle": "Why is this needed?",
+    "jitWhyNeededDesc": "Lightning payments require <strong>inbound liquidity</strong> (receiving capacity). You currently don't have enough capacity to receive this amount directly.",
+    "jitHowWorksTitle": "How it works",
+    "jitHowWorksDesc": "Your LSP will automatically open a new channel <strong>Just-In-Time (JIT)</strong> when the payment arrives. This ensures your payment succeeds immediately without you needing to manually manage channels.",
+    "feeStructure": "Fee Structure",
+    "minFee": "Minimum Fee:",
+    "propRate": "Proportional Rate:",
+    "min": "Min:",
+    "max": "Max:",
+    "feeLogic": "The fee is the <strong>higher</strong> of the Minimum Fee or the calculated Proportional Fee.",
+    "whoPays": "Who pays the fee?",
+    "receiverPays": "Receiver Pays:",
+    "receiverPaysDesc": "(Default) The fee is deducted from the amount you receive.",
+    "senderPays": "Sender Pays:",
+    "senderPaysDesc": "The fee is added to the invoice total. The sender pays the extra cost.",
+    "loadingJit": "Loading JIT details...",
+    "estimatedFee": "Estimated Fee",
+    "totalToSend": "Total to Send",
+    "youReceive": "You Receive",
+    "retry": "Retry",
+    "paymentRange": "Payment Range:",
+    "includeFee": "Include fee in invoice (Sender pays)",
+    "descriptionPlaceholder": "For e.g. who is sending this payment?",
+    "receiveOnchain": "Receive from On-chain",
+    "unknownError": "Unknown error"
   },
   "send": {
     "title": "Send",
@@ -34,6 +109,58 @@
     "description": "Description",
     "confirm": "Confirm Payment",
     "pay": "Pay",
-    "scanQr": "Scan QR Code"
+    "scanQr": "Scan QR Code",
+    "zeroAmount": {
+      "title": "Enter Amount",
+      "description": "This invoice has no amount. Enter how much you want to send."
+    },
+    "success": {
+      "title": "Payment Sent!",
+      "description": "Your payment was sent successfully."
+    },
+    "lnurl": {
+      "title": "Send via LNURL"
+    },
+    "onchain": {
+      "title": "Send On-chain",
+      "amountLabel": "Amount",
+      "feeRateLabel": "Fee Rate ({{unit}}/vB)",
+      "addressLabel": "On-chain Address",
+      "amountNotIdeal": "Amount not ideal for On-chain transaction",
+      "cancel": "Cancel"
+    }
+  },
+  "signMessage": {
+    "title": "Sign Message",
+    "label": "Message",
+    "sign": "Sign"
+  },
+  "nodeAlias": {
+    "title": "Node Alias",
+    "label": "Node Alias",
+    "save": "Save"
+  },
+  "withdraw": {
+    "title": "Withdraw On-chain Funds",
+    "amountLabel": "Amount",
+    "addressLabel": "Onchain Address",
+    "feeRateLabel": "Fee Rate ({{unit}}/vB)",
+    "sendAllAlert": "Entire wallet balance will be sent",
+    "cancel": "Cancel"
+  },
+  "subwallets": {
+    "title": "Sub-wallets",
+    "new": "New Sub-wallet",
+    "empty": "No sub-wallets yet",
+    "about": {
+      "title": "About Sub-wallets",
+      "close": "Close"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "Awaiting Confirmations",
+    "backToNode": "Back to Node",
+    "received": "Received",
+    "viewExplorer": "View on Explorer"
   }
 }

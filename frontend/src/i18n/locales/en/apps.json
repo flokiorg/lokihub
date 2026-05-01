@@ -3,6 +3,15 @@
   "description": "Apps connected to your node via Nostr Wallet Connect",
   "empty": "No apps connected yet",
   "connect": "Connect App",
+  "detail": {
+    "title": "Connection Details",
+    "delete": "Delete Connection",
+    "deleteConfirm": "Are you sure you want to delete this connection?",
+    "deleteSuccess": "Connection deleted.",
+    "edit": "Edit Permissions",
+    "close": "Close",
+    "cancel": "Cancel"
+  },
   "permissions": {
     "title": "Permissions",
     "pay": "Pay invoices",
@@ -15,6 +24,7 @@
     "title": "Budget",
     "renewal": "Budget Renewal",
     "amount": "Budget Amount",
+    "customAmount": "Custom budget amount ({{unit}})",
     "spent": "Spent",
     "remaining": "Remaining"
   },
@@ -29,6 +39,117 @@
     "delete": "Delete Connection",
     "edit": "Edit Permissions",
     "deleteConfirm": "Are you sure you want to delete this connection?",
-    "deleteSuccess": "Connection deleted."
+    "deleteSuccess": "Connection deleted.",
+    "decrease": "Decrease",
+    "decreaseTitle": "Decrease Balance",
+    "decreaseAmountLabel": "Amount ({{unit}})",
+    "increaseTitle": "Increase Balance"
+  },
+  "scopes": {
+    "title": "Choose wallet permissions"
+  },
+  "disconnectApp": {
+    "cancel": "Cancel"
+  },
+  "expiry": {
+    "title": "Expiry"
+  },
+  "connections": {
+    "title": "Connections",
+    "addConnection": "Add Connection",
+    "appStore": "App Store",
+    "connectedApps": "Connected Apps",
+    "editConnection": "Edit Connection",
+    "successfullyUpdated": "Successfully updated connection",
+    "failedToUpdate": "Failed to update connection",
+    "lokiAccount": "Loki Account",
+    "connections_count": "{{count}} Connections",
+    "connected": "Connected",
+    "addAnother": "Add Another Connection",
+    "connectionDetails": "Connection Details",
+    "disconnect": "Disconnect {{appName}}",
+    "confirmUpdate": "Confirm Update App",
+    "isolatedRemoveConfirm": "Are you sure you wish to remove the <1>isolated</1> status from this connection?",
+    "payPermissionsConfirm": "Are you sure you wish to give this connection <1>pay permissions</1>?",
+    "warningNotice": "⚠️ Warning: This applies to all apps that have this connection secret. Only change this if you know it is safe to do so, otherwise you could potentially lose all funds",
+    "upToBudget": " up to the specified budget",
+    "isolatedFunds": " that are deposited into this isolated app"
+  },
+  "appStore": {
+    "submitApp": "Submit your app",
+    "links": "Links"
+  },
+  "usage": {
+    "isolatedBalance": "Isolated Balance",
+    "decrease": "Decrease",
+    "increase": "Increase",
+    "totalSpent": "Total Spent",
+    "totalReceived": "Total Received",
+    "budget": "Budget",
+    "leftInBudget": "Left in budget",
+    "budgetRenewal": "Budget renewal"
+  },
+  "newApp": {
+    "title": "Connect a New App",
+    "description": "Paste a connection string or scan a QR code to connect an app to your wallet.",
+    "nwcString": "Connection String",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "Connect",
+    "unsupportedApp": "Unsupported App",
+    "unsupportedMethods": "This app requests methods not supported by your wallet: {{methods}}",
+    "unsupportedNotificationTypes": "This app requests notification types not supported by your wallet: {{types}}",
+    "tryLdkBackend": "Try the Lokihub LDK backend for extra features.",
+    "connectTo": "Connect to {{appName}}",
+    "connectNewApp": "Connect a new app",
+    "headerDescription": "Configure wallet permissions for the app and follow instructions to finalize the connection",
+    "install": "Install",
+    "open": "Open",
+    "waitingForConnection": "Waiting for app to connect...",
+    "name": "Name",
+    "nameDescription": "Name of the app or purpose of the connection",
+    "enableAcceptingConnections": "Enable accepting connections to other apps",
+    "allowAuthorizeNew": "Allow this app to let you authorize new connections to your Lokihub.",
+    "returnTo": "You will automatically return to {{url}}",
+    "next": "Next",
+    "back": "Back",
+    "connectionEstablished": "Connection established!",
+    "canUseApp": "You can now use the app with your Lokihub.",
+    "openApp": "Open the app you wish to connect to",
+    "findSettings": "Find settings to connect your wallet (may be under <1>Nostr Wallet Connect</1> or <2>NWC</2>).",
+    "scanOrPaste": "Scan or paste the connection secret",
+    "optionalTopUp": "Optional: Top up sub-wallet balance ({{amount}})",
+    "topUp": "Top Up",
+    "confirmNewConnection": "Confirm New Connection",
+    "lokiGoPermission": "Loki Go will be given permission to create other app connections which can spend your balance.",
+    "warningLokiGo": "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.",
+    "enterUnlockPassword": "Please enter your unlock password to continue.",
+    "unlockPassword": "Unlock Password",
+    "specifyWalletPermissions": "Please specify wallet permissions.",
+    "appCreated": "App created",
+    "failedToCreate": "Failed to create app",
+    "configure": "Configure",
+    "finalize": "Finalize"
+  },
+  "cleanup": {
+    "title": "Cleanup Unused Apps",
+    "description": "Review apps that haven't been used for 2 months or longer",
+    "warning": "Warning",
+    "warningDetail": "Review the app carefully before deleting it, deleted apps cannot be recovered.",
+    "skip": "Skip",
+    "delete": "Delete",
+    "noMore": "No more unused apps to review.",
+    "backToOverview": "Back to overview",
+    "progress": "Progress",
+    "progressDetail": "{{reviewed}} of {{total}} unused apps reviewed ({{skipped}} skipped, {{deleted}} deleted)"
+  },
+  "connectAppCard": {
+    "title": "Connect App",
+    "description": "Use Nostr Wallet Connect to link apps to your wallet.",
+    "connectionSecret": "Connection Secret",
+    "takingLonger": "Connecting is taking longer than usual.",
+    "continueAnyway": "Continue anyway",
+    "appConnected": "App connected",
+    "revealQR": "Reveal QR",
+    "copySecret": "Copy Connection Secret"
   }
 }
