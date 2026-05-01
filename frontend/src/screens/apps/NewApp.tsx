@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
@@ -68,6 +69,8 @@ type NewAppInternalProps = {
 
 const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => {
   const location = useLocation();
+  const { t } = useTranslation("apps");
+  const { t: tc } = useTranslation("common");
 
   const [unsupportedError, setUnsupportedError] = useState<string>();
   const [isLoading, setLoading] = React.useState(false);
@@ -124,8 +127,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
     );
     if (unsupportedMethods.length) {
       setUnsupportedError(
-        "This app requests methods not supported by your wallet: " +
-          unsupportedMethods
+        t("newApp.unsupportedMethods", { methods: unsupportedMethods.join(", ") })
       );
     }
 
@@ -146,8 +148,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
     );
     if (unsupportedNotificationTypes.length) {
       setUnsupportedError(
-        "This app requests notification types not supported by your wallet: " +
-          unsupportedNotificationTypes
+        t("newApp.unsupportedNotificationTypes", { types: unsupportedNotificationTypes.join(", ") })
       );
     }
 
@@ -241,16 +242,16 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
           : []),
         {
           id: "configure",
-          title: "Configure",
+          title: t("newApp.configure", "Configure"),
         },
-        ...(returnTo || pubkey ? [] : [{ id: "finalize", title: "Finalize" }])
+        ...(returnTo || pubkey ? [] : [{ id: "finalize", title: t("newApp.finalize", "Finalize") }])
       ),
     [appStoreApp, returnTo, pubkey]
   );
 
   const handleCreateApp = async (nextFunc: () => void) => {
     if (!permissions.scopes.length) {
-      toast("Please specify wallet permissions.");
+      toast(t("newApp.specifyWalletPermissions", "Please specify wallet permissions."));
       return;
     }
 
@@ -308,7 +309,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         window.location.href = createAppResponse.returnTo;
         return;
       }
-      toast("App created");
+      toast(t("newApp.appCreated", "App created"));
       setCreateAppResponse(createAppResponse);
       if (pubkey) {
         return;
@@ -316,7 +317,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
       nextFunc();
     } catch (error) {
-      handleRequestError("Failed to create app", error);
+      handleRequestError(t("newApp.failedToCreate", "Failed to create app"), error);
     }
     setLoading(false);
   };
@@ -324,8 +325,8 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
   if (unsupportedError) {
     return (
       <>
-        <AppHeader title="Unsupported App" description={unsupportedError} />
-        <p>Try the Lokihub LDK backend for extra features.</p>
+        <AppHeader title={t("newApp.unsupportedApp", "Unsupported App")} description={unsupportedError} />
+        <p>{t("newApp.tryLdkBackend", "Try the Lokihub LDK backend for extra features.")}</p>
       </>
     );
   }
@@ -333,7 +334,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
   return (
     <>
       <AppHeader
-        title={appName ? `Connect to ${appName}` : "Connect a new app"}
+        title={appName ? t("newApp.connectTo", { appName }) : t("newApp.connectNewApp", "Connect a new app")}
         icon={
           appStoreApp?.logo && logoSrc ? (
             <img
@@ -343,7 +344,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
             />
           ) : undefined
         }
-        description="Configure wallet permissions for the app and follow instructions to finalize the connection"
+        description={t("newApp.headerDescription", "Configure wallet permissions for the app and follow instructions to finalize the connection")}
       />
 
       <Stepper.Provider className="space-y-4 max-w-lg" variant="vertical">
@@ -362,7 +363,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                 >
                   <Stepper.Title>
                     {step.title ||
-                      (isInstallable ? "Install" : "Open") + " " + appName}
+                      (isInstallable ? t("newApp.install", "Install") : t("newApp.open", "Open")) + " " + appName}
                   </Stepper.Title>
                   {methods.when(step.id, () => (
                     <>
@@ -377,7 +378,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                               <div className="flex flex-col items-center justify-center p-8 gap-4">
                                 <div className="flex flex-row items-center gap-2 text-sm z-10">
                                   <Loading className="size-4" />
-                                  <p className="text-muted-foreground font-medium">Waiting for app to connect...</p>
+                                  <p className="text-muted-foreground font-medium">{t("newApp.waitingForConnection", "Waiting for app to connect...")}</p>
                                 </div>
                               </div>
                             );
@@ -396,7 +397,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                             />
                             {!appStoreApp && (
                               <div className="w-full grid gap-1.5">
-                                <Label htmlFor="name">Name</Label>
+                                <Label htmlFor="name">{t("newApp.name", "Name")}</Label>
                                 <Input
                                   autoFocus
                                   type="text"
@@ -408,7 +409,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                                   autoComplete="off"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                  Name of the app or purpose of the connection
+                                  {t("newApp.nameDescription", "Name of the app or purpose of the connection")}
                                 </p>
                               </div>
                             )}
@@ -443,11 +444,10 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                                   className="ml-2 text-sm text-foreground flex flex-col items-start justify-center"
                                 >
                                   <div>
-                                    Enable accepting connections to other apps
+                                    {t("newApp.enableAcceptingConnections", "Enable accepting connections to other apps")}
                                   </div>
                                   <div className="text-muted-foreground font-normal">
-                                    Allow this app to let you authorize new
-                                    connections to your Lokihub.
+                                    {t("newApp.allowAuthorizeNew", "Allow this app to let you authorize new connections to your Lokihub.")}
                                   </div>
                                 </Label>
                               </div>
@@ -455,7 +455,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
                             {returnTo && (
                               <p className="text-xs text-muted-foreground">
-                                You will automatically return to {returnTo}
+                                {t("newApp.returnTo", { url: returnTo })}
                               </p>
                             )}
                           </div>
@@ -479,7 +479,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                               variant="secondary"
                               onClick={methods.prev}
                             >
-                              Back
+                              {tc("actions.back", "Back")}
                             </Button>
                           )}
                           <LoadingButton
@@ -496,8 +496,8 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                             }
                           >
                             {step.id === "configure" && pubkey
-                              ? "Connect"
-                              : "Next"}
+                              ? tc("actions.connect", "Connect")
+                              : tc("actions.next", "Next")}
                           </LoadingButton>
                         </Stepper.Controls>
                       )}
@@ -523,18 +523,19 @@ function FinalizeConnection({
   appStoreApp: AppStoreApp | undefined;
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation("apps");
 
   const pairingUri = createAppResponse.pairingUri;
   const { data: app } = useApp(createAppResponse.id, true);
 
   React.useEffect(() => {
     if (app?.lastUsedAt) {
-      toast("Connection established!", {
-        description: "You can now use the app with your Lokihub.",
+      toast(t("newApp.connectionEstablished", "Connection established!"), {
+        description: t("newApp.canUseApp", "You can now use the app with your Lokihub."),
       });
       navigate("/apps?tab=connected-apps");
     }
-  }, [app?.lastUsedAt, navigate]);
+  }, [app?.lastUsedAt, navigate, t]);
 
   if (!createAppResponse) {
     return <Navigate to="/apps/new" />;
@@ -547,23 +548,21 @@ function FinalizeConnection({
           <>{appStoreApp.finalizeGuide}</>
         ) : (
           <ol className="list-decimal list-inside">
-            <li>Open the app you wish to connect to</li>
+            <li>{t("newApp.openApp", "Open the app you wish to connect to")}</li>
             <li>
-              Find settings to connect your wallet (may be under{" "}
-              <span className="font-semibold">Nostr Wallet Connect</span> or{" "}
-              <span className="font-semibold">NWC</span>).
+              {t("newApp.findSettings", "Find settings to connect your wallet (may be under Nostr Wallet Connect or NWC).")}
             </li>
-            <li>Scan or paste the connection secret</li>
+            <li>{t("newApp.scanOrPaste", "Scan or paste the connection secret")}</li>
           </ol>
         )}
 
         {app?.isolated && (
           <li>
-            Optional: Top up sub-wallet balance (
-            <FormattedFlokicoinAmount amount={app.balance} />){" "}
+            {t("newApp.optionalTopUp", { amount: '' })}
+            <FormattedFlokicoinAmount amount={app.balance} />{" "}
             <IsolatedAppTopupDialog appId={app.id}>
               <Button size="sm" variant="secondary">
-                Top Up
+                {t("newApp.topUp", "Top Up")}
               </Button>
             </IsolatedAppTopupDialog>
           </li>
@@ -595,6 +594,8 @@ function SuperuserConfirmPasswordDialog({
   unlockPassword,
   setUnlockPassword,
 }: SuperuserConfirmPasswordDialogProps) {
+  const { t } = useTranslation("apps");
+  const { t: tc } = useTranslation("common");
   return (
     <AlertDialog open={open}>
       <AlertDialogContent>
@@ -605,25 +606,22 @@ function SuperuserConfirmPasswordDialog({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm New Connection</AlertDialogTitle>
+            <AlertDialogTitle>{t("newApp.confirmNewConnection", "Confirm New Connection")}</AlertDialogTitle>
             <AlertDialogDescription>
               <div className="flex flex-col">
                 <p>
-                  Loki Go will be given permission to create other app
-                  connections which can spend your balance.
+                  {t("newApp.lokiGoPermission", "Loki Go will be given permission to create other app connections which can spend your balance.")}
                 </p>
 
                 <p className="mt-4">
-                  Warning: Loki Go can create connections with a larger budget
-                  than the one set for Loki Go. Make sure to always set a
-                  budget.
+                  {t("newApp.warningLokiGo", "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.")}
                 </p>
 
                 <p className="mt-4">
-                  Please enter your unlock password to continue.
+                  {t("newApp.enterUnlockPassword", "Please enter your unlock password to continue.")}
                 </p>
                 <div className="grid gap-1.5 mt-4">
-                  <Label htmlFor="password">Unlock Password</Label>
+                  <Label htmlFor="password">{t("newApp.unlockPassword", "Unlock Password")}</Label>
                   <PasswordInput
                     id="password"
                     onChange={setUnlockPassword}
@@ -636,9 +634,9 @@ function SuperuserConfirmPasswordDialog({
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-3">
             <AlertDialogCancel onClick={() => setOpen(false)}>
-              Cancel
+              {tc("actions.cancel", "Cancel")}
             </AlertDialogCancel>
-            <Button type="submit">Confirm</Button>
+            <Button type="submit">{tc("actions.confirm", "Confirm")}</Button>
           </AlertDialogFooter>
         </form>
       </AlertDialogContent>

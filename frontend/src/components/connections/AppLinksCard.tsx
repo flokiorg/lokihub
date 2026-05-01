@@ -12,8 +12,11 @@ import {
   CardTitle,
 } from "src/components/ui/card";
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
+import { useTranslation } from "react-i18next";
 
 export function AppLinksCard({ appStoreApp }: { appStoreApp: AppStoreApp }) {
+  const { t } = useTranslation("apps");
+
   if (
     !appStoreApp.appleLink &&
     !appStoreApp.playLink &&
@@ -28,7 +31,7 @@ export function AppLinksCard({ appStoreApp }: { appStoreApp: AppStoreApp }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">Links</CardTitle>
+        <CardTitle className="text-2xl">{t("appStore.links", "Links")}</CardTitle>
       </CardHeader>
       <CardFooter className="flex flex-row flex-wrap gap-2">
         {appStoreApp.webLink && (

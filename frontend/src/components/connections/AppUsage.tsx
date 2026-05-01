@@ -18,9 +18,11 @@ import {
 import { Progress } from "src/components/ui/progress";
 import { useTransactions } from "src/hooks/useTransactions";
 import { getBudgetRenewalLabel } from "src/lib/utils";
+import { useTranslation } from "react-i18next";
 import { App, Transaction } from "src/types";
 
 export function AppUsage({ app }: { app: App }) {
+  const { t } = useTranslation("apps");
   const [page, setPage] = React.useState(1);
   const { data: transactionsResponse } = useTransactions(
     app.id,
@@ -74,7 +76,7 @@ export function AppUsage({ app }: { app: App }) {
         <div className="grid grid-cols-1 gap-2">
           <Card className="justify-between">
             <CardHeader>
-              <CardTitle>Isolated Balance</CardTitle>
+              <CardTitle>{t("usage.isolatedBalance", "Isolated Balance")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-end">
@@ -91,14 +93,14 @@ export function AppUsage({ app }: { app: App }) {
                     <IsolatedAppDrawDownDialog appId={app.id}>
                       <Button size="sm" variant="outline">
                         <CircleMinusIcon />
-                        Decrease
+                        {t("usage.decrease", "Decrease")}
                       </Button>
                     </IsolatedAppDrawDownDialog>
                   )}
                   <IsolatedAppTopupDialog appId={app.id}>
                     <Button size="sm" variant="outline">
                       <CirclePlusIcon />
-                      Increase
+                      {t("usage.increase", "Increase")}
                     </Button>
                   </IsolatedAppTopupDialog>
                 </div>
@@ -112,7 +114,7 @@ export function AppUsage({ app }: { app: App }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
         <Card>
           <CardHeader>
-            <CardTitle>Total Spent</CardTitle>
+            <CardTitle>{t("usage.totalSpent", "Total Spent")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="font-medium text-2xl">
@@ -123,7 +125,7 @@ export function AppUsage({ app }: { app: App }) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Total Received</CardTitle>
+            <CardTitle>{t("usage.totalReceived", "Total Received")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="font-medium text-2xl">
@@ -137,13 +139,13 @@ export function AppUsage({ app }: { app: App }) {
       {app.maxAmount > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Budget</CardTitle>
+            <CardTitle>{t("usage.budget", "Budget")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-row justify-between mb-2">
               <div>
                 <p className="text-xs text-secondary-foreground font-medium">
-                  Left in budget
+                  {t("usage.leftInBudget", "Left in budget")}
                 </p>
                 <p className="text-xl font-medium">
                   <FormattedFlokicoinAmount
@@ -154,7 +156,7 @@ export function AppUsage({ app }: { app: App }) {
               </div>
               <div>
                 <p className="text-xs text-secondary-foreground font-medium">
-                  Budget renewal
+                  {t("usage.budgetRenewal", "Budget renewal")}
                 </p>
                 <p className="text-xl font-medium">
                   <FormattedFlokicoinAmount amount={app.maxAmount * 1000} />

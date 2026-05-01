@@ -1,5 +1,6 @@
 import { SkipForwardIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import AppCard from "src/components/connections/AppCard";
 import Loading from "src/components/Loading";
@@ -20,6 +21,7 @@ import { App } from "src/types";
 
 export function AppsCleanup() {
   const unusedApps = useUnusedApps(100_000); // assume never more than 100k apps
+  const { t } = useTranslation("apps");
   const [appIndex, setAppIndex] = React.useState<number>();
   const [skippedCount, setSkippedCount] = React.useState<number>(0);
   const [deletedCount, setDeletedCount] = React.useState<number>(0);
@@ -52,18 +54,17 @@ export function AppsCleanup() {
   return (
     <>
       <AppHeader
-        title="Cleanup Unused Apps"
-        description="Review apps that haven't been used for 2 months or longer"
+        title={t("cleanup.title", "Cleanup Unused Apps")}
+        description={t("cleanup.description", "Review apps that haven't been used for 2 months or longer")}
       />
       {currentApp && (
         <Alert variant="destructive">
           <AlertTitle className="flex gap-2">
             <TriangleAlertIcon className="h-4 w-4" />
-            Warning
+            {t("cleanup.warning", "Warning")}
           </AlertTitle>
           <AlertDescription>
-            Review the app carefully before deleting it, deleted apps cannot be
-            recovered.
+            {t("cleanup.warningDetail", "Review the app carefully before deleting it, deleted apps cannot be recovered.")}
           </AlertDescription>
         </Alert>
       )}
@@ -83,7 +84,7 @@ export function AppsCleanup() {
                         }}
                       >
                         <SkipForwardIcon />
-                        Skip
+                        {t("cleanup.skip", "Skip")}
                       </Button>
                       <DeleteAppButton
                         app={currentApp}
@@ -101,10 +102,10 @@ export function AppsCleanup() {
           )}
           {!currentApp && (
             <>
-              <div>No more unused apps to review.</div>
+              <div>{t("cleanup.noMore", "No more unused apps to review.")}</div>
               <div>
                 <LinkButton to="/apps?tab=connected-apps">
-                  Back to overview
+                  {t("cleanup.backToOverview", "Back to overview")}
                 </LinkButton>
               </div>
             </>
@@ -113,10 +114,14 @@ export function AppsCleanup() {
         <div className="lg:col-span-2">
           <Card className="w-full">
             <CardHeader>
-              <CardTitle>Progress</CardTitle>
+              <CardTitle>{t("cleanup.progress", "Progress")}</CardTitle>
               <CardDescription>
-                {appIndex} of {appsToReview.length} unused apps reviewed (
-                {skippedCount} skipped, {deletedCount} deleted)
+                {t("cleanup.progressDetail", {
+                  reviewed: appIndex,
+                  total: appsToReview.length,
+                  skipped: skippedCount,
+                  deleted: deletedCount,
+                })}
               </CardDescription>
             </CardHeader>
             <CardFooter>
@@ -137,6 +142,7 @@ function DeleteAppButton({
   onDelete: () => void;
 }) {
   const { deleteApp } = useDeleteApp(app);
+  const { t } = useTranslation("apps");
   return (
     <Button
       variant="destructive"
@@ -146,7 +152,7 @@ function DeleteAppButton({
       }}
     >
       <Trash2Icon />
-      Delete
+      {t("cleanup.delete", "Delete")}
     </Button>
   );
 }

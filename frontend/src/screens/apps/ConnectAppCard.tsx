@@ -1,5 +1,6 @@
 import { CheckIcon, CopyIcon, EyeIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
@@ -29,6 +30,7 @@ export function ConnectAppCard({
   const [timeout, setTimeout] = useState(false);
   const [isQRCodeVisible, setIsQRCodeVisible] = useState(false);
   const logoSrc = useAppLogo(appStoreApp?.id);
+  const { t } = useTranslation("apps");
 
   const copy = () => {
     copyToClipboard(pairingUri);
@@ -45,20 +47,20 @@ export function ConnectAppCard({
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">Connection Secret</CardTitle>
+        <CardTitle className="text-center">{t("connectAppCard.connectionSecret", "Connection Secret")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-5">
         {!app.lastUsedAt ? (
           <>
             <div className="flex flex-row items-center gap-2 text-sm z-10">
               <Loading className="size-4" />
-              <p>Waiting for app to connect</p>
+              <p>{t("newApp.waitingForConnection", "Waiting for app to connect...")}</p>
             </div>
             {timeout ? (
               <div className="text-sm flex flex-col gap-2 items-center text-center">
-                Connecting is taking longer than usual.
+                {t("connectAppCard.takingLonger", "Connecting is taking longer than usual.")}
                 <LinkButton to={`/apps/${app?.id}`} variant="secondary">
-                  Continue anyway
+                  {t("connectAppCard.continueAnyway", "Continue anyway")}
                 </LinkButton>
               </div>
             ) : null}
@@ -66,7 +68,7 @@ export function ConnectAppCard({
         ) : (
           <Badge variant="positive">
             <CheckIcon />
-            App connected
+            {t("connectAppCard.appConnected", "App connected")}
           </Badge>
         )}
         {!appStoreApp?.hideConnectionQr ? (
@@ -91,7 +93,7 @@ export function ConnectAppCard({
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
               >
                 <EyeIcon />
-                Reveal QR
+                {t("connectAppCard.revealQR", "Reveal QR")}
               </Button>
             ) : null}
           </div>
@@ -99,7 +101,7 @@ export function ConnectAppCard({
         <div className="flex gap-2">
           <Button onClick={copy} variant="outline">
             <CopyIcon />
-            Copy Connection Secret
+            {t("connectAppCard.copySecret", "Copy Connection Secret")}
           </Button>
           {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
           {/* <ExternalLinkButton to={pairingUri} variant="outline">

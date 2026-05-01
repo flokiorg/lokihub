@@ -1,5 +1,6 @@
 import { CirclePlusIcon, LayoutGridIcon, Plug2Icon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import AppHeader from "src/components/AppHeader";
 import AppStore from "src/components/connections/AppStore";
@@ -15,6 +16,7 @@ import {
 export function Connections() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = React.useState(searchParams.get("tab") || "app-store");
+  const { t } = useTranslation("apps");
 
   React.useEffect(() => {
     const newTabValue = searchParams.get("tab");
@@ -27,25 +29,25 @@ export function Connections() {
   return (
     <>
       <AppHeader
-        title="Connections"
+        title={t("connections.title", "Connections")}
         contentRight={
           <ResponsiveLinkButton
             to="/apps/new"
             icon={CirclePlusIcon}
-            text="Add Connection"
+            text={t("connections.addConnection", "Add Connection")}
           />
         }
       />
       <Tabs value={tab} onValueChange={setTab} className="px-2 lg:px-0">
         <TabsList className="mb-2 lg:mb-6">
           <TabsTrigger value="app-store" className="flex gap-2 items-center">
-            <LayoutGridIcon className="w-5 h-5" /> App Store
+            <LayoutGridIcon className="w-5 h-5" /> {t("connections.appStore", "App Store")}
           </TabsTrigger>
           <TabsTrigger
             value="connected-apps"
             className="flex gap-2 items-center"
           >
-            <Plug2Icon className="w-5 h-5" /> Connected Apps
+            <Plug2Icon className="w-5 h-5" /> {t("connections.connectedApps", "Connected Apps")}
           </TabsTrigger>
         </TabsList>
         <TabsContent value="app-store" tabIndex={-1}>

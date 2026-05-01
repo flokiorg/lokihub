@@ -66,6 +66,8 @@ import { useApp } from "src/hooks/useApp";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { cn } from "src/lib/utils";
+import { useTranslation } from "react-i18next";
+import { Trans } from "react-i18next";
 
 function AppDetails() {
   const { id } = useParams() as { id: string };
@@ -103,6 +105,8 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     React.useState(false);
   const [showDisconnectAppDialog, setShowDisconnectAppDialog] =
     React.useState(false);
+  const { t } = useTranslation("apps");
+  const { t: tc } = useTranslation("common");
 
 
 
@@ -146,16 +150,16 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
       refetchApp();
       setIsEditingPermissions(false);
       setSavedPermissions(permissions);
-      toast("Successfully updated connection");
+      toast(t("connections.successfullyUpdated", "Successfully updated connection"));
     } catch (error) {
-      handleRequestError("Failed to update connection", error);
+      handleRequestError(t("connections.failedToUpdate", "Failed to update connection"), error);
     }
   };
 
 
 
   const appName =
-    app.name === LOKI_ACCOUNT_APP_NAME ? "Loki Account" : app.name;
+    app.name === LOKI_ACCOUNT_APP_NAME ? t("connections.lokiAccount", "Loki Account") : app.name;
 
   let appStoreApp = getAppStoreApp(app);
   if (!appStoreApp) {
@@ -208,7 +212,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     >
                       <DropdownMenuTrigger>
                         <div className="flex items-center gap-1">
-                          {`${connectedApps?.length} Connections`}{" "}
+                          {t("connections.connections_count", { count: connectedApps?.length })}{" "}
                           <ChevronDownIcon className="size-3 -mr-1" />
                         </div>
                       </DropdownMenuTrigger>
@@ -232,7 +236,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     </DropdownMenu>
                   ) : (
                     <>
-                      <CheckCircleIcon className="w-3 h-3" /> Connected
+                      <CheckCircleIcon className="w-3 h-3" /> {t("connections.connected", "Connected")}
                     </>
                   )}
                 </Badge>
@@ -256,8 +260,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                               to={addAnotherUrl}
                               className="flex flex-1 items-center gap-2"
                             >
-                              <PlusIcon className="size-4" /> Add Another
-                              Connection
+                              <PlusIcon className="size-4" /> {t("connections.addAnother", "Add Another Connection")}
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
@@ -265,7 +268,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                               className="flex items-center gap-2"
                               onClick={() => setShowConnectionDetails(true)}
                             >
-                              <InfoIcon className="size-4" /> Connection Details
+                              <InfoIcon className="size-4" /> {t("connections.connectionDetails", "Connection Details")}
                             </div>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -274,8 +277,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                               className="flex items-center gap-2"
                               onClick={() => setShowDisconnectAppDialog(true)}
                             >
-                              <UnplugIcon className="size-4" /> Disconnect{" "}
-                              {appName}
+                              <UnplugIcon className="size-4" /> {t("connections.disconnect", { appName })}
                             </div>
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
@@ -300,7 +302,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                             setIsEditingPermissions(false);
                           }}
                         >
-                          Cancel
+                          {tc("actions.cancel", "Cancel")}
                         </Button>
 
                         {(app.isolated && !permissions.isolated) ||
@@ -308,54 +310,51 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                           permissions.scopes.includes("pay_invoice")) ? (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button type="button">Save</Button>
+                              <Button type="button">{tc("actions.save", "Save")}</Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogTitle>
-                                Confirm Update App
+                                {t("connections.confirmUpdate", "Confirm Update App")}
                               </AlertDialogTitle>
                               <AlertDialogDescription>
                                 <div className="space-y-2">
                                   {app.isolated && !permissions.isolated ? (
                                     <p>
-                                      Are you sure you wish to remove the{" "}
-                                      <span className="font-bold">
-                                        isolated
-                                      </span>{" "}
-                                      status from this connection?
+                                      <Trans
+                                        i18nKey="connections.isolatedRemoveConfirm"
+                                        t={t}
+                                        components={{ 1: <span className="font-bold" /> }}
+                                      >
+                                        Are you sure you wish to remove the <span className="font-bold">isolated</span> status from this connection?
+                                      </Trans>
                                     </p>
                                   ) : (
                                     <p>
-                                      Are you sure you wish to give this
-                                      connection{" "}
-                                      <span className="font-bold">
-                                        pay permissions
-                                      </span>
-                                      ?
+                                      <Trans
+                                        i18nKey="connections.payPermissionsConfirm"
+                                        t={t}
+                                        components={{ 1: <span className="font-bold" /> }}
+                                      >
+                                        Are you sure you wish to give this connection <span className="font-bold">pay permissions</span>?
+                                      </Trans>
                                     </p>
                                   )}
                                   <p className="text-amber-600 dark:text-amber-400 font-medium">
-                                    ⚠️ Warning: This applies to all apps that
-                                    have this connection secret. Only change
-                                    this if you know it is safe to do so,
-                                    otherwise you could potentially lose all
-                                    funds
-                                    {!!permissions.maxAmount &&
-                                      " up to the specified budget"}
-                                    {permissions.isolated &&
-                                      " that are deposited into this isolated app"}
+                                    {t("connections.warningNotice", "⚠️ Warning: This applies to all apps that have this connection secret. Only change this if you know it is safe to do so, otherwise you could potentially lose all funds")}
+                                    {!!permissions.maxAmount && t("connections.upToBudget", " up to the specified budget")}
+                                    {permissions.isolated && t("connections.isolatedFunds", " that are deposited into this isolated app")}
                                     .
                                   </p>
                                 </div>
                               </AlertDialogDescription>
                               <AlertDialogFooter className="mt-5">
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <Button onClick={handleSave}>Save</Button>
+                                <AlertDialogCancel>{tc("actions.cancel", "Cancel")}</AlertDialogCancel>
+                                <Button onClick={handleSave}>{tc("actions.save", "Save")}</Button>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
                         ) : (
-                          <Button onClick={handleSave}>Save</Button>
+                          <Button onClick={handleSave}>{tc("actions.save", "Save")}</Button>
                         )}
                       </div>
                     )}
@@ -381,7 +380,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
           {isEditingPermissions && app.name !== LOKI_ACCOUNT_APP_NAME && (
             <Card>
               <CardHeader>
-                <CardTitle>App Name</CardTitle>
+                <CardTitle>{tc("labels.appName", "App Name")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-row gap-2 items-center">
@@ -403,7 +402,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
             <CardHeader>
               <CardTitle>
                 <div className="flex flex-row justify-between items-center">
-                  Permissions
+                  {t("permissions.title", "Permissions")}
                 </div>
               </CardTitle>
             </CardHeader>
