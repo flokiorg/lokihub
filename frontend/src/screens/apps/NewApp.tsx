@@ -225,7 +225,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         ? "never"
         : DEFAULT_APP_BUDGET_RENEWAL,
     expiresAt: parseExpiresParam(expiresAtParam),
-    isolated: isolatedParam === "true",
+    isolated: isolatedParam === "" ? true : isolatedParam === "true",
   });
 
   const { Stepper } = React.useMemo(

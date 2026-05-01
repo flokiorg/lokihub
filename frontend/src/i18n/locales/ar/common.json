@@ -1,0 +1,87 @@
+{
+  "nav": {
+    "home": "الرئيسية",
+    "wallet": "المحفظة",
+    "subWallets": "المحافظ الفرعية",
+    "connections": "الاتصالات",
+    "node": "العقدة",
+    "settings": "الإعدادات",
+    "help": "المساعدة",
+    "logout": "تسجيل الخروج"
+  },
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "back": "رجوع",
+    "next": "التالي",
+    "done": "تم",
+    "close": "إغلاق",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "retry": "إعادة المحاولة",
+    "continue": "متابعة",
+    "show": "إظهار",
+    "hide": "إخفاء",
+    "search": "بحث",
+    "add": "إضافة",
+    "remove": "إزالة",
+    "connect": "اتصال",
+    "disconnect": "قطع الاتصال",
+    "update": "تحديث",
+    "create": "إنشاء",
+    "open": "فتح",
+    "loading": "جارٍ التحميل..."
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "pending": "قيد الانتظار",
+    "success": "ناجح",
+    "failed": "فشل",
+    "error": "خطأ",
+    "connected": "متصل",
+    "disconnected": "غير متصل",
+    "syncing": "جارٍ المزامنة",
+    "online": "متصل بالإنترنت",
+    "offline": "غير متصل بالإنترنت"
+  },
+  "errors": {
+    "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "notFound": "الصفحة غير موجودة.",
+    "unauthorized": "غير مخوّل لك بعرض هذه الصفحة.",
+    "networkError": "خطأ في الشبكة. يرجى التحقق من اتصالك.",
+    "loadFailed": "فشل تحميل البيانات."
+  },
+  "labels": {
+    "amount": "المبلغ",
+    "currency": "العملة",
+    "date": "التاريخ",
+    "description": "الوصف",
+    "name": "الاسم",
+    "type": "النوع",
+    "status": "الحالة",
+    "total": "الإجمالي",
+    "fee": "الرسوم",
+    "address": "العنوان",
+    "note": "ملاحظة",
+    "optional": "اختياري",
+    "required": "مطلوب"
+  },
+  "time": {
+    "justNow": "الآن",
+    "minutesAgo": "منذ دقيقة",
+    "minutesAgo_plural": "منذ {{count}} دقائق",
+    "hoursAgo": "منذ ساعة",
+    "hoursAgo_plural": "منذ {{count}} ساعات",
+    "daysAgo": "منذ يوم",
+    "daysAgo_plural": "منذ {{count}} أيام"
+  },
+  "pagination": {
+    "previous": "السابق",
+    "next": "التالي",
+    "page": "صفحة {{current}} من {{total}}"
+  }
+}

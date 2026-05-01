@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import Tick from "src/assets/illustrations/tick.svg?react";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
@@ -24,7 +25,6 @@ import {
   CardTitle,
 } from "src/components/ui/card";
 import { Checkbox } from "src/components/ui/checkbox";
-import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
@@ -57,7 +57,14 @@ import { request } from "src/utils/request";
 export default function ReceiveInvoice() {
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { parseAmount, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
 
   const [isLoading, setLoading] = React.useState(false);
   const [isFetchingJitParams, setIsFetchingJitParams] = React.useState(false);
@@ -97,16 +104,16 @@ export default function ReceiveInvoice() {
     // Check if amountDisplay > inbound capacity
     // 0.8 safety factor? Original code used it.
     // (+amountDisplay * 1000 || transaction?.amount || 0) >= 0.8 * balances.lightning.totalReceivable
-    const amountSat = parseAmount(+amountDisplay) || 0;
+    const amountSat = parseInputAmount(+amountDisplay, inputUnit) || 0;
     // Note: This check relies on the raw input amount to determine if JIT is needed. 
     // In "Sender Pays" mode, the actual incoming amount might be higher, making JIT even more likely.
     return amountSat * 1000 > balances.lightning.totalReceivable;
-  }, [balances, amountDisplay, parseAmount]);
+  }, [balances, amountDisplay, parseInputAmount, inputUnit]);
 
   const validationError = React.useMemo(() => {
     if (!needsJit || !jitFeeParams || !amountDisplay) return null;
     
-    const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
+    const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
     const minFee = parseInt(jitFeeParams.min_fee_mloki);
     const rate = jitFeeParams.proportional / 1000000;
     let grossAmt = 0;
@@ -125,13 +132,13 @@ export default function ReceiveInvoice() {
     const maxSize = parseInt(jitFeeParams.max_payment_size_mloki);
     
     if (grossAmt < minSize) {
-        return `Below min limit (${scaleAmount(minSize/1000)} ${unit()}).`;
+        return `Below min limit (${scaleInputAmount(minSize/1000, inputUnit)} ${inputUnit}).`;
     }
     if (maxSize > 0 && grossAmt > maxSize) {
-        return `Exceeds max limit (${scaleAmount(maxSize/1000)} ${unit()}).`;
+        return `Exceeds max limit (${scaleInputAmount(maxSize/1000, inputUnit)} ${inputUnit}).`;
     }
     return null;
-  }, [needsJit, jitFeeParams, amountDisplay, senderPaysFee, parseAmount, scaleAmount, unit]);
+  }, [needsJit, jitFeeParams, amountDisplay, senderPaysFee, parseInputAmount, scaleInputAmount, inputUnit]);
 
   const fetchJitFees = React.useCallback(async () => {
     if (!selectedLspPubkey) return;
@@ -178,7 +185,7 @@ export default function ReceiveInvoice() {
 
       const firstLSP = selectedLspPubkey || info?.lsps?.[0]?.pubkey;
       // Calculate amount in mloki (1 sat = 1000 mloki)
-      const inputAmountMloki = (parseAmount(+amountDisplay) || 0) * 1000;
+      const inputAmountMloki = (parseInputAmount(+amountDisplay, inputUnit) || 0) * 1000;
       let invoiceAmountMloki = inputAmountMloki;
       let buyLiquidityAmountMloki = inputAmountMloki;
       let feeMloki = 0;
@@ -228,13 +235,13 @@ export default function ReceiveInvoice() {
             const maxPaymentSize = parseInt(jitFeeParams.max_payment_size_mloki);
 
             if (buyLiquidityAmountMloki < minPaymentSize) {
-                toast.error(`Amount too small for JIT payment. Minimum: ${scaleAmount(minPaymentSize / 1000)} ${unit()}.`);
+                toast.error(`Amount too small for JIT payment. Minimum: ${scaleInputAmount(minPaymentSize / 1000, inputUnit)} ${inputUnit}.`);
                 setLoading(false);
                 return;
             }
 
             if (maxPaymentSize > 0 && buyLiquidityAmountMloki > maxPaymentSize) {
-                 toast.error(`Amount too large for JIT payment. Maximum: ${scaleAmount(maxPaymentSize / 1000)} ${unit()}.`);
+                 toast.error(`Amount too large for JIT payment. Maximum: ${scaleInputAmount(maxPaymentSize / 1000, inputUnit)} ${inputUnit}.`);
                  setLoading(false);
                  return;
             }
@@ -409,21 +416,16 @@ export default function ReceiveInvoice() {
             ) : (
               <form onSubmit={handleSubmit} className="grid gap-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount ({unit()})</Label>
-                  <InputWithAdornment
+                  <Label htmlFor="amount">Amount ({inputUnit})</Label>
+                  <CurrencyInput
                     id="amount"
-                    type="number"
-                    value={amountDisplay}
-                    step="any"
-                    placeholder={`Amount in ${unit()}...`}
-                    onChange={(e) => {
-                      setAmountDisplay(e.target.value.trim());
-                    }}
+                    amount={amountDisplay}
+                    onAmountChange={(val) => setAmountDisplay(val)}
+                    inputUnit={inputUnit}
+                    onInputUnitChange={setInputUnit}
+                    placeholder={`Amount in ${inputUnit}...`}
                     min={1}
                     autoFocus
-                    endAdornment={
-                      <FormattedFiatAmount amount={parseAmount(+amountDisplay)} className="mr-2" />
-                    }
                   />
                 </div>
                 {needsJit && info?.lsps && info.lsps.length > 0 && (
@@ -491,7 +493,8 @@ export default function ReceiveInvoice() {
                                                     <h4 className="font-semibold text-sm mb-2">Fee Structure</h4>
                                                     <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
                                                         <span className="text-muted-foreground">Minimum Fee:</span>
-                                                        <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? scaleAmount(parseInt(jitFeeParams.min_fee_mloki)/1000) : 0} {unit()}</span>
+                                                        <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? scaleInputAmount(parseInt(jitFeeParams.min_fee_mloki)/1000, inputUnit) : 0} {inputUnit}</span>
+
                                                         
                                                         <span className="text-muted-foreground">Proportional Rate:</span>
                                                         <span className="font-medium text-right">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
@@ -546,7 +549,7 @@ export default function ReceiveInvoice() {
                                     <span className="text-xs text-muted-foreground uppercase">Estimated Fee</span>
                                     <div className="text-lg">
                                         <FormattedFlokicoinAmount amount={(() => {
-                                          const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
+                                          const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
                                           const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                           const rate = jitFeeParams.proportional / 1000000;
                                           let finalFee = 0;
@@ -571,7 +574,7 @@ export default function ReceiveInvoice() {
                                     <div className="text-lg">
                                         {senderPaysFee ? (
                                              <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
+                                              const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
                                               const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                               const rate = jitFeeParams.proportional / 1000000;
                                               const gross = Math.floor(inputAmt / (1 - rate));
@@ -581,7 +584,7 @@ export default function ReceiveInvoice() {
                                              })()} />
                                         ) : (
                                              <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseAmount(+amountDisplay)||0)*1000;
+                                              const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
                                               const minFee = parseInt(jitFeeParams.min_fee_mloki);
                                               const rate = jitFeeParams.proportional / 1000000;
                                               const prop = Math.floor(inputAmt * rate);

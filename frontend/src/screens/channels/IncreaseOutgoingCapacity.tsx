@@ -87,20 +87,17 @@ function NewChannelInternal({
     else setInputUnit("FLC");
   }, [displayFormat]);
 
-  const presetAmounts = [250_000, 500_000, 1_000_000];
+  const flcPresets = [21, 55, 500];
+  const lokiPresets = [21000, 500000, 21000000];
 
   const [order, setOrder] = React.useState<Partial<OnchainOrder>>({
     paymentMethod: "onchain",
     status: "pay",
-    amount: presetAmounts[0].toString(),
+    amount: "",
     isPublic: !!channels.length && channels.every((channel) => channel.public),
   });
 
-  // Adjust initial amount based on inputUnit on mount
-  React.useEffect(() => {
-    setOrder(current => ({ ...current, amount: scaleInputAmount(presetAmounts[0], inputUnit).toString() }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Remove initial amount prefill useEffect
 
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
 
@@ -217,13 +214,6 @@ function NewChannelInternal({
               </Tooltip>
             </TooltipProvider>
 
-            {order.amount && parseInputAmount(parseFloat(order.amount), inputUnit) < 200_000 && (
-              <p className="text-muted-foreground text-xs">
-                For a smooth experience consider a opening a channel of{" "}
-                <FormattedFlokicoinAmount amount={200_000 * 1000} /> in size or
-                more.
-              </p>
-            )}
             <CurrencyInput
               id="amount"
               required
@@ -240,19 +230,29 @@ function NewChannelInternal({
               />
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
-              {presetAmounts.map((amount) => (
-                <div
-                  key={amount}
-                  className={cn(
-                    "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                    +(parseInputAmount(parseFloat(order.amount || "0"), inputUnit) || "0") === amount &&
-                      "border-primary hover:border-primary"
-                  )}
-                  onClick={() => setAmount(scaleInputAmount(amount, inputUnit).toString())}
-                >
-                  <FormattedFlokicoinAmount amount={amount * 1000} showSymbol={false} />
-                </div>
-              ))}
+              {(inputUnit === "FLC" ? flcPresets : lokiPresets).map((amount) => {
+                let displayLabel = amount.toString();
+                if (inputUnit === "loki") {
+                    if (amount >= 1000000) displayLabel = (amount / 1000000) + "M";
+                    else if (amount >= 1000) displayLabel = (amount / 1000) + "k";
+                }
+
+                const valueToFill = amount.toString();
+                const isActive = order.amount === valueToFill;
+
+                return (
+                  <div
+                    key={amount}
+                    className={cn(
+                      "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
+                      isActive && "border-primary hover:border-primary"
+                    )}
+                    onClick={() => setAmount(valueToFill)}
+                  >
+                    {displayLabel}
+                  </div>
+                );
+              })}
             </div>
           </div>
           <>

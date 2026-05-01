@@ -58,11 +58,10 @@ export default function OrderChannel() {
     else setInputUnit("FLC");
   }, [displayFormat]);
 
-  const presetAmounts = [21 * 100_000_000, 50 * 100_000_000, 500 * 100_000_000];
+  const flcPresets = [21, 55, 500];
+  const lokiPresets = [21000, 500000, 21000000];
 
-  const [amountDisplay, setAmountDisplay] = useState<string>(
-    scaleInputAmount(presetAmounts[0], displayFormat === "flc" ? "FLC" : "loki").toString()
-  );
+  const [amountDisplay, setAmountDisplay] = useState<string>("");
   const [paymentInvoice, setPaymentInvoice] = useState<string>("");
   const [orderId, setOrderId] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -346,19 +345,29 @@ export default function OrderChannel() {
                          )}
 
                         <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
-                          {presetAmounts.map((preset) => (
-                            <div
-                              key={preset}
-                              className={cn(
-                                "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                                +(parseInputAmount(+amountDisplay, inputUnit) || "0") === preset &&
-                                  "border-primary hover:border-primary"
-                              )}
-                              onClick={() => setAmountDisplay(scaleInputAmount(preset, inputUnit).toString())}
-                            >
-                              <FormattedFlokicoinAmount amount={preset * 1000} showSymbol={false} />
-                            </div>
-                          ))}
+                          {(inputUnit === "FLC" ? flcPresets : lokiPresets).map((preset) => {
+                            let displayLabel = preset.toString();
+                            if (inputUnit === "loki") {
+                                if (preset >= 1000000) displayLabel = (preset / 1000000) + "M";
+                                else if (preset >= 1000) displayLabel = (preset / 1000) + "k";
+                            }
+                            
+                            const valueToFill = preset.toString();
+                            const isActive = amountDisplay === valueToFill;
+
+                            return (
+                              <div
+                                key={preset}
+                                className={cn(
+                                  "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
+                                  isActive && "border-primary hover:border-primary"
+                                )}
+                                onClick={() => setAmountDisplay(valueToFill)}
+                              >
+                                {displayLabel}
+                              </div>
+                            );
+                          })}
                         </div>
                     </div>
 
@@ -424,7 +433,6 @@ export default function OrderChannel() {
                                     <div className="font-semibold text-primary">
                                         <FormattedFlokicoinAmount amount={(orderFee || estimatedFee) * 1000} />
                                     </div>
-                                    <FormattedFiatAmount amount={orderFee || estimatedFee} className="text-[10px] text-muted-foreground" />
                                 </div>
                             </div>
                         )}

@@ -1,0 +1,40 @@
+{
+  "title": "General",
+  "description": "General Lokihub settings.",
+  "sections": {
+    "appearance": "Appearance",
+    "unitsAndCurrency": "Units & Currency",
+    "language": "Language"
+  },
+  "appearance": {
+    "theme": "Theme",
+    "themeDescription": "Choose your visual theme",
+    "darkMode": "Appearance",
+    "darkModeDescription": "Choose light, dark, or follow your system setting",
+    "modes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    }
+  },
+  "units": {
+    "displayUnit": "Display Unit",
+    "displayUnitDescription": "Choose how amounts are shown",
+    "fiatCurrency": "Fiat Currency",
+    "fiatCurrencyDescription": "Your preferred fiat reference currency",
+    "auto": "Auto"
+  },
+  "language": {
+    "label": "Language",
+    "description": "Choose your preferred interface language",
+    "updated": "Language updated."
+  },
+  "toasts": {
+    "themeUpdated": "Theme updated.",
+    "appearanceUpdated": "Appearance updated.",
+    "currencyUpdated": "Currency set to {{currency}}",
+    "formatUpdated": "Flokicoin display format updated",
+    "currencyFetchFailed": "Failed to fetch currencies: {{error}}",
+    "updateFailed": "Failed to update settings"
+  }
+}

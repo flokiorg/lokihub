@@ -27,22 +27,31 @@ import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
-import { Label } from "src/components/ui/label";
 import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useUnit } from "src/hooks/useUnit";
-
 import { copyToClipboard } from "src/lib/clipboard";
 import { RedeemOnchainFundsResponse } from "src/types";
+import { CurrencyInput } from "src/components/CurrencyInput";
+import { Label } from "src/components/ui/label";
 import { request } from "src/utils/request";
 
 export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, parseAmount } = useUnit();
+  const { displayFormat, parseInputAmount } = useUnit();
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -93,7 +102,7 @@ export default function WithdrawOnchainFunds() {
 
     try {
       setLoading(true);
-      const amountLoki = parseAmount(+amountDisplay);
+      const amountLoki = parseInputAmount(+amountDisplay, inputUnit);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -161,7 +170,7 @@ export default function WithdrawOnchainFunds() {
   if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
     return (
       <p>
-        You currently don't have enough {unit()} to pay for an onchain transaction.
+        You currently don't have enough {inputUnit} to pay for an onchain transaction.
       </p>
     );
   }
@@ -206,15 +215,14 @@ export default function WithdrawOnchainFunds() {
                 </div>
               </div>
               {!sendAll && (
-                <Input
+                <CurrencyInput
                   id="amount"
-                  type="number"
-                  value={amountDisplay}
+                  amount={amountDisplay}
+                  onAmountChange={(val) => setAmountDisplay(val)}
+                  inputUnit={inputUnit}
+                  onInputUnitChange={setInputUnit}
                   required
-                  step="any"
-                  onChange={(e) => {
-                    setAmountDisplay(e.target.value);
-                  }}
+                  placeholder={`Amount in ${inputUnit}...`}
                 />
               )}
             </div>
@@ -231,7 +239,7 @@ export default function WithdrawOnchainFunds() {
               </Alert>
             )}
             <AnchorReserveAlert
-              amount={sendAll ? balances.onchain.spendable : parseAmount(+amountDisplay)}
+              amount={sendAll ? balances.onchain.spendable : parseInputAmount(+amountDisplay, inputUnit)}
               className="mt-4"
             />
           </div>
@@ -254,7 +262,7 @@ export default function WithdrawOnchainFunds() {
           <>
             {showAdvanced && (
               <div className="grid gap-2">
-                <Label htmlFor="fee-rate">Fee Rate ({unit()}/vB)</Label>
+                <Label htmlFor="fee-rate">Fee Rate ({inputUnit}/vB)</Label>
                 {mempoolError && (
                   <div className="text-muted-foreground text-xs flex gap-1 items-center">
                     <AlertTriangleIcon className="h-3 w-3" />
@@ -327,7 +335,7 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} {unit()}/vB</span> fee
+                  <span className="font-semibold">{feeRate} {inputUnit}/vB</span> fee
                 </div>
               )}
 
@@ -349,7 +357,7 @@ export default function WithdrawOnchainFunds() {
                             "entire on-chain balance"
                           ) : (
                             <>
-                              <FormattedFlokicoinAmount amount={parseAmount(+amountDisplay) * 1000} />
+                              <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} />
                             </>
                           )}
                         </span>
@@ -360,7 +368,7 @@ export default function WithdrawOnchainFunds() {
                           <span className="font-bold slashed-zero">
                             {feeRate}
                           </span>{" "}
-                          {unit()}/vB
+                          {inputUnit}/vB
                         </p>
                       )}
                     </div>

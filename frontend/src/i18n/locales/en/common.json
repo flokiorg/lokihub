@@ -1,0 +1,87 @@
+{
+  "nav": {
+    "home": "Home",
+    "wallet": "Wallet",
+    "subWallets": "Sub-wallets",
+    "connections": "Connections",
+    "node": "Node",
+    "settings": "Settings",
+    "help": "Help",
+    "logout": "Log out"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied",
+    "retry": "Retry",
+    "continue": "Continue",
+    "show": "Show",
+    "hide": "Hide",
+    "search": "Search",
+    "add": "Add",
+    "remove": "Remove",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "update": "Update",
+    "create": "Create",
+    "open": "Open",
+    "loading": "Loading..."
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "pending": "Pending",
+    "success": "Success",
+    "failed": "Failed",
+    "error": "Error",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "syncing": "Syncing",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "Page not found.",
+    "unauthorized": "You are not authorized to view this page.",
+    "networkError": "Network error. Please check your connection.",
+    "loadFailed": "Failed to load data."
+  },
+  "labels": {
+    "amount": "Amount",
+    "currency": "Currency",
+    "date": "Date",
+    "description": "Description",
+    "name": "Name",
+    "type": "Type",
+    "status": "Status",
+    "total": "Total",
+    "fee": "Fee",
+    "address": "Address",
+    "note": "Note",
+    "optional": "Optional",
+    "required": "Required"
+  },
+  "time": {
+    "justNow": "Just now",
+    "minutesAgo": "{{count}} minute ago",
+    "minutesAgo_plural": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hour ago",
+    "hoursAgo_plural": "{{count}} hours ago",
+    "daysAgo": "{{count}} day ago",
+    "daysAgo_plural": "{{count}} days ago"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {{current}} of {{total}}"
+  }
+}

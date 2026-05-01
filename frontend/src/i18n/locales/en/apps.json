@@ -1,0 +1,34 @@
+{
+  "title": "Connections",
+  "description": "Apps connected to your node via Nostr Wallet Connect",
+  "empty": "No apps connected yet",
+  "connect": "Connect App",
+  "permissions": {
+    "title": "Permissions",
+    "pay": "Pay invoices",
+    "receive": "Receive payments",
+    "balance": "View balance",
+    "history": "View transaction history",
+    "sign": "Sign messages"
+  },
+  "budget": {
+    "title": "Budget",
+    "renewal": "Budget Renewal",
+    "amount": "Budget Amount",
+    "spent": "Spent",
+    "remaining": "Remaining"
+  },
+  "renewals": {
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "never": "Never"
+  },
+  "actions": {
+    "delete": "Delete Connection",
+    "edit": "Edit Permissions",
+    "deleteConfirm": "Are you sure you want to delete this connection?",
+    "deleteSuccess": "Connection deleted."
+  }
+}

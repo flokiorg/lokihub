@@ -100,9 +100,9 @@ export const expiryOptions: Record<string, number> = {
 };
 
 export const budgetOptions: Record<string, number> = {
-  "10k": 10_000,
-  "100k": 100_000,
-  "1M": 1_000_000,
+  "21": 21_000,
+  "500": 500_000,
+  "21M": 21_000_000,
   Unlimited: 0,
 };
 

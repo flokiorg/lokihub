@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "Good Morning",
+    "afternoon": "Good Afternoon",
+    "evening": "Good Evening",
+    "withName": "{{greeting}}, {{name}}!"
+  },
+  "widgets": {
+    "statsForNerds": "Stats for nerds",
+    "nodeStatus": "Node Status",
+    "blockHeight": "Block Height",
+    "onchainFees": "Onchain Fees",
+    "forwards": "Forwards",
+    "latestApps": "Recently Used Apps"
+  },
+  "alerts": {
+    "newApp": "New app connected",
+    "updatedApp": "App updated",
+    "dismiss": "Dismiss"
+  },
+  "search": {
+    "placeholder": "Search"
+  }
+}

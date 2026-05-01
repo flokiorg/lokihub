@@ -1,0 +1,33 @@
+{
+  "steps": {
+    "welcome": "Welcome",
+    "nodeSetup": "Node Setup",
+    "unlockPassword": "Set Unlock Password",
+    "backup": "Backup",
+    "complete": "Setup Complete"
+  },
+  "welcome": {
+    "title": "Welcome to Lokihub",
+    "subtitle": "Your Lightning node management interface",
+    "getStarted": "Get Started"
+  },
+  "password": {
+    "title": "Set Your Unlock Password",
+    "description": "This password protects access to your node. Store it safely.",
+    "label": "Password",
+    "confirm": "Confirm Password",
+    "mismatch": "Passwords do not match",
+    "tooShort": "Password must be at least 8 characters"
+  },
+  "backup": {
+    "title": "Backup Your Recovery Phrase",
+    "description": "Write down these words in order and keep them safe. You will need them to recover your wallet.",
+    "confirmed": "I have written down my recovery phrase",
+    "warning": "Never share your recovery phrase with anyone."
+  },
+  "complete": {
+    "title": "You're all set!",
+    "description": "Your node is ready to use.",
+    "goHome": "Go to Dashboard"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "balance": {
+    "lightning": "Lightning Balance",
+    "onchain": "On-chain Balance",
+    "total": "Total Balance",
+    "available": "Available",
+    "reserved": "Reserved",
+    "pending": "Pending"
+  },
+  "transactions": {
+    "title": "Transactions",
+    "empty": "No transactions yet",
+    "sent": "Sent",
+    "received": "Received",
+    "pending": "Pending",
+    "failed": "Failed",
+    "viewAll": "View all"
+  },
+  "receive": {
+    "title": "Receive",
+    "invoice": "Lightning Invoice",
+    "address": "Bitcoin Address",
+    "amount": "Amount",
+    "description": "Description",
+    "generate": "Generate Invoice",
+    "copyInvoice": "Copy Invoice",
+    "copyAddress": "Copy Address",
+    "shareInvoice": "Share Invoice"
+  },
+  "send": {
+    "title": "Send",
+    "destination": "Destination",
+    "amount": "Amount",
+    "description": "Description",
+    "confirm": "Confirm Payment",
+    "pay": "Pay",
+    "scanQr": "Scan QR Code"
+  }
+}

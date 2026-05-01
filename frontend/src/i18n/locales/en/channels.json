@@ -1,0 +1,31 @@
+{
+  "title": "Node",
+  "channels": {
+    "title": "Channels",
+    "open": "Open Channel",
+    "close": "Close Channel",
+    "empty": "No channels open",
+    "capacity": "Capacity",
+    "localBalance": "Local Balance",
+    "remoteBalance": "Remote Balance",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "pending": "Pending",
+      "closing": "Closing"
+    }
+  },
+  "peers": {
+    "title": "Peers",
+    "connect": "Connect Peer",
+    "disconnect": "Disconnect",
+    "empty": "No peers connected",
+    "pubkey": "Public Key",
+    "alias": "Alias"
+  },
+  "liquidity": {
+    "title": "Liquidity",
+    "incoming": "Incoming",
+    "outgoing": "Outgoing"
+  }
+}
