@@ -8,6 +8,7 @@ import {
     CardTitle,
 } from "src/components/ui/card";
 import { useAppLogo } from "src/hooks/useAppLogo";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   app: AppStoreApp;
@@ -18,6 +19,7 @@ type Props = {
 export default function AppAlert({ app, type, onDismiss }: Props) {
   const navigate = useNavigate();
   const logoSrc = useAppLogo(app.id);
+  const { t } = useTranslation("home");
 
   return (
     <Card className="relative overflow-hidden mb-4 rounded-xl">
@@ -50,7 +52,7 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
           </div>
           <div>
             <CardTitle className="text-lg">
-              {type === "new" ? "New App Available:" : "App Updated:"} {app.title}
+              {type === "new" ? t("alerts.newApp") : t("alerts.updatedApp")}: {app.title}
             </CardTitle>
             <CardDescription>{app.description}</CardDescription>
           </div>

@@ -1,6 +1,7 @@
 import { PowerCircleIcon } from "lucide-react";
 import React, { ChangeEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
@@ -26,7 +27,8 @@ import { request } from "src/utils/request";
 
 export function RestoreNode() {
   const navigate = useNavigate();
-
+  const { t } = useTranslation("setup");
+  const { t: tc } = useTranslation("common");
   const [unlockPassword, setUnlockPassword] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -46,17 +48,15 @@ export function RestoreNode() {
     return (
       <div className="flex flex-col gap-5 items-center">
         <TwoColumnLayoutHeader
-          title="Restart your Hub"
-          description="Lokihub needs to restart to finish restoring your node"
+          title={t("restore.restartingTitle", "Restart your Hub")}
+          description={t("restore.restartingDesc", "Lokihub needs to restart to finish restoring your node")}
         />
         <PowerCircleIcon className="w-32 h-32" />
         <p className="max-w-sm text-center">
-          If you're running in the cloud, your Lokihub will restart
-          automatically. Otherwise, please manually restart your Lokihub to
-          finish the restore process.
+          {t("restore.restartingMessage", "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process.")}
         </p>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loading /> <p>Waiting for restart...</p>
+          <Loading /> <p>{t("restore.waitingForRestart", "Waiting for restart...")}</p>
         </div>
       </div>
     );
@@ -114,15 +114,15 @@ export function RestoreNode() {
       >
         <TwoColumnLayoutHeader
           // TODO: Show different message in wails mode
-          title="Import Wallet from Migration File"
-          description="Upload your encrypted wallet migration file."
+          title={t("restore.title")}
+          description={t("restore.description")}
         />
         <div className="grid gap-2">
-          <Label htmlFor="password">Unlock Password</Label>
+          <Label htmlFor="password">{tc("labels.password")}</Label>
           <PasswordInput
             onChange={setUnlockPassword}
             value={unlockPassword}
-            placeholder="Unlock Password"
+            placeholder={tc("labels.password")}
           />
         </div>
         {_isHttpMode && (
@@ -142,13 +142,13 @@ export function RestoreNode() {
         <AlertDialog open={showAlert}>
           <AlertDialogTrigger asChild>
             <LoadingButton type="submit" loading={loading}>
-              Import Wallet
+              {t("restore.import")}
             </LoadingButton>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Restore Node from Migration File
+                {t("restore.restartingTitle", "Restore Node from Migration File")}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 <div>
@@ -166,10 +166,10 @@ export function RestoreNode() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setShowAlert(false)}>
-                Cancel
+                {tc("actions.cancel")}
               </AlertDialogCancel>
               <AlertDialogAction onClick={restoreNode}>
-                Continue
+                {tc("actions.continue")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

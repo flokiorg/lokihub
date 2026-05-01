@@ -1,5 +1,6 @@
 import { ChevronLeftIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { CompactLanguageSwitcher } from "src/components/CompactLanguageSwitcher";
 import { Button } from "src/components/ui/button";
 import { cn } from "src/lib/utils";
 
@@ -36,7 +37,10 @@ export function SetupLayout({
   return (
     <div className="h-full w-full flex flex-col bg-background">
       {/* Main Content Area - Centered */}
-      <div className="flex-1 flex flex-col items-center w-full px-5 py-6 md:py-12">
+      <div className="flex-1 flex flex-col items-center w-full px-5 py-6 md:py-12 relative">
+        <div className="absolute top-4 right-4 z-50">
+          <CompactLanguageSwitcher />
+        </div>
         <div className={cn("w-full max-w-md flex flex-col", contentClassName)}>
           {shouldShowBack && (
             <div className="mb-4 self-start">

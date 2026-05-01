@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import PasswordInput from "src/components/password/PasswordInput";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
@@ -16,6 +17,7 @@ export default function Unlock() {
   const [loading, setLoading] = React.useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation("setup");
 
   const { data: info } = useInfo();
   const { mutate: refetchInfo } = useInfo();
@@ -53,7 +55,7 @@ export default function Unlock() {
         navigate("/", { replace: true });
       }
     } catch (error) {
-      handleRequestError("Failed to connect", error);
+      handleRequestError(t("unlock.failedToConnect"), error);
     } finally {
       setLoading(false);
     }
@@ -64,12 +66,12 @@ export default function Unlock() {
       <form onSubmit={onSubmit} className="w-full p-5">
         <div className="mx-auto grid w-80 max-w-full gap-6">
           <TwoColumnLayoutHeader
-            title="Login"
-            description=" Enter your unlock password to continue"
+            title={t("unlock.title")}
+            description={t("unlock.description")}
           />
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("unlock.passwordLabel")}</Label>
               <PasswordInput
                 id="password"
                 onChange={setUnlockPassword}
@@ -78,7 +80,7 @@ export default function Unlock() {
               />
             </div>
             <LoadingButton type="submit" loading={loading}>
-              Login
+              {t("unlock.login")}
             </LoadingButton>
           </div>
         </div>

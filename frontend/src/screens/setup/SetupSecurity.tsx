@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Loading from "src/components/Loading";
 import { SetupLayout } from "./SetupLayout";
 
@@ -18,6 +19,8 @@ import { useInfo } from "src/hooks/useInfo";
 export function SetupSecurity() {
   const navigate = useNavigate();
   const { data: info, isLoading } = useInfo(true); // Enable polling to wait for backend
+  const { t } = useTranslation("setup");
+  const { t: tc } = useTranslation("common");
   const [hasConfirmed, setConfirmed] = useState<boolean>(false);
 
   // Backend is ready when setupCompleted and running are both true
@@ -35,8 +38,8 @@ export function SetupSecurity() {
       <div className="grid max-w-sm w-full">
         <form onSubmit={onSubmit} className="flex flex-col items-center w-full">
           <TwoColumnLayoutHeader
-            title="Security & Recovery"
-            description="Take your time to understand how to secure and recover your funds on Lokihub."
+            title={t("security.title")}
+            description={t("security.description")}
           />
 
           <div className="flex flex-col gap-6 w-full mt-6">
@@ -78,12 +81,12 @@ export function SetupSecurity() {
                 htmlFor="securePassword"
                 className="ml-2 text-foreground leading-4"
               >
-                I understand how to secure and recover funds
+                {t("security.confirmed")}
               </Label>
             </div>
             <Button className="w-full" disabled={!hasConfirmed || isLoading || !isBackendReady} type="submit">
               {(isLoading || !isBackendReady) ? <Loading className="w-4 h-4 mr-2" /> : null}
-              {!isBackendReady ? "Starting..." : "Continue"}
+              {!isBackendReady ? t("start.starting") : tc("actions.continue")}
             </Button>
           </div>
         </form>

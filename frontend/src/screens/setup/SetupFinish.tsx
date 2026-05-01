@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import LottieLoading from "src/components/LottieLoading";
 import { useInfo } from "src/hooks/useInfo";
 import { saveAuthToken } from "src/lib/auth";
@@ -12,8 +13,8 @@ import { SetupLayout } from "./SetupLayout";
 let lastStartupErrorTime: string;
 export function SetupFinish() {
   const navigate = useNavigate();
-  const { data: info, mutate: refetchInfo } = useInfo(true); // poll the info endpoint to auto-redirect when app is running
-
+  const { data: info, mutate: refetchInfo } = useInfo(true);
+  const { t } = useTranslation("setup");
   const [loading, setLoading] = React.useState(false);
   // Removed connectionError state in favor of direct navigation on error
   const hasFetchedRef = React.useRef(false);
@@ -106,7 +107,7 @@ export function SetupFinish() {
       <div className="flex flex-col gap-5 justify-center text-center">
         <LottieLoading size={400} />
         <h1 className="font-semibold text-lg font-headline">
-          Setting up your Hub...
+          {t("finish.loading")}
         </h1>
       </div>
     </SetupLayout>

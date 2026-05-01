@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useSetupStore from "src/state/SetupStore";
 import { SetupLayout } from "./SetupLayout";
 
@@ -15,6 +16,7 @@ export function SetupPassword() {
   const navigate = useNavigate();
   const store = useSetupStore();
   const { data: info } = useInfo();
+  const { t } = useTranslation("setup");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [isPasswordSecured, setIsPasswordSecured] = useState<boolean>(false);
   const [isPasswordSecured2, setIsPasswordSecured2] = useState<boolean>(false);
@@ -28,11 +30,11 @@ export function SetupPassword() {
       return;
     }
     if (!isPasswordSecured || !isPasswordSecured2) {
-      toast.error("Please confirm you have saved your password");
+      toast.error(t("password.notConfirmed"));
       return;
     }
     if (store.unlockPassword !== confirmPassword) {
-      toast.error("Passwords don't match");
+      toast.error(t("password.mismatch"));
       return;
     }
 
@@ -48,12 +50,12 @@ export function SetupPassword() {
       <form onSubmit={onSubmit} className="flex flex-col items-center w-full">
         <div className="grid gap-4 w-full">
           <TwoColumnLayoutHeader
-            title="Create Password"
-            description="Your password is used to access your wallet, and it can't be reset or recovered if you lose it."
+            title={t("password.title")}
+            description={t("password.description")}
           />
           <div className="grid gap-4 w-full">
             <div className="grid gap-1.5">
-              <Label htmlFor="unlock-password">Password</Label>
+              <Label htmlFor="unlock-password">{t("password.label")}</Label>
               <PasswordInput
                 id="unlock-password"
                 onChange={store.setUnlockPassword}
@@ -63,11 +65,11 @@ export function SetupPassword() {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="confirm-password">Repeat Password</Label>
+              <Label htmlFor="confirm-password">{t("password.repeatLabel")}</Label>
               <PasswordInput
                 id="confirm-password"
                 autoComplete="new-password"
-                placeholder="Re-enter the password"
+                placeholder={t("password.repeatPlaceholder")}
                 onChange={setConfirmPassword}
                 value={confirmPassword}
               />
@@ -86,7 +88,7 @@ export function SetupPassword() {
                 htmlFor="securePassword"
                 className="ml-2 text-foreground leading-4"
               >
-                I've secured this password in a safe place
+                {t("password.securedConfirm")}
               </Label>
             </div>
             {isPasswordSecured && (
@@ -102,11 +104,11 @@ export function SetupPassword() {
                   htmlFor="securePassword2"
                   className="ml-2 leading-4 font-semibold"
                 >
-                  I understand this password cannot be recovered
+                  {t("password.irrecoverableConfirm")}
                 </Label>
               </div>
             )}
-            <Button type="submit">Create Password</Button>
+            <Button type="submit">{t("password.createButton")}</Button>
           </div>
         </div>
       </form>

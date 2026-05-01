@@ -1,5 +1,6 @@
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { BlockHeightWidget } from "src/components/home/widgets/BlockHeightWidget";
 import { ForwardsWidget } from "src/components/home/widgets/ForwardsWidget";
@@ -24,16 +25,17 @@ import { SearchInput } from "src/components/ui/search-input";
 import { localStorageKeys } from "src/constants";
 import { useAppStore } from "src/hooks/useAppStore";
 
-function getGreeting(name: string | undefined) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getGreeting(name: string | undefined, t: (...args: any[]) => string) {
   const hours = new Date().getHours();
   let greeting;
 
   if (hours < 11) {
-    greeting = "Good Morning";
+    greeting = t("greeting.morning");
   } else if (hours < 16) {
-    greeting = "Good Afternoon";
+    greeting = t("greeting.afternoon");
   } else {
-    greeting = "Good Evening";
+    greeting = t("greeting.evening");
   }
 
   return `${greeting}${name ? `, ${name}` : ""}!`;
@@ -93,6 +95,8 @@ function DashboardAlerts() {
 function Home() {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
+  const { t } = useTranslation("home");
+  const { t: tc } = useTranslation("common");
 
   const [isNerd, setNerd] = React.useState(false);
   if (!info || !balances) {
@@ -102,8 +106,8 @@ function Home() {
   return (
     <>
       <AppHeader
-        title={getGreeting(undefined)}
-        contentRight={<SearchInput placeholder="Search" />}
+        title={getGreeting(undefined, t)}
+        contentRight={<SearchInput placeholder={t("search.placeholder")} />}
       />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start justify-start">
         {/* LEFT */}
@@ -121,9 +125,9 @@ function Home() {
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle>Stats for nerds</CardTitle>
+                <CardTitle>{t("widgets.statsForNerds")}</CardTitle>
                 <Button variant="secondary" onClick={() => setNerd(!isNerd)}>
-                  {isNerd ? "Hide" : "Show"}
+                  {isNerd ? tc("actions.hide") : tc("actions.show")}
                 </Button>
               </div>
             </CardHeader>

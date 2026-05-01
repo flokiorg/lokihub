@@ -1,5 +1,6 @@
 import React from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import Container from "src/components/Container";
 import PasswordInput from "src/components/password/PasswordInput";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
@@ -15,7 +16,8 @@ import { request } from "src/utils/request";
 export default function Start() {
   const [unlockPassword, setUnlockPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-  const [buttonText, setButtonText] = React.useState("Start");
+  const { t } = useTranslation("setup");
+  const [buttonText, setButtonText] = React.useState("");
 
   const { data: info } = useInfo(true); // poll the info endpoint to auto-redirect when app is running
 
@@ -31,11 +33,11 @@ export default function Start() {
 
   React.useEffect(() => {
     if (startupError && startupErrorTime) {
-      toast.error("Failed to start", {
+      toast.error(t("start.failedToStart"), {
         description: startupError,
       });
       setLoading(false);
-      setButtonText("Start");
+      setButtonText(t("start.title"));
       setUnlockPassword("");
     }
   }, [startupError, startupErrorTime]);
@@ -44,7 +46,7 @@ export default function Start() {
     e.preventDefault();
     try {
       setLoading(true);
-      setButtonText("Please wait...");
+      setButtonText(t("start.pleaseWait"));
 
       const authTokenResponse = await request<AuthTokenResponse>("/api/start", {
         method: "POST",
@@ -60,9 +62,9 @@ export default function Start() {
         saveAuthToken(authTokenResponse.token);
       }
     } catch (error) {
-      handleRequestError("Failed to connect", error);
+      handleRequestError(t("start.failedToConnect"), error);
       setLoading(false);
-      setButtonText("Start");
+      setButtonText(t("start.title"));
       setUnlockPassword("");
     }
   }
@@ -72,13 +74,13 @@ export default function Start() {
       <Container>
         <div className="mx-auto grid gap-5">
           <TwoColumnLayoutHeader
-            title="Start"
-            description="Enter your password to unlock and start Lokihub."
+            title={t("start.title")}
+            description={t("start.description")}
           />
           <form onSubmit={onSubmit}>
             <div className="grid gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("start.passwordLabel")}</Label>
                 <PasswordInput
                   id="password"
                   onChange={setUnlockPassword}
@@ -91,11 +93,11 @@ export default function Start() {
                 loading={loading}
                 disabled={!unlockPassword}
               >
-                {buttonText}
+                {buttonText || t("start.title")}
               </LoadingButton>
               {loading && (
                 <p className="text-muted-foreground text-xs text-center">
-                  Starting Lokihub may take a few minutes.
+                  {t("start.starting")}
                 </p>
               )}
             </div>

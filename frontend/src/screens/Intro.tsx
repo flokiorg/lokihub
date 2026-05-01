@@ -9,6 +9,8 @@ import {
 import { motion } from "motion/react";
 import React, { ReactElement, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { CompactLanguageSwitcher } from "src/components/CompactLanguageSwitcher";
 import { Button } from "src/components/ui/button";
 import {
   Carousel,
@@ -160,6 +162,7 @@ export function StarryNight({ children }: { children: React.ReactNode }) {
 export function Intro() {
   const { data: info } = useInfo();
   const navigate = useNavigate();
+  const { t } = useTranslation("setup");
   const [api, setApi] = React.useState<CarouselApi>();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setProgress] = React.useState<number>(0);
@@ -193,17 +196,20 @@ export function Intro() {
       <Carousel className={cn("w-full h-full bg-transparent")} setApi={setApi}>
         <CarouselContent className="select-none bg-transparent">
           <CarouselItem>
+            <div className="absolute top-4 right-4 z-50">
+              <CompactLanguageSwitcher />
+            </div>
             <div className="flex flex-col justify-center items-center h-screen p-5">
               <div className="flex flex-col gap-4 text-center max-w-lg">
                 <div className="text-4xl font-extrabold text-foreground">
-                  Welcome to Lokihub
+                  {t("intro.slide1.title")}
                 </div>
                 <div className="text-2xl text-muted-foreground font-semibold">
-                  A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.
+                  {t("intro.slide1.subtitle")}
                 </div>
                 <div className="mt-20">
                   <Button onClick={() => api?.scrollNext()} size="lg">
-                    Next
+                    {t("intro.slide1.next")}
                   </Button>
                 </div>
               </div>
@@ -213,24 +219,24 @@ export function Intro() {
             <Slide
               api={api}
               icon={CloudLightningIcon}
-              title="Always Ready"
-              description="Your wallet is online and ready to use on any device, anytime."
+              title={t("intro.slide2.title")}
+              description={t("intro.slide2.description")}
             />
           </CarouselItem>
           <CarouselItem>
             <Slide
               api={api}
               icon={ShieldCheckIcon}
-              title="Secure & Private"
-              description="Encrypted by your password. Only you can access your funds."
+              title={t("intro.slide3.title")}
+              description={t("intro.slide3.description")}
             />
           </CarouselItem>
           <CarouselItem>
             <Slide
               api={api}
               icon={WalletIcon}
-              title="Connect Apps"
-              description="Link up with apps and join the Web of Fun."
+              title={t("intro.slide4.title")}
+              description={t("intro.slide4.description")}
             />
           </CarouselItem>
         </CarouselContent>
