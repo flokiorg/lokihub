@@ -1,0 +1,148 @@
+{
+  "title": "노드",
+  "channels": {
+    "title": "채널",
+    "open": "채널 열기",
+    "close": "채널 닫기",
+    "empty": "열린 채널이 없습니다",
+    "capacity": "용량",
+    "localBalance": "로컬 잔액",
+    "remoteBalance": "원격 잔액",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성",
+      "pending": "대기 중",
+      "closing": "닫는 중",
+      "online": "Online",
+      "offline": "Offline",
+      "opening": "Opening"
+    },
+    "pendingClosed": "Pending Closed Channels",
+    "table": {
+      "capacity": "Capacity",
+      "localBalance": "Local Balance",
+      "remoteBalance": "Remote Balance",
+      "actions": "Actions"
+    },
+    "closeDialog": {
+      "title": "Select mode of channel closure",
+      "headsUp": "Heads up!",
+      "cancel": "Cancel",
+      "closedSuccess": "Channel closed successfully"
+    },
+    "nodeHealth": {
+      "tooltip": "Node health: {{percent}}%",
+      "dialogTitle": "Node Health",
+      "close": "Close"
+    },
+    "dropdown": {
+      "viewFunding": "View Funding Transaction",
+      "viewNode": "View Node on {{explorer}}",
+      "setRoutingFee": "Set Routing Fee"
+    }
+  },
+  "peers": {
+    "title": "피어",
+    "connect": "피어 연결",
+    "disconnect": "연결 해제",
+    "empty": "연결된 피어가 없습니다",
+    "pubkey": "공개 키",
+    "alias": "별칭",
+    "disconnectConfirm": "Confirm",
+    "disconnectCancel": "Cancel"
+  },
+  "liquidity": {
+    "title": "유동성",
+    "incoming": "수신",
+    "outgoing": "송신"
+  },
+  "menu": {
+    "node": "Node",
+    "onchain": "On-Chain",
+    "swaps": "Swaps",
+    "history": "History",
+    "management": "Management"
+  },
+  "onchain": {
+    "title": "On-chain",
+    "addressLabel": "On-Chain Address",
+    "depositTitle": "Deposit Flokicoin",
+    "generateNew": "Generate a new address"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "History of your channel orders",
+    "noOrdersDesc": "You haven't ordered any channels yet.",
+    "noOrdersTitle": "No Order History",
+    "totalFee": "Total Fee"
+  },
+  "increaseCapacity": {
+    "title": "Open Channel with On-Chain",
+    "description": "Funds used to open a channel minus fees will be added to your spending balance",
+    "info": "Open a channel with on-chain funds. Both parties are free to close the channel at any time. However, by keeping more funds on your side of the channel and using it regularly, there is more chance the channel will stay open.",
+    "peerLabel": "Peer / LSP",
+    "customPeer": "Custom Peer",
+    "peer": "Peer",
+    "hostPort": "Host:Port",
+    "increaseSpendingLabel": "Increase spending balance",
+    "increaseSpendingTooltip": "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees.",
+    "currentBalance": "Current on-chain balance:",
+    "noLsps": "No LSPs Configured",
+    "selectProvider": "Select a Provider",
+    "needIncoming": "Need incoming capacity instead?",
+    "buyInbound": "Buy Inbound Liquidity",
+    "lookingToReceive": "Looking to receive funds instead? You might need incoming capacity.",
+    "publicChannel": "Public Channel",
+    "publicChannelDesc": "Not recommended for most users.",
+    "confirmTitle": "Confirm Channel Opening",
+    "confirmDesc": "Are you sure you want to open a Lightning channel with the following details?",
+    "channelType": "Channel Type",
+    "paymentMethod": "Payment Method",
+    "nodePublicKey": "Node Public Key",
+    "important": "Important:",
+    "confirmWarning": "Opening a channel requires an on-chain transaction and network fees. This action cannot be undone. Please verify all details before proceeding.",
+    "confirmAndOpen": "Confirm & Open Channel",
+    "manageProviders": "Manage providers in"
+  },
+  "orderChannel": {
+    "title": "Increase Inbound Liquidity",
+    "description": "Order a channel from your LSP to increase your receiving capacity",
+    "info": "Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.",
+    "increaseInboundLabel": "Increase inbound liquidity",
+    "orderRange": "Order Range:",
+    "orderBtn": "Order Channel",
+    "opening": "Your channel is being opened",
+    "reviewTitle": "Review Channel Purchase",
+    "reviewDesc": "Complete Payment to open a channel to your node",
+    "spendingBalance": "Spending Balance",
+    "incomingLiquidity": "Incoming Liquidity",
+    "amountToPay": "Amount to pay",
+    "consentMsg": "By proceeding, you consent the channel opens immediately and that you lose the right to revoke once it is open.",
+    "otherOptions": "Other options",
+    "increaseSpending": "Increase Spending Balance",
+    "balanceMsg": "Your current balance is",
+    "currentlyHave": "You currently have",
+    "deposited": "Deposited",
+    "depositedAmount": "Deposited amount",
+    "estTime": "Estimated time",
+    "includesCost": "Includes channel opening cost",
+    "noPending": "No pending channel orders",
+    "notEnough": "Not enough balance",
+    "openedDesc": "Your channel is now open and ready to use.",
+    "openedTitle": "Channel Opened",
+    "recommendDeposit": "We recommend depositing",
+    "return": "Return to Node",
+    "scanQr": "Scan QR to deposit",
+    "sendFloki": "Send Flokicoin",
+    "successMsg": "Successfully ordered channel",
+    "toOpen": "To open a channel of",
+    "waitingChannel": "Waiting for channel to open...",
+    "waitingConf": "Waiting for confirmations...",
+    "waitingTx": "Waiting for transaction..."
+  }
+}

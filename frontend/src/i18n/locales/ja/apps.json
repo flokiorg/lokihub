@@ -1,0 +1,155 @@
+{
+  "title": "接続",
+  "description": "Nostr Wallet Connect でノードに接続されたアプリ",
+  "empty": "まだ接続されたアプリはありません",
+  "connect": "アプリを接続",
+  "detail": {
+    "title": "接続の詳細",
+    "delete": "接続を削除",
+    "deleteConfirm": "この接続を削除してもよろしいですか？",
+    "deleteSuccess": "接続が削除されました。",
+    "edit": "権限を編集",
+    "close": "閉じる",
+    "cancel": "キャンセル"
+  },
+  "permissions": {
+    "title": "権限",
+    "pay": "インボイスの支払い",
+    "receive": "支払いの受け取り",
+    "balance": "残高の確認",
+    "history": "取引履歴の確認",
+    "sign": "メッセージの署名"
+  },
+  "budget": {
+    "title": "予算",
+    "renewal": "予算の更新",
+    "amount": "予算金額",
+    "customAmount": "カスタム予算（{{unit}}）",
+    "spent": "使用済み",
+    "remaining": "残高"
+  },
+  "renewals": {
+    "daily": "毎日",
+    "weekly": "毎週",
+    "monthly": "毎月",
+    "yearly": "毎年",
+    "never": "更新しない"
+  },
+  "actions": {
+    "delete": "接続を削除",
+    "edit": "権限を編集",
+    "deleteConfirm": "この接続を削除してもよろしいですか？",
+    "deleteSuccess": "接続が削除されました。",
+    "decrease": "減らす",
+    "decreaseTitle": "残高を減らす",
+    "decreaseAmountLabel": "金額（{{unit}}）",
+    "increaseTitle": "残高を増やす"
+  },
+  "scopes": {
+    "title": "ウォレットの権限を選択"
+  },
+  "disconnectApp": {
+    "cancel": "キャンセル"
+  },
+  "expiry": {
+    "title": "有効期限"
+  },
+  "connections": {
+    "title": "接続",
+    "addConnection": "接続を追加",
+    "appStore": "アプリストア",
+    "connectedApps": "接続済みアプリ",
+    "editConnection": "接続を編集",
+    "successfullyUpdated": "接続が正常に更新されました",
+    "failedToUpdate": "接続の更新に失敗しました",
+    "lokiAccount": "Loki アカウント",
+    "connections_count": "{{count}} 件の接続",
+    "connected": "接続済み",
+    "addAnother": "別の接続を追加",
+    "connectionDetails": "接続の詳細",
+    "disconnect": "{{appName}} の接続を解除",
+    "confirmUpdate": "アプリの更新を確認",
+    "isolatedRemoveConfirm": "この接続から<1>隔離</1>ステータスを削除してもよろしいですか？",
+    "payPermissionsConfirm": "この接続に<1>支払い権限</1>を付与してもよろしいですか？",
+    "warningNotice": "⚠️ 警告：これはこの接続シークレットを持つすべてのアプリに適用されます。安全であると確信できる場合のみ変更してください。そうでなければすべての資金を失う可能性があります",
+    "upToBudget": "（指定した予算まで）",
+    "isolatedFunds": "（この隔離アプリに預けられた資金）"
+  },
+  "appStore": {
+    "submitApp": "アプリを申請する",
+    "links": "リンク"
+  },
+  "usage": {
+    "isolatedBalance": "隔離残高",
+    "decrease": "減らす",
+    "increase": "増やす",
+    "totalSpent": "合計支出",
+    "totalReceived": "合計受取",
+    "budget": "予算",
+    "leftInBudget": "予算の残高",
+    "budgetRenewal": "予算の更新"
+  },
+  "newApp": {
+    "unsupportedApp": "未対応のアプリ",
+    "unsupportedMethods": "このアプリはウォレットが対応していないメソッドを要求しています：{{methods}}",
+    "unsupportedNotificationTypes": "このアプリは対応していない通知タイプを要求しています：{{types}}",
+    "tryLdkBackend": "追加機能については Lokihub LDK バックエンドをお試しください。",
+    "connectTo": "{{appName}} に接続",
+    "connectNewApp": "新しいアプリを接続",
+    "headerDescription": "アプリのウォレット権限を設定し、手順に従って接続を完了してください",
+    "install": "インストール",
+    "open": "開く",
+    "waitingForConnection": "アプリの接続を待っています...",
+    "name": "名前",
+    "nameDescription": "アプリの名前または接続の目的",
+    "enableAcceptingConnections": "他のアプリからの接続の受け入れを有効にする",
+    "allowAuthorizeNew": "このアプリが Lokihub への新しい接続を承認できるようにします。",
+    "returnTo": "{{url}} に自動的に戻ります",
+    "next": "次へ",
+    "back": "戻る",
+    "connectionEstablished": "接続が確立されました！",
+    "canUseApp": "Lokihub でこのアプリを使用できるようになりました。",
+    "openApp": "接続したいアプリを開く",
+    "findSettings": "ウォレット接続の設定を見つける（Nostr Wallet Connect または NWC の下にある場合があります）。",
+    "scanOrPaste": "接続シークレットをスキャンまたは貼り付け",
+    "optionalTopUp": "オプション：サブウォレットに入金（{{amount}}）",
+    "topUp": "入金",
+    "confirmNewConnection": "新しい接続を確認",
+    "lokiGoPermission": "Loki Go はあなたの残高を使用できる他のアプリ接続を作成する権限を付与されます。",
+    "warningLokiGo": "警告：Loki Go は Loki Go に設定した予算より大きな予算の接続を作成できます。必ず予算を設定してください。",
+    "enterUnlockPassword": "続行するにはロック解除パスワードを入力してください。",
+    "unlockPassword": "ロック解除パスワード",
+    "specifyWalletPermissions": "ウォレットの権限を指定してください。",
+    "appCreated": "アプリが作成されました",
+    "failedToCreate": "アプリの作成に失敗しました",
+    "configure": "設定",
+    "finalize": "完了",
+    "title": "新しいアプリを接続",
+    "description": "接続文字列を貼り付けるか、QRコードをスキャンしてアプリをウォレットに接続します。",
+    "nwcString": "接続文字列",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "接続"
+  },
+  "cleanup": {
+    "title": "未使用アプリのクリーンアップ",
+    "description": "2ヶ月以上使用されていないアプリを確認",
+    "warning": "警告",
+    "warningDetail": "削除前にアプリを注意深く確認してください。削除されたアプリは復元できません。",
+    "skip": "スキップ",
+    "delete": "削除",
+    "noMore": "確認が必要な未使用アプリはありません。",
+    "backToOverview": "概要に戻る",
+    "progress": "進捗",
+    "progressDetail": "未使用アプリ {{total}} 件中 {{reviewed}} 件を確認（スキップ {{skipped}} 件、削除 {{deleted}} 件）"
+  },
+  "connectAppCard": {
+    "title": "アプリを接続",
+    "description": "Nostr Wallet Connect を使用してアプリをウォレットに接続します。",
+    "connectionSecret": "接続シークレット",
+    "takingLonger": "接続に予想より時間がかかっています。",
+    "continueAnyway": "このまま続ける",
+    "appConnected": "アプリが接続されました",
+    "revealQR": "QRコードを表示",
+    "copySecret": "接続シークレットをコピー"
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "title": "连接",
+  "description": "通过 Nostr Wallet Connect 连接到您节点的应用程序",
+  "empty": "暂无已连接应用程序",
+  "connect": "连接应用程序",
+  "detail": {
+    "title": "连接详情",
+    "delete": "删除连接",
+    "deleteConfirm": "您确定要删除此连接吗？",
+    "deleteSuccess": "连接已删除。",
+    "edit": "编辑权限",
+    "close": "关闭",
+    "cancel": "取消"
+  },
+  "permissions": {
+    "title": "权限",
+    "pay": "支付发票",
+    "receive": "接收付款",
+    "balance": "查看余额",
+    "history": "查看交易记录",
+    "sign": "签名消息"
+  },
+  "budget": {
+    "title": "预算",
+    "renewal": "预算续期",
+    "amount": "预算金额",
+    "customAmount": "自定义预算金额（{{unit}}）",
+    "spent": "已支出",
+    "remaining": "剩余"
+  },
+  "renewals": {
+    "daily": "每日",
+    "weekly": "每周",
+    "monthly": "每月",
+    "yearly": "每年",
+    "never": "永不"
+  },
+  "actions": {
+    "delete": "删除连接",
+    "edit": "编辑权限",
+    "deleteConfirm": "您确定要删除此连接吗？",
+    "deleteSuccess": "连接已删除。",
+    "decrease": "减少",
+    "decreaseTitle": "减少余额",
+    "decreaseAmountLabel": "金额（{{unit}}）",
+    "increaseTitle": "增加余额"
+  },
+  "scopes": {
+    "title": "选择钱包权限"
+  },
+  "disconnectApp": {
+    "cancel": "取消"
+  },
+  "expiry": {
+    "title": "到期时间"
+  },
+  "connections": {
+    "title": "连接",
+    "addConnection": "添加连接",
+    "appStore": "应用商店",
+    "connectedApps": "已连接应用程序",
+    "editConnection": "编辑连接",
+    "successfullyUpdated": "连接更新成功",
+    "failedToUpdate": "连接更新失败",
+    "lokiAccount": "Loki 账户",
+    "connections_count": "{{count}} 个连接",
+    "connected": "已连接",
+    "addAnother": "添加另一个连接",
+    "connectionDetails": "连接详情",
+    "disconnect": "断开 {{appName}} 的连接",
+    "confirmUpdate": "确认更新应用程序",
+    "isolatedRemoveConfirm": "您确定要从此连接移除 <1>隔离</1> 状态吗？",
+    "payPermissionsConfirm": "您确定要为此连接赋予 <1>支付权限</1> 吗？",
+    "warningNotice": "⚠️ 警告：此操作适用于所有持有该连接密钥的应用程序。仅在确认安全的情况下修改，否则可能损失所有资金",
+    "upToBudget": " 至指定预算上限",
+    "isolatedFunds": " 存入此隔离应用程序的资金"
+  },
+  "appStore": {
+    "submitApp": "提交您的应用程序",
+    "links": "链接"
+  },
+  "usage": {
+    "isolatedBalance": "隔离余额",
+    "decrease": "减少",
+    "increase": "增加",
+    "totalSpent": "总支出",
+    "totalReceived": "总收入",
+    "budget": "预算",
+    "leftInBudget": "预算剩余",
+    "budgetRenewal": "预算续期"
+  },
+  "newApp": {
+    "unsupportedApp": "不支持的应用程序",
+    "unsupportedMethods": "此应用程序请求您的钱包不支持的方法：{{methods}}",
+    "unsupportedNotificationTypes": "此应用程序请求不支持的通知类型：{{types}}",
+    "tryLdkBackend": "尝试使用 Lokihub LDK 后端以获得更多功能。",
+    "connectTo": "连接到 {{appName}}",
+    "connectNewApp": "连接新应用程序",
+    "headerDescription": "为应用程序配置钱包权限，并按照说明完成连接",
+    "install": "安装",
+    "open": "打开",
+    "waitingForConnection": "正在等待应用程序连接...",
+    "name": "名称",
+    "nameDescription": "应用程序名称或连接用途",
+    "enableAcceptingConnections": "启用接受其他应用程序的连接",
+    "allowAuthorizeNew": "允许此应用程序为您授权 Lokihub 的新连接。",
+    "returnTo": "您将自动返回 {{url}}",
+    "next": "下一步",
+    "back": "返回",
+    "connectionEstablished": "连接已建立！",
+    "canUseApp": "您现在可以通过 Lokihub 使用此应用程序了。",
+    "openApp": "打开您要连接的应用程序",
+    "findSettings": "找到连接钱包的设置（可能在 Nostr Wallet Connect 或 NWC 下）。",
+    "scanOrPaste": "扫描或粘贴连接密钥",
+    "optionalTopUp": "可选：为子钱包充值（{{amount}}）",
+    "topUp": "充值",
+    "confirmNewConnection": "确认新连接",
+    "lokiGoPermission": "Loki Go 将获得创建其他应用程序连接的权限，这些连接可以使用您的余额。",
+    "warningLokiGo": "警告：Loki Go 创建的连接预算可能超过 Loki Go 本身设置的预算。请务必设置预算。",
+    "enterUnlockPassword": "请输入解锁密码以继续。",
+    "unlockPassword": "解锁密码",
+    "specifyWalletPermissions": "请指定钱包权限。",
+    "appCreated": "应用程序已创建",
+    "failedToCreate": "创建应用程序失败",
+    "configure": "配置",
+    "finalize": "完成",
+    "title": "连接新应用程序",
+    "description": "粘贴连接字符串或扫描二维码将应用程序连接到您的钱包。",
+    "nwcString": "连接字符串",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "连接"
+  },
+  "cleanup": {
+    "title": "清理未使用的应用程序",
+    "description": "审查超过 2 个月未使用的应用程序",
+    "warning": "警告",
+    "warningDetail": "删除前请仔细审查应用程序，已删除的应用程序无法恢复。",
+    "skip": "跳过",
+    "delete": "删除",
+    "noMore": "没有更多未使用的应用程序需要审查。",
+    "backToOverview": "返回概览",
+    "progress": "进度",
+    "progressDetail": "已审查 {{reviewed}}/{{total}} 个未使用应用程序（跳过 {{skipped}} 个，已删除 {{deleted}} 个）"
+  },
+  "connectAppCard": {
+    "title": "连接应用程序",
+    "description": "使用 Nostr Wallet Connect 将应用程序连接到您的钱包。",
+    "connectionSecret": "连接密钥",
+    "takingLonger": "连接时间比预期更长。",
+    "continueAnyway": "仍然继续",
+    "appConnected": "应用程序已连接",
+    "revealQR": "显示二维码",
+    "copySecret": "复制连接密钥"
+  }
+}

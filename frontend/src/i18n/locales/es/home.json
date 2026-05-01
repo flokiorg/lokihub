@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "Buenos días",
+    "afternoon": "Buenas tardes",
+    "evening": "Buenas noches",
+    "withName": "{{greeting}}, {{name}}!"
+  },
+  "widgets": {
+    "statsForNerds": "Estadísticas avanzadas",
+    "nodeStatus": "Estado del nodo",
+    "blockHeight": "Altura del bloque",
+    "onchainFees": "Comisiones on-chain",
+    "forwards": "Reenvíos",
+    "latestApps": "Aplicaciones recientes"
+  },
+  "alerts": {
+    "newApp": "Nueva app conectada",
+    "updatedApp": "App actualizada",
+    "dismiss": "Cerrar"
+  },
+  "search": {
+    "placeholder": "Buscar"
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "balance": {
+    "lightning": "闪电网络余额",
+    "onchain": "链上余额",
+    "total": "总余额",
+    "available": "可用",
+    "reserved": "已预留",
+    "pending": "待处理"
+  },
+  "transactions": {
+    "title": "交易记录",
+    "empty": "暂无交易",
+    "sent": "已发送",
+    "received": "已接收",
+    "pending": "待处理",
+    "failed": "失败",
+    "viewAll": "查看全部"
+  },
+  "receive": {
+    "title": "收款",
+    "invoice": "闪电发票",
+    "address": "比特币地址",
+    "amount": "金额",
+    "description": "说明",
+    "generate": "生成发票",
+    "copyInvoice": "复制发票",
+    "copyAddress": "复制地址",
+    "shareInvoice": "分享发票",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    },
+    "buyingLiquidity": "正在购买入账流动性...",
+    "amountTooSmall": "金额太小，无法进行 JIT 支付。最低：{{amount}} {{unit}}。",
+    "amountTooLarge": "金额太大，无法进行 JIT 支付。最高：{{amount}} {{unit}}。",
+    "failedToBuyLiquidity": "购买流动性失败",
+    "successCreated": "成功创建发票",
+    "failedToCreate": "创建发票失败",
+    "lightningInvoice": "闪电网络发票",
+    "createInvoice": "创建发票",
+    "waiting": "等待付款",
+    "paymentReceived": "收到付款",
+    "createAnother": "创建另一张发票",
+    "backToWallet": "返回钱包",
+    "amountPlaceholder": "金额（{{unit}}）...",
+    "liquidityProvider": "流动性提供商",
+    "selectLSP": "选择 LSP",
+    "jitPayment": "JIT 支付",
+    "jitExplainedTitle": "JIT 支付说明",
+    "jitWhyNeededTitle": "为什么需要这个？",
+    "jitWhyNeededDesc": "闪电网络支付需要<strong>入账流动性</strong>（接收容量）。您目前没有足够的容量来直接接收这笔金额。",
+    "jitHowWorksTitle": "它是如何工作的",
+    "jitHowWorksDesc": "您的 LSP 将在付款到达时自动<strong>即时（JIT）</strong>打开一个新通道。这确保您的付款立即成功，而无需您手动管理通道。",
+    "feeStructure": "费用结构",
+    "minFee": "最低费用：",
+    "propRate": "比例费率：",
+    "min": "最低：",
+    "max": "最高：",
+    "feeLogic": "费用是最低费用或计算出的比例费率中的<strong>较高者</strong>。",
+    "whoPays": "谁支付费用？",
+    "receiverPays": "收款人支付：",
+    "receiverPaysDesc": "（默认）费用将从您收到的金额中扣除。",
+    "senderPays": "付款人支付：",
+    "senderPaysDesc": "费用将添加到发票总额中。付款人支付额外费用。",
+    "loadingJit": "正在加载 JIT 详细信息...",
+    "estimatedFee": "预计费用",
+    "totalToSend": "发送总额",
+    "youReceive": "您收到",
+    "retry": "重试",
+    "paymentRange": "付款范围：",
+    "includeFee": "在发票中包含费用（付款人支付）",
+    "descriptionPlaceholder": "例如，谁发送这笔付款？",
+    "receiveOnchain": "通过链上接收",
+    "unknownError": "未知错误"
+  },
+  "send": {
+    "title": "付款",
+    "destination": "收款方",
+    "amount": "金额",
+    "description": "说明",
+    "confirm": "确认付款",
+    "pay": "付款",
+    "scanQr": "扫描二维码",
+    "zeroAmount": {
+      "title": "输入金额",
+      "description": "此发票没有金额。输入您想发送多少。"
+    },
+    "success": {
+      "title": "付款已发送！",
+      "description": "您的付款已成功发送。"
+    },
+    "lnurl": {
+      "title": "通过 LNURL 发送"
+    },
+    "onchain": {
+      "title": "链上发送",
+      "amountLabel": "金额",
+      "feeRateLabel": "费率 ({{unit}}/vB)",
+      "addressLabel": "链上地址",
+      "amountNotIdeal": "金额不适合链上交易",
+      "cancel": "取消"
+    }
+  },
+  "header": {
+    "title": "钱包",
+    "receive": "接收",
+    "send": "发送",
+    "swap": "交换"
+  },
+  "alerts": {
+    "channelReservesUnmet": "通道储备未满足",
+    "channelReservesDesc": "在填满通道储备之前，您将无法进行付款。",
+    "viewChannelReserves": "查看通道储备",
+    "openFirstChannel": "打开您的第一个通道",
+    "openFirstChannelDesc": "您将无法接收或发送付款，直到您",
+    "openFirstChannelLink": "打开您的第一个通道",
+    "onchainShownOnNode": "链上交易显示在节点页面上",
+    "viewOnchain": "查看链上交易"
+  },
+  "onboarding": {
+    "title": "开始使用 Lokihub",
+    "description": "按照这些初始步骤设置并充分利用您的 Loki Hub。"
+  },
+  "signMessage": {
+    "title": "签名消息",
+    "label": "消息",
+    "sign": "签名"
+  },
+  "nodeAlias": {
+    "title": "节点别名",
+    "label": "节点别名",
+    "save": "保存"
+  },
+  "withdraw": {
+    "title": "提取链上资金",
+    "amountLabel": "金额",
+    "addressLabel": "链上地址",
+    "feeRateLabel": "费率 ({{unit}}/vB)",
+    "sendAllAlert": "将发送所有钱包余额",
+    "cancel": "取消"
+  },
+  "subwallets": {
+    "title": "子钱包",
+    "new": "新子钱包",
+    "empty": "还没有子钱包",
+    "about": {
+      "title": "关于子钱包",
+      "close": "关闭"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "等待确认",
+    "backToNode": "返回节点",
+    "received": "已收到",
+    "viewExplorer": "在浏览器中查看"
+  }
+}

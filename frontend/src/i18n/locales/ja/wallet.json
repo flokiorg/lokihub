@@ -1,0 +1,124 @@
+{
+  "balance": {
+    "lightning": "ライトニング残高",
+    "onchain": "オンチェーン残高",
+    "total": "合計残高",
+    "available": "利用可能",
+    "reserved": "予約済み",
+    "pending": "保留中"
+  },
+  "transactions": {
+    "title": "取引履歴",
+    "empty": "取引はまだありません",
+    "sent": "送信済み",
+    "received": "受信済み",
+    "pending": "保留中",
+    "failed": "失敗",
+    "viewAll": "すべて表示"
+  },
+  "receive": {
+    "title": "受け取る",
+    "invoice": "ライトニングインボイス",
+    "address": "ビットコインアドレス",
+    "amount": "金額",
+    "description": "説明",
+    "generate": "インボイスを生成",
+    "copyInvoice": "インボイスをコピー",
+    "copyAddress": "アドレスをコピー",
+    "shareInvoice": "インボイスを共有",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    }
+  },
+  "send": {
+    "title": "送る",
+    "destination": "送り先",
+    "amount": "金額",
+    "description": "説明",
+    "confirm": "支払いを確認",
+    "pay": "支払う",
+    "scanQr": "QRコードをスキャン",
+    "zeroAmount": {
+      "title": "Enter Amount",
+      "description": "This invoice has no amount. Enter how much you want to send."
+    },
+    "success": {
+      "title": "Payment Sent!",
+      "description": "Your payment was sent successfully."
+    },
+    "lnurl": {
+      "title": "Send via LNURL"
+    },
+    "onchain": {
+      "title": "Send On-chain",
+      "amountLabel": "Amount",
+      "feeRateLabel": "Fee Rate ({{unit}}/vB)",
+      "addressLabel": "On-chain Address",
+      "amountNotIdeal": "Amount not ideal for On-chain transaction",
+      "cancel": "Cancel"
+    }
+  },
+  "header": {
+    "title": "Wallet",
+    "receive": "Receive",
+    "send": "Send",
+    "swap": "Swap"
+  },
+  "alerts": {
+    "channelReservesUnmet": "Channel Reserves Unmet",
+    "channelReservesDesc": "You won't be able to make payments until you fill your channel reserve.",
+    "viewChannelReserves": "View channel reserves",
+    "openFirstChannel": "Open Your First Channel",
+    "openFirstChannelDesc": "You won't be able to receive or send payments until you",
+    "openFirstChannelLink": "open your first channel",
+    "onchainShownOnNode": "On-chain transactions are shown on the Node page",
+    "viewOnchain": "View On-chain transactions"
+  },
+  "onboarding": {
+    "title": "Get started with your Lokihub",
+    "description": "Follow these initial steps to set up and make the most of your Loki Hub."
+  },
+  "signMessage": {
+    "title": "Sign Message",
+    "label": "Message",
+    "sign": "Sign"
+  },
+  "nodeAlias": {
+    "title": "Node Alias",
+    "label": "Node Alias",
+    "save": "Save"
+  },
+  "withdraw": {
+    "title": "Withdraw On-chain Funds",
+    "amountLabel": "Amount",
+    "addressLabel": "Onchain Address",
+    "feeRateLabel": "Fee Rate ({{unit}}/vB)",
+    "sendAllAlert": "Entire wallet balance will be sent",
+    "cancel": "Cancel"
+  },
+  "subwallets": {
+    "title": "Sub-wallets",
+    "new": "New Sub-wallet",
+    "empty": "No sub-wallets yet",
+    "about": {
+      "title": "About Sub-wallets",
+      "close": "Close"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "Awaiting Confirmations",
+    "backToNode": "Back to Node",
+    "received": "Received",
+    "viewExplorer": "View on Explorer"
+  }
+}

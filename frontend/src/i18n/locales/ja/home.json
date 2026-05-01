@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "おはようございます",
+    "afternoon": "こんにちは",
+    "evening": "こんばんは",
+    "withName": "{{greeting}}、{{name}}さん！"
+  },
+  "widgets": {
+    "statsForNerds": "詳細統計",
+    "nodeStatus": "ノードステータス",
+    "blockHeight": "ブロック高",
+    "onchainFees": "オンチェーン手数料",
+    "forwards": "転送",
+    "latestApps": "最近使用したアプリ"
+  },
+  "alerts": {
+    "newApp": "新しいアプリが接続されました",
+    "updatedApp": "アプリが更新されました",
+    "dismiss": "閉じる"
+  },
+  "search": {
+    "placeholder": "検索"
+  }
+}

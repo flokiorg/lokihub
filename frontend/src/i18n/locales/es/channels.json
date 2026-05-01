@@ -1,0 +1,148 @@
+{
+  "title": "Nodo",
+  "channels": {
+    "title": "Canales",
+    "open": "Abrir canal",
+    "close": "Cerrar canal",
+    "empty": "No hay canales abiertos",
+    "capacity": "Capacidad",
+    "localBalance": "Saldo local",
+    "remoteBalance": "Saldo remoto",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "pending": "Pendiente",
+      "closing": "Cerrando",
+      "online": "En línea",
+      "offline": "Desconectado",
+      "opening": "Abriendo"
+    },
+    "pendingClosed": "Canales pendientes de cierre",
+    "table": {
+      "capacity": "Capacidad",
+      "localBalance": "Saldo Local",
+      "remoteBalance": "Saldo Remoto",
+      "actions": "Acciones"
+    },
+    "closeDialog": {
+      "title": "Seleccione el modo de cierre del canal",
+      "headsUp": "¡Atención!",
+      "cancel": "Cancelar",
+      "closedSuccess": "Canal cerrado con éxito"
+    },
+    "nodeHealth": {
+      "tooltip": "Salud del nodo: {{percent}}%",
+      "dialogTitle": "Salud del nodo",
+      "close": "Cerrar"
+    },
+    "dropdown": {
+      "viewFunding": "Ver transacción de fondos",
+      "viewNode": "Ver nodo en {{explorer}}",
+      "setRoutingFee": "Establecer tarifa de enrutamiento"
+    }
+  },
+  "peers": {
+    "title": "Pares",
+    "connect": "Conectar par",
+    "disconnect": "Desconectar",
+    "empty": "No hay pares conectados",
+    "pubkey": "Clave pública",
+    "alias": "Alias",
+    "disconnectConfirm": "Confirmar",
+    "disconnectCancel": "Cancelar"
+  },
+  "liquidity": {
+    "title": "Liquidez",
+    "incoming": "Entrante",
+    "outgoing": "Saliente"
+  },
+  "menu": {
+    "node": "Node",
+    "onchain": "On-Chain",
+    "swaps": "Swaps",
+    "history": "History",
+    "management": "Management"
+  },
+  "onchain": {
+    "title": "On-chain",
+    "addressLabel": "On-Chain Address",
+    "depositTitle": "Deposit Flokicoin",
+    "generateNew": "Generate a new address"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "Su historial de pedidos de canales",
+    "noOrdersDesc": "Aún no ha pedido ningún canal.",
+    "noOrdersTitle": "No hay historial de pedidos",
+    "totalFee": "Tarifa total"
+  },
+  "increaseCapacity": {
+    "title": "Abrir canal en cadena",
+    "description": "Los fondos utilizados para abrir un canal menos las tarifas se agregarán a su saldo de gasto",
+    "info": "Abra un canal con fondos en la cadena. Ambas partes son libres de cerrar el canal en cualquier momento. Sin embargo, al mantener más fondos de su lado y usarlo regularmente, hay más posibilidades de que el canal permanezca abierto.",
+    "peerLabel": "Nodo / LSP",
+    "customPeer": "Nodo personalizado",
+    "peer": "Nodo",
+    "hostPort": "Host:Puerto",
+    "increaseSpendingLabel": "Aumentar saldo de gasto",
+    "increaseSpendingTooltip": "Configure la capacidad de gasto que necesita. Deberá depositar flokicoin en la cadena para cubrir el tamaño completo del canal, más las tarifas de la cadena.",
+    "currentBalance": "Saldo actual en la cadena:",
+    "noLsps": "No hay LSPs configurados",
+    "selectProvider": "Seleccione un proveedor",
+    "needIncoming": "¿Necesita capacidad entrante en su lugar?",
+    "buyInbound": "Comprar liquidez entrante",
+    "lookingToReceive": "¿Busca recibir fondos? Puede que necesite capacidad entrante.",
+    "publicChannel": "Canal público",
+    "publicChannelDesc": "No recomendado para la mayoría de los usuarios.",
+    "confirmTitle": "Confirmar apertura del canal",
+    "confirmDesc": "¿Está seguro de que desea abrir un canal Lightning con los siguientes detalles?",
+    "channelType": "Tipo de canal",
+    "paymentMethod": "Método de pago",
+    "nodePublicKey": "Clave pública del nodo",
+    "important": "Importante:",
+    "confirmWarning": "Abrir un canal requiere una transacción en la cadena y tarifas de red. Esta acción no se puede deshacer. Verifique todos los detalles antes de continuar.",
+    "confirmAndOpen": "Confirmar y abrir canal",
+    "manageProviders": "Administrar proveedores en"
+  },
+  "orderChannel": {
+    "title": "Aumentar liquidez entrante",
+    "description": "Pida un canal a su LSP para aumentar su capacidad de recepción",
+    "info": "Pida un canal de un LSP. Esto proporciona liquidez entrante, lo que le permite recibir pagos inmediatamente después de que se confirme el canal.",
+    "increaseInboundLabel": "Aumentar liquidez entrante",
+    "orderRange": "Rango de pedido:",
+    "orderBtn": "Pedir canal",
+    "opening": "Se está abriendo su canal",
+    "reviewTitle": "Revisar compra del canal",
+    "reviewDesc": "Complete el pago para abrir un canal a su nodo",
+    "spendingBalance": "Saldo de gasto",
+    "incomingLiquidity": "Liquidez entrante",
+    "amountToPay": "Cantidad a pagar",
+    "consentMsg": "Al continuar, usted acepta que el canal se abra inmediatamente y pierde el derecho a revocar una vez que esté abierto.",
+    "otherOptions": "Otras opciones",
+    "increaseSpending": "Aumentar saldo de gasto",
+    "balanceMsg": "Su saldo actual es",
+    "currentlyHave": "Actualmente tiene",
+    "deposited": "Depositado",
+    "depositedAmount": "Monto depositado",
+    "estTime": "Tiempo estimado",
+    "includesCost": "Incluye el costo de abrir el canal",
+    "noPending": "No hay pedidos de canales pendientes",
+    "notEnough": "Saldo insuficiente",
+    "openedDesc": "Su canal ahora está abierto y listo para usar.",
+    "openedTitle": "Canal abierto",
+    "recommendDeposit": "Recomendamos depositar",
+    "return": "Volver al nodo",
+    "scanQr": "Escanear código de barras para depositar",
+    "sendFloki": "Enviar Flokicoin",
+    "successMsg": "Canal ordenado con éxito",
+    "toOpen": "Para abrir un canal con",
+    "waitingChannel": "Esperando que se abra el canal...",
+    "waitingConf": "Esperando confirmaciones...",
+    "waitingTx": "Esperando transacción..."
+  }
+}

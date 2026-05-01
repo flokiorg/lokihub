@@ -1,0 +1,97 @@
+{
+  "title": "일반",
+  "description": "Lokihub 일반 설정.",
+  "sections": {
+    "appearance": "외관",
+    "unitsAndCurrency": "단위 및 통화",
+    "language": "언어"
+  },
+  "appearance": {
+    "theme": "테마",
+    "themeDescription": "비주얼 테마를 선택하세요",
+    "darkMode": "외관",
+    "darkModeDescription": "라이트, 다크 모드 또는 시스템 설정 따르기를 선택하세요",
+    "modes": {
+      "system": "시스템",
+      "light": "라이트",
+      "dark": "다크"
+    }
+  },
+  "units": {
+    "displayUnit": "표시 단위",
+    "displayUnitDescription": "금액 표시 방식을 선택하세요",
+    "fiatCurrency": "법정 통화",
+    "fiatCurrencyDescription": "선호하는 법정 기준 통화",
+    "auto": "자동"
+  },
+  "language": {
+    "label": "언어",
+    "description": "선호하는 인터페이스 언어를 선택하세요",
+    "updated": "언어가 업데이트되었습니다."
+  },
+  "toasts": {
+    "themeUpdated": "테마가 업데이트되었습니다.",
+    "appearanceUpdated": "외관이 업데이트되었습니다.",
+    "currencyUpdated": "통화가 {{currency}}로 설정되었습니다",
+    "formatUpdated": "Flokicoin 표시 형식이 업데이트되었습니다",
+    "currencyFetchFailed": "통화를 가져오지 못했습니다: {{error}}",
+    "updateFailed": "설정 업데이트에 실패했습니다"
+  },
+  "nav": {
+    "general": "General",
+    "services": "Services",
+    "autoUnlock": "Auto Unlock",
+    "unlockPassword": "Unlock Password",
+    "backup": "Backup",
+    "migrate": "Migrate Lokihub",
+    "developer": "Developer",
+    "debugTools": "Debug Tools",
+    "about": "About"
+  },
+  "shutdown": {
+    "dialogTitle": "Do you want to turn off your Lokihub?",
+    "dialogDesc": "This will turn off your Lokihub and make your node offline. You won't be able to send or receive flokicoin until you unlock it.",
+    "cancel": "Cancel",
+    "confirm": "Continue",
+    "toast": "Your node has been turned off.",
+    "failedToast": "Failed to shutdown node"
+  },
+  "header": {
+    "title": "Settings"
+  },
+  "changePassword": {
+    "title": "Change Unlock Password",
+    "important": "Important!",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNew": "Confirm New Password",
+    "save": "Save"
+  },
+  "backup": {
+    "title": "Backup",
+    "important": "Important",
+    "passwordLabel": "Password",
+    "active": "Active"
+  },
+  "autoUnlock": {
+    "title": "Auto Unlock",
+    "attention": "Attention",
+    "passwordLabel": "Unlock Password"
+  },
+  "developer": {
+    "title": "Developer",
+    "tokenType": "Token Type",
+    "tokenExpiry": "Token Expiry (Days)",
+    "passwordLabel": "Unlock Password",
+    "createToken": "Create Token"
+  },
+  "debugTools": {
+    "title": "Debug Tools",
+    "probeInvoice": "Probe Invoice",
+    "probeKeysend": "Probe Keysend",
+    "networkGraph": "Get Network Graph",
+    "refundTo": "Refund to",
+    "onchainAddress": "On-chain address",
+    "cancel": "Cancel"
+  }
+}

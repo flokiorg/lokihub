@@ -1,0 +1,155 @@
+{
+  "title": "Conexiones",
+  "description": "Aplicaciones conectadas a tu nodo mediante Nostr Wallet Connect",
+  "empty": "Aún no hay aplicaciones conectadas",
+  "connect": "Conectar aplicación",
+  "detail": {
+    "title": "Detalles de la conexión",
+    "delete": "Eliminar conexión",
+    "deleteConfirm": "¿Estás seguro de que quieres eliminar esta conexión?",
+    "deleteSuccess": "Conexión eliminada.",
+    "edit": "Editar permisos",
+    "close": "Cerrar",
+    "cancel": "Cancelar"
+  },
+  "permissions": {
+    "title": "Permisos",
+    "pay": "Pagar facturas",
+    "receive": "Recibir pagos",
+    "balance": "Ver saldo",
+    "history": "Ver historial de transacciones",
+    "sign": "Firmar mensajes"
+  },
+  "budget": {
+    "title": "Presupuesto",
+    "renewal": "Renovación de presupuesto",
+    "amount": "Monto del presupuesto",
+    "customAmount": "Monto de presupuesto personalizado ({{unit}})",
+    "spent": "Gastado",
+    "remaining": "Restante"
+  },
+  "renewals": {
+    "daily": "Diario",
+    "weekly": "Semanal",
+    "monthly": "Mensual",
+    "yearly": "Anual",
+    "never": "Nunca"
+  },
+  "actions": {
+    "delete": "Eliminar conexión",
+    "edit": "Editar permisos",
+    "deleteConfirm": "¿Estás seguro de que quieres eliminar esta conexión?",
+    "deleteSuccess": "Conexión eliminada.",
+    "decrease": "Reducir",
+    "decreaseTitle": "Reducir saldo",
+    "decreaseAmountLabel": "Monto ({{unit}})",
+    "increaseTitle": "Aumentar saldo"
+  },
+  "scopes": {
+    "title": "Selecciona permisos de la cartera"
+  },
+  "disconnectApp": {
+    "cancel": "Cancelar"
+  },
+  "expiry": {
+    "title": "Fecha de vencimiento"
+  },
+  "connections": {
+    "title": "Conexiones",
+    "addConnection": "Agregar conexión",
+    "appStore": "Tienda de aplicaciones",
+    "connectedApps": "Aplicaciones conectadas",
+    "editConnection": "Editar conexión",
+    "successfullyUpdated": "Conexión actualizada exitosamente",
+    "failedToUpdate": "No se pudo actualizar la conexión",
+    "lokiAccount": "Cuenta Loki",
+    "connections_count": "{{count}} conexión(es)",
+    "connected": "Conectado",
+    "addAnother": "Agregar otra conexión",
+    "connectionDetails": "Detalles de la conexión",
+    "disconnect": "Desconectar {{appName}}",
+    "confirmUpdate": "Confirmar actualización de la aplicación",
+    "isolatedRemoveConfirm": "¿Estás seguro de que quieres eliminar el estado <1>aislado</1> de esta conexión?",
+    "payPermissionsConfirm": "¿Estás seguro de que quieres otorgar <1>permisos de pago</1> a esta conexión?",
+    "warningNotice": "⚠️ Advertencia: Esto aplica a todas las aplicaciones que tienen este secreto de conexión. Cambia solo si estás seguro de que es seguro, de lo contrario podrías perder todos tus fondos",
+    "upToBudget": " hasta el presupuesto especificado",
+    "isolatedFunds": " depositados en esta aplicación aislada"
+  },
+  "appStore": {
+    "submitApp": "Envía tu aplicación",
+    "links": "Enlaces"
+  },
+  "usage": {
+    "isolatedBalance": "Saldo aislado",
+    "decrease": "Reducir",
+    "increase": "Aumentar",
+    "totalSpent": "Total gastado",
+    "totalReceived": "Total recibido",
+    "budget": "Presupuesto",
+    "leftInBudget": "Presupuesto restante",
+    "budgetRenewal": "Renovación de presupuesto"
+  },
+  "newApp": {
+    "unsupportedApp": "Aplicación no compatible",
+    "unsupportedMethods": "Esta aplicación solicita métodos no compatibles con tu cartera: {{methods}}",
+    "unsupportedNotificationTypes": "Esta aplicación solicita tipos de notificación no compatibles: {{types}}",
+    "tryLdkBackend": "Prueba el backend LDK de Lokihub para obtener más funciones.",
+    "connectTo": "Conectar a {{appName}}",
+    "connectNewApp": "Conectar nueva aplicación",
+    "headerDescription": "Configura los permisos de la cartera para la aplicación y sigue las instrucciones para completar la conexión",
+    "install": "Instalar",
+    "open": "Abrir",
+    "waitingForConnection": "Esperando que la aplicación se conecte...",
+    "name": "Nombre",
+    "nameDescription": "Nombre de la aplicación o propósito de la conexión",
+    "enableAcceptingConnections": "Habilitar la aceptación de conexiones de otras aplicaciones",
+    "allowAuthorizeNew": "Permitir que esta aplicación autorice nuevas conexiones a Lokihub.",
+    "returnTo": "Serás redirigido automáticamente a {{url}}",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "connectionEstablished": "¡Conexión establecida!",
+    "canUseApp": "Ahora puedes usar la aplicación con Lokihub.",
+    "openApp": "Abre la aplicación que quieres conectar",
+    "findSettings": "Busca los ajustes de conexión de cartera (puede estar bajo Nostr Wallet Connect o NWC).",
+    "scanOrPaste": "Escanea o pega el secreto de conexión",
+    "optionalTopUp": "Opcional: recargar saldo de la subcartera ({{amount}})",
+    "topUp": "Recargar",
+    "confirmNewConnection": "Confirmar nueva conexión",
+    "lokiGoPermission": "Loki Go obtendrá permiso para crear otras conexiones de aplicaciones que podrán gastar tu saldo.",
+    "warningLokiGo": "Advertencia: Loki Go puede crear conexiones con un presupuesto mayor al que se le asignó. Siempre establece un presupuesto.",
+    "enterUnlockPassword": "Por favor ingresa tu contraseña de desbloqueo para continuar.",
+    "unlockPassword": "Contraseña de desbloqueo",
+    "specifyWalletPermissions": "Por favor especifica los permisos de la cartera.",
+    "appCreated": "Aplicación creada",
+    "failedToCreate": "No se pudo crear la aplicación",
+    "configure": "Configurar",
+    "finalize": "Finalizar",
+    "title": "Conectar una nueva aplicación",
+    "description": "Pega una cadena de conexión o escanea un código QR para conectar una aplicación a tu cartera.",
+    "nwcString": "Cadena de conexión",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "Conectar"
+  },
+  "cleanup": {
+    "title": "Limpiar aplicaciones no utilizadas",
+    "description": "Revisa las aplicaciones que no se han usado en 2 meses o más",
+    "warning": "Advertencia",
+    "warningDetail": "Revisa la aplicación cuidadosamente antes de eliminarla. Las aplicaciones eliminadas no se pueden recuperar.",
+    "skip": "Omitir",
+    "delete": "Eliminar",
+    "noMore": "No hay más aplicaciones no utilizadas para revisar.",
+    "backToOverview": "Volver al resumen",
+    "progress": "Progreso",
+    "progressDetail": "{{reviewed}} de {{total}} aplicaciones no utilizadas revisadas ({{skipped}} omitidas, {{deleted}} eliminadas)"
+  },
+  "connectAppCard": {
+    "title": "Conectar aplicación",
+    "description": "Usa Nostr Wallet Connect para vincular aplicaciones a tu cartera.",
+    "connectionSecret": "Secreto de conexión",
+    "takingLonger": "La conexión está tardando más de lo normal.",
+    "continueAnyway": "Continuar de todos modos",
+    "appConnected": "Aplicación conectada",
+    "revealQR": "Mostrar código QR",
+    "copySecret": "Copiar secreto de conexión"
+  }
+}

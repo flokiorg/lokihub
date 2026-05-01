@@ -1,0 +1,96 @@
+{
+  "steps": {
+    "welcome": "환영합니다",
+    "nodeSetup": "노드 설정",
+    "unlockPassword": "잠금 해제 비밀번호 설정",
+    "backup": "백업",
+    "complete": "설정 완료"
+  },
+  "welcome": {
+    "title": "Lokihub에 오신 것을 환영합니다",
+    "subtitle": "라이트닝 노드 관리 인터페이스",
+    "getStarted": "시작하기"
+  },
+  "password": {
+    "title": "잠금 해제 비밀번호를 설정하세요",
+    "description": "이 비밀번호는 노드 접근을 보호합니다. 안전한 곳에 보관하세요.",
+    "label": "비밀번호",
+    "confirm": "비밀번호 확인",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "tooShort": "비밀번호는 8자 이상이어야 합니다",
+    "repeatLabel": "Repeat Password",
+    "repeatPlaceholder": "Re-enter the password",
+    "securedConfirm": "I've secured this password in a safe place",
+    "irrecoverableConfirm": "I understand this password cannot be recovered",
+    "createButton": "Create Password",
+    "notConfirmed": "Please confirm you have saved your password"
+  },
+  "backup": {
+    "title": "복구 문구를 백업하세요",
+    "description": "이 단어들을 순서대로 적어 안전한 곳에 보관하세요. 지갑 복구에 필요합니다.",
+    "confirmed": "복구 문구를 기록했습니다",
+    "warning": "복구 문구를 절대 다른 사람과 공유하지 마세요."
+  },
+  "complete": {
+    "title": "모든 준비가 완료되었습니다",
+    "description": "노드를 사용할 준비가 되었습니다.",
+    "goHome": "대시보드로 이동"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Welcome to Lokihub",
+      "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
+      "next": "Next"
+    },
+    "slide2": {
+      "title": "Always Ready",
+      "description": "Your wallet is online and ready to use on any device, anytime."
+    },
+    "slide3": {
+      "title": "Secure & Private",
+      "description": "Encrypted by your password. Only you can access your funds."
+    },
+    "slide4": {
+      "title": "Connect Apps",
+      "description": "Link up with apps and join the Web of Fun."
+    },
+    "slideAriaLabel": "Go to slide {{index}}"
+  },
+  "start": {
+    "title": "Start",
+    "description": "Enter your password to unlock and start Lokihub.",
+    "passwordLabel": "Password",
+    "pleaseWait": "Please wait...",
+    "starting": "Starting Lokihub may take a few minutes.",
+    "failedToStart": "Failed to start",
+    "failedToConnect": "Failed to connect"
+  },
+  "unlock": {
+    "title": "Login",
+    "description": "Enter your unlock password to continue",
+    "passwordLabel": "Password",
+    "login": "Login",
+    "failedToConnect": "Failed to connect"
+  },
+  "finish": {
+    "loading": "Setting up your Hub...",
+    "connectionTimeout": "Connection timed out. Please check your node.",
+    "failedToConnect": "Failed to connect"
+  },
+  "security": {
+    "title": "Security & Recovery",
+    "description": "Take your time to understand how to secure and recover your funds on Lokihub.",
+    "confirmed": "I understand how to secure and recover funds"
+  },
+  "restore": {
+    "title": "Import Wallet from Migration File",
+    "description": "Upload your encrypted wallet migration file.",
+    "import": "Import Wallet",
+    "restartingTitle": "Restart your Hub",
+    "restartingDesc": "Lokihub needs to restart to finish restoring your node",
+    "restartingMessage": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process.",
+    "waitingForRestart": "Waiting for restart...",
+    "warning1": "As part of the node restore process your Lokihub will be shut down.",
+    "warning2": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Loki Hub to finish the restore process."
+  }
+}

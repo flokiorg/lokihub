@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "좋은 아침이에요",
+    "afternoon": "안녕하세요",
+    "evening": "좋은 저녁이에요",
+    "withName": "{{greeting}}, {{name}}님!"
+  },
+  "widgets": {
+    "statsForNerds": "상세 통계",
+    "nodeStatus": "노드 상태",
+    "blockHeight": "블록 높이",
+    "onchainFees": "온체인 수수료",
+    "forwards": "전달",
+    "latestApps": "최근 사용한 앱"
+  },
+  "alerts": {
+    "newApp": "새 앱이 연결되었습니다",
+    "updatedApp": "앱이 업데이트되었습니다",
+    "dismiss": "닫기"
+  },
+  "search": {
+    "placeholder": "검색"
+  }
+}

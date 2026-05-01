@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "早上好",
+    "afternoon": "下午好",
+    "evening": "晚上好",
+    "withName": "{{greeting}}，{{name}}！"
+  },
+  "widgets": {
+    "statsForNerds": "技术统计",
+    "nodeStatus": "节点状态",
+    "blockHeight": "区块高度",
+    "onchainFees": "链上手续费",
+    "forwards": "转发",
+    "latestApps": "最近使用的应用"
+  },
+  "alerts": {
+    "newApp": "新应用已连接",
+    "updatedApp": "应用已更新",
+    "dismiss": "关闭"
+  },
+  "search": {
+    "placeholder": "搜索"
+  }
+}

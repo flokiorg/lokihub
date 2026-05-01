@@ -1,0 +1,97 @@
+{
+  "title": "通用",
+  "description": "Lokihub 通用设置。",
+  "sections": {
+    "appearance": "外观",
+    "unitsAndCurrency": "单位与货币",
+    "language": "语言"
+  },
+  "appearance": {
+    "theme": "主题",
+    "themeDescription": "选择您的视觉主题",
+    "darkMode": "外观",
+    "darkModeDescription": "选择浅色、深色或跟随系统设置",
+    "modes": {
+      "system": "跟随系统",
+      "light": "浅色",
+      "dark": "深色"
+    }
+  },
+  "units": {
+    "displayUnit": "显示单位",
+    "displayUnitDescription": "选择金额的显示方式",
+    "fiatCurrency": "法定货币",
+    "fiatCurrencyDescription": "您首选的法定参考货币",
+    "auto": "自动"
+  },
+  "language": {
+    "label": "语言",
+    "description": "选择您偏好的界面语言",
+    "updated": "语言已更新。"
+  },
+  "toasts": {
+    "themeUpdated": "主题已更新。",
+    "appearanceUpdated": "外观已更新。",
+    "currencyUpdated": "货币已设置为 {{currency}}",
+    "formatUpdated": "Flokicoin 显示格式已更新",
+    "currencyFetchFailed": "获取货币失败：{{error}}",
+    "updateFailed": "更新设置失败"
+  },
+  "nav": {
+    "general": "常规",
+    "services": "服务",
+    "autoUnlock": "自动解锁",
+    "unlockPassword": "解锁密码",
+    "backup": "备份",
+    "migrate": "迁移 Lokihub",
+    "developer": "开发者",
+    "debugTools": "调试工具",
+    "about": "关于"
+  },
+  "shutdown": {
+    "dialogTitle": "您想关闭 Lokihub 吗？",
+    "dialogDesc": "这会关闭您的 Lokihub 并使节点离线。在您解锁之前，您将无法发送或接收 flokicoin。",
+    "cancel": "取消",
+    "confirm": "继续",
+    "toast": "您的节点已关闭。",
+    "failedToast": "节点关闭失败"
+  },
+  "header": {
+    "title": "设置"
+  },
+  "changePassword": {
+    "title": "更改解锁密码",
+    "important": "重要提示！",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmNew": "确认新密码",
+    "save": "保存"
+  },
+  "backup": {
+    "title": "备份",
+    "important": "重要提示",
+    "passwordLabel": "密码",
+    "active": "启用"
+  },
+  "autoUnlock": {
+    "title": "自动解锁",
+    "attention": "注意",
+    "passwordLabel": "解锁密码"
+  },
+  "developer": {
+    "title": "开发者",
+    "tokenType": "令牌类型",
+    "tokenExpiry": "令牌有效期（天）",
+    "passwordLabel": "解锁密码",
+    "createToken": "创建令牌"
+  },
+  "debugTools": {
+    "title": "调试工具",
+    "probeInvoice": "探测发票",
+    "probeKeysend": "探测 Keysend",
+    "networkGraph": "获取网络图",
+    "refundTo": "退款至",
+    "onchainAddress": "链上地址",
+    "cancel": "取消"
+  }
+}

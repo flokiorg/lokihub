@@ -1,0 +1,148 @@
+{
+  "title": "节点",
+  "channels": {
+    "title": "通道",
+    "open": "开启通道",
+    "close": "关闭通道",
+    "empty": "尚无开放通道",
+    "capacity": "容量",
+    "localBalance": "本地余额",
+    "remoteBalance": "远程余额",
+    "status": {
+      "active": "活跃",
+      "inactive": "不活跃",
+      "pending": "待处理",
+      "closing": "关闭中",
+      "online": "在线",
+      "offline": "离线",
+      "opening": "开启中"
+    },
+    "pendingClosed": "待关闭通道",
+    "table": {
+      "capacity": "容量",
+      "localBalance": "本地余额",
+      "remoteBalance": "远程余额",
+      "actions": "操作"
+    },
+    "closeDialog": {
+      "title": "选择通道关闭模式",
+      "headsUp": "注意！",
+      "cancel": "取消",
+      "closedSuccess": "通道关闭成功"
+    },
+    "nodeHealth": {
+      "tooltip": "节点健康：{{percent}}%",
+      "dialogTitle": "节点健康",
+      "close": "关闭"
+    },
+    "dropdown": {
+      "viewFunding": "查看资金交易",
+      "viewNode": "在 {{explorer}} 查看节点",
+      "setRoutingFee": "设置路由费"
+    }
+  },
+  "peers": {
+    "title": "节点对等方",
+    "connect": "连接对等方",
+    "disconnect": "断开连接",
+    "empty": "暂无已连接的对等方",
+    "pubkey": "公钥",
+    "alias": "别名",
+    "disconnectConfirm": "确认",
+    "disconnectCancel": "取消"
+  },
+  "liquidity": {
+    "title": "流动性",
+    "incoming": "入账",
+    "outgoing": "出账"
+  },
+  "menu": {
+    "node": "Node",
+    "onchain": "On-Chain",
+    "swaps": "Swaps",
+    "history": "History",
+    "management": "Management"
+  },
+  "onchain": {
+    "title": "On-chain",
+    "addressLabel": "On-Chain Address",
+    "depositTitle": "Deposit Flokicoin",
+    "generateNew": "Generate a new address"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "您的通道订单记录",
+    "noOrdersDesc": "您还没有订购任何通道。",
+    "noOrdersTitle": "没有订单记录",
+    "totalFee": "总费用"
+  },
+  "increaseCapacity": {
+    "title": "使用链上资金开通通道",
+    "description": "用于开通通道的资金（扣除费用后）将添加到您的可用余额中",
+    "info": "使用链上资金开通通道。双方随时可以自由关闭通道。但是，如果您在通道的您这一侧保留更多资金并经常使用它，通道保持开放的机会就更大。",
+    "peerLabel": "节点 / LSP",
+    "customPeer": "自定义节点",
+    "peer": "节点",
+    "hostPort": "主机:端口",
+    "increaseSpendingLabel": "增加可用余额",
+    "increaseSpendingTooltip": "配置您需要的可用容量。您将需要在链上存入 flokicoin 以覆盖整个通道大小，外加链上费用。",
+    "currentBalance": "当前链上余额：",
+    "noLsps": "没有配置 LSP",
+    "selectProvider": "选择提供商",
+    "needIncoming": "而是需要流入容量？",
+    "buyInbound": "购买流入流动性",
+    "lookingToReceive": "想接收资金？您可能需要流入容量。",
+    "publicChannel": "公共通道",
+    "publicChannelDesc": "不推荐给大多数用户。",
+    "confirmTitle": "确认开通通道",
+    "confirmDesc": "您确定要使用以下详细信息开通闪电网络通道吗？",
+    "channelType": "通道类型",
+    "paymentMethod": "付款方式",
+    "nodePublicKey": "节点公钥",
+    "important": "重要提示：",
+    "confirmWarning": "开通通道需要链上交易和网络费用。此操作无法撤消。请在继续之前验证所有详细信息。",
+    "confirmAndOpen": "确认并开通通道",
+    "manageProviders": "在以下位置管理提供商"
+  },
+  "orderChannel": {
+    "title": "增加流入流动性",
+    "description": "从您的 LSP 订购通道以增加接收容量",
+    "info": "从 LSP 订购通道。这提供了流入流动性，使您可以在通道确认后立即接收付款。",
+    "increaseInboundLabel": "增加流入流动性",
+    "orderRange": "订购范围：",
+    "orderBtn": "订购通道",
+    "opening": "您的通道正在打开",
+    "reviewTitle": "确认通道购买",
+    "reviewDesc": "完成支付以向您的节点打开通道",
+    "spendingBalance": "可用余额",
+    "incomingLiquidity": "流入流动性",
+    "amountToPay": "应付金额",
+    "consentMsg": "继续即表示您同意通道立即打开，并且一旦打开，您将失去撤销的权利。",
+    "otherOptions": "其他选项",
+    "increaseSpending": "增加可用余额",
+    "balanceMsg": "您当前的余额是",
+    "currentlyHave": "您目前有",
+    "deposited": "已存入",
+    "depositedAmount": "存入金额",
+    "estTime": "预计时间",
+    "includesCost": "包含开通通道费用",
+    "noPending": "没有待处理的通道订单",
+    "notEnough": "余额不足",
+    "openedDesc": "您的通道现在已打开，可以使用了。",
+    "openedTitle": "通道已打开",
+    "recommendDeposit": "我们建议存入",
+    "return": "返回节点",
+    "scanQr": "扫描条形码以存入",
+    "sendFloki": "发送 Flokicoin",
+    "successMsg": "成功订购通道",
+    "toOpen": "以开通一个容量为",
+    "waitingChannel": "等待通道开启...",
+    "waitingConf": "等待确认...",
+    "waitingTx": "等待交易..."
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "balance": {
+    "lightning": "Saldo Lightning",
+    "onchain": "Saldo on-chain",
+    "total": "Saldo total",
+    "available": "Disponible",
+    "reserved": "Reservado",
+    "pending": "Pendiente"
+  },
+  "transactions": {
+    "title": "Transacciones",
+    "empty": "Aún no hay transacciones",
+    "sent": "Enviado",
+    "received": "Recibido",
+    "pending": "Pendiente",
+    "failed": "Fallido",
+    "viewAll": "Ver todo"
+  },
+  "receive": {
+    "title": "Recibir",
+    "invoice": "Factura Lightning",
+    "address": "Dirección Bitcoin",
+    "amount": "Monto",
+    "description": "Descripción",
+    "generate": "Generar factura",
+    "copyInvoice": "Copiar factura",
+    "copyAddress": "Copiar dirección",
+    "shareInvoice": "Compartir factura",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    },
+    "buyingLiquidity": "Comprando liquidez entrante...",
+    "amountTooSmall": "Monto demasiado pequeño para el pago JIT. Mínimo: {{amount}} {{unit}}.",
+    "amountTooLarge": "Monto demasiado grande para el pago JIT. Máximo: {{amount}} {{unit}}.",
+    "failedToBuyLiquidity": "Error al comprar liquidez",
+    "successCreated": "Factura creada con éxito",
+    "failedToCreate": "Error al crear factura",
+    "lightningInvoice": "Factura Lightning",
+    "createInvoice": "Crear factura",
+    "waiting": "Esperando el pago",
+    "paymentReceived": "Pago recibido",
+    "createAnother": "Crear otra factura",
+    "backToWallet": "Volver a la billetera",
+    "amountPlaceholder": "Monto en {{unit}}...",
+    "liquidityProvider": "Proveedor de liquidez",
+    "selectLSP": "Seleccionar LSP",
+    "jitPayment": "Pago JIT",
+    "jitExplainedTitle": "Pago JIT Explicado",
+    "jitWhyNeededTitle": "¿Por qué es necesario esto?",
+    "jitWhyNeededDesc": "Los pagos de Lightning requieren <strong>liquidez entrante</strong> (capacidad de recepción). Actualmente no tiene suficiente capacidad para recibir esta cantidad directamente.",
+    "jitHowWorksTitle": "Cómo funciona",
+    "jitHowWorksDesc": "Su LSP abrirá automáticamente un nuevo canal <strong>Just-In-Time (JIT)</strong> cuando llegue el pago. Esto asegura que su pago se realice inmediatamente sin que tenga que administrar canales manualmente.",
+    "feeStructure": "Estructura de tarifas",
+    "minFee": "Tarifa mínima:",
+    "propRate": "Tasa proporcional:",
+    "min": "Mínimo:",
+    "max": "Máximo:",
+    "feeLogic": "La tarifa es la <strong>mayor</strong> entre la tarifa mínima o la tarifa proporcional calculada.",
+    "whoPays": "¿Quién paga la tarifa?",
+    "receiverPays": "El receptor paga:",
+    "receiverPaysDesc": "(Predeterminado) La tarifa se deduce de la cantidad que recibe.",
+    "senderPays": "El remitente paga:",
+    "senderPaysDesc": "La tarifa se agrega al total de la factura. El remitente paga el costo adicional.",
+    "loadingJit": "Cargando detalles de JIT...",
+    "estimatedFee": "Tarifa estimada",
+    "totalToSend": "Total a enviar",
+    "youReceive": "Usted recibe",
+    "retry": "Reintentar",
+    "paymentRange": "Rango de pago:",
+    "includeFee": "Incluir tarifa en la factura (El remitente paga)",
+    "descriptionPlaceholder": "Por ejemplo, ¿quién envía este pago?",
+    "receiveOnchain": "Recibir On-chain",
+    "unknownError": "Error desconocido"
+  },
+  "send": {
+    "title": "Enviar",
+    "destination": "Destino",
+    "amount": "Monto",
+    "description": "Descripción",
+    "confirm": "Confirmar pago",
+    "pay": "Pagar",
+    "scanQr": "Escanear código QR",
+    "zeroAmount": {
+      "title": "Ingresar monto",
+      "description": "Esta factura no tiene monto. Ingrese cuánto desea enviar."
+    },
+    "success": {
+      "title": "¡Pago enviado!",
+      "description": "Su pago se envió con éxito."
+    },
+    "lnurl": {
+      "title": "Enviar vía LNURL"
+    },
+    "onchain": {
+      "title": "Enviar On-chain",
+      "amountLabel": "Monto",
+      "feeRateLabel": "Tasa de tarifa ({{unit}}/vB)",
+      "addressLabel": "Dirección On-chain",
+      "amountNotIdeal": "Monto no ideal para transacciones On-chain",
+      "cancel": "Cancelar"
+    }
+  },
+  "header": {
+    "title": "Billetera",
+    "receive": "Recibir",
+    "send": "Enviar",
+    "swap": "Intercambiar"
+  },
+  "alerts": {
+    "channelReservesUnmet": "Reservas del canal no cumplidas",
+    "channelReservesDesc": "No podrá realizar pagos hasta que llene la reserva de su canal.",
+    "viewChannelReserves": "Ver reservas de canales",
+    "openFirstChannel": "Abre tu primer canal",
+    "openFirstChannelDesc": "No podrá recibir ni enviar pagos hasta que",
+    "openFirstChannelLink": "abra su primer canal",
+    "onchainShownOnNode": "Las transacciones on-chain se muestran en la página del Nodo",
+    "viewOnchain": "Ver transacciones On-chain"
+  },
+  "onboarding": {
+    "title": "Comience con su Lokihub",
+    "description": "Siga estos pasos iniciales para configurar y aprovechar al máximo su Hub Loki."
+  },
+  "signMessage": {
+    "title": "Firmar Mensaje",
+    "label": "Mensaje",
+    "sign": "Firmar"
+  },
+  "nodeAlias": {
+    "title": "Alias del nodo",
+    "label": "Alias del nodo",
+    "save": "Guardar"
+  },
+  "withdraw": {
+    "title": "Retirar fondos On-chain",
+    "amountLabel": "Cantidad",
+    "addressLabel": "Dirección On-chain",
+    "feeRateLabel": "Tasa de tarifa ({{unit}}/vB)",
+    "sendAllAlert": "Se enviará el saldo completo de la billetera",
+    "cancel": "Cancelar"
+  },
+  "subwallets": {
+    "title": "Sub-billeteras",
+    "new": "Nueva sub-billetera",
+    "empty": "Aún no hay sub-billeteras",
+    "about": {
+      "title": "Acerca de las sub-billeteras",
+      "close": "Cerrar"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "Esperando confirmaciones",
+    "backToNode": "Volver al nodo",
+    "received": "Recibido",
+    "viewExplorer": "Ver en el explorador"
+  }
+}

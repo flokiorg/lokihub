@@ -1,0 +1,96 @@
+{
+  "steps": {
+    "welcome": "欢迎",
+    "nodeSetup": "节点设置",
+    "unlockPassword": "设置解锁密码",
+    "backup": "备份",
+    "complete": "设置完成"
+  },
+  "welcome": {
+    "title": "欢迎使用 Lokihub",
+    "subtitle": "您的闪电节点管理界面",
+    "getStarted": "开始使用"
+  },
+  "password": {
+    "title": "设置解锁密码",
+    "description": "此密码保护您对节点的访问权限，请妥善保管。",
+    "label": "密码",
+    "confirm": "确认密码",
+    "mismatch": "两次输入的密码不一致",
+    "tooShort": "密码至少需要 8 个字符",
+    "repeatLabel": "重复密码",
+    "repeatPlaceholder": "重新输入密码",
+    "securedConfirm": "我已经把这个密码保存在一个安全的地方",
+    "irrecoverableConfirm": "我明白这个密码无法恢复",
+    "createButton": "创建密码",
+    "notConfirmed": "请确认您已保存密码"
+  },
+  "backup": {
+    "title": "备份您的恢复短语",
+    "description": "请按顺序抄写这些词语并妥善保管，您将需要它们来恢复钱包。",
+    "confirmed": "我已抄写恢复短语",
+    "warning": "切勿将恢复短语分享给任何人。"
+  },
+  "complete": {
+    "title": "一切就绪！",
+    "description": "您的节点已准备好使用。",
+    "goHome": "前往控制台"
+  },
+  "intro": {
+    "slide1": {
+      "title": "欢迎使用 Lokihub",
+      "subtitle": "一个强大的、一体化的 Flokicoin 闪电网络钱包，为下一代互动网络提供动力。",
+      "next": "下一步"
+    },
+    "slide2": {
+      "title": "随时准备",
+      "description": "您的钱包全天候在线，随时可以在任何设备上使用。"
+    },
+    "slide3": {
+      "title": "安全且隐私",
+      "description": "由您的密码加密。只有您才能访问您的资金。"
+    },
+    "slide4": {
+      "title": "连接应用",
+      "description": "连接应用程序并加入乐趣网络。"
+    },
+    "slideAriaLabel": "转到幻灯片 {{index}}"
+  },
+  "start": {
+    "title": "开始",
+    "description": "输入您的密码以解锁并启动 Lokihub。",
+    "passwordLabel": "密码",
+    "pleaseWait": "请稍候...",
+    "starting": "启动 Lokihub 可能需要几分钟时间。",
+    "failedToStart": "启动失败",
+    "failedToConnect": "连接失败"
+  },
+  "unlock": {
+    "title": "登录",
+    "description": "输入您的解锁密码以继续",
+    "passwordLabel": "密码",
+    "login": "登录",
+    "failedToConnect": "连接失败"
+  },
+  "finish": {
+    "loading": "正在设置您的 Hub...",
+    "connectionTimeout": "连接超时。请检查您的节点。",
+    "failedToConnect": "连接失败"
+  },
+  "security": {
+    "title": "安全与恢复",
+    "description": "花点时间了解如何在 Lokihub 上保护和恢复您的资金。",
+    "confirmed": "我了解如何保护和恢复资金"
+  },
+  "restore": {
+    "title": "从迁移文件导入钱包",
+    "description": "上传您的加密钱包迁移文件。",
+    "import": "导入钱包",
+    "restartingTitle": "重启您的 Hub",
+    "restartingDesc": "Lokihub 需要重启以完成节点恢复",
+    "restartingMessage": "如果您在云端运行，您的 Lokihub 将自动重启。否则，请手动重启 Lokihub 以完成恢复过程。",
+    "waitingForRestart": "等待重启...",
+    "warning1": "作为节点恢复过程的一部分，您的 Lokihub 将被关闭。",
+    "warning2": "如果您在云端运行，您的 Lokihub 将自动重启。否则，请手动重启 Lokihub 以完成恢复过程。"
+  }
+}

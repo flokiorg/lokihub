@@ -1,0 +1,96 @@
+{
+  "steps": {
+    "welcome": "Bienvenido",
+    "nodeSetup": "Configuración del nodo",
+    "unlockPassword": "Establecer contraseña de desbloqueo",
+    "backup": "Respaldo",
+    "complete": "Configuración completa"
+  },
+  "welcome": {
+    "title": "Bienvenido a Lokihub",
+    "subtitle": "Tu interfaz de gestión de nodo Lightning",
+    "getStarted": "Comenzar"
+  },
+  "password": {
+    "title": "Establece tu contraseña de desbloqueo",
+    "description": "Esta contraseña protege el acceso a tu nodo. Guárdala en un lugar seguro.",
+    "label": "Contraseña",
+    "confirm": "Confirmar contraseña",
+    "mismatch": "Las contraseñas no coinciden",
+    "tooShort": "La contraseña debe tener al menos 8 caracteres",
+    "repeatLabel": "Repetir contraseña",
+    "repeatPlaceholder": "Vuelva a introducir la contraseña",
+    "securedConfirm": "He guardado esta contraseña en un lugar seguro",
+    "irrecoverableConfirm": "Entiendo que esta contraseña no se puede recuperar",
+    "createButton": "Crear contraseña",
+    "notConfirmed": "Por favor, confirme que ha guardado su contraseña"
+  },
+  "backup": {
+    "title": "Respalda tu frase de recuperación",
+    "description": "Escribe estas palabras en orden y guárdalas en un lugar seguro. Las necesitarás para recuperar tu cartera.",
+    "confirmed": "He escrito mi frase de recuperación",
+    "warning": "Nunca compartas tu frase de recuperación con nadie."
+  },
+  "complete": {
+    "title": "¡Todo listo!",
+    "description": "Tu nodo está listo para usarse.",
+    "goHome": "Ir al panel"
+  },
+  "intro": {
+    "slide1": {
+      "title": "Bienvenido a Lokihub",
+      "subtitle": "Una poderosa billetera Lightning de Flokicoin todo en uno que impulsa la próxima web de interacción.",
+      "next": "Siguiente"
+    },
+    "slide2": {
+      "title": "Siempre listo",
+      "description": "Su billetera está en línea y lista para usar en cualquier dispositivo, en cualquier momento."
+    },
+    "slide3": {
+      "title": "Seguro y privado",
+      "description": "Cifrado por su contraseña. Solo usted puede acceder a sus fondos."
+    },
+    "slide4": {
+      "title": "Conectar aplicaciones",
+      "description": "Conéctese con aplicaciones y únase a la Web de la Diversión."
+    },
+    "slideAriaLabel": "Ir a la diapositiva {{index}}"
+  },
+  "start": {
+    "title": "Inicio",
+    "description": "Ingrese su contraseña para desbloquear y comenzar Lokihub.",
+    "passwordLabel": "Contraseña",
+    "pleaseWait": "Por favor espere...",
+    "starting": "Iniciar Lokihub puede tardar unos minutos.",
+    "failedToStart": "Error al iniciar",
+    "failedToConnect": "Error al conectar"
+  },
+  "unlock": {
+    "title": "Iniciar sesión",
+    "description": "Ingrese su contraseña de desbloqueo para continuar",
+    "passwordLabel": "Contraseña",
+    "login": "Iniciar sesión",
+    "failedToConnect": "Error al conectar"
+  },
+  "finish": {
+    "loading": "Configurando su Hub...",
+    "connectionTimeout": "Tiempo de espera de conexión agotado. Por favor, revise su nodo.",
+    "failedToConnect": "Error al conectar"
+  },
+  "security": {
+    "title": "Seguridad y recuperación",
+    "description": "Tómese su tiempo para comprender cómo asegurar y recuperar sus fondos en Lokihub.",
+    "confirmed": "Entiendo cómo asegurar y recuperar fondos"
+  },
+  "restore": {
+    "title": "Importar billetera desde archivo de migración",
+    "description": "Cargue su archivo de migración de billetera cifrado.",
+    "import": "Importar billetera",
+    "restartingTitle": "Reinicie su Hub",
+    "restartingDesc": "Lokihub necesita reiniciarse para terminar de restaurar su nodo",
+    "restartingMessage": "Si se ejecuta en la nube, su Lokihub se reiniciará automáticamente. De lo contrario, reinicie manualmente su Lokihub para finalizar el proceso de restauración.",
+    "waitingForRestart": "Esperando reinicio...",
+    "warning1": "Como parte del proceso de restauración del nodo, su Lokihub se apagará.",
+    "warning2": "Si se ejecuta en la nube, su Lokihub se reiniciará automáticamente. De lo contrario, reinicie manualmente su Lokihub para finalizar el proceso de restauración."
+  }
+}

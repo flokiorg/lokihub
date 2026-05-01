@@ -1,0 +1,97 @@
+{
+  "title": "General",
+  "description": "Ajustes generales de Lokihub.",
+  "sections": {
+    "appearance": "Apariencia",
+    "unitsAndCurrency": "Unidades y moneda",
+    "language": "Idioma"
+  },
+  "appearance": {
+    "theme": "Tema",
+    "themeDescription": "Elige tu tema visual",
+    "darkMode": "Apariencia",
+    "darkModeDescription": "Elige modo claro, oscuro o seguir la configuración del sistema",
+    "modes": {
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Oscuro"
+    }
+  },
+  "units": {
+    "displayUnit": "Unidad de visualización",
+    "displayUnitDescription": "Elige cómo se muestran los montos",
+    "fiatCurrency": "Moneda fiat",
+    "fiatCurrencyDescription": "Tu moneda fiat de referencia preferida",
+    "auto": "Automático"
+  },
+  "language": {
+    "label": "Idioma",
+    "description": "Elige tu idioma de interfaz preferido",
+    "updated": "Idioma actualizado."
+  },
+  "toasts": {
+    "themeUpdated": "Tema actualizado.",
+    "appearanceUpdated": "Apariencia actualizada.",
+    "currencyUpdated": "Moneda configurada a {{currency}}",
+    "formatUpdated": "Formato de visualización de Flokicoin actualizado",
+    "currencyFetchFailed": "Error al obtener monedas: {{error}}",
+    "updateFailed": "Error al actualizar los ajustes"
+  },
+  "nav": {
+    "general": "General",
+    "services": "Servicios",
+    "autoUnlock": "Desbloqueo automático",
+    "unlockPassword": "Contraseña de desbloqueo",
+    "backup": "Copia de seguridad",
+    "migrate": "Migrar Lokihub",
+    "developer": "Desarrollador",
+    "debugTools": "Herramientas de depuración",
+    "about": "Acerca de"
+  },
+  "shutdown": {
+    "dialogTitle": "¿Desea apagar su Lokihub?",
+    "dialogDesc": "Esto apagará su Lokihub y desconectará su nodo. No podrá enviar ni recibir flokicoin hasta que lo desbloquee.",
+    "cancel": "Cancelar",
+    "confirm": "Continuar",
+    "toast": "Su nodo ha sido apagado.",
+    "failedToast": "Error al apagar el nodo"
+  },
+  "header": {
+    "title": "Configuración"
+  },
+  "changePassword": {
+    "title": "Cambiar contraseña de desbloqueo",
+    "important": "¡Importante!",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña",
+    "confirmNew": "Confirmar nueva contraseña",
+    "save": "Guardar"
+  },
+  "backup": {
+    "title": "Copia de seguridad",
+    "important": "Importante",
+    "passwordLabel": "Contraseña",
+    "active": "Activo"
+  },
+  "autoUnlock": {
+    "title": "Desbloqueo automático",
+    "attention": "Atención",
+    "passwordLabel": "Contraseña de desbloqueo"
+  },
+  "developer": {
+    "title": "Desarrollador",
+    "tokenType": "Tipo de token",
+    "tokenExpiry": "Vencimiento del token (días)",
+    "passwordLabel": "Contraseña de desbloqueo",
+    "createToken": "Crear token"
+  },
+  "debugTools": {
+    "title": "Herramientas de depuración",
+    "probeInvoice": "Probar factura",
+    "probeKeysend": "Probar Keysend",
+    "networkGraph": "Obtener gráfico de red",
+    "refundTo": "Reembolsar a",
+    "onchainAddress": "Dirección On-chain",
+    "cancel": "Cancelar"
+  }
+}
