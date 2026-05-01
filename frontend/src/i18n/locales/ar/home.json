@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "صباح الخير",
+    "afternoon": "مساء الخير",
+    "evening": "مساء النور",
+    "withName": "{{greeting}}، {{name}}!"
+  },
+  "widgets": {
+    "statsForNerds": "إحصائيات للمتخصصين",
+    "nodeStatus": "حالة العقدة",
+    "blockHeight": "ارتفاع الكتلة",
+    "onchainFees": "رسوم السلسلة",
+    "forwards": "التحويلات",
+    "latestApps": "التطبيقات المستخدمة مؤخراً"
+  },
+  "alerts": {
+    "newApp": "تطبيق جديد متصل",
+    "updatedApp": "تم تحديث التطبيق",
+    "dismiss": "إغلاق"
+  },
+  "search": {
+    "placeholder": "بحث"
+  }
+}

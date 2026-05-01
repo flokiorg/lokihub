@@ -1,0 +1,148 @@
+{
+  "title": "گره",
+  "channels": {
+    "title": "کانال‌ها",
+    "open": "باز کردن کانال",
+    "close": "بستن کانال",
+    "empty": "هیچ کانال بازی وجود ندارد",
+    "capacity": "ظرفیت",
+    "localBalance": "موجودی محلی",
+    "remoteBalance": "موجودی راه دور",
+    "status": {
+      "active": "فعال",
+      "inactive": "غیرفعال",
+      "pending": "در انتظار",
+      "closing": "در حال بستن",
+      "online": "آنلاین",
+      "offline": "آفلاین",
+      "opening": "در حال باز شدن"
+    },
+    "pendingClosed": "کانال‌های در حال بسته شدن",
+    "table": {
+      "capacity": "ظرفیت",
+      "localBalance": "موجودی محلی",
+      "remoteBalance": "موجودی راه دور",
+      "actions": "عملیات"
+    },
+    "closeDialog": {
+      "title": "حالت بستن کانال را انتخاب کنید",
+      "headsUp": "توجه!",
+      "cancel": "لغو",
+      "closedSuccess": "کانال با موفقیت بسته شد"
+    },
+    "nodeHealth": {
+      "tooltip": "سلامت نود: {{percent}}%",
+      "dialogTitle": "سلامت نود",
+      "close": "بستن"
+    },
+    "dropdown": {
+      "viewFunding": "مشاهده تراکنش تامین مالی",
+      "viewNode": "مشاهده نود در {{explorer}}",
+      "setRoutingFee": "تنظیم کارمزد مسیریابی"
+    }
+  },
+  "peers": {
+    "title": "همتایان",
+    "connect": "اتصال به همتا",
+    "disconnect": "قطع اتصال",
+    "empty": "هیچ همتایی متصل نیست",
+    "pubkey": "کلید عمومی",
+    "alias": "نام مستعار",
+    "disconnectConfirm": "تایید",
+    "disconnectCancel": "لغو"
+  },
+  "liquidity": {
+    "title": "نقدینگی",
+    "incoming": "ورودی",
+    "outgoing": "خروجی"
+  },
+  "menu": {
+    "node": "Node",
+    "onchain": "On-Chain",
+    "swaps": "Swaps",
+    "history": "History",
+    "management": "Management"
+  },
+  "onchain": {
+    "title": "On-chain",
+    "addressLabel": "On-Chain Address",
+    "depositTitle": "Deposit Flokicoin",
+    "generateNew": "Generate a new address"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "تاریخچه سفارشات کانال شما",
+    "noOrdersDesc": "شما هنوز هیچ کانالی سفارش نداده اید.",
+    "noOrdersTitle": "تاریخچه سفارشی وجود ندارد",
+    "totalFee": "کل کارمزد"
+  },
+  "increaseCapacity": {
+    "title": "باز کردن کانال روی زنجیره (On-Chain)",
+    "description": "وجوه استفاده شده برای باز کردن کانال منهای کارمزد به موجودی خرج کرد شما اضافه می شود",
+    "info": "یک کانال با وجوه روی بلاکچین باز کنید. هر دو طرف آزادند کانال را در هر زمان ببندند. با این حال، با نگه داشتن وجوه بیشتر در سمت خود و استفاده منظم از آن، شانس باز ماندن کانال بیشتر است.",
+    "peerLabel": "نود / LSP",
+    "customPeer": "نود دلخواه",
+    "peer": "نود",
+    "hostPort": "میزبان:پورت",
+    "increaseSpendingLabel": "افزایش موجودی خرج کرد",
+    "increaseSpendingTooltip": "میزان ظرفیت خرج کرد مورد نیاز خود را پیکربندی کنید. برای پوشش کل اندازه کانال، به علاوه هزینه های بلاکچین، باید flokicoin را در بلاکچین سپرده گذاری کنید.",
+    "currentBalance": "موجودی فعلی بلاکچین:",
+    "noLsps": "هیچ LSP پیکربندی نشده است",
+    "selectProvider": "یک ارائه دهنده انتخاب کنید",
+    "needIncoming": "به جای آن به ظرفیت ورودی نیاز دارید؟",
+    "buyInbound": "خرید نقدینگی ورودی",
+    "lookingToReceive": "به دنبال دریافت وجوه هستید؟ ممکن است به ظرفیت ورودی نیاز داشته باشید.",
+    "publicChannel": "کانال عمومی",
+    "publicChannelDesc": "برای اکثر کاربران توصیه نمی شود.",
+    "confirmTitle": "تأیید باز کردن کانال",
+    "confirmDesc": "آیا مطمئن هستید که می خواهید یک کانال لایتنینگ با جزئیات زیر باز کنید؟",
+    "channelType": "نوع کانال",
+    "paymentMethod": "روش پرداخت",
+    "nodePublicKey": "کلید عمومی نود",
+    "important": "مهم:",
+    "confirmWarning": "باز کردن کانال نیاز به یک تراکنش روی بلاکچین و هزینه های شبکه دارد. این اقدام قابل بازگشت نیست. لطفا قبل از ادامه، تمام جزئیات را بررسی کنید.",
+    "confirmAndOpen": "تأیید و باز کردن کانال",
+    "manageProviders": "مدیریت ارائه دهندگان در"
+  },
+  "orderChannel": {
+    "title": "افزایش نقدینگی ورودی",
+    "description": "برای افزایش ظرفیت دریافت خود، یک کانال از LSP خود سفارش دهید",
+    "info": "یک کانال از یک LSP سفارش دهید. این نقدینگی ورودی را فراهم می کند و به شما امکان می دهد بلافاصله پس از تأیید کانال، پرداخت ها را دریافت کنید.",
+    "increaseInboundLabel": "افزایش نقدینگی ورودی",
+    "orderRange": "محدوده سفارش:",
+    "orderBtn": "سفارش کانال",
+    "opening": "کانال شما در حال باز شدن است",
+    "reviewTitle": "مرور خرید کانال",
+    "reviewDesc": "پرداخت را برای باز کردن یک کانال به نود خود تکمیل کنید",
+    "spendingBalance": "موجودی خرج کرد",
+    "incomingLiquidity": "نقدینگی ورودی",
+    "amountToPay": "مبلغ پرداختی",
+    "consentMsg": "با ادامه، شما رضایت می دهید که کانال بلافاصله باز شود و حق لغو را پس از باز شدن از دست می دهید.",
+    "otherOptions": "گزینه های دیگر",
+    "increaseSpending": "افزایش موجودی خرج کرد",
+    "balanceMsg": "موجودی فعلی شما",
+    "currentlyHave": "شما در حال حاضر دارید",
+    "deposited": "واریز شد",
+    "depositedAmount": "مبلغ واریزی",
+    "estTime": "زمان تخمینی",
+    "includesCost": "شامل هزینه باز کردن کانال",
+    "noPending": "هیچ سفارش کانال در حال انتظاری وجود ندارد",
+    "notEnough": "موجودی کافی نیست",
+    "openedDesc": "کانال شما اکنون باز و آماده استفاده است.",
+    "openedTitle": "کانال باز شد",
+    "recommendDeposit": "ما توصیه می کنیم واریز کنید",
+    "return": "بازگشت به نود",
+    "scanQr": "اسکن بارکد برای واریز",
+    "sendFloki": "ارسال Flokicoin",
+    "successMsg": "کانال با موفقیت سفارش داده شد",
+    "toOpen": "برای باز کردن یک کانال به مبلغ",
+    "waitingChannel": "در انتظار باز شدن کانال...",
+    "waitingConf": "در انتظار تایید...",
+    "waitingTx": "در انتظار تراکنش..."
+  }
+}

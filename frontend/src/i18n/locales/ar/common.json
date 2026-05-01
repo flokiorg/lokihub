@@ -6,7 +6,7 @@
     "connections": "الاتصالات",
     "node": "العقدة",
     "settings": "الإعدادات",
-    "help": "المساعدة",
+    "help": "مساعدة",
     "logout": "تسجيل الخروج"
   },
   "actions": {
@@ -33,7 +33,19 @@
     "update": "تحديث",
     "create": "إنشاء",
     "open": "فتح",
-    "loading": "جارٍ التحميل..."
+    "loading": "جاري التحميل...",
+    "share": "Share",
+    "reload": "Reload App",
+    "saving": "Saving...",
+    "login": "Login",
+    "logout": "تسجيل الخروج",
+    "getStarted": "Get Started",
+    "goHome": "Go to Dashboard",
+    "viewAll": "View all",
+    "payAndOpen": "Pay and open channel",
+    "payExternally": "Pay with another wallet",
+    "copyInvoice": "نسخ الفاتورة",
+    "backToWallet": "العودة إلى المحفظة"
   },
   "status": {
     "active": "نشط",
@@ -46,14 +58,23 @@
     "disconnected": "غير متصل",
     "syncing": "جارٍ المزامنة",
     "online": "متصل بالإنترنت",
-    "offline": "غير متصل بالإنترنت"
+    "offline": "غير متصل بالإنترنت",
+    "opening": "Opening",
+    "closing": "Closing",
+    "loading": "Loading...",
+    "running": "Running"
   },
   "errors": {
     "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
-    "notFound": "الصفحة غير موجودة.",
-    "unauthorized": "غير مخوّل لك بعرض هذه الصفحة.",
+    "notFound": "المورد المطلوب غير موجود.",
+    "unauthorized": "غير مصرح لك بإجراء هذا الإجراء.",
     "networkError": "خطأ في الشبكة. يرجى التحقق من اتصالك.",
-    "loadFailed": "فشل تحميل البيانات."
+    "loadFailed": "فشل تحميل البيانات.",
+    "failedToConnect": "Failed to connect",
+    "failedToSave": "Failed to save",
+    "tryAgain": "Please try again",
+    "network": "خطأ في الشبكة. يرجى التحقق من اتصالك.",
+    "formValidation": "يرجى التحقق من الأخطاء في النموذج."
   },
   "labels": {
     "amount": "المبلغ",
@@ -68,7 +89,15 @@
     "address": "العنوان",
     "note": "ملاحظة",
     "optional": "اختياري",
-    "required": "مطلوب"
+    "required": "مطلوب",
+    "password": "كلمة المرور",
+    "message": "Message",
+    "nodeAlias": "Node Alias",
+    "pubkey": "Public Key",
+    "alias": "Alias",
+    "appName": "App Name",
+    "nodeId": "معرف العقدة",
+    "balance": "الرصيد"
   },
   "time": {
     "justNow": "الآن",
@@ -83,5 +112,19 @@
     "previous": "السابق",
     "next": "التالي",
     "page": "صفحة {{current}} من {{total}}"
+  },
+  "loading": "Loading...",
+  "appName": "Lokihub",
+  "criticalError": {
+    "title": "Critical Error",
+    "description": "Something went wrong and Lokihub cannot continue.",
+    "hideConfig": "Hide Configuration",
+    "updateConfig": "Update Configuration",
+    "loadingConfig": "Loading configuration...",
+    "saveReload": "Save & Reload App",
+    "reloadApp": "Reload App",
+    "configUpdated": "Configuration updated. Reloading...",
+    "failedToLoad": "Failed to load current configuration",
+    "failedToUpdate": "Failed to update configuration"
   }
 }

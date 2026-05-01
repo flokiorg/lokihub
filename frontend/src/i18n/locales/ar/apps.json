@@ -1,0 +1,155 @@
+{
+  "title": "الاتصالات",
+  "description": "التطبيقات المتصلة بعقدتك عبر Nostr Wallet Connect",
+  "empty": "لا توجد تطبيقات متصلة بعد",
+  "connect": "ربط تطبيق",
+  "detail": {
+    "title": "تفاصيل الاتصال",
+    "delete": "حذف الاتصال",
+    "deleteConfirm": "هل أنت متأكد من رغبتك في حذف هذا الاتصال؟",
+    "deleteSuccess": "تم حذف الاتصال.",
+    "edit": "تعديل الأذونات",
+    "close": "إغلاق",
+    "cancel": "إلغاء"
+  },
+  "permissions": {
+    "title": "الأذونات",
+    "pay": "دفع الفواتير",
+    "receive": "استقبال المدفوعات",
+    "balance": "عرض الرصيد",
+    "history": "عرض سجل المعاملات",
+    "sign": "توقيع الرسائل"
+  },
+  "budget": {
+    "title": "الميزانية",
+    "renewal": "تجديد الميزانية",
+    "amount": "مبلغ الميزانية",
+    "customAmount": "مبلغ ميزانية مخصص ({{unit}})",
+    "spent": "المُنفَق",
+    "remaining": "المتبقي"
+  },
+  "renewals": {
+    "daily": "يومياً",
+    "weekly": "أسبوعياً",
+    "monthly": "شهرياً",
+    "yearly": "سنوياً",
+    "never": "بلا تجديد"
+  },
+  "actions": {
+    "delete": "حذف الاتصال",
+    "edit": "تعديل الأذونات",
+    "deleteConfirm": "هل أنت متأكد من رغبتك في حذف هذا الاتصال؟",
+    "deleteSuccess": "تم حذف الاتصال.",
+    "decrease": "تقليل",
+    "decreaseTitle": "تقليل الرصيد",
+    "decreaseAmountLabel": "المبلغ ({{unit}})",
+    "increaseTitle": "زيادة الرصيد"
+  },
+  "scopes": {
+    "title": "اختر أذونات المحفظة"
+  },
+  "disconnectApp": {
+    "cancel": "إلغاء"
+  },
+  "expiry": {
+    "title": "تاريخ الانتهاء"
+  },
+  "connections": {
+    "title": "الاتصالات",
+    "addConnection": "إضافة اتصال",
+    "appStore": "متجر التطبيقات",
+    "connectedApps": "التطبيقات المتصلة",
+    "editConnection": "تعديل الاتصال",
+    "successfullyUpdated": "تم تحديث الاتصال بنجاح",
+    "failedToUpdate": "فشل تحديث الاتصال",
+    "lokiAccount": "حساب Loki",
+    "connections_count": "{{count}} اتصال",
+    "connected": "متصل",
+    "addAnother": "إضافة اتصال آخر",
+    "connectionDetails": "تفاصيل الاتصال",
+    "disconnect": "قطع اتصال {{appName}}",
+    "confirmUpdate": "تأكيد تحديث التطبيق",
+    "isolatedRemoveConfirm": "هل أنت متأكد من رغبتك في إزالة حالة <1>العزل</1> من هذا الاتصال؟",
+    "payPermissionsConfirm": "هل أنت متأكد من رغبتك في منح هذا الاتصال <1>صلاحيات الدفع</1>؟",
+    "warningNotice": "⚠️ تحذير: ينطبق هذا على جميع التطبيقات التي تمتلك رمز الاتصال هذا. قم بالتغيير فقط إذا كنت متأكداً من أنه آمن، وإلا قد تفقد جميع أموالك",
+    "upToBudget": " وفق الميزانية المحددة",
+    "isolatedFunds": " المودعة في هذا التطبيق المعزول"
+  },
+  "appStore": {
+    "submitApp": "أرسل تطبيقك",
+    "links": "الروابط"
+  },
+  "usage": {
+    "isolatedBalance": "الرصيد المعزول",
+    "decrease": "تقليل",
+    "increase": "زيادة",
+    "totalSpent": "إجمالي المُنفَق",
+    "totalReceived": "إجمالي المُستلَم",
+    "budget": "الميزانية",
+    "leftInBudget": "المتبقي في الميزانية",
+    "budgetRenewal": "تجديد الميزانية"
+  },
+  "newApp": {
+    "unsupportedApp": "تطبيق غير مدعوم",
+    "unsupportedMethods": "هذا التطبيق يطلب وظائف غير مدعومة من محفظتك: {{methods}}",
+    "unsupportedNotificationTypes": "هذا التطبيق يطلب أنواع إشعارات غير مدعومة: {{types}}",
+    "tryLdkBackend": "جرّب خلفية Lokihub LDK للحصول على ميزات إضافية.",
+    "connectTo": "الاتصال بـ {{appName}}",
+    "connectNewApp": "ربط تطبيق جديد",
+    "headerDescription": "اضبط أذونات المحفظة للتطبيق واتبع التعليمات لإتمام الاتصال",
+    "install": "تثبيت",
+    "open": "فتح",
+    "waitingForConnection": "في انتظار اتصال التطبيق...",
+    "name": "الاسم",
+    "nameDescription": "اسم التطبيق أو الغرض من الاتصال",
+    "enableAcceptingConnections": "تفعيل قبول الاتصالات من تطبيقات أخرى",
+    "allowAuthorizeNew": "السماح لهذا التطبيق بتفويض اتصالات جديدة لـ Lokihub.",
+    "returnTo": "ستُعاد تلقائياً إلى {{url}}",
+    "next": "التالي",
+    "back": "رجوع",
+    "connectionEstablished": "تم إنشاء الاتصال!",
+    "canUseApp": "يمكنك الآن استخدام التطبيق مع Lokihub.",
+    "openApp": "افتح التطبيق الذي تريد الاتصال به",
+    "findSettings": "ابحث عن إعدادات ربط المحفظة (قد تكون تحت Nostr Wallet Connect أو NWC).",
+    "scanOrPaste": "امسح أو الصق رمز الاتصال السري",
+    "optionalTopUp": "اختياري: إعادة شحن رصيد المحفظة الفرعية ({{amount}})",
+    "topUp": "إعادة الشحن",
+    "confirmNewConnection": "تأكيد الاتصال الجديد",
+    "lokiGoPermission": "سيحصل Loki Go على إذن لإنشاء اتصالات تطبيقات أخرى يمكنها إنفاق رصيدك.",
+    "warningLokiGo": "تحذير: يمكن لـ Loki Go إنشاء اتصالات بميزانية أكبر من الميزانية المحددة له. تأكد دائماً من تعيين ميزانية.",
+    "enterUnlockPassword": "الرجاء إدخال كلمة مرور إلغاء القفل للمتابعة.",
+    "unlockPassword": "كلمة مرور إلغاء القفل",
+    "specifyWalletPermissions": "الرجاء تحديد أذونات المحفظة.",
+    "appCreated": "تم إنشاء التطبيق",
+    "failedToCreate": "فشل إنشاء التطبيق",
+    "configure": "تهيئة",
+    "finalize": "إتمام",
+    "title": "ربط تطبيق جديد",
+    "description": "الصق سلسلة الاتصال أو امسح رمز QR لربط تطبيق بمحفظتك.",
+    "nwcString": "سلسلة الاتصال",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "اتصال"
+  },
+  "cleanup": {
+    "title": "حذف التطبيقات غير المستخدمة",
+    "description": "مراجعة التطبيقات التي لم تُستخدم لمدة شهرين أو أكثر",
+    "warning": "تحذير",
+    "warningDetail": "راجع التطبيق بعناية قبل الحذف، لأن التطبيقات المحذوفة لا يمكن استعادتها.",
+    "skip": "تخطي",
+    "delete": "حذف",
+    "noMore": "لا توجد تطبيقات غير مستخدمة للمراجعة.",
+    "backToOverview": "العودة إلى النظرة العامة",
+    "progress": "التقدم",
+    "progressDetail": "تمت مراجعة {{reviewed}} من {{total}} تطبيق (تم تخطي {{skipped}}، حُذف {{deleted}})"
+  },
+  "connectAppCard": {
+    "title": "ربط تطبيق",
+    "description": "استخدم Nostr Wallet Connect لربط التطبيقات بمحفظتك.",
+    "connectionSecret": "رمز الاتصال السري",
+    "takingLonger": "الاتصال يستغرق وقتاً أطول من المعتاد.",
+    "continueAnyway": "المتابعة على أي حال",
+    "appConnected": "تم الاتصال بالتطبيق",
+    "revealQR": "إظهار رمز QR",
+    "copySecret": "نسخ رمز الاتصال السري"
+  }
+}

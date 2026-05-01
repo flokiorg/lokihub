@@ -1,0 +1,166 @@
+{
+  "balance": {
+    "lightning": "موجودی لایتنینگ",
+    "onchain": "موجودی آنچین",
+    "total": "موجودی کل",
+    "available": "در دسترس",
+    "reserved": "رزروشده",
+    "pending": "در انتظار"
+  },
+  "transactions": {
+    "title": "تراکنش‌ها",
+    "empty": "هنوز تراکنشی وجود ندارد",
+    "sent": "ارسال‌شده",
+    "received": "دریافت‌شده",
+    "pending": "در انتظار",
+    "failed": "ناموفق",
+    "viewAll": "مشاهده همه"
+  },
+  "receive": {
+    "title": "دریافت",
+    "invoice": "فاکتور لایتنینگ",
+    "address": "آدرس بیت‌کوین",
+    "amount": "مقدار",
+    "description": "توضیحات",
+    "generate": "ایجاد فاکتور",
+    "copyInvoice": "کپی فاکتور",
+    "copyAddress": "کپی آدرس",
+    "shareInvoice": "اشتراک‌گذاری فاکتور",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    },
+    "buyingLiquidity": "خرید نقدینگی ورودی...",
+    "amountTooSmall": "مبلغ برای پرداخت JIT بسیار کم است. حداقل: {{amount}} {{unit}}.",
+    "amountTooLarge": "مبلغ برای پرداخت JIT بسیار زیاد است. حداکثر: {{amount}} {{unit}}.",
+    "failedToBuyLiquidity": "خرید نقدینگی با شکست مواجه شد",
+    "successCreated": "فاکتور با موفقیت ایجاد شد",
+    "failedToCreate": "ایجاد فاکتور با شکست مواجه شد",
+    "lightningInvoice": "فاکتور لایتنینگ",
+    "createInvoice": "ایجاد فاکتور",
+    "waiting": "در انتظار پرداخت",
+    "paymentReceived": "پرداخت دریافت شد",
+    "createAnother": "ایجاد فاکتور دیگر",
+    "backToWallet": "بازگشت به کیف پول",
+    "amountPlaceholder": "مبلغ به {{unit}}...",
+    "liquidityProvider": "تامین کننده نقدینگی",
+    "selectLSP": "انتخاب LSP",
+    "jitPayment": "پرداخت JIT",
+    "jitExplainedTitle": "توضیح پرداخت JIT",
+    "jitWhyNeededTitle": "چرا این مورد نیاز است؟",
+    "jitWhyNeededDesc": "پرداخت های لایتنینگ به <strong>نقدینگی ورودی</strong> (ظرفیت دریافت) نیاز دارند. شما در حال حاضر ظرفیت کافی برای دریافت مستقیم این مبلغ را ندارید.",
+    "jitHowWorksTitle": "چگونه کار می کند",
+    "jitHowWorksDesc": "LSP شما به طور خودکار یک کانال جدید <strong>دقیقا به موقع (JIT)</strong> در هنگام رسیدن پرداخت باز می کند. این تضمین می کند پرداخت شما بلافاصله بدون نیاز به مدیریت دستی کانال ها با موفقیت انجام شود.",
+    "feeStructure": "ساختار کارمزد",
+    "minFee": "حداقل کارمزد:",
+    "propRate": "نرخ متناسب:",
+    "min": "حداقل:",
+    "max": "حداکثر:",
+    "feeLogic": "کارمزد مبلغ <strong>بیشتر</strong> بین حداقل کارمزد یا کارمزد متناسب محاسبه شده است.",
+    "whoPays": "چه کسی کارمزد را پرداخت می کند؟",
+    "receiverPays": "گیرنده پرداخت می کند:",
+    "receiverPaysDesc": "(پیش فرض) کارمزد از مبلغی که دریافت می کنید کسر می شود.",
+    "senderPays": "فرستنده پرداخت می کند:",
+    "senderPaysDesc": "کارمزد به مجموع فاکتور اضافه می شود. فرستنده هزینه اضافی را پرداخت می کند.",
+    "loadingJit": "بارگیری جزئیات JIT...",
+    "estimatedFee": "کارمزد تخمینی",
+    "totalToSend": "مجموع برای ارسال",
+    "youReceive": "شما دریافت می کنید",
+    "retry": "تلاش مجدد",
+    "paymentRange": "محدوده پرداخت:",
+    "includeFee": "گنجاندن کارمزد در فاکتور (فرستنده پرداخت می کند)",
+    "descriptionPlaceholder": "برای مثال چه کسی این پرداخت را ارسال می کند؟",
+    "receiveOnchain": "دریافت از بلاکچین",
+    "unknownError": "خطای ناشناخته"
+  },
+  "send": {
+    "title": "ارسال",
+    "destination": "مقصد",
+    "amount": "مقدار",
+    "description": "توضیحات",
+    "confirm": "تأیید پرداخت",
+    "pay": "پرداخت",
+    "scanQr": "اسکن QR کد",
+    "zeroAmount": {
+      "title": "وارد کردن مبلغ",
+      "description": "این فاکتور هیچ مبلغی ندارد. مقداری که می خواهید ارسال کنید را وارد کنید."
+    },
+    "success": {
+      "title": "پرداخت ارسال شد!",
+      "description": "پرداخت شما با موفقیت ارسال شد."
+    },
+    "lnurl": {
+      "title": "ارسال از طریق LNURL"
+    },
+    "onchain": {
+      "title": "ارسال روی زنجیره",
+      "amountLabel": "مبلغ",
+      "feeRateLabel": "نرخ کارمزد ({{unit}}/vB)",
+      "addressLabel": "آدرس روی زنجیره",
+      "amountNotIdeal": "مبلغ برای تراکنش روی زنجیره ایده آل نیست",
+      "cancel": "لغو"
+    }
+  },
+  "header": {
+    "title": "کیف پول",
+    "receive": "دریافت",
+    "send": "ارسال",
+    "swap": "تبدیل"
+  },
+  "alerts": {
+    "channelReservesUnmet": "ذخایر کانال برآورده نشده است",
+    "channelReservesDesc": "تا زمانی که ذخیره کانال خود را پر نکنید، نمی توانید پرداخت انجام دهید.",
+    "viewChannelReserves": "مشاهده ذخایر کانال",
+    "openFirstChannel": "اولین کانال خود را باز کنید",
+    "openFirstChannelDesc": "شما نمی توانید پرداخت ها را دریافت یا ارسال کنید تا زمانی که",
+    "openFirstChannelLink": "اولین کانال خود را باز کنید",
+    "onchainShownOnNode": "تراکنش های روی زنجیره در صفحه نود نشان داده می شوند",
+    "viewOnchain": "مشاهده تراکنش های روی زنجیره"
+  },
+  "onboarding": {
+    "title": "شروع با Lokihub",
+    "description": "این مراحل اولیه را برای راه اندازی و استفاده حداکثری از هاب Loki خود دنبال کنید."
+  },
+  "signMessage": {
+    "title": "امضای پیام",
+    "label": "پیام",
+    "sign": "امضا"
+  },
+  "nodeAlias": {
+    "title": "نام مستعار نود",
+    "label": "نام مستعار نود",
+    "save": "ذخیره"
+  },
+  "withdraw": {
+    "title": "برداشت وجوه روی زنجیره",
+    "amountLabel": "مبلغ",
+    "addressLabel": "آدرس روی زنجیره",
+    "feeRateLabel": "نرخ کارمزد ({{unit}}/vB)",
+    "sendAllAlert": "کل موجودی کیف پول ارسال خواهد شد",
+    "cancel": "لغو"
+  },
+  "subwallets": {
+    "title": "کیف پول های فرعی",
+    "new": "کیف پول فرعی جدید",
+    "empty": "هنوز هیچ کیف پول فرعی وجود ندارد",
+    "about": {
+      "title": "درباره کیف پول های فرعی",
+      "close": "بستن"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "در انتظار تایید",
+    "backToNode": "بازگشت به نود",
+    "received": "دریافت شد",
+    "viewExplorer": "مشاهده در مرورگر"
+  }
+}

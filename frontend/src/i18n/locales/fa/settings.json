@@ -1,0 +1,97 @@
+{
+  "title": "عمومی",
+  "description": "تنظیمات عمومی Lokihub.",
+  "sections": {
+    "appearance": "ظاهر",
+    "unitsAndCurrency": "واحدها و ارز",
+    "language": "زبان"
+  },
+  "appearance": {
+    "theme": "پوسته",
+    "themeDescription": "پوسته بصری خود را انتخاب کنید",
+    "darkMode": "ظاهر",
+    "darkModeDescription": "حالت روشن، تاریک یا پیروی از تنظیمات سیستم را انتخاب کنید",
+    "modes": {
+      "system": "سیستم",
+      "light": "روشن",
+      "dark": "تاریک"
+    }
+  },
+  "units": {
+    "displayUnit": "واحد نمایش",
+    "displayUnitDescription": "نحوه نمایش مبالغ را انتخاب کنید",
+    "fiatCurrency": "ارز فیات",
+    "fiatCurrencyDescription": "ارز مرجع فیات ترجیحی شما",
+    "auto": "خودکار"
+  },
+  "language": {
+    "label": "زبان",
+    "description": "زبان رابط کاربری مورد نظر خود را انتخاب کنید",
+    "updated": "زبان به‌روزرسانی شد."
+  },
+  "toasts": {
+    "themeUpdated": "پوسته به‌روزرسانی شد.",
+    "appearanceUpdated": "ظاهر به‌روزرسانی شد.",
+    "currencyUpdated": "ارز به {{currency}} تغییر یافت",
+    "formatUpdated": "فرمت نمایش فلوکی‌کوین به‌روزرسانی شد",
+    "currencyFetchFailed": "دریافت ارزها ناموفق بود: {{error}}",
+    "updateFailed": "به‌روزرسانی تنظیمات ناموفق بود"
+  },
+  "nav": {
+    "general": "عمومی",
+    "services": "خدمات",
+    "autoUnlock": "بازگشایی خودکار",
+    "unlockPassword": "رمز عبور بازگشایی",
+    "backup": "پشتیبان گیری",
+    "migrate": "مهاجرت Lokihub",
+    "developer": "توسعه دهنده",
+    "debugTools": "ابزارهای اشکال زدایی",
+    "about": "درباره"
+  },
+  "shutdown": {
+    "dialogTitle": "آیا می خواهید Lokihub خود را خاموش کنید؟",
+    "dialogDesc": "این کار Lokihub شما را خاموش می کند و نود شما را آفلاین می کند. تا زمانی که آن را باز نکنید، نمی توانید flokicoin ارسال یا دریافت کنید.",
+    "cancel": "لغو",
+    "confirm": "ادامه",
+    "toast": "نود شما خاموش شد.",
+    "failedToast": "خاموش کردن نود با شکست مواجه شد"
+  },
+  "header": {
+    "title": "تنظیمات"
+  },
+  "changePassword": {
+    "title": "تغییر رمز عبور بازگشایی",
+    "important": "مهم!",
+    "currentPassword": "رمز عبور فعلی",
+    "newPassword": "رمز عبور جدید",
+    "confirmNew": "تایید رمز عبور جدید",
+    "save": "ذخیره"
+  },
+  "backup": {
+    "title": "پشتیبان گیری",
+    "important": "مهم",
+    "passwordLabel": "رمز عبور",
+    "active": "فعال"
+  },
+  "autoUnlock": {
+    "title": "بازگشایی خودکار",
+    "attention": "توجه",
+    "passwordLabel": "رمز عبور بازگشایی"
+  },
+  "developer": {
+    "title": "توسعه دهنده",
+    "tokenType": "نوع توکن",
+    "tokenExpiry": "انقضای توکن (به روز)",
+    "passwordLabel": "رمز عبور بازگشایی",
+    "createToken": "ایجاد توکن"
+  },
+  "debugTools": {
+    "title": "ابزارهای اشکال زدایی",
+    "probeInvoice": "بررسی فاکتور",
+    "probeKeysend": "بررسی Keysend",
+    "networkGraph": "دریافت نمودار شبکه",
+    "refundTo": "بازپرداخت به",
+    "onchainAddress": "آدرس روی زنجیره",
+    "cancel": "لغو"
+  }
+}

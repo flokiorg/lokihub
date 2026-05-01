@@ -1,0 +1,24 @@
+{
+  "greeting": {
+    "morning": "صبح بخیر",
+    "afternoon": "بعدازظهر بخیر",
+    "evening": "شب بخیر",
+    "withName": "{{greeting}}، {{name}}!"
+  },
+  "widgets": {
+    "statsForNerds": "آمار برای متخصصان",
+    "nodeStatus": "وضعیت گره",
+    "blockHeight": "ارتفاع بلوک",
+    "onchainFees": "کارمزدهای آنچین",
+    "forwards": "ارسال‌های روتینگ",
+    "latestApps": "برنامه‌های اخیراً استفاده‌شده"
+  },
+  "alerts": {
+    "newApp": "برنامه جدید متصل شد",
+    "updatedApp": "برنامه به‌روزرسانی شد",
+    "dismiss": "بستن"
+  },
+  "search": {
+    "placeholder": "جستجو"
+  }
+}

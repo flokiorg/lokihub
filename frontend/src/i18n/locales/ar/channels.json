@@ -1,0 +1,148 @@
+{
+  "title": "العقدة",
+  "channels": {
+    "title": "القنوات",
+    "open": "فتح قناة",
+    "close": "إغلاق قناة",
+    "empty": "لا توجد قنوات مفتوحة",
+    "capacity": "السعة",
+    "localBalance": "الرصيد المحلي",
+    "remoteBalance": "الرصيد البعيد",
+    "status": {
+      "active": "نشطة",
+      "inactive": "غير نشطة",
+      "pending": "قيد الانتظار",
+      "closing": "جارٍ الإغلاق",
+      "online": "متصل",
+      "offline": "غير متصل",
+      "opening": "جارٍ الفتح"
+    },
+    "pendingClosed": "قنوات قيد الإغلاق",
+    "table": {
+      "capacity": "السعة",
+      "localBalance": "الرصيد المحلي",
+      "remoteBalance": "الرصيد البعيد",
+      "actions": "الإجراءات"
+    },
+    "closeDialog": {
+      "title": "حدد وضع إغلاق القناة",
+      "headsUp": "انتبه!",
+      "cancel": "إلغاء",
+      "closedSuccess": "تم إغلاق القناة بنجاح"
+    },
+    "nodeHealth": {
+      "tooltip": "صحة العقدة: {{percent}}%",
+      "dialogTitle": "صحة العقدة",
+      "close": "إغلاق"
+    },
+    "dropdown": {
+      "viewFunding": "عرض معاملة التمويل",
+      "viewNode": "عرض العقدة على {{explorer}}",
+      "setRoutingFee": "تعيين رسوم التوجيه"
+    }
+  },
+  "peers": {
+    "title": "النظراء",
+    "connect": "الاتصال بنظير",
+    "disconnect": "قطع الاتصال",
+    "empty": "لا يوجد نظراء متصلون",
+    "pubkey": "المفتاح العام",
+    "alias": "اسم مستعار",
+    "disconnectConfirm": "تأكيد",
+    "disconnectCancel": "إلغاء"
+  },
+  "liquidity": {
+    "title": "السيولة",
+    "incoming": "واردة",
+    "outgoing": "صادرة"
+  },
+  "menu": {
+    "node": "Node",
+    "onchain": "On-Chain",
+    "swaps": "Swaps",
+    "history": "History",
+    "management": "Management"
+  },
+  "onchain": {
+    "title": "On-chain",
+    "addressLabel": "On-Chain Address",
+    "depositTitle": "Deposit Flokicoin",
+    "generateNew": "Generate a new address"
+  },
+  "orderHistory": {
+    "title": "Order History",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "description": "سجل طلبات القنوات الخاصة بك",
+    "noOrdersDesc": "لم تقم بطلب أي قنوات بعد.",
+    "noOrdersTitle": "لا يوجد سجل طلبات",
+    "totalFee": "إجمالي الرسوم"
+  },
+  "increaseCapacity": {
+    "title": "فتح قناة على السلسلة",
+    "description": "سيتم إضافة الأموال المستخدمة لفتح القناة مطروحا منها الرسوم إلى رصيد الإنفاق الخاص بك",
+    "info": "افتح قناة بأموال على السلسلة. يحق لكلا الطرفين إغلاق القناة في أي وقت. ومع ذلك، من خلال الاحتفاظ بمزيد من الأموال على جانبك من القناة واستخدامها بانتظام، تزداد فرصة بقاء القناة مفتوحة.",
+    "peerLabel": "نظير / LSP",
+    "customPeer": "نظير مخصص",
+    "peer": "نظير",
+    "hostPort": "المضيف:المنفذ",
+    "increaseSpendingLabel": "زيادة رصيد الإنفاق",
+    "increaseSpendingTooltip": "قم بتكوين مقدار سعة الإنفاق التي تحتاجها. ستحتاج إلى إيداع flokicoin على السلسلة لتغطية حجم القناة بالكامل، بالإضافة إلى رسوم السلسلة.",
+    "currentBalance": "الرصيد الحالي على السلسلة:",
+    "noLsps": "لم يتم تكوين مزودي سيولة (LSPs)",
+    "selectProvider": "حدد مزودًا",
+    "needIncoming": "هل تحتاج إلى سعة واردة بدلا من ذلك؟",
+    "buyInbound": "شراء سيولة واردة",
+    "lookingToReceive": "هل تتطلع إلى استلام أموال بدلا من ذلك؟ قد تحتاج إلى سعة واردة.",
+    "publicChannel": "قناة عامة",
+    "publicChannelDesc": "غير موصى به لمعظم المستخدمين.",
+    "confirmTitle": "تأكيد فتح القناة",
+    "confirmDesc": "هل أنت متأكد أنك تريد فتح قناة لايتنينغ بالتفاصيل التالية؟",
+    "channelType": "نوع القناة",
+    "paymentMethod": "طريقة الدفع",
+    "nodePublicKey": "المفتاح العام للعقدة",
+    "important": "هام:",
+    "confirmWarning": "يتطلب فتح القناة معاملة على السلسلة ورسوم الشبكة. لا يمكن التراجع عن هذا الإجراء. يرجى التحقق من جميع التفاصيل قبل المتابعة.",
+    "confirmAndOpen": "تأكيد وفتح القناة",
+    "manageProviders": "إدارة المزودين في"
+  },
+  "orderChannel": {
+    "title": "زيادة السيولة الواردة",
+    "description": "اطلب قناة من LSP لزيادة سعة الاستلام الخاصة بك",
+    "info": "اطلب قناة من LSP. يوفر هذا سيولة واردة، مما يسمح لك باستلام المدفوعات فور تأكيد القناة.",
+    "increaseInboundLabel": "زيادة السيولة الواردة",
+    "orderRange": "نطاق الطلب:",
+    "orderBtn": "طلب قناة",
+    "opening": "جاري فتح قناتك",
+    "reviewTitle": "مراجعة شراء القناة",
+    "reviewDesc": "إكمال الدفع لفتح قناة إلى عقدتك",
+    "spendingBalance": "رصيد الإنفاق",
+    "incomingLiquidity": "السيولة الواردة",
+    "amountToPay": "المبلغ المراد دفعه",
+    "consentMsg": "بالمتابعة، أنت توافق على فتح القناة فورًا وتفقد الحق في الإلغاء بمجرد فتحها.",
+    "otherOptions": "خيارات أخرى",
+    "increaseSpending": "زيادة رصيد الإنفاق",
+    "balanceMsg": "رصيدك الحالي هو",
+    "currentlyHave": "لديك حاليا",
+    "deposited": "تم الإيداع",
+    "depositedAmount": "المبلغ المودع",
+    "estTime": "الوقت المقدر",
+    "includesCost": "يتضمن تكلفة فتح القناة",
+    "noPending": "لا توجد طلبات قنوات معلقة",
+    "notEnough": "رصيد غير كاف",
+    "openedDesc": "قناتك الآن مفتوحة وجاهزة للاستخدام.",
+    "openedTitle": "تم فتح القناة",
+    "recommendDeposit": "نوصي بإيداع",
+    "return": "العودة إلى العقدة",
+    "scanQr": "امسح الرمز الشريطي للإيداع",
+    "sendFloki": "إرسال Flokicoin",
+    "successMsg": "تم طلب القناة بنجاح",
+    "toOpen": "لفتح قناة بـ",
+    "waitingChannel": "في انتظار فتح القناة...",
+    "waitingConf": "في انتظار التأكيدات...",
+    "waitingTx": "في انتظار المعاملة..."
+  }
+}

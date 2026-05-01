@@ -1,0 +1,97 @@
+{
+  "title": "عام",
+  "description": "الإعدادات العامة لـ Lokihub.",
+  "sections": {
+    "appearance": "المظهر",
+    "unitsAndCurrency": "الوحدات والعملة",
+    "language": "اللغة"
+  },
+  "appearance": {
+    "theme": "السمة",
+    "themeDescription": "اختر سمتك المرئية",
+    "darkMode": "المظهر",
+    "darkModeDescription": "اختر الوضع الفاتح أو الداكن أو اتبع إعداد النظام",
+    "modes": {
+      "system": "النظام",
+      "light": "فاتح",
+      "dark": "داكن"
+    }
+  },
+  "units": {
+    "displayUnit": "وحدة العرض",
+    "displayUnitDescription": "اختر كيفية عرض المبالغ",
+    "fiatCurrency": "العملة الورقية",
+    "fiatCurrencyDescription": "عملتك الورقية المرجعية المفضلة",
+    "auto": "تلقائي"
+  },
+  "language": {
+    "label": "اللغة",
+    "description": "اختر لغة الواجهة المفضلة لديك",
+    "updated": "تم تحديث اللغة."
+  },
+  "toasts": {
+    "themeUpdated": "تم تحديث السمة.",
+    "appearanceUpdated": "تم تحديث المظهر.",
+    "currencyUpdated": "تم ضبط العملة على {{currency}}",
+    "formatUpdated": "تم تحديث تنسيق عرض فلوكيكوين",
+    "currencyFetchFailed": "فشل جلب العملات: {{error}}",
+    "updateFailed": "فشل تحديث الإعدادات"
+  },
+  "nav": {
+    "general": "عام",
+    "services": "الخدمات",
+    "autoUnlock": "فتح تلقائي",
+    "unlockPassword": "كلمة مرور الفتح",
+    "backup": "نسخ احتياطي",
+    "migrate": "ترحيل Lokihub",
+    "developer": "المطور",
+    "debugTools": "أدوات التصحيح",
+    "about": "حول"
+  },
+  "shutdown": {
+    "dialogTitle": "هل تريد إيقاف تشغيل Lokihub؟",
+    "dialogDesc": "سيؤدي هذا إلى إيقاف تشغيل Lokihub وجعل العقدة غير متصلة. لن تتمكن من إرسال أو استقبال flokicoin حتى تقوم بفتحه.",
+    "cancel": "إلغاء",
+    "confirm": "متابعة",
+    "toast": "تم إيقاف تشغيل العقدة الخاصة بك.",
+    "failedToast": "فشل في إيقاف تشغيل العقدة"
+  },
+  "header": {
+    "title": "الإعدادات"
+  },
+  "changePassword": {
+    "title": "تغيير كلمة مرور الفتح",
+    "important": "هام!",
+    "currentPassword": "كلمة المرور الحالية",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmNew": "تأكيد كلمة المرور الجديدة",
+    "save": "حفظ"
+  },
+  "backup": {
+    "title": "نسخ احتياطي",
+    "important": "هام",
+    "passwordLabel": "كلمة المرور",
+    "active": "نشط"
+  },
+  "autoUnlock": {
+    "title": "فتح تلقائي",
+    "attention": "انتباه",
+    "passwordLabel": "كلمة مرور الفتح"
+  },
+  "developer": {
+    "title": "المطور",
+    "tokenType": "نوع الرمز",
+    "tokenExpiry": "صلاحية الرمز (بالأيام)",
+    "passwordLabel": "كلمة مرور الفتح",
+    "createToken": "إنشاء رمز"
+  },
+  "debugTools": {
+    "title": "أدوات التصحيح",
+    "probeInvoice": "فحص الفاتورة",
+    "probeKeysend": "فحص Keysend",
+    "networkGraph": "الحصول على رسم بياني للشبكة",
+    "refundTo": "استرداد إلى",
+    "onchainAddress": "عنوان على السلسلة",
+    "cancel": "إلغاء"
+  }
+}

@@ -109,3 +109,138 @@ input[type="text"]::-webkit-calendar-picker-indicator {
 .avatar-gradient-9 {
   background: linear-gradient(135deg, var(--chart-5), var(--chart-3));
 }
+
+/* =============================================================
+   RTL SUPPORT — Arabic (ar) & Farsi/Persian (fa)
+   Best practices for right-to-left language rendering
+   ============================================================= */
+
+/**
+ * 1. RTL-specific font families
+ *    Inter has no Arabic/Farsi glyphs. We set language-specific
+ *    font stacks via :lang() selectors so the correct script renders
+ *    even if only a portion of the page is in that language.
+ */
+:lang(ar) {
+  font-family: "Noto Sans Arabic", "Arabic UI Text", "Geeza Pro", "Tahoma", system-ui, sans-serif;
+  /* Arabic needs ~10% more line-height due to stacked diacritics */
+  line-height: 1.7;
+  /* Arabic benefits from slightly wider letter spacing at small sizes */
+  word-spacing: 0.05em;
+}
+
+:lang(fa) {
+  font-family: "Vazirmatn", "Iranian Sans", "Tahoma", system-ui, sans-serif;
+  line-height: 1.7;
+  word-spacing: 0.03em;
+}
+
+/**
+ * 2. Directional layout — sidebar, navigation, content area
+ *    When dir="rtl" is set on <html>, these rules ensure the entire
+ *    UI mirrors correctly.
+ */
+
+/* Mirror sidebar from left to right */
+[dir="rtl"] [data-sidebar="sidebar"] {
+  right: 0;
+  left: auto;
+  border-right: none;
+  border-left: var(--sidebar-border, 1px solid hsl(var(--border)));
+}
+
+/* Fix sidebar rail/trigger position */
+[dir="rtl"] [data-sidebar="rail"] {
+  right: auto;
+  left: 0;
+  border-left: none;
+  border-right: 1px solid hsl(var(--border) / 0.5);
+}
+
+/**
+ * 3. Navigation item text alignment in RTL
+ */
+[dir="rtl"] nav a,
+[dir="rtl"] [role="menuitem"] {
+  flex-direction: row-reverse;
+}
+
+/* Keep icons on the correct side in RTL navigation */
+[dir="rtl"] nav a svg:first-child,
+[dir="rtl"] [role="menuitem"] svg:first-child {
+  /* Icons stay on the "start" side — which is right in RTL */
+  order: 1;
+}
+
+/**
+ * 4. Form layout — labels and inputs align RTL
+ */
+[dir="rtl"] label,
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select {
+  text-align: right;
+}
+
+/* Inputs that contain numbers/addresses should stay LTR even in RTL context */
+[dir="rtl"] input[type="number"],
+[dir="rtl"] input[type="tel"],
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="url"],
+[dir="rtl"] .ltr-content {
+  direction: ltr;
+  text-align: left;
+}
+
+/**
+ * 5. Icon flip utilities — arrows and chevrons should reverse in RTL
+ *    Apply .rtl-flip to any directional icon (back arrow, chevron, etc.)
+ */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+/* Auto-flip common directional Lucide icons in RTL */
+[dir="rtl"] [data-lucide="arrow-left"],
+[dir="rtl"] [data-lucide="arrow-right"],
+[dir="rtl"] [data-lucide="chevron-left"],
+[dir="rtl"] [data-lucide="chevron-right"],
+[dir="rtl"] [data-lucide="chevrons-left"],
+[dir="rtl"] [data-lucide="chevrons-right"] {
+  transform: scaleX(-1);
+}
+
+/**
+ * 6. Card and dialog — text alignment in RTL
+ */
+[dir="rtl"] .card-header,
+[dir="rtl"] [data-slot="card-header"],
+[dir="rtl"] [data-slot="card-title"],
+[dir="rtl"] [data-slot="card-description"] {
+  text-align: right;
+}
+
+/**
+ * 7. Toast notifications — position from right in RTL
+ */
+[dir="rtl"] [data-sonner-toaster] {
+  right: auto !important;
+  left: max(var(--offset), env(safe-area-inset-left)) !important;
+}
+
+/**
+ * 8. Progress bars — fill from right in RTL
+ */
+[dir="rtl"] [role="progressbar"] > div {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/**
+ * 9. QR code / sensitive content — always stays LTR
+ */
+.sensitive,
+[data-sensitive="true"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}

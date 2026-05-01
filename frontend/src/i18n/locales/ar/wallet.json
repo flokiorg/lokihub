@@ -1,0 +1,166 @@
+{
+  "balance": {
+    "lightning": "رصيد شبكة البرق",
+    "onchain": "الرصيد على السلسلة",
+    "total": "الرصيد الإجمالي",
+    "available": "المتاح",
+    "reserved": "المحجوز",
+    "pending": "قيد الانتظار"
+  },
+  "transactions": {
+    "title": "المعاملات",
+    "empty": "لا توجد معاملات بعد",
+    "sent": "مُرسَل",
+    "received": "مُستلَم",
+    "pending": "قيد الانتظار",
+    "failed": "فشل",
+    "viewAll": "عرض الكل"
+  },
+  "receive": {
+    "title": "استقبال",
+    "invoice": "فاتورة البرق",
+    "address": "عنوان البيتكوين",
+    "amount": "المبلغ",
+    "description": "الوصف",
+    "generate": "إنشاء فاتورة",
+    "copyInvoice": "نسخ الفاتورة",
+    "copyAddress": "نسخ العنوان",
+    "shareInvoice": "مشاركة الفاتورة",
+    "onchain": {
+      "title": "Receive On-chain",
+      "waiting": "Waiting for Payment...",
+      "newAddress": "New Address",
+      "waitingConfirm": "Waiting for On-chain Confirmation...",
+      "viewExplorer": "View on Flokicoin Explorer",
+      "received": "Transaction Received!",
+      "receiveAnother": "Receive Another Payment",
+      "backToWallet": "Back to Wallet"
+    },
+    "lightning": {
+      "title": "Receive via Lightning"
+    },
+    "buyingLiquidity": "شراء سيولة واردة...",
+    "amountTooSmall": "المبلغ صغير جدا لدفع JIT. الحد الأدنى: {{amount}} {{unit}}.",
+    "amountTooLarge": "المبلغ كبير جدا لدفع JIT. الحد الأقصى: {{amount}} {{unit}}.",
+    "failedToBuyLiquidity": "فشل شراء السيولة",
+    "successCreated": "تم إنشاء الفاتورة بنجاح",
+    "failedToCreate": "فشل إنشاء الفاتورة",
+    "lightningInvoice": "فاتورة لايتنينغ",
+    "createInvoice": "إنشاء فاتورة",
+    "waiting": "في انتظار الدفع",
+    "paymentReceived": "تم استلام الدفع",
+    "createAnother": "إنشاء فاتورة أخرى",
+    "backToWallet": "العودة إلى المحفظة",
+    "amountPlaceholder": "المبلغ بـ {{unit}}...",
+    "liquidityProvider": "مزود السيولة",
+    "selectLSP": "حدد LSP",
+    "jitPayment": "دفع JIT",
+    "jitExplainedTitle": "شرح دفع JIT",
+    "jitWhyNeededTitle": "لماذا هذا مطلوب؟",
+    "jitWhyNeededDesc": "تتطلب مدفوعات لايتنينغ <strong>سيولة واردة</strong> (سعة استلام). ليس لديك حاليا سعة كافية لاستلام هذا المبلغ مباشرة.",
+    "jitHowWorksTitle": "كيف يعمل",
+    "jitHowWorksDesc": "سيقوم LSP الخاص بك تلقائيا بفتح قناة جديدة <strong>في الوقت المناسب (JIT)</strong> عند وصول الدفع. يضمن هذا نجاح الدفع على الفور دون الحاجة إلى إدارة القنوات يدويا.",
+    "feeStructure": "هيكل الرسوم",
+    "minFee": "الحد الأدنى للرسوم:",
+    "propRate": "المعدل النسبي:",
+    "min": "الحد الأدنى:",
+    "max": "الحد الأقصى:",
+    "feeLogic": "الرسوم هي <strong>الأعلى</strong> بين الحد الأدنى للرسوم أو الرسوم النسبية المحسوبة.",
+    "whoPays": "من يدفع الرسوم؟",
+    "receiverPays": "المستلم يدفع:",
+    "receiverPaysDesc": "(افتراضي) يتم خصم الرسوم من المبلغ الذي تتلقاه.",
+    "senderPays": "المرسل يدفع:",
+    "senderPaysDesc": "تتم إضافة الرسوم إلى إجمالي الفاتورة. المرسل يدفع التكلفة الإضافية.",
+    "loadingJit": "تحميل تفاصيل JIT...",
+    "estimatedFee": "الرسوم المقدرة",
+    "totalToSend": "إجمالي الإرسال",
+    "youReceive": "أنت تتلقى",
+    "retry": "إعادة المحاولة",
+    "paymentRange": "نطاق الدفع:",
+    "includeFee": "تضمين الرسوم في الفاتورة (المرسل يدفع)",
+    "descriptionPlaceholder": "على سبيل المثال من يرسل هذه الدفعة؟",
+    "receiveOnchain": "استلام من السلسلة",
+    "unknownError": "خطأ غير معروف"
+  },
+  "send": {
+    "title": "إرسال",
+    "destination": "الوجهة",
+    "amount": "المبلغ",
+    "description": "الوصف",
+    "confirm": "تأكيد الدفع",
+    "pay": "دفع",
+    "scanQr": "مسح رمز QR",
+    "zeroAmount": {
+      "title": "أدخل المبلغ",
+      "description": "هذه الفاتورة ليس لها مبلغ. أدخل المبلغ الذي تريد إرساله."
+    },
+    "success": {
+      "title": "تم إرسال الدفع!",
+      "description": "تم إرسال دفعتك بنجاح."
+    },
+    "lnurl": {
+      "title": "إرسال عبر LNURL"
+    },
+    "onchain": {
+      "title": "إرسال على السلسلة",
+      "amountLabel": "المبلغ",
+      "feeRateLabel": "معدل الرسوم ({{unit}}/vB)",
+      "addressLabel": "عنوان على السلسلة",
+      "amountNotIdeal": "المبلغ غير مثالي لمعاملة على السلسلة",
+      "cancel": "إلغاء"
+    }
+  },
+  "header": {
+    "title": "المحفظة",
+    "receive": "استلام",
+    "send": "إرسال",
+    "swap": "تبديل"
+  },
+  "alerts": {
+    "channelReservesUnmet": "لم يتم استيفاء احتياطيات القناة",
+    "channelReservesDesc": "لن تتمكن من إجراء مدفوعات حتى تملأ احتياطي القناة الخاص بك.",
+    "viewChannelReserves": "عرض احتياطيات القناة",
+    "openFirstChannel": "افتح قناتك الأولى",
+    "openFirstChannelDesc": "لن تتمكن من استلام أو إرسال المدفوعات حتى",
+    "openFirstChannelLink": "تفتح قناتك الأولى",
+    "onchainShownOnNode": "تظهر المعاملات على السلسلة في صفحة العقدة",
+    "viewOnchain": "عرض المعاملات على السلسلة"
+  },
+  "onboarding": {
+    "title": "ابدأ مع Lokihub الخاص بك",
+    "description": "اتبع هذه الخطوات الأولية لإعداد وتحقيق أقصى استفادة من Loki Hub الخاص بك."
+  },
+  "signMessage": {
+    "title": "توقيع رسالة",
+    "label": "الرسالة",
+    "sign": "توقيع"
+  },
+  "nodeAlias": {
+    "title": "الاسم المستعار للعقدة",
+    "label": "الاسم المستعار للعقدة",
+    "save": "حفظ"
+  },
+  "withdraw": {
+    "title": "سحب أموال على السلسلة",
+    "amountLabel": "المبلغ",
+    "addressLabel": "عنوان على السلسلة",
+    "feeRateLabel": "معدل الرسوم ({{unit}}/vB)",
+    "sendAllAlert": "سيتم إرسال رصيد المحفظة بالكامل",
+    "cancel": "إلغاء"
+  },
+  "subwallets": {
+    "title": "المحافظ الفرعية",
+    "new": "محفظة فرعية جديدة",
+    "empty": "لا توجد محافظ فرعية بعد",
+    "about": {
+      "title": "حول المحافظ الفرعية",
+      "close": "إغلاق"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "في انتظار التأكيدات",
+    "backToNode": "العودة إلى العقدة",
+    "received": "تم الاستلام",
+    "viewExplorer": "عرض في المستكشف"
+  }
+}

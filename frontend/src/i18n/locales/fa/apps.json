@@ -1,0 +1,155 @@
+{
+  "title": "اتصالات",
+  "description": "اپلیکیشن‌های متصل به گره‌تان از طریق Nostr Wallet Connect",
+  "empty": "هنوز هیچ اپلیکیشنی متصل نشده",
+  "connect": "اتصال اپلیکیشن",
+  "detail": {
+    "title": "جزئیات اتصال",
+    "delete": "حذف اتصال",
+    "deleteConfirm": "آیا مطمئن هستید که می‌خواهید این اتصال را حذف کنید؟",
+    "deleteSuccess": "اتصال حذف شد.",
+    "edit": "ویرایش دسترسی‌ها",
+    "close": "بستن",
+    "cancel": "لغو"
+  },
+  "permissions": {
+    "title": "دسترسی‌ها",
+    "pay": "پرداخت فاکتورها",
+    "receive": "دریافت پرداخت‌ها",
+    "balance": "مشاهده موجودی",
+    "history": "مشاهده تاریخچه تراکنش‌ها",
+    "sign": "امضای پیام‌ها"
+  },
+  "budget": {
+    "title": "بودجه",
+    "renewal": "تجدید بودجه",
+    "amount": "مقدار بودجه",
+    "customAmount": "مقدار بودجه دلخواه ({{unit}})",
+    "spent": "هزینه‌شده",
+    "remaining": "باقی‌مانده"
+  },
+  "renewals": {
+    "daily": "روزانه",
+    "weekly": "هفتگی",
+    "monthly": "ماهانه",
+    "yearly": "سالانه",
+    "never": "هرگز"
+  },
+  "actions": {
+    "delete": "حذف اتصال",
+    "edit": "ویرایش دسترسی‌ها",
+    "deleteConfirm": "آیا مطمئن هستید که می‌خواهید این اتصال را حذف کنید؟",
+    "deleteSuccess": "اتصال حذف شد.",
+    "decrease": "کاهش",
+    "decreaseTitle": "کاهش موجودی",
+    "decreaseAmountLabel": "مقدار ({{unit}})",
+    "increaseTitle": "افزایش موجودی"
+  },
+  "scopes": {
+    "title": "دسترسی‌های کیف‌پول را انتخاب کنید"
+  },
+  "disconnectApp": {
+    "cancel": "لغو"
+  },
+  "expiry": {
+    "title": "تاریخ انقضا"
+  },
+  "connections": {
+    "title": "اتصالات",
+    "addConnection": "افزودن اتصال",
+    "appStore": "فروشگاه اپلیکیشن",
+    "connectedApps": "اپلیکیشن‌های متصل",
+    "editConnection": "ویرایش اتصال",
+    "successfullyUpdated": "اتصال با موفقیت به‌روز شد",
+    "failedToUpdate": "به‌روزرسانی اتصال ناموفق بود",
+    "lokiAccount": "حساب Loki",
+    "connections_count": "{{count}} اتصال",
+    "connected": "متصل",
+    "addAnother": "افزودن اتصال دیگر",
+    "connectionDetails": "جزئیات اتصال",
+    "disconnect": "قطع اتصال {{appName}}",
+    "confirmUpdate": "تأیید به‌روزرسانی اپلیکیشن",
+    "isolatedRemoveConfirm": "آیا مطمئن هستید که می‌خواهید وضعیت <1>جداسازی</1> را از این اتصال حذف کنید؟",
+    "payPermissionsConfirm": "آیا مطمئن هستید که می‌خواهید <1>دسترسی پرداخت</1> را به این اتصال بدهید؟",
+    "warningNotice": "⚠️ هشدار: این تغییر برای تمام اپلیکیشن‌هایی که کد اتصال را دارند اعمال می‌شود. فقط در صورتی تغییر دهید که مطمئن باشید، در غیر این صورت ممکن است تمام وجوه خود را از دست بدهید",
+    "upToBudget": " تا سقف بودجه مشخص‌شده",
+    "isolatedFunds": " که در این اپلیکیشن جداسازی‌شده واریز می‌شوند"
+  },
+  "appStore": {
+    "submitApp": "اپلیکیشن خود را ارسال کنید",
+    "links": "لینک‌ها"
+  },
+  "usage": {
+    "isolatedBalance": "موجودی جداسازی‌شده",
+    "decrease": "کاهش",
+    "increase": "افزایش",
+    "totalSpent": "مجموع هزینه‌شده",
+    "totalReceived": "مجموع دریافت‌شده",
+    "budget": "بودجه",
+    "leftInBudget": "باقی‌مانده در بودجه",
+    "budgetRenewal": "تجدید بودجه"
+  },
+  "newApp": {
+    "unsupportedApp": "اپلیکیشن پشتیبانی‌نشده",
+    "unsupportedMethods": "این اپلیکیشن متدهایی را درخواست می‌کند که توسط کیف‌پول شما پشتیبانی نمی‌شوند: {{methods}}",
+    "unsupportedNotificationTypes": "این اپلیکیشن انواع اعلانی را درخواست می‌کند که پشتیبانی نمی‌شوند: {{types}}",
+    "tryLdkBackend": "برای ویژگی‌های بیشتر، بک‌اند LDK لوکی‌هاب را امتحان کنید.",
+    "connectTo": "اتصال به {{appName}}",
+    "connectNewApp": "اتصال اپلیکیشن جدید",
+    "headerDescription": "دسترسی‌های کیف‌پول را تنظیم کنید و دستورالعمل‌ها را برای تکمیل اتصال دنبال کنید",
+    "install": "نصب",
+    "open": "باز کردن",
+    "waitingForConnection": "در انتظار اتصال اپلیکیشن...",
+    "name": "نام",
+    "nameDescription": "نام اپلیکیشن یا هدف از اتصال",
+    "enableAcceptingConnections": "فعال‌سازی پذیرش اتصال از اپلیکیشن‌های دیگر",
+    "allowAuthorizeNew": "به این اپلیکیشن اجازه دهید اتصالات جدید به لوکی‌هاب را تأیید کند.",
+    "returnTo": "به‌طور خودکار به {{url}} بازمی‌گردید",
+    "next": "بعدی",
+    "back": "بازگشت",
+    "connectionEstablished": "اتصال برقرار شد!",
+    "canUseApp": "اکنون می‌توانید از اپلیکیشن با لوکی‌هاب استفاده کنید.",
+    "openApp": "اپلیکیشنی را که می‌خواهید متصل کنید باز کنید",
+    "findSettings": "تنظیمات اتصال کیف‌پول را پیدا کنید (ممکن است زیر Nostr Wallet Connect یا NWC باشد).",
+    "scanOrPaste": "کد اتصال سری را اسکن یا جای‌گذاری کنید",
+    "optionalTopUp": "اختیاری: شارژ موجودی زیرکیف‌پول ({{amount}})",
+    "topUp": "شارژ",
+    "confirmNewConnection": "تأیید اتصال جدید",
+    "lokiGoPermission": "به Loki Go اجازه داده می‌شود اتصالات اپلیکیشن‌های دیگری ایجاد کند که می‌توانند موجودی شما را خرج کنند.",
+    "warningLokiGo": "هشدار: Loki Go می‌تواند اتصالاتی با بودجه بیشتر از بودجه تعیین‌شده‌اش ایجاد کند. همیشه بودجه تعیین کنید.",
+    "enterUnlockPassword": "لطفاً رمز عبور قفل‌گشایی را برای ادامه وارد کنید.",
+    "unlockPassword": "رمز عبور قفل‌گشایی",
+    "specifyWalletPermissions": "لطفاً دسترسی‌های کیف‌پول را مشخص کنید.",
+    "appCreated": "اپلیکیشن ایجاد شد",
+    "failedToCreate": "ایجاد اپلیکیشن ناموفق بود",
+    "configure": "پیکربندی",
+    "finalize": "نهایی‌سازی",
+    "title": "اتصال اپلیکیشن جدید",
+    "description": "رشته اتصال را جای‌گذاری کنید یا کد QR را اسکن کنید تا اپلیکیشن را به کیف‌پولتان متصل کنید.",
+    "nwcString": "رشته اتصال",
+    "placeholder": "nostr+walletconnect://...",
+    "connect": "اتصال"
+  },
+  "cleanup": {
+    "title": "حذف اپلیکیشن‌های بلااستفاده",
+    "description": "مرور اپلیکیشن‌هایی که ۲ ماه یا بیشتر استفاده نشده‌اند",
+    "warning": "هشدار",
+    "warningDetail": "قبل از حذف اپلیکیشن را با دقت بررسی کنید. اپلیکیشن‌های حذف‌شده قابل بازیابی نیستند.",
+    "skip": "رد کردن",
+    "delete": "حذف",
+    "noMore": "دیگر اپلیکیشن بلااستفاده‌ای برای بررسی وجود ندارد.",
+    "backToOverview": "بازگشت به نمای کلی",
+    "progress": "پیشرفت",
+    "progressDetail": "{{reviewed}} از {{total}} اپلیکیشن بررسی شد ({{skipped}} رد شد، {{deleted}} حذف شد)"
+  },
+  "connectAppCard": {
+    "title": "اتصال اپلیکیشن",
+    "description": "از Nostr Wallet Connect برای اتصال اپلیکیشن‌ها به کیف‌پولتان استفاده کنید.",
+    "connectionSecret": "کد اتصال سری",
+    "takingLonger": "اتصال بیشتر از معمول طول می‌کشد.",
+    "continueAnyway": "ادامه به هر حال",
+    "appConnected": "اپلیکیشن متصل شد",
+    "revealQR": "نمایش کد QR",
+    "copySecret": "کپی کد اتصال سری"
+  }
+}
