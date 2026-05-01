@@ -26,6 +26,7 @@ import {
 } from "src/components/ui/tooltip.tsx";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { useUnit } from "src/hooks/useUnit";
+import { useTranslation } from "react-i18next";
 import { Channel, LongUnconfirmedZeroConfChannel } from "src/types";
 import { ChannelDropdownMenu } from "./ChannelDropdownMenu";
 
@@ -38,6 +39,7 @@ export function ChannelsTable({
   channels,
   longUnconfirmedZeroConfChannels,
 }: ChannelsTableProps) {
+  const { t } = useTranslation("channels");
   if (channels && !channels.length) {
     return null;
   }
@@ -45,14 +47,14 @@ export function ChannelsTable({
   return (
     <Card className="hidden lg:block">
       <CardHeader>
-        <CardTitle className="text-2xl">Channels</CardTitle>
+        <CardTitle className="text-2xl">{t("channels.title", "Channels")}</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[160px] text-muted-foreground">
-                Peer
+                {t("increaseCapacity.peer", "Peer")}
               </TableHead>
               <TableHead className="w-[80px] text-muted-foreground">
                 <TooltipProvider>
@@ -73,14 +75,14 @@ export function ChannelsTable({
                 </TooltipProvider>
               </TableHead>
               <TableHead className="w-[80px] text-muted-foreground">
-                Status
+                {t("channels.status.active", "Status")}
               </TableHead>
               <TableHead className="w-[128px] text-muted-foreground">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
                       <div className="flex flex-row gap-1 items-center text-muted-foreground">
-                        Capacity
+                        {t("channels.capacity", "Capacity")}
                         <InfoIcon className="h-3 w-3 shrink-0" />
                       </div>
                     </TooltipTrigger>
@@ -113,8 +115,8 @@ export function ChannelsTable({
               </TableHead>
               <TableHead className="w-[350px]">
                 <div className="flex flex-row justify-between items-center gap-2 text-muted-foreground">
-                  <div>Spending</div>
-                  <div>Receiving</div>
+                  <div>{t("liquidity.outgoing", "Spending")}</div>
+                  <div>{t("liquidity.incoming", "Receiving")}</div>
                 </div>
               </TableHead>
               <TableHead className="w-px"></TableHead>
@@ -173,6 +175,7 @@ function ChannelTableRow({
   const capacity = channel.localBalance + channel.remoteBalance;
   const alias = peerDetails?.alias || "Unknown";
   const { unit } = useUnit();
+  const { t } = useTranslation("channels");
 
   return (
     <TableRow key={channel.id} className="channel">
@@ -184,15 +187,15 @@ function ChannelTableRow({
         {channel.status == "online" ? (
           unconfirmedChannel ? (
             <Badge variant="outline" title={unconfirmedChannel.message}>
-              Unconfirmed
+              {t("channels.status.pending", "Unconfirmed")}
             </Badge>
           ) : (
-            <Badge variant="positive">Online</Badge>
+            <Badge variant="positive">{t("channels.status.online", "Online")}</Badge>
           )
         ) : channel.status == "opening" ? (
-          <Badge variant="outline">Opening</Badge>
+          <Badge variant="outline">{t("channels.status.opening", "Opening")}</Badge>
         ) : (
-          <Badge variant="warning">Offline</Badge>
+          <Badge variant="warning">{t("channels.status.offline", "Offline")}</Badge>
         )}
       </TableCell>
       <TableCell>

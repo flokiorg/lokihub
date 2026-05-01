@@ -1,5 +1,6 @@
 import { InfoIcon, Zap } from "lucide-react";
 import React, { FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
@@ -77,6 +78,8 @@ function NewChannelInternal({
 }) {
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
+  const { t } = useTranslation("channels");
+  const { t: tc } = useTranslation("common");
   const { unit, displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
   const navigate = useNavigate();
 
@@ -160,8 +163,8 @@ function NewChannelInternal({
   return (
     <>
       <AppHeader
-        title="Open Channel with On-Chain"
-        description="Funds used to open a channel minus fees will be added to your spending balance"
+        title={t("increaseCapacity.title", "Open Channel with On-Chain")}
+        description={t("increaseCapacity.description", "Funds used to open a channel minus fees will be added to your spending balance")}
       />
       <div className="md:max-w-md max-w-full flex flex-col gap-5 flex-1">
         <LightningNetworkDark
@@ -169,17 +172,14 @@ function NewChannelInternal({
         />
         <LightningNetworkLight className="w-full dark:hidden" />
         <p className="text-muted-foreground">
-          Open a channel with on-chain funds. Both parties are free to close the
-          channel at any time. However, by keeping more funds on your side of
-          the channel and using it regularly, there is more chance the channel
-          will stay open.
+          {t("increaseCapacity.info", "Open a channel with on-chain funds. Both parties are free to close the channel at any time. However, by keeping more funds on your side of the channel and using it regularly, there is more chance the channel will stay open.")}
         </p>
 
         <Alert className="bg-muted/50">
           <InfoIcon className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2">
             <p className="text-sm">
-              Looking to receive funds instead? You might need incoming capacity.
+              {t("increaseCapacity.lookingToReceive", "Looking to receive funds instead? You might need incoming capacity.")}
             </p>
             <LinkButton
               to="/channels/inbound"
@@ -187,7 +187,7 @@ function NewChannelInternal({
               size="sm"
               className="w-full sm:w-auto"
             >
-              Buy Inbound Liquidity
+              {t("increaseCapacity.buyInbound", "Buy Inbound Liquidity")}
             </LinkButton>
           </AlertDescription>
         </Alert>
@@ -201,15 +201,13 @@ function NewChannelInternal({
                 <TooltipTrigger type="button">
                   <div className="flex flex-row gap-2 items-center justify-start text-sm">
                     <Label htmlFor="amount">
-                      Increase spending balance ({unit()})
+                      {t("increaseCapacity.increaseSpendingLabel", "Increase spending balance")} ({unit()})
                     </Label>
                     <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Configure the amount of spending capacity you need. You will
-                  need to deposit on-chain flokicoin to cover the entire channel
-                  size, plus on-chain fees.
+                  {t("increaseCapacity.increaseSpendingTooltip", "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees.")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -224,7 +222,7 @@ function NewChannelInternal({
               onInputUnitChange={setInputUnit}
             />
             <div className="text-muted-foreground text-sm sensitive slashed-zero">
-              Current on-chain balance:{" "}
+              {t("increaseCapacity.currentBalance", "Current on-chain balance:")}{" "}
               <FormattedFlokicoinAmount
                 amount={balances.onchain.spendable * 1000}
               />
@@ -276,10 +274,10 @@ function NewChannelInternal({
                   htmlFor="public-channel"
                   className="flex items-center gap-2"
                 >
-                  Public Channel
+                  {t("increaseCapacity.publicChannel", "Public Channel")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Not recommended for most users.
+                  {t("increaseCapacity.publicChannelDesc", "Not recommended for most users.")}
                 </p>
               </div>
             </div>
@@ -295,7 +293,7 @@ function NewChannelInternal({
           />
           <Button size="lg">
             <Zap className="mr-2 h-4 w-4" />
-            {openImmediately ? "Open Channel" : "Next"}
+            {openImmediately ? t("channels.open") : tc("actions.next")}
           </Button>
         </form>
 
@@ -305,7 +303,7 @@ function NewChannelInternal({
             variant="link"
             className="text-muted-foreground text-xs"
           >
-            Need incoming capacity instead?
+            {t("increaseCapacity.needIncoming", "Need incoming capacity instead?")}
           </LinkButton>
         </div>
       </div>
@@ -314,21 +312,20 @@ function NewChannelInternal({
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm Channel Opening</DialogTitle>
+            <DialogTitle>{t("increaseCapacity.confirmTitle", "Confirm Channel Opening")}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to open a Lightning channel with the
-              following details?
+              {t("increaseCapacity.confirmDesc", "Are you sure you want to open a Lightning channel with the following details?")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="font-medium text-muted-foreground">Peer</div>
-                <div>Custom</div>
+                <div className="font-medium text-muted-foreground">{t("increaseCapacity.peer", "Peer")}</div>
+                <div>{t("increaseCapacity.customPeer", "Custom")}</div>
               </div>
               <div>
-                <div className="font-medium text-muted-foreground">Amount</div>
+                <div className="font-medium text-muted-foreground">{tc("labels.amount", "Amount")}</div>
                 <div>
                   <FormattedFlokicoinAmount
                     amount={parseInt(order.amount || "0") * 1000}
@@ -337,22 +334,22 @@ function NewChannelInternal({
               </div>
               <div>
                 <div className="font-medium text-muted-foreground">
-                  Channel Type
+                  {t("increaseCapacity.channelType", "Channel Type")}
                 </div>
                 <div>{order.isPublic ? "Public" : "Private"}</div>
               </div>
               <div>
                 <div className="font-medium text-muted-foreground">
-                  Payment Method
+                  {t("increaseCapacity.paymentMethod", "Payment Method")}
                 </div>
-                <div>On-chain</div>
+                <div>{t("menu.onchain", "On-chain")}</div>
               </div>
             </div>
 
             {order.pubkey && (
               <div className="text-sm">
                 <div className="font-medium text-muted-foreground">
-                  Node Public Key
+                  {t("increaseCapacity.nodePublicKey", "Node Public Key")}
                 </div>
                 <div className="font-mono text-xs break-all bg-muted p-2 rounded">
                   {order.pubkey}
@@ -363,9 +360,7 @@ function NewChannelInternal({
             <Alert variant="warning">
               <InfoIcon />
               <AlertDescription>
-                <strong>Important:</strong> Opening a channel requires an
-                on-chain transaction and network fees. This action cannot be
-                undone. Please verify all details before proceeding.
+                <strong>{t("increaseCapacity.important", "Important:")}</strong> {t("increaseCapacity.confirmWarning", "Opening a channel requires an on-chain transaction and network fees. This action cannot be undone. Please verify all details before proceeding.")}
               </AlertDescription>
             </Alert>
           </div>
@@ -375,10 +370,10 @@ function NewChannelInternal({
               variant="outline"
               onClick={() => setShowConfirmModal(false)}
             >
-              Cancel
+              {tc("actions.cancel", "Cancel")}
             </Button>
             <Button onClick={handleConfirmSubmit}>
-              Confirm & Open Channel
+              {t("increaseCapacity.confirmAndOpen", "Confirm & Open Channel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -396,6 +391,8 @@ type NewChannelOnchainProps = {
 function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { data: peers } = usePeers();
   const { data: info } = useInfo();
+  const { t } = useTranslation("channels");
+  const { t: tc } = useTranslation("common");
   
   if (props.order.paymentMethod !== "onchain") {
     throw new Error("unexpected payment method");
@@ -476,7 +473,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
         {props.showCustomOptions && (
           <>
             <div className="grid gap-1.5">
-                <Label htmlFor="provider-select">Peer / LSP</Label>
+                <Label htmlFor="provider-select">{t("increaseCapacity.peerLabel")}</Label>
                 {/* LSP Selector */}
                 <Select 
                     value={selection} 
@@ -490,7 +487,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                     disabled={!hasLSPs}
                 >
                     <SelectTrigger className="w-full" id="provider-select">
-                        <SelectValue placeholder={!hasLSPs ? "No LSPs Configured" : "Select a Provider"} />
+                        <SelectValue placeholder={!hasLSPs ? t("increaseCapacity.noLsps", "No LSPs Configured") : t("increaseCapacity.selectProvider", "Select a Provider")} />
                     </SelectTrigger>
                     <SelectContent>
                         {info?.lsps?.map((lsp) => (
@@ -499,14 +496,14 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                             </SelectItem>
                         ))}
                         {hasLSPs && <div className="h-px bg-muted my-1" />}
-                        <SelectItem value="custom">Custom Peer</SelectItem>
+                        <SelectItem value="custom">{t("increaseCapacity.customPeer")}</SelectItem>
                     </SelectContent>
                 </Select>
                 {!hasLSPs && (
                      <div className="text-muted-foreground text-xs">
-                        <span className="mr-1">Manage providers in</span>
+                        <span className="mr-1">{t("increaseCapacity.manageProviders", "Manage providers in")}</span>
                         <LinkButton to="/settings/services" variant="link" className="h-auto p-0 text-xs underline">
-                            Settings &gt; Services
+                            {tc("nav.settings")} &gt; Services
                         </LinkButton>
                      </div>
                 )}
@@ -516,7 +513,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
             {selection === "custom" && (
                 <>
                     <div className="grid gap-1.5">
-                    <Label htmlFor="pubkey">Peer</Label>
+                    <Label htmlFor="pubkey">{t("increaseCapacity.peer")}</Label>
                     <Input
                         id="pubkey"
                         type="text"
@@ -551,7 +548,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
 
                     {!isAlreadyPeered && /*!nodeDetails && */ pubkey && (
                     <div className="grid gap-1.5">
-                        <Label htmlFor="host">Host:Port</Label>
+                        <Label htmlFor="host">{t("increaseCapacity.hostPort")}</Label>
                         <Input
                         id="host"
                         type="text"

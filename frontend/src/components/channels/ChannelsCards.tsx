@@ -20,6 +20,7 @@ import {
 } from "src/components/ui/tooltip";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { formatAmount } from "src/lib/utils.ts";
+import { useTranslation } from "react-i18next";
 import { Channel, LongUnconfirmedZeroConfChannel } from "src/types";
 
 type ChannelsCardsProps = {
@@ -31,6 +32,7 @@ export function ChannelsCards({
   channels,
   longUnconfirmedZeroConfChannels,
 }: ChannelsCardsProps) {
+  const { t } = useTranslation("channels");
   if (!channels?.length) {
     return null;
   }
@@ -38,7 +40,7 @@ export function ChannelsCards({
   return (
     <Card className="lg:hidden">
       <CardHeader className="w-full pb-2 text-2xl font-semibold">
-        Channels
+        {t("channels.title")}
       </CardHeader>
       <CardContent>
         {channels
@@ -79,6 +81,8 @@ function ChannelCard({
   const alias = node?.alias || "Unknown";
   const capacity = channel.localBalance + channel.remoteBalance;
 
+  const { t } = useTranslation("channels");
+
   return (
     <>
       {addSeparator && <Separator className="mt-6 mb-2" />}
@@ -98,19 +102,19 @@ function ChannelCard({
         </CardHeader>
         <CardDescription className="w-full flex flex-col gap-4">
           <div className="flex w-full justify-between items-center">
-            <p className="text-muted-foreground font-medium">Status</p>
+            <p className="text-muted-foreground font-medium">{t("channels.status.active", "Status")}</p>
             {channel.status == "online" ? (
               unconfirmedChannel ? (
                 <Badge variant="outline" title={unconfirmedChannel.message}>
-                  Unconfirmed
+                  {t("channels.status.pending", "Unconfirmed")}
                 </Badge>
               ) : (
-                <Badge variant="positive">Online</Badge>
+                <Badge variant="positive">{t("channels.status.online", "Online")}</Badge>
               )
             ) : channel.status == "opening" ? (
-              <Badge variant="outline">Opening</Badge>
+              <Badge variant="outline">{t("channels.status.opening", "Opening")}</Badge>
             ) : (
-              <Badge variant="warning">Offline</Badge>
+              <Badge variant="warning">{t("channels.status.offline", "Offline")}</Badge>
             )}
           </div>
           <div className="flex w-full justify-between items-center">
@@ -139,7 +143,7 @@ function ChannelCard({
               <Tooltip>
                 <TooltipTrigger>
                   <div className="flex flex-row gap-1 items-center text-muted-foreground">
-                    Capacity
+                    {t("channels.capacity", "Capacity")}
                     <InfoIcon className="h-3 w-3 shrink-0" />
                   </div>
                 </TooltipTrigger>
@@ -194,10 +198,10 @@ function ChannelCard({
           </div>
           <div className="flex justify-between items-center">
             <p className="text-muted-foreground font-medium text-sm">
-              Spending
+              {t("liquidity.outgoing", "Spending")}
             </p>
             <p className="text-muted-foreground font-medium text-sm">
-              Receiving
+              {t("liquidity.incoming", "Receiving")}
             </p>
           </div>
           <div className="flex gap-2 items-center">

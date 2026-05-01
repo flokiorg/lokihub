@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { LanguageSwitcher } from "src/components/LanguageSwitcher";
 import Loading from "src/components/Loading";
 import SettingsHeader from "src/components/SettingsHeader";
 
@@ -30,6 +32,7 @@ import { request } from "src/utils/request";
 
 function Settings() {
   const { theme, darkMode, setTheme, setDarkMode } = useTheme();
+  const { t } = useTranslation("settings");
 
   const [fiatCurrencies, setFiatCurrencies] = useState<[string, string][]>([]);
 
@@ -60,7 +63,7 @@ function Settings() {
       } catch (error) {
         console.error(error);
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        toast.error(`Failed to fetch currencies: ${errorMessage}`);
+        toast.error(t("toasts.currencyFetchFailed", { error: errorMessage }));
       }
     }
 
@@ -71,8 +74,7 @@ function Settings() {
 
   async function updateSettings(
     payload: Record<string, string | boolean>,
-    successMessage: string,
-    errorMessage: string
+    successMessage: string
   ) {
     try {
       await request("/api/settings", {
@@ -86,23 +88,21 @@ function Settings() {
       toast(successMessage);
     } catch (error) {
       console.error(error);
-      handleRequestError(errorMessage, error);
+      handleRequestError(t("toasts.updateFailed"), error);
     }
   }
 
   async function updateCurrency(currency: string) {
     await updateSettings(
       { currency },
-      `Currency set to ${currency}`,
-      "Failed to update currencies"
+      t("toasts.currencyUpdated", { currency })
     );
   }
 
   async function updateFlokicoinDisplayFormat(flokicoinDisplayFormat: string) {
     await updateSettings(
       { flokicoinDisplayFormat },
-      "Flokicoin display format updated",
-      "Failed to update flokicoin display format"
+      t("toasts.formatUpdated")
     );
   }
 
@@ -116,25 +116,25 @@ function Settings() {
   return (
     <>
       <SettingsHeader
-        title="General"
-        description="General Lokihub settings."
+        title={t("title")}
+        description={t("description")}
       />
       <form className="w-full flex flex-col gap-8">
         {/* Theme & Appearance Section */}
         <div className="space-y-4">
-          <h3 className="text-xl font-medium">Appearance</h3>
+          <h3 className="text-xl font-medium">{t("sections.appearance")}</h3>
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="theme">Theme</Label>
+              <Label htmlFor="theme">{t("appearance.theme")}</Label>
               <Select
                 value={theme}
                 onValueChange={(value) => {
                   setTheme(value as Theme);
-                  toast("Theme updated.");
+                  toast(t("toasts.themeUpdated"));
                 }}
               >
                 <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder="Theme" />
+                  <SelectValue placeholder={t("appearance.theme")} />
                 </SelectTrigger>
                 <SelectContent>
                   {Themes.map((theme) => (
@@ -146,21 +146,21 @@ function Settings() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="appearance">Appearance</Label>
+              <Label htmlFor="appearance">{t("appearance.darkMode")}</Label>
               <Select
                 value={darkMode}
                 onValueChange={(value) => {
                   setDarkMode(value as DarkMode);
-                  toast("Appearance updated.");
+                  toast(t("toasts.appearanceUpdated"));
                 }}
               >
                 <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder="Appearance" />
+                  <SelectValue placeholder={t("appearance.darkMode")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="system">System</SelectItem>
-                  <SelectItem value="light">Light</SelectItem>
-                  <SelectItem value="dark">Dark</SelectItem>
+                  <SelectItem value="system">{t("appearance.modes.system")}</SelectItem>
+                  <SelectItem value="light">{t("appearance.modes.light")}</SelectItem>
+                  <SelectItem value="dark">{t("appearance.modes.dark")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -169,20 +169,20 @@ function Settings() {
 
         {/* Units & Currency Section */}
         <div className="space-y-4">
-          <h3 className="text-xl font-medium">Units & Currency</h3>
+          <h3 className="text-xl font-medium">{t("sections.unitsAndCurrency")}</h3>
           <div className="space-y-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="flokicoinDisplayFormat">Display Unit</Label>
+              <Label htmlFor="flokicoinDisplayFormat">{t("units.displayUnit")}</Label>
               <Select
                 value={info.flokicoinDisplayFormat}
                 onValueChange={updateFlokicoinDisplayFormat}
               >
                 <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder="Select a display format" />
+                  <SelectValue placeholder={t("units.displayUnit")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_AUTO}>
-                    Auto
+                    {t("units.auto")}
                   </SelectItem>
                   <SelectItem value={FLOKICOIN_DISPLAY_FORMAT_FLC}>
                     FLC
@@ -194,10 +194,10 @@ function Settings() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="currency">Fiat Currency</Label>
+              <Label htmlFor="currency">{t("units.fiatCurrency")}</Label>
               <Select value={info?.currency} onValueChange={updateCurrency}>
                 <SelectTrigger className="w-full md:w-60">
-                  <SelectValue placeholder="Select a currency" />
+                  <SelectValue placeholder={t("units.fiatCurrency")} />
                 </SelectTrigger>
                 <SelectContent>
                   {fiatCurrencies.map(([code, name]) => (
@@ -208,6 +208,14 @@ function Settings() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </div>
+
+        {/* Language Section */}
+        <div className="space-y-4">
+          <h3 className="text-xl font-medium">{t("sections.language")}</h3>
+          <div className="space-y-4">
+            <LanguageSwitcher />
           </div>
         </div>
 

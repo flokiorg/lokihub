@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader.tsx";
 import { ChannelsCards } from "src/components/channels/ChannelsCards.tsx";
 import { ChannelsTable } from "src/components/channels/ChannelsTable.tsx";
@@ -82,6 +83,7 @@ export default function Channels() {
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances(true);
   const navigate = useNavigate();
+  const { t } = useTranslation("channels");
   const [longUnconfirmedZeroConfChannels, setLongUnconfirmedZeroConfChannels] =
     React.useState<LongUnconfirmedZeroConfChannel[]>([]);
 
@@ -149,7 +151,7 @@ export default function Channels() {
   return (
     <>
       <AppHeader
-        title="Node"
+        title={t("title")}
         contentRight={
           hasChannelManagement && (
             <div className="flex gap-3 items-center justify-center">
@@ -207,7 +209,7 @@ export default function Channels() {
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>On-Chain</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("menu.onchain")}</DropdownMenuLabel>
                     <DropdownMenuItem asChild>
                       <Link to="/channels/onchain/deposit-flokicoin">
                         Deposit
@@ -253,7 +255,7 @@ export default function Channels() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>History</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("menu.history")}</DropdownMenuLabel>
                     <DropdownMenuItem asChild>
                       <Link to="/channels/history">
                         Liquidity Orders
@@ -262,7 +264,7 @@ export default function Channels() {
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>Management</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("menu.management")}</DropdownMenuLabel>
                     <DropdownMenuItem>
                       <Link className="w-full" to="/peers">
                         Connected Peers
@@ -296,7 +298,7 @@ export default function Channels() {
                 Swap
               </LinkButton>
               )}
-              <LinkButton to="/channels/outgoing">Open Channel</LinkButton>
+              <LinkButton to="/channels/outgoing">{t("channels.open")}</LinkButton>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -327,7 +329,7 @@ export default function Channels() {
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>Node health: {nodeHealth}%</TooltipContent>
+                  <TooltipContent>{t("channels.nodeHealth.tooltip", { percent: nodeHealth })}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -565,7 +567,7 @@ export default function Channels() {
             balances.onchain.pendingBalancesFromChannelClosures > 0 && (
               <Alert>
                 <HourglassIcon />
-                <AlertTitle>Pending Closed Channels</AlertTitle>
+                <AlertTitle>{t("channels.pendingClosed")}</AlertTitle>
                 <AlertDescription className="block">
                   You have{" "}
                   <FormattedFlokicoinAmount

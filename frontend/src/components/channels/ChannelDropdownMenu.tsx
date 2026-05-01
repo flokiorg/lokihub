@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { CloseChannelDialogContent } from "src/components/CloseChannelDialogContent";
 import ExternalLink from "src/components/ExternalLink";
 
@@ -36,6 +37,7 @@ export function ChannelDropdownMenu({
 }: ChannelDropdownMenuProps) {
   const { data: info } = useInfo();
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation("channels");
   const [dialog, setDialog] = React.useState<
     "closeChannel" | "routingFee"
   >();
@@ -70,7 +72,7 @@ export function ChannelDropdownMenu({
               to={`${info?.mempoolUrl}/tx/${channel.fundingTxId}#flow=&vout=${channel.fundingTxVout}`}
             >
               <ExternalLinkIcon />
-              View Funding Transaction
+              {t("channels.dropdown.viewFunding", "View Funding Transaction")}
             </ExternalLink>
           </DropdownMenuItem>
           <DropdownMenuItem>
@@ -79,21 +81,21 @@ export function ChannelDropdownMenu({
               to={`${info?.mempoolUrl}/lightning/node/${channel.remotePubkey}`}
             >
               <ExternalLinkIcon />
-              View Node on {info?.mempoolUrl ? new URL(info.mempoolUrl).hostname : "Explorer"}
+              {t("channels.dropdown.viewNode", "View Node on {{explorer}}", { explorer: info?.mempoolUrl ? new URL(info.mempoolUrl).hostname : "Explorer" })}
             </ExternalLink>
           </DropdownMenuItem>
           {channel.public && (
             <AlertDialogTrigger asChild>
               <DropdownMenuItem onClick={() => setDialog("routingFee")}>
                 <HandCoinsIcon />
-                Set Routing Fee
+                {t("channels.dropdown.setRoutingFee", "Set Routing Fee")}
               </DropdownMenuItem>
             </AlertDialogTrigger>
           )}
           <AlertDialogTrigger asChild>
             <DropdownMenuItem onClick={() => setDialog("closeChannel")}>
               <Trash2Icon className="text-destructive" />
-              Close Channel
+              {t("channels.close", "Close Channel")}
             </DropdownMenuItem>
           </AlertDialogTrigger>
         </DropdownMenuContent>

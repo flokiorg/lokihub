@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
+import { useTranslation } from "react-i18next";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
 import { Button } from "src/components/ui/button";
@@ -69,12 +70,13 @@ import { request } from "src/utils/request";
 
 export function CurrentChannelOrder() {
   const order = useChannelOrderStore((store) => store.order);
+  const { t } = useTranslation("channels");
   if (!order) {
     return (
       <p>
-        No pending channel order.{" "}
+        {t("orderChannel.noPending", "No pending channel order.")}{" "}
         <Link to="/channels" className="underline">
-          Return to channels page
+          {t("orderChannel.return", "Return to channels page")}
         </Link>
       </p>
     );
@@ -114,23 +116,24 @@ function ChannelOrderInternal({ order }: { order: NewChannelOrder }) {
 }
 
 function Success() {
+  const { t } = useTranslation("channels");
+  const { t: tc } = useTranslation("common");
   return (
     <div className="flex flex-col justify-center gap-5 p-5 max-w-md items-stretch">
       <TwoColumnLayoutHeader
-        title="Channel Opened"
-        description="Your new lightning channel is ready to use"
+        title={t("orderChannel.openedTitle", "Channel Opened")}
+        description={t("orderChannel.openedDesc", "Your new lightning channel is ready to use")}
       />
 
       <p>
-        Congratulations! Your channel is active and can be used to send and
-        receive payments.
+        {t("orderChannel.successMsg", "Congratulations! Your channel is active and can be used to send and receive payments.")}
       </p>
       <p>
-        To ensure you can both send and receive, make sure to balance your channel's liquidity.
+        {t("orderChannel.balanceMsg", "To ensure you can both send and receive, make sure to balance your channel's liquidity.")}
       </p>
 
       <LinkButton to="/home" className="flex justify-center mt-8">
-        Go to your dashboard
+        {tc("actions.goHome")}
       </LinkButton>
     </div>
   );
@@ -190,19 +193,20 @@ function PayFlokicoinChannelOrder({ order }: { order: NewChannelOrder }) {
 }
 
 function PayFlokicoinChannelOrderWaitingDepositConfirmation() {
+  const { t } = useTranslation("channels");
   return (
     <>
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-row items-center gap-2">
-            Flokicoin deposited
+            {t("orderChannel.deposited", "Flokicoin deposited")}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2">
-          <Loading /> Waiting for one block confirmation
+          <Loading /> {t("orderChannel.waitingConf", "Waiting for one block confirmation")}
         </CardContent>
         <CardFooter className="text-muted-foreground">
-          estimated time: 1 minute
+          {t("orderChannel.estTime", "estimated time: 1 minute")}
         </CardFooter>
       </Card>
     </>
@@ -210,6 +214,7 @@ function PayFlokicoinChannelOrderWaitingDepositConfirmation() {
 }
 
 function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
+  const { t } = useTranslation("channels");
   if (order.paymentMethod !== "onchain") {
     throw new Error("incorrect payment method");
   }
@@ -267,26 +272,25 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
   return (
     <div className="grid gap-5">
       <AppHeader
-        title="Deposit flokicoin"
-        description="You don't have enough Flokicoin to open your intended channel"
+        title={t("onchain.depositTitle")}
+        description={t("orderChannel.notEnough", "You don't have enough Flokicoin to open your intended channel")}
       />
       <div className="grid gap-5 max-w-lg">
         <div className="grid gap-1.5">
-          <Label htmlFor="text">On-Chain Address</Label>
+          <Label htmlFor="text">{t("onchain.addressLabel")}</Label>
           <p className="text-xs slashed-zero">
-            You currently have{" "}
+            {t("orderChannel.currentlyHave", "You currently have")}{" "}
             <span className="font-semibold sensitive">
               <FormattedFlokicoinAmount amount={balances.onchain.total * 1000} />
             </span>
-            . We recommend depositing an additional amount of{" "}
+            . {t("orderChannel.recommendDeposit", "We recommend depositing an additional amount of")}{" "}
             <span className="font-semibold">
               <FormattedFlokicoinAmount amount={recommendedAmount * 1000} />
             </span>{" "}
-            to open this channel.
+            {t("orderChannel.toOpen", "to open this channel.")}
           </p>
           <p className="text-xs text-muted-foreground">
-            This amount includes cost for the channel opening and potential
-            channel onchain reserves.
+            {t("orderChannel.includesCost", "This amount includes cost for the channel opening and potential channel onchain reserves.")}
           </p>
           <div className="flex flex-row gap-2 items-center">
             <Input
@@ -312,9 +316,9 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Deposit flokicoin</DialogTitle>
+                  <DialogTitle>{t("onchain.depositTitle")}</DialogTitle>
                   <DialogDescription>
-                    Scan this QR code with your wallet to send funds.
+                    {t("orderChannel.scanQr", "Scan this QR code with your wallet to send funds.")}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-row justify-center p-3">
@@ -337,7 +341,7 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
                     {!loadingAddress && <RefreshCwIcon className="size-4" />}
                   </LoadingButton>
                 </TooltipTrigger>
-                <TooltipContent>Generate a new address</TooltipContent>
+                <TooltipContent>{t("onchain.generateNew")}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -346,16 +350,15 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-row items-center gap-2">
-              <Loading /> Waiting for your transaction
+              <Loading /> {t("orderChannel.waitingTx", "Waiting for your transaction")}
             </CardTitle>
             <CardDescription>
-              Send a flokicoin transaction to the address provided above. You'll
-              be redirected as soon as the transaction is seen in the mempool.
+              {t("orderChannel.sendFloki", "Send a flokicoin transaction to the address provided above. You'll be redirected as soon as the transaction is seen in the mempool.")}
             </CardDescription>
           </CardHeader>
           {unspentAmount > 0 && (
             <CardContent className="slashed-zero">
-              <FormattedFlokicoinAmount amount={unspentAmount * 1000} /> deposited
+              <FormattedFlokicoinAmount amount={unspentAmount * 1000} /> {t("orderChannel.depositedAmount", "deposited")}
             </CardContent>
           )}
         </Card>
@@ -545,16 +548,19 @@ function useWaitForNewChannel() {
 }
 
 function PaidLightningChannelOrder() {
+  const { t } = useTranslation("channels");
   useWaitForNewChannel();
 
   return (
     <div className="flex w-full h-full gap-2 items-center justify-center">
-      <Loading /> <p>Waiting for channel to be opened...</p>
+      <Loading /> <p>{t("orderChannel.waitingChannel", "Waiting for channel to be opened...")}</p>
     </div>
   );
 }
 
 function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
+  const { t } = useTranslation("channels");
+  const { t: tc } = useTranslation("common");
   if (order.paymentMethod !== "lightning") {
     throw new Error("incorrect payment method");
   }
@@ -635,11 +641,11 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
   return (
     <div className="flex flex-col gap-5">
       <AppHeader
-        title="Review Channel Purchase"
+        title={t("orderChannel.reviewTitle", "Review Channel Purchase")}
         description={
           lspOrderResponse
-            ? "Complete Payment to open a channel to your node"
-            : "Please wait, loading..."
+            ? t("orderChannel.reviewDesc", "Complete Payment to open a channel to your node")
+            : tc("loading", "Please wait, loading...")
         }
       />
       {!lspOrderResponse?.invoice && <Loading />}
@@ -653,7 +659,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                   {lspOrderResponse.outgoingLiquidity > 0 && (
                     <TableRow>
                       <TableCell className="font-medium p-3">
-                        Spending Balance
+                        {t("orderChannel.spendingBalance", "Spending Balance")}
                       </TableCell>
                       <TableCell className="text-right p-3">
                         <FormattedFlokicoinAmount
@@ -665,7 +671,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                   {lspOrderResponse.incomingLiquidity > 0 && (
                     <TableRow>
                       <TableCell className="font-medium p-3">
-                        Incoming Liquidity
+                        {t("orderChannel.incomingLiquidity", "Incoming Liquidity")}
                       </TableCell>
                       <TableCell className="text-right p-3">
                         <div className="flex flex-col items-end">
@@ -682,7 +688,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                   )}
                   <TableRow>
                     <TableCell className="font-medium p-3">
-                      Amount to pay
+                      {t("orderChannel.amountToPay", "Amount to pay")}
                     </TableCell>
                     <TableCell className="font-semibold text-right p-3">
                       <div className="flex flex-col items-end">
@@ -701,8 +707,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
             </div>
             <div className="flex justify-center w-full -mb-5">
               <p className="text-center text-xs text-muted-foreground max-w-sm">
-                By proceeding, you consent the channel opens immediately and
-                that you lose the right to revoke once it is open.
+                {t("orderChannel.consentMsg", "By proceeding, you consent the channel opens immediately and that you lose the right to revoke once it is open.")}
               </p>
             </div>
             <>
@@ -740,7 +745,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                       setPaying(false);
                     }}
                   >
-                    Pay and open channel
+                    {tc("actions.payAndOpen", "Pay and open channel")}
                   </LoadingButton>
                   {!payExternally && (
                     <Button
@@ -749,7 +754,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                       className="text-muted-foreground text-xs"
                       onClick={() => setPayExternally(true)}
                     >
-                      Pay with another wallet
+                      {tc("actions.payExternally", "Pay with another wallet")}
                     </Button>
                   )}
                 </>
@@ -764,14 +769,14 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
               <div className="flex-1 flex flex-col justify-end items-center gap-4">
                 <Separator className="my-16" />
                 <p className="text-sm text-muted-foreground text-center">
-                  Other options
+                  {t("orderChannel.otherOptions", "Other options")}
                 </p>
                 <LinkButton
                   to="/channels/outgoing"
                   variant="secondary"
                   className="w-full"
                 >
-                  Increase Spending Balance
+                  {t("orderChannel.increaseSpending", "Increase Spending Balance")}
                 </LinkButton>
               </div>
             </>

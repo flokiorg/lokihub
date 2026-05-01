@@ -1,5 +1,6 @@
 import { History, InfoIcon, Zap } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -43,6 +44,7 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 
 export default function OrderChannel() {
+  const { t } = useTranslation("channels");
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
   const [selectedLSP, setSelectedLSP] = useState<string>("");
@@ -266,12 +268,12 @@ export default function OrderChannel() {
     <div className="flex flex-col gap-5">
       {!paymentInvoice && (
         <AppHeader
-          title="Increase Inbound Liquidity"
-          description="Order a channel from your LSP to increase your receiving capacity"
+          title={t("orderChannel.title", "Increase Inbound Liquidity")}
+          description={t("orderChannel.description", "Order a channel from your LSP to increase your receiving capacity")}
           contentRight={
             <LinkButton to="/channels/history" variant="secondary" size="sm" className="hidden sm:flex">
               <History className="w-4 h-4 mr-2" />
-              History
+              {t("menu.history")}
             </LinkButton>
           }
         />
@@ -285,7 +287,7 @@ export default function OrderChannel() {
                 <LightningNetworkLight className="w-full dark:hidden" />
                 
                 <p className="text-muted-foreground">
-                  Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.
+                  {t("orderChannel.info", "Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.")}
                 </p>
 
                 <Alert className="bg-muted/50">
@@ -312,7 +314,7 @@ export default function OrderChannel() {
                             <TooltipTrigger type="button">
                               <div className="flex flex-row gap-2 items-center justify-start text-sm">
                                 <Label htmlFor="amount">
-                                  Increase inbound liquidity ({unit()})
+                                  {t("orderChannel.increaseInboundLabel", "Increase inbound liquidity")} ({unit()})
                                 </Label>
                                 <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                               </div>
@@ -337,7 +339,7 @@ export default function OrderChannel() {
                         {/* Helper text for limits or balance if needed */}
                           {lsps1Info && (
                                 <div className="text-muted-foreground text-sm sensitive slashed-zero">
-                                  Order Range:{" "}
+                                  {t("orderChannel.orderRange", "Order Range:")}{" "}
                                   <FormattedFlokicoinAmount amount={Number(lsps1Info.min_initial_lsp_balance_loki) * 1000} />
                                   {" - "}
                                   <FormattedFlokicoinAmount amount={Number(lsps1Info.max_initial_lsp_balance_loki) * 1000} />
@@ -447,7 +449,7 @@ export default function OrderChannel() {
                             disabled={!selectedLSP || !amountDisplay || !!validationError}
                         >
                             <Zap className="mr-2 h-4 w-4" />
-                            Order Channel
+                            {t("orderChannel.orderBtn", "Order Channel")}
                         </LoadingButton>
                     </div>
                     <div className="flex justify-center mt-2">
@@ -464,8 +466,8 @@ export default function OrderChannel() {
         ) : isPaid ? (
             <div className="md:max-w-md w-full">
                 <AppHeader
-                    title="Payment Received!"
-                    description="Your channel is being opened"
+                    title={t("onchain.received", "Payment Received!")}
+                    description={t("orderChannel.opening", "Your channel is being opened")}
                 />
                 <Card className="mt-5">
                     <CardContent className="flex flex-col items-center gap-6 pt-6">
@@ -482,7 +484,7 @@ export default function OrderChannel() {
                             </p>
                         </div>
                         <LinkButton to="/channels/history" className="w-full">
-                            View Order History
+                            {t("orderHistory.title", "View Order History")}
                         </LinkButton>
                     </CardContent>
                 </Card>
@@ -490,8 +492,8 @@ export default function OrderChannel() {
         ) : (
             <div className="md:max-w-md w-full">
                 <AppHeader
-                    title="Review Channel Purchase"
-                    description="Complete Payment to open a channel to your node"
+                    title={t("orderChannel.reviewTitle", "Review Channel Purchase")}
+                    description={t("orderChannel.reviewDesc", "Complete Payment to open a channel to your node")}
                 />
                 <Card className="mt-5">
                     <div className="border-b">
