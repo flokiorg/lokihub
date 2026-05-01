@@ -10,6 +10,7 @@ import {
     WalletIcon,
 } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 
@@ -42,6 +43,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
+  const { t } = useTranslation("common");
 
   const _isHttpMode = isHttpMode();
 
@@ -68,22 +70,22 @@ export function AppSidebar() {
   const data = {
     navMain: [
       {
-        title: "Home",
+        title: t("nav.home"),
         url: "/home",
         icon: HomeIcon,
       },
       {
-        title: "Wallet",
+        title: t("nav.wallet"),
         url: "/wallet",
         icon: WalletIcon,
       },
       {
-        title: "Sub-wallets",
+        title: t("nav.subWallets"),
         url: "/sub-wallets",
         icon: SquareStack,
       },
       {
-        title: "Connections",
+        title: t("nav.connections"),
         url: "/apps",
         icon: Plug2Icon,
       },
@@ -92,14 +94,14 @@ export function AppSidebar() {
       ...(hasChannelManagement
         ? [
             {
-              title: "Node",
+              title: t("nav.node"),
               url: "/channels",
               icon: BoxIcon,
             },
           ]
         : []),
       {
-        title: "Settings",
+        title: t("nav.settings"),
         url: "/settings",
         icon: Settings,
       },
@@ -176,6 +178,7 @@ export function NavSecondary({
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   const { setOpenMobile } = useSidebar();
   const location = useLocation();
+  const { t } = useTranslation("common");
 
   return (
     <SidebarGroup {...props}>
@@ -204,14 +207,14 @@ export function NavSecondary({
             <SidebarMenuButton asChild>
               <Link to="/help" onClick={() => setOpenMobile(false)}>
                 <CircleHelp className="h-4 w-4" />
-                <span>Help</span>
+                <span>{t("nav.help")}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={logout}>
               <LogOut />
-              <span>Log out</span>
+              <span>{t("nav.logout")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

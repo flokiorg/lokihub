@@ -1,5 +1,6 @@
 import { RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
     ServiceConfigForm,
@@ -21,6 +22,7 @@ type GlobalErrorProps = {
 };
 
 export function GlobalError({ message }: GlobalErrorProps) {
+  const { t } = useTranslation("common");
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   
@@ -73,7 +75,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
         })
         .catch((e) => {
           console.error("Failed to fetch info", e);
-          toast.error("Failed to load current configuration");
+          toast.error(t("criticalError.failedToLoad"));
         })
         .finally(() => {
           setLoadingConfig(false);
@@ -114,11 +116,11 @@ export function GlobalError({ message }: GlobalErrorProps) {
             }),
         });
         
-        toast.success("Configuration updated. Reloading...");
+        toast.success(t("criticalError.configUpdated"));
         setTimeout(() => window.location.reload(), 1000);
       } catch (error) {
           console.error(error);
-          toast.error("Failed to update configuration");
+          toast.error(t("criticalError.failedToUpdate"));
       } finally {
           setLoading(false);
       }
@@ -128,11 +130,11 @@ export function GlobalError({ message }: GlobalErrorProps) {
     <div className="flex items-center justify-center min-h-screen p-4 bg-background overflow-y-auto">
       <Card className="w-full max-w-md my-8">
         <CardHeader>
-          <CardTitle className="text-destructive">Critical Error</CardTitle>
+          <CardTitle className="text-destructive">{t("criticalError.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
-            Something went wrong and Lokihub cannot continue.
+            {t("criticalError.description")}
           </p>
           <div className="p-3 bg-muted rounded-md font-mono text-sm break-all max-h-40 overflow-y-auto">
             {message}
@@ -144,13 +146,13 @@ export function GlobalError({ message }: GlobalErrorProps) {
               onClick={() => setShowConfig(!showConfig)}
               className="w-full"
             >
-              {showConfig ? "Hide Configuration" : "Update Configuration"}
+              {showConfig ? t("criticalError.hideConfig") : t("criticalError.updateConfig")}
             </Button>
           </div>
 
           {showConfig && (
             <div className="space-y-3 pt-2">
-              {loadingConfig && <div className="text-sm text-muted-foreground">Loading configuration...</div>}
+              {loadingConfig && <div className="text-sm text-muted-foreground">{t("criticalError.loadingConfig")}</div>}
               
               <ServiceConfigForm
                   state={config}
@@ -168,7 +170,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
 
               <Button onClick={saveConfiguration} disabled={loading} className="w-full mt-4">
                 {loading ? <RotateCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {loading ? "Saving..." : "Save & Reload App"}
+                {loading ? t("actions.saving") : t("criticalError.saveReload")}
               </Button>
             </div>
           )}
@@ -177,7 +179,7 @@ export function GlobalError({ message }: GlobalErrorProps) {
           {!showConfig && (
             <Button onClick={() => window.location.reload()}>
               <RotateCw className="w-4 h-4 mr-2" />
-              Reload App
+              {t("criticalError.reloadApp")}
             </Button>
           )}
         </CardFooter>

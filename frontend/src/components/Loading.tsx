@@ -1,4 +1,5 @@
 import { Loader2Icon, LoaderIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "src/lib/utils";
 
 function Loading({
@@ -8,6 +9,7 @@ function Loading({
   className?: string;
   variant?: "loader2" | "loader";
 }) {
+  const { t } = useTranslation("common");
   const Component = variant === "loader2" ? Loader2Icon : LoaderIcon;
 
   return (
@@ -19,7 +21,7 @@ function Loading({
           className
         )}
       >
-        <span className="sr-only">Loading...</span>
+        <span className="sr-only">{t("loading")}</span>
       </Component>
     </>
   );

@@ -1,10 +1,9 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { buttonVariants } from "../ui/buttonVariants";
-
 import { useInfo } from "src/hooks/useInfo";
-
 import { PowerIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -31,6 +30,7 @@ export default function SettingsLayout() {
     hasNodeBackup,
   } = useInfo();
   const navigate = useNavigate();
+  const { t } = useTranslation("settings");
   const [shuttingDown, setShuttingDown] = useState(false);
 
   const shutdown = React.useCallback(async () => {
@@ -46,10 +46,10 @@ export default function SettingsLayout() {
       await refetchInfo();
       setShuttingDown(false);
       navigate("/", { replace: true });
-      toast("Your node has been turned off.");
+      toast(t("shutdown.toast"));
     } catch (error) {
       console.error(error);
-      toast.error("Failed to shutdown node", {
+      toast.error(t("shutdown.failedToast"), {
         description: "" + error,
       });
     }
@@ -58,7 +58,7 @@ export default function SettingsLayout() {
   return (
     <>
       <AppHeader
-        title="Settings"
+        title={t("header.title")}
         breadcrumb={false}
         contentRight={
           <div className="flex items-center gap-4">
@@ -78,18 +78,16 @@ export default function SettingsLayout() {
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    Do you want to turn off your Lokihub?
+                    {t("shutdown.dialogTitle")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will turn off your Lokihub and make your node offline.
-                    You won't be able to send or receive flokicoin until you
-                    unlock it.
+                    {t("shutdown.dialogDesc")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{t("shutdown.cancel")}</AlertDialogCancel>
                   <AlertDialogAction onClick={shutdown}>
-                    Continue
+                    {t("shutdown.confirm")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -101,21 +99,21 @@ export default function SettingsLayout() {
       <div className="flex flex-col space-y-8 lg:flex-row lg:space-x-4 lg:space-y-0 h-full">
         <aside className="flex flex-col justify-between lg:w-1/5">
           <nav className="flex flex-wrap lg:flex-col lg:space-y-1">
-            <MenuItem to="/settings">General</MenuItem>
-            <MenuItem to="/settings/services">Services</MenuItem>
+            <MenuItem to="/settings">{t("nav.general")}</MenuItem>
+            <MenuItem to="/settings/services">{t("nav.services")}</MenuItem>
             {info?.autoUnlockPasswordSupported && (
-              <MenuItem to="/settings/auto-unlock">Auto Unlock</MenuItem>
+              <MenuItem to="/settings/auto-unlock">{t("nav.autoUnlock")}</MenuItem>
             )}
             <MenuItem to="/settings/change-unlock-password">
-              Unlock Password
+              {t("nav.unlockPassword")}
             </MenuItem>
-            {hasMnemonic && <MenuItem to="/settings/backup">Backup</MenuItem>}
+            {hasMnemonic && <MenuItem to="/settings/backup">{t("nav.backup")}</MenuItem>}
             {hasNodeBackup && (
-              <MenuItem to="/settings/node-migrate">Migrate Lokihub</MenuItem>
+              <MenuItem to="/settings/node-migrate">{t("nav.migrate")}</MenuItem>
             )}
-            <MenuItem to="/settings/developer">Developer</MenuItem>
-            <MenuItem to="/settings/debug-tools">Debug Tools</MenuItem>
-            <MenuItem to="/settings/about">About</MenuItem>
+            <MenuItem to="/settings/developer">{t("nav.developer")}</MenuItem>
+            <MenuItem to="/settings/debug-tools">{t("nav.debugTools")}</MenuItem>
+            <MenuItem to="/settings/about">{t("nav.about")}</MenuItem>
           </nav>
         </aside>
         <Separator orientation="vertical" className="hidden lg:block" />
