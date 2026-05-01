@@ -5,6 +5,7 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
@@ -31,6 +32,8 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { MempoolUtxo } from "src/types";
 
 export default function DepositFlokicoin() {
+  const { t } = useTranslation("channels");
+  const { t: tc } = useTranslation("common");
   useSyncWallet();
   const {
     data: onchainAddress,
@@ -76,8 +79,7 @@ export default function DepositFlokicoin() {
   return (
     <div className="grid gap-5">
       <AppHeader
-        title="Deposit Flokicoin to On-Chain Balance"
-        description="Deposit flokicoin to your on-chain address which then can be used to open new lightning channels."
+        title={t("onchain.depositTitle")}
       />
       <MempoolAlert />
       <div className="w-80">
@@ -108,7 +110,7 @@ export default function DepositFlokicoin() {
                   loading={loadingAddress}
                 >
                   {!loadingAddress && <RefreshCwIcon />}
-                  Change
+                  {tc("actions.update")}
                 </LoadingButton>
                 <Button
                   variant="secondary"
@@ -118,7 +120,7 @@ export default function DepositFlokicoin() {
                   }}
                 >
                   <CopyIcon />
-                  Copy
+                  {tc("actions.copy")}
                 </Button>
               </div>
             </CardContent>
@@ -137,11 +139,12 @@ function DepositPending({
   txId: string;
 }) {
   const { data: info } = useInfo();
+  const { t } = useTranslation("channels");
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">Awaiting Confirmation</CardTitle>
+        <CardTitle className="text-center">{t("onchain.awaitingConfirm", "Awaiting Confirmation")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
         <LottieLoading size={288} />
@@ -159,7 +162,7 @@ function DepositPending({
             variant="outline"
             className="flex items-center mt-2"
           >
-            View on Flokicoin Explorer 
+            {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
             <ExternalLinkIcon className="size-4 ml-2" />
           </ExternalLinkButton>
         </div>
@@ -170,12 +173,13 @@ function DepositPending({
 
 function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
   const { data: info } = useInfo();
+  const { t } = useTranslation("channels");
 
   return (
     <>
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="text-center">Payment Received!</CardTitle>
+          <CardTitle className="text-center">{t("onchain.received", "Payment Received!")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
           <CircleCheckIcon className="w-72 h-72 p-2" />
@@ -191,14 +195,14 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
               variant="outline"
               className="flex items-center mt-2"
             >
-              View on Flokicoin Explorer 
+              {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
               <ExternalLinkIcon className="size-4 ml-2" />
             </ExternalLinkButton>
           </div>
         </CardContent>
       </Card>
       <LinkButton to="/channels" className="mt-4 w-full">
-        Back To Node
+        {t("onchain.backToNode", "Back To Node")}
       </LinkButton>
     </>
   );

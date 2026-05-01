@@ -4,6 +4,7 @@ import { address, networks } from "flokicoinjs-lib";
 import { ClipboardPasteIcon } from "lucide-react";
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
@@ -27,6 +28,8 @@ export default function Send() {
   const { data: balances } = useBalances();
   const { data: channels } = useChannels();
   const navigate = useNavigate();
+  const { t } = useTranslation("wallet");
+  const { t: tc } = useTranslation("common");
 
   const [recipient, setRecipient] = React.useState("");
   const [isLoading, setLoading] = React.useState(false);
@@ -93,11 +96,11 @@ export default function Send() {
 
   return (
     <div className="grid gap-4">
-      <AppHeader title="Send" />
+      <AppHeader title={t("send.title")} />
       <div className="w-full md:max-w-lg">
         <form onSubmit={onSubmit} className="grid gap-6">
           <div className="grid gap-2">
-            <Label htmlFor="recipient">Recipient</Label>
+            <Label htmlFor="recipient">{t("send.destination")}</Label>
             <div className="flex gap-2">
               <Input
                 id="recipient"
@@ -125,7 +128,7 @@ export default function Send() {
             disabled={!recipient}
             className="flex-1"
           >
-            Continue
+            {tc("actions.continue")}
           </LoadingButton>
         </form>
       </div>

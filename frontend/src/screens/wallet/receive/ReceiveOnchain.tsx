@@ -8,11 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import Tick from "src/assets/illustrations/tick.svg?react";
 import AppHeader from "src/components/AppHeader";
-// ... (omitting lines to shorten context if possible, but for replace_file_content I need exact match or chunk)
-// Wait, I should do two chunks if they are far apart.
-// StartLine: 8 for import
-// StartLine: 185 for usage.
-// I will use multi_replace.
+import { useTranslation } from "react-i18next";
 
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
@@ -38,9 +34,10 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { MempoolUtxo } from "src/types";
 
 export default function ReceiveOnchain() {
+  const { t } = useTranslation("wallet");
   return (
     <div className="grid gap-5">
-      <AppHeader title="Receive On-chain" />
+      <AppHeader title={t("receive.onchain.title")} />
       <div className="w-full max-w-lg grid gap-5">
         <MempoolAlert />
         <ReceiveToOnchain />
@@ -50,6 +47,8 @@ export default function ReceiveOnchain() {
 }
 
 function ReceiveToOnchain() {
+  const { t } = useTranslation("wallet");
+  const { t: tc } = useTranslation("common");
   const { data: onchainAddress, getNewAddress } = useOnchainAddress();
   const { data: mempoolAddressUtxos } = useMempoolApi<MempoolUtxo[]>(
     onchainAddress ? `/address/${onchainAddress}/utxo` : undefined,
@@ -96,7 +95,7 @@ function ReceiveToOnchain() {
           <CardHeader>
             <CardTitle className="flex items-center justify-center gap-2">
               <Loading className="w-4 h-4" />
-              Waiting for Payment...
+              {t("receive.onchain.waiting")}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-6">
@@ -120,7 +119,7 @@ function ReceiveToOnchain() {
               variant="secondary"
             >
               <CopyIcon className="w-4 h-4 mr-2" />
-              Copy Address
+              {tc("actions.copy")}
             </Button>
             <Button
               className="w-full"
@@ -128,7 +127,7 @@ function ReceiveToOnchain() {
               onClick={getNewAddress}
             >
               <RefreshCwIcon className="h-4 w-4 shrink-0 mr-2" />
-              New Address
+              {t("receive.onchain.newAddress")}
             </Button>
           </CardFooter>
         </Card>
@@ -145,13 +144,14 @@ function DepositPending({
   txId: string;
 }) {
   const { data: info } = useInfo();
+  const { t } = useTranslation("wallet");
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center justify-center gap-2">
           <Loading className="w-4 h-4" />
-          Waiting for On-chain Confirmation...
+          {t("receive.onchain.waitingConfirm")}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
@@ -172,7 +172,7 @@ function DepositPending({
           className="w-full"
         >
           <ExternalLinkIcon className="w-4 h-4 mr-2" />
-          View on Flokicoin Explorer 
+          {t("receive.onchain.viewExplorer")}
         </ExternalLinkButton>
       </CardFooter>
     </Card>
@@ -181,11 +181,12 @@ function DepositPending({
 
 function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
   const { data: info } = useInfo();
+  const { t } = useTranslation("wallet");
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">Transaction Received!</CardTitle>
+        <CardTitle className="text-center">{t("receive.onchain.received")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6">
         <Tick className="w-48" />
@@ -203,15 +204,15 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
           className="w-full"
         >
           <ExternalLinkIcon className="w-4 h-4 mr-2" />
-          View on Flokicoin Explorer 
+          {t("receive.onchain.viewExplorer")}
         </ExternalLinkButton>
         <LinkButton to="/wallet/receive/onchain" variant="outline" className="w-full">
           <HandCoinsIcon className="w-4 h-4 mr-2" />
-          Receive Another Payment
+          {t("receive.onchain.receiveAnother")}
         </LinkButton>
         <LinkButton to="/wallet" variant="link" className="w-full">
           <ArrowLeftIcon className="w-4 h-4 mr-2" />
-          Back to Wallet
+          {t("receive.onchain.backToWallet")}
         </LinkButton>
       </CardFooter>
     </Card>

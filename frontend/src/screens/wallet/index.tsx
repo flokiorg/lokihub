@@ -8,6 +8,7 @@ import {
     ExternalLinkIcon,
     LightbulbIcon
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import AppHeader from "src/components/AppHeader";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -31,6 +32,7 @@ function Wallet() {
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
   const { data: channels } = useChannels();
+  const { t } = useTranslation("wallet");
 
   if (!info || !balances) {
     return <Loading />;
@@ -39,7 +41,7 @@ function Wallet() {
   return (
     <>
       <AppHeader
-        title="Wallet"
+        title={t("header.title")}
         description=""
         contentRight={
           <>
@@ -49,7 +51,7 @@ function Wallet() {
               className="hidden xl:inline-flex !px-12"
             >
               <ArrowDownIcon />
-              Receive
+              {t("header.receive")}
             </LinkButton>
             <LinkButton
               to="/wallet/send"
@@ -57,7 +59,7 @@ function Wallet() {
               className="hidden xl:inline-flex !px-12"
             >
               <ArrowUpIcon />
-              Send
+              {t("header.send")}
             </LinkButton>
           </>
         }
@@ -70,12 +72,11 @@ function Wallet() {
         ) && (
           <Alert>
             <AlertTriangleIcon className="h-4 w-4" />
-            <AlertTitle>Channel Reserves Unmet</AlertTitle>
+            <AlertTitle>{t("alerts.channelReservesUnmet")}</AlertTitle>
             <AlertDescription>
-              You won't be able to make payments until you fill your channel
-              reserve.{" "}
+              {t("alerts.channelReservesDesc")}{" "}
               <Link to="/channels" className="underline">
-                View channel reserves
+                {t("alerts.viewChannelReserves")}
               </Link>
             </AlertDescription>
           </Alert>
@@ -89,11 +90,11 @@ function Wallet() {
       {hasChannelManagement && !channels?.length && (
         <Alert>
           <AlertTriangleIcon className="h-4 w-4" />
-          <AlertTitle>Open Your First Channel</AlertTitle>
+          <AlertTitle>{t("alerts.openFirstChannel")}</AlertTitle>
           <AlertDescription className="inline">
-            You won't be able to receive or send payments until you{" "}
+            {t("alerts.openFirstChannelDesc")}{" "}
             <Link className="underline" to="/channels/first">
-              open your first channel
+              {t("alerts.openFirstChannelLink")}
             </Link>
             .
           </AlertDescription>
@@ -113,17 +114,17 @@ function Wallet() {
         </div>
         <div className="grid grid-cols-2 items-center gap-3 xl:hidden">
           <LinkButton to="/wallet/receive" size="lg">
-            Receive
+            {t("header.receive")}
           </LinkButton>
           <LinkButton to="/wallet/send" size="lg">
-            Send
+            {t("header.send")}
           </LinkButton>
         </div>
         <div className="flex items-center gap-3">
           {hasChannelManagement && info.enableSwap && (
             <LinkButton to="/wallet/swap" variant="secondary">
               <ArrowDownUpIcon />
-              Swap
+              {t("header.swap")}
             </LinkButton>
           )}
           <div>

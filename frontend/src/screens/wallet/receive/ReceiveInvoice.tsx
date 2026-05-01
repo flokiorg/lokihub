@@ -52,9 +52,11 @@ import { useTransaction } from "src/hooks/useTransaction";
 import { copyToClipboard } from "src/lib/clipboard";
 import { CreateInvoiceRequest, LSPS2BuyRequest, LSPS2BuyResponse, LSPS2GetInfoResponse, LSPS2OpeningFeeParams, Transaction } from "src/types";
 
+import { useTranslation, Trans } from "react-i18next";
 import { request } from "src/utils/request";
 
 export default function ReceiveInvoice() {
+  const { t } = useTranslation(["wallet", "common"]);
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
   const { parseAmount, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
@@ -235,13 +237,13 @@ export default function ReceiveInvoice() {
             const maxPaymentSize = parseInt(jitFeeParams.max_payment_size_mloki);
 
             if (buyLiquidityAmountMloki < minPaymentSize) {
-                toast.error(`Amount too small for JIT payment. Minimum: ${scaleInputAmount(minPaymentSize / 1000, inputUnit)} ${inputUnit}.`);
+                toast.error(t("wallet:receive.amountTooSmall", { amount: scaleInputAmount(minPaymentSize / 1000, inputUnit), unit: inputUnit }));
                 setLoading(false);
                 return;
             }
 
             if (maxPaymentSize > 0 && buyLiquidityAmountMloki > maxPaymentSize) {
-                 toast.error(`Amount too large for JIT payment. Maximum: ${scaleInputAmount(maxPaymentSize / 1000, inputUnit)} ${inputUnit}.`);
+                 toast.error(t("wallet:receive.amountTooLarge", { amount: scaleInputAmount(maxPaymentSize / 1000, inputUnit), unit: inputUnit }));
                  setLoading(false);
                  return;
             }
@@ -253,7 +255,7 @@ export default function ReceiveInvoice() {
 
 
             try {
-                toast("Buying inbound liquidity...");
+                toast(t("wallet:receive.buyingLiquidity"));
                 const buyRes = await request<LSPS2BuyResponse>("/api/lsps2/buy", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -270,8 +272,8 @@ export default function ReceiveInvoice() {
                 }
             } catch (e: any) {
                 console.error("Failed to buy liquidity", e);
-                toast.error("Failed to buy liquidity", {
-                    description: e.message || "Unknown error"
+                toast.error(t("wallet:receive.failedToBuyLiquidity"), {
+                    description: e.message || t("wallet:receive.unknownError")
                 });
                 return;
             }
@@ -301,11 +303,11 @@ export default function ReceiveInvoice() {
         }
         setAmountDisplay("");
         setDescription("");
-        toast("Successfully created invoice");
+        toast.success(t("wallet:receive.successCreated"));
       }
     } catch (e: any) {
-      toast.error("Failed to create invoice", {
-        description: e.message || "Unknown error",
+      toast.error(t("wallet:receive.failedToCreate"), {
+        description: e.message || t("wallet:receive.unknownError"),
       });
       console.error(e);
     } finally {
@@ -321,7 +323,7 @@ export default function ReceiveInvoice() {
 
   return (
     <div className="grid gap-5">
-      <AppHeader title={transaction ? "Lightning Invoice" : "Create Invoice"} />
+      <AppHeader title={transaction ? t("wallet:receive.lightningInvoice") : t("wallet:receive.createInvoice")} />
       <div className="flex flex-col md:flex-row gap-12">
         <div className="w-full md:max-w-lg grid gap-6">
           {hasChannelManagement &&
@@ -337,7 +339,7 @@ export default function ReceiveInvoice() {
                     <CardHeader>
                       <CardTitle className="flex justify-center">
                         <Loading className="size-4 mr-2" />
-                        <p>Waiting for payment</p>
+                        <p>{t("wallet:receive.waiting")}</p>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6">
@@ -362,7 +364,7 @@ export default function ReceiveInvoice() {
                         variant="outline"
                       >
                         <CopyIcon className="w-4 h-4 mr-2" />
-                        Copy Invoice
+                        {t("wallet:receive.copyInvoice")}
                       </Button>
                     </CardFooter>
                   </>
@@ -370,7 +372,7 @@ export default function ReceiveInvoice() {
                   <>
                     <CardHeader>
                       <CardTitle className="text-center">
-                        Payment Received
+                        {t("wallet:receive.paymentReceived")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6">
@@ -399,7 +401,7 @@ export default function ReceiveInvoice() {
                         className="w-full"
                       >
                         <PlusIcon className="w-4 h-4 mr-2" />
-                        Create Another Invoice
+                        {t("wallet:receive.createAnother")}
                       </Button>
                       <LinkButton
                         to="/wallet"
@@ -407,7 +409,7 @@ export default function ReceiveInvoice() {
                         className="w-full"
                       >
                         <ArrowLeftIcon className="w-4 h-4 mr-2" />
-                        Back to Wallet
+                        {t("wallet:receive.backToWallet")}
                       </LinkButton>
                     </CardFooter>
                   </>
@@ -416,14 +418,14 @@ export default function ReceiveInvoice() {
             ) : (
               <form onSubmit={handleSubmit} className="grid gap-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount ({inputUnit})</Label>
+                  <Label htmlFor="amount">{t("common:labels.amount")} ({inputUnit})</Label>
                   <CurrencyInput
                     id="amount"
                     amount={amountDisplay}
                     onAmountChange={(val) => setAmountDisplay(val)}
                     inputUnit={inputUnit}
                     onInputUnitChange={setInputUnit}
-                    placeholder={`Amount in ${inputUnit}...`}
+                    placeholder={t("wallet:receive.amountPlaceholder", { unit: inputUnit })}
                     min={1}
                     autoFocus
                   />
@@ -433,7 +435,7 @@ export default function ReceiveInvoice() {
                      {/* 1. LSP Selection Header */}
                      <div className="flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
                         <div className="grid gap-1.5 flex-1 w-full">
-                            <Label htmlFor="lsp-select">Liquidity Provider</Label>
+                            <Label htmlFor="lsp-select">{t("wallet:receive.liquidityProvider")}</Label>
                             <Select 
                                 value={selectedLspPubkey} 
                                 onValueChange={(val) => {
@@ -443,7 +445,7 @@ export default function ReceiveInvoice() {
                                 }}
                             >
                                 <SelectTrigger id="lsp-select">
-                                    <SelectValue placeholder="Select LSP" />
+                                    <SelectValue placeholder={t("wallet:receive.selectLSP")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {info.lsps.map((lsp) => (
@@ -456,7 +458,7 @@ export default function ReceiveInvoice() {
                        </div>
                        
                        <div className="flex items-center gap-2 pb-1">
-                            <span className="text-sm font-medium">JIT Payment</span>
+                            <span className="text-sm font-medium">{t("wallet:receive.jitPayment")}</span>
                             <Dialog>
                                 <DialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
@@ -465,24 +467,26 @@ export default function ReceiveInvoice() {
                                 </DialogTrigger>
                                 <DialogContent className="max-w-lg">
                                     <DialogHeader>
-                                        <DialogTitle>JIT Payment Explained</DialogTitle>
+                                        <DialogTitle>{t("wallet:receive.jitExplainedTitle")}</DialogTitle>
                                     </DialogHeader>
                                     
                                     <div className="grid gap-4 py-2">
                                         <div className="space-y-3">
                                             <div>
-                                                <h4 className="font-semibold text-sm mb-1">Why is this needed?</h4>
+                                                <h4 className="font-semibold text-sm mb-1">{t("wallet:receive.jitWhyNeededTitle")}</h4>
                                                 <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    Lightning payments require <strong>inbound liquidity</strong> (receiving capacity). 
-                                                    You currently don't have enough capacity to receive this amount directly.
+                                                    <Trans t={t} i18nKey="wallet:receive.jitWhyNeededDesc">
+                                                        Lightning payments require <strong>inbound liquidity</strong> (receiving capacity). You currently don't have enough capacity to receive this amount directly.
+                                                    </Trans>
                                                 </p>
                                             </div>
                                             
                                             <div>
-                                                <h4 className="font-semibold text-sm mb-1">How it works</h4>
+                                                <h4 className="font-semibold text-sm mb-1">{t("wallet:receive.jitHowWorksTitle")}</h4>
                                                 <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    Your LSP will automatically open a new channel <strong>Just-In-Time (JIT)</strong> when the payment arrives. 
-                                                    This ensures your payment succeeds immediately without you needing to manually manage channels.
+                                                    <Trans t={t} i18nKey="wallet:receive.jitHowWorksDesc">
+                                                        Your LSP will automatically open a new channel <strong>Just-In-Time (JIT)</strong> when the payment arrives. This ensures your payment succeeds immediately without you needing to manually manage channels.
+                                                    </Trans>
                                                 </p>
                                             </div>
                                         </div>
@@ -490,40 +494,42 @@ export default function ReceiveInvoice() {
                                         {jitFeeParams && (
                                             <>
                                                 <div className="border-t pt-4">
-                                                    <h4 className="font-semibold text-sm mb-2">Fee Structure</h4>
+                                                    <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.feeStructure")}</h4>
                                                     <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
-                                                        <span className="text-muted-foreground">Minimum Fee:</span>
+                                                        <span className="text-muted-foreground">{t("wallet:receive.minFee")}</span>
                                                         <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? scaleInputAmount(parseInt(jitFeeParams.min_fee_mloki)/1000, inputUnit) : 0} {inputUnit}</span>
 
                                                         
-                                                        <span className="text-muted-foreground">Proportional Rate:</span>
+                                                        <span className="text-muted-foreground">{t("wallet:receive.propRate")}</span>
                                                         <span className="font-medium text-right">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
 
-                                                        <span className="text-muted-foreground">Min :</span>
+                                                        <span className="text-muted-foreground">{t("wallet:receive.min")}</span>
                                                         <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} /></span>
 
-                                                        <span className="text-muted-foreground">Max :</span>
+                                                        <span className="text-muted-foreground">{t("wallet:receive.max")}</span>
                                                         <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} /></span>
                                                         
                                                         <div className="col-span-2 text-xs text-muted-foreground mt-2 border-t pt-2">
-                                                            The fee is the <strong>higher</strong> of the Minimum Fee or the calculated Proportional Fee.
+                                                            <Trans t={t} i18nKey="wallet:receive.feeLogic">
+                                                                The fee is the <strong>higher</strong> of the Minimum Fee or the calculated Proportional Fee.
+                                                            </Trans>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="border-t pt-4">
-                                                    <h4 className="font-semibold text-sm mb-2">Who pays the fee?</h4>
+                                                    <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.whoPays")}</h4>
                                                     <div className="space-y-3">
                                                         <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
-                                                            <span className="text-sm font-medium">Receiver Pays:</span>
+                                                            <span className="text-sm font-medium">{t("wallet:receive.receiverPays")}</span>
                                                             <p className="text-sm text-muted-foreground">
-                                                                (Default) The fee is deducted from the amount you receive.
+                                                                {t("wallet:receive.receiverPaysDesc")}
                                                             </p>
                                                         </div>
                                                         <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
-                                                            <span className="text-sm font-medium">Sender Pays:</span>
+                                                            <span className="text-sm font-medium">{t("wallet:receive.senderPays")}</span>
                                                             <p className="text-sm text-muted-foreground">
-                                                                The fee is added to the invoice total. The sender pays the extra cost.
+                                                                {t("wallet:receive.senderPaysDesc")}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -541,12 +547,12 @@ export default function ReceiveInvoice() {
                         {isFetchingJitParams ? (
                             <div className="flex items-center justify-center p-4 text-sm text-muted-foreground border border-dashed rounded-md">
                                 <Loading className="size-4 mr-2" />
-                                <span>Loading JIT details...</span>
+                                <span>{t("wallet:receive.loadingJit")}</span>
                             </div>
                         ) : jitFeeParams ? (
                             <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-md border">
                                 <div className="flex flex-col gap-1">
-                                    <span className="text-xs text-muted-foreground uppercase">Estimated Fee</span>
+                                    <span className="text-xs text-muted-foreground uppercase">{t("wallet:receive.estimatedFee")}</span>
                                     <div className="text-lg">
                                         <FormattedFlokicoinAmount amount={(() => {
                                           const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
@@ -569,7 +575,7 @@ export default function ReceiveInvoice() {
 
                                 <div className="flex flex-col gap-1 text-right">
                                     <span className="text-xs text-muted-foreground uppercase">
-                                        {senderPaysFee ? "Total to Send" : "You Receive"}
+                                        {senderPaysFee ? t("wallet:receive.totalToSend") : t("wallet:receive.youReceive")}
                                     </span>
                                     <div className="text-lg">
                                         {senderPaysFee ? (
@@ -601,7 +607,7 @@ export default function ReceiveInvoice() {
                         {jitError && (
                             <div className="text-destructive text-sm bg-destructive/10 p-3 rounded-md border border-destructive/20 flex items-center justify-between gap-2">
                                 <span className="flex-1">{jitError}</span>
-                                <Button variant="outline" size="sm" onClick={fetchJitFees}>Retry</Button>
+                                <Button variant="outline" size="sm" onClick={fetchJitFees}>{t("wallet:receive.retry")}</Button>
                             </div>
                         )}
                      </div>
@@ -610,7 +616,7 @@ export default function ReceiveInvoice() {
                      {jitFeeParams && (
                         <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
-                                <span className="opacity-70">Payment Range:</span>
+                                <span className="opacity-70">{t("wallet:receive.paymentRange")}</span>
                                 <div className="flex items-center gap-1.5 text-foreground/90">
                                     <FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} />
                                     <span className="opacity-40">—</span>
@@ -637,19 +643,19 @@ export default function ReceiveInvoice() {
                                 htmlFor="senderPays"
                                     className="text-sm text-foreground cursor-pointer"
                             >
-                                Include fee in invoice (Sender pays)
+                                {t("wallet:receive.includeFee")}
                             </label>
                         </div>
                      )}
                   </div>
                 )}
                 <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">{t("common:labels.description")}</Label>
                   <Input
                     id="description"
                     type="text"
                     value={description}
-                    placeholder="For e.g. who is sending this payment?"
+                    placeholder={t("wallet:receive.descriptionPlaceholder")}
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
@@ -659,7 +665,7 @@ export default function ReceiveInvoice() {
                   type="submit"
                   disabled={!amountDisplay || (needsJit && (!jitFeeParams || !!validationError))}
                 >
-                  Create Invoice
+                  {t("wallet:receive.createInvoice")}
                 </LoadingButton>
                 <div className="grid gap-2 border-t pt-6">
 
@@ -669,7 +675,7 @@ export default function ReceiveInvoice() {
                       className="w-full"
                     >
                       <LinkIcon className="h-4 w-4" />
-                      Receive from On-chain
+                      {t("wallet:receive.receiveOnchain")}
                     </LinkButton>
                 </div>
               </form>
