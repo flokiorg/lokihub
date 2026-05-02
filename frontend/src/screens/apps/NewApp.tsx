@@ -182,7 +182,14 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
     if (requestMethodsSet.has("list_transactions")) {
       scopes.push("list_transactions");
     }
-    if (requestMethodsSet.has("sign_message") && isolatedParam !== "true") {
+    // Only include sign_message if explicitly requested via URL params or if
+    // isolated mode is explicitly disabled — by default we use isolated mode
+    // (which excludes sign_message), making "Isolated App" the default selection.
+    if (
+      requestMethodsSet.has("sign_message") &&
+      isolatedParam !== "true" &&
+      (reqMethodsParam !== "" || isolatedParam === "false")
+    ) {
       scopes.push("sign_message");
     }
     if (notificationTypes.length) {
