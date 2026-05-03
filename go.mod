@@ -29,7 +29,7 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/flokiorg/flnd v0.1.20-beta
+	github.com/flokiorg/flnd v0.1.21-beta
 	github.com/flokiorg/flndecodepay v1.0.0
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/google/uuid v1.6.0
