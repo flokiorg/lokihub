@@ -102,7 +102,7 @@ export default function WithdrawOnchainFunds() {
 
     try {
       setLoading(true);
-      const amountLoki = parseInputAmount(+amountDisplay, inputUnit);
+      const amountLoki = sendAll ? 0 : parseInputAmount(+amountDisplay, inputUnit);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -114,6 +114,7 @@ export default function WithdrawOnchainFunds() {
             toAddress: onchainAddress,
             amount: amountLoki,
             feeRate: +feeRate,
+            sendAll: sendAll,
           }),
         }
       );
@@ -262,7 +263,7 @@ export default function WithdrawOnchainFunds() {
           <>
             {showAdvanced && (
               <div className="grid gap-2">
-                <Label htmlFor="fee-rate">Fee Rate ({inputUnit}/vB)</Label>
+                <Label htmlFor="fee-rate">Fee Rate (loki/vB)</Label>
                 {mempoolError && (
                   <div className="text-muted-foreground text-xs flex gap-1 items-center">
                     <AlertTriangleIcon className="h-3 w-3" />
@@ -335,7 +336,7 @@ export default function WithdrawOnchainFunds() {
                 <div className="mt-2 text-muted-foreground text-sm flex gap-1 items-center justify-center">
                   <InfoIcon className="h-4 w-4" />
                   On-chain payment will be made with{" "}
-                  <span className="font-semibold">{feeRate} {inputUnit}/vB</span> fee
+                  <span className="font-semibold">{feeRate} loki/vB</span> fee
                 </div>
               )}
 
@@ -368,7 +369,7 @@ export default function WithdrawOnchainFunds() {
                           <span className="font-bold slashed-zero">
                             {feeRate}
                           </span>{" "}
-                          {inputUnit}/vB
+                          loki/vB
                         </p>
                       )}
                     </div>

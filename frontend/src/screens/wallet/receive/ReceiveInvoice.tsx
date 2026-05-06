@@ -418,7 +418,7 @@ export default function ReceiveInvoice() {
             ) : (
               <form onSubmit={handleSubmit} className="grid gap-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="amount">{t("common:labels.amount")} ({inputUnit})</Label>
+                  <Label htmlFor="amount">{t("common:labels.amount")}</Label>
                   <CurrencyInput
                     id="amount"
                     amount={amountDisplay}

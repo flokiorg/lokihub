@@ -424,7 +424,7 @@ import { useUnit } from "src/hooks/useUnit";
   
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="amount" className="text-right">
-                    Amount ({unit()})
+                    Amount
                   </Label>
                   <div className="col-span-2">
                     <Input

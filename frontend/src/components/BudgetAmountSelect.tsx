@@ -81,7 +81,7 @@ function BudgetAmountSelect({
       {/* Amount input is always shown unless Unlimited is selected */}
       {!isUnlimited && (
         <div className="grid gap-2 mb-5">
-          <Label htmlFor="budget">Budget amount ({inputUnit})</Label>
+          <Label htmlFor="budget">Budget amount</Label>
           <CurrencyInput
             id="budget"
             amount={scaleInputAmount(value, inputUnit).toString()}

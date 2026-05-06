@@ -79,7 +79,7 @@ export function IsolatedAppDrawDownDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">Amount ({unit()})</Label>
+            <Label htmlFor="amount">Amount</Label>
             <Input
               autoFocus
               id="amount"

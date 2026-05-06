@@ -103,7 +103,7 @@ function ProbeKeysendDialogContent({ apiRequest }: Props) {
         <AlertDialogDescription className="text-start">
           <div>
             <Label htmlFor="amount" className="block mb-2">
-              Enter Amount ({unit()})
+              Enter Amount
             </Label>
             <Input
               id="amount"

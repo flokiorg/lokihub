@@ -201,7 +201,7 @@ function NewChannelInternal({
                 <TooltipTrigger type="button">
                   <div className="flex flex-row gap-2 items-center justify-start text-sm">
                     <Label htmlFor="amount">
-                      {t("increaseCapacity.increaseSpendingLabel", "Increase spending balance")} ({unit()})
+                      {t("increaseCapacity.increaseSpendingLabel", "Increase spending balance")}
                     </Label>
                     <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
