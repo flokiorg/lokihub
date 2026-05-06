@@ -51,7 +51,7 @@ export default function OrderChannel() {
   // Unified loading and error state handling
   const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext(); 
-  const { unit, displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
+  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
   
   const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
   useEffect(() => {
@@ -325,7 +325,7 @@ export default function OrderChannel() {
                             <TooltipTrigger type="button">
                               <div className="flex flex-row gap-2 items-center justify-start text-sm">
                                 <Label htmlFor="amount">
-                                  {t("orderChannel.increaseInboundLabel", "Increase inbound liquidity")} ({unit()})
+                                  {t("orderChannel.increaseInboundLabel", "Increase inbound liquidity")}
                                 </Label>
                                 <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                               </div>
