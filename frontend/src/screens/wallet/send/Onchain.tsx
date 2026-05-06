@@ -343,7 +343,7 @@ function SwapForm({
   const navigate = useNavigate();
   const { data: balances } = useBalances();
   const { data: swapInfo } = useSwapInfo("out");
-  const { unit, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
 
   const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
 
@@ -453,7 +453,7 @@ function SwapForm({
           <p className="text-muted-foreground">On-chain Fee Rate</p>
           <div className="flex items-center gap-2">
             {recommendedFees?.fastestFee ? (
-              <p>{recommendedFees?.fastestFee} {unit()}/vB</p>
+              <p>{recommendedFees?.fastestFee} loki/vB</p>
             ) : (
               <Loading className="w-4 h-4" />
             )}
