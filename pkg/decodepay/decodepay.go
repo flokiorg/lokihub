@@ -29,7 +29,7 @@ type Bolt11 struct {
 
 func Decode(bolt11 string) (*Bolt11, error) {
 	bolt11 = strings.ToLower(bolt11)
-	if !strings.HasPrefix(bolt11, "ln") && !strings.HasPrefix(bolt11, "fln") {
+	if !strings.HasPrefix(bolt11, "ln") {
 		return nil, fmt.Errorf("invalid flokicoin invoice prefix: %s", bolt11)
 	}
 
