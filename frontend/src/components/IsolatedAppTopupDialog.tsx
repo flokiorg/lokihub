@@ -10,8 +10,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "src/components/ui/dialog";
-import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { useApp } from "src/hooks/useApp";
 import { useUnit } from "src/hooks/useUnit";
 import { handleRequestError } from "src/utils/handleRequestError";
@@ -28,14 +28,34 @@ export function IsolatedAppTopupDialog({
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
-  const { unit, parseAmount } = useUnit();
+  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
   const [amountDisplay, setAmountDisplay] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       await request(`/api/transfers`, {
         method: "POST",
         headers: {
@@ -43,7 +63,7 @@ export function IsolatedAppTopupDialog({
         },
         body: JSON.stringify({
           toAppId: appId,
-          amountLoki: parseAmount(+amountDisplay),
+          amountLoki: amountLoki,
         }),
       });
       await reloadApp();
@@ -53,7 +73,7 @@ export function IsolatedAppTopupDialog({
         undefined,
         { revalidate: true }
       );
-      toast(`Successfully increased balance by ${+amountDisplay} ${unit()}`);
+      toast(`Successfully increased balance by ${amountDisplay} ${inputUnit}`);
       reset();
     } catch (error) {
       handleRequestError("Failed to increase sub-wallet balance", error);
@@ -82,14 +102,15 @@ export function IsolatedAppTopupDialog({
           </DialogHeader>
           <div className="grid gap-2 mt-5">
             <Label htmlFor="amount">Amount</Label>
-            <Input
+            <CurrencyInput
               autoFocus
               id="amount"
-              type="number"
+              amount={amountDisplay}
+              onAmountChange={(val) => setAmountDisplay(val)}
+              inputUnit={inputUnit}
+              onInputUnitChange={handleInputUnitChange}
               required
-              step="any"
-              value={amountDisplay}
-              onChange={(e) => setAmountDisplay(e.target.value.trim())}
+              min={scaleInputAmount(1, inputUnit)}
             />
           </div>
           <DialogFooter className="mt-5">

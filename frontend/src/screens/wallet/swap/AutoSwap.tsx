@@ -5,12 +5,13 @@ import {
     MoveRightIcon,
     XCircleIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { Button } from "src/components/ui/button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
@@ -59,7 +60,7 @@ function AutoSwapOutForm() {
   const { mutate } = useAutoSwapsConfig();
   const { data: swapInfo } = useSwapInfo("out");
   const { data: info } = useInfo();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
   const [balanceThresholdDisplay, setBalanceThresholdDisplay] = useState("");
@@ -70,11 +71,36 @@ function AutoSwapOutForm() {
   );
   const [loading, setLoading] = useState(false);
 
+  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
+  useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (balanceThresholdDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(balanceThresholdDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setBalanceThresholdDisplay(newAmount.toString());
+      }
+    }
+    if (swapAmountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setSwapAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const balanceThresholdNum = parseAmount(+balanceThresholdDisplay);
-    const swapAmountNum = parseAmount(+swapAmountDisplay);
+    const balanceThresholdNum = parseInputAmount(parseFloat(balanceThresholdDisplay), inputUnit);
+    const swapAmountNum = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
 
     if (swapAmountNum > balanceThresholdNum) {
       toast.info(
@@ -134,13 +160,11 @@ function AutoSwapOutForm() {
 
       <div className="grid gap-1.5">
         <Label>Spending balance threshold</Label>
-        <Input
-          type="number"
-          placeholder={`Amount in ${unit()}`}
-          value={balanceThresholdDisplay}
-          step="any"
-          min={swapAmountDisplay}
-          onChange={(e) => setBalanceThresholdDisplay(e.target.value)}
+        <CurrencyInput
+          amount={balanceThresholdDisplay}
+          onAmountChange={setBalanceThresholdDisplay}
+          inputUnit={inputUnit}
+          onInputUnitChange={handleInputUnitChange}
           required
         />
         <p className="text-xs text-muted-foreground">
@@ -150,14 +174,12 @@ function AutoSwapOutForm() {
 
       <div className="grid gap-1.5">
         <Label>Swap amount</Label>
-        <Input
-          type="number"
-          placeholder={`Amount in ${unit()}`}
-          value={swapAmountDisplay}
-          step="any"
-          min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 0}
-          max={swapInfo.maxAmount ? scaleAmount(swapInfo.maxAmount) : undefined}
-          onChange={(e) => setSwapAmountDisplay(e.target.value)}
+        <CurrencyInput
+          amount={swapAmountDisplay}
+          onAmountChange={setSwapAmountDisplay}
+          inputUnit={inputUnit}
+          onInputUnitChange={handleInputUnitChange}
+          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 0}
           required
         />
         <p className="text-xs text-muted-foreground">

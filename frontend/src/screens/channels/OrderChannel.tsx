@@ -60,6 +60,17 @@ export default function OrderChannel() {
     else setInputUnit("FLC");
   }, [displayFormat]);
 
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
+
   const flcPresets = [21, 55, 500];
   const lokiPresets = [21000, 500000, 21000000];
 
@@ -331,7 +342,7 @@ export default function OrderChannel() {
                           amount={amountDisplay}
                           onAmountChange={(val) => setAmountDisplay(val)}
                           inputUnit={inputUnit}
-                          onInputUnitChange={setInputUnit}
+                          onInputUnitChange={handleInputUnitChange}
                           min={lsps1Info?.min_initial_lsp_balance_loki ? scaleInputAmount(lsps1Info.min_initial_lsp_balance_loki, inputUnit) : undefined}
                           max={lsps1Info?.max_initial_lsp_balance_loki ? scaleInputAmount(lsps1Info.max_initial_lsp_balance_loki, inputUnit) : undefined}
                         />

@@ -42,7 +42,7 @@ export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { displayFormat, parseInputAmount } = useUnit();
+  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
 
   const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
 
@@ -52,6 +52,16 @@ export default function WithdrawOnchainFunds() {
     else setInputUnit("FLC");
   }, [displayFormat]);
 
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -221,9 +231,9 @@ export default function WithdrawOnchainFunds() {
                   amount={amountDisplay}
                   onAmountChange={(val) => setAmountDisplay(val)}
                   inputUnit={inputUnit}
-                  onInputUnitChange={setInputUnit}
+                  onInputUnitChange={handleInputUnitChange}
                   required
-                  placeholder={`Amount in ${inputUnit}...`}
+                  min={scaleInputAmount(1, inputUnit)}
                 />
               )}
             </div>

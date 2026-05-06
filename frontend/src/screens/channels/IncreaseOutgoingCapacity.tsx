@@ -80,7 +80,7 @@ function NewChannelInternal({
   const { data: balances } = useBalances();
   const { t } = useTranslation("channels");
   const { t: tc } = useTranslation("common");
-  const { unit, displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
+  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
   const navigate = useNavigate();
 
   const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
@@ -89,6 +89,17 @@ function NewChannelInternal({
     else if (displayFormat === "loki") setInputUnit("loki");
     else setInputUnit("FLC");
   }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (order.amount) {
+      const amountLoki = parseInputAmount(parseFloat(order.amount), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmount(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
 
   const flcPresets = [21, 55, 500];
   const lokiPresets = [21000, 500000, 21000000];
@@ -140,7 +151,11 @@ function NewChannelInternal({
         );
       }
 
-      useChannelOrderStore.getState().setOrder(order as NewChannelOrder);
+      const amountLoki = parseInputAmount(parseFloat(order.amount || "0"), inputUnit);
+      useChannelOrderStore.getState().setOrder({
+        ...order,
+        amount: amountLoki.toString(),
+      } as NewChannelOrder);
       setShowConfirmModal(false);
       navigate("/channels/order");
     } catch (error) {
@@ -219,7 +234,7 @@ function NewChannelInternal({
               amount={order.amount || ""}
               onAmountChange={(val) => setAmount(val)}
               inputUnit={inputUnit}
-              onInputUnitChange={setInputUnit}
+              onInputUnitChange={handleInputUnitChange}
             />
             <div className="text-muted-foreground text-sm sensitive slashed-zero">
               {t("increaseCapacity.currentBalance", "Current on-chain balance:")}{" "}

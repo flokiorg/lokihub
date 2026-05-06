@@ -12,7 +12,7 @@ import Loading from "src/components/Loading";
 import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import { PendingPaymentAlert } from "src/components/PendingPaymentAlert";
 import { SpendingAlert } from "src/components/SpendingAlert";
-import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { useBalances } from "src/hooks/useBalances";
@@ -24,12 +24,31 @@ export default function ZeroAmount() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
 
   const invoice = state?.args?.paymentRequest as Invoice;
   const [amountDisplay, setAmountDisplay] = React.useState("");
   const [isLoading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,7 +58,7 @@ export default function ZeroAmount() {
         throw new Error("no invoice set");
       }
       setLoading(true);
-      const amountLoki = parseAmount(+amountDisplay);
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       const payInvoiceResponse = await request<PayInvoiceResponse>(
         `/api/payments/${invoice.paymentRequest}`,
         {
@@ -119,22 +138,15 @@ export default function ZeroAmount() {
         )}
         <div className="grid gap-2">
           <Label htmlFor="amount">Amount</Label>
-          <InputWithAdornment
+          <CurrencyInput
             id="amount"
-            type="number"
-            value={amountDisplay}
-            step="any"
-            placeholder={`Amount in ${unit()}...`}
-            onChange={(e) => {
-              setAmountDisplay(e.target.value.trim());
-            }}
-            min={1}
-            max={scaleAmount(balances.lightning.totalSpendable)}
+            amount={amountDisplay}
+            onAmountChange={(val) => setAmountDisplay(val)}
+            inputUnit={inputUnit}
+            onInputUnitChange={handleInputUnitChange}
+            min={scaleInputAmount(1, inputUnit)}
             required
             autoFocus
-            endAdornment={
-              <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
-            }
           />
           <div className="grid gap-2">
             <div className="flex justify-between text-xs text-muted-foreground sensitive slashed-zero">
@@ -151,7 +163,7 @@ export default function ZeroAmount() {
             </div>
           </div>
         </div>
-        <SpendingAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
+        <SpendingAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
         <div className="flex gap-2">
           <LinkButton to="/wallet/send" variant="outline">
             Back

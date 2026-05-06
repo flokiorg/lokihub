@@ -16,9 +16,9 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading";
 import { MempoolAlert } from "src/components/MempoolAlert";
 import { SpendingAlert } from "src/components/SpendingAlert";
+import { CurrencyInput } from "src/components/CurrencyInput";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
-import { InputWithAdornment } from "src/components/ui/custom/input-with-adornment";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
@@ -115,13 +115,32 @@ function OnchainForm({
   const navigate = useNavigate();
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
     economyFee: number;
     minimumFee: number;
   }>("/v1/fees/recommended");
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
 
   const [feeRate, setFeeRate] = React.useState("");
   const [isLoading, setLoading] = React.useState(false);
@@ -145,7 +164,7 @@ function OnchainForm({
         );
       }
       setLoading(true);
-      const amountLoki = parseAmount(+amountDisplay);
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -165,7 +184,7 @@ function OnchainForm({
       }
       navigate(`/wallet/send/onchain-success`, {
         state: {
-          amount: +amountDisplay,
+          amount: parseFloat(amountDisplay),
           txId: response.txId,
         },
       });
@@ -188,22 +207,15 @@ function OnchainForm({
     <form onSubmit={onSubmit} className="grid gap-6">
       <div className="grid gap-2">
         <Label htmlFor="amount">Amount</Label>
-        <InputWithAdornment
+        <CurrencyInput
           id="amount"
-          type="number"
-          value={amountDisplay}
-          step="any"
-          placeholder={`Amount in ${unit()}...`}
-          onChange={(e) => {
-            setAmountDisplay(e.target.value.trim());
-          }}
-          min={scaleAmount(ONCHAIN_DUST_LOKI)}
-          max={scaleAmount(balances.onchain.spendable)}
+          amount={amountDisplay}
+          onAmountChange={(val) => setAmountDisplay(val)}
+          inputUnit={inputUnit}
+          onInputUnitChange={handleInputUnitChange}
+          min={scaleInputAmount(ONCHAIN_DUST_LOKI, inputUnit)}
           required
           autoFocus
-          endAdornment={
-            <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
-          }
         />
         <div className="flex justify-between text-muted-foreground text-xs sensitive slashed-zero">
           <div>
@@ -294,17 +306,17 @@ function OnchainForm({
           </div>
         )}
       </div>
-      {amountDisplay && parseAmount(parseFloat(amountDisplay)) < 10_000 && (
+      {amountDisplay && parseInputAmount(parseFloat(amountDisplay), inputUnit) < 10_000 && (
         <Alert>
           <InfoIcon className="h-4 w-4" />
           <AlertTitle>Amount not ideal for On-chain transaction</AlertTitle>
           <AlertDescription>
             Small amounts can become unspendable when mempool fees increase.
-            Consider using Lightning instead or sending at least {scaleAmount(10_000)} {unit()}.
+            Consider using Lightning instead or sending at least {scaleInputAmount(10_000, inputUnit)} {inputUnit}.
           </AlertDescription>
         </Alert>
       )}
-      <AnchorReserveAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
+      <AnchorReserveAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back
@@ -331,7 +343,26 @@ function SwapForm({
   const navigate = useNavigate();
   const { data: balances } = useBalances();
   const { data: swapInfo } = useSwapInfo("out");
-  const { unit, scaleAmount, parseAmount } = useUnit();
+  const { unit, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+
+  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
+
+  React.useEffect(() => {
+    if (displayFormat === "flc") setInputUnit("FLC");
+    else if (displayFormat === "loki") setInputUnit("loki");
+    else setInputUnit("FLC");
+  }, [displayFormat]);
+
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
 
   const [isLoading, setLoading] = React.useState(false);
 
@@ -339,7 +370,7 @@ function SwapForm({
     event.preventDefault();
     try {
       setLoading(true);
-      const amountLoki = parseAmount(+amountDisplay);
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
       const swapOutResponse = await request<SwapResponse>("/api/swaps/out", {
         method: "POST",
         headers: {
@@ -376,25 +407,15 @@ function SwapForm({
     <form onSubmit={onSubmit} className="grid gap-6">
       <div className="grid gap-2">
         <Label htmlFor="amount">Amount</Label>
-        <InputWithAdornment
+        <CurrencyInput
           id="amount"
-          type="number"
-          value={amountDisplay}
-          step="any"
-          placeholder={`Amount in ${unit()}...`}
-          onChange={(e) => {
-            setAmountDisplay(e.target.value.trim());
-          }}
-          min={swapInfo.minAmount ? scaleAmount(swapInfo.minAmount) : 1}
-          max={Math.min(
-            swapInfo.maxAmount ? scaleAmount(swapInfo.maxAmount) : Infinity,
-            scaleAmount(balances.lightning.totalSpendable)
-          )}
+          amount={amountDisplay}
+          onAmountChange={(val) => setAmountDisplay(val)}
+          inputUnit={inputUnit}
+          onInputUnitChange={handleInputUnitChange}
+          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 1}
           required
           autoFocus
-          endAdornment={
-            <FormattedFiatAmount amount={parseAmount(Number(amountDisplay))} className="mr-2" />
-          }
         />
         <div className="grid gap-1">
           <div className="flex justify-between text-xs text-muted-foreground sensitive slashed-zero">
@@ -430,21 +451,20 @@ function SwapForm({
       <div className="grid gap-2 text-sm border-t pt-6">
         <div className="flex items-center justify-between">
           <p className="text-muted-foreground">On-chain Fee Rate</p>
-          <p>
-            {/* ~{new Intl.NumberFormat().format(swapInfo.boltzNetworkFee)} loki */}
+          <div className="flex items-center gap-2">
             {recommendedFees?.fastestFee ? (
               <p>{recommendedFees?.fastestFee} {unit()}/vB</p>
             ) : (
               <Loading className="w-4 h-4" />
             )}
-          </p>
+          </div>
         </div>
         <div className="flex items-center justify-between">
           <p className="text-muted-foreground">Swap Fee</p>
           <p>{swapInfo.lokiServiceFee + swapInfo.boltzServiceFee}%</p>
         </div>
       </div>
-      <SpendingAlert amount={parseAmount(parseFloat(amountDisplay || "0"))} />
+      <SpendingAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back

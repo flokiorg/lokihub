@@ -68,6 +68,17 @@ export default function ReceiveInvoice() {
     else setInputUnit("FLC");
   }, [displayFormat]);
 
+  const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
+    if (amountDisplay) {
+      const amountLoki = parseInputAmount(parseFloat(amountDisplay), inputUnit);
+      if (!isNaN(amountLoki)) {
+        const newAmount = scaleInputAmount(amountLoki, newUnit);
+        setAmountDisplay(newAmount.toString());
+      }
+    }
+    setInputUnit(newUnit);
+  };
+
   const [isLoading, setLoading] = React.useState(false);
   const [isFetchingJitParams, setIsFetchingJitParams] = React.useState(false);
   const [amountDisplay, setAmountDisplay] = React.useState<string>("");
@@ -424,7 +435,7 @@ export default function ReceiveInvoice() {
                     amount={amountDisplay}
                     onAmountChange={(val) => setAmountDisplay(val)}
                     inputUnit={inputUnit}
-                    onInputUnitChange={setInputUnit}
+                    onInputUnitChange={handleInputUnitChange}
                     placeholder={t("wallet:receive.amountPlaceholder", { unit: inputUnit })}
                     min={1}
                     autoFocus
