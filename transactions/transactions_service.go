@@ -465,6 +465,9 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	if err != nil {
 		return nil, err
 	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
+	}
 
 	return settledTransaction, nil
 }
@@ -607,6 +610,9 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 
 	if err != nil {
 		return nil, err
+	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
 	}
 
 	return settledTransaction, nil
@@ -768,13 +774,17 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 	}
 	// update transaction state
 	if lnClientTransaction.SettledAt != nil {
+		var settledTx *db.Transaction
 		err = svc.db.Transaction(func(tx *gorm.DB) error {
-			_, err = svc.markTransactionSettled(tx, transaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
-			return err
+			var txErr error
+			settledTx, txErr = svc.markTransactionSettled(tx, transaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			return txErr
 		})
 
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to mark payment sent when checking unsettled transaction")
+		} else if settledTx != nil {
+			svc.publishSettleEvent(settledTx)
 		}
 	}
 }
@@ -789,6 +799,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 		}
 
 		var dbTransaction db.Transaction
+		var settledIncoming *db.Transaction
 		err := svc.db.Transaction(func(tx *gorm.DB) error {
 
 			result := tx.Limit(1).Find(&dbTransaction, &db.Transaction{
@@ -845,8 +856,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				}
 			}
 
-			_, err := svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
-			return err
+			var txErr error
+			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			return txErr
 		})
 
 		if err != nil {
@@ -854,6 +866,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				Str("payment_hash", lnClientTransaction.PaymentHash).
 				Msg("Failed to execute DB transaction")
 			return
+		}
+		if settledIncoming != nil {
+			svc.publishSettleEvent(settledIncoming)
 		}
 
 	case "nwc_lnclient_hold_invoice_accepted":
@@ -876,6 +891,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 		}
 
 		var dbTransaction db.Transaction
+		var settledOutgoing *db.Transaction
 		err := svc.db.Transaction(func(tx *gorm.DB) error {
 
 			// first lookup by pending
@@ -920,8 +936,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				}
 			}
 
-			_, err := svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
-			return err
+			var txErr error
+			settledOutgoing, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			return txErr
 		})
 
 		if err != nil {
@@ -929,6 +946,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				Str("payment_hash", lnClientTransaction.PaymentHash).
 				Msg("Failed to update transaction")
 			return
+		}
+		if settledOutgoing != nil {
+			svc.publishSettleEvent(settledOutgoing)
 		}
 	case "nwc_lnclient_payment_failed":
 		paymentFailedAsyncProperties, ok := event.Properties.(*lnclient.PaymentFailedEventProperties)
@@ -1034,13 +1054,18 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, lnClien
 		return nil, errors.New("preimage is not set on transaction. Self payments not supported")
 	}
 
+	var settledSelfTx *db.Transaction
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
-		_, err := svc.markTransactionSettled(tx, &incomingTransaction, *incomingTransaction.Preimage, uint64(0), true)
-		return err
+		var txErr error
+		settledSelfTx, txErr = svc.markTransactionSettled(tx, &incomingTransaction, *incomingTransaction.Preimage, uint64(0), true)
+		return txErr
 	})
 
 	if err != nil {
 		return nil, err
+	}
+	if settledSelfTx != nil {
+		svc.publishSettleEvent(settledSelfTx)
 	}
 
 	return &lnclient.PayInvoiceResponse{
@@ -1304,6 +1329,9 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 			Msg("Failed DB transaction while settling hold invoice")
 		return nil, err
 	}
+	if settledTransaction != nil {
+		svc.publishSettleEvent(settledTransaction)
+	}
 
 	return settledTransaction, nil
 }
@@ -1417,7 +1445,8 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		State:       constants.TRANSACTION_STATE_SETTLED,
 	}).RowsAffected > 0 {
 		logger.Logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already marked as sent")
-		return &existingSettledTransaction, nil
+		// Return nil so callers know not to fire a settlement event for an already-settled payment.
+		return nil, nil
 	}
 
 	now := time.Now()
@@ -1441,21 +1470,22 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		Str("type", dbTransaction.Type).
 		Msg("Marked transaction as settled")
 
-	event := "nwc_payment_sent"
-	if dbTransaction.Type == constants.TRANSACTION_TYPE_INCOMING {
-		event = "nwc_payment_received"
-	}
-
-	svc.eventPublisher.Publish(&events.Event{
-		Event:      event,
-		Properties: dbTransaction,
-	})
-
 	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.AppId != nil {
 		svc.checkBudgetUsage(dbTransaction, tx)
 	}
 
 	return dbTransaction, nil
+}
+
+func (svc *transactionsService) publishSettleEvent(dbTransaction *db.Transaction) {
+	event := "nwc_payment_sent"
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_INCOMING {
+		event = "nwc_payment_received"
+	}
+	svc.eventPublisher.Publish(&events.Event{
+		Event:      event,
+		Properties: dbTransaction,
+	})
 }
 
 func (svc *transactionsService) checkBudgetUsage(dbTransaction *db.Transaction, gormTransaction *gorm.DB) {
