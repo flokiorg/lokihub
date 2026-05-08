@@ -436,6 +436,14 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	// (e.g. lnClient.CheckConnection()) Rather than it being a side-effect
 	// in the LNClient init function
 
+	// Write NodeLastStartTime before exposing lnClient to the API so that
+	// GetInfo never returns {running:true, setupCompleted:false}, which would
+	// send the frontend to the onboarding page instead of the start/home page.
+	err = svc.cfg.SetUpdate("NodeLastStartTime", strconv.FormatInt(time.Now().Unix(), 10), "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to set last node start time")
+	}
+
 	svc.lnClient = lnClient
 	info, err := lnClient.GetInfo(ctx)
 	if err != nil {
@@ -444,13 +452,6 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	if info != nil {
 		svc.eventPublisher.SetGlobalProperty("node_id", info.Pubkey)
 		svc.eventPublisher.SetGlobalProperty("network", info.Network)
-	}
-
-	// Mark that the node has successfully started
-	// This will ensure the user cannot go through the setup again
-	err = svc.cfg.SetUpdate("NodeLastStartTime", strconv.FormatInt(time.Now().Unix(), 10), "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to set last node start time")
 	}
 
 	svc.eventPublisher.Publish(&events.Event{

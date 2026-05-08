@@ -167,7 +167,9 @@ func NewService(ctx context.Context) (*service, error) {
 	if autoUnlockPassword != "" {
 		nodeLastStartTime, _ := cfg.Get("NodeLastStartTime", "")
 		if nodeLastStartTime != "" {
-			svc.StartApp(autoUnlockPassword)
+			if err := svc.StartApp(autoUnlockPassword); err != nil {
+				logger.Logger.Error().Err(err).Msg("Auto-unlock StartApp failed; node will require manual start")
+			}
 		}
 	}
 
