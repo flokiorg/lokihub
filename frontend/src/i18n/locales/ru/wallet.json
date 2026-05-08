@@ -1,0 +1,166 @@
+{
+  "balance": {
+    "lightning": "Баланс Lightning",
+    "onchain": "Баланс сети",
+    "total": "Общий баланс",
+    "available": "Доступно",
+    "reserved": "Зарезервировано",
+    "pending": "Ожидание"
+  },
+  "transactions": {
+    "title": "Транзакции",
+    "empty": "Нет транзакций",
+    "sent": "Отправлено",
+    "received": "Получено",
+    "pending": "Ожидание",
+    "failed": "Ошибка",
+    "viewAll": "Показать все"
+  },
+  "header": {
+    "title": "Кошелёк",
+    "receive": "Получить",
+    "send": "Отправить",
+    "swap": "Обмен"
+  },
+  "alerts": {
+    "channelReservesUnmet": "Резервы канала не выполнены",
+    "channelReservesDesc": "Вы не сможете совершать платежи, пока не пополните резерв канала.",
+    "viewChannelReserves": "Просмотр резервов канала",
+    "openFirstChannel": "Откройте первый канал",
+    "openFirstChannelDesc": "Вы не сможете получать или отправлять платежи, пока не",
+    "openFirstChannelLink": "откроете первый канал",
+    "onchainShownOnNode": "Транзакции в сети отображаются на странице ноды",
+    "viewOnchain": "Просмотр транзакций сети"
+  },
+  "onboarding": {
+    "title": "Начните работу с Lokihub",
+    "description": "Выполните эти начальные шаги для настройки и использования Loki Hub."
+  },
+  "receive": {
+    "title": "Получить",
+    "invoice": "Lightning-счёт",
+    "address": "Bitcoin-адрес",
+    "amount": "Сумма",
+    "description": "Описание",
+    "generate": "Создать счёт",
+    "copyInvoice": "Копировать счёт",
+    "copyAddress": "Копировать адрес",
+    "shareInvoice": "Поделиться счётом",
+    "onchain": {
+      "title": "Получить через сеть",
+      "waiting": "Ожидание платежа...",
+      "newAddress": "Новый адрес",
+      "waitingConfirm": "Ожидание подтверждения в сети...",
+      "viewExplorer": "Просмотр в Flokicoin Explorer",
+      "received": "Транзакция получена!",
+      "receiveAnother": "Получить ещё один платёж",
+      "backToWallet": "Вернуться к кошельку"
+    },
+    "lightning": {
+      "title": "Получить через Lightning"
+    },
+    "buyingLiquidity": "Покупка входящей ликвидности...",
+    "amountTooSmall": "Сумма слишком мала для JIT-платежа. Минимум: {{amount}} {{unit}}.",
+    "amountTooLarge": "Сумма слишком велика для JIT-платежа. Максимум: {{amount}} {{unit}}.",
+    "failedToBuyLiquidity": "Не удалось купить ликвидность",
+    "successCreated": "Счёт успешно создан",
+    "failedToCreate": "Не удалось создать счёт",
+    "lightningInvoice": "Lightning-счёт",
+    "createInvoice": "Создать счёт",
+    "waiting": "Ожидание платежа",
+    "paymentReceived": "Платёж получен",
+    "createAnother": "Создать ещё один счёт",
+    "backToWallet": "Вернуться к кошельку",
+    "amountPlaceholder": "Сумма в {{unit}}...",
+    "liquidityProvider": "Провайдер ликвидности",
+    "selectLSP": "Выбрать LSP",
+    "jitPayment": "JIT-платёж",
+    "jitExplainedTitle": "Как работает JIT-платёж",
+    "jitWhyNeededTitle": "Почему это нужно?",
+    "jitWhyNeededDesc": "Lightning-платежи требуют <strong>входящей ликвидности</strong> (ёмкости для получения). У вас недостаточно ёмкости для получения этой суммы напрямую.",
+    "jitHowWorksTitle": "Как это работает",
+    "jitHowWorksDesc": "Ваш LSP автоматически откроет новый канал <strong>Just-In-Time (JIT)</strong> при поступлении платежа. Это гарантирует немедленный успех платежа без ручного управления каналами.",
+    "feeStructure": "Структура комиссий",
+    "minFee": "Минимальная комиссия:",
+    "propRate": "Пропорциональная ставка:",
+    "min": "Мин:",
+    "max": "Макс:",
+    "feeLogic": "Комиссия — <strong>наибольшее</strong> из минимальной или пропорциональной комиссии.",
+    "whoPays": "Кто платит комиссию?",
+    "receiverPays": "Получатель платит:",
+    "receiverPaysDesc": "(По умолчанию) Комиссия вычитается из получаемой суммы.",
+    "senderPays": "Отправитель платит:",
+    "senderPaysDesc": "Комиссия добавляется к итоговой сумме счёта. Отправитель оплачивает дополнительную стоимость.",
+    "loadingJit": "Загрузка данных JIT...",
+    "estimatedFee": "Расчётная комиссия",
+    "totalToSend": "Итого к отправке",
+    "youReceive": "Вы получите",
+    "retry": "Повторить",
+    "paymentRange": "Диапазон платежа:",
+    "includeFee": "Включить комиссию в счёт (отправитель платит)",
+    "descriptionPlaceholder": "Например, кто отправляет этот платёж?",
+    "receiveOnchain": "Получить из сети",
+    "unknownError": "Неизвестная ошибка"
+  },
+  "send": {
+    "title": "Отправить",
+    "destination": "Получатель",
+    "amount": "Сумма",
+    "description": "Описание",
+    "confirm": "Подтвердить платёж",
+    "pay": "Оплатить",
+    "scanQr": "Сканировать QR-код",
+    "zeroAmount": {
+      "title": "Введите сумму",
+      "description": "В этом счёте не указана сумма. Введите сумму для отправки."
+    },
+    "success": {
+      "title": "Платёж отправлен!",
+      "description": "Ваш платёж успешно отправлен."
+    },
+    "lnurl": {
+      "title": "Отправить через LNURL"
+    },
+    "onchain": {
+      "title": "Отправить в сети",
+      "amountLabel": "Сумма",
+      "feeRateLabel": "Ставка комиссии ({{unit}}/vB)",
+      "addressLabel": "Адрес сети",
+      "amountNotIdeal": "Сумма не идеальна для транзакции в сети",
+      "cancel": "Отмена"
+    }
+  },
+  "signMessage": {
+    "title": "Подписать сообщение",
+    "label": "Сообщение",
+    "sign": "Подписать"
+  },
+  "nodeAlias": {
+    "title": "Псевдоним ноды",
+    "label": "Псевдоним ноды",
+    "save": "Сохранить"
+  },
+  "withdraw": {
+    "title": "Вывести средства из сети",
+    "amountLabel": "Сумма",
+    "addressLabel": "Адрес сети",
+    "feeRateLabel": "Ставка комиссии ({{unit}}/vB)",
+    "sendAllAlert": "Будет отправлен весь баланс кошелька",
+    "cancel": "Отмена"
+  },
+  "subwallets": {
+    "title": "Субкошельки",
+    "new": "Новый субкошелёк",
+    "empty": "Нет субкошельков",
+    "about": {
+      "title": "О субкошельках",
+      "close": "Закрыть"
+    }
+  },
+  "onchain": {
+    "awaitingConfirm": "Ожидание подтверждений",
+    "backToNode": "Вернуться к ноде",
+    "received": "Получено",
+    "viewExplorer": "Посмотреть в проводнике"
+  }
+}

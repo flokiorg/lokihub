@@ -38,60 +38,60 @@
     "updateFailed": "設定の更新に失敗しました"
   },
   "nav": {
-    "general": "General",
-    "services": "Services",
-    "autoUnlock": "Auto Unlock",
-    "unlockPassword": "Unlock Password",
-    "backup": "Backup",
-    "migrate": "Migrate Lokihub",
-    "developer": "Developer",
-    "debugTools": "Debug Tools",
-    "about": "About"
+    "general": "一般",
+    "services": "サービス",
+    "autoUnlock": "自動ロック解除",
+    "unlockPassword": "ロック解除パスワード",
+    "backup": "バックアップ",
+    "migrate": "Lokihubを移行",
+    "developer": "開発者",
+    "debugTools": "デバッグツール",
+    "about": "概要"
   },
   "shutdown": {
-    "dialogTitle": "Do you want to turn off your Lokihub?",
-    "dialogDesc": "This will turn off your Lokihub and make your node offline. You won't be able to send or receive flokicoin until you unlock it.",
-    "cancel": "Cancel",
-    "confirm": "Continue",
-    "toast": "Your node has been turned off.",
-    "failedToast": "Failed to shutdown node"
+    "dialogTitle": "Lokihubをオフにしますか？",
+    "dialogDesc": "これによりLokihubがオフになり、ノードがオフラインになります。ロックを解除するまでflokicoinの送受信ができません。",
+    "cancel": "キャンセル",
+    "confirm": "続行",
+    "toast": "ノードがオフになりました。",
+    "failedToast": "ノードのシャットダウンに失敗しました"
   },
   "header": {
-    "title": "Settings"
+    "title": "設定"
   },
   "changePassword": {
-    "title": "Change Unlock Password",
-    "important": "Important!",
-    "currentPassword": "Current Password",
-    "newPassword": "New Password",
-    "confirmNew": "Confirm New Password",
-    "save": "Save"
+    "title": "ロック解除パスワードを変更",
+    "important": "重要！",
+    "currentPassword": "現在のパスワード",
+    "newPassword": "新しいパスワード",
+    "confirmNew": "新しいパスワードを確認",
+    "save": "保存"
   },
   "backup": {
-    "title": "Backup",
-    "important": "Important",
-    "passwordLabel": "Password",
-    "active": "Active"
+    "title": "バックアップ",
+    "important": "重要",
+    "passwordLabel": "パスワード",
+    "active": "アクティブ"
   },
   "autoUnlock": {
-    "title": "Auto Unlock",
-    "attention": "Attention",
-    "passwordLabel": "Unlock Password"
+    "title": "自動ロック解除",
+    "attention": "注意",
+    "passwordLabel": "ロック解除パスワード"
   },
   "developer": {
-    "title": "Developer",
-    "tokenType": "Token Type",
-    "tokenExpiry": "Token Expiry (Days)",
-    "passwordLabel": "Unlock Password",
-    "createToken": "Create Token"
+    "title": "開発者",
+    "tokenType": "トークンタイプ",
+    "tokenExpiry": "トークン有効期限（日数）",
+    "passwordLabel": "ロック解除パスワード",
+    "createToken": "トークンを作成"
   },
   "debugTools": {
-    "title": "Debug Tools",
-    "probeInvoice": "Probe Invoice",
-    "probeKeysend": "Probe Keysend",
-    "networkGraph": "Get Network Graph",
-    "refundTo": "Refund to",
-    "onchainAddress": "On-chain address",
-    "cancel": "Cancel"
+    "title": "デバッグツール",
+    "probeInvoice": "インボイスをプローブ",
+    "probeKeysend": "Keysendをプローブ",
+    "networkGraph": "ネットワークグラフを取得",
+    "refundTo": "返金先",
+    "onchainAddress": "オンチェーンアドレス",
+    "cancel": "キャンセル"
   }
 }

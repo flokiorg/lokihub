@@ -13,32 +13,32 @@
       "inactive": "非アクティブ",
       "pending": "保留中",
       "closing": "クローズ中",
-      "online": "Online",
-      "offline": "Offline",
-      "opening": "Opening"
+      "online": "オンライン",
+      "offline": "オフライン",
+      "opening": "開設中"
     },
-    "pendingClosed": "Pending Closed Channels",
+    "pendingClosed": "閉鎖保留中のチャンネル",
     "table": {
-      "capacity": "Capacity",
-      "localBalance": "Local Balance",
-      "remoteBalance": "Remote Balance",
-      "actions": "Actions"
+      "capacity": "容量",
+      "localBalance": "ローカル残高",
+      "remoteBalance": "リモート残高",
+      "actions": "操作"
     },
     "closeDialog": {
-      "title": "Select mode of channel closure",
-      "headsUp": "Heads up!",
-      "cancel": "Cancel",
-      "closedSuccess": "Channel closed successfully"
+      "title": "チャンネルクローズモードを選択",
+      "headsUp": "注意！",
+      "cancel": "キャンセル",
+      "closedSuccess": "チャンネルが正常にクローズされました"
     },
     "nodeHealth": {
-      "tooltip": "Node health: {{percent}}%",
-      "dialogTitle": "Node Health",
-      "close": "Close"
+      "tooltip": "ノードの健全性: {{percent}}%",
+      "dialogTitle": "ノードの健全性",
+      "close": "閉じる"
     },
     "dropdown": {
-      "viewFunding": "View Funding Transaction",
-      "viewNode": "View Node on {{explorer}}",
-      "setRoutingFee": "Set Routing Fee"
+      "viewFunding": "資金調達トランザクションを表示",
+      "viewNode": "{{explorer}}でノードを表示",
+      "setRoutingFee": "ルーティング手数料を設定"
     }
   },
   "peers": {
@@ -48,8 +48,8 @@
     "empty": "接続中のピアはありません",
     "pubkey": "公開鍵",
     "alias": "エイリアス",
-    "disconnectConfirm": "Confirm",
-    "disconnectCancel": "Cancel"
+    "disconnectConfirm": "確認",
+    "disconnectCancel": "キャンセル"
   },
   "liquidity": {
     "title": "流動性",
@@ -57,17 +57,17 @@
     "outgoing": "送信"
   },
   "menu": {
-    "node": "Node",
-    "onchain": "On-Chain",
-    "swaps": "Swaps",
-    "history": "History",
-    "management": "Management"
+    "node": "ノード",
+    "onchain": "オンチェーン",
+    "swaps": "スワップ",
+    "history": "履歴",
+    "management": "管理"
   },
   "onchain": {
-    "title": "On-chain",
-    "addressLabel": "On-Chain Address",
-    "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "title": "オンチェーン",
+    "addressLabel": "オンチェーンアドレス",
+    "depositTitle": "Flokicoinを入金",
+    "generateNew": "新しいアドレスを生成"
   },
   "orderHistory": {
     "title": "Order History",
@@ -76,38 +76,39 @@
     "state": "State",
     "detailsTitle": "Liquidity Order Details",
     "reviewTitle": "Review Inbound Order",
-    "description": "History of your channel orders",
-    "noOrdersDesc": "You haven't ordered any channels yet.",
-    "noOrdersTitle": "No Order History",
-    "totalFee": "Total Fee"
+    "description": "チャンネル注文の履歴",
+    "noOrdersDesc": "まだチャンネルを注文していません。",
+    "noOrdersTitle": "注文履歴はありません",
+    "totalFee": "合計手数料",
+    "orderLiquidity": "流動性を注文"
   },
   "increaseCapacity": {
-    "title": "Open Channel with On-Chain",
-    "description": "Funds used to open a channel minus fees will be added to your spending balance",
-    "info": "Open a channel with on-chain funds. Both parties are free to close the channel at any time. However, by keeping more funds on your side of the channel and using it regularly, there is more chance the channel will stay open.",
-    "peerLabel": "Peer / LSP",
-    "customPeer": "Custom Peer",
-    "peer": "Peer",
-    "hostPort": "Host:Port",
-    "increaseSpendingLabel": "Increase spending balance",
-    "increaseSpendingTooltip": "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees.",
-    "currentBalance": "Current on-chain balance:",
-    "noLsps": "No LSPs Configured",
-    "selectProvider": "Select a Provider",
-    "needIncoming": "Need incoming capacity instead?",
-    "buyInbound": "Buy Inbound Liquidity",
-    "lookingToReceive": "Looking to receive funds instead? You might need incoming capacity.",
-    "publicChannel": "Public Channel",
-    "publicChannelDesc": "Not recommended for most users.",
-    "confirmTitle": "Confirm Channel Opening",
-    "confirmDesc": "Are you sure you want to open a Lightning channel with the following details?",
-    "channelType": "Channel Type",
-    "paymentMethod": "Payment Method",
-    "nodePublicKey": "Node Public Key",
-    "important": "Important:",
-    "confirmWarning": "Opening a channel requires an on-chain transaction and network fees. This action cannot be undone. Please verify all details before proceeding.",
-    "confirmAndOpen": "Confirm & Open Channel",
-    "manageProviders": "Manage providers in"
+    "title": "オンチェーンでチャンネルを開く",
+    "description": "チャンネルを開くために使用された資金から手数料を引いた金額が支出残高に追加されます",
+    "info": "オンチェーン資金でチャンネルを開きます。両者はいつでもチャンネルを閉じることができます。ただし、チャンネルの自分側に多くの資金を保持し、定期的に使用することで、チャンネルが開いたままになる可能性が高まります。",
+    "peerLabel": "ピア / LSP",
+    "customPeer": "カスタムピア",
+    "peer": "ピア",
+    "hostPort": "ホスト:ポート",
+    "increaseSpendingLabel": "支出残高を増やす",
+    "increaseSpendingTooltip": "必要な支出容量を設定します。チャンネルサイズ全体をカバーするためにオンチェーンflokicoinを入金する必要があります。",
+    "currentBalance": "現在のオンチェーン残高：",
+    "noLsps": "LSPが設定されていません",
+    "selectProvider": "プロバイダーを選択",
+    "needIncoming": "代わりに受信容量が必要ですか？",
+    "buyInbound": "インバウンド流動性を購入",
+    "lookingToReceive": "代わりに資金を受け取りたいですか？受信容量が必要かもしれません。",
+    "publicChannel": "パブリックチャンネル",
+    "publicChannelDesc": "ほとんどのユーザーには推奨されません。",
+    "confirmTitle": "チャンネル開設を確認",
+    "confirmDesc": "以下の詳細でライトニングチャンネルを開いてもよいですか？",
+    "channelType": "チャンネルタイプ",
+    "paymentMethod": "支払い方法",
+    "nodePublicKey": "ノードの公開鍵",
+    "important": "重要：",
+    "confirmWarning": "チャンネルを開くにはオンチェーントランザクションとネットワーク手数料が必要です。この操作は取り消せません。続行前にすべての詳細を確認してください。",
+    "confirmAndOpen": "確認してチャンネルを開く",
+    "manageProviders": "プロバイダーの管理"
   },
   "orderChannel": {
     "title": "Increase Inbound Liquidity",
@@ -125,24 +126,24 @@
     "consentMsg": "By proceeding, you consent the channel opens immediately and that you lose the right to revoke once it is open.",
     "otherOptions": "Other options",
     "increaseSpending": "Increase Spending Balance",
-    "balanceMsg": "Your current balance is",
-    "currentlyHave": "You currently have",
-    "deposited": "Deposited",
-    "depositedAmount": "Deposited amount",
-    "estTime": "Estimated time",
-    "includesCost": "Includes channel opening cost",
-    "noPending": "No pending channel orders",
-    "notEnough": "Not enough balance",
-    "openedDesc": "Your channel is now open and ready to use.",
-    "openedTitle": "Channel Opened",
-    "recommendDeposit": "We recommend depositing",
-    "return": "Return to Node",
-    "scanQr": "Scan QR to deposit",
-    "sendFloki": "Send Flokicoin",
-    "successMsg": "Successfully ordered channel",
-    "toOpen": "To open a channel of",
-    "waitingChannel": "Waiting for channel to open...",
-    "waitingConf": "Waiting for confirmations...",
-    "waitingTx": "Waiting for transaction..."
+    "balanceMsg": "現在の残高は",
+    "currentlyHave": "現在お持ちの額は",
+    "deposited": "入金済み",
+    "depositedAmount": "入金額",
+    "estTime": "推定時間",
+    "includesCost": "チャンネル開設コストを含む",
+    "noPending": "保留中のチャンネル注文はありません",
+    "notEnough": "残高が不足しています",
+    "openedDesc": "チャンネルが開き、使用可能になりました。",
+    "openedTitle": "チャンネルが開きました",
+    "recommendDeposit": "入金を推奨します",
+    "return": "ノードに戻る",
+    "scanQr": "QRコードをスキャンして入金",
+    "sendFloki": "Flokicoinを送る",
+    "successMsg": "チャンネルの注文が成功しました",
+    "toOpen": "チャンネルを開くために",
+    "waitingChannel": "チャンネルが開くのを待っています...",
+    "waitingConf": "確認を待っています...",
+    "waitingTx": "トランザクションを待っています..."
   }
 }

@@ -9,7 +9,7 @@ export function StartRedirect({ children }: React.PropsWithChildren) {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (!info || (info.setupCompleted && !info.running)) {
+    if (!info || !(info.setupCompleted && info.running)) {
       return;
     }
 

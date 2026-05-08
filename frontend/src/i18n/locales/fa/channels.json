@@ -57,17 +57,17 @@
     "outgoing": "خروجی"
   },
   "menu": {
-    "node": "Node",
-    "onchain": "On-Chain",
-    "swaps": "Swaps",
-    "history": "History",
-    "management": "Management"
+    "node": "نود",
+    "onchain": "زنجیره‌ای",
+    "swaps": "تبادل",
+    "history": "تاریخچه",
+    "management": "مدیریت"
   },
   "onchain": {
-    "title": "On-chain",
-    "addressLabel": "On-Chain Address",
-    "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "title": "زنجیره‌ای",
+    "addressLabel": "آدرس زنجیره‌ای",
+    "depositTitle": "واریز فلوکیکوین",
+    "generateNew": "ایجاد آدرس جدید"
   },
   "orderHistory": {
     "title": "Order History",
@@ -79,7 +79,8 @@
     "description": "تاریخچه سفارشات کانال شما",
     "noOrdersDesc": "شما هنوز هیچ کانالی سفارش نداده اید.",
     "noOrdersTitle": "تاریخچه سفارشی وجود ندارد",
-    "totalFee": "کل کارمزد"
+    "totalFee": "کل کارمزد",
+    "orderLiquidity": "درخواست نقدینگی"
   },
   "increaseCapacity": {
     "title": "باز کردن کانال روی زنجیره (On-Chain)",

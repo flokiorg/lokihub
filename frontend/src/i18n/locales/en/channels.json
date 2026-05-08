@@ -73,7 +73,8 @@
     "description": "History of your channel orders",
     "noOrdersDesc": "You haven't ordered any channels yet.",
     "noOrdersTitle": "No Order History",
-    "totalFee": "Total Fee"
+    "totalFee": "Total Fee",
+    "orderLiquidity": "Order Liquidity"
   },
   "increaseCapacity": {
     "title": "Open Channel with On-Chain",

@@ -57,17 +57,17 @@
     "outgoing": "صادرة"
   },
   "menu": {
-    "node": "Node",
-    "onchain": "On-Chain",
-    "swaps": "Swaps",
-    "history": "History",
-    "management": "Management"
+    "node": "العقدة",
+    "onchain": "على السلسلة",
+    "swaps": "التبادلات",
+    "history": "السجل",
+    "management": "الإدارة"
   },
   "onchain": {
-    "title": "On-chain",
-    "addressLabel": "On-Chain Address",
-    "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "title": "على السلسلة",
+    "addressLabel": "عنوان على السلسلة",
+    "depositTitle": "إيداع فلوكيكوين",
+    "generateNew": "إنشاء عنوان جديد"
   },
   "orderHistory": {
     "title": "Order History",
@@ -79,7 +79,8 @@
     "description": "سجل طلبات القنوات الخاصة بك",
     "noOrdersDesc": "لم تقم بطلب أي قنوات بعد.",
     "noOrdersTitle": "لا يوجد سجل طلبات",
-    "totalFee": "إجمالي الرسوم"
+    "totalFee": "إجمالي الرسوم",
+    "orderLiquidity": "طلب سيولة"
   },
   "increaseCapacity": {
     "title": "فتح قناة على السلسلة",

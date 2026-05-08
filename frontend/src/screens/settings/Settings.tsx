@@ -214,9 +214,7 @@ function Settings() {
         {/* Language Section */}
         <div className="space-y-4">
           <h3 className="text-xl font-medium">{t("sections.language")}</h3>
-          <div className="space-y-4">
-            <LanguageSwitcher />
-          </div>
+          <LanguageSwitcher />
         </div>
 
 

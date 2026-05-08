@@ -27,18 +27,60 @@
     "copyAddress": "アドレスをコピー",
     "shareInvoice": "インボイスを共有",
     "onchain": {
-      "title": "Receive On-chain",
-      "waiting": "Waiting for Payment...",
-      "newAddress": "New Address",
-      "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
-      "received": "Transaction Received!",
-      "receiveAnother": "Receive Another Payment",
-      "backToWallet": "Back to Wallet"
+      "title": "オンチェーンで受け取る",
+      "waiting": "支払いを待っています...",
+      "newAddress": "新しいアドレス",
+      "waitingConfirm": "オンチェーン確認を待っています...",
+      "viewExplorer": "Flokicoinエクスプローラーで表示",
+      "received": "取引を受信しました！",
+      "receiveAnother": "別の支払いを受け取る",
+      "backToWallet": "ウォレットに戻る"
     },
     "lightning": {
-      "title": "Receive via Lightning"
-    }
+      "title": "ライトニングで受け取る"
+    },
+    "buyingLiquidity": "インバウンド流動性を購入中...",
+    "amountTooSmall": "JIT支払いには金額が少なすぎます。最小値：{{amount}} {{unit}}。",
+    "amountTooLarge": "JIT支払いには金額が多すぎます。最大値：{{amount}} {{unit}}。",
+    "failedToBuyLiquidity": "流動性の購入に失敗しました",
+    "successCreated": "インボイスが正常に作成されました",
+    "failedToCreate": "インボイスの作成に失敗しました",
+    "lightningInvoice": "ライトニングインボイス",
+    "createInvoice": "インボイスを作成",
+    "waiting": "支払いを待っています",
+    "paymentReceived": "支払いを受け取りました",
+    "createAnother": "別のインボイスを作成",
+    "backToWallet": "ウォレットに戻る",
+    "amountPlaceholder": "{{unit}}での金額...",
+    "liquidityProvider": "流動性プロバイダー",
+    "selectLSP": "LSPを選択",
+    "jitPayment": "JIT支払い",
+    "jitExplainedTitle": "JIT支払いの説明",
+    "jitWhyNeededTitle": "なぜ必要なのですか？",
+    "jitWhyNeededDesc": "ライトニング支払いには<strong>インバウンド流動性</strong>（受信容量）が必要です。現在、この金額を直接受け取るのに十分な容量がありません。",
+    "jitHowWorksTitle": "仕組み",
+    "jitHowWorksDesc": "LSPは支払いが到着したときに自動的に新しいチャンネルを<strong>ジャストインタイム（JIT）</strong>で開きます。これにより、チャンネルを手動で管理することなく、支払いが即座に成功します。",
+    "feeStructure": "手数料体系",
+    "minFee": "最低手数料：",
+    "propRate": "比例率：",
+    "min": "最小：",
+    "max": "最大：",
+    "feeLogic": "手数料は最低手数料と計算された比例手数料の<strong>高い方</strong>です。",
+    "whoPays": "手数料は誰が払いますか？",
+    "receiverPays": "受取人が払う：",
+    "receiverPaysDesc": "（デフォルト）手数料は受け取る金額から差し引かれます。",
+    "senderPays": "送金人が払う：",
+    "senderPaysDesc": "手数料はインボイス合計に追加されます。送金人が追加費用を負担します。",
+    "loadingJit": "JIT詳細を読み込み中...",
+    "estimatedFee": "推定手数料",
+    "totalToSend": "送金合計",
+    "youReceive": "受け取る金額",
+    "retry": "再試行",
+    "paymentRange": "支払い範囲：",
+    "includeFee": "手数料をインボイスに含める（送金人が払う）",
+    "descriptionPlaceholder": "例：この支払いを送るのは誰ですか？",
+    "receiveOnchain": "オンチェーンから受け取る",
+    "unknownError": "不明なエラー"
   },
   "send": {
     "title": "送る",
@@ -49,76 +91,76 @@
     "pay": "支払う",
     "scanQr": "QRコードをスキャン",
     "zeroAmount": {
-      "title": "Enter Amount",
-      "description": "This invoice has no amount. Enter how much you want to send."
+      "title": "金額を入力",
+      "description": "このインボイスには金額が設定されていません。送金額を入力してください。"
     },
     "success": {
-      "title": "Payment Sent!",
-      "description": "Your payment was sent successfully."
+      "title": "支払い完了！",
+      "description": "支払いが正常に送信されました。"
     },
     "lnurl": {
-      "title": "Send via LNURL"
+      "title": "LNURLで送金"
     },
     "onchain": {
-      "title": "Send On-chain",
-      "amountLabel": "Amount",
-      "feeRateLabel": "Fee Rate ({{unit}}/vB)",
-      "addressLabel": "On-chain Address",
-      "amountNotIdeal": "Amount not ideal for On-chain transaction",
-      "cancel": "Cancel"
+      "title": "オンチェーンで送金",
+      "amountLabel": "金額",
+      "feeRateLabel": "手数料率（{{unit}}/vB）",
+      "addressLabel": "オンチェーンアドレス",
+      "amountNotIdeal": "オンチェーン取引に適さない金額です",
+      "cancel": "キャンセル"
     }
   },
   "header": {
-    "title": "Wallet",
-    "receive": "Receive",
-    "send": "Send",
-    "swap": "Swap"
+    "title": "ウォレット",
+    "receive": "受け取る",
+    "send": "送る",
+    "swap": "スワップ"
   },
   "alerts": {
-    "channelReservesUnmet": "Channel Reserves Unmet",
-    "channelReservesDesc": "You won't be able to make payments until you fill your channel reserve.",
-    "viewChannelReserves": "View channel reserves",
-    "openFirstChannel": "Open Your First Channel",
-    "openFirstChannelDesc": "You won't be able to receive or send payments until you",
-    "openFirstChannelLink": "open your first channel",
-    "onchainShownOnNode": "On-chain transactions are shown on the Node page",
-    "viewOnchain": "View On-chain transactions"
+    "channelReservesUnmet": "チャンネル準備金未充足",
+    "channelReservesDesc": "チャンネル準備金を補充するまで支払いができません。",
+    "viewChannelReserves": "チャンネル準備金を表示",
+    "openFirstChannel": "最初のチャンネルを開く",
+    "openFirstChannelDesc": "最初のチャンネルを開くまで支払いや受け取りができません",
+    "openFirstChannelLink": "最初のチャンネルを開く",
+    "onchainShownOnNode": "オンチェーン取引はノードページに表示されます",
+    "viewOnchain": "オンチェーン取引を表示"
   },
   "onboarding": {
-    "title": "Get started with your Lokihub",
-    "description": "Follow these initial steps to set up and make the most of your Loki Hub."
+    "title": "Lokihubを使い始めましょう",
+    "description": "以下の初期設定を行い、Loki Hubを最大限に活用してください。"
   },
   "signMessage": {
-    "title": "Sign Message",
-    "label": "Message",
-    "sign": "Sign"
+    "title": "メッセージに署名",
+    "label": "メッセージ",
+    "sign": "署名"
   },
   "nodeAlias": {
-    "title": "Node Alias",
-    "label": "Node Alias",
-    "save": "Save"
+    "title": "ノードエイリアス",
+    "label": "ノードエイリアス",
+    "save": "保存"
   },
   "withdraw": {
-    "title": "Withdraw On-chain Funds",
-    "amountLabel": "Amount",
-    "addressLabel": "Onchain Address",
-    "feeRateLabel": "Fee Rate ({{unit}}/vB)",
-    "sendAllAlert": "Entire wallet balance will be sent",
-    "cancel": "Cancel"
+    "title": "オンチェーン資金を引き出す",
+    "amountLabel": "金額",
+    "addressLabel": "オンチェーンアドレス",
+    "feeRateLabel": "手数料率（{{unit}}/vB）",
+    "sendAllAlert": "ウォレットの残高すべてが送金されます",
+    "cancel": "キャンセル"
   },
   "subwallets": {
-    "title": "Sub-wallets",
-    "new": "New Sub-wallet",
-    "empty": "No sub-wallets yet",
+    "title": "サブウォレット",
+    "new": "新しいサブウォレット",
+    "empty": "サブウォレットはまだありません",
     "about": {
-      "title": "About Sub-wallets",
-      "close": "Close"
+      "title": "サブウォレットについて",
+      "close": "閉じる"
     }
   },
   "onchain": {
-    "awaitingConfirm": "Awaiting Confirmations",
-    "backToNode": "Back to Node",
-    "received": "Received",
-    "viewExplorer": "View on Explorer"
+    "awaitingConfirm": "確認待ち",
+    "backToNode": "ノードに戻る",
+    "received": "受信済み",
+    "viewExplorer": "エクスプローラーで表示"
   }
 }

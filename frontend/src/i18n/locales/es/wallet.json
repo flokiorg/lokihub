@@ -27,17 +27,17 @@
     "copyAddress": "Copiar dirección",
     "shareInvoice": "Compartir factura",
     "onchain": {
-      "title": "Receive On-chain",
-      "waiting": "Waiting for Payment...",
-      "newAddress": "New Address",
-      "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
-      "received": "Transaction Received!",
-      "receiveAnother": "Receive Another Payment",
-      "backToWallet": "Back to Wallet"
+      "title": "Recibir On-chain",
+      "waiting": "Esperando pago...",
+      "newAddress": "Nueva dirección",
+      "waitingConfirm": "Esperando confirmación On-chain...",
+      "viewExplorer": "Ver en el Explorador de Flokicoin",
+      "received": "¡Transacción recibida!",
+      "receiveAnother": "Recibir otro pago",
+      "backToWallet": "Volver a la billetera"
     },
     "lightning": {
-      "title": "Receive via Lightning"
+      "title": "Recibir por Lightning"
     },
     "buyingLiquidity": "Comprando liquidez entrante...",
     "amountTooSmall": "Monto demasiado pequeño para el pago JIT. Mínimo: {{amount}} {{unit}}.",

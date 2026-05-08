@@ -8,17 +8,41 @@ import {
 } from "src/components/ui/dropdown-menu";
 import { useLocale } from "src/hooks/useLocale";
 import type { SupportedLanguageCode } from "src/i18n";
+import { cn } from "src/lib/utils";
 
-export function CompactLanguageSwitcher() {
+type Props = {
+  showLabel?: boolean;
+};
+
+export function CompactLanguageSwitcher({ showLabel }: Props) {
   const { currentLanguage, changeLanguage, supportedLanguages } = useLocale();
+  const currentLangName =
+    supportedLanguages.find((l) => l.code === currentLanguage)?.name ?? currentLanguage;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-          <GlobeIcon className="h-5 w-5" />
-          <span className="sr-only">Toggle language</span>
-        </Button>
+        {showLabel ? (
+          <button
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm text-muted-foreground",
+              "border border-transparent transition-colors outline-none",
+              "hover:text-foreground hover:bg-accent hover:border-border"
+            )}
+          >
+            <GlobeIcon className="h-4 w-4 shrink-0" />
+            <span>{currentLangName}</span>
+          </button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <GlobeIcon className="h-5 w-5" />
+            <span className="sr-only">Toggle language</span>
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {supportedLanguages.map((lang) => (

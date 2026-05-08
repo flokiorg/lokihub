@@ -38,60 +38,60 @@
     "updateFailed": "설정 업데이트에 실패했습니다"
   },
   "nav": {
-    "general": "General",
-    "services": "Services",
-    "autoUnlock": "Auto Unlock",
-    "unlockPassword": "Unlock Password",
-    "backup": "Backup",
-    "migrate": "Migrate Lokihub",
-    "developer": "Developer",
-    "debugTools": "Debug Tools",
-    "about": "About"
+    "general": "일반",
+    "services": "서비스",
+    "autoUnlock": "자동 잠금 해제",
+    "unlockPassword": "잠금 해제 비밀번호",
+    "backup": "백업",
+    "migrate": "Lokihub 마이그레이션",
+    "developer": "개발자",
+    "debugTools": "디버그 도구",
+    "about": "정보"
   },
   "shutdown": {
-    "dialogTitle": "Do you want to turn off your Lokihub?",
-    "dialogDesc": "This will turn off your Lokihub and make your node offline. You won't be able to send or receive flokicoin until you unlock it.",
-    "cancel": "Cancel",
-    "confirm": "Continue",
-    "toast": "Your node has been turned off.",
-    "failedToast": "Failed to shutdown node"
+    "dialogTitle": "Lokihub를 끄시겠습니까?",
+    "dialogDesc": "이렇게 하면 Lokihub가 꺼지고 노드가 오프라인 상태가 됩니다. 잠금을 해제할 때까지 flokicoin을 보내거나 받을 수 없습니다.",
+    "cancel": "취소",
+    "confirm": "계속",
+    "toast": "노드가 꺼졌습니다.",
+    "failedToast": "노드 종료 실패"
   },
   "header": {
-    "title": "Settings"
+    "title": "설정"
   },
   "changePassword": {
-    "title": "Change Unlock Password",
-    "important": "Important!",
-    "currentPassword": "Current Password",
-    "newPassword": "New Password",
-    "confirmNew": "Confirm New Password",
-    "save": "Save"
+    "title": "잠금 해제 비밀번호 변경",
+    "important": "중요!",
+    "currentPassword": "현재 비밀번호",
+    "newPassword": "새 비밀번호",
+    "confirmNew": "새 비밀번호 확인",
+    "save": "저장"
   },
   "backup": {
-    "title": "Backup",
-    "important": "Important",
-    "passwordLabel": "Password",
-    "active": "Active"
+    "title": "백업",
+    "important": "중요",
+    "passwordLabel": "비밀번호",
+    "active": "활성"
   },
   "autoUnlock": {
-    "title": "Auto Unlock",
-    "attention": "Attention",
-    "passwordLabel": "Unlock Password"
+    "title": "자동 잠금 해제",
+    "attention": "주의",
+    "passwordLabel": "잠금 해제 비밀번호"
   },
   "developer": {
-    "title": "Developer",
-    "tokenType": "Token Type",
-    "tokenExpiry": "Token Expiry (Days)",
-    "passwordLabel": "Unlock Password",
-    "createToken": "Create Token"
+    "title": "개발자",
+    "tokenType": "토큰 유형",
+    "tokenExpiry": "토큰 만료 (일)",
+    "passwordLabel": "잠금 해제 비밀번호",
+    "createToken": "토큰 생성"
   },
   "debugTools": {
-    "title": "Debug Tools",
-    "probeInvoice": "Probe Invoice",
-    "probeKeysend": "Probe Keysend",
-    "networkGraph": "Get Network Graph",
-    "refundTo": "Refund to",
-    "onchainAddress": "On-chain address",
-    "cancel": "Cancel"
+    "title": "디버그 도구",
+    "probeInvoice": "인보이스 프로브",
+    "probeKeysend": "Keysend 프로브",
+    "networkGraph": "네트워크 그래프 가져오기",
+    "refundTo": "환불 대상",
+    "onchainAddress": "온체인 주소",
+    "cancel": "취소"
   }
 }
