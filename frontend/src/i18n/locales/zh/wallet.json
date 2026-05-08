@@ -27,17 +27,17 @@
     "copyAddress": "复制地址",
     "shareInvoice": "分享发票",
     "onchain": {
-      "title": "Receive On-chain",
-      "waiting": "Waiting for Payment...",
-      "newAddress": "New Address",
-      "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
-      "received": "Transaction Received!",
-      "receiveAnother": "Receive Another Payment",
-      "backToWallet": "Back to Wallet"
+      "title": "链上收款",
+      "waiting": "等待付款...",
+      "newAddress": "新地址",
+      "waitingConfirm": "等待链上确认...",
+      "viewExplorer": "在 Flokicoin 浏览器上查看",
+      "received": "已收到交易！",
+      "receiveAnother": "接收另一笔付款",
+      "backToWallet": "返回钱包"
     },
     "lightning": {
-      "title": "Receive via Lightning"
+      "title": "通过闪电网络收款"
     },
     "buyingLiquidity": "正在购买入账流动性...",
     "amountTooSmall": "金额太小，无法进行 JIT 支付。最低：{{amount}} {{unit}}。",

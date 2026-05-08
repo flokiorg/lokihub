@@ -94,7 +94,7 @@ function OrderHistory() {
           {!isLoading && orders.length > 0 && (
             <LinkButton to="/channels/inbound" size="default">
               <Zap className="mr-2 h-4 w-4" />
-              {t("liquidity.incoming", "Incoming Liquidity")}
+              {t("orderHistory.orderLiquidity", "Order Liquidity")}
             </LinkButton>
           )}
         </div>
@@ -115,7 +115,7 @@ function OrderHistory() {
           </p>
           <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto mt-4">
             <Zap className="mr-2 h-4 w-4" />
-            {t("liquidity.incoming", "Incoming Liquidity")}
+            {t("orderHistory.orderLiquidity", "Order Liquidity")}
           </LinkButton>
         </div>
       )}

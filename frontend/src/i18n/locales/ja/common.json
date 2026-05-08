@@ -34,16 +34,16 @@
     "create": "作成",
     "open": "開く",
     "loading": "読み込み中...",
-    "share": "Share",
-    "reload": "Reload App",
-    "saving": "Saving...",
-    "login": "Login",
-    "logout": "Log out",
-    "getStarted": "Get Started",
-    "goHome": "Go to Dashboard",
-    "viewAll": "View all",
-    "payAndOpen": "Pay and open channel",
-    "payExternally": "Pay with another wallet"
+    "share": "共有",
+    "reload": "アプリを再読み込み",
+    "saving": "保存中...",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "getStarted": "はじめる",
+    "goHome": "ダッシュボードへ",
+    "viewAll": "すべて表示",
+    "payAndOpen": "支払ってチャンネルを開く",
+    "payExternally": "別のウォレットで支払う"
   },
   "status": {
     "active": "アクティブ",
@@ -57,10 +57,10 @@
     "syncing": "同期中",
     "online": "オンライン",
     "offline": "オフライン",
-    "opening": "Opening",
-    "closing": "Closing",
-    "loading": "Loading...",
-    "running": "Running"
+    "opening": "開設中",
+    "closing": "クローズ中",
+    "loading": "読み込み中...",
+    "running": "実行中"
   },
   "errors": {
     "generic": "エラーが発生しました。もう一度お試しください。",
@@ -68,9 +68,9 @@
     "unauthorized": "このページを表示する権限がありません。",
     "networkError": "ネットワークエラーです。接続を確認してください。",
     "loadFailed": "データの読み込みに失敗しました。",
-    "failedToConnect": "Failed to connect",
-    "failedToSave": "Failed to save",
-    "tryAgain": "Please try again"
+    "failedToConnect": "接続に失敗しました",
+    "failedToSave": "保存に失敗しました",
+    "tryAgain": "もう一度お試しください"
   },
   "labels": {
     "amount": "金額",
@@ -86,12 +86,12 @@
     "note": "メモ",
     "optional": "任意",
     "required": "必須",
-    "password": "Password",
-    "message": "Message",
-    "nodeAlias": "Node Alias",
-    "pubkey": "Public Key",
-    "alias": "Alias",
-    "appName": "App Name"
+    "password": "パスワード",
+    "message": "メッセージ",
+    "nodeAlias": "ノードエイリアス",
+    "pubkey": "公開鍵",
+    "alias": "エイリアス",
+    "appName": "アプリ名"
   },
   "time": {
     "justNow": "たった今",
@@ -107,18 +107,18 @@
     "next": "次へ",
     "page": "{{total}} ページ中 {{current}} ページ目"
   },
-  "loading": "Loading...",
+  "loading": "読み込み中...",
   "appName": "Lokihub",
   "criticalError": {
-    "title": "Critical Error",
-    "description": "Something went wrong and Lokihub cannot continue.",
-    "hideConfig": "Hide Configuration",
-    "updateConfig": "Update Configuration",
-    "loadingConfig": "Loading configuration...",
-    "saveReload": "Save & Reload App",
-    "reloadApp": "Reload App",
-    "configUpdated": "Configuration updated. Reloading...",
-    "failedToLoad": "Failed to load current configuration",
-    "failedToUpdate": "Failed to update configuration"
+    "title": "重大なエラー",
+    "description": "問題が発生し、Lokihubを続行できません。",
+    "hideConfig": "設定を非表示",
+    "updateConfig": "設定を更新",
+    "loadingConfig": "設定を読み込み中...",
+    "saveReload": "保存してアプリを再読み込み",
+    "reloadApp": "アプリを再読み込み",
+    "configUpdated": "設定が更新されました。再読み込み中...",
+    "failedToLoad": "現在の設定の読み込みに失敗しました",
+    "failedToUpdate": "設定の更新に失敗しました"
   }
 }

@@ -57,17 +57,17 @@
     "outgoing": "Saliente"
   },
   "menu": {
-    "node": "Node",
+    "node": "Nodo",
     "onchain": "On-Chain",
     "swaps": "Swaps",
-    "history": "History",
-    "management": "Management"
+    "history": "Historial",
+    "management": "Gestión"
   },
   "onchain": {
     "title": "On-chain",
-    "addressLabel": "On-Chain Address",
-    "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "addressLabel": "Dirección On-chain",
+    "depositTitle": "Depositar Flokicoin",
+    "generateNew": "Generar una nueva dirección"
   },
   "orderHistory": {
     "title": "Order History",
@@ -79,7 +79,8 @@
     "description": "Su historial de pedidos de canales",
     "noOrdersDesc": "Aún no ha pedido ningún canal.",
     "noOrdersTitle": "No hay historial de pedidos",
-    "totalFee": "Tarifa total"
+    "totalFee": "Tarifa total",
+    "orderLiquidity": "Solicitar liquidez"
   },
   "increaseCapacity": {
     "title": "Abrir canal en cadena",

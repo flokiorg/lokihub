@@ -160,7 +160,7 @@ export function StarryNight({ children }: { children: React.ReactNode }) {
 }
 
 export function Intro() {
-  const { data: info } = useInfo();
+  const { data: info } = useInfo(true); // poll so we auto-redirect if setupCompleted becomes true
   const navigate = useNavigate();
   const { t } = useTranslation("setup");
   const [api, setApi] = React.useState<CarouselApi>();
@@ -196,21 +196,19 @@ export function Intro() {
       <Carousel className={cn("w-full h-full bg-transparent")} setApi={setApi}>
         <CarouselContent className="select-none bg-transparent">
           <CarouselItem>
-            <div className="absolute top-4 right-4 z-50">
-              <CompactLanguageSwitcher />
-            </div>
             <div className="flex flex-col justify-center items-center h-screen p-5">
-              <div className="flex flex-col gap-4 text-center max-w-lg">
+              <div className="flex flex-col gap-4 text-center items-center max-w-lg">
                 <div className="text-4xl font-extrabold text-foreground">
                   {t("intro.slide1.title")}
                 </div>
                 <div className="text-2xl text-muted-foreground font-semibold">
                   {t("intro.slide1.subtitle")}
                 </div>
-                <div className="mt-20">
+                <div className="mt-20 flex flex-col items-center gap-3">
                   <Button onClick={() => api?.scrollNext()} size="lg">
                     {t("intro.slide1.next")}
                   </Button>
+                  <CompactLanguageSwitcher showLabel />
                 </div>
               </div>
             </div>

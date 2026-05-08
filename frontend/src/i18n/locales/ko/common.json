@@ -34,16 +34,16 @@
     "create": "만들기",
     "open": "열기",
     "loading": "불러오는 중...",
-    "share": "Share",
-    "reload": "Reload App",
-    "saving": "Saving...",
-    "login": "Login",
-    "logout": "Log out",
-    "getStarted": "Get Started",
-    "goHome": "Go to Dashboard",
-    "viewAll": "View all",
-    "payAndOpen": "Pay and open channel",
-    "payExternally": "Pay with another wallet"
+    "share": "공유",
+    "reload": "앱 새로고침",
+    "saving": "저장 중...",
+    "login": "로그인",
+    "logout": "로그아웃",
+    "getStarted": "시작하기",
+    "goHome": "대시보드로 이동",
+    "viewAll": "전체 보기",
+    "payAndOpen": "결제하고 채널 열기",
+    "payExternally": "다른 지갑으로 결제"
   },
   "status": {
     "active": "활성",
@@ -57,10 +57,10 @@
     "syncing": "동기화 중",
     "online": "온라인",
     "offline": "오프라인",
-    "opening": "Opening",
-    "closing": "Closing",
-    "loading": "Loading...",
-    "running": "Running"
+    "opening": "열리는 중",
+    "closing": "닫히는 중",
+    "loading": "불러오는 중...",
+    "running": "실행 중"
   },
   "errors": {
     "generic": "문제가 발생했습니다. 다시 시도해 주세요.",
@@ -68,9 +68,9 @@
     "unauthorized": "이 페이지를 볼 권한이 없습니다.",
     "networkError": "네트워크 오류입니다. 연결을 확인해 주세요.",
     "loadFailed": "데이터를 불러오지 못했습니다.",
-    "failedToConnect": "Failed to connect",
-    "failedToSave": "Failed to save",
-    "tryAgain": "Please try again"
+    "failedToConnect": "연결 실패",
+    "failedToSave": "저장 실패",
+    "tryAgain": "다시 시도해 주세요"
   },
   "labels": {
     "amount": "금액",
@@ -86,12 +86,12 @@
     "note": "메모",
     "optional": "선택사항",
     "required": "필수",
-    "password": "Password",
-    "message": "Message",
-    "nodeAlias": "Node Alias",
-    "pubkey": "Public Key",
-    "alias": "Alias",
-    "appName": "App Name"
+    "password": "비밀번호",
+    "message": "메시지",
+    "nodeAlias": "노드 별칭",
+    "pubkey": "공개 키",
+    "alias": "별칭",
+    "appName": "앱 이름"
   },
   "time": {
     "justNow": "방금 전",
@@ -107,18 +107,18 @@
     "next": "다음",
     "page": "{{total}}페이지 중 {{current}}페이지"
   },
-  "loading": "Loading...",
+  "loading": "불러오는 중...",
   "appName": "Lokihub",
   "criticalError": {
-    "title": "Critical Error",
-    "description": "Something went wrong and Lokihub cannot continue.",
-    "hideConfig": "Hide Configuration",
-    "updateConfig": "Update Configuration",
-    "loadingConfig": "Loading configuration...",
-    "saveReload": "Save & Reload App",
-    "reloadApp": "Reload App",
-    "configUpdated": "Configuration updated. Reloading...",
-    "failedToLoad": "Failed to load current configuration",
-    "failedToUpdate": "Failed to update configuration"
+    "title": "심각한 오류",
+    "description": "문제가 발생하여 Lokihub를 계속 실행할 수 없습니다.",
+    "hideConfig": "설정 숨기기",
+    "updateConfig": "설정 업데이트",
+    "loadingConfig": "설정 불러오는 중...",
+    "saveReload": "저장하고 앱 새로고침",
+    "reloadApp": "앱 새로고침",
+    "configUpdated": "설정이 업데이트되었습니다. 새로고침 중...",
+    "failedToLoad": "현재 설정 불러오기 실패",
+    "failedToUpdate": "설정 업데이트 실패"
   }
 }

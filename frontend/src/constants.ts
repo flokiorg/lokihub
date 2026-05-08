@@ -19,7 +19,7 @@ export const LIST_APPS_LIMIT = 20;
 export const SUBWALLET_APPSTORE_APP_ID = "lokies";
 export const LOKI_ACCOUNT_APP_NAME = "loki-account";
 
-export const DEFAULT_APP_BUDGET_LOKI = 10_000;
+export const DEFAULT_APP_BUDGET_LOKI = 21 * 100_000_000; // 21 FLC — matches the first FLC preset
 export const DEFAULT_APP_BUDGET_RENEWAL = "monthly";
 
 export const FLOKICOIN_DISPLAY_FORMAT_FLC = "flc";

@@ -1,0 +1,97 @@
+{
+  "title": "Основные",
+  "description": "Общие настройки Lokihub.",
+  "sections": {
+    "appearance": "Внешний вид",
+    "unitsAndCurrency": "Единицы и валюта",
+    "language": "Язык"
+  },
+  "appearance": {
+    "theme": "Тема",
+    "themeDescription": "Выберите визуальную тему",
+    "darkMode": "Оформление",
+    "darkModeDescription": "Выберите светлый, тёмный или системный режим",
+    "modes": {
+      "system": "Системный",
+      "light": "Светлый",
+      "dark": "Тёмный"
+    }
+  },
+  "units": {
+    "displayUnit": "Единица отображения",
+    "displayUnitDescription": "Выберите формат отображения сумм",
+    "fiatCurrency": "Фиатная валюта",
+    "fiatCurrencyDescription": "Предпочтительная справочная валюта",
+    "auto": "Авто"
+  },
+  "language": {
+    "label": "Язык",
+    "description": "Выберите язык интерфейса",
+    "updated": "Язык обновлён."
+  },
+  "nav": {
+    "general": "Основные",
+    "services": "Сервисы",
+    "autoUnlock": "Автоматическая разблокировка",
+    "unlockPassword": "Пароль разблокировки",
+    "backup": "Резервная копия",
+    "migrate": "Перенос Lokihub",
+    "developer": "Разработчик",
+    "debugTools": "Инструменты отладки",
+    "about": "О программе"
+  },
+  "shutdown": {
+    "dialogTitle": "Вы хотите выключить Lokihub?",
+    "dialogDesc": "Это выключит ваш Lokihub и нода станет недоступной. Вы не сможете отправлять или получать флокикоин, пока не разблокируете его.",
+    "cancel": "Отмена",
+    "confirm": "Продолжить",
+    "toast": "Нода выключена.",
+    "failedToast": "Не удалось выключить ноду"
+  },
+  "header": {
+    "title": "Настройки"
+  },
+  "changePassword": {
+    "title": "Изменить пароль разблокировки",
+    "important": "Важно!",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "confirmNew": "Подтвердите новый пароль",
+    "save": "Сохранить"
+  },
+  "backup": {
+    "title": "Резервная копия",
+    "important": "Важно",
+    "passwordLabel": "Пароль",
+    "active": "Активна"
+  },
+  "autoUnlock": {
+    "title": "Автоматическая разблокировка",
+    "attention": "Внимание",
+    "passwordLabel": "Пароль разблокировки"
+  },
+  "developer": {
+    "title": "Разработчик",
+    "tokenType": "Тип токена",
+    "tokenExpiry": "Срок действия токена (дни)",
+    "passwordLabel": "Пароль разблокировки",
+    "createToken": "Создать токен"
+  },
+  "debugTools": {
+    "title": "Инструменты отладки",
+    "probeInvoice": "Проверить счёт",
+    "probeKeysend": "Проверить Keysend",
+    "networkGraph": "Получить граф сети",
+    "refundTo": "Возврат на",
+    "onchainAddress": "Адрес сети",
+    "cancel": "Отмена"
+  },
+  "toasts": {
+    "themeUpdated": "Тема обновлена.",
+    "appearanceUpdated": "Оформление обновлено.",
+    "currencyUpdated": "Установлена валюта {{currency}}",
+    "formatUpdated": "Формат отображения флокикоин обновлён",
+    "currencyFetchFailed": "Не удалось загрузить валюты: {{error}}",
+    "updateFailed": "Не удалось обновить настройки"
+  }
+}

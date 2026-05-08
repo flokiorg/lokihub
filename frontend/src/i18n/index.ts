@@ -11,6 +11,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "ja", name: "日本語", dir: "ltr" },
   { code: "ko", name: "한국어", dir: "ltr" },
   { code: "es", name: "Español", dir: "ltr" },
+  { code: "ru", name: "Русский", dir: "ltr" },
 ] as const;
 
 export type SupportedLanguageCode =

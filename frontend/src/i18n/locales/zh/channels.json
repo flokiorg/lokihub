@@ -57,17 +57,17 @@
     "outgoing": "出账"
   },
   "menu": {
-    "node": "Node",
-    "onchain": "On-Chain",
-    "swaps": "Swaps",
-    "history": "History",
-    "management": "Management"
+    "node": "节点",
+    "onchain": "链上",
+    "swaps": "兑换",
+    "history": "历史",
+    "management": "管理"
   },
   "onchain": {
-    "title": "On-chain",
-    "addressLabel": "On-Chain Address",
-    "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "title": "链上",
+    "addressLabel": "链上地址",
+    "depositTitle": "存入 Flokicoin",
+    "generateNew": "生成新地址"
   },
   "orderHistory": {
     "title": "Order History",
@@ -79,7 +79,8 @@
     "description": "您的通道订单记录",
     "noOrdersDesc": "您还没有订购任何通道。",
     "noOrdersTitle": "没有订单记录",
-    "totalFee": "总费用"
+    "totalFee": "总费用",
+    "orderLiquidity": "申请流动性"
   },
   "increaseCapacity": {
     "title": "使用链上资金开通通道",

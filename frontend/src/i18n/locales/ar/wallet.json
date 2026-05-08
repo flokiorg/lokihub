@@ -27,17 +27,17 @@
     "copyAddress": "نسخ العنوان",
     "shareInvoice": "مشاركة الفاتورة",
     "onchain": {
-      "title": "Receive On-chain",
-      "waiting": "Waiting for Payment...",
-      "newAddress": "New Address",
-      "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
-      "received": "Transaction Received!",
-      "receiveAnother": "Receive Another Payment",
-      "backToWallet": "Back to Wallet"
+      "title": "استلام على السلسلة",
+      "waiting": "في انتظار الدفع...",
+      "newAddress": "عنوان جديد",
+      "waitingConfirm": "في انتظار تأكيد على السلسلة...",
+      "viewExplorer": "عرض في مستكشف فلوكيكوين",
+      "received": "تم استلام المعاملة!",
+      "receiveAnother": "استلام دفعة أخرى",
+      "backToWallet": "العودة إلى المحفظة"
     },
     "lightning": {
-      "title": "Receive via Lightning"
+      "title": "استلام عبر لايتنينغ"
     },
     "buyingLiquidity": "شراء سيولة واردة...",
     "amountTooSmall": "المبلغ صغير جدا لدفع JIT. الحد الأدنى: {{amount}} {{unit}}.",

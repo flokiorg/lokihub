@@ -27,17 +27,17 @@
     "copyAddress": "کپی آدرس",
     "shareInvoice": "اشتراک‌گذاری فاکتور",
     "onchain": {
-      "title": "Receive On-chain",
-      "waiting": "Waiting for Payment...",
-      "newAddress": "New Address",
-      "waitingConfirm": "Waiting for On-chain Confirmation...",
-      "viewExplorer": "View on Flokicoin Explorer",
-      "received": "Transaction Received!",
-      "receiveAnother": "Receive Another Payment",
-      "backToWallet": "Back to Wallet"
+      "title": "دریافت از بلاکچین",
+      "waiting": "در انتظار پرداخت...",
+      "newAddress": "آدرس جدید",
+      "waitingConfirm": "در انتظار تایید بلاکچین...",
+      "viewExplorer": "مشاهده در اکسپلورر فلوکیکوین",
+      "received": "تراکنش دریافت شد!",
+      "receiveAnother": "دریافت پرداخت دیگر",
+      "backToWallet": "بازگشت به کیف پول"
     },
     "lightning": {
-      "title": "Receive via Lightning"
+      "title": "دریافت از طریق لایتنینگ"
     },
     "buyingLiquidity": "خرید نقدینگی ورودی...",
     "amountTooSmall": "مبلغ برای پرداخت JIT بسیار کم است. حداقل: {{amount}} {{unit}}.",

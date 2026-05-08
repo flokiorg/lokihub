@@ -18,12 +18,12 @@
     "confirm": "비밀번호 확인",
     "mismatch": "비밀번호가 일치하지 않습니다",
     "tooShort": "비밀번호는 8자 이상이어야 합니다",
-    "repeatLabel": "Repeat Password",
-    "repeatPlaceholder": "Re-enter the password",
-    "securedConfirm": "I've secured this password in a safe place",
-    "irrecoverableConfirm": "I understand this password cannot be recovered",
-    "createButton": "Create Password",
-    "notConfirmed": "Please confirm you have saved your password"
+    "repeatLabel": "비밀번호 반복",
+    "repeatPlaceholder": "비밀번호 재입력",
+    "securedConfirm": "이 비밀번호를 안전한 곳에 저장했습니다",
+    "irrecoverableConfirm": "이 비밀번호는 복구할 수 없다는 것을 이해합니다",
+    "createButton": "비밀번호 생성",
+    "notConfirmed": "비밀번호를 저장했는지 확인해 주세요"
   },
   "backup": {
     "title": "복구 문구를 백업하세요",
@@ -38,59 +38,59 @@
   },
   "intro": {
     "slide1": {
-      "title": "Welcome to Lokihub",
-      "subtitle": "A powerful, all-in-one Flokicoin Lightning wallet powering the next web of engagement.",
-      "next": "Next"
+      "title": "Lokihub에 오신 것을 환영합니다",
+      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 Flokicoin 라이트닝 지갑.",
+      "next": "다음"
     },
     "slide2": {
-      "title": "Always Ready",
-      "description": "Your wallet is online and ready to use on any device, anytime."
+      "title": "항상 준비됨",
+      "description": "언제 어디서나 모든 기기에서 지갑을 사용할 수 있습니다."
     },
     "slide3": {
-      "title": "Secure & Private",
-      "description": "Encrypted by your password. Only you can access your funds."
+      "title": "안전하고 프라이빗",
+      "description": "비밀번호로 암호화됩니다. 오직 본인만 자금에 접근할 수 있습니다."
     },
     "slide4": {
-      "title": "Connect Apps",
-      "description": "Link up with apps and join the Web of Fun."
+      "title": "앱 연결",
+      "description": "앱과 연결하고 재미있는 웹에 참여하세요."
     },
-    "slideAriaLabel": "Go to slide {{index}}"
+    "slideAriaLabel": "슬라이드 {{index}}로 이동"
   },
   "start": {
-    "title": "Start",
-    "description": "Enter your password to unlock and start Lokihub.",
-    "passwordLabel": "Password",
-    "pleaseWait": "Please wait...",
-    "starting": "Starting Lokihub may take a few minutes.",
-    "failedToStart": "Failed to start",
-    "failedToConnect": "Failed to connect"
+    "title": "시작",
+    "description": "비밀번호를 입력하여 Lokihub의 잠금을 해제하고 시작합니다.",
+    "passwordLabel": "비밀번호",
+    "pleaseWait": "잠시 기다려 주세요...",
+    "starting": "Lokihub 시작에 몇 분이 소요될 수 있습니다.",
+    "failedToStart": "시작 실패",
+    "failedToConnect": "연결 실패"
   },
   "unlock": {
-    "title": "Login",
-    "description": "Enter your unlock password to continue",
-    "passwordLabel": "Password",
-    "login": "Login",
-    "failedToConnect": "Failed to connect"
+    "title": "로그인",
+    "description": "계속하려면 잠금 해제 비밀번호를 입력하세요",
+    "passwordLabel": "비밀번호",
+    "login": "로그인",
+    "failedToConnect": "연결 실패"
   },
   "finish": {
-    "loading": "Setting up your Hub...",
-    "connectionTimeout": "Connection timed out. Please check your node.",
-    "failedToConnect": "Failed to connect"
+    "loading": "허브 설정 중...",
+    "connectionTimeout": "연결 시간이 초과되었습니다. 노드를 확인하세요.",
+    "failedToConnect": "연결 실패"
   },
   "security": {
-    "title": "Security & Recovery",
-    "description": "Take your time to understand how to secure and recover your funds on Lokihub.",
-    "confirmed": "I understand how to secure and recover funds"
+    "title": "보안 및 복구",
+    "description": "Lokihub에서 자금을 보호하고 복구하는 방법을 이해하는 시간을 가져보세요.",
+    "confirmed": "자금 보안 및 복구 방법을 이해했습니다"
   },
   "restore": {
-    "title": "Import Wallet from Migration File",
-    "description": "Upload your encrypted wallet migration file.",
-    "import": "Import Wallet",
-    "restartingTitle": "Restart your Hub",
-    "restartingDesc": "Lokihub needs to restart to finish restoring your node",
-    "restartingMessage": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process.",
-    "waitingForRestart": "Waiting for restart...",
-    "warning1": "As part of the node restore process your Lokihub will be shut down.",
-    "warning2": "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Loki Hub to finish the restore process."
+    "title": "마이그레이션 파일에서 지갑 가져오기",
+    "description": "암호화된 지갑 마이그레이션 파일을 업로드하세요.",
+    "import": "지갑 가져오기",
+    "restartingTitle": "허브 재시작",
+    "restartingDesc": "노드 복원을 완료하려면 Lokihub을 재시작해야 합니다",
+    "restartingMessage": "클라우드에서 실행 중인 경우 Lokihub이 자동으로 재시작됩니다. 그렇지 않으면 복원 프로세스를 완료하기 위해 수동으로 Lokihub을 재시작해 주세요.",
+    "waitingForRestart": "재시작 대기 중...",
+    "warning1": "노드 복원 프로세스의 일환으로 Lokihub이 종료됩니다.",
+    "warning2": "클라우드에서 실행 중인 경우 Lokihub이 자동으로 재시작됩니다. 그렇지 않으면 복원 프로세스를 완료하기 위해 수동으로 Loki Hub를 재시작해 주세요."
   }
 }
