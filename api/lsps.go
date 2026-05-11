@@ -619,7 +619,7 @@ func (api *api) UpdateLSPS1OrderState(ctx context.Context, orderID, state string
 	if api.svc.GetLiquidityManager() == nil {
 		return fmt.Errorf("LiquidityManager not started")
 	}
-	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state)
+	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, "")
 	return nil
 }
 

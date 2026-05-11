@@ -174,7 +174,7 @@ func (l *Listener) handleEvent(ctx context.Context, ev *nostr.Event) {
 		}
 
 	case constants.LSPS5_EVENT_ORDER_STATE_CHANGED:
-		event.Event = constants.LSPS5_EVENT_ORDER_STATE_CHANGED
+		event.Event = constants.LSPS5_EVENT_ORDER_STATE_NOTIFICATION
 		var params struct {
 			OrderID      string  `json:"order_id"`
 			State        string  `json:"state"`

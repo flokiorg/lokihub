@@ -196,6 +196,24 @@ func (m *LSPManager) UpdateOrderState(orderID, state string) error {
 	return m.db.Model(&persist.LSPS1Order{}).Where("order_id = ?", orderID).Update("state", state).Error
 }
 
+// UpdateOrderStateIfPriority atomically reads the current state and applies the update only
+// if allow(currentState) returns true. Returns (true, nil) when applied, (false, nil) when skipped.
+func (m *LSPManager) UpdateOrderStateIfPriority(orderID, newState string, allow func(current string) bool) (bool, error) {
+	applied := false
+	err := m.db.Transaction(func(tx *gorm.DB) error {
+		var order persist.LSPS1Order
+		if err := tx.First(&order, "order_id = ?", orderID).Error; err != nil {
+			return err
+		}
+		if !allow(order.State) {
+			return nil
+		}
+		applied = true
+		return tx.Model(&persist.LSPS1Order{}).Where("order_id = ?", orderID).Update("state", newState).Error
+	})
+	return applied, err
+}
+
 // ListAllOrders returns all orders (history)
 func (m *LSPManager) ListAllOrders() ([]persist.LSPS1Order, error) {
 	var orders []persist.LSPS1Order
@@ -211,7 +229,7 @@ func (m *LSPManager) ListPendingOrders() ([]persist.LSPS1Order, error) {
 	// We might want to keep checking "CREATED" logic.
 	// Typically, terminal states are: "COMPLETED", "FAILED", "CANCELLED", "CLOSED" (from previous logic)
 	// We filter where state NOT IN (...)
-	terminalStates := []string{"COMPLETED", "FAILED", "CANCELLED", "CLOSED"}
+	terminalStates := []string{"COMPLETED", "FAILED", "CANCELLED", "CLOSED", "EXPIRED"}
 	if err := m.db.Where("state NOT IN ?", terminalStates).Find(&orders).Error; err != nil {
 		return nil, err
 	}
