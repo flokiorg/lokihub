@@ -52,15 +52,24 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 
 		// apply pragma if we're not running the tests
 		if !strings.Contains(sqliteURI, "?mode=memory") {
-			// see https://github.com/mattn/go-sqlite3?tab=readme-ov-file#connection-string
-			// _txlock: avoid SQLITE_BUSY errors with _txlock=immediate
-			// _auto_vacuum: properly cleanup disk when deleting records with auto_vacuum=1
-			// _busy_timeout: avoid SQLITE_BUSY errors with 5 second lock timeout
-			// _journal_mode: enables write-ahead log so that your reads do not block writes and vice-versa.
-			// _synchronous: sqlite will sync less frequently and be more performant, still safe to use because of the enabled WAL mode
-			// _cache_size: 20MB memory cache
-			// _pragma=temp_store=MEMORY: set the temp_store setting to memory (required for modernc.org/sqlite)
-			sqliteURI = sqliteURI + "?_txlock=immediate&_foreign_keys=1&_auto_vacuum=1&_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-20000&_pragma=temp_store=MEMORY"
+			// modernc.org/sqlite only understands _txlock and _pragma=KEY(VALUE) — mattn-style
+			// shorthand params (_journal_mode, _busy_timeout, etc.) are silently ignored.
+			// _txlock=immediate: start all transactions IMMEDIATE to avoid SQLITE_BUSY on concurrent writes
+			// _pragma=busy_timeout(5000): wait up to 5s before returning SQLITE_BUSY
+			// _pragma=journal_mode(WAL): readers do not block writers and vice-versa
+			// _pragma=foreign_keys(1): enforce FK constraints
+			// _pragma=auto_vacuum(1): reclaim disk space on DELETE
+			// _pragma=synchronous(NORMAL): less frequent sync, safe with WAL
+			// _pragma=cache_size(-20000): 20 MB memory cache
+			// _pragma=temp_store(MEMORY): keep temp tables in memory (required for modernc.org/sqlite)
+			sqliteURI = sqliteURI + "?_txlock=immediate" +
+				"&_pragma=busy_timeout(5000)" +
+				"&_pragma=journal_mode(WAL)" +
+				"&_pragma=foreign_keys(1)" +
+				"&_pragma=auto_vacuum(1)" +
+				"&_pragma=synchronous(NORMAL)" +
+				"&_pragma=cache_size(-20000)" +
+				"&_pragma=temp_store(MEMORY)"
 		}
 
 		driverName := sqlite_wrapper.Sqlite3WrapperDriverName
