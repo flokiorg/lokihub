@@ -343,7 +343,7 @@ function NewChannelInternal({
                 <div className="font-medium text-muted-foreground">{tc("labels.amount", "Amount")}</div>
                 <div>
                   <FormattedFlokicoinAmount
-                    amount={parseInt(order.amount || "0") * 1000}
+                    amount={parseInputAmount(parseFloat(order.amount || "0"), inputUnit) * 1000}
                   />
                 </div>
               </div>

@@ -4,6 +4,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ClockIcon,
   CopyIcon,
   XIcon,
   Zap
@@ -153,6 +154,8 @@ function OrderHistory() {
                           ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
                           : order.state === "PAID"
                           ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
+                          : order.state === "EXPIRED"
+                          ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300"
                           : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
                       }`}
                     >
@@ -210,12 +213,16 @@ function OrderHistory() {
                     ? "bg-green-100 dark:bg-emerald-950"
                     : selectedOrder.state === "FAILED"
                     ? "bg-red-100 dark:bg-rose-950"
+                    : selectedOrder.state === "EXPIRED"
+                    ? "bg-orange-100 dark:bg-orange-950"
                     : "bg-blue-100 dark:bg-sky-950"
                 )}>
                   {selectedOrder.state === "COMPLETED" || selectedOrder.state === "SUCCESS" ? (
                     <CheckIcon className="w-8 h-8 stroke-green-500 dark:stroke-teal-500" strokeWidth={3} />
                   ) : selectedOrder.state === "FAILED" ? (
                     <XIcon className="w-8 h-8 stroke-red-500 dark:stroke-rose-500" strokeWidth={3} />
+                  ) : selectedOrder.state === "EXPIRED" ? (
+                    <ClockIcon className="w-8 h-8 stroke-orange-500 dark:stroke-orange-400" strokeWidth={2} />
                   ) : (
                     <ArrowDownIcon className="w-8 h-8 stroke-blue-500 dark:stroke-sky-500" strokeWidth={3} />
                   )}
