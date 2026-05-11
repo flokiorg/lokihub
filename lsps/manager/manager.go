@@ -157,26 +157,8 @@ func (m *LiquidityManager) pollOrders(ctx context.Context) {
 					Str("state", statusEvent.OrderState).
 					Msg("Polled order status")
 
-				// Update DB with full details (state + amounts if available)
-				if err := m.cfg.LSPManager.UpdateOrderState(order.OrderID, statusEvent.OrderState); err != nil {
-					logger.Logger.Error().Err(err).Str("order_id", order.OrderID).Msg("Failed to update order state in DB")
-				}
-
-				// Publish event to internal queue (for any internal listeners)
 				m.eventQueue.Enqueue(statusEvent)
-
-				// Also publish to global event bus for Frontend updates (SSE)
-				if m.cfg.EventPublisher != nil {
-					m.cfg.EventPublisher.Publish(&globalevents.Event{
-						Event: constants.LSPS5_EVENT_ORDER_STATE_CHANGED,
-						Properties: map[string]interface{}{
-							"order_id":   order.OrderID,
-							"state":      statusEvent.OrderState,
-							"lsp_pubkey": order.LSPPubkey,
-							"timestamp":  time.Now().UTC().Format(time.RFC3339),
-						},
-					})
-				}
+				m.HandleOrderStateUpdate(order.OrderID, statusEvent.OrderState, order.LSPPubkey)
 			}
 		}
 	}
@@ -229,23 +211,59 @@ func (m *LiquidityManager) MonitorOrder(lspPubkey, orderID string, invoice strin
 	}
 }
 
-// HandleOrderStateUpdate processes state updates from other sources (e.g. Webhook)
-func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state string) {
-	logger.Logger.Info().Str("order_id", orderID).Str("state", state).Msg("Received external order state update")
+// orderStatePriority returns the priority of an order state. Higher priority states
+// must never be overwritten by lower priority ones (e.g. PAID must not regress to CREATED
+// when the poller receives a spec-mapped CREATED from flspd for a PAID order).
+func orderStatePriority(state string) int {
+	switch state {
+	case "CREATED":
+		return 0
+	case "PAID":
+		return 1
+	case "COMPLETED", "FAILED", "EXPIRED", "CANCELLED", "CLOSED":
+		return 2
+	default:
+		return 0
+	}
+}
 
-	// Update DB
-	if err := m.cfg.LSPManager.UpdateOrderState(orderID, state); err != nil {
-		logger.Logger.Error().Err(err).Str("order_id", orderID).Msg("Failed to update order state from webhook")
+// HandleOrderStateUpdate persists an order state change and publishes the SSE event to the frontend.
+// It is the single authoritative path for all state change sources (Nostr, HTTP webhook, polling).
+// The read and write are atomic inside a transaction — a lower-priority state can never overwrite a
+// higher-priority one even under concurrent callers (e.g. PAID → CREATED is silently skipped).
+func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state, lspPubkey string) {
+	applied, err := m.cfg.LSPManager.UpdateOrderStateIfPriority(orderID, state, func(current string) bool {
+		if orderStatePriority(current) > orderStatePriority(state) {
+			logger.Logger.Debug().
+				Str("order_id", orderID).
+				Str("current", current).
+				Str("new", state).
+				Msg("Skipping order state downgrade")
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("order_id", orderID).Msg("Failed to persist order state")
+		return
+	}
+	if !applied {
 		return
 	}
 
-	// We could also fetch the full order details if we needed more than just state,
-	// but usually the notification payload (if rich) or just the state change is enough to notify frontend.
-	// For now, let's just create a synthetic event or fetch fresh?
-	// The webhook handler in http_service already publishes an event.
-	// But `pollOrders` relies on DB state. Updating DB here is enough for `pollOrders` stop logic if it was stateful,
-	// but pollOrders iterates over "non-terminal".
-	// By updating to "COMPLETED" here, the next poll loop simply won't pick it up. Efficient!
+	logger.Logger.Info().Str("order_id", orderID).Str("state", state).Msg("Order state update")
+
+	if m.cfg.EventPublisher != nil {
+		m.cfg.EventPublisher.Publish(&globalevents.Event{
+			Event: constants.LSPS5_EVENT_ORDER_STATE_CHANGED,
+			Properties: map[string]interface{}{
+				"order_id":   orderID,
+				"state":      state,
+				"lsp_pubkey": lspPubkey,
+				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
 }
 
 func (m *LiquidityManager) processMessages(ctx context.Context, msgs <-chan lnclient.CustomMessage, errs <-chan error) {

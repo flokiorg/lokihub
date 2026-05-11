@@ -15,7 +15,7 @@ type lspsEventConsumer struct {
 func (c *lspsEventConsumer) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
 	if event.Event == constants.LSPS5_EVENT_PAYMENT_INCOMING {
 		c.handlePaymentIncoming(ctx, event)
-	} else if event.Event == constants.LSPS5_EVENT_ORDER_STATE_CHANGED {
+	} else if event.Event == constants.LSPS5_EVENT_ORDER_STATE_NOTIFICATION {
 		c.handleOrderStateChanged(ctx, event)
 	}
 }
@@ -30,23 +30,11 @@ func (c *lspsEventConsumer) handleOrderStateChanged(ctx context.Context, event *
 	orderID, _ := props["order_id"].(string)
 	lspPubkey, _ := props["lsp_pubkey"].(string)
 
-	if state == "FAILED" {
-		errMsg, _ := props["error"].(string)
-		logger.Logger.Error().
-			Str("order_id", orderID).
-			Str("lsp", lspPubkey).
-			Str("error", errMsg).
-			Msg("LSPS order failed terminal status")
-
-		// Here we could trigger internal reconciliation/UI updates
-	} else if state == "COMPLETED" {
-		channelPoint, _ := props["channel_point"].(string)
-		logger.Logger.Info().
-			Str("order_id", orderID).
-			Str("lsp", lspPubkey).
-			Str("channel_point", channelPoint).
-			Msg("LSPS order completed successfully")
+	if orderID == "" || state == "" {
+		return
 	}
+
+	c.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, lspPubkey)
 }
 
 func (c *lspsEventConsumer) handlePaymentIncoming(ctx context.Context, event *events.Event) {

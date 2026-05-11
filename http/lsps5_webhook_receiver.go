@@ -286,12 +286,13 @@ func (httpSvc *HttpService) handleLSPS5Notification(lspPubkey, orderID string, n
 			Str("order_id", orderID).
 			Interface("params", params).
 			Msg("Order state changed notification")
-		event.Event = constants.LSPS5_EVENT_ORDER_STATE_CHANGED
 
-		// Update persistent order state
+		// HandleOrderStateUpdate (called inside) persists state and publishes
+		// LSPS5_EVENT_ORDER_STATE_CHANGED to the frontend SSE — skip the generic publish below.
 		if err := httpSvc.api.UpdateLSPS1OrderState(context.Background(), orderID, params.State); err != nil {
 			logger.Logger.Warn().Err(err).Str("order_id", orderID).Msg("Failed to update persistent order state from webhook")
 		}
+		return nil
 
 	default:
 		// Check for LSPS1-specific notifications (non-standard but useful)
