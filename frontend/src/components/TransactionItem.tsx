@@ -13,6 +13,7 @@ import {
 import { nip19 } from "nostr-tools";
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AppAvatar from "src/components/AppAvatar";
 import ExternalLink from "src/components/ExternalLink";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
@@ -30,6 +31,7 @@ import {
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useSwap } from "src/hooks/useSwaps";
+import { useLocale } from "src/hooks/useLocale";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { Transaction } from "src/types";
@@ -49,6 +51,8 @@ function safeNpubEncode(hex: string): string | undefined {
 }
 
 function TransactionItem({ tx }: Props) {
+  const { t } = useTranslation("wallet");
+  const { isRTL } = useLocale();
   const { data: app } = useApp(tx.appId);
   const swapId = tx.metadata?.swap_id;
   const { data: swap } = useSwap(swapId);
@@ -62,11 +66,11 @@ function TransactionItem({ tx }: Props) {
   const from =
     type === "incoming"
       ? payerName
-        ? `from ${payerName}`
+        ? t("transactions.fromPayer", { name: payerName })
         : npub
-          ? `zap from ${npub.substring(0, 12)}...`
+          ? t("transactions.zapFrom", { npub: npub.substring(0, 12) + "..." })
           : swap
-            ? `swap from ${swap.lockupAddress}`
+            ? t("transactions.swapFrom", { address: swap.lockupAddress })
             : undefined
       : undefined;
 
@@ -74,29 +78,40 @@ function TransactionItem({ tx }: Props) {
   const to =
     type === "outgoing"
       ? npub
-        ? `zap to ${npub.substring(0, 12)}...`
+        ? t("transactions.zapTo", { npub: npub.substring(0, 12) + "..." })
         : swap?.type === "out"
-          ? `swap to ${swap.destinationAddress}`
+          ? t("transactions.swapTo", { address: swap.destinationAddress })
           : recipientIdentifier
-            ? `${tx.state === "failed" ? "payment " : ""}to ${recipientIdentifier}`
+            ? t(
+                tx.state === "failed"
+                  ? "transactions.paymentTo"
+                  : "transactions.toRecipient",
+                { identifier: recipientIdentifier }
+              )
             : undefined
       : undefined;
 
   const eventId = tx.metadata?.nostr?.tags?.find((t) => t[0] === "e")?.[1];
 
-
-
-  const description =
-    tx.description || tx.metadata?.comment;
+  const description = tx.description || tx.metadata?.comment;
 
   const typeStateText =
-    type == "incoming"
-      ? "Received"
-      : tx.state === "settled" // we only fetch settled incoming payments
-        ? "Sent"
+    type === "incoming"
+      ? t("transactions.received")
+      : tx.state === "settled"
+        ? t("transactions.sent")
         : tx.state === "pending"
-          ? "Sending"
-          : "Failed";
+          ? t("transactions.sending")
+          : t("transactions.failed");
+
+  const dialogTitle =
+    type === "incoming"
+      ? t("transactions.receivedPayment")
+      : tx.state === "settled"
+        ? t("transactions.sentPayment")
+        : tx.state === "pending"
+          ? t("transactions.sendingPayment")
+          : t("transactions.failedPayment");
 
   const Icon =
     tx.state === "failed"
@@ -170,15 +185,24 @@ function TransactionItem({ tx }: Props) {
             tx.state === "pending" && "animate-pulse"
           )}
         >
-          {typeStateIcon}
-          <div className="overflow-hidden me-3 max-w-full flex flex-col items-start justify-center">
-            <div className="flex items-center gap-2">
+          <div className={isRTL ? "order-3" : "order-1"}>
+            {typeStateIcon}
+          </div>
+          <div
+            className={cn(
+              "overflow-hidden max-w-full flex flex-col justify-center",
+              isRTL
+                ? "order-2 ms-auto items-end"
+                : "order-2 me-3 items-start"
+            )}
+          >
+            <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
               <span className="md:text-xl font-semibold break-all line-clamp-1">
                 {typeStateText}
                 {from !== undefined && <>&nbsp;{from}</>}
                 {to !== undefined && <>&nbsp;{to}</>}
               </span>
-              <span className="text-xs md:text-base text-muted-foreground shrink-0">
+              <span className="text-xs md:text-base text-muted-foreground shrink-0" dir="ltr">
                 {dayjs(tx.updatedAt).fromNow()}
               </span>
             </div>
@@ -186,8 +210,18 @@ function TransactionItem({ tx }: Props) {
               {description}
             </p>
           </div>
-          <div className="flex ms-auto shrink-0">
-            <div className="flex flex-col items-end md:text-xl">
+          <div
+            className={cn(
+              "flex shrink-0",
+              isRTL ? "order-1" : "order-3 ms-auto"
+            )}
+          >
+            <div
+              className={cn(
+                "flex flex-col md:text-xl",
+                isRTL ? "items-start" : "items-end"
+              )}
+            >
               <p
                 dir="ltr"
                 className={cn(
@@ -212,7 +246,7 @@ function TransactionItem({ tx }: Props) {
         <DialogHeader>
           <DialogTitle
             className={cn(tx.state === "pending" && "animate-pulse")}
-          >{`${typeStateText} Flokicoin Payment`}</DialogTitle>
+          >{dialogTitle}</DialogTitle>
           <DialogDescription className="text-start text-foreground max-h-[90vh] overflow-y-auto pe-2">
             <div
               className={cn(
@@ -230,7 +264,7 @@ function TransactionItem({ tx }: Props) {
             </div>
             {app && (
               <div className="mt-8">
-                <p>App</p>
+                <p>{t("transactions.app")}</p>
                 <Link to={`/apps/${app.id}`}>
                   <p className="font-semibold">
                     {app.name === LOKI_ACCOUNT_APP_NAME
@@ -242,7 +276,7 @@ function TransactionItem({ tx }: Props) {
             )}
             {swapId && (
               <div className="mt-8">
-                <p>Swap Id</p>
+                <p>{t("transactions.swapId")}</p>
                 <Link
                   to={`/wallet/swap/${type === "incoming" ? "in" : "out"}/status/${swapId}`}
                   className="flex items-center gap-1"
@@ -253,26 +287,26 @@ function TransactionItem({ tx }: Props) {
             )}
             {to && (
               <div className="mt-6">
-                <p>To</p>
+                <p>{t("transactions.to")}</p>
                 <p className="text-muted-foreground">{to}</p>
               </div>
             )}
             {payerName && (
               <div className="mt-6">
-                <p>From</p>
+                <p>{t("transactions.from")}</p>
                 <p className="text-muted-foreground">{payerName}</p>
               </div>
             )}
             <div className="mt-6">
-              <p>Date & Time</p>
-              <p className="text-muted-foreground">
+              <p>{t("transactions.dateTime")}</p>
+              <p className="text-muted-foreground text-end" dir="ltr">
                 {dayjs(tx.updatedAt).local().format("D MMMM YYYY, HH:mm")}
               </p>
             </div>
             {tx.state != "failed" && type == "outgoing" && (
               <div className="mt-6">
-                <p>Fee</p>
-                <p className="text-muted-foreground">
+                <p>{t("transactions.fee")}</p>
+                <p className="text-muted-foreground text-end" dir="ltr">
                   <FormattedFlokicoinAmount amount={tx.feesPaid} />
                   {tx.feesPaid > 0 && (
                     <>&nbsp;({((tx.feesPaid / tx.amount) * 100).toFixed(2)}%)</>
@@ -282,7 +316,7 @@ function TransactionItem({ tx }: Props) {
             )}
             {tx.description && (
               <div className="mt-6">
-                <p>Description</p>
+                <p>{t("transactions.description")}</p>
                 <p className="text-muted-foreground break-all">
                   {tx.description}
                 </p>
@@ -290,15 +324,12 @@ function TransactionItem({ tx }: Props) {
             )}
             {tx.metadata?.comment && (
               <div className="mt-6">
-                <p>Comment</p>
+                <p>{t("transactions.comment")}</p>
                 <p className="text-muted-foreground break-all">
                   {tx.metadata.comment}
                 </p>
               </div>
             )}
-
-            {/* for Loki lightning addresses the content of the zap request is
-            automatically extracted and already displayed above as description */}
             {tx.metadata?.nostr && eventId && npub && (
               <div className="mt-6">
                 <p>
@@ -308,10 +339,10 @@ function TransactionItem({ tx }: Props) {
                     })}`}
                     className="underline"
                   >
-                    Nostr Zap
+                    {t("transactions.nostrZap")}
                   </ExternalLink>{" "}
                   <span className="text-muted-foreground break-all">
-                    from {npub}
+                    {t("transactions.nostrZapFrom", { npub })}
                   </span>
                 </p>
               </div>
@@ -329,7 +360,7 @@ function TransactionItem({ tx }: Props) {
                 className="flex items-center gap-2 cursor-pointer"
                 onClick={() => setShowDetails(!showDetails)}
               >
-                Details
+                {t("transactions.details")}
                 {showDetails ? (
                   <ChevronUpIcon className="size-4" />
                 ) : (
@@ -339,10 +370,9 @@ function TransactionItem({ tx }: Props) {
               {showDetails && (
                 <>
                   {tx.boostagram && <PodcastingInfo boost={tx.boostagram} />}
-
                   {tx.preimage && (
                     <div className="mt-6">
-                      <p>Preimage</p>
+                      <p>{t("transactions.preimage")}</p>
                       <div className="flex items-center gap-4">
                         <p className="text-muted-foreground break-all" dir="ltr">
                           {tx.preimage}
@@ -359,7 +389,7 @@ function TransactionItem({ tx }: Props) {
                     </div>
                   )}
                   <div className="mt-6">
-                    <p>Hash</p>
+                    <p>{t("transactions.hash")}</p>
                     <div className="flex items-center gap-4">
                       <p className="text-muted-foreground break-all" dir="ltr">
                         {tx.paymentHash}
@@ -373,7 +403,7 @@ function TransactionItem({ tx }: Props) {
                     </div>
                   </div>
                   <div className="mt-6">
-                    <p>Invoice</p>
+                    <p>{t("transactions.invoice")}</p>
                     <div className="flex items-center gap-4">
                       <p className="text-muted-foreground break-all" dir="ltr">
                         {tx.invoice}
@@ -388,7 +418,7 @@ function TransactionItem({ tx }: Props) {
                   </div>
                   {!!tx.failureReason && (
                     <div className="mt-6">
-                      <p>Failure Reason</p>
+                      <p>{t("transactions.failureReason")}</p>
                       <div className="flex items-center gap-4">
                         <p className="text-muted-foreground break-anywhere">
                           {tx.failureReason}
@@ -404,7 +434,7 @@ function TransactionItem({ tx }: Props) {
                   )}
                   {tx.metadata && (
                     <div className="mt-6">
-                      <p>Metadata</p>
+                      <p>{t("transactions.metadata")}</p>
                       <div className="flex items-center gap-4">
                         <p className="text-muted-foreground break-all" dir="ltr">
                           {JSON.stringify(tx.metadata)}
