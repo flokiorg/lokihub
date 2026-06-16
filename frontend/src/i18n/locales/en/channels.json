@@ -67,7 +67,17 @@
     "onchain": "On-Chain",
     "swaps": "Swaps",
     "history": "History",
-    "management": "Management"
+    "management": "Management",
+    "advanced": "Advanced",
+    "publicKey": "Public Key",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "swapIn": "Swap In",
+    "swapOut": "Swap Out",
+    "liquidityOrders": "Liquidity Orders",
+    "connectedPeers": "Connected Peers",
+    "signMessage": "Sign Message",
+    "setNodeAlias": "Set Node Alias"
   },
   "onchain": {
     "title": "On-chain",
@@ -201,6 +211,17 @@
     "spendingBalance": "Spending Balance",
     "receiveLimit": "Receive Limit",
     "balance": "Balance"
+  },
+  "alerts": {
+    "conflictingChannels": {
+      "title": "Conflicting Private / Public Channels",
+      "desc": "You will not be able to receive payments on any private channels. It is recommended to only open all private or all public channels."
+    },
+    "duplicateChannel": {
+      "titleWithName": "You already have a channel with {{name}}",
+      "titleGeneric": "You already have a channel with the selected peer",
+      "desc": "There are other options available rather than opening multiple channels with the same counterparty."
+    }
   },
   "spendingAlert": {
     "title": "Maximum Spendable Balance Too Low",

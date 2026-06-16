@@ -67,7 +67,17 @@
     "onchain": "على السلسلة",
     "swaps": "التبادلات",
     "history": "السجل",
-    "management": "الإدارة"
+    "management": "الإدارة",
+    "advanced": "متقدم",
+    "publicKey": "المفتاح العام",
+    "deposit": "إيداع",
+    "withdraw": "سحب",
+    "swapIn": "تبادل للداخل",
+    "swapOut": "تبادل للخارج",
+    "liquidityOrders": "طلبات السيولة",
+    "connectedPeers": "النظراء المتصلون",
+    "signMessage": "توقيع رسالة",
+    "setNodeAlias": "تعيين اسم العقدة"
   },
   "onchain": {
     "title": "على السلسلة",
@@ -196,6 +206,17 @@
     "spendingBalance": "رصيد الإنفاق",
     "receiveLimit": "حد الاستلام",
     "balance": "الرصيد"
+  },
+  "alerts": {
+    "conflictingChannels": {
+      "title": "تعارض القنوات الخاصة / العامة",
+      "desc": "لن تتمكن من استلام المدفوعات على أي قناة خاصة. يُنصح بفتح جميع القنوات الخاصة أو جميع القنوات العامة فقط."
+    },
+    "duplicateChannel": {
+      "titleWithName": "لديك بالفعل قناة مع {{name}}",
+      "titleGeneric": "لديك بالفعل قناة مع النظير المحدد",
+      "desc": "هناك خيارات أخرى متاحة بدلاً من فتح قنوات متعددة مع نفس الطرف الآخر."
+    }
   },
   "spendingAlert": {
     "title": "رصيد الإنفاق الأقصى منخفض جداً",

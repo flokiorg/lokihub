@@ -12,11 +12,39 @@
     "empty": "لا توجد معاملات بعد",
     "sent": "مُرسَل",
     "received": "مُستلَم",
+    "sending": "جارٍ الإرسال",
     "pending": "قيد الانتظار",
     "failed": "فشل",
     "viewAll": "عرض الكل",
     "emptyDescription": "ستظهر هنا أحدث مدفوعاتك الواردة والصادرة.",
-    "receiveFirst": "استقبل دفعتك الأولى"
+    "receiveFirst": "استقبل دفعتك الأولى",
+    "receivedPayment": "دفعة Flokicoin مُستلَمة",
+    "sentPayment": "دفعة Flokicoin مُرسَلة",
+    "sendingPayment": "جارٍ إرسال دفعة Flokicoin",
+    "failedPayment": "دفعة Flokicoin فاشلة",
+    "app": "التطبيق",
+    "swapId": "معرّف التبادل",
+    "to": "إلى",
+    "from": "من",
+    "dateTime": "التاريخ والوقت",
+    "fee": "الرسوم",
+    "description": "الوصف",
+    "comment": "تعليق",
+    "details": "التفاصيل",
+    "preimage": "Preimage",
+    "hash": "Hash",
+    "invoice": "الفاتورة",
+    "failureReason": "سبب الفشل",
+    "metadata": "البيانات الوصفية",
+    "fromPayer": "من {{name}}",
+    "zapFrom": "Zap من {{npub}}",
+    "zapTo": "Zap إلى {{npub}}",
+    "swapFrom": "تبادل من {{address}}",
+    "swapTo": "تبادل إلى {{address}}",
+    "paymentTo": "دفعة إلى {{identifier}}",
+    "toRecipient": "إلى {{identifier}}",
+    "nostrZap": "Nostr Zap",
+    "nostrZapFrom": "من {{npub}}"
   },
   "receive": {
     "title": "استقبال",
@@ -87,6 +115,7 @@
   "send": {
     "title": "إرسال",
     "destination": "الوجهة",
+    "placeholder": "فاتورة، عنوان البرق، عنوان على السلسلة",
     "amount": "المبلغ",
     "description": "الوصف",
     "confirm": "تأكيد الدفع",
@@ -174,7 +203,9 @@
     "empty": "لا توجد محافظ فرعية بعد",
     "about": {
       "title": "حول المحافظ الفرعية",
-      "close": "إغلاق"
+      "close": "إغلاق",
+      "desc1": "المحافظ الفرعية هي أرصدة منفصلة داخل محفظتك. يمكنك استخدامها لإدارة إنفاقك على تطبيقات محددة، أو لتعريف أصدقائك وعائلتك بـ Flokicoin من خلال منحهم محافظهم الخاصة.",
+      "desc2": "تمتلك كل محفظة فرعية بيانات اعتماد خاصة بها ويمكن ربطها بالتطبيقات بشكل مستقل."
     },
     "intro": {
       "description": "أنشئ محافظ فرعية لنفسك أو أصدقائك أو عائلتك أو زملائك",
@@ -191,6 +222,20 @@
       "description": "زيادة رصيد هذه المحفظة الفرعية. تأكد دائمًا من الحفاظ على أموال كافية في رصيد الإنفاق لمنع المحافظ الفرعية من التوقف عن العمل.",
       "amount": "المبلغ",
       "increaseButton": "زيادة"
+    },
+    "decreaseBalance": {
+      "title": "تخفيض الرصيد",
+      "description": "تخفيض رصيد هذه المحفظة الفرعية.",
+      "amount": "المبلغ",
+      "decreaseButton": "تخفيض",
+      "successToast": "تم تخفيض الرصيد بنجاح بمقدار {{amount}} {{unit}}"
+    },
+    "create": {
+      "title": "إنشاء محفظة فرعية",
+      "nameLabel": "اسم المحفظة الفرعية",
+      "nameHelper": "سمِّ صديقك أو أحد أفراد عائلتك أو زميلك في العمل",
+      "button": "إنشاء محفظة فرعية",
+      "toast": "تم إنشاء محفظة فرعية جديدة لـ {{name}}"
     }
   },
   "onchain": {
