@@ -1,16 +1,16 @@
 import { AlertCircleIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 
 export function ChannelPublicPrivateAlert() {
+  const { t } = useTranslation("channels");
+
   return (
     <Alert>
       <AlertCircleIcon />
-      <AlertTitle>Conflicting Private / Public Channels</AlertTitle>
+      <AlertTitle>{t("alerts.conflictingChannels.title")}</AlertTitle>
       <AlertDescription>
-        <div className="mb-2">
-          You will not be able to receive payments on any private channels. It
-          is recommended to only open all private or all public channels.
-        </div>
+        <div className="mb-2">{t("alerts.conflictingChannels.desc")}</div>
       </AlertDescription>
     </Alert>
   );

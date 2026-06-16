@@ -9,7 +9,8 @@ import { cn } from "src/lib/utils";
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+  const dir = document.documentElement.dir as "ltr" | "rtl";
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" dir={dir || "ltr"} {...props} />;
 }
 
 function DropdownMenuPortal({

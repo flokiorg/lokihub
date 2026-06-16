@@ -60,6 +60,7 @@ import {
 import { ONCHAIN_DUST_LOKI } from "src/constants.ts";
 import { useBalances } from "src/hooks/useBalances.ts";
 import { useChannels } from "src/hooks/useChannels";
+import { useLocale } from "src/hooks/useLocale";
 import { useInfo } from "src/hooks/useInfo";
 
 import { useNodeConnectionInfo } from "src/hooks/useNodeConnectionInfo.ts";
@@ -84,6 +85,7 @@ export default function Channels() {
   const { data: balances } = useBalances(true);
   const navigate = useNavigate();
   const { t } = useTranslation("channels");
+  const { isRTL } = useLocale();
   const [longUnconfirmedZeroConfChannels, setLongUnconfirmedZeroConfChannels] =
     React.useState<LongUnconfirmedZeroConfChannel[]>([]);
 
@@ -159,14 +161,14 @@ export default function Channels() {
                 <ResponsiveButton
                   asChild
                   icon={Settings2Icon}
-                  text="Advanced"
+                  text={t("menu.advanced")}
                   variant="secondary"
                 >
                   <DropdownMenuTrigger />
                 </ResponsiveButton>
-                <DropdownMenuContent className="w-56">
+                <DropdownMenuContent className="w-56" align="end">
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>Node</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("menu.node")}</DropdownMenuLabel>
                     <DropdownMenuItem>
                       <div
                         className="flex flex-row gap-2 items-center w-full cursor-pointer"
@@ -177,7 +179,7 @@ export default function Channels() {
                           copyToClipboard(nodeConnectionInfo.pubkey);
                         }}
                       >
-                        <div>Public key</div>
+                        <div>{t("menu.publicKey")}</div>
                         <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
                           {nodeConnectionInfo?.pubkey || "Loading..."}
                         </div>
@@ -212,14 +214,14 @@ export default function Channels() {
                     <DropdownMenuLabel>{t("menu.onchain")}</DropdownMenuLabel>
                     <DropdownMenuItem asChild>
                       <Link to="/channels/onchain/deposit-flokicoin">
-                        Deposit
+                        {t("menu.deposit")}
                       </Link>
                     </DropdownMenuItem>
                     {(balances?.onchain.spendable || 0) > ONCHAIN_DUST_LOKI && (
                       <DropdownMenuItem
                         onClick={() => navigate("/wallet/withdraw")}
                       >
-                        Withdraw
+                        {t("menu.withdraw")}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuGroup>
@@ -228,7 +230,7 @@ export default function Channels() {
                   )}
                   {hasChannelManagement && info?.enableSwap && (
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Swaps</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("menu.swaps")}</DropdownMenuLabel>
                       <DropdownMenuItem
                         onClick={() => navigate("/wallet/swap?type=in")}
                         className="cursor-pointer"
@@ -238,7 +240,7 @@ export default function Channels() {
                           <ArrowRightIcon className="size-4" />
                           <ZapIcon className="size-4" />
                         </div>
-                        Swap in
+                        {t("menu.swapIn")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => navigate("/wallet/swap?type=out")}
@@ -249,7 +251,7 @@ export default function Channels() {
                           <ArrowRightIcon className="size-4" />
                           <LinkIcon className="size-4" />
                         </div>
-                        Swap out
+                        {t("menu.swapOut")}
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                   )}
@@ -258,7 +260,7 @@ export default function Channels() {
                     <DropdownMenuLabel>{t("menu.history")}</DropdownMenuLabel>
                     <DropdownMenuItem asChild>
                       <Link to="/channels/history">
-                        Liquidity Orders
+                        {t("menu.liquidityOrders")}
                       </Link>
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
@@ -267,12 +269,12 @@ export default function Channels() {
                     <DropdownMenuLabel>{t("menu.management")}</DropdownMenuLabel>
                     <DropdownMenuItem>
                       <Link className="w-full" to="/peers">
-                        Connected Peers
+                        {t("menu.connectedPeers")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem>
                       <Link className="w-full" to="/wallet/sign-message">
-                        Sign Message
+                        {t("menu.signMessage")}
                       </Link>
                     </DropdownMenuItem>
                       <DropdownMenuItem className="w-full" asChild>
@@ -281,7 +283,7 @@ export default function Channels() {
                           to="/wallet/node-alias"
                         >
                           <SparklesIcon className="size-4 me-2 text-muted-foreground" />
-                          Set Node Alias
+                          {t("menu.setNodeAlias")}
                         </Link>
                       </DropdownMenuItem>
                   </DropdownMenuGroup>
@@ -372,7 +374,7 @@ export default function Channels() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className="flex flex-row gap-1 items-center justify-start text-sm font-medium">
+                            <div className={cn("flex flex-row gap-1 items-center justify-start text-sm font-medium", isRTL && "flex-row-reverse")}>
                               {t("node.spendingBalance")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
@@ -437,7 +439,7 @@ export default function Channels() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className="flex flex-row gap-1 items-center justify-start text-sm font-medium">
+                            <div className={cn("flex flex-row gap-1 items-center justify-start text-sm font-medium", isRTL && "flex-row-reverse")}>
                               {t("node.receiveLimit")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
@@ -482,7 +484,7 @@ export default function Channels() {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          <div className="flex flex-row gap-1 items-center text-sm font-medium">
+                          <div className={cn("flex flex-row gap-1 items-center text-sm font-medium", isRTL && "flex-row-reverse")}>
                             {t("node.balance")}
                             <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                           </div>

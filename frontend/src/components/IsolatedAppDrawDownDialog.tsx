@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
@@ -26,6 +27,7 @@ export function IsolatedAppDrawDownDialog({
   appId,
   children,
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
+  const { t } = useTranslation("wallet");
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
   const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
@@ -73,7 +75,7 @@ export function IsolatedAppDrawDownDialog({
         undefined,
         { revalidate: true }
       );
-      toast(`Successfully reduced balance by ${amountDisplay} ${inputUnit}`);
+      toast(t("subwallets.decreaseBalance.successToast", { amount: amountDisplay, unit: inputUnit }));
       reset();
     } catch (error) {
       handleRequestError("Failed to decrease sub-wallet balance", error);
@@ -84,7 +86,6 @@ export function IsolatedAppDrawDownDialog({
   function reset() {
     setOpen(false);
     setAmountDisplay("");
-
   }
 
   return (
@@ -93,13 +94,13 @@ export function IsolatedAppDrawDownDialog({
       <DialogContent>
         <form onSubmit={onSubmit}>
           <DialogHeader>
-            <DialogTitle>Decrease Balance</DialogTitle>
+            <DialogTitle>{t("subwallets.decreaseBalance.title")}</DialogTitle>
             <DialogDescription>
-              Decrease the balance of this sub-wallet.
+              {t("subwallets.decreaseBalance.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">Amount</Label>
+            <Label htmlFor="amount">{t("subwallets.decreaseBalance.amount")}</Label>
             <CurrencyInput
               autoFocus
               id="amount"
@@ -112,7 +113,7 @@ export function IsolatedAppDrawDownDialog({
             />
           </div>
           <DialogFooter className="mt-5">
-            <LoadingButton loading={loading}>Decrease</LoadingButton>
+            <LoadingButton loading={loading}>{t("subwallets.decreaseBalance.decreaseButton")}</LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>

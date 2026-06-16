@@ -11,7 +11,7 @@ const InputWithAdornment = React.forwardRef<
   InputWithAdornmentProps
 >(({ className, type, endAdornment, dir, ...props }, ref) => {
   return (
-    <div className="relative flex items-center w-full">
+    <div className="relative flex items-center w-full" dir={dir}>
       <Input
         type={type}
         ref={ref}

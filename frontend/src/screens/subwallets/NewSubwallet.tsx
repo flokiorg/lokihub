@@ -1,6 +1,7 @@
 import { HelpCircleIcon } from "lucide-react";
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import Loading from "src/components/Loading";
@@ -18,6 +19,8 @@ import { handleRequestError } from "src/utils/handleRequestError";
 
 export function NewSubwallet() {
   const navigate = useNavigate();
+  const { t } = useTranslation("wallet");
+  const { t: tCommon } = useTranslation("common");
   const [name, setName] = React.useState("");
   const { data: appsData } = useApps(
     undefined,
@@ -29,14 +32,11 @@ export function NewSubwallet() {
   );
   const { data: info } = useInfo();
 
-
   const [isLoading, setLoading] = React.useState(false);
 
   if (!info || !appsData) {
     return <Loading />;
   }
-
-
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -66,7 +66,7 @@ export function NewSubwallet() {
         state: createAppResponse,
       });
 
-      toast("New sub-wallet created for " + name);
+      toast(t("subwallets.create.toast", { name }));
     } catch (error) {
       handleRequestError("Failed to create app", error);
     }
@@ -76,14 +76,14 @@ export function NewSubwallet() {
   return (
     <div className="grid gap-5">
       <AppHeader
-        title="Create Sub-wallet"
+        title={t("subwallets.create.title")}
         contentRight={
           <>
             <SubWalletInfoDialog
               trigger={
                 <Button variant="outline">
                   <HelpCircleIcon className="w-4 h-4 me-2" />
-                  Help
+                  {tCommon("nav.help")}
                 </Button>
               }
             />
@@ -95,7 +95,7 @@ export function NewSubwallet() {
         className="flex flex-col items-start gap-3 max-w-lg"
       >
         <div className="w-full grid gap-1.5 mb-4">
-          <Label htmlFor="name">Sub-wallet name</Label>
+          <Label htmlFor="name">{t("subwallets.create.nameLabel")}</Label>
           <Input
             autoFocus
             type="text"
@@ -107,11 +107,11 @@ export function NewSubwallet() {
             autoComplete="off"
           />
           <p className="text-muted-foreground text-sm">
-            Name your friend, family member or coworker
+            {t("subwallets.create.nameHelper")}
           </p>
         </div>
         <LoadingButton loading={isLoading} type="submit">
-          Create Sub-wallet
+          {t("subwallets.create.button")}
         </LoadingButton>
       </form>
     </div>

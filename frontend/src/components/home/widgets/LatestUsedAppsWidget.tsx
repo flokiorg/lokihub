@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { ChevronRightIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AppAvatar from "src/components/AppAvatar";
 import {
   Card,
@@ -13,6 +14,7 @@ import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApps } from "src/hooks/useApps";
 
 export function LatestUsedAppsWidget() {
+  const { t } = useTranslation("home");
   const { data: appsData } = useApps(3, undefined, undefined, "last_used_at");
   const apps = appsData?.apps;
   const usedApps = apps?.filter((x) => x.lastUsedAt);
@@ -25,9 +27,9 @@ export function LatestUsedAppsWidget() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <div>Recently Used Apps</div>
+          <div>{t("widgets.latestApps")}</div>
           <LinkButton to="/apps?tab=connected-apps" variant="secondary">
-            See All
+            {t("widgets.seeAll")}
           </LinkButton>
         </CardTitle>
       </CardHeader>
@@ -47,7 +49,7 @@ export function LatestUsedAppsWidget() {
                     ? "Loki Account"
                     : app.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground" dir="ltr">
                   {app.lastUsedAt ? dayjs(app.lastUsedAt).fromNow() : "never"}
                 </p>
                 <ChevronRightIcon className="text-muted-foreground size-8 rtl:rotate-180" />

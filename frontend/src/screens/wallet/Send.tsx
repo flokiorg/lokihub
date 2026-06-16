@@ -108,7 +108,7 @@ export default function Send() {
                 dir="ltr"
                 value={recipient}
                 autoFocus
-                placeholder="Invoice, lightning address, on-chain address"
+                placeholder={t("send.placeholder")}
                 onChange={(e) => {
                   setRecipient(e.target.value.trim());
                 }}

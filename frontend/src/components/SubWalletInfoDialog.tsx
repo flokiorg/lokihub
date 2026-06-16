@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -13,6 +14,8 @@ type SubWalletInfoDialogProps = {
 };
 
 export function SubWalletInfoDialog({ trigger }: SubWalletInfoDialogProps) {
+  const { t } = useTranslation("wallet");
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -20,21 +23,14 @@ export function SubWalletInfoDialog({ trigger }: SubWalletInfoDialogProps) {
       </AlertDialogTrigger>
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>About Sub-wallets</AlertDialogTitle>
+          <AlertDialogTitle>{t("subwallets.about.title")}</AlertDialogTitle>
           <div className="flex flex-col gap-4 text-muted-foreground text-sm">
-            <p>
-              Sub-wallets are separate balances within your wallet. You can use
-              them to budget your spending for specific apps, or to onboard
-              friends and family to Flokicoin by giving them their own wallet.
-            </p>
-            <p>
-              Each sub-wallet has its own credentials and can be connected to
-              apps independently.
-            </p>
+            <p>{t("subwallets.about.desc1")}</p>
+            <p>{t("subwallets.about.desc2")}</p>
           </div>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Close</AlertDialogCancel>
+          <AlertDialogCancel>{t("subwallets.about.close")}</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

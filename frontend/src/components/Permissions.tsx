@@ -1,5 +1,6 @@
 import { AlertTriangleIcon, PlusCircleIcon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import BudgetAmountSelect from "src/components/BudgetAmountSelect";
 import BudgetRenewalSelect from "src/components/BudgetRenewalSelect";
 import ExpirySelect from "src/components/ExpirySelect";
@@ -17,7 +18,6 @@ import {
   BudgetRenewalType,
   Scope,
   WalletCapabilities,
-  scopeDescriptions,
   scopeIconMap,
 } from "src/types";
 
@@ -46,6 +46,7 @@ const Permissions: React.FC<PermissionsProps> = ({
   expiresAtReadOnly,
   showBudgetUsage = true,
 }) => {
+  const { t } = useTranslation("apps");
   const [showBudgetOptions, setShowBudgetOptions] = React.useState(
     permissions.scopes.includes("pay_invoice") && permissions.maxAmount > 0
   );
@@ -103,7 +104,7 @@ const Permissions: React.FC<PermissionsProps> = ({
         />
       ) : (
         <>
-          <p className="text-sm font-medium mb-2">This app is authorized to:</p>
+          <p className="text-sm font-medium mb-2">{t("permissions.authorizedTo")}</p>
           <div className="flex flex-wrap gap-2 mb-4">
             {[...permissions.scopes].map((scope) => {
               const PermissionIcon = scopeIconMap[scope];
@@ -116,7 +117,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                   )}
                 >
                   <PermissionIcon className="me-1 size-4" />
-                  <p className="text-sm">{scopeDescriptions[scope]}</p>
+                  <p className="text-sm">{t(`scopes.${scope}`, { defaultValue: scope })}</p>
                 </Badge>
               );
             })}
@@ -140,7 +141,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                   className={cn("me-4", showExpiryOptions && "mb-4")}
                 >
                   <PlusCircleIcon />
-                  Set budget
+                  {t("budget.set")}
                 </Button>
               )}
               {showBudgetOptions && (
@@ -166,13 +167,13 @@ const Permissions: React.FC<PermissionsProps> = ({
               <div className="flex flex-col gap-2 text-muted-foreground text-sm">
                 <p className="capitalize">
                   <span className="text-primary font-medium">
-                    Budget Renewal:
+                    {t("budget.renewal")}:
                   </span>{" "}
-                  {permissions.budgetRenewal || "Never"}
+                  {t(`renewals.${permissions.budgetRenewal || "never"}`)}
                 </p>
                 <p className="slashed-zero">
                   <span className="text-primary font-medium">
-                    Budget Amount:
+                    {t("budget.amount")}:
                   </span>{" "}
                   {permissions.maxAmount ? (
                     <FormattedFlokicoinAmount
@@ -187,7 +188,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                       <FormattedFlokicoinAmount
                         amount={(budgetUsage || 0) * 1000}
                       />{" "}
-                      used)
+                      {t("budget.used")})
                     </>
                   )}
                 </p>
@@ -207,7 +208,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                 onClick={() => setShowExpiryOptions(true)}
               >
                 <PlusCircleIcon />
-                Set expiration time
+                {t("expiry.set")}
               </Button>
             )}
 
@@ -220,11 +221,11 @@ const Permissions: React.FC<PermissionsProps> = ({
           </>
         ) : (
           <>
-            <p className="text-sm font-medium mb-2">Connection expiry</p>
+            <p className="text-sm font-medium mb-2">{t("expiry.connectionExpiry")}</p>
             <p className="text-muted-foreground text-sm">
               {permissions.expiresAt
                 ? new Date(permissions.expiresAt).toString()
-                : "This app will never expire"}
+                : t("expiry.neverExpires")}
             </p>
           </>
         )}
@@ -235,11 +236,11 @@ const Permissions: React.FC<PermissionsProps> = ({
           <div className="flex items-center gap-2 mt-4">
             <AlertTriangleIcon className="size-4" />
             <p className="text-sm font-medium">
-              This app can create other app connections
+              {t("permissions.superuserTitle")}
             </p>
           </div>
           <p className="text-muted-foreground text-sm">
-            Make sure to set budgets on connections created by this app.
+            {t("permissions.superuserDesc")}
           </p>
         </>
       )}

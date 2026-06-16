@@ -287,7 +287,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                       variant="secondary"
                       onClick={() => setIsEditingPermissions(true)}
                       icon={SquarePenIcon}
-                      text="Edit Connection"
+                      text={t("connections.editConnection")}
                     />
                   </>
                 )}
