@@ -10,6 +10,7 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
+	lokitray "github.com/flokiorg/lokihub/tray"
 	"github.com/flokiorg/lokihub/wails"
 )
 
@@ -18,6 +19,26 @@ var assets embed.FS
 
 //go:embed appicon.png
 var appIcon []byte
+
+//go:embed ops/TrayIcon.svg
+var trayIconSVG []byte
+
+//go:embed ops/TrayIcon.png
+var trayIconPNG []byte
+
+// resolveTrayIcon renders the SVG to the correct platform format.
+// Falls back to scaling the static PNG through the same platform path if SVG rendering fails.
+func resolveTrayIcon() []byte {
+	icon, err := lokitray.RenderIcon(trayIconSVG)
+	if err == nil && len(icon) > 0 {
+		return icon
+	}
+	icon, err = lokitray.RenderIconFromPNG(trayIconPNG)
+	if err == nil && len(icon) > 0 {
+		return icon
+	}
+	return nil
+}
 
 func main() {
 	// Get a port lock on a rare port to prevent the app running twice
@@ -37,7 +58,7 @@ func main() {
 	}
 
 	app := wails.NewApp(svc)
-	wails.LaunchWailsApp(app, assets, appIcon)
+	wails.LaunchWailsApp(app, assets, appIcon, resolveTrayIcon())
 	logger.Logger.Info().Msg("Wails app exited")
 
 	logger.Logger.Info().Msg("Cancelling service context...")

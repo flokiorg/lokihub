@@ -4,11 +4,13 @@ import (
 	"context"
 	"embed"
 	nethttp "net/http"
+	"sync/atomic"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
+	lokitray "github.com/flokiorg/lokihub/tray"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -22,12 +24,13 @@ import (
 )
 
 type WailsApp struct {
-	ctx     context.Context
-	svc     service.Service
-	api     api.API
-	db      *gorm.DB
-	appsSvc apps.AppsService
-	httpSvc *http.HttpService
+	ctx      context.Context
+	quitting atomic.Bool
+	svc      service.Service
+	api      api.API
+	db       *gorm.DB
+	appsSvc  apps.AppsService
+	httpSvc  *http.HttpService
 }
 
 func NewApp(svc service.Service) *WailsApp {
@@ -40,10 +43,28 @@ func NewApp(svc service.Service) *WailsApp {
 	}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (app *WailsApp) startup(ctx context.Context) {
+func (app *WailsApp) startup(ctx context.Context, trayIcon []byte) {
 	app.ctx = ctx
+
+	lokitray.Setup("Lokihub", trayIcon, func() {
+		lokitray.ShowInDock()
+		runtime.WindowShow(ctx)
+	}, func() {
+		response, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+			Type:  runtime.QuestionDialog,
+			Title: "Confirm Exit",
+			Message: "Are you sure you want to shut down Lokihub? " +
+				"Lokihub must remain online to coordinate payments. " +
+				"If it is offline, creating or sending payments may fail.",
+			Buttons:       []string{"Yes", "No"},
+			DefaultButton: "No",
+		})
+		if err != nil || response != "Yes" {
+			return
+		}
+		app.quitting.Store(true)
+		runtime.Quit(ctx)
+	})
 
 	// Register Wails event subscriber
 	subscriber := NewWailsEventSubscriber(ctx)
@@ -51,20 +72,12 @@ func (app *WailsApp) startup(ctx context.Context) {
 }
 
 func (app *WailsApp) onBeforeClose(ctx context.Context) bool {
-	response, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
-		Type:  runtime.QuestionDialog,
-		Title: "Confirm Exit",
-		Message: "Are you sure you want to shut down Lokihub? " +
-			"Lokihub must remain online to coordinate payments." +
-			"If it is offline, creating or sending payments may fail.",
-		Buttons:       []string{"Yes", "No"},
-		DefaultButton: "No",
-	})
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to show confirmation dialog")
-		return false
+	if app.quitting.Load() {
+		return false // real quit from tray menu — allow through
 	}
-	return response != "Yes"
+	runtime.WindowHide(ctx)
+	lokitray.HideFromDock()
+	return true // cancel close: window is now hidden in tray
 }
 
 func (app *WailsApp) SelectDirectory() (string, error) {
@@ -77,7 +90,7 @@ func (app *WailsApp) SelectDirectory() (string, error) {
 	return selection, nil
 }
 
-func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte) {
+func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []byte) {
 	// Start background HTTP server ONLY if in 'dev' build mode (see dev_server.go)
 	StartDevServer(app)
 
@@ -90,9 +103,10 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte) {
 			Handler: NewAssetHandler(app.httpSvc),
 		},
 		Logger: NewWailsLogger(),
-		// HideWindowOnClose: true, // with this on, there is no way to close the app - wait for v3
 
-		OnStartup: app.startup,
+		OnStartup: func(ctx context.Context) {
+			app.startup(ctx, trayIcon)
+		},
 		OnBeforeClose: func(ctx context.Context) bool {
 			return app.onBeforeClose(ctx)
 		},
