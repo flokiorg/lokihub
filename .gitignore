@@ -9,6 +9,7 @@ nwc.db
 .breez
 .data
 .idea
+.claude
 
 frontend/dist
 frontend/node_modules
