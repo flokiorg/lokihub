@@ -16,6 +16,7 @@ import (
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog"
 	"gorm.io/gorm"
 )
 
@@ -30,6 +31,7 @@ type nip47Service struct {
 	keys                   keys.Keys
 	db                     *gorm.DB
 	eventPublisher         events.EventPublisher
+	logger                 zerolog.Logger
 }
 
 type Nip47Service interface {
@@ -55,6 +57,7 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 		appsService:            apps.NewAppsService(db, eventPublisher, keys, cfg),
 		eventPublisher:         eventPublisher,
 		keys:                   keys,
+		logger:                 logger.Logger.With().Str("component", "nip47").Logger(),
 	}
 }
 
@@ -74,10 +77,10 @@ func (svc *nip47Service) StartNotifier(ctx context.Context, pool *nostr.SimplePo
 				// app exited
 				return
 			case event := <-svc.nip47NotificationQueue.Channel():
-				logger.Logger.Debug().Interface("event", event).Msg("Consuming event from notification queue")
+				svc.logger.Debug().Interface("event", event).Msg("Consuming event from notification queue")
 				err := nip47Notifier.ConsumeEvent(ctx, event)
 				if err != nil {
-					logger.Logger.Error().Err(err).Interface("event", event).Msg("Failed to consume event from notification queue")
+					svc.logger.Error().Err(err).Interface("event", event).Msg("Failed to consume event from notification queue")
 					// wait and then re-add the item to the queue
 					time.Sleep(5 * time.Second)
 					svc.nip47NotificationQueue.AddToQueue(event)
@@ -111,7 +114,7 @@ func (svc *nip47Service) StartNip47InfoPublisher(ctx context.Context, pool *nost
 			case req := <-svc.nip47InfoPublishQueue.Channel():
 				_, err := svc.PublishNip47Info(ctx, pool, req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, lnClient)
 				if err != nil {
-					logger.Logger.Error().Err(err).
+					svc.logger.Error().Err(err).
 						Str("wallet_pubkey", req.AppWalletPubKey).
 						Str("relay_url", req.RelayUrl).
 						Msg("Failed to publish NIP47 info from queue")

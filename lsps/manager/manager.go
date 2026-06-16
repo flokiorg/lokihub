@@ -105,13 +105,7 @@ func NewLiquidityManager(cfg *ManagerConfig) (*LiquidityManager, error) {
 }
 
 func (m *LiquidityManager) Start(ctx context.Context) error {
-	// subscribe to incoming messages
-	msgs, errs, err := m.cfg.LNClient.SubscribeCustomMessages(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to custom messages: %w", err)
-	}
-
-	go m.processMessages(ctx, msgs, errs)
+	go m.processMessages(ctx)
 	go m.processInternalEvents(ctx)
 	go m.StartInterceptor(ctx)
 
@@ -266,19 +260,79 @@ func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state, lspPubkey stri
 	}
 }
 
-func (m *LiquidityManager) processMessages(ctx context.Context, msgs <-chan lnclient.CustomMessage, errs <-chan error) {
+// streamRetryDelay is the backoff between stream resubscription attempts, shared
+// by processMessages and StartInterceptor.
+const streamRetryDelay = 5 * time.Second
+
+func (m *LiquidityManager) processMessages(ctx context.Context) {
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+		msgs, errs, err := m.cfg.LNClient.SubscribeCustomMessages(ctx)
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to subscribe to custom messages, retrying")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(streamRetryDelay):
+				continue
+			}
+		}
+		logger.Logger.Info().Msg("Custom messages stream established")
+		if !m.consumeMessageStream(ctx, msgs, errs) {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case err := <-errs:
-			if err != nil {
-				// Log error (we might need a logger in config)
-				logger.Logger.Error().Err(err).Msg("Error receiving custom message")
-				continue
+		case <-time.After(streamRetryDelay):
+		}
+	}
+}
+
+// consumeMessageStream reads from a live custom-message stream until it closes or
+// errors. Returns true when the caller should resubscribe, false when the context
+// is done.
+func (m *LiquidityManager) consumeMessageStream(
+	ctx context.Context,
+	msgs <-chan lnclient.CustomMessage,
+	errs <-chan error,
+) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case err, ok := <-errs:
+			if !ok || err != nil {
+				if err != nil {
+					logger.Logger.Error().Err(err).Msg("Custom messages stream error")
+				}
+				m.drainMessages(msgs)
+				return true
 			}
-		case msg := <-msgs:
+		case msg, ok := <-msgs:
+			if !ok {
+				logger.Logger.Info().Msg("Custom messages stream closed")
+				return true
+			}
 			m.dispatchMessage(msg)
+		}
+	}
+}
+
+// drainMessages dispatches any messages already buffered in a closing stream so
+// that in-flight LSPS request-response pairs are not silently dropped.
+func (m *LiquidityManager) drainMessages(msgs <-chan lnclient.CustomMessage) {
+	for {
+		select {
+		case msg, ok := <-msgs:
+			if !ok {
+				return
+			}
+			m.dispatchMessage(msg)
+		default:
+			return
 		}
 	}
 }
@@ -944,81 +998,91 @@ func (m *LiquidityManager) GetLSPS1Order(ctx context.Context, pubkey, orderID st
 }
 
 // Interceptor Logic
-func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
-	reqChan, respond, err := m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to subscribe to channel acceptor")
-		return
-	}
 
+func (m *LiquidityManager) StartInterceptor(ctx context.Context) {
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+		reqChan, respond, err := m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to subscribe to channel acceptor, retrying")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(streamRetryDelay):
+				continue
+			}
+		}
+		logger.Logger.Info().Msg("Channel acceptor stream established")
+		if !m.runChannelAcceptor(ctx, reqChan, respond) {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
+		case <-time.After(streamRetryDelay):
+		}
+	}
+}
+
+// runChannelAcceptor processes channel-accept requests until the stream closes.
+// Returns true when the caller should resubscribe, false when the context is done.
+func (m *LiquidityManager) runChannelAcceptor(
+	ctx context.Context,
+	reqChan <-chan lnclient.ChannelAcceptRequest,
+	respond func(id string, accept bool, zeroConf bool) error,
+) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
 		case req, ok := <-reqChan:
 			if !ok {
-				// Stream closed
-				logger.Logger.Info().Msg("Channel acceptor stream closed, retrying in 5s...")
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(5 * time.Second):
-					// Retry subscription
-					reqChan, respond, err = m.cfg.LNClient.SubscribeChannelAcceptor(ctx)
-					if err != nil {
-						logger.Logger.Error().Err(err).Msg("Failed to resubscribe to channel acceptor")
-						// Exponential backoff or just loop? 5s fixed for now.
-					}
-					continue
-				}
+				logger.Logger.Info().Msg("Channel acceptor stream closed, resubscribing")
+				return true
 			}
+			m.handleChannelAcceptRequest(req, respond)
+		}
+	}
+}
 
-			// Check against whitelist
-			m.mu.RLock()
-			activeLSPs, err := m.getLSPsFromDB()
-			m.mu.RUnlock()
+// handleChannelAcceptRequest enforces the LSP zero-conf whitelist and responds
+// to an incoming channel-open request.
+func (m *LiquidityManager) handleChannelAcceptRequest(
+	req lnclient.ChannelAcceptRequest,
+	respond func(id string, accept bool, zeroConf bool) error,
+) {
+	m.mu.RLock()
+	activeLSPs, err := m.getLSPsFromDB()
+	m.mu.RUnlock()
 
-			if err != nil {
-				logger.Logger.Error().Err(err).Msg("Failed to get LSPs from DB")
-				// Check if whitelisted for ZeroConf
-				whitelisted := false
-				requestPubkey := strings.ToLower(req.NodePubkey)
-				for _, lsp := range activeLSPs {
-					if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
-						whitelisted = true
-						break
-					}
-				}
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to get LSPs from DB")
+		logger.Logger.Warn().Str("pubkey", req.NodePubkey).
+			Msg("ZeroConf channel acceptance degraded to standard accept due to DB error")
+	}
 
-				if whitelisted {
-					logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
-					respond(req.ID, true, true)
-				} else {
-					// Standard accept (ZeroConf=false)
-					logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
-					respond(req.ID, true, false)
-				}
-				continue
-			}
+	requestPubkey := strings.ToLower(req.NodePubkey)
+	whitelisted := false
+	for _, lsp := range activeLSPs {
+		if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
+			whitelisted = true
+			break
+		}
+	}
 
-			whitelisted := false
-			requestPubkey := strings.ToLower(req.NodePubkey)
-			for _, lsp := range activeLSPs {
-				// Check if active and pubkey matches
-				if lsp.Active && strings.ToLower(lsp.Pubkey) == requestPubkey {
-					whitelisted = true
-					break
-				}
-			}
-
-			if whitelisted {
-				logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
-				respond(req.ID, true, true)
-			} else {
-				logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
-				// Accept normally (FLND default validation)
-				respond(req.ID, true, false)
-			}
+	if whitelisted {
+		logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Accepting ZeroConf channel from trusted LSP")
+		if err := respond(req.ID, true, true); err != nil {
+			logger.Logger.Error().Err(err).Str("pubkey", req.NodePubkey).
+				Msg("Failed to send ZeroConf channel accept response")
+		}
+	} else {
+		logger.Logger.Info().Str("pubkey", req.NodePubkey).Msg("Standard accept for channel from untrusted peer")
+		if err := respond(req.ID, true, false); err != nil {
+			logger.Logger.Error().Err(err).Str("pubkey", req.NodePubkey).
+				Msg("Failed to send standard channel accept response")
 		}
 	}
 }

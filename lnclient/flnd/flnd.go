@@ -96,7 +96,7 @@ func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, f
 		cancel:         cancel,
 		ctx:            flndCtx,
 		eventPublisher: eventPublisher,
-		logger:         logger.Logger.With().Str("frontend", "FLND").Logger(),
+		logger:         logger.Logger.With().Str("component", "flnd").Logger(),
 	}
 
 	go flndService.subscribePayments(flndCtx)
@@ -359,7 +359,7 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 		if invoice.State == lnrpc.Invoice_OPEN {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
 			logger.Logger.Info().
-				Str("paymentHash", paymentHashHex).
+				Str("payment_hash", paymentHashHex).
 				Uint64("addIndex", invoice.AddIndex).
 				Msg("Resubscribing to pending hold invoice")
 			go svc.subscribeSingleInvoice(invoice.RHash)
@@ -375,7 +375,7 @@ func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 	defer cancel() // Ensure cancellation happens on exit
 
 	paymentHashHex := hex.EncodeToString(paymentHashBytes)
-	log := logger.Logger.With().Str("paymentHash", paymentHashHex).Logger()
+	log := logger.Logger.With().Str("payment_hash", paymentHashHex).Logger()
 
 	log.Info().Msg("Starting subscribeSingleInvoice goroutine")
 
@@ -864,7 +864,7 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 			err = errors.New("payment hash must be 32 bytes hex")
 		}
 		logger.Logger.Error().Err(err).
-			Str("paymentHash", paymentHash).
+			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
 		return nil, err
 	}
@@ -902,11 +902,11 @@ func (svc *FLNDService) MakeHoldInvoice(ctx context.Context, amount int64, descr
 
 	// Start subscribing to updates for this specific hold invoice in a separate goroutine
 	go svc.subscribeSingleInvoice(paymentHashBytes)
-	logger.Logger.Info().Str("paymentHash", paymentHash).Msg("Launched single invoice subscription goroutine")
+	logger.Logger.Info().Str("payment_hash", paymentHash).Msg("Launched single invoice subscription goroutine")
 
 	inv, err := svc.client.LookupInvoice(ctx, &lnrpc.PaymentHash{RHash: paymentHashBytes})
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("paymentHash", paymentHash).Msg("Failed to lookup hold invoice after creation")
+		logger.Logger.Error().Err(err).Str("payment_hash", paymentHash).Msg("Failed to lookup hold invoice after creation")
 		return nil, err
 	}
 
@@ -945,7 +945,7 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 			err = errors.New("payment hash must be 32 bytes hex")
 		}
 		logger.Logger.Error().Err(err).
-			Str("paymentHash", paymentHash).
+			Str("payment_hash", paymentHash).
 			Msg("Invalid payment hash")
 		return err
 	}
@@ -955,7 +955,7 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 	})
 	if err != nil {
 		logger.Logger.Error().Err(err).
-			Str("paymentHash", paymentHash).
+			Str("payment_hash", paymentHash).
 			Msg("Failed to cancel hold invoice")
 		return err
 	}

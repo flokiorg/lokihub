@@ -2182,7 +2182,7 @@ func (api *api) verifyFLNDConnection(ctx context.Context, address, certHex, maca
 			return nil
 		}
 		lastErr = err
-		logger.Logger.Warn().Err(err).Msgf("Verification attempt %d failed", i+1)
+		logger.Logger.Warn().Err(err).Int("attempt", i+1).Msg("Verification attempt failed")
 	}
 
 	return lastErr

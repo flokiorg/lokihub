@@ -51,7 +51,7 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 		Interface("description", makeHoldInvoiceParams.Description).
 		Interface("descriptionHash", makeHoldInvoiceParams.DescriptionHash).
 		Interface("expiry", makeHoldInvoiceParams.Expiry).
-		Interface("paymentHash", makeHoldInvoiceParams.PaymentHash).
+		Interface("payment_hash", makeHoldInvoiceParams.PaymentHash).
 		Interface("metadata", makeHoldInvoiceParams.Metadata).
 		Msg("Making hold invoice")
 
@@ -77,7 +77,7 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 			Interface("description", makeHoldInvoiceParams.Description).
 			Interface("descriptionHash", makeHoldInvoiceParams.DescriptionHash).
 			Interface("expiry", makeHoldInvoiceParams.Expiry).
-			Interface("paymentHash", makeHoldInvoiceParams.PaymentHash).
+			Interface("payment_hash", makeHoldInvoiceParams.PaymentHash).
 			Msg("Failed to make invoice")
 
 		publishResponse(&models.Response{

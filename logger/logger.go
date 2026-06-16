@@ -23,9 +23,8 @@ var logFilePath string
 var Writer io.Writer
 
 func Init(logLevel string) {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.TimeFieldFormat = time.RFC3339
 
-	// Default console writer
 	consoleWriter := zerolog.ConsoleWriter{
 		Out:        os.Stdout,
 		TimeFormat: time.DateTime,
@@ -43,35 +42,28 @@ func Init(logLevel string) {
 		Timestamp().
 		Logger()
 
+	// Level mapping: Logrus-style (0=Panic,1=Fatal,2=Error,3=Warn,4=Info,5=Debug,6=Trace)
+	// to Zerolog (Trace=-1,Debug=0,Info=1,Warn=2,Error=3,Fatal=4,Panic=5)
 	level, err := strconv.Atoi(logLevel)
 	if err != nil {
 		level = int(zerolog.InfoLevel)
 	}
 
-	// Helper to map numeric level to zerolog.Level if needed,
-	// checking against specific values or just casting if assuming compatibility.
-	// However, Logrus and Zerolog levels might differ slightly in integer values.
-	// Logrus: Panic=0, Fatal=1, Error=2, Warn=3, Info=4, Debug=5, Trace=6
-	// Zerolog: Debug=0, Info=1, Warn=2, Error=3, Fatal=4, Panic=5, NoLevel=, Disabled=-1, Trace=-1 (actually Trace is 0 in recent versions? No, Trace is -1 by default or 0 depends on version. Actually Debug=0, Info=1...)
-	// UPDATE: Zerolog: Trace=-1, Debug=0, Info=1, Warn=2, Error=3, Fatal=4, Panic=5
-	// Logrus: Panic=0, Fatal=1, Error=2, Warn=3, Info=4, Debug=5, Trace=6
-	// The levels are INVERTED/DIFFERENT. We need a mapping.
-
 	var zLevel zerolog.Level
 	switch level {
-	case 6: // Trace
+	case 6:
 		zLevel = zerolog.TraceLevel
-	case 5: // Debug
+	case 5:
 		zLevel = zerolog.DebugLevel
-	case 4: // Info
+	case 4:
 		zLevel = zerolog.InfoLevel
-	case 3: // Warn
+	case 3:
 		zLevel = zerolog.WarnLevel
-	case 2: // Error
+	case 2:
 		zLevel = zerolog.ErrorLevel
-	case 1: // Fatal
+	case 1:
 		zLevel = zerolog.FatalLevel
-	case 0: // Panic
+	case 0:
 		zLevel = zerolog.PanicLevel
 	default:
 		zLevel = zerolog.InfoLevel
@@ -95,28 +87,46 @@ func AddFileLogger(workdir string) error {
 	logFilePath = filepath.Join(workdir, logDir, logFilename)
 	fileLogger := &lumberjack.Logger{
 		Filename:   logFilePath,
+		MaxSize:    50, // MB — rotate before age if file grows large
 		MaxAge:     3,
 		MaxBackups: 3,
 	}
 
-	// MultiWriter to write to both console and file
+	// File writer uses ConsoleWriter (no color) for human-readable ops format.
+	// Console writer keeps colored output for interactive use.
+	fileConsoleWriter := zerolog.ConsoleWriter{
+		Out:        fileLogger,
+		TimeFormat: time.RFC3339,
+		NoColor:    true,
+	}
 	consoleWriter := zerolog.ConsoleWriter{
 		Out:        os.Stdout,
 		TimeFormat: time.DateTime,
 	}
-	multi := zerolog.MultiLevelWriter(consoleWriter, fileLogger)
+	multi := zerolog.MultiLevelWriter(consoleWriter, fileConsoleWriter)
 	Writer = multi
 
+	zLevel := zerolog.GlobalLevel()
 	Logger = zerolog.New(multi).
 		With().
 		Timestamp().
-		Logger()
+		Logger().
+		Level(zLevel)
 
-	// HttpLogger also writes to file
-	HttpLogger = zerolog.New(fileLogger).
+	if zLevel <= zerolog.DebugLevel {
+		buildInfo, _ := debug.ReadBuildInfo()
+		Logger = Logger.With().
+			Caller().
+			Interface("build_info", buildInfo).
+			Logger()
+	}
+
+	// HttpLogger writes to file only (no console noise for HTTP traffic)
+	HttpLogger = zerolog.New(fileConsoleWriter).
 		With().
 		Timestamp().
-		Logger()
+		Logger().
+		Level(zLevel)
 
 	return nil
 }

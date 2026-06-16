@@ -17,6 +17,7 @@ import (
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/rs/zerolog"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -51,6 +52,7 @@ type HttpService struct {
 	db             *gorm.DB
 	appsSvc        apps.AppsService
 	appStoreSvc    appstore.Service
+	logger         zerolog.Logger
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -62,6 +64,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		db:             svc.GetDB(),
 		appsSvc:        apps.NewAppsService(svc.GetDB(), eventPublisher, svc.GetKeys(), svc.GetConfig()),
 		appStoreSvc:    svc.GetAppStoreSvc(),
+		logger:         logger.Logger.With().Str("component", "http").Logger(),
 	}
 }
 
@@ -776,7 +779,7 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 
 	response, err := httpSvc.api.RequestMempoolApi(c.Request().Context(), endpoint)
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("endpoint", endpoint).Msg("Failed to request mempool API")
+		httpSvc.logger.Error().Err(err).Str("endpoint", endpoint).Msg("Failed to request mempool API")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to request mempool API: %s", err.Error()),
 		})
@@ -788,7 +791,7 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 func (httpSvc *HttpService) getServicesHandler(c echo.Context) error {
 	response, err := httpSvc.api.GetServices(c.Request().Context())
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch services")
+		httpSvc.logger.Error().Err(err).Msg("Failed to fetch services")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to fetch services: %s", err.Error()),
 		})
@@ -800,7 +803,7 @@ func (httpSvc *HttpService) getServicesHandler(c echo.Context) error {
 func (httpSvc *HttpService) capabilitiesHandler(c echo.Context) error {
 	response, err := httpSvc.api.GetWalletCapabilities(c.Request().Context())
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to request wallet capabilities")
+		httpSvc.logger.Error().Err(err).Msg("Failed to request wallet capabilities")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to request wallet capabilities: %s", err.Error()),
 		})
@@ -1004,7 +1007,7 @@ func (httpSvc *HttpService) appsListHandler(c echo.Context) error {
 	if filtersJSON != "" {
 		err := json.Unmarshal([]byte(filtersJSON), &filters)
 		if err != nil {
-			logger.Logger.Error().Err(err).
+			httpSvc.logger.Error().Err(err).
 				Str("filters", filtersJSON).
 				Msg("Failed to deserialize app filters")
 			return err
@@ -1091,7 +1094,7 @@ func (httpSvc *HttpService) appsUpdateHandler(c echo.Context) error {
 	err := httpSvc.api.UpdateApp(dbApp, &requestData)
 
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update app")
+		httpSvc.logger.Error().Err(err).Msg("Failed to update app")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to update app: %v", err),
 		})
@@ -1111,7 +1114,7 @@ func (httpSvc *HttpService) transfersHandler(c echo.Context) error {
 	err := httpSvc.api.Transfer(c.Request().Context(), requestData.FromAppId, requestData.ToAppId, requestData.AmountLoki*1000)
 
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to transfer funds")
+		httpSvc.logger.Error().Err(err).Msg("Failed to transfer funds")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to transfer funds: %v", err),
 		})
@@ -1153,7 +1156,7 @@ func (httpSvc *HttpService) appsCreateHandler(c echo.Context) error {
 	responseBody, err := httpSvc.api.CreateApp(&requestData)
 
 	if err != nil {
-		logger.Logger.Error().Err(err).Interface("requestData", requestData).Msg("Failed to save app")
+		httpSvc.logger.Error().Err(err).Interface("requestData", requestData).Msg("Failed to save app")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to save app: %v", err),
 		})
@@ -1548,7 +1551,7 @@ func (httpSvc *HttpService) setupLocalHandler(c echo.Context) error {
 
 	err := httpSvc.api.SetupLocal(c.Request().Context(), &setupRequest)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to setup local connection")
+		httpSvc.logger.Error().Err(err).Msg("Failed to setup local connection")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to setup: %s", err.Error()),
 		})
@@ -1567,7 +1570,7 @@ func (httpSvc *HttpService) setupManualHandler(c echo.Context) error {
 
 	err := httpSvc.api.SetupManual(c.Request().Context(), &setupRequest)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to setup manual connection")
+		httpSvc.logger.Error().Err(err).Msg("Failed to setup manual connection")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to setup: %s", err.Error()),
 		})
@@ -1577,37 +1580,31 @@ func (httpSvc *HttpService) setupManualHandler(c echo.Context) error {
 }
 
 func (httpSvc *HttpService) getAppStoreAppsHandler(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "public, max-age=300")
 	apps := httpSvc.appStoreSvc.ListApps()
 	return c.JSON(http.StatusOK, apps)
 }
 
 func (httpSvc *HttpService) getAppStoreLogoHandler(c echo.Context) error {
 	appId := c.Param("appId")
-	logger.Logger.Info().Str("appId", appId).Msg("getAppStoreLogoHandler called")
 	if appId == "" {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "appId is required"})
 	}
 
 	logoPath, err := httpSvc.appStoreSvc.GetLogoPath(appId)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("GetLogoPath failed")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 	}
-	logger.Logger.Info().Str("path", logoPath).Msg("Resolved logo path")
 
-	// Manual file serving to debug issues
-	f, err := os.Open(logoPath)
-	if err != nil {
-		logger.Logger.Error().Err(err).Str("path", logoPath).Msg("Failed to open logo file")
+	if _, err := os.Stat(logoPath); err != nil {
 		if os.IsNotExist(err) {
 			return c.JSON(http.StatusNotFound, ErrorResponse{Message: "Logo not found"})
 		}
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: fmt.Sprintf("Failed to open file: %s", err.Error())})
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 	}
-	defer f.Close()
 
-	// Detect content type or assume png
-	return c.Stream(http.StatusOK, "image/png", f)
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	return c.File(logoPath)
 }
 
 func (httpSvc *HttpService) getLSPS2InfoHandler(c echo.Context) error {

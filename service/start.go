@@ -276,7 +276,9 @@ func (svc *service) startAppWalletSubscription(ctx context.Context, pool *nostr.
 }
 
 func (svc *service) watchSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel chan nostr.RelayEvent) error {
-	eventsChannelClosed := make(chan struct{})
+	// Buffered so the inner goroutine can send without blocking when the outer
+	// select has already returned via ctx.Done() — prevents a goroutine leak.
+	eventsChannelClosed := make(chan struct{}, 1)
 	go func() {
 		// loop through incoming events
 		for event := range eventsChannel {
@@ -419,7 +421,7 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		svc.stopLNClient()
 	}()
 
-	logger.Logger.Info().Msgf("Connecting to FLN Backend: %s", config.FLNDBackendType)
+	logger.Logger.Info().Str("backend_type", config.FLNDBackendType).Msg("Connecting to FLN Backend")
 
 	FLNDAddress, _ := svc.cfg.Get("LNDAddress", encryptionKey)
 	FLNDCertHex, _ := svc.cfg.Get("LNDCertHex", encryptionKey)

@@ -24,7 +24,7 @@ func (controller *nip47Controller) HandleCancelHoldInvoiceEvent(ctx context.Cont
 	logger.Logger.Info().
 		Interface("requestEventId", requestEventId).
 		Interface("appId", appId).
-		Interface("paymentHash", cancelHoldInvoiceParams.PaymentHash).
+		Interface("payment_hash", cancelHoldInvoiceParams.PaymentHash).
 		Msg("Canceling hold invoice")
 
 	err := controller.transactionsService.CancelHoldInvoice(ctx, cancelHoldInvoiceParams.PaymentHash, controller.lnClient)
@@ -32,7 +32,7 @@ func (controller *nip47Controller) HandleCancelHoldInvoiceEvent(ctx context.Cont
 		logger.Logger.Error().Err(err).
 			Interface("request_event_id", requestEventId).
 			Interface("appId", appId).
-			Interface("paymentHash", cancelHoldInvoiceParams.PaymentHash).
+			Interface("payment_hash", cancelHoldInvoiceParams.PaymentHash).
 			Msg("Failed to cancel hold invoice")
 
 		publishResponse(&models.Response{
