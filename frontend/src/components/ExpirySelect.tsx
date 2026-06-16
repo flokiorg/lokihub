@@ -75,7 +75,7 @@ const ExpirySelect: React.FC<ExpiryProps> = ({ value, onChange }) => {
                 customExpiry ? "border-primary" : "border-muted"
               )}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
+              <CalendarIcon className="me-2 h-4 w-4" />
               <span className="truncate">
                 {customExpiry && value
                   ? dayjs(value).format("DD MMMM YYYY")

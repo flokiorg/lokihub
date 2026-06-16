@@ -142,7 +142,7 @@ function TransactionItem({ tx }: Props) {
         />
         {app && (
           <div
-            className="absolute -bottom-1 -right-1"
+            className="absolute -bottom-1 -end-1"
             title={`${typeStateText} via ${app.name === LOKI_ACCOUNT_APP_NAME ? "Loki Account" : app.name}`}
           >
             <AppAvatar
@@ -171,7 +171,7 @@ function TransactionItem({ tx }: Props) {
           )}
         >
           {typeStateIcon}
-          <div className="overflow-hidden mr-3 max-w-full text-left flex flex-col items-start justify-center">
+          <div className="overflow-hidden me-3 max-w-full flex flex-col items-start justify-center">
             <div className="flex items-center gap-2">
               <span className="md:text-xl font-semibold break-all line-clamp-1">
                 {typeStateText}
@@ -186,21 +186,20 @@ function TransactionItem({ tx }: Props) {
               {description}
             </p>
           </div>
-          <div className="flex ml-auto space-x-3 shrink-0">
+          <div className="flex ms-auto shrink-0">
             <div className="flex flex-col items-end md:text-xl">
-              <div className="flex flex-row gap-1">
-                <p
-                  className={cn(
-                    type == "incoming" && "text-green-600 dark:text-emerald-500"
-                  )}
-                >
-                  {type == "outgoing" ? "-" : "+"}
-                  <FormattedFlokicoinAmount
-                    amount={tx.amount}
-                    className="font-medium"
-                  />
-                </p>
-              </div>
+              <p
+                dir="ltr"
+                className={cn(
+                  type == "incoming" && "text-green-600 dark:text-emerald-500"
+                )}
+              >
+                {type == "outgoing" ? "-" : "+"}
+                <FormattedFlokicoinAmount
+                  amount={tx.amount}
+                  className="font-medium"
+                />
+              </p>
               <FormattedFiatAmount
                 className="text-xs md:text-base"
                 amount={Math.floor(tx.amount / 1000)}
@@ -214,7 +213,7 @@ function TransactionItem({ tx }: Props) {
           <DialogTitle
             className={cn(tx.state === "pending" && "animate-pulse")}
           >{`${typeStateText} Flokicoin Payment`}</DialogTitle>
-          <DialogDescription className="text-start text-foreground max-h-[90vh] overflow-y-auto pr-2">
+          <DialogDescription className="text-start text-foreground max-h-[90vh] overflow-y-auto pe-2">
             <div
               className={cn(
                 "flex items-center mt-6",
@@ -222,7 +221,7 @@ function TransactionItem({ tx }: Props) {
               )}
             >
               {typeStateIcon}
-              <div className="ml-4">
+              <div className="ms-4">
                 <p className="text-xl md:text-2xl font-semibold sensitive">
                   <FormattedFlokicoinAmount amount={tx.amount} />
                 </p>
@@ -345,7 +344,7 @@ function TransactionItem({ tx }: Props) {
                     <div className="mt-6">
                       <p>Preimage</p>
                       <div className="flex items-center gap-4">
-                        <p className="text-muted-foreground break-all">
+                        <p className="text-muted-foreground break-all" dir="ltr">
                           {tx.preimage}
                         </p>
                         <CopyIcon
@@ -362,7 +361,7 @@ function TransactionItem({ tx }: Props) {
                   <div className="mt-6">
                     <p>Hash</p>
                     <div className="flex items-center gap-4">
-                      <p className="text-muted-foreground break-all">
+                      <p className="text-muted-foreground break-all" dir="ltr">
                         {tx.paymentHash}
                       </p>
                       <CopyIcon
@@ -376,7 +375,7 @@ function TransactionItem({ tx }: Props) {
                   <div className="mt-6">
                     <p>Invoice</p>
                     <div className="flex items-center gap-4">
-                      <p className="text-muted-foreground break-all">
+                      <p className="text-muted-foreground break-all" dir="ltr">
                         {tx.invoice}
                       </p>
                       <CopyIcon
@@ -407,7 +406,7 @@ function TransactionItem({ tx }: Props) {
                     <div className="mt-6">
                       <p>Metadata</p>
                       <div className="flex items-center gap-4">
-                        <p className="text-muted-foreground break-all">
+                        <p className="text-muted-foreground break-all" dir="ltr">
                           {JSON.stringify(tx.metadata)}
                         </p>
                         <CopyIcon

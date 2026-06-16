@@ -401,7 +401,7 @@ const classForSeparator = cva(
       },
       labelOrientation: {
         vertical:
-          "absolute left-[calc(50%+30px)] right-[calc(-50%+20px)] top-5 block shrink-0",
+          "absolute start-[calc(50%+30px)] end-[calc(-50%+20px)] top-5 block shrink-0",
       },
     },
   }

@@ -76,6 +76,7 @@ export default function ConnectPeer() {
             <Input
               id="connectionString"
               type="text"
+              dir="ltr"
               value={connectionString}
               placeholder="pubkey@host:port"
               onChange={(e) => {

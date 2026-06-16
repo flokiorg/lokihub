@@ -14,7 +14,9 @@
     "received": "已接收",
     "pending": "待处理",
     "failed": "失败",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "emptyDescription": "您最近的入账和出账将显示在此处。",
+    "receiveFirst": "接收您的第一笔付款"
   },
   "receive": {
     "title": "收款",

@@ -15,6 +15,9 @@
       "system": "Sistema",
       "light": "Claro",
       "dark": "Oscuro"
+    },
+    "themes": {
+      "default": "Predeterminado"
     }
   },
   "units": {

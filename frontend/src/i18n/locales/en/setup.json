@@ -85,5 +85,62 @@
     "title": "All done!",
     "description": "Your node is ready to use.",
     "goHome": "Go to Dashboard"
+  },
+  "services": {
+    "title": "Hub Configuration",
+    "description": "Configure external services for your node.",
+    "loading": "Loading...",
+    "continue": "Continue",
+    "fetchError": "Failed to fetch Hub Configuration. Please check your connection.",
+    "communityNote": "These service suggestions are provided by the community. To suggest changes or add new services, please submit a pull request to the <1>lokihub-services</1> repository.",
+    "connectHint": "Connect a trusted service",
+    "warning": "Warning",
+    "warningText": "You are responsible for the services you connect to. Ensure you trust the providers of these URLs.",
+    "configErrors": "Configuration Errors",
+    "explorer": {
+      "title": "Flokicoin Explorer",
+      "description": "Used for fee estimation and transaction details.",
+      "custom": "Custom Explorer"
+    },
+    "relay": {
+      "title": "Nostr Relays",
+      "description": "Connect to multiple Nostr relays for Wallet Connect (NWC) communication. Multiple relays improve availability."
+    },
+    "lsp": {
+      "title": "Lightning Service Providers",
+      "description": "Manage LSPs for JIT channels and inbound liquidity.",
+      "communityBadge": "Proposed by the community",
+      "active": "Active",
+      "inactive": "Inactive",
+      "addCustom": "Add Custom LSP",
+      "newLsp": "New LSP",
+      "name": "Name",
+      "uri": "URI (pubkey@host:port)",
+      "cancel": "Cancel",
+      "add": "Add",
+      "nameRequired": "LSP Name is required",
+      "nameUnique": "LSP Name must be unique",
+      "uriRequired": "LSP URI is required",
+      "invalidUri": "Invalid URI format",
+      "pubkeyExists": "LSP with this Pubkey already exists",
+      "copied": "LSP URI copied to clipboard"
+    },
+    "swap": {
+      "title": "Swap Service",
+      "description": "Enables Lightning to on-chain swaps (and vice-versa).",
+      "custom": "Custom Swap Service"
+    },
+    "messageboard": {
+      "title": "Messageboard",
+      "description": "Connects to a NWC-enabled messageboard service.",
+      "custom": "Custom Message Board"
+    },
+    "validation": {
+      "relayRequired": "At least one relay is required",
+      "explorerRequired": "Flokicoin Explorer URL is required",
+      "swapRequired": "Swap Service URL is required when enabled",
+      "messageboardRequired": "Messageboard URL is required when enabled",
+      "invalidUrl": "{{field}}: invalid URL format"
+    }
   }
 }

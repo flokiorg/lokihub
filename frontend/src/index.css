@@ -159,18 +159,9 @@ input[type="text"]::-webkit-calendar-picker-indicator {
 
 /**
  * 3. Navigation item text alignment in RTL
+ *    flex-direction: row in an RTL document already flows right-to-left,
+ *    so no explicit override is needed — the browser handles it automatically.
  */
-[dir="rtl"] nav a,
-[dir="rtl"] [role="menuitem"] {
-  flex-direction: row-reverse;
-}
-
-/* Keep icons on the correct side in RTL navigation */
-[dir="rtl"] nav a svg:first-child,
-[dir="rtl"] [role="menuitem"] svg:first-child {
-  /* Icons stay on the "start" side — which is right in RTL */
-  order: 1;
-}
 
 /**
  * 4. Form layout — labels and inputs align RTL

@@ -95,6 +95,7 @@ export default function SignMessage() {
                 <div className="flex flex-row items-center gap-2">
                   <Input
                     type="text"
+                    dir="ltr"
                     value={signature}
                     className="flex-1"
                     readOnly

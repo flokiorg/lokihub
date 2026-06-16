@@ -32,7 +32,7 @@ export function FeeDisplay({ invoice, size = "sm" }: FeeDisplayProps) {
   }
 
   return (
-      <div className="text-right">
+      <div className="text-end">
           <div className="font-semibold">
               <FormattedFlokicoinAmount amount={sats * 1000} />
           </div>

@@ -43,7 +43,7 @@ export function ConnectionDetailsModal({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <AlertCircleIcon className="w-3 h-3 ml-2 flex-shrink-0" />
+                      <AlertCircleIcon className="w-3 h-3 ms-2 flex-shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent>
                       This connection does not have its own unique wallet

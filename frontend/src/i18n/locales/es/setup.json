@@ -92,5 +92,62 @@
     "waitingForRestart": "Esperando reinicio...",
     "warning1": "Como parte del proceso de restauración del nodo, su Lokihub se apagará.",
     "warning2": "Si se ejecuta en la nube, su Lokihub se reiniciará automáticamente. De lo contrario, reinicie manualmente su Lokihub para finalizar el proceso de restauración."
+  },
+  "services": {
+    "title": "Configuración del Hub",
+    "description": "Configure los servicios externos para su nodo.",
+    "loading": "Cargando...",
+    "continue": "Continuar",
+    "fetchError": "Error al obtener la configuración del Hub. Verifique su conexión.",
+    "communityNote": "Estas sugerencias de servicios son proporcionadas por la comunidad. Para sugerir cambios o agregar nuevos servicios, envíe un pull request al repositorio <1>lokihub-services</1>.",
+    "warning": "Advertencia",
+    "warningText": "Usted es responsable de los servicios a los que se conecta. Asegúrese de confiar en los proveedores de estas URLs.",
+    "configErrors": "Errores de configuración",
+    "explorer": {
+      "title": "Explorador Flokicoin",
+      "description": "Usado para estimación de comisiones y detalles de transacciones.",
+      "custom": "Explorador personalizado"
+    },
+    "relay": {
+      "title": "Relés Nostr",
+      "description": "Conéctese a múltiples relés Nostr para la comunicación Wallet Connect (NWC). Múltiples relés mejoran la disponibilidad."
+    },
+    "lsp": {
+      "title": "Proveedores de Servicios Lightning",
+      "description": "Gestione los LSPs para canales JIT y liquidez entrante.",
+      "communityBadge": "Propuesto por la comunidad",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "addCustom": "Agregar LSP personalizado",
+      "newLsp": "Nuevo LSP",
+      "name": "Nombre",
+      "uri": "URI (pubkey@host:port)",
+      "cancel": "Cancelar",
+      "add": "Agregar",
+      "nameRequired": "El nombre del LSP es obligatorio",
+      "nameUnique": "El nombre del LSP debe ser único",
+      "uriRequired": "La URI del LSP es obligatoria",
+      "invalidUri": "Formato de URI inválido",
+      "pubkeyExists": "Ya existe un LSP con esta Pubkey",
+      "copied": "URI del LSP copiada al portapapeles"
+    },
+    "swap": {
+      "title": "Servicio de intercambio",
+      "description": "Habilita intercambios de Lightning a on-chain (y viceversa).",
+      "custom": "Servicio de intercambio personalizado"
+    },
+    "messageboard": {
+      "title": "Tablón de mensajes",
+      "description": "Se conecta a un servicio de tablón de mensajes habilitado con NWC.",
+      "custom": "Tablón de mensajes personalizado"
+    },
+    "validation": {
+      "relayRequired": "Se requiere al menos un relé",
+      "explorerRequired": "La URL del Explorador Flokicoin es obligatoria",
+      "swapRequired": "La URL del servicio de intercambio es obligatoria cuando está habilitado",
+      "messageboardRequired": "La URL del tablón de mensajes es obligatoria cuando está habilitado",
+      "invalidUrl": "{{field}}: formato de URL inválido"
+    },
+    "connectHint": "Conectar un servicio de confianza"
   }
 }

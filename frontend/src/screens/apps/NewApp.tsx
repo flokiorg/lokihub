@@ -448,7 +448,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                                 />
                                 <Label
                                   htmlFor="superuser"
-                                  className="ml-2 text-sm text-foreground flex flex-col items-start justify-center"
+                                  className="ms-2 text-sm text-foreground flex flex-col items-start justify-center"
                                 >
                                   <div>
                                     {t("newApp.enableAcceptingConnections", "Enable accepting connections to other apps")}
@@ -470,7 +470,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                         },
                         finalize: () =>
                           createAppResponse && (
-                            <div className="pl-8 max-w-md">
+                            <div className="ps-8 max-w-md">
                               <FinalizeConnection
                                 createAppResponse={createAppResponse}
                                 appStoreApp={appStoreApp}

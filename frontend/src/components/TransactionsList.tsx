@@ -1,5 +1,6 @@
 import { DrumIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CustomPagination } from "src/components/CustomPagination";
 import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
@@ -16,6 +17,7 @@ function TransactionsList({
   appId,
   showReceiveButton = true,
 }: TransactionsListProps) {
+  const { t } = useTranslation("wallet");
   const [page, setPage] = useState(1);
   const transactionListRef = useRef<HTMLDivElement>(null);
   const { data: transactionData, isLoading } = useTransactions(
@@ -44,9 +46,9 @@ function TransactionsList({
       {!transactions.length ? (
         <EmptyState
           icon={DrumIcon}
-          title="No transactions yet"
-          description="Your most recent incoming and outgoing payments will show up here."
-          buttonText="Receive Your First Payment"
+          title={t("transactions.empty")}
+          description={t("transactions.emptyDescription")}
+          buttonText={t("transactions.receiveFirst")}
           buttonLink="/wallet/receive"
           showButton={showReceiveButton}
           showBorder={false}

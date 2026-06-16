@@ -161,7 +161,7 @@ export function AutoChannel() {
                   <Checkbox
                     id="public-channel"
                     onCheckedChange={() => setPublic(!isPublic)}
-                    className="mr-2"
+                    className="me-2"
                   />
                   <div className="grid gap-1.5 leading-none">
                     <Label
@@ -186,7 +186,7 @@ export function AutoChannel() {
                   onClick={() => setShowAdvanced((current) => !current)}
                 >
                   Advanced Options
-                  <ChevronDownIcon className="size-4 ml-1" />
+                  <ChevronDownIcon className="size-4 ms-1" />
                 </Button>
               </div>
             )}

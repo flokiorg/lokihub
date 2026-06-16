@@ -92,5 +92,62 @@
     "waitingForRestart": "再起動を待っています...",
     "warning1": "ノード復元プロセスの一部として、Lokihubがシャットダウンされます。",
     "warning2": "クラウドで実行している場合、Lokihubは自動的に再起動します。そうでない場合は、手動でLoki Hubを再起動して復元プロセスを完了してください。"
+  },
+  "services": {
+    "title": "ハブ設定",
+    "description": "ノードの外部サービスを設定します。",
+    "loading": "読み込み中...",
+    "continue": "続ける",
+    "fetchError": "ハブ設定の取得に失敗しました。接続を確認してください。",
+    "communityNote": "これらのサービス提案はコミュニティから提供されています。変更の提案や新しいサービスの追加は、<1>lokihub-services</1> リポジトリにプルリクエストを送ってください。",
+    "warning": "警告",
+    "warningText": "接続するサービスの責任はあなたにあります。これらのURLのプロバイダーを信頼していることを確認してください。",
+    "configErrors": "設定エラー",
+    "explorer": {
+      "title": "Flokicoinエクスプローラー",
+      "description": "手数料の見積もりとトランザクション詳細に使用します。",
+      "custom": "カスタムエクスプローラー"
+    },
+    "relay": {
+      "title": "Nostrリレー",
+      "description": "Wallet Connect (NWC) 通信のために複数のNostrリレーに接続します。複数のリレーにより可用性が向上します。"
+    },
+    "lsp": {
+      "title": "ライトニングサービスプロバイダー",
+      "description": "JITチャネルとインバウンド流動性のためのLSPを管理します。",
+      "communityBadge": "コミュニティが提案",
+      "active": "有効",
+      "inactive": "無効",
+      "addCustom": "カスタムLSPを追加",
+      "newLsp": "新しいLSP",
+      "name": "名前",
+      "uri": "URI (pubkey@host:port)",
+      "cancel": "キャンセル",
+      "add": "追加",
+      "nameRequired": "LSP名は必須です",
+      "nameUnique": "LSP名は一意でなければなりません",
+      "uriRequired": "LSP URIは必須です",
+      "invalidUri": "無効なURIフォーマット",
+      "pubkeyExists": "このPubkeyのLSPはすでに存在します",
+      "copied": "LSP URIをクリップボードにコピーしました"
+    },
+    "swap": {
+      "title": "スワップサービス",
+      "description": "ライトニングとオンチェーンのスワップ（およびその逆）を有効にします。",
+      "custom": "カスタムスワップサービス"
+    },
+    "messageboard": {
+      "title": "メッセージボード",
+      "description": "NWC対応のメッセージボードサービスに接続します。",
+      "custom": "カスタムメッセージボード"
+    },
+    "validation": {
+      "relayRequired": "少なくとも1つのリレーが必要です",
+      "explorerRequired": "FlokicoinエクスプローラーのURLは必須です",
+      "swapRequired": "有効時はスワップサービスのURLが必須です",
+      "messageboardRequired": "有効時はメッセージボードのURLが必須です",
+      "invalidUrl": "{{field}}：URLフォーマットが無効です"
+    },
+    "connectHint": "信頼できるサービスに接続"
   }
 }

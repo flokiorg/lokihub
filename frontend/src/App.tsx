@@ -4,6 +4,7 @@ import {
     createBrowserRouter,
     createHashRouter,
 } from "react-router-dom";
+import { ErrorBoundary } from "src/components/ErrorBoundary";
 import { GlobalError } from "src/components/GlobalError";
 import Loading from "src/components/Loading";
 import { Toaster } from "src/components/ui/sonner";
@@ -35,10 +36,12 @@ function App() {
           storageKey="vite-ui-theme"
         >
           {isLoading && <Loading />}
-          {error && <GlobalError message={error.message} />}
+          {error && <GlobalError error={error} />}
           {info && (
             <LSPEventProvider>
-              <RouterProvider router={router} />
+              <ErrorBoundary>
+                <RouterProvider router={router} />
+              </ErrorBoundary>
             </LSPEventProvider>
           )}
           <Toaster position="bottom-right" richColors={true} />

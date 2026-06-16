@@ -233,7 +233,7 @@ export default function Channels() {
                         onClick={() => navigate("/wallet/swap?type=in")}
                         className="cursor-pointer"
                       >
-                        <div className="mr-2 text-muted-foreground flex flex-row items-center">
+                        <div dir="ltr" className="me-2 text-muted-foreground flex flex-row items-center">
                           <LinkIcon className="size-4" />
                           <ArrowRightIcon className="size-4" />
                           <ZapIcon className="size-4" />
@@ -244,7 +244,7 @@ export default function Channels() {
                         onClick={() => navigate("/wallet/swap?type=out")}
                         className="cursor-pointer"
                       >
-                        <div className="mr-2 text-muted-foreground flex flex-row items-center">
+                        <div dir="ltr" className="me-2 text-muted-foreground flex flex-row items-center">
                           <ZapIcon className="size-4" />
                           <ArrowRightIcon className="size-4" />
                           <LinkIcon className="size-4" />
@@ -280,7 +280,7 @@ export default function Channels() {
                           className="w-full flex flex-row items-center cursor-pointer"
                           to="/wallet/node-alias"
                         >
-                          <SparklesIcon className="size-4 mr-2 text-muted-foreground" />
+                          <SparklesIcon className="size-4 me-2 text-muted-foreground" />
                           Set Node Alias
                         </Link>
                       </DropdownMenuItem>
@@ -360,20 +360,20 @@ export default function Channels() {
             <Card className="flex flex-1 sm:flex-2 flex-col">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="font-semibold text-2xl">
-                  Lightning
+                  {t("node.lightning")}
                 </CardTitle>
                 <ZapIcon className="h-6 w-6 text-muted-foreground" />
               </CardHeader>
 
-              <CardContent className="flex flex-col sm:flex-row pl-0 flex-wrap">
+              <CardContent className="flex flex-col sm:flex-row ps-0 flex-wrap">
                 <div className="flex flex-col flex-1">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pr-0">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pe-0">
                     <CardTitle className="text-sm font-medium">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
                             <div className="flex flex-row gap-1 items-center justify-start text-sm font-medium">
-                              Spending Balance
+                              {t("node.spendingBalance")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
                           </TooltipTrigger>
@@ -432,13 +432,13 @@ export default function Channels() {
 
                 </div>
                 <div className="flex flex-col flex-1">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pr-0">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pe-0">
                     <CardTitle className="text-sm font-medium">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
                             <div className="flex flex-row gap-1 items-center justify-start text-sm font-medium">
-                              Receive Limit
+                              {t("node.receiveLimit")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
                           </TooltipTrigger>
@@ -472,18 +472,18 @@ export default function Channels() {
             <Card className="flex flex-1 flex-col">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-2xl font-semibold">
-                  On-Chain
+                  {t("node.onchain")}
                 </CardTitle>
                 <LinkIcon className="h-6 w-6 text-muted-foreground" />
               </CardHeader>
               <CardContent className="grow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pl-0">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 ps-0">
                   <CardTitle className="text-sm font-medium">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
                           <div className="flex flex-row gap-1 items-center text-sm font-medium">
-                            Balance
+                            {t("node.balance")}
                             <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                           </div>
                         </TooltipTrigger>
@@ -509,7 +509,7 @@ export default function Channels() {
                   {balances && (
                     <>
                       <div className="mb-1">
-                        <span className="text-xl font-medium balance sensitive mb-1 mr-1">
+                        <span className="text-xl font-medium balance sensitive mb-1 me-1">
                           <FormattedFlokicoinAmount
                             amount={balances.onchain.spendable * 1000}
                           />
@@ -677,7 +677,7 @@ function PendingBalancesDetailsItem({
         className="underline"
       >
         {nodeDetails?.alias || "Unknown"}
-        <ExternalLinkIcon className="ml-1 w-4 h-4 inline" />
+        <ExternalLinkIcon className="ms-1 w-4 h-4 inline" />
       </ExternalLink>{" "}
       (<FormattedFlokicoinAmount amount={details.amount * 1000} />
       )&nbsp;
@@ -686,7 +686,7 @@ function PendingBalancesDetailsItem({
         className="underline"
       >
         funding tx
-        <ExternalLinkIcon className="ml-1 w-4 h-4 inline" />
+        <ExternalLinkIcon className="ms-1 w-4 h-4 inline" />
       </ExternalLink>
       {isLast && ","}
     </div>

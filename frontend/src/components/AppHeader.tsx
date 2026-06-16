@@ -21,8 +21,8 @@ function AppHeader({
   return (
     <>
       <header className="flex flex-row flex-wrap items-center border-b border-border pb-4 gap-2">
-        {addSidebarTrigger && <SidebarTrigger className="-ml-1 md:hidden" />}
-        <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+        {addSidebarTrigger && <SidebarTrigger className="-ms-1 md:hidden" />}
+        <Separator orientation="vertical" className="me-2 h-4 md:hidden" />
         {icon}
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex justify-between items-start sm:items-center flex-wrap gap-2">

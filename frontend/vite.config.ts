@@ -2,8 +2,6 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { defineConfig, Plugin } from "vite";
-import { VitePWA } from "vite-plugin-pwa";
-
 import svgr from "vite-plugin-svgr";
 
 const svgrConfig = {
@@ -31,46 +29,6 @@ export default defineConfig(({ command }) => ({
     svgr(svgrConfig),
     tailwindcss(),
     // tsconfigPaths(),
-    VitePWA({
-      registerType: "autoUpdate",
-      // disable service worker - Lokihub cannot be used offline (and also breaks oauth callback)
-      injectRegister: false,
-      includeAssets: [
-        "favicon.ico",
-        "robots.txt",
-        "icon-192.png",
-        "icon-512.png",
-      ],
-      useCredentials: true, // because the manifest might sit behind authentication
-      manifest: {
-        short_name: "Lokihub",
-        name: "Lokihub",
-        icons: [
-          {
-            src: "icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-          {
-            src: "icon-1024.png",
-            sizes: "1024x1024",
-            type: "image/png",
-          },
-        ],
-        start_url: ".",
-        display: "standalone",
-        theme_color: "#000000",
-        background_color: "#ffffff",
-      },
-      workbox: {
-        maximumFileSizeToCacheInBytes: 6000000, // 6MB
-      },
-    }),
     ...(command === "serve" ? [insertDevCSPPlugin] : []),
   ],
   server: {

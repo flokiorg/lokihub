@@ -9,20 +9,22 @@ export interface InputWithAdornmentProps extends React.ComponentProps<"input"> {
 const InputWithAdornment = React.forwardRef<
   HTMLInputElement,
   InputWithAdornmentProps
->(({ className, type, endAdornment, ...props }, ref) => {
+>(({ className, type, endAdornment, dir, ...props }, ref) => {
   return (
     <div className="relative flex items-center w-full">
       <Input
         type={type}
         ref={ref}
+        dir={dir}
         className={cn(
           "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+          endAdornment && (dir === "ltr" ? "pe-8 rtl:pe-0 rtl:ps-8" : "pe-8"),
           className
         )}
         {...props}
       />
       {endAdornment && (
-        <span className="absolute right-1 flex items-center">
+        <span className="absolute end-1 flex items-center">
           {endAdornment}
         </span>
       )}

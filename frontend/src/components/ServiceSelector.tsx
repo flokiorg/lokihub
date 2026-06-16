@@ -105,7 +105,7 @@ export function ServiceSelector({
               ) : (
                 <span className="text-muted-foreground">{placeholder || "Select a service provider..."}</span>
               )}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              <ChevronsUpDown className="ms-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
@@ -130,7 +130,7 @@ export function ServiceSelector({
                             <ShieldCheck className="w-3 h-3 text-primary/80" />
                         )}
                         {value === option.value && (
-                          <Check className="ml-auto h-4 w-4 text-primary" />
+                          <Check className="ms-auto h-4 w-4 text-primary" />
                         )}
                       </div>
                       {option.description && (

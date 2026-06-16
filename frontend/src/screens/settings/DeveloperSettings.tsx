@@ -1,5 +1,6 @@
 import { CopyIcon, SquareArrowOutUpRightIcon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import PasswordInput from "src/components/password/PasswordInput";
 import SettingsHeader from "src/components/SettingsHeader";
@@ -15,6 +16,7 @@ import { AuthTokenResponse } from "src/types";
 import { request } from "src/utils/request";
 
 export default function DeveloperSettings() {
+  const { t } = useTranslation("settings");
 
   const [token, setToken] = React.useState<string>();
   const [tokenPermission, setTokenPermission] = React.useState<string>();
@@ -64,18 +66,13 @@ export default function DeveloperSettings() {
   return (
     <>
       <SettingsHeader
-        title="Developer"
-        description="Power your apps with Lokihub."
+        title={t("developer.title")}
+        description={t("developer.description")}
       />
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1 text-sm">
-          <h3 className="font-semibold">Power your apps with NWC</h3>
-
-          <div className="text-muted-foreground">
-            Lokihub can power your lightning apps and services in all
-            environments using Nostr Wallet Connect, an open protocol to connect
-            lightning wallets and apps
-          </div>
+          <h3 className="font-semibold">{t("developer.nwcTitle")}</h3>
+          <div className="text-muted-foreground">{t("developer.nwcDesc")}</div>
         </div>
         <div>
           <ExternalLinkButton
@@ -84,7 +81,7 @@ export default function DeveloperSettings() {
             to="https://nwc.dev"
             className="flex-1 gap-2 items-center justify-center"
           >
-            Learn More on nwc.dev
+            {t("developer.learnMore")}
             <SquareArrowOutUpRightIcon />
           </ExternalLinkButton>
         </div>
@@ -92,14 +89,8 @@ export default function DeveloperSettings() {
       <Separator />
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1 text-sm">
-          <h3 className="font-semibold">Experimental API access</h3>
-
-          <div className="text-muted-foreground">
-            You can use your auth token to access the Lokihub internal API.
-            However, whenever possible, we recommend using the NWC API directly
-            for more stability. Please note that the internal API may change or
-            be removed entirely in the future.
-          </div>
+          <h3 className="font-semibold">{t("developer.apiTitle")}</h3>
+          <div className="text-muted-foreground">{t("developer.apiDesc")}</div>
         </div>
         {!token && !showCreateTokenForm && (
           <div>
@@ -109,7 +100,7 @@ export default function DeveloperSettings() {
               onClick={() => setShowCreateTokenForm(true)}
               className="flex-1"
             >
-              Configure Token
+              {t("developer.configureToken")}
             </Button>
           </div>
         )}
@@ -120,7 +111,7 @@ export default function DeveloperSettings() {
           >
             <>
               <div className="grid gap-3">
-                <Label>Token Type</Label>
+                <Label>{t("developer.tokenType")}</Label>
                 <RadioGroup
                   value={permission}
                   onValueChange={(v) => {
@@ -137,11 +128,11 @@ export default function DeveloperSettings() {
                       htmlFor="full"
                       className="flex-1 flex flex-col justify-center items-start cursor-pointer"
                     >
-                      <div className="font-medium shrink-0">Full Access</div>
+                      <div className="font-medium shrink-0">
+                        {t("developer.fullAccess")}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        Complete control over your hub - can read data and
-                        perform all operations (send payments, manage apps,
-                        etc.)
+                        {t("developer.fullAccessDesc")}
                       </div>
                     </Label>
                   </div>
@@ -151,17 +142,18 @@ export default function DeveloperSettings() {
                       htmlFor="readonly"
                       className="flex-1  flex flex-col justify-center items-start cursor-pointer"
                     >
-                      <div className="font-medium">Read-Only Access</div>
+                      <div className="font-medium">
+                        {t("developer.readonlyAccess")}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        View-only access - can read balances, transactions, and
-                        other data but cannot perform operations
+                        {t("developer.readonlyAccessDesc")}
                       </div>
                     </Label>
                   </div>
                 </RadioGroup>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="token-expiry">Token Expiry (Days)</Label>
+                <Label htmlFor="token-expiry">{t("developer.tokenExpiry")}</Label>
                 <Input
                   type="number"
                   name="token-expiry"
@@ -171,7 +163,7 @@ export default function DeveloperSettings() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="password">Unlock Password</Label>
+                <Label htmlFor="password">{t("developer.passwordLabel")}</Label>
                 <PasswordInput
                   id="password"
                   onChange={setUnlockPassword}
@@ -180,7 +172,9 @@ export default function DeveloperSettings() {
                 />
               </div>
               <div className="mt-4">
-                <LoadingButton loading={loading}>Create Token</LoadingButton>
+                <LoadingButton loading={loading}>
+                  {t("developer.createToken")}
+                </LoadingButton>
               </div>
             </>
           </form>

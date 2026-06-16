@@ -142,12 +142,12 @@ export function SubwalletList() {
               </span>
               {isSufficientlyBacked ? (
                 <div className="flex items-center text-positive-foreground text-sm">
-                  <ShieldCheckIcon className="size-4 mr-2" />
+                  <ShieldCheckIcon className="size-4 me-2" />
                   <span className="text-sm font-medium">Fully backed</span>
                 </div>
               ) : (
                 <div className="flex items-center text-warning-foreground text-sm">
-                  <TriangleAlertIcon className="size-4 mr-2" />
+                  <TriangleAlertIcon className="size-4 me-2" />
                   <span className="text-sm font-medium">
                     Insufficiently backed
                   </span>

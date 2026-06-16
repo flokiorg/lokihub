@@ -15,6 +15,9 @@
       "system": "시스템",
       "light": "라이트",
       "dark": "다크"
+    },
+    "themes": {
+      "default": "기본"
     }
   },
   "units": {

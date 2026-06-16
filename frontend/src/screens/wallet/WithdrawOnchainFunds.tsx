@@ -167,7 +167,7 @@ export default function WithdrawOnchainFunds() {
           className="underline flex items-center mt-2"
         >
           View on Flokicoin Explorer 
-          <ExternalLinkIcon className="size-4 ml-2" />
+          <ExternalLinkIcon className="size-4 ms-2" />
         </ExternalLink>
         <p>Your on-chain balance in Lokihub may take some time to update.</p>
       </div>
@@ -259,6 +259,7 @@ export default function WithdrawOnchainFunds() {
             <Input
               id="onchain-address"
               type="text"
+              dir="ltr"
               value={onchainAddress}
               required
               onChange={(e) => {

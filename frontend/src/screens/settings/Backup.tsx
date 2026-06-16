@@ -106,7 +106,7 @@ export default function Backup() {
                   <Checkbox id="private" required className="mt-0.5" />
                   <Label
                     htmlFor="private"
-                    className="ml-2 text-sm text-foreground"
+                    className="ms-2 text-sm text-foreground"
                   >
                     I'll NEVER share my recovery phrase with anyone, including
                     Loki support

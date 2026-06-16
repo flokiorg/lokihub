@@ -1,4 +1,5 @@
 import { ExternalLinkIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import ExternalLink from "src/components/ExternalLink";
 import {
@@ -15,6 +16,7 @@ import Loading from "src/components/Loading";
 import { useFAQ } from "src/hooks/useFAQ";
 
 export function FAQ() {
+  const { t } = useTranslation("help");
   const { faq, isLoading } = useFAQ();
 
   if (isLoading) {
@@ -24,10 +26,10 @@ export function FAQ() {
   return (
     <div className="grid gap-5">
       <AppHeader
-        title="Frequently Asked Questions"
-        description="Learn about Flokicoin, Lightning Network, and how to use your Hub."
+        title={t("faq.title")}
+        description={t("faq.description")}
       />
-      <div className="max-w-2xl">
+      <div className="max-w-2xl" dir="ltr">
         <Accordion type="single" collapsible className="w-full">
           {faq?.map((item, index) => (
             <AccordionItem key={index} value={`item-${index}`}>
@@ -56,15 +58,14 @@ export function FAQ() {
         </Accordion>
 
         <div className="mt-8 p-4 border rounded-lg bg-muted/30">
-          <h3 className="font-semibold mb-2">Still have questions?</h3>
+          <h3 className="font-semibold mb-2">{t("faq.stillHaveQuestions")}</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Join our community on Discord to get help, ask questions, and chat
-            with other Flokicoin users.
+            {t("faq.communityDesc")}
           </p>
           <ExternalLink to="https://flokicoin.org/discord">
             <Button>
-              Join Flokicoin Discord
-              <ExternalLinkIcon className="ml-2 h-4 w-4" />
+              {t("faq.joinDiscord")}
+              <ExternalLinkIcon className="ms-2 h-4 w-4" />
             </Button>
           </ExternalLink>
         </div>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
@@ -26,6 +27,7 @@ export function IsolatedAppTopupDialog({
   appId,
   children,
 }: React.PropsWithChildren<IsolatedAppTopupProps>) {
+  const { t } = useTranslation("wallet");
   const { mutate: reloadApp } = useApp(appId);
   const { mutate } = useSWRConfig();
   const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
@@ -67,7 +69,6 @@ export function IsolatedAppTopupDialog({
         }),
       });
       await reloadApp();
-      // Invalidate global caches to update other components
       await mutate(
         (key) => typeof key === "string" && (key.startsWith("/api/balances") || key.startsWith("/api/transactions")),
         undefined,
@@ -84,7 +85,6 @@ export function IsolatedAppTopupDialog({
   function reset() {
     setOpen(false);
     setAmountDisplay("");
-
   }
 
   return (
@@ -93,15 +93,13 @@ export function IsolatedAppTopupDialog({
       <DialogContent>
         <form onSubmit={onSubmit}>
           <DialogHeader>
-            <DialogTitle>Increase Balance</DialogTitle>
+            <DialogTitle>{t("subwallets.increaseBalance.title")}</DialogTitle>
             <DialogDescription>
-              Increase the balance of this sub-wallet. Make sure you always
-              maintain enough funds in your spending balance to prevent
-              sub-wallets becoming unspendable.
+              {t("subwallets.increaseBalance.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">Amount</Label>
+            <Label htmlFor="amount">{t("subwallets.increaseBalance.amount")}</Label>
             <CurrencyInput
               autoFocus
               id="amount"
@@ -114,7 +112,9 @@ export function IsolatedAppTopupDialog({
             />
           </div>
           <DialogFooter className="mt-5">
-            <LoadingButton loading={loading}>Increase</LoadingButton>
+            <LoadingButton loading={loading}>
+              {t("subwallets.increaseBalance.increaseButton")}
+            </LoadingButton>
           </DialogFooter>
         </form>
       </DialogContent>

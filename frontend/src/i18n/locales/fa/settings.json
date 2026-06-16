@@ -15,6 +15,9 @@
       "system": "سیستم",
       "light": "روشن",
       "dark": "تاریک"
+    },
+    "themes": {
+      "default": "پیش‌فرض"
     }
   },
   "units": {

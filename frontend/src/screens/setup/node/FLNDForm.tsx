@@ -113,20 +113,20 @@ export function FLNDForm() {
                 Local Node
                 {setupStatus ? (
                   <span
-                    className="flex items-center text-xs font-normal ml-auto"
+                    className="flex items-center text-xs font-normal ms-auto"
                     title={
                       setupStatus.active ? "Node is active" : "Node is unreachable"
                     }
                   >
                     {setupStatus.active ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-500 mr-1" />
+                      <CheckCircle2 className="w-4 h-4 text-green-500 me-1" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-red-500 mr-1" />
+                      <XCircle className="w-4 h-4 text-red-500 me-1" />
                     )}
                     {setupStatus.active ? "Ready" : "Offline"}
                   </span>
                 ) : (
-                    <Skeleton className="h-4 w-16 ml-auto" />
+                    <Skeleton className="h-4 w-16 ms-auto" />
                 )}
               </CardTitle>
               <CardDescription>
@@ -193,6 +193,7 @@ export function FLNDForm() {
               onChange={(e) => setFlndMacaroonHex(e.target.value)}
               value={flndMacaroonHex}
               type="text"
+              dir="ltr"
               id="flnd-macaroon-hex"
               autoComplete="off"
             />
@@ -205,6 +206,7 @@ export function FLNDForm() {
               onChange={(e) => setFlndCertHex(e.target.value)}
               value={flndCertHex}
               type="text"
+              dir="ltr"
               id="flnd-cert-hex"
               autoComplete="off"
             />

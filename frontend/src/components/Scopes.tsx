@@ -174,7 +174,7 @@ const Scopes: React.FC<ScopesProps> = ({
                   }}
                 >
                   <ScopeGroupIcon className="shrink-0 w-6 h-6 mx-2" />
-                  <div className="flex flex-col text-left">
+                  <div className="flex flex-col text-start">
                     <p className="font-semibold">{scopeGroupTitle[sg]}</p>
                     <span className="text-sm text-muted-foreground">
                       {scopeGroupDescriptions[sg]}
@@ -218,7 +218,7 @@ const Scopes: React.FC<ScopesProps> = ({
           <div className="flex items-center mt-2">
             <Checkbox
               id="isolated"
-              className="mr-2"
+              className="me-2"
               onCheckedChange={() => onScopesChanged(scopes, !isolated)}
               checked={isolated}
             />
@@ -240,7 +240,7 @@ const Scopes: React.FC<ScopesProps> = ({
                   <div className="flex items-center mb-2">
                     <Checkbox
                       id={scope}
-                      className="mr-2"
+                      className="me-2"
                       onCheckedChange={() => handleScopeChange(scope)}
                       checked={scopes.includes(scope)}
                     />

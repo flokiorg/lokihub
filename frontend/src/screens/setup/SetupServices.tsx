@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -17,6 +18,7 @@ import { SetupLayout } from "./SetupLayout";
 export function SetupServices() {
   const navigate = useNavigate();
   const store = useSetupStore();
+  const { t } = useTranslation("setup");
   
   const [loading, setLoading] = useState(true);
   
@@ -97,7 +99,7 @@ export function SetupServices() {
 
       } catch (err) {
         console.error("Failed to fetch services or info", err);
-        toast.error("Failed to fetch Hub Configuration. Please check your connection.");
+        toast.error(t("services.fetchError"));
       } finally {
         setLoading(false);
       }
@@ -109,7 +111,7 @@ export function SetupServices() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     
-    const errors = validateServiceConfig(config);
+    const errors = validateServiceConfig(config, t);
     if (errors.length > 0) {
         setValidationErrors(errors);
         // Scroll to error container
@@ -137,8 +139,8 @@ export function SetupServices() {
     >
 
       <TwoColumnLayoutHeader
-          title="Hub Configuration"
-          description="Configure external services for your node."
+          title={t("services.title")}
+          description={t("services.description")}
         />
 
       <form onSubmit={onSubmit} className="flex flex-col items-center w-full max-w-4xl mx-auto pb-10">
@@ -157,7 +159,7 @@ export function SetupServices() {
 
         <div className="flex justify-end w-full mt-8">
           <Button type="submit" size="lg" disabled={loading}>
-            {loading ? "Loading..." : "Continue"}
+            {loading ? t("services.loading") : t("services.continue")}
           </Button>
         </div>
       </form>

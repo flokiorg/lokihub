@@ -5,6 +5,7 @@ import enWallet from "./locales/en/wallet.json";
 import enSetup from "./locales/en/setup.json";
 import enChannels from "./locales/en/channels.json";
 import enApps from "./locales/en/apps.json";
+import enHelp from "./locales/en/help.json";
 
 declare module "i18next" {
   interface CustomTypeOptions {
@@ -17,6 +18,7 @@ declare module "i18next" {
       setup: typeof enSetup;
       channels: typeof enChannels;
       apps: typeof enApps;
+      help: typeof enHelp;
     };
   }
 }

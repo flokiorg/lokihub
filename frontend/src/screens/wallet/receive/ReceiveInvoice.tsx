@@ -419,7 +419,7 @@ export default function ReceiveInvoice() {
                         variant="link"
                         className="w-full"
                       >
-                        <ArrowLeftIcon className="w-4 h-4 mr-2" />
+                        <ArrowLeftIcon className="w-4 h-4 me-2 rtl:rotate-180" />
                         {t("wallet:receive.backToWallet")}
                       </LinkButton>
                     </CardFooter>
@@ -508,17 +508,17 @@ export default function ReceiveInvoice() {
                                                     <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.feeStructure")}</h4>
                                                     <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
                                                         <span className="text-muted-foreground">{t("wallet:receive.minFee")}</span>
-                                                        <span className="font-medium text-right">{jitFeeParams.min_fee_mloki ? scaleInputAmount(parseInt(jitFeeParams.min_fee_mloki)/1000, inputUnit) : 0} {inputUnit}</span>
+                                                        <span className="font-medium text-end">{jitFeeParams.min_fee_mloki ? scaleInputAmount(parseInt(jitFeeParams.min_fee_mloki)/1000, inputUnit) : 0} {inputUnit}</span>
 
                                                         
                                                         <span className="text-muted-foreground">{t("wallet:receive.propRate")}</span>
-                                                        <span className="font-medium text-right">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
+                                                        <span className="font-medium text-end">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
 
                                                         <span className="text-muted-foreground">{t("wallet:receive.min")}</span>
-                                                        <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} /></span>
+                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} /></span>
 
                                                         <span className="text-muted-foreground">{t("wallet:receive.max")}</span>
-                                                        <span className="font-medium text-right"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} /></span>
+                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} /></span>
                                                         
                                                         <div className="col-span-2 text-xs text-muted-foreground mt-2 border-t pt-2">
                                                             <Trans t={t} i18nKey="wallet:receive.feeLogic">
@@ -584,7 +584,7 @@ export default function ReceiveInvoice() {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-1 text-right">
+                                <div className="flex flex-col gap-1 text-end">
                                     <span className="text-xs text-muted-foreground uppercase">
                                         {senderPaysFee ? t("wallet:receive.totalToSend") : t("wallet:receive.youReceive")}
                                     </span>

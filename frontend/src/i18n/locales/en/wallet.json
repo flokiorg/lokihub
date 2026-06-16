@@ -14,7 +14,9 @@
     "received": "Received",
     "pending": "Pending",
     "failed": "Failed",
-    "viewAll": "View all"
+    "viewAll": "View all",
+    "emptyDescription": "Your most recent incoming and outgoing payments will show up here.",
+    "receiveFirst": "Receive Your First Payment"
   },
   "header": {
     "title": "Wallet",
@@ -34,7 +36,25 @@
   },
   "onboarding": {
     "title": "Get started with your Lokihub",
-    "description": "Follow these initial steps to set up and make the most of your Loki Hub."
+    "description": "Follow these initial steps to set up and make the most of your Loki Hub.",
+    "items": {
+      "openChannel": {
+        "title": "Open your first channel",
+        "description": "Establish a new Lightning channel to enable fast and low-fee Flokicoin transactions."
+      },
+      "firstPayment": {
+        "title": "Send or receive your first payment",
+        "description": "Use your newly opened channel to make a transaction on the Lightning Network."
+      },
+      "connectApp": {
+        "title": "Connect your first app",
+        "description": "Seamlessly connect apps and integrate your wallet with other apps from your Hub."
+      },
+      "backupKeys": {
+        "title": "Backup your keys",
+        "description": "Secure your keys by creating a backup to ensure you don't lose access."
+      }
+    }
   },
   "receive": {
     "title": "Receive",
@@ -155,6 +175,22 @@
     "about": {
       "title": "About Sub-wallets",
       "close": "Close"
+    },
+    "intro": {
+      "description": "Create sub-wallets for yourself, friends, family or coworkers",
+      "separateWalletsTitle": "Sub-wallets are separate wallets hosted by your Lokihub",
+      "separateWalletsDesc": "Each sub-wallet has its own balance and can be used as a separate wallet that can be connected to Loki Account or any app.",
+      "dependOnBalanceTitle": "Sub-wallets depend on your Lokihub spending balance and receive limit",
+      "dependOnBalanceDesc": "Sub-wallets are using your Hubs node liquidity. They can receive funds as long as you have enough receive limit in your channels.",
+      "waryOfSpendingTitle": "Be wary of spending sub-wallets funds",
+      "waryOfSpendingDesc": "Make sure you always maintain enough funds in your spending balance to prevent sub-wallets becoming unspendable. Sub-wallet payments might fail if the amount isn't available in your spending balance.",
+      "createButton": "Create Sub-wallet"
+    },
+    "increaseBalance": {
+      "title": "Increase Balance",
+      "description": "Increase the balance of this sub-wallet. Make sure you always maintain enough funds in your spending balance to prevent sub-wallets becoming unspendable.",
+      "amount": "Amount",
+      "increaseButton": "Increase"
     }
   },
   "onchain": {

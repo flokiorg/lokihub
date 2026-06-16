@@ -1,5 +1,6 @@
 import { TriangleAlertIcon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import PasswordInput from "src/components/password/PasswordInput";
 
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import { useInfo } from "src/hooks/useInfo";
 import { request } from "src/utils/request";
 
 export function ChangeUnlockPassword() {
+  const { t } = useTranslation("settings");
   const { mutate: refetchInfo } = useInfo();
 
   const [currentUnlockPassword, setCurrentUnlockPassword] = React.useState("");
@@ -55,23 +57,23 @@ export function ChangeUnlockPassword() {
   return (
     <>
       <SettingsHeader
-        title="Unlock Password"
-        description="Change unlock password to your Hub. Your node will restart after password change."
+        title={t("changePassword.title")}
+        description={t("changePassword.description")}
       />
       <div>
         <Alert variant="destructive" className="w-full md:max-w-6xl mb-8">
           <TriangleAlertIcon />
-          <AlertTitle>Important!</AlertTitle>
-          <AlertDescription>
-            Password can't be reset or recovered. Make sure to back it up!
-          </AlertDescription>
+          <AlertTitle>{t("changePassword.important")}</AlertTitle>
+          <AlertDescription>{t("changePassword.importantDesc")}</AlertDescription>
         </Alert>
         <form
           onSubmit={onSubmit}
           className="w-full md:w-96 flex flex-col gap-6"
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="current-password">
+              {t("changePassword.currentPassword")}
+            </Label>
             <PasswordInput
               id="current-password"
               autoFocus
@@ -80,7 +82,9 @@ export function ChangeUnlockPassword() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="new-password">New Password</Label>
+            <Label htmlFor="new-password">
+              {t("changePassword.newPassword")}
+            </Label>
             <PasswordInput
               id="new-password"
               onChange={setNewUnlockPassword}
@@ -88,7 +92,9 @@ export function ChangeUnlockPassword() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="confirm-new-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-new-password">
+              {t("changePassword.confirmNew")}
+            </Label>
             <PasswordInput
               id="confirm-new-password"
               onChange={setConfirmNewUnlockPassword}
@@ -106,7 +112,7 @@ export function ChangeUnlockPassword() {
                 )
               }
             >
-              Change Password
+              {t("changePassword.changeButton")}
             </LoadingButton>
           </div>
         </form>
