@@ -24,10 +24,10 @@ func (svc *service) stopLNClient() {
 	lnClient := svc.lnClient
 	svc.lnClient = nil
 
-	logger.Logger.Info().Msg("Shutting down LN client")
+	logger.Logger.Info().Msg("Shutting down FLN client")
 	err := lnClient.Shutdown()
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to stop LN client")
+		logger.Logger.Error().Err(err).Msg("Failed to stop FLN client")
 		svc.eventPublisher.Publish(&events.Event{
 			Event: "nwc_node_stop_failed",
 			Properties: map[string]interface{}{
@@ -40,5 +40,5 @@ func (svc *service) stopLNClient() {
 	svc.eventPublisher.Publish(&events.Event{
 		Event: "nwc_node_stopped",
 	})
-	logger.Logger.Info().Msg("LNClient stopped successfully")
+	logger.Logger.Info().Msg("FLN client stopped successfully")
 }

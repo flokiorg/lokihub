@@ -16,11 +16,22 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+// nostrPool is the subset of *nostr.SimplePool used by Listener, allowing a
+// test double to be injected without depending on the concrete type.
+// The return type matches SimplePool.SubscribeMany exactly (bidirectional chan).
+type nostrPool interface {
+	SubscribeMany(ctx context.Context, urls []string, filter nostr.Filter, opts ...nostr.SubscriptionOption) chan nostr.RelayEvent
+}
+
+// resubscribeDelay is the backoff between a relay channel close and the next
+// SubscribeMany call. Mirrors streamRetryDelay in lsps/manager.
+const resubscribeDelay = 5 * time.Second
+
 // Listener handles incoming LSPS5 notifications over Nostr
 type Listener struct {
 	keys              keys.Keys
 	cfg               config.Config
-	pool              *nostr.SimplePool
+	pool              nostrPool
 	eventPublisher    events.EventPublisher
 	relays            []string
 	mu                sync.Mutex
@@ -78,28 +89,64 @@ func (l *Listener) Start(ctx context.Context, pool *nostr.SimplePool) error {
 		Since: ptr(nostr.Timestamp(time.Now().Add(-24 * time.Hour).Unix())),
 	}
 
-	// Use SubscribeMany which returns a channel of events
-	sub := l.pool.SubscribeMany(ctx, l.relays, filters)
-
-	go func() {
-		for {
-			select {
-			case ev := <-sub:
-				// ev is RelayEvent (contains .Event)
-				if ev.Event == nil {
-					continue
-				}
-				go l.handleEvent(ctx, ev.Event)
-			case <-ctx.Done():
-				return
-			case <-l.stop:
-				// Cancel via context usually, but here we just exit loop
-				return
-			}
-		}
-	}()
+	go l.runSubscriptionLoop(ctx, filters)
 
 	return nil
+}
+
+// runSubscriptionLoop reads relay events and resubscribes whenever the channel
+// closes (relay disconnect). Exits on context cancellation or Stop().
+func (l *Listener) runSubscriptionLoop(ctx context.Context, filters nostr.Filter) {
+	currentSub := l.pool.SubscribeMany(ctx, l.relays, filters)
+	for {
+		select {
+		case ev, ok := <-currentSub:
+			if !ok {
+				// Relay subscription closed (relay disconnect or CLOSED message).
+				// Back off before resubscribing to avoid a tight reconnect loop
+				// under a misbehaving relay sending rapid CLOSE frames.
+				logger.Logger.Warn().Msg("LSPS5 Nostr relay subscription closed, resubscribing")
+				select {
+				case <-ctx.Done():
+					return
+				case <-l.stop:
+					return
+				case <-time.After(resubscribeDelay):
+				}
+				filters.Since = ptr(nostr.Timestamp(time.Now().Unix()))
+				currentSub = l.pool.SubscribeMany(ctx, l.relays, filters)
+				continue
+			}
+			if ev.Event == nil {
+				continue
+			}
+			// Pre-filter: drop untrusted events before spawning a goroutine to
+			// prevent goroutine accumulation under an event flood.
+			if !l.isTrustedPubkey(ev.Event.PubKey) {
+				logger.Logger.Debug().Str("pubkey", ev.Event.PubKey).
+					Msg("Dropping LSPS5 event from untrusted source")
+				continue
+			}
+			go l.handleEvent(ctx, ev.Event)
+		case <-ctx.Done():
+			return
+		case <-l.stop:
+			return
+		}
+	}
+}
+
+// isTrustedPubkey reports whether pubkey is in the current trusted-LSP set.
+func (l *Listener) isTrustedPubkey(pubkey string) bool {
+	if l.getTrustedPubkeys == nil {
+		return false
+	}
+	for _, p := range l.getTrustedPubkeys() {
+		if p == pubkey {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *Listener) Stop() {

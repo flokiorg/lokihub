@@ -195,8 +195,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	// Start processing events in background
 	go m.processInternalEvents(ctx)
 	// Also start processing messages (CRITICAL)
-	msgChan, errChanMock, _ := mockLN.SubscribeCustomMessages(ctx)
-	go m.processMessages(ctx, msgChan, errChanMock)
+	go m.processMessages(ctx)
 
 	// We run EnsureInboundLiquidity in a goroutine because it blocks waiting for responses
 	resultChan := make(chan *JitChannelHints, 1)

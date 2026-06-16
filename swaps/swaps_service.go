@@ -29,11 +29,31 @@ import (
 	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/lightzapp/lightz-client/pkg/lightz"
+	"github.com/rs/zerolog"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 type Swap = db.Swap
+
+// lightzWebsocket abstracts *lightz.Websocket so the dispatch goroutine and
+// per-swap listeners can be tested with a mock without a live WebSocket server.
+// UpdatesChan returns the channel that receives swap status updates; it wraps
+// the concrete Updates field because interface methods cannot be struct fields.
+type lightzWebsocket interface {
+	Connect() error
+	Close() error
+	Subscribe(swapIds []string) error
+	Unsubscribe(swapId string)
+	Connected() bool
+	Reconnect() error
+	UpdatesChan() <-chan lightz.SwapUpdate
+}
+
+// wsWrapper adapts *lightz.Websocket to satisfy lightzWebsocket.
+type wsWrapper struct{ *lightz.Websocket }
+
+func (w *wsWrapper) UpdatesChan() <-chan lightz.SwapUpdate { return w.Updates }
 
 type swapsService struct {
 	autoSwapOutCancelFn context.CancelFunc
@@ -45,9 +65,10 @@ type swapsService struct {
 	eventPublisher      events.EventPublisher
 	transactionsService transactions.TransactionsService
 	lightzApi           *lightz.Api
-	lightzWs            *lightz.Websocket
+	lightzWs            lightzWebsocket
 	swapListeners       map[string]chan lightz.SwapUpdate
 	swapListenersLock   sync.Mutex
+	logger              zerolog.Logger
 }
 
 type SwapsService interface {
@@ -105,18 +126,18 @@ type SwapResponse struct {
 func (svc *swapsService) Reload() {
 	if svc.cfg.EnableSwap() {
 		if svc.lightzWs == nil {
-			logger.Logger.Info().Msg("Starting swap service...")
+			svc.logger.Info().Msg("Starting swap service...")
 			svc.Start()
 		} else if svc.lightzApi.URL != svc.cfg.GetSwapServiceURL() {
-			logger.Logger.Info().Msg("Swap Service URL changed, restarting...")
+			svc.logger.Info().Msg("Swap Service URL changed, restarting...")
 			svc.Stop()
 			svc.Start()
 		} else {
-			logger.Logger.Info().Msg("Swap Service already running")
+			svc.logger.Info().Msg("Swap Service already running")
 		}
 	} else {
 		if svc.lightzWs != nil {
-			logger.Logger.Info().Msg("Stopping swap service...")
+			svc.logger.Info().Msg("Stopping swap service...")
 			svc.Stop()
 		}
 	}
@@ -124,43 +145,59 @@ func (svc *swapsService) Reload() {
 
 func (svc *swapsService) Start() {
 	svc.lightzApi = &lightz.Api{URL: svc.cfg.GetSwapServiceURL()}
-	svc.lightzWs = svc.lightzApi.NewWebsocket()
+	svc.lightzWs = &wsWrapper{svc.lightzApi.NewWebsocket()}
+	go svc.runConnectAndDispatch()
+}
 
-	go func() {
-		for {
-			if svc.lightzWs == nil {
-				return
-			}
-			err := svc.lightzWs.Connect()
-			if err != nil {
-				logger.Logger.Error().Err(err).Msg("Failed to connect to swap service websocket, retrying in 2s...")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			break
+// runConnectAndDispatch connects to the websocket, re-subscribes any in-flight
+// swaps, then dispatches updates to per-swap listener channels until the
+// websocket is closed. Extracted so tests can inject a mock lightzWebsocket.
+func (svc *swapsService) runConnectAndDispatch() {
+	ws := svc.lightzWs // snapshot — owned for this goroutine's lifetime; prevents TOCTOU race with Stop()
+	if ws == nil {
+		return
+	}
+	for {
+		err := ws.Connect()
+		if err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to connect to swap service websocket, retrying in 2s...")
+			time.Sleep(2 * time.Second)
+			continue
 		}
-		logger.Logger.Info().Msg("Connected to swap service websocket")
+		break
+	}
+	svc.logger.Info().Msg("Connected to swap service websocket")
 
-		for {
-			if svc.lightzWs == nil {
-				return
-			}
-			update, ok := <-svc.lightzWs.Updates
-			if !ok {
-				logger.Logger.Error().Msg("Received error from swap service websocket")
-				return // Exit goroutine if channel is closed, likely due to reloading again
-			}
-
-			svc.swapListenersLock.Lock()
-			ch, ok := svc.swapListeners[update.Id]
-			svc.swapListenersLock.Unlock()
-			if ok {
-				ch <- update
-			} else {
-				logger.Logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from swap service")
-			}
+	// Re-subscribe any in-progress swaps so that goroutines waiting on
+	// their per-swap channels are not orphaned after a Reload().
+	svc.swapListenersLock.Lock()
+	activeIds := make([]string, 0, len(svc.swapListeners))
+	for id := range svc.swapListeners {
+		activeIds = append(activeIds, id)
+	}
+	svc.swapListenersLock.Unlock()
+	if len(activeIds) > 0 {
+		if err := ws.Subscribe(activeIds); err != nil {
+			svc.logger.Error().Err(err).Msg("Failed to re-subscribe active swaps after reconnect")
 		}
-	}()
+	}
+
+	for {
+		update, ok := <-ws.UpdatesChan()
+		if !ok {
+			svc.logger.Error().Msg("Received error from swap service websocket")
+			return // Exit goroutine if channel is closed, likely due to reloading again
+		}
+
+		svc.swapListenersLock.Lock()
+		ch, ok := svc.swapListeners[update.Id]
+		svc.swapListenersLock.Unlock()
+		if ok {
+			ch <- update
+		} else {
+			svc.logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from swap service")
+		}
+	}
 }
 
 func (svc *swapsService) Stop() {
@@ -181,13 +218,14 @@ func NewSwapsService(ctx context.Context, db *gorm.DB, cfg config.Config, keys k
 		transactionsService: transactionsService,
 		lnClient:            lnClient,
 		swapListeners:       make(map[string]chan lightz.SwapUpdate),
+		logger:              logger.Logger.With().Str("component", "swaps").Logger(),
 	}
 
 	svc.Reload()
 
 	err := svc.EnableAutoSwapOut()
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Couldn't enable auto swaps")
+		svc.logger.Error().Err(err).Msg("Couldn't enable auto swaps")
 	}
 
 	go svc.subscribePendingSwaps()
@@ -197,9 +235,9 @@ func NewSwapsService(ctx context.Context, db *gorm.DB, cfg config.Config, keys k
 
 func (svc *swapsService) StopAutoSwapOut() {
 	if svc.autoSwapOutCancelFn != nil {
-		logger.Logger.Info().Msg("Stopping auto swap out service...")
+		svc.logger.Info().Msg("Stopping auto swap out service...")
 		svc.autoSwapOutCancelFn()
-		logger.Logger.Info().Msg("Auto swap out service stopped")
+		svc.logger.Info().Msg("Auto swap out service stopped")
 	}
 }
 
@@ -213,7 +251,7 @@ func (svc *swapsService) EnableAutoSwapOut() error {
 
 	if balanceThresholdStr == "" || amountStr == "" {
 		cancelFn()
-		logger.Logger.Info().Msg("Auto swap not configured")
+		svc.logger.Info().Msg("Auto swap not configured")
 		return nil
 	}
 
@@ -229,22 +267,22 @@ func (svc *swapsService) EnableAutoSwapOut() error {
 		return errors.New("invalid auto swap configuration")
 	}
 
-	logger.Logger.Info().Msg("Starting auto swap workflow")
+	svc.logger.Info().Msg("Starting auto swap workflow")
 
 	go func() {
 		for {
 			select {
 			case <-time.After(1 * time.Hour):
-				logger.Logger.Debug().Msg("Checking to see if we can swap")
+				svc.logger.Debug().Msg("Checking to see if we can swap")
 				balance, err := svc.lnClient.GetBalances(ctx, false)
 				if err != nil {
-					logger.Logger.Error().Err(err).Msg("Failed to get balance")
+					svc.logger.Error().Err(err).Msg("Failed to get balance")
 					continue
 				}
 				lightningBalance := uint64(balance.Lightning.TotalSpendable)
 				balanceThresholdMilliSats := balanceThreshold * 1000
 				if lightningBalance < balanceThresholdMilliSats {
-					logger.Logger.Info().Msg("Threshold requirements not met for swap, ignoring")
+					svc.logger.Info().Msg("Threshold requirements not met for swap, ignoring")
 					continue
 				}
 
@@ -254,24 +292,24 @@ func (svc *swapsService) EnableAutoSwapOut() error {
 					if err := svc.validateXpub(swapDestination); err == nil {
 						actualDestination, err = svc.getNextUnusedAddressFromXpub()
 						if err != nil {
-							logger.Logger.Error().Err(err).Msg("Failed to get next address from xpub")
+							svc.logger.Error().Err(err).Msg("Failed to get next address from xpub")
 							continue
 						}
 						usedXpubDerivation = true
 					}
 				}
 
-				logger.Logger.Info().
+				svc.logger.Info().
 					Uint64("amount", amount).
 					Str("destination", actualDestination).
 					Msg("Initiating swap")
 				_, err = svc.SwapOut(amount, actualDestination, true, usedXpubDerivation)
 				if err != nil {
-					logger.Logger.Error().Err(err).Msg("Failed to initiate swap")
+					svc.logger.Error().Err(err).Msg("Failed to initiate swap")
 					continue
 				}
 			case <-ctx.Done():
-				logger.Logger.Info().Msg("Stopping auto swap workflow")
+				svc.logger.Info().Msg("Stopping auto swap workflow")
 				return
 			}
 		}
@@ -319,7 +357,7 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 	serviceFee := lightz.CalculatePercentage(serviceFeePercentage, amount)
 	networkFee := fees.MinerFees.Lockup + fees.MinerFees.Claim
 
-	logger.Logger.Info().
+	svc.logger.Info().
 		Uint64("serviceFee", serviceFee).
 		Uint64("networkFee", networkFee).
 		Msg("Calculated fees for swap out")
@@ -345,7 +383,7 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 
 	defer func() {
 		if err != nil && dbSwap.ID != 0 {
-			logger.Logger.Error().Err(err).Msg("Marking swap state as failed")
+			svc.logger.Error().Err(err).Msg("Marking swap state as failed")
 			svc.markSwapState(&dbSwap, constants.SWAP_STATE_FAILED)
 		}
 	}()
@@ -407,13 +445,13 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 	})
 
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("paymentHash", paymentHash).
+		svc.logger.Error().Err(err).
+			Str("payment_hash", paymentHash).
 			Msg("Failed to save swap")
 		return nil, err
 	}
 
-	logger.Logger.Info().Str("swapId", swap.Id).Msg("Swap created")
+	svc.logger.Info().Str("swap_id", swap.Id).Msg("Swap created")
 
 	if autoSwap {
 		// block until the swap finishes to ensure we can't do multiple concurrent auto swaps
@@ -456,7 +494,7 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 	serviceFee := lightz.CalculatePercentage(serviceFeePercentage, amount)
 	networkFee := fees.MinerFees
 
-	logger.Logger.Info().
+	svc.logger.Info().
 		Uint64("serviceFee", serviceFee).
 		Interface("networkFee", networkFee).
 		Msg("Calculated fees for swap in")
@@ -479,7 +517,7 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 
 	defer func() {
 		if err != nil && dbSwap.ID != 0 {
-			logger.Logger.Error().Err(err).Msg("Marking swap state as failed")
+			svc.logger.Error().Err(err).Msg("Marking swap state as failed")
 			svc.markSwapState(&dbSwap, constants.SWAP_STATE_FAILED)
 		}
 	}()
@@ -530,8 +568,8 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 	})
 
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("paymentHash", invoice.PaymentHash).
+		svc.logger.Error().Err(err).
+			Str("payment_hash", invoice.PaymentHash).
 			Msg("Failed to save swap")
 		return nil, err
 	}
@@ -541,15 +579,15 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 	}
 	err = svc.transactionsService.SetTransactionMetadata(svc.ctx, invoice.ID, metadata)
 	if err != nil {
-		logger.Logger.Error().Err(err).Fields(map[string]interface{}{
-			"swapId":      swap.Id,
-			"paymentHash": invoice.PaymentHash,
+		svc.logger.Error().Err(err).Fields(map[string]interface{}{
+			"swap_id":      swap.Id,
+			"payment_hash": invoice.PaymentHash,
 			"metadata":    metadata,
 		}).Msg("Failed to add swap metadata to lightning payment")
 		return nil, err
 	}
 
-	logger.Logger.Info().Str("swapId", swap.Id).Msg("Swap created")
+	svc.logger.Info().Str("swap_id", swap.Id).Msg("Swap created")
 
 	go svc.startSwapInListener(&dbSwap)
 
@@ -619,7 +657,7 @@ func (svc *swapsService) markSwapState(dbSwap *db.Swap, state string) {
 		SwapId: dbSwap.SwapId,
 		State:  state,
 	}).RowsAffected > 0 {
-		logger.Logger.Debug().Str("swapId", dbSwap.SwapId).Msgf("swap already marked as %s", state)
+		svc.logger.Debug().Str("swap_id", dbSwap.SwapId).Str("state", state).Msg("swap already marked")
 		return
 	}
 
@@ -627,7 +665,7 @@ func (svc *swapsService) markSwapState(dbSwap *db.Swap, state string) {
 		State: state,
 	}).Error
 	if dbErr != nil {
-		logger.Logger.Error().Err(dbErr).Str("swapId", dbSwap.SwapId).Msg("Failed to update swap state")
+		svc.logger.Error().Err(dbErr).Str("swap_id", dbSwap.SwapId).Msg("Failed to update swap state")
 	}
 }
 
@@ -638,11 +676,11 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 	})
 	err := query.Error
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Failed to lookup swap")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Failed to lookup swap")
 		return err
 	}
 	if query.RowsAffected == 0 {
-		logger.Logger.Error().Str("swapId", swapId).Msg("Could not find swap to process refund")
+		svc.logger.Error().Str("swap_id", swapId).Msg("Could not find swap to process refund")
 		return errors.New("Could not find swap")
 	}
 
@@ -662,7 +700,7 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 	// Fetch raw hex to construct the lockup transaction
 	swapTransactionResp, err := svc.lightzApi.GetSwapTransaction(swapId)
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Failed to get lockup tx from swap id")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Failed to get lockup tx from swap id")
 		return err
 	}
 
@@ -671,8 +709,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 			LockupTxId: swapTransactionResp.Id,
 		}).Error
 		if err != nil {
-			logger.Logger.Error().Err(err).
-				Str("swapId", swapId).
+			svc.logger.Error().Err(err).
+				Str("swap_id", swapId).
 				Str("lockupTxId", swapTransactionResp.Id).
 				Msg("Failed to save lockup txid to swap")
 			return err
@@ -719,19 +757,19 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 
 	lockupTransaction, err := lightz.NewTxFromHex(lightz.CurrencyBtc, swapTransactionResp.Hex, nil)
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Failed to build lockup tx from hex")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Failed to build lockup tx from hex")
 		return err
 	}
 	vout, _, err := lockupTransaction.FindVout(network, swap.LockupAddress)
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Failed to find lockup address output")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Failed to find lockup address output")
 		return err
 	}
 
 	if address == "" {
 		address, err = svc.lnClient.GetNewOnchainAddress(svc.ctx)
 		if err != nil {
-			logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Failed to get new on-chain address from config")
+			svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Failed to get new on-chain address from config")
 			return err
 		}
 	}
@@ -740,8 +778,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 		RefundAddress: address,
 	}).Error
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swapId).
 			Str("refundAddress", address).
 			Msg("Failed to save refund address to swap")
 		return err
@@ -752,15 +790,15 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 	for i := 0; ; i++ {
 		select {
 		case <-svc.ctx.Done():
-			logger.Logger.Info().Str("swapId", swapId).Msg("Swap refund context cancelled")
+			svc.logger.Info().Str("swap_id", swapId).Msg("Swap refund context cancelled")
 			return nil
 		case <-time.After(time.Duration(min(i*5, 30)) * time.Second): // timeout
 		}
 
 		nodeInfo, err := svc.lnClient.GetInfo(svc.ctx)
 		if err != nil {
-			logger.Logger.Error().Err(err).
-				Str("swapId", swapId).
+			svc.logger.Error().Err(err).
+				Str("swap_id", swapId).
 				Int("iteration", i).
 				Msg("Failed to request node info")
 			continue
@@ -768,8 +806,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 
 		feeRates, err := svc.getFeeRates()
 		if err != nil {
-			logger.Logger.Error().Err(err).
-				Str("swapId", swapId).
+			svc.logger.Error().Err(err).
+				Str("swap_id", swapId).
 				Int("iteration", i).
 				Msg("Failed to fetch fee rate to create claim transaction")
 			continue
@@ -800,8 +838,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 			svc.lightzApi,
 		)
 		if err != nil {
-			logger.Logger.Error().Err(err).
-				Str("swapId", swapId).
+			svc.logger.Error().Err(err).
+				Str("swap_id", swapId).
 				Int("iteration", i).
 				Bool("cooperative", cooperative).
 				Msg("Could not create claim transaction refund")
@@ -818,19 +856,19 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 
 	txHex, err := refundTransaction.Serialize()
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Could not serialize refund transaction")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Could not serialize refund transaction")
 		return err
 	}
 
 	// TODO: Replace with LNClient broadcast method to avoid trusting lightz
 	claimTxId, err := svc.lightzApi.BroadcastTransaction(lightz.CurrencyBtc, txHex)
 	if err != nil {
-		logger.Logger.Error().Err(err).Str("swapId", swapId).Msg("Could not broadcast transaction")
+		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Could not broadcast transaction")
 		return err
 	}
 
-	logger.Logger.Info().
-		Str("swapId", swapId).
+	svc.logger.Info().
+		Str("swap_id", swapId).
 		Str("claimTxId", claimTxId).
 		Msg("Claim transaction broadcasted for refund")
 
@@ -840,8 +878,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 		State:         constants.SWAP_STATE_REFUNDED,
 	}).Error
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swapId).
 			Str("claimTxId", claimTxId).
 			Msg("Failed to save claim txid to swap")
 		return err
@@ -857,7 +895,7 @@ func (svc *swapsService) GetSwap(swapId string) (*Swap, error) {
 	}).Error
 
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to get swap")
+		svc.logger.Error().Err(err).Msg("Failed to get swap")
 		return nil, err
 	}
 
@@ -869,7 +907,7 @@ func (svc *swapsService) ListSwaps() ([]Swap, error) {
 	err := svc.db.Find(&swaps).Error
 
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to list swaps")
+		svc.logger.Error().Err(err).Msg("Failed to list swaps")
 		return nil, err
 	}
 
@@ -879,14 +917,14 @@ func (svc *swapsService) ListSwaps() ([]Swap, error) {
 func (svc *swapsService) subscribePendingSwaps() {
 	var swaps []db.Swap
 	if err := svc.db.Where("state = ?", constants.SWAP_STATE_PENDING).Find(&swaps).Error; err != nil {
-		logger.Logger.Error().Err(err).Msg("failed to load pending swaps")
+		svc.logger.Error().Err(err).Msg("failed to load pending swaps")
 		return
 	}
 	if len(swaps) == 0 {
 		return
 	}
 
-	logger.Logger.Info().Int("count", len(swaps)).Msg("Resuming pending swaps...")
+	svc.logger.Info().Int("count", len(swaps)).Msg("Resuming pending swaps...")
 
 	ids := make([]string, len(swaps))
 	for i, s := range swaps {
@@ -907,14 +945,14 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	for {
 		err := svc.lightzWs.Subscribe([]string{swap.SwapId})
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to subscribe to lightz websocket, retrying in 2s...")
+			svc.logger.Error().Err(err).Msg("Failed to subscribe to lightz websocket, retrying in 2s...")
 			time.Sleep(2 * time.Second)
 			continue
 		}
 		break
 	}
 
-	logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Subscribed to lightz websocket")
+	svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Subscribed to lightz websocket")
 
 	updateCh := make(chan lightz.SwapUpdate)
 	svc.swapListenersLock.Lock()
@@ -928,7 +966,7 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 		svc.swapListenersLock.Unlock()
 		svc.lightzWs.Unsubscribe(swap.SwapId)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Marking swap state as failed")
+			svc.logger.Error().Err(err).Msg("Marking swap state as failed")
 			svc.markSwapState(swap, constants.SWAP_STATE_FAILED)
 		}
 	}()
@@ -936,8 +974,8 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	var network *lightz.Network
 	network, err = lightz.ParseChain(svc.cfg.GetNetwork())
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to parse network")
 		return
 	}
@@ -945,16 +983,16 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	var ourKeys *btcec.PrivateKey
 	ourKeys, err = svc.keys.GetSwapKey(swap.ID)
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to generate swap child private key")
 		return
 	}
 
 	var serializedTree lightz.SerializedTree
 	if err = json.Unmarshal(swap.SwapTree, &serializedTree); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to unmarshal swap tree")
 		return
 	}
@@ -964,8 +1002,8 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	var lightzPubKey *btcec.PublicKey
 	lightzPubKey, err = btcec.ParsePubKey(lightzPubkeyBytes)
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to parse lightz pubkey")
 		return
 	}
@@ -974,22 +1012,22 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 
 	tree := serializedTree.Deserialize()
 	if err = tree.Init(lightz.CurrencyBtc, false, ourKeys, lightzPubKey); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to initialize swap tree")
 		return
 	}
 
 	if err = tree.Check(lightz.NormalSwap, swap.TimeoutBlockHeight, decodedPreimageHash); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to check swap tree")
 		return
 	}
 
 	if err = tree.CheckAddress(swap.LockupAddress, network, nil); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to check address")
 		return
 	}
@@ -1000,13 +1038,13 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	for {
 		select {
 		case <-svc.ctx.Done():
-			logger.Logger.Error().Err(svc.ctx.Err()).
-				Str("swapId", swap.SwapId).
+			svc.logger.Error().Err(svc.ctx.Err()).
+				Str("swap_id", swap.SwapId).
 				Msg("Swap in context cancelled")
 			return
 		case update, ok := <-updateCh:
 			if !ok {
-				logger.Logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from lightz")
+				svc.logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from lightz")
 				continue
 			}
 			if update.Id != swap.SwapId {
@@ -1014,23 +1052,23 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 			}
 			switch lightz.ParseEvent(update.Status) {
 			case lightz.TransactionMempool:
-				logger.Logger.Info().
-					Str("swapId", swap.SwapId).
+				svc.logger.Info().
+					Str("swap_id", swap.SwapId).
 					Str("lockupTxId", update.Transaction.Id).
 					Msg("Lockup transaction found in mempool")
 				err = svc.db.Model(swap).Updates(&db.Swap{
 					LockupTxId: update.Transaction.Id,
 				}).Error
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Str("lockupTxId", update.Transaction.Id).
 						Msg("Failed to save lockup txid to swap")
 					return
 				}
 			case lightz.TransactionConfirmed:
-				logger.Logger.Info().
-					Str("swapId", swap.SwapId).
+				svc.logger.Info().
+					Str("swap_id", swap.SwapId).
 					Str("lockupTxId", swap.LockupTxId).
 					Msg("Lockup transaction confirmed in mempool")
 			case lightz.InvoicePaid:
@@ -1039,13 +1077,13 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 					ReceiveAmount: amount,
 				}).Error
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Uint64("receiveAmount", amount).
 						Msg("Failed to save received amount to swap")
 					return
 				}
-				logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Swap succeeded")
+				svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Swap succeeded")
 				svc.eventPublisher.Publish(&events.Event{
 					Event: "nwc_swap_succeeded",
 					Properties: map[string]interface{}{
@@ -1054,15 +1092,15 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 				})
 				return
 			case lightz.TransactionLockupFailed, lightz.InvoiceFailedToPay, lightz.SwapExpired:
-				logger.Logger.Error().
-					Str("swapId", swap.SwapId).
+				svc.logger.Error().
+					Str("swap_id", swap.SwapId).
 					Str("reason", update.Status).
 					Msg("Swap in failed, initiating refund")
 
 				err = svc.RefundSwap(swap.SwapId, "", true)
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Could not process refund")
 				}
 				return
@@ -1075,14 +1113,14 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 	for {
 		err := svc.lightzWs.Subscribe([]string{swap.SwapId})
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to subscribe to lightz websocket, retrying in 2s...")
+			svc.logger.Error().Err(err).Msg("Failed to subscribe to lightz websocket, retrying in 2s...")
 			time.Sleep(2 * time.Second)
 			continue
 		}
 		break
 	}
 
-	logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Subscribed to lightz websocket")
+	svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Subscribed to lightz websocket")
 
 	updateCh := make(chan lightz.SwapUpdate)
 	svc.swapListenersLock.Lock()
@@ -1096,7 +1134,7 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 		svc.swapListenersLock.Unlock()
 		svc.lightzWs.Unsubscribe(swap.SwapId)
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Marking swap state as failed")
+			svc.logger.Error().Err(err).Msg("Marking swap state as failed")
 			svc.markSwapState(swap, constants.SWAP_STATE_FAILED)
 		}
 	}()
@@ -1104,8 +1142,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 	var network *lightz.Network
 	network, err = lightz.ParseChain(svc.cfg.GetNetwork())
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to parse network")
 		return
 	}
@@ -1113,16 +1151,16 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 	var ourKeys *btcec.PrivateKey
 	ourKeys, err = svc.keys.GetSwapKey(swap.ID)
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to generate swap child private key")
 		return
 	}
 
 	var serializedTree lightz.SerializedTree
 	if err = json.Unmarshal(swap.SwapTree, &serializedTree); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to unmarshal swap tree")
 		return
 	}
@@ -1132,8 +1170,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 	var lightzPubKey *btcec.PublicKey
 	lightzPubKey, err = btcec.ParsePubKey(lightzPubkeyBytes)
 	if err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to parse lightz pubkey")
 		return
 	}
@@ -1143,15 +1181,15 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 
 	tree := serializedTree.Deserialize()
 	if err = tree.Init(lightz.CurrencyBtc, true, ourKeys, lightzPubKey); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to initialize swap tree")
 		return
 	}
 
 	if err = tree.Check(lightz.ReverseSwap, swap.TimeoutBlockHeight, preimageHash[:]); err != nil {
-		logger.Logger.Error().Err(err).
-			Str("swapId", swap.SwapId).
+		svc.logger.Error().Err(err).
+			Str("swap_id", swap.SwapId).
 			Msg("Failed to check swap tree")
 		return
 	}
@@ -1164,28 +1202,28 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 	for {
 		select {
 		case <-svc.ctx.Done():
-			logger.Logger.Error().Err(svc.ctx.Err()).
-				Str("swapId", swap.SwapId).
+			svc.logger.Error().Err(svc.ctx.Err()).
+				Str("swap_id", swap.SwapId).
 				Msg("Swap out context cancelled")
 			return
 		case err = <-paymentErrorCh:
-			logger.Logger.Error().Err(err).
-				Str("swapId", swap.SwapId).
+			svc.logger.Error().Err(err).
+				Str("swap_id", swap.SwapId).
 				Msg("Failed to pay hold invoice, terminating swap out...")
 			return
 		case <-claimTicker.C:
 			if swap.ClaimTxId != "" {
 				tx, err := svc.getMempoolTx(swap.ClaimTxId)
 				if err != nil {
-					logger.Logger.Debug().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Debug().Err(err).
+						Str("swap_id", swap.SwapId).
 						Str("claimTxId", swap.ClaimTxId).
 						Msg("Claim poll failed; will retry")
 					break
 				}
 				if tx.Status.Confirmed {
 					svc.markSwapState(swap, constants.SWAP_STATE_SUCCESS)
-					logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Swap succeeded")
+					svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Swap succeeded")
 					if swap.UsedXpub {
 						svc.bumpAutoswapXpubIndex(swap.ID)
 					}
@@ -1200,7 +1238,7 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 			}
 		case update, ok := <-updateCh:
 			if !ok {
-				logger.Logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from lightz")
+				svc.logger.Error().Str("swap_id", update.Id).Msg("Failed to receive update from lightz")
 				continue
 			}
 			if update.Id != swap.SwapId {
@@ -1208,52 +1246,52 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 			}
 			switch lightz.ParseEvent(update.Status) {
 			case lightz.SwapCreated:
-				logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Paying the swap invoice")
+				svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Paying the swap invoice")
 				go func() {
 					_, err := svc.transactionsService.LookupTransaction(svc.ctx, swap.PaymentHash, nil, svc.lnClient, nil)
 					if err == transactions.NewNotFoundError() {
-						logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Already initiated swap invoice payment")
+						svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Already initiated swap invoice payment")
 						return
 					}
 					metadata := map[string]interface{}{
 						"swap_id": swap.SwapId,
 					}
-					logger.Logger.Info().Str("swapId", swap.SwapId).Msg("Initiating swap invoice payment")
+					svc.logger.Info().Str("swap_id", swap.SwapId).Msg("Initiating swap invoice payment")
 					_, err = svc.transactionsService.SendPaymentSync(swap.Invoice, nil, metadata, svc.lnClient, nil, nil)
 					if err != nil {
-						logger.Logger.Error().Err(err).
-							Str("swapId", swap.SwapId).
+						svc.logger.Error().Err(err).
+							Str("swap_id", swap.SwapId).
 							Msg("Error paying the swap invoice")
 						paymentErrorCh <- err
 						return
 					}
 				}()
 			case lightz.TransactionMempool:
-				logger.Logger.Info().
-					Str("swapId", swap.SwapId).
+				svc.logger.Info().
+					Str("swap_id", swap.SwapId).
 					Str("lockupTxId", update.Transaction.Id).
 					Msg("Lockup transaction found in mempool")
 				err = svc.db.Model(swap).Updates(&db.Swap{
 					LockupTxId: update.Transaction.Id,
 				}).Error
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Str("lockupTxId", update.Transaction.Id).
 						Msg("Failed to save lockup txid to swap")
 					return
 				}
 			case lightz.TransactionConfirmed:
-				logger.Logger.Info().
-					Str("swapId", swap.SwapId).
+				svc.logger.Info().
+					Str("swap_id", swap.SwapId).
 					Str("lockupTxId", swap.LockupTxId).
 					Msg("Lockup transaction confirmed in mempool")
 
 				var lockupTransaction lightz.Transaction
 				lockupTransaction, err = lightz.NewTxFromHex(lightz.CurrencyBtc, update.Transaction.Hex, nil)
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Failed to build lockup tx from hex")
 					return
 				}
@@ -1261,8 +1299,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 				var vout uint32
 				vout, _, err = lockupTransaction.FindVout(network, swap.LockupAddress)
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Failed to find lockup address output")
 					return
 				}
@@ -1285,8 +1323,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 				if swap.ReceiveAmount != 0 {
 					lockupAmount, err := lockupTransaction.VoutValue(vout)
 					if err != nil {
-						logger.Logger.Error().Err(err).
-							Str("swapId", swap.SwapId).
+						svc.logger.Error().Err(err).
+							Str("swap_id", swap.SwapId).
 							Msg("Failed to find lockup output value")
 						return
 					}
@@ -1296,8 +1334,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 					var feeRates *FeeRates
 					feeRates, err = svc.getFeeRates()
 					if err != nil {
-						logger.Logger.Error().Err(err).
-							Str("swapId", swap.SwapId).
+						svc.logger.Error().Err(err).
+							Str("swap_id", swap.SwapId).
 							Msg("Failed to fetch fee rate to create claim transaction")
 						return
 					}
@@ -1308,8 +1346,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 				var claimTransaction lightz.Transaction
 				claimTransaction, _, err = lightz.ConstructTransaction(network, lightz.CurrencyBtc, outputs, lightzFee, svc.lightzApi)
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Could not create claim transaction")
 					return
 				}
@@ -1320,8 +1358,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 				var txHex string
 				txHex, err = claimTransaction.Serialize()
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Could not serialize claim transaction")
 					return
 				}
@@ -1331,8 +1369,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 					// TODO: Replace with LNClient broadcast method to avoid trusting lightz
 					claimTxId, err = svc.lightzApi.BroadcastTransaction(lightz.CurrencyBtc, txHex)
 					if err != nil {
-						logger.Logger.Warn().Err(err).
-							Str("swapId", swap.SwapId).
+						svc.logger.Warn().Err(err).
+							Str("swap_id", swap.SwapId).
 							Int("attempt", attempt).
 							Msg("Failed to broadcast transaction, retrying")
 						time.Sleep(1 * time.Second)
@@ -1342,14 +1380,14 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 				}
 
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Msg("Could not broadcast transaction")
 					return
 				}
 
-				logger.Logger.Info().
-					Str("swapId", swap.SwapId).
+				svc.logger.Info().
+					Str("swap_id", swap.SwapId).
 					Str("claimTxId", claimTxId).
 					Msg("Claim transaction broadcasted")
 
@@ -1358,16 +1396,16 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 					ReceiveAmount: claimAmount,
 				}).Error
 				if err != nil {
-					logger.Logger.Error().Err(err).
-						Str("swapId", swap.SwapId).
+					svc.logger.Error().Err(err).
+						Str("swap_id", swap.SwapId).
 						Str("claimTxId", claimTxId).
 						Uint64("claimAmount", claimAmount).
 						Msg("Failed to save claim info to swap")
 					return
 				}
 			case lightz.TransactionFailed, lightz.SwapExpired:
-				logger.Logger.Error().
-					Str("swapId", swap.SwapId).
+				svc.logger.Error().
+					Str("swap_id", swap.SwapId).
 					Str("reason", update.Status).
 					Msg("Swap out failed, HTLC is cancelled")
 				err = errors.New(update.Status)
@@ -1398,7 +1436,7 @@ func (svc *swapsService) requestMempoolApi(endpoint string, result interface{}) 
 	for attempt := 1; attempt <= 10; attempt++ {
 		err := svc.doMempoolRequest(endpoint, result)
 		if err != nil {
-			logger.Logger.Error().Err(err).
+			svc.logger.Error().Err(err).
 				Int("attempt", attempt).
 				Str("endpoint", endpoint).
 				Msg("Mempool API request failed, retrying")
@@ -1421,14 +1459,14 @@ func (svc *swapsService) doMempoolRequest(endpoint string, result interface{}) e
 
 	req, err := http.NewRequestWithContext(svc.ctx, http.MethodGet, url, nil)
 	if err != nil {
-		logger.Logger.Error().Err(err).
+		svc.logger.Error().Err(err).
 			Str("url", url).
 			Msg("Failed to create http request")
 		return err
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Logger.Error().Err(err).
+		svc.logger.Error().Err(err).
 			Str("url", url).
 			Msg("Failed to send request")
 		return err
@@ -1438,7 +1476,7 @@ func (svc *swapsService) doMempoolRequest(endpoint string, result interface{}) e
 
 	body, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
-		logger.Logger.Error().Err(readErr).
+		svc.logger.Error().Err(readErr).
 			Str("url", url).
 			Msg("Failed to read response body")
 		return errors.New("failed to read response body")
@@ -1446,7 +1484,7 @@ func (svc *swapsService) doMempoolRequest(endpoint string, result interface{}) e
 
 	jsonErr := json.Unmarshal(body, &result)
 	if jsonErr != nil {
-		logger.Logger.Error().Err(jsonErr).
+		svc.logger.Error().Err(jsonErr).
 			Str("url", url).
 			Msg("Failed to deserialize json")
 		return fmt.Errorf("failed to deserialize json %s %s", url, string(body))
@@ -1457,7 +1495,7 @@ func (svc *swapsService) doMempoolRequest(endpoint string, result interface{}) e
 func (svc *swapsService) bumpAutoswapXpubIndex(swapId uint) {
 	indexStr, err := svc.cfg.Get(config.AutoSwapXpubIndexStart, "")
 	if err != nil {
-		logger.Logger.Error().Msg("failed to get auto swap xpub index")
+		svc.logger.Error().Msg("failed to get auto swap xpub index")
 		return
 	}
 	if indexStr == "" {
@@ -1465,16 +1503,16 @@ func (svc *swapsService) bumpAutoswapXpubIndex(swapId uint) {
 	}
 	index, err := strconv.ParseUint(indexStr, 10, 32)
 	if err != nil {
-		logger.Logger.Error().Msg("failed to parse auto swap xpub index")
+		svc.logger.Error().Msg("failed to parse auto swap xpub index")
 		return
 	}
 
 	err = svc.cfg.SetUpdate(config.AutoSwapXpubIndexStart, strconv.FormatUint(uint64(index+1), 10), "")
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update auto swap xpub index")
+		svc.logger.Error().Err(err).Msg("Failed to update auto swap xpub index")
 	}
-	logger.Logger.Info().
-		Uint("swapId", swapId).
+	svc.logger.Info().
+		Uint("swap_id", swapId).
 		Uint64("nextIndex", index+1).
 		Msg("Updated xpub index start for swap address")
 }

@@ -37,7 +37,7 @@ func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*Ma
 		lspFeeProp = &fp
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, "", 0, nil, api.svc.GetLNClient(), nil, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), req.AppId, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp)
 	if err != nil {
 		return nil, err
 	}

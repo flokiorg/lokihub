@@ -641,6 +641,8 @@ type MakeOfferRequest struct {
 type MakeInvoiceRequest struct {
 	Amount                       uint64 `json:"amount"`
 	Description                  string `json:"description"`
+	DescriptionHash              string `json:"descriptionHash,omitempty"`
+	AppId                        *uint  `json:"appId,omitempty"`
 	LSPJitChannelSCID            string `json:"lspJitChannelSCID,omitempty"`
 	LSPCltvExpiryDelta           uint16 `json:"lspCltvExpiryDelta,omitempty"`
 	LSPPubkey                    string `json:"lspPubkey,omitempty"`

@@ -49,7 +49,6 @@ func setupTestEnvironment(t *testing.T) (*mockLNClientConnection, *LSPManager, *
 
 	lspManager := NewLSPManager(db)
 
-	// Setup Mock LN
 	mockLN := &mockLNClientConnection{
 		connectedPeers: make(map[string]string),
 		peerRequests:   make(map[string]*lnclient.ConnectPeerRequest),

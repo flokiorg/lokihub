@@ -53,8 +53,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 	defer cancel()
 
 	go m.processInternalEvents(ctx)
-	msgChan, errChanMock, _ := mockLN.SubscribeCustomMessages(ctx)
-	go m.processMessages(ctx, msgChan, errChanMock)
+	go m.processMessages(ctx)
 
 	resultChan := make(chan *JitChannelHints, 1)
 	errChan := make(chan error, 1)

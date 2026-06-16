@@ -189,13 +189,13 @@ func NewService(ctx context.Context) (*service, error) {
 }
 
 func (svc *service) noticeHandler(notice string) {
-	logger.Logger.Info().Msgf("Received a notice %s", notice)
+	logger.Logger.Info().Str("notice", notice).Msg("Received a notice")
 }
 
 func finishRestoreNode(workDir string) error {
 	restoreDir := filepath.Join(workDir, "restore")
 	if restoreDirStat, err := os.Stat(restoreDir); err == nil && restoreDirStat.IsDir() {
-		logger.Logger.Info().Str("restoreDir", restoreDir).Msgf("Restore directory found. Finishing Node restore")
+		logger.Logger.Info().Str("restoreDir", restoreDir).Msg("Restore directory found. Finishing Node restore")
 
 		existingFiles, err := os.ReadDir(restoreDir)
 		if err != nil {

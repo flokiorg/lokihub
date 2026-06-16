@@ -573,7 +573,7 @@ func (api *api) saveLSPsToDatabase(lsps []LSPSettingInput) error {
 	for _, input := range lsps {
 		pubkey, host, err := utils.ParseLSPURI(input.Pubkey + "@" + input.Host)
 		if err != nil {
-			logger.Logger.Warn().Err(err).Msgf("Invalid LSP URI in setup: %s", input.Name)
+			logger.Logger.Warn().Err(err).Str("name", input.Name).Msg("Invalid LSP URI in setup")
 			continue
 		}
 
