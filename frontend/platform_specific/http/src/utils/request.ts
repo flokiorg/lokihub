@@ -1,6 +1,18 @@
 import { getAuthToken } from "src/lib/auth";
 import { ErrorResponse } from "src/types";
 
+export class AppError extends Error {
+  status?: number;
+  url?: string;
+
+  constructor(message: string, status?: number, url?: string) {
+    super(message);
+    this.name = "AppError";
+    this.status = status;
+    this.url = url;
+  }
+}
+
 export const request = async <T>(
   ...args: Parameters<typeof fetch>
 ): Promise<T | undefined> => {
@@ -35,10 +47,10 @@ export const request = async <T>(
     }
 
     if (!fetchResponse.ok) {
-      throw new Error(
-        fetchResponse.status +
-          " " +
-          ((body as ErrorResponse)?.message || "Unknown error")
+      throw new AppError(
+        (body as ErrorResponse)?.message || "Unknown error",
+        fetchResponse.status,
+        args[0].toString()
       );
     }
     return body;
