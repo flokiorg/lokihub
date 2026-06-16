@@ -18,7 +18,10 @@
     "receive": "Receive payments",
     "balance": "View balance",
     "history": "View transaction history",
-    "sign": "Sign messages"
+    "sign": "Sign messages",
+    "authorizedTo": "This app is authorized to:",
+    "superuserTitle": "This app can create other app connections",
+    "superuserDesc": "Make sure to set budgets on connections created by this app."
   },
   "budget": {
     "title": "Budget",
@@ -26,7 +29,9 @@
     "amount": "Budget Amount",
     "customAmount": "Custom budget amount ({{unit}})",
     "spent": "Spent",
-    "remaining": "Remaining"
+    "remaining": "Remaining",
+    "set": "Set budget",
+    "used": "used"
   },
   "renewals": {
     "daily": "Daily",
@@ -46,13 +51,25 @@
     "increaseTitle": "Increase Balance"
   },
   "scopes": {
-    "title": "Choose wallet permissions"
+    "title": "Choose wallet permissions",
+    "get_balance": "Read your balance",
+    "get_info": "Read your node info",
+    "list_transactions": "Read transaction history",
+    "lookup_invoice": "Lookup status of invoices",
+    "make_invoice": "Create invoices",
+    "pay_invoice": "Send payments",
+    "sign_message": "Sign messages",
+    "notifications": "Receive wallet notifications",
+    "superuser": "Create other app connections"
   },
   "disconnectApp": {
     "cancel": "Cancel"
   },
   "expiry": {
-    "title": "Expiry"
+    "title": "Expiry",
+    "set": "Set expiration time",
+    "connectionExpiry": "Connection expiry",
+    "neverExpires": "This app will never expire"
   },
   "connections": {
     "title": "Connections",

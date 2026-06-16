@@ -11,7 +11,8 @@
     "blockHeight": "Block Height",
     "onchainFees": "Onchain Fees",
     "forwards": "Forwards",
-    "latestApps": "Recently Used Apps"
+    "latestApps": "Recently Used Apps",
+    "seeAll": "See All"
   },
   "alerts": {
     "newApp": "New app connected",

@@ -12,11 +12,39 @@
     "empty": "No transactions yet",
     "sent": "Sent",
     "received": "Received",
+    "sending": "Sending",
     "pending": "Pending",
     "failed": "Failed",
     "viewAll": "View all",
     "emptyDescription": "Your most recent incoming and outgoing payments will show up here.",
-    "receiveFirst": "Receive Your First Payment"
+    "receiveFirst": "Receive Your First Payment",
+    "receivedPayment": "Received Flokicoin Payment",
+    "sentPayment": "Sent Flokicoin Payment",
+    "sendingPayment": "Sending Flokicoin Payment",
+    "failedPayment": "Failed Flokicoin Payment",
+    "app": "App",
+    "swapId": "Swap ID",
+    "to": "To",
+    "from": "From",
+    "dateTime": "Date & Time",
+    "fee": "Fee",
+    "description": "Description",
+    "comment": "Comment",
+    "details": "Details",
+    "preimage": "Preimage",
+    "hash": "Hash",
+    "invoice": "Invoice",
+    "failureReason": "Failure Reason",
+    "metadata": "Metadata",
+    "fromPayer": "from {{name}}",
+    "zapFrom": "zap from {{npub}}",
+    "zapTo": "zap to {{npub}}",
+    "swapFrom": "swap from {{address}}",
+    "swapTo": "swap to {{address}}",
+    "paymentTo": "payment to {{identifier}}",
+    "toRecipient": "to {{identifier}}",
+    "nostrZap": "Nostr Zap",
+    "nostrZapFrom": "from {{npub}}"
   },
   "header": {
     "title": "Wallet",
@@ -125,6 +153,7 @@
   "send": {
     "title": "Send",
     "destination": "Destination",
+    "placeholder": "Invoice, lightning address, on-chain address",
     "amount": "Amount",
     "description": "Description",
     "confirm": "Confirm Payment",
@@ -174,7 +203,9 @@
     "empty": "No sub-wallets yet",
     "about": {
       "title": "About Sub-wallets",
-      "close": "Close"
+      "close": "Close",
+      "desc1": "Sub-wallets are separate balances within your wallet. You can use them to budget your spending for specific apps, or to onboard friends and family to Flokicoin by giving them their own wallet.",
+      "desc2": "Each sub-wallet has its own credentials and can be connected to apps independently."
     },
     "intro": {
       "description": "Create sub-wallets for yourself, friends, family or coworkers",
@@ -191,6 +222,20 @@
       "description": "Increase the balance of this sub-wallet. Make sure you always maintain enough funds in your spending balance to prevent sub-wallets becoming unspendable.",
       "amount": "Amount",
       "increaseButton": "Increase"
+    },
+    "decreaseBalance": {
+      "title": "Decrease Balance",
+      "description": "Decrease the balance of this sub-wallet.",
+      "amount": "Amount",
+      "decreaseButton": "Decrease",
+      "successToast": "Successfully reduced balance by {{amount}} {{unit}}"
+    },
+    "create": {
+      "title": "Create Sub-wallet",
+      "nameLabel": "Sub-wallet name",
+      "nameHelper": "Name your friend, family member or coworker",
+      "button": "Create Sub-wallet",
+      "toast": "New sub-wallet created for {{name}}"
     }
   },
   "onchain": {
