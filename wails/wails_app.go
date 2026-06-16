@@ -50,20 +50,24 @@ func (app *WailsApp) startup(ctx context.Context, trayIcon []byte) {
 		lokitray.ShowInDock()
 		runtime.WindowShow(ctx)
 	}, func() {
-		response, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
-			Type:  runtime.QuestionDialog,
-			Title: "Confirm Exit",
-			Message: "Are you sure you want to shut down Lokihub? " +
-				"Lokihub must remain online to coordinate payments. " +
-				"If it is offline, creating or sending payments may fail.",
-			Buttons:       []string{"Yes", "No"},
-			DefaultButton: "No",
-		})
-		if err != nil || response != "Yes" {
-			return
-		}
-		app.quitting.Store(true)
-		runtime.Quit(ctx)
+		// Run in a goroutine: the quit callback fires on the Cocoa main thread,
+		// and MessageDialog also needs the main thread — calling it directly deadlocks.
+		go func() {
+			response, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:  runtime.QuestionDialog,
+				Title: "Confirm Exit",
+				Message: "Are you sure you want to shut down Lokihub? " +
+					"Lokihub must remain online to coordinate payments. " +
+					"If it is offline, creating or sending payments may fail.",
+				Buttons:       []string{"Yes", "No"},
+				DefaultButton: "No",
+			})
+			if err != nil || response != "Yes" {
+				return
+			}
+			app.quitting.Store(true)
+			runtime.Quit(ctx)
+		}()
 	})
 
 	// Register Wails event subscriber
