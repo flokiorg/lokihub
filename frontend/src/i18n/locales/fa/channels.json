@@ -22,7 +22,9 @@
       "capacity": "ظرفیت",
       "localBalance": "موجودی محلی",
       "remoteBalance": "موجودی راه دور",
-      "actions": "عملیات"
+      "actions": "عملیات",
+      "typeTooltip": "نوع کانال برق. خصوصی برای اکثر کاربران توصیه می‌شود.",
+      "reserveTooltip": "وجوهی که هر طرف برای جلوگیری از تقلب کنار می‌گذارد و در طول عمر کانال قابل خرج نیست."
     },
     "closeDialog": {
       "title": "حالت بستن کانال را انتخاب کنید",
@@ -39,7 +41,11 @@
       "viewFunding": "مشاهده تراکنش تامین مالی",
       "viewNode": "مشاهده نود در {{explorer}}",
       "setRoutingFee": "تنظیم کارمزد مسیریابی"
-    }
+    },
+    "type": "نوع",
+    "typePublic": "عمومی",
+    "typePrivate": "خصوصی",
+    "reserve": "ذخیره"
   },
   "peers": {
     "title": "همتایان",
@@ -67,7 +73,12 @@
     "title": "زنجیره‌ای",
     "addressLabel": "آدرس زنجیره‌ای",
     "depositTitle": "واریز فلوکیکوین",
-    "generateNew": "ایجاد آدرس جدید"
+    "generateNew": "ایجاد آدرس جدید",
+    "transactions": "تراکنش‌های روی زنجیره",
+    "sent": "ارسال شد",
+    "sending": "در حال ارسال",
+    "received": "دریافت شد",
+    "receiving": "در حال دریافت"
   },
   "orderHistory": {
     "title": "Order History",
@@ -145,5 +156,12 @@
     "waitingChannel": "در انتظار باز شدن کانال...",
     "waitingConf": "در انتظار تایید...",
     "waitingTx": "در انتظار تراکنش..."
+  },
+  "relay": {
+    "communityRelays": "رله‌های جامعه",
+    "customRelays": "رله‌های سفارشی",
+    "addCustomRelay": "افزودن رله سفارشی",
+    "alreadyAdded": "این رله قبلاً اضافه شده",
+    "add": "افزودن"
   }
 }

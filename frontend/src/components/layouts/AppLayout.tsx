@@ -27,7 +27,11 @@ function AppLayoutInner() {
   useNotifyReceivedPayments();
 
   if (health?.message || error) {
-    return <GlobalError message={health?.message || error?.message || "Unknown error"} />;
+    return (
+      <GlobalError
+        error={error ?? new Error(health?.message || "Unknown error")}
+      />
+    );
   }
 
   if (!info) {

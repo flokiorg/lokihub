@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import Loading from "src/components/Loading";
 import {
@@ -16,6 +17,7 @@ import { request } from "src/utils/request";
 
 export function Services() {
   const { data: info, mutate: reloadInfo } = useInfo();
+  const { t } = useTranslation("setup");
   
   const [config, setConfig] = useState<ServiceConfigState>({
       mempoolApi: "",
@@ -143,7 +145,7 @@ export function Services() {
     setSavingServices(true);
     setValidationErrors([]);
     
-    const errors = validateServiceConfig(config);
+    const errors = validateServiceConfig(config, t);
 
     if (errors.length > 0) {
         setValidationErrors(errors);

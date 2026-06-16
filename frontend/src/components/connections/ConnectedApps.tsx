@@ -1,5 +1,6 @@
 import { CableIcon, TrashIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CustomPagination } from "src/components/CustomPagination";
 import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
@@ -19,6 +20,7 @@ import { ListAppsResponse } from "src/types";
 let prevAppsData: ListAppsResponse | undefined;
 
 function ConnectedApps() {
+  const { t } = useTranslation("apps");
   const { data: info } = useInfo();
   const [page, setPage] = useState(1);
   const { data: appsData } = useApps(LIST_APPS_LIMIT, page, {
@@ -56,7 +58,7 @@ function ConnectedApps() {
         <div className="flex justify-between items-center">
           <div className="flex-1">
             <h1 className="text-xl lg:text-2xl font-semibold">
-              Connected Apps
+              {t("connections.connectedApps")}
             </h1>
           </div>
           <div className="flex gap-3 h-full">
@@ -65,7 +67,7 @@ function ConnectedApps() {
                 <ResponsiveLinkButton
                   to="/apps/cleanup"
                   icon={TrashIcon}
-                  text="Cleanup Unused"
+                  text={t("connections.cleanupUnused")}
                   variant="outline"
                 />
               )}
@@ -74,16 +76,14 @@ function ConnectedApps() {
         </div>
       </div>
 
-
-
       <div className="mt-6" />
 
       {!otherApps.length && (
         <EmptyState
           icon={CableIcon}
-          title="Connect Your First App"
-          description="Connect your app of choice, fine-tune permissions and enjoy a seamless and secure wallet experience."
-          buttonText="See Recommended Apps"
+          title={t("connections.connectedAppsEmpty")}
+          description={t("connections.connectedAppsEmptyDesc")}
+          buttonText={t("connections.seeRecommended")}
           buttonLink="/apps?tab=app-store"
         />
       )}

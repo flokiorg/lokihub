@@ -1,31 +1,17 @@
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import { swrFetcher } from "src/utils/swr";
 
 export const useAppStore = () => {
-    const [apps, setApps] = useState<AppStoreApp[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { data, isLoading, error } = useSWR<AppStoreApp[]>(
+        "/api/appstore/apps",
+        swrFetcher,
+        { dedupingInterval: 60_000 }
+    );
 
-    useEffect(() => {
-        const fetchApps = async () => {
-            try {
-                const data = (await swrFetcher("/api/appstore/apps")) as AppStoreApp[];
-                if (Array.isArray(data)) {
-                    setApps(data);
-                } else {
-                    console.error("App Store Apps data is not an array:", data);
-                    setApps([]);
-                }
-            } catch (e: any) {
-                setError(e.message || "Failed to fetch apps");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchApps();
-    }, []);
-
-    return { apps, loading, error };
+    return {
+        apps: data ?? [],
+        loading: isLoading,
+        error: error?.message ?? null,
+    };
 };

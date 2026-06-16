@@ -1,5 +1,6 @@
 import { Check, Copy, Droplet, Trash2, Users } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import ExternalLink from "src/components/ExternalLink";
 import { Button } from "src/components/ui/button";
@@ -26,7 +27,6 @@ interface LSPManagementCardProps {
   localLSPs: LSP[];
   setLocalLSPs: (lsps: LSP[]) => void;
   className?: string;
-  // Callback when validation fails (optional, to bubble up to parent)
   inputError?: (error: string) => void;
 }
 
@@ -35,18 +35,12 @@ export function LSPManagementCard({
   setLocalLSPs,
   className,
 }: LSPManagementCardProps) {
+  const { t } = useTranslation("setup");
   const [newLSPName, setNewLSPName] = useState("");
   const [newLSPURI, setNewLSPURI] = useState("");
   const [isAddingLSP, setIsAddingLSP] = useState(false);
 
   const separateLSPs = () => {
-    // Identify community LSPs by checking if they match any option in the list
-    // OR if they have the isCommunity flag (if we set it elsewhere)
-    // Here we rely on the `isCommunity` flag which should be set by the parent when merging
-    // If parent doesn't set it, we might need to infer it. The current implementation in Services.tsx sets it.
-    // Based on Services.tsx logic, `isCommunity` is set during merge.
-    
-    // Safety check: filter out invalid entries if any
     const validLSPs = localLSPs || [];
     const community = validLSPs.filter((l) => l.isCommunity);
     const custom = validLSPs.filter((l) => !l.isCommunity);
@@ -57,7 +51,7 @@ export function LSPManagementCard({
 
   const handleAddLocalLSP = () => {
     if (!newLSPName.trim()) {
-      toast.error("LSP Name is required");
+      toast.error(t("services.lsp.nameRequired"));
       return;
     }
     if (
@@ -65,12 +59,12 @@ export function LSPManagementCard({
         (l) => l.name.toLowerCase() === newLSPName.toLowerCase()
       )
     ) {
-      toast.error("LSP Name must be unique");
+      toast.error(t("services.lsp.nameUnique"));
       return;
     }
 
     if (!newLSPURI.trim()) {
-      toast.error("LSP URI is required");
+      toast.error(t("services.lsp.uriRequired"));
       return;
     }
     const uriErr = validateLSPURI(newLSPURI);
@@ -79,17 +73,16 @@ export function LSPManagementCard({
       return;
     }
 
-    // Parse URI to get pubkey and host
     const parts = newLSPURI.split("@");
     if (parts.length !== 2) {
-      toast.error("Invalid URI format");
+      toast.error(t("services.lsp.invalidUri"));
       return;
     }
     const pubkey = parts[0];
     const host = parts[1];
 
     if (localLSPs.some((l) => l.pubkey === pubkey)) {
-      toast.error("LSP with this Pubkey already exists");
+      toast.error(t("services.lsp.pubkeyExists"));
       return;
     }
 
@@ -117,21 +110,20 @@ export function LSPManagementCard({
     );
   };
 
-  console.log("communityCards", communityCards);
-
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="text-base">Lightning Service Providers</CardTitle>
+        <CardTitle className="text-base">{t("services.lsp.title")}</CardTitle>
         <CardDescription>
-          Manage LSPs for JIT channels and inbound liquidity.
+          {t("services.lsp.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
-          {/* Community LSPs */}
+          {/* Community LSPs — dir=ltr: names/descriptions/URIs are English API data */}
           {communityCards.map((provider) => (
             <div
+              dir="ltr"
               key={`${provider.pubkey}-${provider.active}`}
               onClick={() => toggleLocalLSP(provider.pubkey, !provider.active)}
               className={cn(
@@ -168,7 +160,7 @@ export function LSPManagementCard({
                             <Users className="w-3 h-3 text-muted-foreground/70" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Proposed by the community</p>
+                            <p>{t("services.lsp.communityBadge")}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -190,7 +182,7 @@ export function LSPManagementCard({
                       </div>
                     ) : (
                       <span className="text-[10px] text-muted-foreground font-medium mt-1">
-                        {provider.active ? "Active" : "Inactive"}
+                        {provider.active ? t("services.lsp.active") : t("services.lsp.inactive")}
                       </span>
                     )}
                   </div>
@@ -220,11 +212,11 @@ export function LSPManagementCard({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 -mr-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-5 w-5 -me-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
-                        toast.success("LSP URI copied to clipboard");
+                        toast.success(t("services.lsp.copied"));
                     }}
                   >
                     <Copy className="w-3 h-3" />
@@ -237,9 +229,9 @@ export function LSPManagementCard({
 
           {customCards.map((provider) => (
             <div
+              dir="ltr"
               key={`${provider.pubkey}-${provider.active}`}
               onClick={(e) => {
-                // Don't toggle if clicking delete
                 if ((e.target as HTMLElement).closest("button")) return;
                 toggleLocalLSP(provider.pubkey, !provider.active);
               }}
@@ -271,7 +263,7 @@ export function LSPManagementCard({
                       {provider.name}
                     </span>
                     <span className="text-[10px] text-muted-foreground font-medium mt-1">
-                      {provider.active ? "Active" : "Inactive"}
+                      {provider.active ? t("services.lsp.active") : t("services.lsp.inactive")}
                     </span>
                   </div>
                 </div>
@@ -306,11 +298,11 @@ export function LSPManagementCard({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 -mr-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-5 w-5 -me-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
-                        toast.success("LSP URI copied to clipboard");
+                        toast.success(t("services.lsp.copied"));
                     }}
                   >
                     <Copy className="w-3 h-3" />
@@ -336,19 +328,19 @@ export function LSPManagementCard({
                   <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-colors duration-300" />
                   <Droplet className="w-5 h-5 relative z-10" />
                 </div>
-                <span className="font-medium text-sm">Add Custom LSP</span>
+                <span className="font-medium text-sm">{t("services.lsp.addCustom")}</span>
               </div>
             ) : (
               <div className="flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="font-semibold text-sm">New LSP</span>
+                  <span className="font-semibold text-sm">{t("services.lsp.newLsp")}</span>
                   <Droplet className="w-4 h-4 text-muted-foreground" />
                 </div>
 
                 <div className="flex-1 space-y-3">
                   <div className="space-y-1">
                     <Label htmlFor="lsp-name" className="text-xs">
-                      Name
+                      {t("services.lsp.name")}
                     </Label>
                     <Input
                       id="lsp-name"
@@ -369,7 +361,7 @@ export function LSPManagementCard({
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="lsp-uri" className="text-xs">
-                      URI (pubkey@host:port)
+                      {t("services.lsp.uri")}
                     </Label>
                     <Input
                       id="lsp-uri"
@@ -413,7 +405,7 @@ export function LSPManagementCard({
                       setNewLSPURI("");
                     }}
                   >
-                    Cancel
+                    {t("services.lsp.cancel")}
                   </Button>
                   <Button
                     size="sm"
@@ -426,7 +418,7 @@ export function LSPManagementCard({
                       !newLSPName || !newLSPURI || !!validateLSPURI(newLSPURI)
                     }
                   >
-                    Add
+                    {t("services.lsp.add")}
                   </Button>
                 </div>
               </div>

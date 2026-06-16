@@ -50,7 +50,7 @@ export function LatestUsedAppsWidget() {
                 <p className="text-xs text-muted-foreground">
                   {app.lastUsedAt ? dayjs(app.lastUsedAt).fromNow() : "never"}
                 </p>
-                <ChevronRightIcon className="text-muted-foreground size-8" />
+                <ChevronRightIcon className="text-muted-foreground size-8 rtl:rotate-180" />
               </div>
             </Link>
           ))}

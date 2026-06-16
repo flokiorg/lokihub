@@ -22,7 +22,9 @@
       "capacity": "容量",
       "localBalance": "ローカル残高",
       "remoteBalance": "リモート残高",
-      "actions": "操作"
+      "actions": "操作",
+      "typeTooltip": "ライトニングチャンネルの種類。ほとんどのユーザーにはプライベートが推奨されます。",
+      "reserveTooltip": "各参加者が不正行為防止のために確保する資金で、チャンネル存続中は使用できません。"
     },
     "closeDialog": {
       "title": "チャンネルクローズモードを選択",
@@ -39,7 +41,11 @@
       "viewFunding": "資金調達トランザクションを表示",
       "viewNode": "{{explorer}}でノードを表示",
       "setRoutingFee": "ルーティング手数料を設定"
-    }
+    },
+    "type": "タイプ",
+    "typePublic": "パブリック",
+    "typePrivate": "プライベート",
+    "reserve": "リザーブ"
   },
   "peers": {
     "title": "ピア",
@@ -67,7 +73,12 @@
     "title": "オンチェーン",
     "addressLabel": "オンチェーンアドレス",
     "depositTitle": "Flokicoinを入金",
-    "generateNew": "新しいアドレスを生成"
+    "generateNew": "新しいアドレスを生成",
+    "transactions": "オンチェーントランザクション",
+    "sent": "送信済み",
+    "sending": "送信中",
+    "received": "受信済み",
+    "receiving": "受信中"
   },
   "orderHistory": {
     "title": "Order History",
@@ -145,5 +156,12 @@
     "waitingChannel": "チャンネルが開くのを待っています...",
     "waitingConf": "確認を待っています...",
     "waitingTx": "トランザクションを待っています..."
+  },
+  "relay": {
+    "communityRelays": "コミュニティリレー",
+    "customRelays": "カスタムリレー",
+    "addCustomRelay": "カスタムリレーを追加",
+    "alreadyAdded": "このリレーは既に追加済みです",
+    "add": "追加"
   }
 }

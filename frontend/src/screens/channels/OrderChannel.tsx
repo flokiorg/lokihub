@@ -45,6 +45,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 
 export default function OrderChannel() {
   const { t } = useTranslation("channels");
+  const { t: ts } = useTranslation("settings");
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
   const [selectedLSP, setSelectedLSP] = useState<string>("");
@@ -283,7 +284,7 @@ export default function OrderChannel() {
           description={t("orderChannel.description", "Order a channel from your LSP to increase your receiving capacity")}
           contentRight={
             <LinkButton to="/channels/history" variant="secondary" size="sm" className="hidden sm:flex">
-              <History className="w-4 h-4 mr-2" />
+              <History className="w-4 h-4 me-2" />
               {t("menu.history")}
             </LinkButton>
           }
@@ -305,7 +306,7 @@ export default function OrderChannel() {
                   <InfoIcon className="h-4 w-4" />
                   <AlertDescription className="flex flex-col gap-2">
                     <p className="text-sm">
-                      Looking to send funds instead? You might need spending capacity.
+                      {t("orderChannel.lookingToSend")}
                     </p>
                     <LinkButton
                       to="/channels/outgoing"
@@ -313,7 +314,7 @@ export default function OrderChannel() {
                       size="sm"
                       className="w-full sm:w-auto"
                     >
-                      Increase Spending Balance
+                      {t("orderChannel.increaseSpending")}
                     </LinkButton>
                   </AlertDescription>
                 </Alert>
@@ -331,7 +332,7 @@ export default function OrderChannel() {
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
-                              The size of the channel you want to order. You will pay a fee for this service.
+                              {t("orderChannel.channelSizeTooltip")}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -385,11 +386,11 @@ export default function OrderChannel() {
                     </div>
 
                     <div className="grid gap-1.5">
-                         <Label htmlFor="lsp-select">LSP</Label>
+                         <Label htmlFor="lsp-select">{t("orderChannel.lspLabel")}</Label>
                          {info.lsps && info.lsps.length > 0 ? (
                              <Select value={selectedLSP} onValueChange={setSelectedLSP}>
                                 <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select an LSP" />
+                                    <SelectValue placeholder={t("orderChannel.selectLSP")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {info.lsps.map((lsp) => (
@@ -400,12 +401,12 @@ export default function OrderChannel() {
                                 </SelectContent>
                              </Select>
                          ) : (
-                             <Input value="No LSPs Configured" disabled />
+                             <Input value={t("orderChannel.noLSPs")} disabled />
                          )}
                          <div className="text-muted-foreground text-xs">
-                            <span className="mr-1">Manage providers in</span>
+                            <span className="me-1">{t("orderChannel.manageLSP")}</span>
                             <LinkButton to="/settings/services" variant="link" className="h-auto p-0 text-xs underline">
-                                Settings &gt; Services
+                                {ts("nav.services")}
                             </LinkButton>
                          </div>
                     </div>
@@ -440,9 +441,9 @@ export default function OrderChannel() {
                         {(estimatedFee > 0 || orderFee > 0) && !orderId && (
                             <div className="flex justify-between items-center text-sm p-3 bg-muted/50 rounded-md">
                                 <span className="text-muted-foreground font-medium">
-                                    {orderFee > 0 ? "Fee" : "Estimated Fee"}
+                                    {orderFee > 0 ? t("orderChannel.fee") : t("orderChannel.estimatedFee")}
                                 </span>
-                                <div className="text-right">
+                                <div className="text-end">
                                     <div className="font-semibold text-primary">
                                         <FormattedFlokicoinAmount amount={(orderFee || estimatedFee) * 1000} />
                                     </div>
@@ -459,7 +460,7 @@ export default function OrderChannel() {
                             loading={isLoading}
                             disabled={!selectedLSP || !amountDisplay || !!validationError}
                         >
-                            <Zap className="mr-2 h-4 w-4" />
+                            <Zap className="me-2 h-4 w-4" />
                             {t("orderChannel.orderBtn", "Order Channel")}
                         </LoadingButton>
                     </div>
@@ -469,7 +470,7 @@ export default function OrderChannel() {
                         variant="link"
                         className="text-muted-foreground text-xs"
                       >
-                        Need spending capacity instead?
+                        {t("orderChannel.needSpending")}
                       </LinkButton>
                     </div>
                 </form>
@@ -486,16 +487,16 @@ export default function OrderChannel() {
                             <TickIcon className="w-16 h-16" />
                         </div>
                         <div className="text-center space-y-2">
-                            <p className="text-lg font-semibold">Payment Complete</p>
+                            <p className="text-lg font-semibold">{t("orderChannel.paymentComplete")}</p>
                             <p className="text-muted-foreground text-sm">
-                                The LSP is now opening a channel to provide you with <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} /> of inbound liquidity.
+                                {t("orderChannel.paymentCompleteDesc1")}
                             </p>
                             <p className="text-muted-foreground text-xs">
-                                This may take a few minutes. You'll see the new channel in your channels list once it's confirmed.
+                                {t("orderChannel.paymentCompleteDesc2")}
                             </p>
                         </div>
                         <LinkButton to="/channels/history" className="w-full">
-                            {t("orderHistory.title", "View Order History")}
+                            {t("orderChannel.orderHistory")}
                         </LinkButton>
                     </CardContent>
                 </Card>
@@ -509,8 +510,8 @@ export default function OrderChannel() {
                 <Card className="mt-5">
                     <div className="border-b">
                         <div className="flex justify-between p-4 text-sm">
-                            <span className="text-muted-foreground">Incoming Liquidity</span>
-                            <div className="text-right">
+                            <span className="text-muted-foreground">{t("orderChannel.incomingLiquidity")}</span>
+                            <div className="text-end">
                                 <div className="font-semibold">
                                     <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} />
                                 </div>
@@ -519,8 +520,8 @@ export default function OrderChannel() {
                         </div>
                         {orderFee > 0 && (
                             <div className="flex justify-between p-4 pt-0 text-sm">
-                                <span className="text-muted-foreground">LSP Fee</span>
-                                <div className="text-right">
+                                <span className="text-muted-foreground">{t("orderChannel.lspFee")}</span>
+                                <div className="text-end">
                                     <div className="font-semibold">
                                         <FormattedFlokicoinAmount amount={orderFee * 1000} />
                                     </div>
@@ -529,8 +530,8 @@ export default function OrderChannel() {
                             </div>
                         )}
                         <div className="flex justify-between p-4 pt-0 text-sm">
-                             <span className="text-muted-foreground">Amount to pay</span>
-                             <div className="text-right">
+                             <span className="text-muted-foreground">{t("orderChannel.amountToPay")}</span>
+                             <div className="text-end">
                                 <FeeDisplay invoice={paymentInvoice} />
                             </div>
                         </div>
@@ -539,7 +540,7 @@ export default function OrderChannel() {
                     <CardContent className="flex flex-col items-center gap-6 pt-6">
                         <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
                             <Loading className="h-4 w-4" />
-                            <p>Waiting for lightning payment...</p>
+                            <p>{t("orderChannel.waitingPayment")}</p>
                         </div>
 
                         <div className="relative flex items-center justify-center w-full">

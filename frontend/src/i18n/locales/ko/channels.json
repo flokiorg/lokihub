@@ -22,7 +22,9 @@
       "capacity": "용량",
       "localBalance": "로컬 잔액",
       "remoteBalance": "원격 잔액",
-      "actions": "작업"
+      "actions": "작업",
+      "typeTooltip": "라이트닝 채널 유형. 대부분의 사용자에게는 비공개가 권장됩니다.",
+      "reserveTooltip": "각 참가자가 사기 방지를 위해 예약하는 자금으로, 채널 기간 동안 사용할 수 없습니다."
     },
     "closeDialog": {
       "title": "채널 종료 모드 선택",
@@ -39,7 +41,11 @@
       "viewFunding": "자금 조달 트랜잭션 보기",
       "viewNode": "{{explorer}}에서 노드 보기",
       "setRoutingFee": "라우팅 수수료 설정"
-    }
+    },
+    "type": "유형",
+    "typePublic": "공개",
+    "typePrivate": "비공개",
+    "reserve": "리저브"
   },
   "peers": {
     "title": "피어",
@@ -67,7 +73,12 @@
     "title": "온체인",
     "addressLabel": "온체인 주소",
     "depositTitle": "Flokicoin 입금",
-    "generateNew": "새 주소 생성"
+    "generateNew": "새 주소 생성",
+    "transactions": "온체인 거래",
+    "sent": "전송됨",
+    "sending": "전송 중",
+    "received": "수신됨",
+    "receiving": "수신 중"
   },
   "orderHistory": {
     "title": "Order History",
@@ -145,5 +156,12 @@
     "waitingChannel": "채널이 열리기를 기다리는 중...",
     "waitingConf": "확인을 기다리는 중...",
     "waitingTx": "트랜잭션을 기다리는 중..."
+  },
+  "relay": {
+    "communityRelays": "커뮤니티 릴레이",
+    "customRelays": "사용자 지정 릴레이",
+    "addCustomRelay": "사용자 지정 릴레이 추가",
+    "alreadyAdded": "이 릴레이는 이미 추가되어 있습니다",
+    "add": "추가"
   }
 }

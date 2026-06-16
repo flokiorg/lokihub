@@ -82,7 +82,7 @@ export function NewSubwallet() {
             <SubWalletInfoDialog
               trigger={
                 <Button variant="outline">
-                  <HelpCircleIcon className="w-4 h-4 mr-2" />
+                  <HelpCircleIcon className="w-4 h-4 me-2" />
                   Help
                 </Button>
               }

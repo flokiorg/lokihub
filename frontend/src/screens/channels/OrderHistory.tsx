@@ -94,7 +94,7 @@ function OrderHistory() {
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {!isLoading && orders.length > 0 && (
             <LinkButton to="/channels/inbound" size="default">
-              <Zap className="mr-2 h-4 w-4" />
+              <Zap className="me-2 h-4 w-4" />
               {t("orderHistory.orderLiquidity", "Order Liquidity")}
             </LinkButton>
           )}
@@ -115,7 +115,7 @@ function OrderHistory() {
             {t("orderHistory.noOrdersDesc", "You haven't ordered any inbound liquidity yet. Inbound liquidity provides the capacity needed to receive Lightning payments.")}
           </p>
           <LinkButton to="/channels/inbound" size="lg" className="w-full sm:w-auto mt-4">
-            <Zap className="mr-2 h-4 w-4" />
+            <Zap className="me-2 h-4 w-4" />
             {t("orderHistory.orderLiquidity", "Order Liquidity")}
           </LinkButton>
         </div>
@@ -126,12 +126,12 @@ function OrderHistory() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("orderHistory.date", "Date")}</TableHead>
-                <TableHead>{t("orderHistory.orderId", "Order ID")}</TableHead>
+                <TableHead>{t("orderHistory.date")}</TableHead>
+                <TableHead>{t("orderHistory.orderId")}</TableHead>
                 <TableHead>LSP</TableHead>
-                <TableHead>{t("orderHistory.state", "State")}</TableHead>
-                <TableHead className="text-right">{t("orderHistory.totalFee", "Total Fee")}</TableHead>
-                <TableHead className="text-right">{t("channels.capacity", "Capacity")}</TableHead>
+                <TableHead>{t("orderHistory.state")}</TableHead>
+                <TableHead className="text-end">{t("orderHistory.totalFee")}</TableHead>
+                <TableHead className="text-end">{t("channels.capacity")}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -159,13 +159,13 @@ function OrderHistory() {
                           : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
                       }`}
                     >
-                      {order.state}
+                      {t(`orderHistory.states.${order.state}`, order.state.charAt(0) + order.state.slice(1).toLowerCase())}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <FormattedFlokicoinAmount amount={order.feeTotal * 1000} />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <FormattedFlokicoinAmount amount={(order.clientBalanceLoki + (order.lspBalanceLoki || 0)) * 1000} />
                   </TableCell>
                   <TableCell>
@@ -178,7 +178,7 @@ function OrderHistory() {
                           setPaymentOrder(order);
                         }}
                       >
-                         Pay
+                         {t("orderHistory.pay")}
                       </Button>
                     )}
                   </TableCell>
@@ -227,7 +227,7 @@ function OrderHistory() {
                     <ArrowDownIcon className="w-8 h-8 stroke-blue-500 dark:stroke-sky-500" strokeWidth={3} />
                   )}
                 </div>
-                <div className="ml-4 flex flex-col justify-center">
+                <div className="ms-4 flex flex-col justify-center">
                   <p className="text-xl md:text-2xl font-semibold sensitive">
                     <FormattedFlokicoinAmount amount={(selectedOrder.clientBalanceLoki + (selectedOrder.lspBalanceLoki || 0)) * 1000} />
                   </p>
@@ -240,21 +240,21 @@ function OrderHistory() {
                   
                   {/* Human Readable Details */}
                   <div>
-                    <p>Status</p>
+                    <p>{t("orderHistory.status")}</p>
                     <p className="text-muted-foreground capitalize">
                       {selectedOrder.state.toLowerCase()}
                     </p>
                   </div>
 
                   <div>
-                    <p>Date & Time</p>
+                    <p>{t("orderHistory.dateTime")}</p>
                     <p className="text-muted-foreground">
                       {dayjs(selectedOrder.createdAt).format("D MMMM YYYY, HH:mm")}
                     </p>
                   </div>
 
                   <div>
-                    <p>Fee</p>
+                    <p>{t("orderHistory.fee")}</p>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <FormattedFlokicoinAmount amount={selectedOrder.feeTotal * 1000} />
                       <span className="text-xs">
@@ -269,7 +269,7 @@ function OrderHistory() {
                       className="flex items-center gap-2 cursor-pointer text-sm font-medium hover:text-muted-foreground transition-colors"
                       onClick={() => setShowDetails(!showDetails)}
                     >
-                      Technical Details
+                      {t("orderHistory.technicalDetails")}
                       {showDetails ? (
                         <ChevronUpIcon className="size-4" />
                       ) : (
@@ -280,7 +280,7 @@ function OrderHistory() {
                     {showDetails && (
                       <div className="flex flex-col gap-4 mt-4 animate-in slide-in-from-top-2 duration-200">
                         <div>
-                          <p className="text-sm">Order ID</p>
+                          <p className="text-sm">{t("orderHistory.orderId")}</p>
                           <div className="flex items-center gap-2 bg-muted/50 p-2 rounded-md">
                             <code className="text-xs text-muted-foreground break-all flex-1">
                               {selectedOrder.orderId}
@@ -306,7 +306,7 @@ function OrderHistory() {
                         </div>
 
                         <div>
-                          <p className="text-sm">LSP Pubkey</p>
+                          <p className="text-sm">{t("orderHistory.lspPubkey")}</p>
                           <div className="flex items-center gap-2 bg-muted/50 p-2 rounded-md">
                             <code className="text-xs text-muted-foreground break-all flex-1">
                               {selectedOrder.lspPubkey}
@@ -324,7 +324,7 @@ function OrderHistory() {
 
                         {selectedOrder.paymentInvoice && (
                           <div>
-                            <p className="text-sm">Payment Invoice</p>
+                            <p className="text-sm">{t("orderHistory.paymentInvoice")}</p>
                             <div className="flex items-center gap-2 bg-muted/50 p-2 rounded-md">
                               <code className="text-xs text-muted-foreground break-all flex-1 line-clamp-2">
                                 {selectedOrder.paymentInvoice}
@@ -342,7 +342,7 @@ function OrderHistory() {
                         )}
                         
                         <div>
-                          <p className="text-sm">Last Updated</p>
+                          <p className="text-sm">{t("orderHistory.lastUpdated")}</p>
                           <p className="text-xs text-muted-foreground">
                              {dayjs(selectedOrder.updatedAt).format("D MMMM YYYY, HH:mm:ss")}
                           </p>
@@ -373,8 +373,8 @@ function OrderHistory() {
             <div className="flex flex-col gap-5">
                 <div className="border-b pb-4">
                     <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Incoming Liquidity</span>
-                        <div className="text-right">
+                        <span className="text-muted-foreground">{t("orderChannel.incomingLiquidity")}</span>
+                        <div className="text-end">
                             <div className="font-semibold">
                                 <FormattedFlokicoinAmount amount={(paymentOrder.clientBalanceLoki + (paymentOrder.lspBalanceLoki || 0)) * 1000} />
                             </div>
@@ -383,8 +383,8 @@ function OrderHistory() {
                     </div>
                     {paymentOrder.feeTotal > 0 && (
                         <div className="flex justify-between text-sm mb-2">
-                            <span className="text-muted-foreground">LSP Fee</span>
-                            <div className="text-right">
+                            <span className="text-muted-foreground">{t("orderChannel.lspFee")}</span>
+                            <div className="text-end">
                                 <div className="font-semibold">
                                     <FormattedFlokicoinAmount amount={paymentOrder.feeTotal * 1000} />
                                 </div>
@@ -393,8 +393,8 @@ function OrderHistory() {
                         </div>
                     )}
                     <div className="flex justify-between text-sm">
-                         <span className="text-muted-foreground">Amount to pay</span>
-                         <div className="text-right">
+                         <span className="text-muted-foreground">{t("orderChannel.amountToPay")}</span>
+                         <div className="text-end">
                             <FeeDisplay invoice={paymentOrder.paymentInvoice} />
                         </div>
                     </div>

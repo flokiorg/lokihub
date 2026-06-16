@@ -1,5 +1,6 @@
 import { Check, Globe, Plus, Server, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "src/components/ui/input";
 import { cn } from "src/lib/utils";
 
@@ -36,6 +37,7 @@ export function ServiceCardSelector({
   customIcon,
   fullWidth,
 }: ServiceCardSelectorProps) {
+  const { t } = useTranslation("setup");
   const [isCustom, setIsCustom] = useState(false);
   const customInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,6 +89,7 @@ export function ServiceCardSelector({
 
         return (
           <div
+            dir="ltr"
             key={option.value}
             onClick={() => handleSelectOption(option.value)}
             className={cn(
@@ -138,6 +141,7 @@ export function ServiceCardSelector({
 
       {/* Custom Option Card */}
       <div
+        dir="ltr"
         onClick={handleSelectCustom}
         className={cn(
           "relative flex flex-col p-3 rounded-lg border transition-all duration-200 cursor-pointer text-left h-full min-h-[110px] overflow-hidden group col-span-full",
@@ -155,7 +159,7 @@ export function ServiceCardSelector({
                 </div>
                 <div className="space-y-0.5">
                     <span className="font-medium text-sm block">{customLabel || "Add Custom Service"}</span>
-                    <p className="text-[10px] text-muted-foreground leading-tight">Connect a trusted service</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight">{t("services.connectHint")}</p>
                 </div>
             </div>
          ) : (

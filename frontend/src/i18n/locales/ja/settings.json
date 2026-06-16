@@ -15,6 +15,9 @@
       "system": "システム",
       "light": "ライト",
       "dark": "ダーク"
+    },
+    "themes": {
+      "default": "デフォルト"
     }
   },
   "units": {

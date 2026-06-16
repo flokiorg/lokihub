@@ -1,10 +1,17 @@
 import { toast } from "sonner";
+import { AppError } from "src/utils/request";
 
 export function handleRequestError(message: string, error: unknown) {
   console.error(message, error);
-  toast.error(message, {
-    description: isErrorWithMessage(error) ? error.message : undefined,
-  });
+  let description: string | undefined;
+  if (error instanceof AppError) {
+    description = error.status
+      ? `HTTP ${error.status}: ${error.message}`
+      : error.message;
+  } else if (isErrorWithMessage(error)) {
+    description = error.message;
+  }
+  toast.error(message, { description });
 }
 type ErrorWithMessage = {
   message: string;

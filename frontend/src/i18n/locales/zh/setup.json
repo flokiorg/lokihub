@@ -92,5 +92,62 @@
     "waitingForRestart": "等待重启...",
     "warning1": "作为节点恢复过程的一部分，您的 Lokihub 将被关闭。",
     "warning2": "如果您在云端运行，您的 Lokihub 将自动重启。否则，请手动重启 Lokihub 以完成恢复过程。"
+  },
+  "services": {
+    "title": "枢纽配置",
+    "description": "为您的节点配置外部服务。",
+    "loading": "加载中...",
+    "continue": "继续",
+    "fetchError": "获取枢纽配置失败，请检查您的连接。",
+    "communityNote": "这些服务建议由社区提供。要建议更改或添加新服务，请向 <1>lokihub-services</1> 仓库提交 pull request。",
+    "warning": "警告",
+    "warningText": "您对所连接的服务负责。请确保信任这些 URL 的提供商。",
+    "configErrors": "配置错误",
+    "explorer": {
+      "title": "Flokicoin 浏览器",
+      "description": "用于费用估算和交易详情。",
+      "custom": "自定义浏览器"
+    },
+    "relay": {
+      "title": "Nostr 中继",
+      "description": "连接到多个 Nostr 中继以进行 Wallet Connect (NWC) 通信。多个中继可提高可用性。"
+    },
+    "lsp": {
+      "title": "闪电网络服务提供商",
+      "description": "管理 JIT 通道和入站流动性的 LSP。",
+      "communityBadge": "由社区提议",
+      "active": "活跃",
+      "inactive": "不活跃",
+      "addCustom": "添加自定义 LSP",
+      "newLsp": "新 LSP",
+      "name": "名称",
+      "uri": "URI (pubkey@host:port)",
+      "cancel": "取消",
+      "add": "添加",
+      "nameRequired": "LSP 名称为必填项",
+      "nameUnique": "LSP 名称必须唯一",
+      "uriRequired": "LSP URI 为必填项",
+      "invalidUri": "URI 格式无效",
+      "pubkeyExists": "此 Pubkey 的 LSP 已存在",
+      "copied": "LSP URI 已复制到剪贴板"
+    },
+    "swap": {
+      "title": "兑换服务",
+      "description": "启用闪电网络与链上的兑换（反之亦然）。",
+      "custom": "自定义兑换服务"
+    },
+    "messageboard": {
+      "title": "留言板",
+      "description": "连接到支持 NWC 的留言板服务。",
+      "custom": "自定义留言板"
+    },
+    "validation": {
+      "relayRequired": "至少需要一个中继",
+      "explorerRequired": "Flokicoin 浏览器 URL 为必填项",
+      "swapRequired": "启用时兑换服务 URL 为必填项",
+      "messageboardRequired": "启用时留言板 URL 为必填项",
+      "invalidUrl": "{{field}}：URL 格式无效"
+    },
+    "connectHint": "连接可信服务"
   }
 }

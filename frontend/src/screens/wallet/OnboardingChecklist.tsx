@@ -1,5 +1,6 @@
 import { ChevronRightIcon, CircleCheckIcon, CircleIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
     Card,
     CardContent,
@@ -20,6 +21,7 @@ interface ChecklistItemProps {
 }
 
 function OnboardingChecklist() {
+  const { t } = useTranslation("wallet");
   const { isLoading, checklistItems } = useOnboardingData();
 
   if (isLoading || !checklistItems.find((x) => !x.checked)) {
@@ -29,11 +31,8 @@ function OnboardingChecklist() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Get started with your Lokihub</CardTitle>
-        <CardDescription>
-          Follow these initial steps to set up and make the most of your Loki
-          Hub.
-        </CardDescription>
+        <CardTitle>{t("onboarding.title")}</CardTitle>
+        <CardDescription>{t("onboarding.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col">
         {checklistItems.map((item, index) => (
@@ -69,8 +68,8 @@ function ChecklistItem({
       )}
     >
       {!checked && !disabled && (
-        <div className="absolute top-0 left-0 w-full h-full items-center justify-end pr-1.5 hidden group-hover:flex opacity-25">
-          <ChevronRightIcon className="size-8" />
+        <div className="absolute top-0 left-0 w-full h-full items-center justify-end pe-1.5 hidden group-hover:flex opacity-25">
+          <ChevronRightIcon className="size-8 rtl:rotate-180" />
         </div>
       )}
       <div className="flex items-center gap-2">

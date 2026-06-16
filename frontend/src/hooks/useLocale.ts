@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   RTL_LANGUAGES,
@@ -17,6 +17,14 @@ export function useLocale() {
     (i18n.language as SupportedLanguageCode) || "en";
 
   const isRTL = RTL_LANGUAGES.includes(currentLanguage);
+
+  // Sync dir and lang on mount and whenever the language changes (e.g. after page refresh
+  // with a stored RTL preference — changeLanguage won't run in that case).
+  useEffect(() => {
+    const dir = RTL_LANGUAGES.includes(currentLanguage) ? "rtl" : "ltr";
+    document.documentElement.dir = dir;
+    document.documentElement.lang = currentLanguage;
+  }, [currentLanguage]);
 
   const changeLanguage = useCallback(
     async (languageCode: SupportedLanguageCode) => {

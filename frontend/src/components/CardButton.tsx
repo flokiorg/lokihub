@@ -21,7 +21,7 @@ function CardButton({ title, description, to }: Props) {
             <div className="text-muted-foreground text-sm">{description}</div>
           </div>
           <div>
-            <ChevronRightIcon />
+            <ChevronRightIcon className="rtl:rotate-180" />
           </div>
         </div>
       </Card>

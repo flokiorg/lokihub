@@ -86,7 +86,7 @@ export function SetupPassword() {
               />
               <Label
                 htmlFor="securePassword"
-                className="ml-2 text-foreground leading-4"
+                className="ms-2 text-foreground leading-4"
               >
                 {t("password.securedConfirm")}
               </Label>
@@ -102,7 +102,7 @@ export function SetupPassword() {
                 />
                 <Label
                   htmlFor="securePassword2"
-                  className="ml-2 leading-4 font-semibold"
+                  className="ms-2 leading-4 font-semibold"
                 >
                   {t("password.irrecoverableConfirm")}
                 </Label>

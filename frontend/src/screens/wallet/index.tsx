@@ -101,7 +101,7 @@ function Wallet() {
         </Alert>
       )}
       <div className="flex flex-col xl:flex-row justify-between xl:items-start gap-3">
-        <div className="flex flex-col gap-1 p-6 xl:p-0 text-center xl:text-left">
+        <div className="flex flex-col gap-1 p-6 xl:p-0 text-center xl:text-start">
           <div className="text-5xl font-medium balance sensitive slashed-zero">
             <FormattedFlokicoinAmount
               amount={balances.lightning.totalSpendable}

@@ -295,6 +295,7 @@ function PayFlokicoinChannelOrderTopup({ order }: { order: NewChannelOrder }) {
           <div className="flex flex-row gap-2 items-center">
             <Input
               type="text"
+              dir="ltr"
               value={onchainAddress}
               readOnly
               className="flex-1"
@@ -661,7 +662,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                       <TableCell className="font-medium p-3">
                         {t("orderChannel.spendingBalance", "Spending Balance")}
                       </TableCell>
-                      <TableCell className="text-right p-3">
+                      <TableCell className="text-end p-3">
                         <FormattedFlokicoinAmount
                           amount={lspOrderResponse.outgoingLiquidity * 1000}
                         />
@@ -673,7 +674,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                       <TableCell className="font-medium p-3">
                         {t("orderChannel.incomingLiquidity", "Incoming Liquidity")}
                       </TableCell>
-                      <TableCell className="text-right p-3">
+                      <TableCell className="text-end p-3">
                         <div className="flex flex-col items-end">
                           <FormattedFlokicoinAmount
                             amount={lspOrderResponse.incomingLiquidity * 1000}
@@ -690,7 +691,7 @@ function PayLightningChannelOrder({ order }: { order: NewChannelOrder }) {
                     <TableCell className="font-medium p-3">
                       {t("orderChannel.amountToPay", "Amount to pay")}
                     </TableCell>
-                    <TableCell className="font-semibold text-right p-3">
+                    <TableCell className="font-semibold text-end p-3">
                       <div className="flex flex-col items-end">
                         <FormattedFlokicoinAmount
                           amount={lspOrderResponse.invoiceAmount * 1000}

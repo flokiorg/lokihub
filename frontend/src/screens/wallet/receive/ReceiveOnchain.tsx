@@ -118,7 +118,7 @@ function ReceiveToOnchain() {
               }}
               variant="secondary"
             >
-              <CopyIcon className="w-4 h-4 mr-2" />
+              <CopyIcon className="w-4 h-4 me-2" />
               {tc("actions.copy")}
             </Button>
             <Button
@@ -211,7 +211,7 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
           {t("receive.onchain.receiveAnother")}
         </LinkButton>
         <LinkButton to="/wallet" variant="link" className="w-full">
-          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          <ArrowLeftIcon className="w-4 h-4 me-2 rtl:rotate-180" />
           {t("receive.onchain.backToWallet")}
         </LinkButton>
       </CardFooter>

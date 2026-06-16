@@ -33,6 +33,7 @@ import {
 
 import { useHealthCheck } from "src/hooks/useHealthCheck";
 import { useInfo } from "src/hooks/useInfo";
+import { useLocale } from "src/hooks/useLocale";
 import { deleteAuthToken } from "src/lib/auth";
 import { isHttpMode } from "src/utils/isHttpMode";
 import { request } from "src/utils/request";
@@ -44,6 +45,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
   const { t } = useTranslation("common");
+  const { isRTL } = useLocale();
 
   const _isHttpMode = isHttpMode();
 
@@ -110,6 +112,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
+      side={isRTL ? "right" : "left"}
       className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
       collapsible="offcanvas"
     >

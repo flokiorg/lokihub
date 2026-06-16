@@ -220,7 +220,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
           <AlertDialogFooter>
             {!loading && <AlertDialogCancel>Cancel</AlertDialogCancel>}
             <Button onClick={closeChannel} disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {loading ? "Closing..." : "Close Channel"}
             </Button>
           </AlertDialogFooter>
@@ -247,7 +247,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                 className="underline flex items-center mt-2"
               >
                 View on Flokicoin Explorer 
-                <ExternalLinkIcon className="size-4 ml-2" />
+                <ExternalLinkIcon className="size-4 ms-2" />
               </ExternalLink>
             </AlertDialogDescription>
           </AlertDialogHeader>

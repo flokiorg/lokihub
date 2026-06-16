@@ -22,7 +22,9 @@
       "capacity": "Capacidad",
       "localBalance": "Saldo Local",
       "remoteBalance": "Saldo Remoto",
-      "actions": "Acciones"
+      "actions": "Acciones",
+      "typeTooltip": "Tipo de canal Lightning. Se recomienda privado para la mayoría de usuarios.",
+      "reserveTooltip": "Fondos que cada participante reserva para prevenir fraudes. No se gastan durante la vida del canal."
     },
     "closeDialog": {
       "title": "Seleccione el modo de cierre del canal",
@@ -39,7 +41,11 @@
       "viewFunding": "Ver transacción de fondos",
       "viewNode": "Ver nodo en {{explorer}}",
       "setRoutingFee": "Establecer tarifa de enrutamiento"
-    }
+    },
+    "type": "Tipo",
+    "typePublic": "Público",
+    "typePrivate": "Privado",
+    "reserve": "Reserva"
   },
   "peers": {
     "title": "Pares",
@@ -67,7 +73,12 @@
     "title": "On-chain",
     "addressLabel": "Dirección On-chain",
     "depositTitle": "Depositar Flokicoin",
-    "generateNew": "Generar una nueva dirección"
+    "generateNew": "Generar una nueva dirección",
+    "transactions": "Transacciones en cadena",
+    "sent": "Enviado",
+    "sending": "Enviando",
+    "received": "Recibido",
+    "receiving": "Recibiendo"
   },
   "orderHistory": {
     "title": "Order History",
@@ -145,5 +156,12 @@
     "waitingChannel": "Esperando que se abra el canal...",
     "waitingConf": "Esperando confirmaciones...",
     "waitingTx": "Esperando transacción..."
+  },
+  "relay": {
+    "communityRelays": "Relés de la comunidad",
+    "customRelays": "Relés personalizados",
+    "addCustomRelay": "Agregar relé personalizado",
+    "alreadyAdded": "Este relé ya está agregado",
+    "add": "Agregar"
   }
 }

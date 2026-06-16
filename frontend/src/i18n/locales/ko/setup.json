@@ -92,5 +92,62 @@
     "waitingForRestart": "재시작 대기 중...",
     "warning1": "노드 복원 프로세스의 일환으로 Lokihub이 종료됩니다.",
     "warning2": "클라우드에서 실행 중인 경우 Lokihub이 자동으로 재시작됩니다. 그렇지 않으면 복원 프로세스를 완료하기 위해 수동으로 Loki Hub를 재시작해 주세요."
+  },
+  "services": {
+    "title": "허브 구성",
+    "description": "노드의 외부 서비스를 구성합니다.",
+    "loading": "불러오는 중...",
+    "continue": "계속",
+    "fetchError": "허브 구성을 가져오지 못했습니다. 연결을 확인하세요.",
+    "communityNote": "이 서비스 제안은 커뮤니티에서 제공됩니다. 변경 제안이나 새 서비스 추가를 위해 <1>lokihub-services</1> 저장소에 pull request를 제출해 주세요.",
+    "warning": "경고",
+    "warningText": "연결하는 서비스에 대한 책임은 귀하에게 있습니다. 이 URL의 제공업체를 신뢰하는지 확인하세요.",
+    "configErrors": "구성 오류",
+    "explorer": {
+      "title": "Flokicoin 탐색기",
+      "description": "수수료 추정 및 트랜잭션 세부 정보에 사용됩니다.",
+      "custom": "사용자 정의 탐색기"
+    },
+    "relay": {
+      "title": "Nostr 릴레이",
+      "description": "Wallet Connect (NWC) 통신을 위해 여러 Nostr 릴레이에 연결합니다. 여러 릴레이는 가용성을 향상시킵니다."
+    },
+    "lsp": {
+      "title": "라이트닝 서비스 제공업체",
+      "description": "JIT 채널 및 인바운드 유동성을 위한 LSP를 관리합니다.",
+      "communityBadge": "커뮤니티 제안",
+      "active": "활성",
+      "inactive": "비활성",
+      "addCustom": "사용자 정의 LSP 추가",
+      "newLsp": "새 LSP",
+      "name": "이름",
+      "uri": "URI (pubkey@host:port)",
+      "cancel": "취소",
+      "add": "추가",
+      "nameRequired": "LSP 이름은 필수입니다",
+      "nameUnique": "LSP 이름은 고유해야 합니다",
+      "uriRequired": "LSP URI는 필수입니다",
+      "invalidUri": "잘못된 URI 형식",
+      "pubkeyExists": "이 Pubkey의 LSP가 이미 존재합니다",
+      "copied": "LSP URI가 클립보드에 복사되었습니다"
+    },
+    "swap": {
+      "title": "스왑 서비스",
+      "description": "라이트닝과 온체인 간의 스왑(및 그 반대)을 활성화합니다.",
+      "custom": "사용자 정의 스왑 서비스"
+    },
+    "messageboard": {
+      "title": "메시지보드",
+      "description": "NWC를 지원하는 메시지보드 서비스에 연결합니다.",
+      "custom": "사용자 정의 메시지보드"
+    },
+    "validation": {
+      "relayRequired": "릴레이가 하나 이상 필요합니다",
+      "explorerRequired": "Flokicoin 탐색기 URL은 필수입니다",
+      "swapRequired": "활성화 시 스왑 서비스 URL은 필수입니다",
+      "messageboardRequired": "활성화 시 메시지보드 URL은 필수입니다",
+      "invalidUrl": "{{field}}: 잘못된 URL 형식"
+    },
+    "connectHint": "신뢰할 수 있는 서비스 연결"
   }
 }

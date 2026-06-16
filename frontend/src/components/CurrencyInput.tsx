@@ -15,12 +15,12 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
 
   const Adornment = () => {
     if (displayFormat !== "auto") {
-      return <span className="mr-3 text-muted-foreground text-sm font-medium">{displayFormat === "flc" ? "FLC" : "loki"}</span>;
+      return <span className="me-3 text-muted-foreground text-sm font-medium">{displayFormat === "flc" ? "FLC" : "loki"}</span>;
     }
 
 
     return (
-      <div className="flex items-center bg-muted rounded-md p-0.5 mr-1 border z-10">
+      <div className="flex items-center bg-muted rounded-md p-0.5 me-1 border z-10">
         <button
           type="button"
           className={cn(
@@ -74,6 +74,7 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
   return (
     <InputWithAdornment
       type="text"
+      dir="ltr"
       inputMode="decimal"
       value={displayValue}
       onChange={handleAmountChange}

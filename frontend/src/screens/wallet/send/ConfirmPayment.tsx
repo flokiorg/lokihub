@@ -152,7 +152,7 @@ export default function ConfirmPayment() {
               />
             </div>
             <LinkButton to="/wallet/send" variant="link" className="w-full">
-              <ArrowLeftIcon className="w-4 h-4 mr-2" />
+              <ArrowLeftIcon className="w-4 h-4 me-2 rtl:rotate-180" />
               Back
             </LinkButton>
           </CardFooter>

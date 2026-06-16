@@ -137,9 +137,11 @@ function Settings() {
                   <SelectValue placeholder={t("appearance.theme")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {Themes.map((theme) => (
-                    <SelectItem key={theme} value={theme}>
-                      <span className="capitalize">{theme}</span>
+                  {Themes.map((th) => (
+                    <SelectItem key={th} value={th}>
+                      <span className="capitalize">
+                        {th === "default" ? t("appearance.themes.default") : th}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

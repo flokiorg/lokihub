@@ -115,7 +115,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                     "flex items-center font-normal py-1 rounded-full px-3"
                   )}
                 >
-                  <PermissionIcon className="mr-1 size-4" />
+                  <PermissionIcon className="me-1 size-4" />
                   <p className="text-sm">{scopeDescriptions[scope]}</p>
                 </Badge>
               );
@@ -137,7 +137,7 @@ const Permissions: React.FC<PermissionsProps> = ({
                     handleBudgetMaxAmountChange(DEFAULT_APP_BUDGET_LOKI);
                     setShowBudgetOptions(true);
                   }}
-                  className={cn("mr-4", showExpiryOptions && "mb-4")}
+                  className={cn("me-4", showExpiryOptions && "mb-4")}
                 >
                   <PlusCircleIcon />
                   Set budget
@@ -162,7 +162,7 @@ const Permissions: React.FC<PermissionsProps> = ({
               )}
             </>
           ) : (
-            <div className="pl-4 ml-2 border-l-2 border-l-primary mb-4">
+            <div className="ps-4 ms-2 border-s-2 border-s-primary mb-4">
               <div className="flex flex-col gap-2 text-muted-foreground text-sm">
                 <p className="capitalize">
                   <span className="text-primary font-medium">

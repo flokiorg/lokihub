@@ -137,14 +137,14 @@ function Calendar({
         Chevron: ({ className, orientation, ...props }) => {
           if (orientation === "left") {
             return (
-              <ChevronLeftIcon className={cn("size-4", className)} {...props} />
+              <ChevronLeftIcon className={cn("size-4 rtl:rotate-180", className)} {...props} />
             );
           }
 
           if (orientation === "right") {
             return (
               <ChevronRightIcon
-                className={cn("size-4", className)}
+                className={cn("size-4 rtl:rotate-180", className)}
                 {...props}
               />
             );

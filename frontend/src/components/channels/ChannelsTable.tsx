@@ -61,15 +61,12 @@ export function ChannelsTable({
                   <Tooltip>
                     <TooltipTrigger>
                       <div className="flex flex-row gap-1 items-center text-muted-foreground">
-                        Type
+                        {t("channels.type")}
                         <InfoIcon className="h-3 w-3 shrink-0" />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      The type of lightning channel, By default private channel
-                      is recommended. If you a podcaster or musician and expect
-                      to receive keysend or Value4Value payments you will need a
-                      public channel.
+                      {t("channels.table.typeTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -98,23 +95,18 @@ export function ChannelsTable({
                   <Tooltip>
                     <TooltipTrigger>
                       <div className="flex flex-row gap-1 items-center text-muted-foreground">
-                        Reserve
+                        {t("channels.reserve")}
                         <InfoIcon className="h-3 w-3 shrink-0" />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      Funds each participant sets aside to discourage cheating
-                      by ensuring each party has something at stake. This
-                      reserve cannot be spent during the channel's lifetime and
-                      typically amounts to 1% of the channel capacity. The
-                      reserve will automatically be filled when payments are
-                      received on the channel.
+                      {t("channels.table.reserveTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </TableHead>
               <TableHead className="w-[350px]">
-                <div className="flex flex-row justify-between items-center gap-2 text-muted-foreground">
+                <div className="flex flex-row rtl:flex-row-reverse justify-between items-center gap-2 text-muted-foreground">
                   <div>{t("liquidity.outgoing", "Spending")}</div>
                   <div>{t("liquidity.incoming", "Receiving")}</div>
                 </div>
@@ -180,9 +172,9 @@ function ChannelTableRow({
   return (
     <TableRow key={channel.id} className="channel">
       <TableCell>
-        <span className="font-semibold text-sm mr-2">{alias}</span>
+        <span className="font-semibold text-sm me-2">{alias}</span>
       </TableCell>
-      <TableCell>{channel.public ? "Public" : "Private"}</TableCell>
+      <TableCell>{channel.public ? t("channels.typePublic") : t("channels.typePrivate")}</TableCell>
       <TableCell>
         {channel.status == "online" ? (
           unconfirmedChannel ? (
@@ -224,7 +216,7 @@ function ChannelTableRow({
             value={(channel.localSpendableBalance / capacity) * 100}
             className="h-6 absolute"
           />
-          <div className="flex flex-row w-full justify-between px-2 text-xs items-center h-6 mix-blend-exclusion text-white">
+          <div className="flex flex-row rtl:flex-row-reverse w-full justify-between px-2 text-xs items-center h-6 mix-blend-exclusion text-white">
             <span>
               <FormattedFlokicoinAmount amount={channel.localSpendableBalance} />
             </span>

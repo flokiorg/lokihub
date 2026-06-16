@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { ArrowDownIcon, ArrowUpIcon, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
@@ -18,6 +19,7 @@ import { openLink } from "src/utils/openLink";
 
 export function OnchainTransactionsTable() {
   const { data: info } = useInfo();
+  const { t } = useTranslation("channels");
   const {
     transactions,
     setSize,
@@ -78,7 +80,7 @@ export function OnchainTransactionsTable() {
       return (
         <Card className="mt-6">
             <CardHeader>
-                <CardTitle className="text-2xl">On-Chain Transactions</CardTitle>
+                <CardTitle className="text-2xl">{t("onchain.transactions")}</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="flex justify-center p-4">
@@ -94,7 +96,7 @@ export function OnchainTransactionsTable() {
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle className="text-2xl">On-Chain Transactions</CardTitle>
+        <CardTitle className="text-2xl">{t("onchain.transactions")}</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -142,11 +144,11 @@ export function OnchainTransactionsTable() {
                       <p className="font-semibold text-lg">
                         {tx.type == "outgoing"
                           ? tx.state === "confirmed"
-                            ? "Sent"
-                            : "Sending"
+                            ? t("onchain.sent")
+                            : t("onchain.sending")
                           : tx.state === "confirmed"
-                            ? "Received"
-                            : "Receiving"}
+                            ? t("onchain.received")
+                            : t("onchain.receiving")}
                       </p>
                       <p
                         className="text-muted-foreground"
@@ -154,30 +156,29 @@ export function OnchainTransactionsTable() {
                           .local()
                           .format("D MMMM YYYY, HH:mm")}
                       >
-                        {dayjs(tx.createdAt * 1000)
-                          .local()
-                          .fromNow()}
+                        <span dir="ltr">
+                          {dayjs(tx.createdAt * 1000).local().fromNow()}
+                        </span>
                       </p>
                     </div>
                   </TableCell>
 
                   <TableCell>
                     <div className="flex flex-col items-end">
-                      <div className="flex flex-row gap-1">
-                        <p
-                          className={cn(
-                            tx.type == "incoming" &&
-                              "text-green-600 dark:text-emerald-500"
-                          )}
-                        >
-                          {tx.type == "outgoing" ? "-" : "+"}
-                          <span className="font-medium">
-                            <FormattedFlokicoinAmount
-                              amount={tx.amountLoki * 1000}
-                            />
-                          </span>
-                        </p>
-                      </div>
+                      <p
+                        dir="ltr"
+                        className={cn(
+                          tx.type == "incoming" &&
+                            "text-green-600 dark:text-emerald-500"
+                        )}
+                      >
+                        {tx.type == "outgoing" ? "-" : "+"}
+                        <span className="font-medium">
+                          <FormattedFlokicoinAmount
+                            amount={tx.amountLoki * 1000}
+                          />
+                        </span>
+                      </p>
                       <FormattedFiatAmount
                         className="text-xs"
                         amount={tx.amountLoki}

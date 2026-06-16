@@ -79,13 +79,13 @@ export function SetupSecurity() {
               />
               <Label
                 htmlFor="securePassword"
-                className="ml-2 text-foreground leading-4"
+                className="ms-2 text-foreground leading-4"
               >
                 {t("security.confirmed")}
               </Label>
             </div>
             <Button className="w-full" disabled={!hasConfirmed || isLoading || !isBackendReady} type="submit">
-              {(isLoading || !isBackendReady) ? <Loading className="w-4 h-4 mr-2" /> : null}
+              {(isLoading || !isBackendReady) ? <Loading className="w-4 h-4 me-2" /> : null}
               {!isBackendReady ? t("start.starting") : tc("actions.continue")}
             </Button>
           </div>

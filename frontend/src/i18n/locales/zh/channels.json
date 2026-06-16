@@ -22,7 +22,9 @@
       "capacity": "容量",
       "localBalance": "本地余额",
       "remoteBalance": "远程余额",
-      "actions": "操作"
+      "actions": "操作",
+      "typeTooltip": "闪电通道类型。大多数用户推荐私有通道。",
+      "reserveTooltip": "每个参与者预留的资金，用于防止欺诈，通道生命周期内不可花费。"
     },
     "closeDialog": {
       "title": "选择通道关闭模式",
@@ -39,7 +41,11 @@
       "viewFunding": "查看资金交易",
       "viewNode": "在 {{explorer}} 查看节点",
       "setRoutingFee": "设置路由费"
-    }
+    },
+    "type": "类型",
+    "typePublic": "公开",
+    "typePrivate": "私有",
+    "reserve": "储备"
   },
   "peers": {
     "title": "节点对等方",
@@ -67,7 +73,12 @@
     "title": "链上",
     "addressLabel": "链上地址",
     "depositTitle": "存入 Flokicoin",
-    "generateNew": "生成新地址"
+    "generateNew": "生成新地址",
+    "transactions": "链上交易",
+    "sent": "已发送",
+    "sending": "发送中",
+    "received": "已接收",
+    "receiving": "接收中"
   },
   "orderHistory": {
     "title": "Order History",
@@ -145,5 +156,12 @@
     "waitingChannel": "等待通道开启...",
     "waitingConf": "等待确认...",
     "waitingTx": "等待交易..."
+  },
+  "relay": {
+    "communityRelays": "社区中继",
+    "customRelays": "自定义中继",
+    "addCustomRelay": "添加自定义中继",
+    "alreadyAdded": "此中继已添加",
+    "add": "添加"
   }
 }

@@ -317,7 +317,7 @@ function AutoSwapOutForm() {
         <LoadingButton className="w-full" loading={loading}>
           Begin Auto Swap
         </LoadingButton>
-        <p className="text-xs text-muted-foreground text-right">
+        <p className="text-xs text-muted-foreground text-end">
           powered by{" "}
           <span className="font-medium text-foreground">
             {info?.swapServiceUrl
@@ -373,13 +373,13 @@ function ActiveSwapOutConfig({ swapConfig }: { swapConfig: AutoSwapConfig }) {
       <div className="my-6 space-y-4 text-sm">
         <div className="flex justify-between items-center gap-2">
           <span className="font-medium">Type</span>
-          <span className="truncate text-muted-foreground text-right">
+          <span className="truncate text-muted-foreground text-end">
             Lightning to On-chain
           </span>
         </div>
         <div className="flex justify-between items-center gap-2">
           <div className="font-medium">Destination</div>
-          <div className="truncate text-muted-foreground text-right">
+          <div className="truncate text-muted-foreground text-end">
             {swapConfig.destination
               ? swapConfig.destination
               : "On-chain Balance"}
@@ -389,7 +389,7 @@ function ActiveSwapOutConfig({ swapConfig }: { swapConfig: AutoSwapConfig }) {
           <span className="font-medium truncate">
             Spending Balance Threshold
           </span>
-          <span className="shrink-0 text-muted-foreground text-right">
+          <span className="shrink-0 text-muted-foreground text-end">
             <FormattedFlokicoinAmount
               amount={swapConfig.balanceThreshold * 1000}
             />
@@ -397,14 +397,14 @@ function ActiveSwapOutConfig({ swapConfig }: { swapConfig: AutoSwapConfig }) {
         </div>
         <div className="flex justify-between items-center gap-2">
           <span className="font-medium truncate">Swap amount</span>
-          <span className="shrink-0 text-muted-foreground text-right">
+          <span className="shrink-0 text-muted-foreground text-end">
             <FormattedFlokicoinAmount amount={swapConfig.swapAmount * 1000} />
           </span>
         </div>
         <div className="flex justify-between items-center gap-2">
           <span className="font-medium">Fee</span>
           {swapInfo ? (
-            <span className="truncate text-muted-foreground text-right">
+            <span className="truncate text-muted-foreground text-end">
               {swapInfo.lokiServiceFee + swapInfo.boltzServiceFee}% + on-chain
               fees
             </span>

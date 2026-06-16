@@ -84,7 +84,7 @@ export function MigrateNode() {
             <TriangleAlertIcon className="size-4" />
             <h3>Do not run your Lokihub on multiple devices</h3>
           </div>
-          <p className="text-sm ml-7">
+          <p className="text-sm ms-7">
             After creating this migration file, do not restart Lokihub on this
             device, as this will cause problems and may cause force channel
             closures.
@@ -95,7 +95,7 @@ export function MigrateNode() {
             <TriangleAlertIcon className="size-4" />
             <h3>Migrate this file only to fresh Lokihub</h3>
           </div>
-          <p className="text-sm ml-7">
+          <p className="text-sm ms-7">
             To import the migration file, you must have a brand new Lokihub on
             another device and use the “Advanced” option during the onboarding.
           </p>
@@ -105,7 +105,7 @@ export function MigrateNode() {
             <InfoIcon className="size-4" />
             <h3>What happens next?</h3>
           </div>
-          <p className="text-sm ml-7">
+          <p className="text-sm ms-7">
             After typing your unlock password, you'll be able to download a
             migration file which contains a backup of your Lokihub data. Then
             you'll see instructions on how to import this migration file into

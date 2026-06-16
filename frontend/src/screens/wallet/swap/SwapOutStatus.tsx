@@ -53,7 +53,7 @@ export default function SwapOutStatus() {
         <Card className="w-full md:max-w-xs">
           <CardHeader>
             <CardTitle className="flex justify-center">
-              {swapStatus === "PENDING" && <Loading className="w-4 h-4 mr-2" />}
+              {swapStatus === "PENDING" && <Loading className="w-4 h-4 me-2" />}
               {statusText[swapStatus]}
             </CardTitle>
             <CardDescription className="flex items-center justify-center gap-2 text-muted-foreground text-sm">
@@ -112,7 +112,7 @@ export default function SwapOutStatus() {
                   <>
                     {swapStatus === "SUCCESS" && (
                       <div className="flex items-center text-muted-foreground text-sm">
-                        <CircleCheckIcon className="w-5 h-5 mr-2 text-green-600 dark:text-emerald-500" />
+                        <CircleCheckIcon className="w-5 h-5 me-2 text-green-600 dark:text-emerald-500" />
                         <div className="flex items-center gap-2">
                           <p>Confirmed onchain</p>
                           <ExternalLink
@@ -126,7 +126,7 @@ export default function SwapOutStatus() {
                     )}
                     {swapStatus === "PENDING" && (
                       <div className="flex items-center text-muted-foreground text-sm">
-                        <Loading className="w-5 h-5 mr-2" />
+                        <Loading className="w-5 h-5 me-2" />
                         <div className="flex items-center gap-2">
                           <p>
                             Waiting for{" "}
@@ -146,7 +146,7 @@ export default function SwapOutStatus() {
                     )}
                     <Divider color="border-green-600 dark:border-emerald-500" />
                     <div className="flex items-center text-muted-foreground text-sm">
-                      <CircleCheckIcon className="w-5 h-5 mr-2 text-green-600 dark:text-emerald-500" />
+                      <CircleCheckIcon className="w-5 h-5 me-2 text-green-600 dark:text-emerald-500" />
                       Lightning invoice paid
                     </div>
                     <Divider color="border-green-600 dark:border-emerald-500" />
@@ -154,7 +154,7 @@ export default function SwapOutStatus() {
                 ) : (
                   <>
                     <div className="flex items-center text-muted-foreground text-sm">
-                      <Loading className="w-5 h-5 mr-2" />
+                      <Loading className="w-5 h-5 me-2" />
                       Paying lightning invoice...
                     </div>
                     <Divider color="border-green-600 dark:border-emerald-500" />
@@ -163,14 +163,14 @@ export default function SwapOutStatus() {
               ) : (
                 <>
                   <div className="flex items-center text-muted-foreground text-sm">
-                    <CircleAlertIcon className="w-5 h-5 mr-2 text-red-500" />
+                    <CircleAlertIcon className="w-5 h-5 me-2 text-red-500" />
                     Swap failed
                   </div>
                   <Divider color="border-red-500" />
                   {swap.lockupTxId ? (
                     <>
                       <div className="flex items-center text-muted-foreground text-sm">
-                        <CircleAlertIcon className="w-5 h-5 mr-2 text-red-500" />
+                        <CircleAlertIcon className="w-5 h-5 me-2 text-red-500" />
                         Failed to claim swap in time
                       </div>
                       <Divider color="border-red-500" />
@@ -178,7 +178,7 @@ export default function SwapOutStatus() {
                   ) : (
                     <>
                       <div className="flex items-center text-muted-foreground text-sm">
-                        <CircleAlertIcon className="w-5 h-5 mr-2 text-red-500" />
+                        <CircleAlertIcon className="w-5 h-5 me-2 text-red-500" />
                         Failed to pay swap invoice
                       </div>
                       <Divider color="border-red-500" />
@@ -187,7 +187,7 @@ export default function SwapOutStatus() {
                 </>
               )}
               <div className="flex items-center text-muted-foreground text-sm">
-                <CircleCheckIcon className="w-5 h-5 mr-2 text-green-600 dark:text-emerald-500" />
+                <CircleCheckIcon className="w-5 h-5 me-2 text-green-600 dark:text-emerald-500" />
                 Swap initiated
               </div>
             </div>
@@ -199,5 +199,5 @@ export default function SwapOutStatus() {
 }
 
 const Divider = ({ color }: { color: string }) => (
-  <div className={`ml-[9px] py-1 border-l ${color}`}></div>
+  <div className={`ms-[9px] py-1 border-s ${color}`}></div>
 );

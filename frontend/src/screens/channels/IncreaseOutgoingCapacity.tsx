@@ -282,7 +282,7 @@ function NewChannelInternal({
                 id="public-channel"
                 checked={order.isPublic}
                 onCheckedChange={() => setPublic(!order.isPublic)}
-                className="mr-2"
+                className="me-2"
               />
               <div className="grid gap-1.5 leading-none">
                 <Label
@@ -307,7 +307,7 @@ function NewChannelInternal({
             name={"Custom"}
           />
           <Button size="lg">
-            <Zap className="mr-2 h-4 w-4" />
+            <Zap className="me-2 h-4 w-4" />
             {openImmediately ? t("channels.open") : tc("actions.next")}
           </Button>
         </form>
@@ -516,7 +516,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                 </Select>
                 {!hasLSPs && (
                      <div className="text-muted-foreground text-xs">
-                        <span className="mr-1">{t("increaseCapacity.manageProviders", "Manage providers in")}</span>
+                        <span className="me-1">{t("increaseCapacity.manageProviders", "Manage providers in")}</span>
                         <LinkButton to="/settings/services" variant="link" className="h-auto p-0 text-xs underline">
                             {tc("nav.settings")} &gt; Services
                         </LinkButton>
@@ -532,6 +532,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                     <Input
                         id="pubkey"
                         type="text"
+                        dir="ltr"
                         value={pubkey}
                         required
                         placeholder="Pubkey of the peer"
@@ -544,9 +545,9 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                         }}
                     />
                     {nodeDetails && (
-                        <div className="ml-2 text-muted-foreground text-sm">
+                        <div className="ms-2 text-muted-foreground text-sm">
                         <span
-                            className="mr-2"
+                            className="me-2"
                             style={{ color: `${nodeDetails.color}` }}
                         >
                             ⬤
@@ -567,6 +568,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
                         <Input
                         id="host"
                         type="text"
+                        dir="ltr"
                         value={host}
                         required
                         placeholder="0.0.0.0:5521 or [2600::]:5521"

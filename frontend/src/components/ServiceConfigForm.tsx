@@ -6,6 +6,7 @@ import {
     Zap
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LSPManagementCard } from "src/components/LSPManagementCard";
 import { MultiRelayInput } from "src/components/MultiRelayInput";
 import { ServiceCardSelector, ServiceOption } from "src/components/ServiceCardSelector";
@@ -40,51 +41,61 @@ export interface ServiceConfigFormProps {
     validationErrors?: string[];
 }
 
-export const validateServiceConfig = (state: ServiceConfigState): string[] => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TFunction = (key: any, options?: any) => string;
+
+const fallbackT: TFunction = (key: string, options?: Record<string, unknown>) => {
+    const map: Record<string, string> = {
+        "services.validation.relayRequired": "At least one relay is required",
+        "services.validation.explorerRequired": "Flokicoin Explorer URL is required.",
+        "services.validation.swapRequired": "Swap Service URL is required when enabled.",
+        "services.validation.messageboardRequired": "Messageboard URL is required when enabled.",
+        "services.validation.invalidUrl": `${options?.field ?? "Field"}: invalid URL format`,
+    };
+    return map[key] ?? key;
+};
+
+export const validateServiceConfig = (state: ServiceConfigState, t: TFunction = fallbackT): string[] => {
     const errors: string[] = [];
 
-    // Validate relays
     if (!state.relay) {
-        errors.push("At least one relay is required");
+        errors.push(t("services.validation.relayRequired"));
     } else {
         const relays = state.relay.split(",").map(r => r.trim()).filter(r => r.length > 0);
         if (relays.length === 0) {
-            errors.push("At least one relay is required");
+            errors.push(t("services.validation.relayRequired"));
         }
         for (const relayUrl of relays) {
             const relayErr = validateWebSocketURL(relayUrl, "Nostr Relay URL");
             if (relayErr) {
-                errors.push(relayErr);
-                break; // Only show first error
+                errors.push(t("services.validation.invalidUrl", { field: "Nostr Relay URL" }));
+                break;
             }
         }
     }
 
-    // Validate mempool
     if (!state.mempoolApi) {
-        errors.push("Flokicoin Explorer URL is required.");
+        errors.push(t("services.validation.explorerRequired"));
     } else {
         const mempoolErr = validateHTTPURL(state.mempoolApi, "Flokicoin Explorer URL");
-        if (mempoolErr) errors.push(mempoolErr);
+        if (mempoolErr) errors.push(t("services.validation.invalidUrl", { field: "Flokicoin Explorer URL" }));
     }
 
-    // Validate swap
     if (state.enableSwap) {
         if (!state.swapServiceUrl) {
-            errors.push("Swap Service URL is required when enabled.");
+            errors.push(t("services.validation.swapRequired"));
         } else {
             const swapErr = validateHTTPURL(state.swapServiceUrl, "Swap Service URL");
-            if (swapErr) errors.push(swapErr);
+            if (swapErr) errors.push(t("services.validation.invalidUrl", { field: "Swap Service URL" }));
         }
     }
 
-    // Validate messageboard
     if (state.enableMessageboardNwc) {
         if (!state.messageboardNwcUrl) {
-            errors.push("Messageboard URL is required when enabled.");
+            errors.push(t("services.validation.messageboardRequired"));
         } else {
             const mbErr = validateMessageBoardURL(state.messageboardNwcUrl);
-            if (mbErr) errors.push(mbErr);
+            if (mbErr) errors.push(t("services.validation.invalidUrl", { field: "Messageboard URL" }));
         }
     }
 
@@ -92,6 +103,8 @@ export const validateServiceConfig = (state: ServiceConfigState): string[] => {
 };
 
 export function ServiceConfigForm({ state, onChange, className, validationErrors = [] }: ServiceConfigFormProps) {
+    const { t } = useTranslation("setup");
+
     const [communityOptions, setCommunityOptions] = useState<{
         swap: ServiceOption[];
         relay: ServiceOption[];
@@ -123,22 +136,20 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                         description: s.description
                     });
 
-                    // Parse LSPs special format
                     const mapLSP = (s: any) => {
-                        // "connection": "pubkey@host:port"
                         const connection = s.connection || s.uri || "";
                         const parts = connection.split("@");
                         const pubkey = parts[0] || "";
                         const host = parts[1] || "";
-                        
+
                         return {
                             name: s.name,
                             pubkey: pubkey,
                             host: host,
-                            active: false, // Default to inactive when just fetching options
+                            active: false,
                             isCommunity: true,
                             description: s.description,
-                            website: s.url || s.website // Map url/website to website field
+                            website: s.url || s.website
                         } as LSP;
                     };
 
@@ -157,23 +168,6 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
         fetchServices();
     }, []);
 
-    // Merge logic for LSPs:
-    // This effect ensures that if we have community LSPs and backend LSPs (in state), they are merged correctly
-    // so that the LSPManagementCard sees "isCommunity" flags and descriptions.
-    // However, since `state.lsps` is managed by the parent, we should perhaps run this merge logic ONCE when community options load?
-    // OR we just pass the raw community options to LSPManagementCard?
-    // LSPManagementCard takes `localLSPs` which is the state.
-    // Let's replicate the merge logic here effectively by updating the state?
-    // NO, repeatedly updating parent state from child effect is bad.
-    // Ideally LSPManagementCard should take `communityLSPs` as a prop and handle the merging/display logic?
-    // But LSPManagementCard is already built to take `localLSPs`.
-    // Let's assume the parent handles the initial merge (as they do now) or we assume basic LSP management here.
-    // Actually, `ServiceConfigForm` is replacing the CARDs.
-    // The previous parents did the merge logic.
-    // Let's leave the complex merge logic to the parent for now, or assume `state.lsps` is already populated.
-    // BUT `SetupServices` and `Services` did the merge logic inside their component.
-    // If we want to deduplicate that, we should probably export a helper `mergeCommunityLSPs`.
-
     return (
         <div className={`space-y-6 ${className || ""}`}>
             <ServiceConfigurationHeader />
@@ -183,10 +177,10 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                         <Globe className="w-5 h-5 text-primary" />
-                        Flokicoin Explorer
+                        {t("services.explorer.title")}
                     </CardTitle>
                     <CardDescription>
-                        Used for fee estimation and transaction details.
+                        {t("services.explorer.description")}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -196,7 +190,7 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                         options={communityOptions.mempool}
                         placeholder="https://..."
                         customIcon={<Globe className="w-4 h-4" />}
-                        customLabel="Custom Explorer"
+                        customLabel={t("services.explorer.custom")}
                     />
                 </CardContent>
             </Card>
@@ -206,10 +200,10 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                         <Zap className="w-5 h-5 text-primary" />
-                        Nostr Relays
+                        {t("services.relay.title")}
                     </CardTitle>
                     <CardDescription>
-                        Connect to multiple Nostr relays for Wallet Connect (NWC) communication. Multiple relays improve availability.
+                        {t("services.relay.description")}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -231,16 +225,15 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
 
             {/* Swap Service */}
             <Card className="border-border shadow-sm">
-
                 <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <CardTitle className="text-lg flex items-center gap-2">
                                 <ArrowLeftRight className="w-5 h-5 text-primary" />
-                                Swap Service
+                                {t("services.swap.title")}
                             </CardTitle>
                             <CardDescription>
-                                Enables Lightning to on-chain swaps (and vice-versa).
+                                {t("services.swap.description")}
                             </CardDescription>
                         </div>
                         <Switch
@@ -258,7 +251,7 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                             placeholder="https://..."
                             disabled={!state.enableSwap}
                             customIcon={<ArrowLeftRight className="w-4 h-4" />}
-                            customLabel="Custom Swap Service"
+                            customLabel={t("services.swap.custom")}
                         />
                     </CardContent>
                 )}
@@ -271,10 +264,10 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                         <div className="space-y-1">
                             <CardTitle className="text-lg flex items-center gap-2">
                                 <MessageCircle className="w-5 h-5 text-primary" />
-                                Messageboard
+                                {t("services.messageboard.title")}
                             </CardTitle>
                             <CardDescription>
-                                Connects to a NWC-enabled messageboard service.
+                                {t("services.messageboard.description")}
                             </CardDescription>
                         </div>
                         <Switch
@@ -292,21 +285,19 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                             placeholder="nostr+walletconnect://..."
                             disabled={!state.enableMessageboardNwc}
                             customIcon={<MessageCircle className="w-4 h-4" />}
-                            customLabel="Custom Message Board"
+                            customLabel={t("services.messageboard.custom")}
                         />
                     </CardContent>
                 )}
             </Card>
 
-
-
             {validationErrors.length > 0 && (
                 <div id="service-config-errors" className="scroll-mt-4">
                     <Alert variant="destructive" className="mt-6 w-full animate-in fade-in slide-in-from-bottom-2">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Configuration Errors</AlertTitle>
+                        <AlertTitle>{t("services.configErrors")}</AlertTitle>
                         <AlertDescription>
-                            <ul className="list-disc pl-5 space-y-1 mt-2">
+                            <ul className="list-disc ps-5 space-y-1 mt-2">
                                 {validationErrors.map((err, i) => (
                                     <li key={i}>{err}</li>
                                 ))}
@@ -318,5 +309,3 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
         </div>
     );
 }
-
-

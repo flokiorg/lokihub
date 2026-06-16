@@ -14,7 +14,9 @@
     "received": "Recibido",
     "pending": "Pendiente",
     "failed": "Fallido",
-    "viewAll": "Ver todo"
+    "viewAll": "Ver todo",
+    "emptyDescription": "Tus pagos entrantes y salientes más recientes aparecerán aquí.",
+    "receiveFirst": "Recibe tu primer pago"
   },
   "receive": {
     "title": "Recibir",

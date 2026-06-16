@@ -163,7 +163,7 @@ function DepositPending({
             className="flex items-center mt-2"
           >
             {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
-            <ExternalLinkIcon className="size-4 ml-2" />
+            <ExternalLinkIcon className="size-4 ms-2" />
           </ExternalLinkButton>
         </div>
       </CardContent>
@@ -196,7 +196,7 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
               className="flex items-center mt-2"
             >
               {t("onchain.viewExplorer", "View on Flokicoin Explorer")}
-              <ExternalLinkIcon className="size-4 ml-2" />
+              <ExternalLinkIcon className="size-4 ms-2" />
             </ExternalLinkButton>
           </div>
         </CardContent>

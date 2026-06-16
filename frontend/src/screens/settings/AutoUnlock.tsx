@@ -1,5 +1,6 @@
 import { AlertTriangleIcon } from "lucide-react";
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import { toast } from "sonner";
 import Loading from "src/components/Loading";
@@ -13,6 +14,7 @@ import { useInfo } from "src/hooks/useInfo";
 import { request } from "src/utils/request";
 
 export function AutoUnlock() {
+  const { t } = useTranslation("settings");
   const { data: info, mutate: refetchInfo } = useInfo();
 
   const [unlockPassword, setUnlockPassword] = React.useState("");
@@ -56,23 +58,15 @@ export function AutoUnlock() {
   return (
     <>
       <SettingsHeader
-        title="Auto Unlock"
-        description="Configure Lokihub will automatically unlock on start (e.g. after machine reboot)"
+        title={t("autoUnlock.title")}
+        description={t("autoUnlock.description")}
       />
       <div>
-        <p className="text-muted-foreground">
-          In some situations it can be impractical to manually unlock the wallet
-          every time Lokihub is started. In those cases you can save the unlock
-          password in plaintext so that Lokihub can auto-unlock itself.
-        </p>
+        <p className="text-muted-foreground">{t("autoUnlock.bodyText")}</p>
         <Alert className="mt-3">
           <AlertTriangleIcon />
-          <AlertTitle>Attention</AlertTitle>
-          <AlertDescription>
-            Everyone who has access to the machine running this hub could read
-            that password and take your funds. Use this only in a secure
-            environment.
-          </AlertDescription>
+          <AlertTitle>{t("autoUnlock.attention")}</AlertTitle>
+          <AlertDescription>{t("autoUnlock.attentionDesc")}</AlertDescription>
         </Alert>
         {!info.autoUnlockPasswordEnabled && (
           <>
@@ -81,7 +75,9 @@ export function AutoUnlock() {
               className="w-full md:w-96 flex flex-col gap-4 mt-4"
             >
               <div className="grid gap-2">
-                <Label htmlFor="unlock-password">Unlock Password</Label>
+                <Label htmlFor="unlock-password">
+                  {t("autoUnlock.passwordLabel")}
+                </Label>
                 <PasswordInput
                   id="unlock-password"
                   autoFocus
@@ -91,7 +87,7 @@ export function AutoUnlock() {
               </div>
               <div>
                 <LoadingButton loading={loading}>
-                  Enable Auto Unlock
+                  {t("autoUnlock.enableButton")}
                 </LoadingButton>
               </div>
             </form>
@@ -105,7 +101,7 @@ export function AutoUnlock() {
             >
               <div>
                 <LoadingButton loading={loading}>
-                  Disable Auto Unlock
+                  {t("autoUnlock.disableButton")}
                 </LoadingButton>
               </div>
             </form>

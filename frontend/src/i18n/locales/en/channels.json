@@ -17,12 +17,18 @@
       "offline": "Offline",
       "opening": "Opening"
     },
+    "type": "Type",
+    "typePublic": "Public",
+    "typePrivate": "Private",
+    "reserve": "Reserve",
     "pendingClosed": "Pending Closed Channels",
     "table": {
       "capacity": "Capacity",
       "localBalance": "Local Balance",
       "remoteBalance": "Remote Balance",
-      "actions": "Actions"
+      "actions": "Actions",
+      "typeTooltip": "The type of lightning channel. Private is recommended for most users. Public channels are needed for podcasters or musicians expecting keysend/Value4Value payments.",
+      "reserveTooltip": "Funds each participant sets aside to discourage cheating. This reserve cannot be spent during the channel's lifetime and is typically 1% of capacity."
     },
     "closeDialog": {
       "title": "Select mode of channel closure",
@@ -65,16 +71,51 @@
   },
   "onchain": {
     "title": "On-chain",
+    "transactions": "On-Chain Transactions",
     "addressLabel": "On-Chain Address",
     "depositTitle": "Deposit Flokicoin",
-    "generateNew": "Generate a new address"
+    "generateNew": "Generate a new address",
+    "sent": "Sent",
+    "sending": "Sending",
+    "received": "Received",
+    "receiving": "Receiving"
+  },
+  "relay": {
+    "communityRelays": "Community Relays",
+    "customRelays": "Custom Relays",
+    "addCustomRelay": "Add Custom Relay",
+    "alreadyAdded": "This relay is already added",
+    "add": "Add"
   },
   "orderHistory": {
-    "description": "History of your channel orders",
-    "noOrdersDesc": "You haven't ordered any channels yet.",
-    "noOrdersTitle": "No Order History",
+    "title": "Order History",
+    "description": "Manage and track your inbound liquidity channel requests.",
+    "noOrdersTitle": "No Liquidity Orders Yet",
+    "noOrdersDesc": "You haven't ordered any inbound liquidity yet. Inbound liquidity provides the capacity needed to receive Lightning payments.",
+    "orderLiquidity": "Order Liquidity",
+    "date": "Date",
+    "orderId": "Order ID",
+    "state": "State",
     "totalFee": "Total Fee",
-    "orderLiquidity": "Order Liquidity"
+    "pay": "Pay",
+    "detailsTitle": "Liquidity Order Details",
+    "reviewTitle": "Review Inbound Order",
+    "status": "Status",
+    "dateTime": "Date & Time",
+    "fee": "Fee",
+    "technicalDetails": "Technical Details",
+    "lspPubkey": "LSP Pubkey",
+    "paymentInvoice": "Payment Invoice",
+    "lastUpdated": "Last Updated",
+    "states": {
+      "COMPLETED": "Completed",
+      "SUCCESS": "Completed",
+      "FAILED": "Failed",
+      "PAID": "Paid",
+      "EXPIRED": "Expired",
+      "CREATED": "Created",
+      "OPENING": "Opening"
+    }
   },
   "increaseCapacity": {
     "title": "Open Channel with On-Chain",
@@ -105,6 +146,35 @@
     "manageProviders": "Manage providers in"
   },
   "orderChannel": {
+    "title": "Increase Inbound Liquidity",
+    "description": "Order a channel from your LSP to increase your receiving capacity",
+    "info": "Order a channel from an LSP. This provides inbound liquidity, allowing you to receive payments immediately after the channel is confirmed.",
+    "increaseInboundLabel": "Increase inbound liquidity",
+    "orderRange": "Order Range:",
+    "orderBtn": "Order Channel",
+    "opening": "Your channel is being opened",
+    "reviewTitle": "Review Channel Purchase",
+    "reviewDesc": "Complete Payment to open a channel to your node",
+    "spendingBalance": "Spending Balance",
+    "incomingLiquidity": "Incoming Liquidity",
+    "amountToPay": "Amount to pay",
+    "increaseSpending": "Increase Spending Balance",
+    "lookingToSend": "Looking to send funds instead? You might need spending capacity.",
+    "channelSizeTooltip": "The size of the channel you want to order. You will pay a fee for this service.",
+    "selectLSP": "Select an LSP",
+    "lspLabel": "LSP",
+    "noLSPs": "No LSPs Configured",
+    "manageLSP": "Manage providers in",
+    "fee": "Fee",
+    "estimatedFee": "Estimated Fee",
+    "needSpending": "Need spending capacity instead?",
+    "paymentComplete": "Payment Complete",
+    "paymentCompleteDesc1": "The LSP is now opening a channel to provide you with inbound liquidity.",
+    "paymentCompleteDesc2": "This may take a few minutes. You'll see the new channel in your channels list once it's confirmed.",
+    "waitingPayment": "Waiting for lightning payment...",
+    "lspFee": "LSP Fee",
+    "retry": "Retry",
+    "orderHistory": "View Order History",
     "balanceMsg": "Your current balance is",
     "currentlyHave": "You currently have",
     "deposited": "Deposited",
@@ -124,5 +194,17 @@
     "waitingChannel": "Waiting for channel to open...",
     "waitingConf": "Waiting for confirmations...",
     "waitingTx": "Waiting for transaction..."
+  },
+  "node": {
+    "lightning": "Lightning",
+    "onchain": "On-Chain",
+    "spendingBalance": "Spending Balance",
+    "receiveLimit": "Receive Limit",
+    "balance": "Balance"
+  },
+  "spendingAlert": {
+    "title": "Maximum Spendable Balance Too Low",
+    "desc": "Your payment will likely fail because your maximum spendable balance for the next payment is currently {{amount}}.",
+    "increaseBtn": "Increase Spending Balance"
   }
 }

@@ -14,7 +14,9 @@
     "received": "받음",
     "pending": "대기 중",
     "failed": "실패",
-    "viewAll": "전체 보기"
+    "viewAll": "전체 보기",
+    "emptyDescription": "최근 수신 및 발신 결제가 여기에 표시됩니다.",
+    "receiveFirst": "첫 번째 결제 받기"
   },
   "receive": {
     "title": "받기",

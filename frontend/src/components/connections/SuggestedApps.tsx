@@ -87,7 +87,7 @@ export default function SuggestedApps() {
   }
 
   return (
-    <>
+    <div dir="ltr">
       <div className="flex gap-2 flex-wrap mt-6 mb-2">
         {sortedAppStoreCategories.map(([categoryId, category]) => {
           // Check if category has any apps
@@ -155,6 +155,6 @@ export default function SuggestedApps() {
             );
           })}
       </div>
-    </>
+    </div>
   );
 }

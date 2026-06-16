@@ -22,7 +22,9 @@
       "capacity": "السعة",
       "localBalance": "الرصيد المحلي",
       "remoteBalance": "الرصيد البعيد",
-      "actions": "الإجراءات"
+      "actions": "الإجراءات",
+      "typeTooltip": "نوع قناة البرق. الخاصة مُوصى بها لمعظم المستخدمين.",
+      "reserveTooltip": "أموال يحجزها كل طرف لمنع الغش. لا تُنفق خلال عمر القناة وعادةً 1% من السعة."
     },
     "closeDialog": {
       "title": "حدد وضع إغلاق القناة",
@@ -39,7 +41,11 @@
       "viewFunding": "عرض معاملة التمويل",
       "viewNode": "عرض العقدة على {{explorer}}",
       "setRoutingFee": "تعيين رسوم التوجيه"
-    }
+    },
+    "type": "النوع",
+    "typePublic": "عام",
+    "typePrivate": "خاص",
+    "reserve": "الاحتياطي"
   },
   "peers": {
     "title": "النظراء",
@@ -67,20 +73,42 @@
     "title": "على السلسلة",
     "addressLabel": "عنوان على السلسلة",
     "depositTitle": "إيداع فلوكيكوين",
-    "generateNew": "إنشاء عنوان جديد"
+    "generateNew": "إنشاء عنوان جديد",
+    "transactions": "معاملات على السلسلة",
+    "sent": "مُرسَل",
+    "sending": "جارٍ الإرسال",
+    "received": "مُستلَم",
+    "receiving": "جارٍ الاستلام"
   },
   "orderHistory": {
-    "title": "Order History",
-    "date": "Date",
-    "orderId": "Order ID",
-    "state": "State",
-    "detailsTitle": "Liquidity Order Details",
-    "reviewTitle": "Review Inbound Order",
-    "description": "سجل طلبات القنوات الخاصة بك",
-    "noOrdersDesc": "لم تقم بطلب أي قنوات بعد.",
-    "noOrdersTitle": "لا يوجد سجل طلبات",
+    "title": "سجل الطلبات",
+    "description": "تتبع وإدارة طلبات السيولة الواردة الخاصة بك",
+    "noOrdersTitle": "لا توجد طلبات سيولة بعد",
+    "noOrdersDesc": "لم تطلب أي سيولة واردة بعد. توفر السيولة الواردة السعة اللازمة لاستلام مدفوعات Lightning.",
+    "orderLiquidity": "طلب سيولة",
+    "date": "التاريخ",
+    "orderId": "معرّف الطلب",
+    "state": "الحالة",
     "totalFee": "إجمالي الرسوم",
-    "orderLiquidity": "طلب سيولة"
+    "pay": "دفع",
+    "detailsTitle": "تفاصيل طلب السيولة",
+    "reviewTitle": "مراجعة الطلب الوارد",
+    "status": "الحالة",
+    "dateTime": "التاريخ والوقت",
+    "fee": "الرسوم",
+    "technicalDetails": "التفاصيل التقنية",
+    "lspPubkey": "المفتاح العام لـ LSP",
+    "paymentInvoice": "فاتورة الدفع",
+    "lastUpdated": "آخر تحديث",
+    "states": {
+      "COMPLETED": "مكتمل",
+      "SUCCESS": "مكتمل",
+      "FAILED": "فشل",
+      "PAID": "مدفوع",
+      "EXPIRED": "منتهي الصلاحية",
+      "CREATED": "تم الإنشاء",
+      "OPENING": "جارٍ الفتح"
+    }
   },
   "increaseCapacity": {
     "title": "فتح قناة على السلسلة",
@@ -123,9 +151,25 @@
     "spendingBalance": "رصيد الإنفاق",
     "incomingLiquidity": "السيولة الواردة",
     "amountToPay": "المبلغ المراد دفعه",
+    "increaseSpending": "زيادة رصيد الإنفاق",
+    "lookingToSend": "هل تريد إرسال أموال بدلاً من ذلك؟ قد تحتاج إلى رصيد إنفاق.",
+    "channelSizeTooltip": "حجم القناة التي تريد طلبها. ستدفع رسوماً مقابل هذه الخدمة.",
+    "selectLSP": "اختر مزود سيولة",
+    "lspLabel": "مزود السيولة",
+    "noLSPs": "لم يتم تكوين مزودي سيولة",
+    "manageLSP": "إدارة المزودين في",
+    "fee": "الرسوم",
+    "estimatedFee": "الرسوم المقدرة",
+    "needSpending": "هل تحتاج إلى رصيد إنفاق بدلاً من ذلك؟",
+    "paymentComplete": "اكتمل الدفع",
+    "paymentCompleteDesc1": "يقوم مزود السيولة بفتح قناة الآن لمنحك سيولة واردة.",
+    "paymentCompleteDesc2": "قد يستغرق هذا بضع دقائق. ستجد القناة الجديدة في قائمة قنواتك بعد التأكيد.",
+    "waitingPayment": "في انتظار دفع البرق...",
+    "lspFee": "رسوم مزود السيولة",
+    "retry": "إعادة المحاولة",
+    "orderHistory": "عرض سجل الطلبات",
     "consentMsg": "بالمتابعة، أنت توافق على فتح القناة فورًا وتفقد الحق في الإلغاء بمجرد فتحها.",
     "otherOptions": "خيارات أخرى",
-    "increaseSpending": "زيادة رصيد الإنفاق",
     "balanceMsg": "رصيدك الحالي هو",
     "currentlyHave": "لديك حاليا",
     "deposited": "تم الإيداع",
@@ -145,5 +189,24 @@
     "waitingChannel": "في انتظار فتح القناة...",
     "waitingConf": "في انتظار التأكيدات...",
     "waitingTx": "في انتظار المعاملة..."
+  },
+  "node": {
+    "lightning": "Lightning",
+    "onchain": "On-Chain",
+    "spendingBalance": "رصيد الإنفاق",
+    "receiveLimit": "حد الاستلام",
+    "balance": "الرصيد"
+  },
+  "spendingAlert": {
+    "title": "رصيد الإنفاق الأقصى منخفض جداً",
+    "desc": "من المحتمل أن تفشل دفعتك لأن الحد الأقصى لرصيد الإنفاق للدفعة التالية هو {{amount}} حالياً.",
+    "increaseBtn": "زيادة رصيد الإنفاق"
+  },
+  "relay": {
+    "communityRelays": "ترحيلات المجتمع",
+    "customRelays": "ترحيلات مخصصة",
+    "addCustomRelay": "إضافة ترحيل مخصص",
+    "alreadyAdded": "هذا الترحيل مضاف بالفعل",
+    "add": "إضافة"
   }
 }

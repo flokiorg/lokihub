@@ -58,12 +58,12 @@ export function PayInvoiceButtons({ paymentInvoice, balances, onPaid }: PayInvoi
           className="flex-1"
           onClick={handlePayNow}
         >
-          <Zap className="mr-2 h-4 w-4" />
+          <Zap className="me-2 h-4 w-4" />
           Pay Now
         </LoadingButton>
       )}
       <Button variant="outline" className="flex-1" onClick={copyInvoice}>
-        <Copy className="mr-2 h-4 w-4" />
+        <Copy className="me-2 h-4 w-4" />
         Copy Invoice
       </Button>
     </div>

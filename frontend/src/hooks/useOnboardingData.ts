@@ -1,5 +1,6 @@
 // src/hooks/useOnboardingData.ts
 
+import { useTranslation } from "react-i18next";
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApps } from "src/hooks/useApps";
 import { useChannels } from "src/hooks/useChannels";
@@ -22,6 +23,7 @@ interface UseOnboardingDataResponse {
 }
 
 export const useOnboardingData = (): UseOnboardingDataResponse => {
+  const { t } = useTranslation("wallet");
 
   const { data: appsData } = useApps();
   const { data: channels } = useChannels();
@@ -53,34 +55,30 @@ export const useOnboardingData = (): UseOnboardingDataResponse => {
     ...(hasChannelManagement
       ? [
           {
-            title: "Open your first channel",
-            description:
-              "Establish a new Lightning channel to enable fast and low-fee Flokicoin transactions.",
+            title: t("onboarding.items.openChannel.title"),
+            description: t("onboarding.items.openChannel.description"),
             checked: hasChannel,
             to: "/channels/first",
           },
         ]
       : []),
     {
-      title: "Send or receive your first payment",
-      description:
-        "Use your newly opened channel to make a transaction on the Lightning Network.",
+      title: t("onboarding.items.firstPayment.title"),
+      description: t("onboarding.items.firstPayment.description"),
       checked: hasTransaction,
       to: "/wallet",
     },
     {
-      title: "Connect your first app",
-      description:
-        "Seamlessly connect apps and integrate your wallet with other apps from your Hub.",
+      title: t("onboarding.items.connectApp.title"),
+      description: t("onboarding.items.connectApp.description"),
       checked: hasCustomApp,
       to: "/apps?tab=app-store",
     },
     ...(hasMnemonic
       ? [
           {
-            title: "Backup your keys",
-            description:
-              "Secure your keys by creating a backup to ensure you don't lose access.",
+            title: t("onboarding.items.backupKeys.title"),
+            description: t("onboarding.items.backupKeys.description"),
             checked: hasBackedUp === true,
             to: "/settings/backup",
           },

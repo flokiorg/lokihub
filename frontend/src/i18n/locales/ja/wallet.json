@@ -14,7 +14,9 @@
     "received": "受信済み",
     "pending": "保留中",
     "failed": "失敗",
-    "viewAll": "すべて表示"
+    "viewAll": "すべて表示",
+    "emptyDescription": "最近の受取・送金がここに表示されます。",
+    "receiveFirst": "最初の支払いを受け取る"
   },
   "receive": {
     "title": "受け取る",

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import React, { ReactElement, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CompactLanguageSwitcher } from "src/components/CompactLanguageSwitcher";
@@ -192,6 +193,13 @@ export function Intro() {
   }, [api]);
 
   return (
+    <>
+    {createPortal(
+      <div dir="ltr" className="fixed top-4 right-4 z-[9999]">
+        <CompactLanguageSwitcher showLabel />
+      </div>,
+      document.body
+    )}
     <StarryNight>
       <Carousel className={cn("w-full h-full bg-transparent")} setApi={setApi}>
         <CarouselContent className="select-none bg-transparent">
@@ -208,7 +216,6 @@ export function Intro() {
                   <Button onClick={() => api?.scrollNext()} size="lg">
                     {t("intro.slide1.next")}
                   </Button>
-                  <CompactLanguageSwitcher showLabel />
                 </div>
               </div>
             </div>
@@ -252,6 +259,7 @@ export function Intro() {
         </div>
       </Carousel>
     </StarryNight>
+    </>
   );
 }
 
@@ -289,7 +297,7 @@ function Slide({
         </div>
       </div>
       <Button size="icon" onClick={slideNext} className="">
-        <ArrowRightIcon className="size-4" />
+        <ArrowRightIcon className="size-4 rtl:rotate-180" />
       </Button>
     </div>
   );

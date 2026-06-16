@@ -105,6 +105,7 @@ export default function Send() {
               <Input
                 id="recipient"
                 type="text"
+                dir="ltr"
                 value={recipient}
                 autoFocus
                 placeholder="Invoice, lightning address, on-chain address"
