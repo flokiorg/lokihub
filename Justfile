@@ -70,6 +70,7 @@ rundev:
         tmux new-session -d -s lokihub-dev -n 'run-1' 'just run-1'; \
         tmux new-window -t lokihub-dev:2 -n 'run-2' 'just run-2'; \
         tmux new-window -t lokihub-dev:3 -n 'run-3' 'just run-3'; \
+        tmux set-option -t lokihub-dev -g mouse on; \
     fi
     @tmux attach -t lokihub-dev
 
