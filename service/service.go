@@ -349,15 +349,4 @@ func (svc *service) removeExcessEvents() {
 		Uint("below_id", deleteEventsBelowId).
 		Float64("duration_seconds", time.Since(startTime).Seconds()).
 		Msg("Removed excess events")
-
-	// TODO: REMOVE AFTER 2026-01-01
-	// this is needed due to cascading delete previously not working
-	err = svc.db.Exec("delete from response_events where request_id < ?", deleteEventsBelowId).Error
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Int("amount", numEventsToDelete).
-			Uint("below_id", deleteEventsBelowId).
-			Msg("Failed to delete excess response events")
-		return
-	}
 }
