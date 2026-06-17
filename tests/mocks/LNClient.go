@@ -2040,3 +2040,67 @@ func (_c *MockLNClient_UpdateLastWalletSyncRequest_Call) RunAndReturn(run func()
 	return _c
 }
 
+// SubscribeChannelAcceptor provides a mock function for the type MockLNClient
+func (_mock *MockLNClient) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SubscribeChannelAcceptor")
+	}
+
+	var r0 <-chan lnclient.ChannelAcceptRequest
+	var r1 func(id string, accept bool, zeroConf bool) error
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (<-chan lnclient.ChannelAcceptRequest, func(string, bool, bool) error, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) <-chan lnclient.ChannelAcceptRequest); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan lnclient.ChannelAcceptRequest)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) func(string, bool, bool) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(func(string, bool, bool) error)
+		}
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context) error); ok {
+		r2 = returnFunc(ctx)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockLNClient_SubscribeChannelAcceptor_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SubscribeChannelAcceptor'
+type MockLNClient_SubscribeChannelAcceptor_Call struct {
+	*mock.Call
+}
+
+// SubscribeChannelAcceptor is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockLNClient_Expecter) SubscribeChannelAcceptor(ctx interface{}) *MockLNClient_SubscribeChannelAcceptor_Call {
+	return &MockLNClient_SubscribeChannelAcceptor_Call{Call: _e.mock.On("SubscribeChannelAcceptor", ctx)}
+}
+
+func (_c *MockLNClient_SubscribeChannelAcceptor_Call) Run(run func(ctx context.Context)) *MockLNClient_SubscribeChannelAcceptor_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockLNClient_SubscribeChannelAcceptor_Call) Return(requests <-chan lnclient.ChannelAcceptRequest, acceptFn func(string, bool, bool) error, err error) *MockLNClient_SubscribeChannelAcceptor_Call {
+	_c.Call.Return(requests, acceptFn, err)
+	return _c
+}
+
+func (_c *MockLNClient_SubscribeChannelAcceptor_Call) RunAndReturn(run func(context.Context) (<-chan lnclient.ChannelAcceptRequest, func(string, bool, bool) error, error)) *MockLNClient_SubscribeChannelAcceptor_Call {
+	_c.Run(func(ctx context.Context) { run(ctx) })
+	return _c
+}
+
