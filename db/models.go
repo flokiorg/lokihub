@@ -68,7 +68,7 @@ type Transaction struct {
 	AppId           *uint
 	App             *App `gorm:"constraint:OnDelete:CASCADE;"`
 	RequestEventId  *uint
-	RequestEvent    *RequestEvent
+	RequestEvent    *RequestEvent `gorm:"constraint:OnDelete:SET NULL;foreignKey:RequestEventId"`
 	Type            string
 	State           string
 	AmountMloki     uint64 `gorm:"column:amount_mloki"`
