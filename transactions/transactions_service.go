@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -59,9 +58,14 @@ const (
 	CustomKeyTlvType  = 696969
 )
 
-// Prevent races when checking the current balance and creating payment
-// transactions from concurrent goroutines.
-var balanceValidationLock = &sync.Mutex{}
+// Payment atomicity is enforced at the database level:
+//   - SQLite: _txlock=immediate acquires a write lock at the start of every
+//     db.Transaction(), serialising all concurrent payment attempts.
+//   - PostgreSQL: the inner db.Transaction() uses READ COMMITTED isolation;
+//     duplicate-payment protection relies on the SETTLED/PENDING check inside
+//     the transaction being visible to concurrent writers (true once committed).
+//     For stricter budget isolation under high concurrency, upgrade to
+//     SERIALIZABLE or use per-app advisory locks.
 
 type Transaction = db.Transaction
 
@@ -79,7 +83,7 @@ type Boostagram struct {
 	SenderName      string         `json:"sender_name"`
 	Time            string         `json:"time"`
 	Action          string         `json:"action"`
-	ValueMlokiTotal int64          `json:"value_mloki_total"`
+	ValueMlokiTotal int64          `json:"value_msat_total"` // Podcasting 2.0 standard field name
 }
 
 type StringOrNumber struct {
@@ -370,57 +374,51 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		paymentAmount = *amountMloki
 	}
 
-	err = func() error {
-		balanceValidationLock.Lock()
-		defer balanceValidationLock.Unlock()
-		return svc.db.Transaction(func(tx *gorm.DB) error {
-			var existingSettledTransaction db.Transaction
-			if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
-				Type:        constants.TRANSACTION_TYPE_OUTGOING,
-				PaymentHash: paymentRequest.PaymentHash,
-				State:       constants.TRANSACTION_STATE_SETTLED,
-			}).RowsAffected > 0 {
-				svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice has already been paid")
-				return errors.New("this invoice has already been paid")
-			}
-			if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
-				Type:        constants.TRANSACTION_TYPE_OUTGOING,
-				PaymentHash: paymentRequest.PaymentHash,
-				State:       constants.TRANSACTION_STATE_PENDING,
-			}).RowsAffected > 0 {
-				svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice is already being paid")
-				return errors.New("there is already a payment pending for this invoice")
-			}
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		var existingSettledTransaction db.Transaction
+		if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: paymentRequest.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).RowsAffected > 0 {
+			svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice has already been paid")
+			return errors.New("this invoice has already been paid")
+		}
+		if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: paymentRequest.PaymentHash,
+			State:       constants.TRANSACTION_STATE_PENDING,
+		}).RowsAffected > 0 {
+			svc.logger.Debug().Str("payment_hash", dbTransaction.PaymentHash).Msg("this invoice is already being paid")
+			return errors.New("there is already a payment pending for this invoice")
+		}
 
-			err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment)
-			if err != nil {
-				return err
-			}
-
-			var expiresAt *time.Time
-			if paymentRequest.Expiry > 0 {
-				expiresAtValue := time.Now().Add(time.Duration(paymentRequest.Expiry) * time.Second)
-				expiresAt = &expiresAtValue
-			}
-			dbTransaction = db.Transaction{
-				AppId:           appId,
-				RequestEventId:  requestEventId,
-				Type:            constants.TRANSACTION_TYPE_OUTGOING,
-				State:           constants.TRANSACTION_STATE_PENDING,
-				FeeReserveMloki: CalculateFeeReserveMloki(paymentAmount),
-				AmountMloki:     paymentAmount,
-				PaymentRequest:  payReq,
-				PaymentHash:     paymentRequest.PaymentHash,
-				Description:     paymentRequest.Description,
-				DescriptionHash: paymentRequest.DescriptionHash,
-				ExpiresAt:       expiresAt,
-				SelfPayment:     selfPayment,
-				Metadata:        datatypes.JSON(metadataBytes),
-			}
-			err = tx.Create(&dbTransaction).Error
+		if err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment); err != nil {
 			return err
-		})
-	}()
+		}
+
+		var expiresAt *time.Time
+		if paymentRequest.Expiry > 0 {
+			expiresAtValue := time.Now().Add(time.Duration(paymentRequest.Expiry) * time.Second)
+			expiresAt = &expiresAtValue
+		}
+		dbTransaction = db.Transaction{
+			AppId:           appId,
+			RequestEventId:  requestEventId,
+			Type:            constants.TRANSACTION_TYPE_OUTGOING,
+			State:           constants.TRANSACTION_STATE_PENDING,
+			FeeReserveMloki: CalculateFeeReserveMloki(paymentAmount),
+			AmountMloki:     paymentAmount,
+			PaymentRequest:  payReq,
+			PaymentHash:     paymentRequest.PaymentHash,
+			Description:     paymentRequest.Description,
+			DescriptionHash: paymentRequest.DescriptionHash,
+			ExpiresAt:       expiresAt,
+			SelfPayment:     selfPayment,
+			Metadata:        datatypes.JSON(metadataBytes),
+		}
+		return tx.Create(&dbTransaction).Error
+	})
 
 	if err != nil {
 		svc.logger.Error().Err(err).
@@ -470,6 +468,19 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	}
 	if settledTransaction != nil {
 		svc.publishSettleEvent(settledTransaction)
+	} else {
+		// subscribePayments goroutine raced and settled the transaction first.
+		// markTransactionSettled returns nil to avoid double-firing the settle event,
+		// but we still need to return the record to the caller.
+		var existing db.Transaction
+		if err := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; err != nil {
+			return nil, fmt.Errorf("payment settled but transaction not found: %w", err)
+		}
+		settledTransaction = &existing
 	}
 
 	return settledTransaction, nil
@@ -513,34 +524,27 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 
 	selfPayment := destination == lnClient.GetPubkey()
 
-	err = func() error {
-		balanceValidationLock.Lock()
-		defer balanceValidationLock.Unlock()
-		return svc.db.Transaction(func(tx *gorm.DB) error {
-			err := svc.validateCanPay(tx, appId, amount, "", selfPayment)
-			if err != nil {
-				return err
-			}
-
-			dbTransaction = db.Transaction{
-				AppId:           appId,
-				Description:     svc.getDescriptionFromCustomRecords(customRecords),
-				RequestEventId:  requestEventId,
-				Type:            constants.TRANSACTION_TYPE_OUTGOING,
-				State:           constants.TRANSACTION_STATE_PENDING,
-				FeeReserveMloki: CalculateFeeReserveMloki(uint64(amount)),
-				AmountMloki:     amount,
-				Metadata:        datatypes.JSON(metadataBytes),
-				Boostagram:      datatypes.JSON(boostagramBytes),
-				PaymentHash:     paymentHash,
-				Preimage:        &preimage,
-				SelfPayment:     selfPayment,
-			}
-			err = tx.Create(&dbTransaction).Error
-
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		if err := svc.validateCanPay(tx, appId, amount, "", selfPayment); err != nil {
 			return err
-		})
-	}()
+		}
+
+		dbTransaction = db.Transaction{
+			AppId:           appId,
+			Description:     svc.getDescriptionFromCustomRecords(customRecords),
+			RequestEventId:  requestEventId,
+			Type:            constants.TRANSACTION_TYPE_OUTGOING,
+			State:           constants.TRANSACTION_STATE_PENDING,
+			FeeReserveMloki: CalculateFeeReserveMloki(uint64(amount)),
+			AmountMloki:     amount,
+			Metadata:        datatypes.JSON(metadataBytes),
+			Boostagram:      datatypes.JSON(boostagramBytes),
+			PaymentHash:     paymentHash,
+			Preimage:        &preimage,
+			SelfPayment:     selfPayment,
+		}
+		return tx.Create(&dbTransaction).Error
+	})
 
 	if err != nil {
 		svc.logger.Error().Err(err).
@@ -616,6 +620,19 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 	}
 	if settledTransaction != nil {
 		svc.publishSettleEvent(settledTransaction)
+	} else {
+		// subscribePayments goroutine raced and settled the transaction first.
+		// markTransactionSettled returns nil to avoid double-firing the settle event,
+		// but we still need to return the record to the caller.
+		var existing db.Transaction
+		if err := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; err != nil {
+			return nil, fmt.Errorf("payment settled but transaction not found: %w", err)
+		}
+		settledTransaction = &existing
 	}
 
 	return settledTransaction, nil
@@ -1121,69 +1138,79 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 		amountWithFeeReserve += CalculateFeeReserveMloki(amount)
 	}
 
-	// ensure balance for isolated apps
-	if appId != nil {
-		var app db.App
-		result := tx.Limit(1).Find(&app, &db.App{
-			ID: *appId,
-		})
-		if result.RowsAffected == 0 {
+	if appId == nil {
+		return nil
+	}
+
+	// Fetch app and its pay_invoice permission in a single JOIN so we only hit the DB once.
+	var row struct {
+		AppName       string
+		AppIsolated   bool
+		MaxAmountLoki int
+		BudgetRenewal string
+		PermAppId     uint
+	}
+	result := tx.Table("apps").
+		Select("apps.name AS app_name, apps.isolated AS app_isolated, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id").
+		Joins("JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope = ?", constants.PAY_INVOICE_SCOPE).
+		Where("apps.id = ?", *appId).
+		Scan(&row)
+	if result.Error != nil {
+		return result.Error
+	}
+	if row.PermAppId == 0 {
+		if tx.Limit(1).Find(&db.App{}, *appId).RowsAffected == 0 {
 			return NewNotFoundError()
 		}
+		return errors.New("app does not have pay_invoice scope")
+	}
 
-		var appPermission db.AppPermission
-		result = tx.Limit(1).Find(&appPermission, &db.AppPermission{
-			AppId: *appId,
-			Scope: constants.PAY_INVOICE_SCOPE,
-		})
-		if result.RowsAffected == 0 {
-			return errors.New("app does not have pay_invoice scope")
-		}
-
-		if app.Isolated {
-			balance := queries.GetIsolatedBalance(tx, appPermission.AppId)
-
-			if int64(amountWithFeeReserve) > balance {
-				svc.logger.Debug().
-					Int64("balance", balance).
-					Bool("self_payment", selfPayment).
-					Uint64("amount", amount).
-					Uint64("amount_with_fee_reserve", amountWithFeeReserve).
-					Msg("Insufficient budget to make payment from isolated app")
-				message := NewInsufficientBalanceError().Error()
-				if description != "" {
-					message += " " + description
-				}
-
-				svc.eventPublisher.Publish(&events.Event{
-					Event: "nwc_permission_denied",
-					Properties: map[string]interface{}{
-						"app_name": app.Name,
-						"code":     constants.ERROR_INSUFFICIENT_BALANCE,
-						"message":  message,
-					},
-				})
-				return NewInsufficientBalanceError()
+	if row.AppIsolated {
+		balance := queries.GetIsolatedBalance(tx, *appId)
+		if int64(amountWithFeeReserve) > balance {
+			svc.logger.Debug().
+				Int64("balance", balance).
+				Bool("self_payment", selfPayment).
+				Uint64("amount", amount).
+				Uint64("amount_with_fee_reserve", amountWithFeeReserve).
+				Msg("Insufficient budget to make payment from isolated app")
+			message := NewInsufficientBalanceError().Error()
+			if description != "" {
+				message += " " + description
 			}
+			svc.eventPublisher.Publish(&events.Event{
+				Event: "nwc_permission_denied",
+				Properties: map[string]interface{}{
+					"app_name": row.AppName,
+					"code":     constants.ERROR_INSUFFICIENT_BALANCE,
+					"message":  message,
+				},
+			})
+			return NewInsufficientBalanceError()
 		}
+	}
 
-		if appPermission.MaxAmountLoki > 0 {
-			budgetUsageSat := queries.GetBudgetUsageSat(tx, &appPermission)
-			if int(amountWithFeeReserve/1000) > appPermission.MaxAmountLoki-int(budgetUsageSat) {
-				message := NewQuotaExceededError().Error()
-				if description != "" {
-					message += " " + description
-				}
-				svc.eventPublisher.Publish(&events.Event{
-					Event: "nwc_permission_denied",
-					Properties: map[string]interface{}{
-						"app_name": app.Name,
-						"code":     constants.ERROR_QUOTA_EXCEEDED,
-						"message":  message,
-					},
-				})
-				return NewQuotaExceededError()
+	if row.MaxAmountLoki > 0 {
+		appPermission := db.AppPermission{
+			AppId:         *appId,
+			MaxAmountLoki: row.MaxAmountLoki,
+			BudgetRenewal: row.BudgetRenewal,
+		}
+		budgetUsageSat := queries.GetBudgetUsageSat(tx, &appPermission)
+		if int(amountWithFeeReserve/1000) > row.MaxAmountLoki-int(budgetUsageSat) {
+			message := NewQuotaExceededError().Error()
+			if description != "" {
+				message += " " + description
 			}
+			svc.eventPublisher.Publish(&events.Event{
+				Event: "nwc_permission_denied",
+				Properties: map[string]interface{}{
+					"app_name": row.AppName,
+					"code":     constants.ERROR_QUOTA_EXCEEDED,
+					"message":  message,
+				},
+			})
+			return NewQuotaExceededError()
 		}
 	}
 
