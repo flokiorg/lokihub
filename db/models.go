@@ -65,17 +65,17 @@ type ResponseEvent struct {
 
 type Transaction struct {
 	ID              uint
-	AppId           *uint
-	App             *App `gorm:"constraint:OnDelete:CASCADE;"`
+	AppId           *uint  `gorm:"index:idx_transactions_app_type_state,priority:1"`
+	App             *App   `gorm:"constraint:OnDelete:CASCADE;"`
 	RequestEventId  *uint
 	RequestEvent    *RequestEvent `gorm:"constraint:OnDelete:SET NULL;foreignKey:RequestEventId"`
-	Type            string
-	State           string
+	Type            string `gorm:"index:idx_transactions_app_type_state,priority:2"`
+	State           string `gorm:"index:idx_transactions_app_type_state,priority:3"`
 	AmountMloki     uint64 `gorm:"column:amount_mloki"`
 	FeeMloki        uint64
 	FeeReserveMloki uint64
 	PaymentRequest  string
-	PaymentHash     string
+	PaymentHash     string `gorm:"index"`
 	Description     string
 	DescriptionHash string
 	Preimage        *string
