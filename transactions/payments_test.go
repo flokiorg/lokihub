@@ -179,10 +179,14 @@ func TestMarkSettled_Sent(t *testing.T) {
 	mockEventConsumer := tests.NewMockEventConsumer()
 	svc.EventPublisher.RegisterSubscriber(mockEventConsumer)
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+	var settled *db.Transaction
 	err = svc.DB.Transaction(func(tx *gorm.DB) error {
-		_, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
+		settled, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
 		return err
 	})
+	if settled != nil {
+		transactionsService.publishSettleEvent(settled)
+	}
 
 	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, dbTransaction.State)
@@ -214,12 +218,16 @@ func TestMarkSettled_Twice(t *testing.T) {
 	for range n {
 		go func() {
 			defer wg.Done()
+			var settled *db.Transaction
 			err = svc.DB.Transaction(func(tx *gorm.DB) error {
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
-				_, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
+				settled, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
 				return err
 			})
+			if settled != nil {
+				transactionsService.publishSettleEvent(settled)
+			}
 			require.NoError(t, err)
 		}()
 	}
@@ -251,10 +259,14 @@ func TestMarkSettled_Received(t *testing.T) {
 	mockEventConsumer := tests.NewMockEventConsumer()
 	svc.EventPublisher.RegisterSubscriber(mockEventConsumer)
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+	var settled *db.Transaction
 	err = svc.DB.Transaction(func(tx *gorm.DB) error {
-		_, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
+		settled, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
 		return err
 	})
+	if settled != nil {
+		transactionsService.publishSettleEvent(settled)
+	}
 
 	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, dbTransaction.State)

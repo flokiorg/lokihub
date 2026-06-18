@@ -89,6 +89,9 @@ func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *ui
 	if err != nil {
 		return nil, err
 	}
+	if transaction == nil {
+		return nil, errors.New("payment settled but transaction record unavailable")
+	}
 	return toApiTransaction(transaction), nil
 }
 
