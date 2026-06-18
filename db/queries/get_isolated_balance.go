@@ -6,22 +6,19 @@ import (
 )
 
 func GetIsolatedBalance(tx *gorm.DB, appId uint) int64 {
-	var received struct {
-		Sum int64
+	var result struct {
+		Balance int64
 	}
-	tx.
-		Table("transactions").
-		Select("SUM(amount_mloki) as sum").
-		Where("app_id = ? AND type = ? AND state = ?", appId, constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_SETTLED).Scan(&received)
-
-	var spent struct {
-		Sum int64
-	}
-
-	tx.
-		Table("transactions").
-		Select("SUM(amount_mloki + fee_mloki + fee_reserve_mloki) as sum").
-		Where("app_id = ? AND type = ? AND (state = ? OR state = ?)", appId, constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED, constants.TRANSACTION_STATE_PENDING).Scan(&spent)
-
-	return received.Sum - spent.Sum
+	tx.Raw(`
+		SELECT
+			COALESCE(SUM(CASE WHEN type = ? AND state = ? THEN amount_mloki ELSE 0 END), 0) -
+			COALESCE(SUM(CASE WHEN type = ? AND (state = ? OR state = ?) THEN amount_mloki + fee_mloki + fee_reserve_mloki ELSE 0 END), 0)
+		AS balance
+		FROM transactions
+		WHERE app_id = ?`,
+		constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_SETTLED,
+		constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED, constants.TRANSACTION_STATE_PENDING,
+		appId,
+	).Scan(&result)
+	return result.Balance
 }
