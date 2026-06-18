@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/logger/crashlog"
 	"github.com/rs/zerolog"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -85,6 +86,12 @@ func Init(logLevel string) {
 
 func AddFileLogger(workdir string) error {
 	logFilePath = filepath.Join(workdir, logDir, logFilename)
+
+	crashLogPath := filepath.Join(workdir, logDir, "crash.log")
+	if crashFile, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		crashlog.RedirectStderr(crashFile)
+	}
+
 	fileLogger := &lumberjack.Logger{
 		Filename:   logFilePath,
 		MaxSize:    50, // MB — rotate before age if file grows large
