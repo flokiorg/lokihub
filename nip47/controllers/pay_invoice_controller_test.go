@@ -183,7 +183,7 @@ func TestHandlePayInvoiceEvent_MalformedInvoice(t *testing.T) {
 
 	assert.Nil(t, publishedResponse.Result)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
-	assert.Equal(t, "Failed to decode bolt11 invoice: bolt11 too short", publishedResponse.Error.Message)
+	assert.Equal(t, "Failed to decode bolt11 invoice: invalid flokicoin invoice prefix: ", publishedResponse.Error.Message)
 }
 
 func TestHandlePayInvoiceEvent_ExpiredInvoice(t *testing.T) {
