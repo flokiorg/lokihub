@@ -72,6 +72,21 @@ func (controller *nip47Controller) pay(bolt11 string, amount *uint64, metadata m
 		return
 	}
 
+	if transaction == nil || transaction.Preimage == nil {
+		logger.Logger.Error().
+			Interface("request_event_id", requestEventId).
+			Interface("app_id", app.ID).
+			Msg("Payment succeeded but transaction or preimage is nil")
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_INTERNAL,
+				Message: "payment completed but preimage unavailable",
+			},
+		}, tags)
+		return
+	}
+
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: payResponse{
