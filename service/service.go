@@ -309,44 +309,44 @@ func (svc *service) GetAppStoreSvc() appstore.Service {
 }
 
 func (svc *service) removeExcessEvents() {
-	logger.Logger.Debug().Msg("Cleaning up excess events")
+	const (
+		maxEvents         = 1000
+		maxEventsToDelete = 5000
+		minEventsToDelete = 100
+	)
 
-	maxEvents := 1000
-	// estimated less than 1 second to delete, it should not lock the DB
-	maxEventsToDelete := 5000
-	// if we only have a few excess events, don't run the task
-	minEventsToDelete := 100
-
-	var events []db.RequestEvent
-	err := svc.db.Select("id").Order("id asc").Limit(maxEvents + maxEventsToDelete).Find(&events).Error
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch request events")
+	var total int64
+	if err := svc.db.Model(&db.RequestEvent{}).Count(&total).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to count request events")
+		return
 	}
 
-	numEventsToDelete := len(events) - maxEvents
-
+	numEventsToDelete := int(total) - maxEvents
 	if numEventsToDelete < minEventsToDelete {
 		return
 	}
-	deleteEventsBelowId := events[numEventsToDelete].ID
+	if numEventsToDelete > maxEventsToDelete {
+		numEventsToDelete = maxEventsToDelete
+	}
 
-	logger.Logger.Debug().
-		Int("amount", numEventsToDelete).
-		Uint("below_id", deleteEventsBelowId).
-		Msg("Removing excess events")
+	logger.Logger.Debug().Int("amount", numEventsToDelete).Msg("Removing excess events")
 
+	// Delete the numEventsToDelete oldest rows without loading them into memory.
+	// The subquery finds the boundary ID: OFFSET (n-1) with ASC order lands on
+	// the last row to delete, so WHERE id <= boundary removes exactly n rows.
 	startTime := time.Now()
-	err = svc.db.Exec("delete from request_events where id < ?", deleteEventsBelowId).Error
-	if err != nil {
-		logger.Logger.Error().Err(err).
+	result := svc.db.Exec(
+		"DELETE FROM request_events WHERE id <= (SELECT id FROM request_events ORDER BY id ASC LIMIT 1 OFFSET ?)",
+		numEventsToDelete-1,
+	)
+	if result.Error != nil {
+		logger.Logger.Error().Err(result.Error).
 			Int("amount", numEventsToDelete).
-			Uint("below_id", deleteEventsBelowId).
 			Msg("Failed to delete excess request events")
 		return
 	}
 	logger.Logger.Info().
-		Int("amount", numEventsToDelete).
-		Uint("below_id", deleteEventsBelowId).
+		Int64("amount", result.RowsAffected).
 		Float64("duration_seconds", time.Since(startTime).Seconds()).
 		Msg("Removed excess events")
 }
