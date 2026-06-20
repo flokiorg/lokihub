@@ -39,15 +39,24 @@ export function SearchInput({
     <div
       className={cn("relative cursor-pointer", className)}
       onClick={handleClick}
+      dir={isRTL ? "rtl" : "ltr"}
     >
       <Input
         placeholder={placeholder}
         readOnly
-        className="cursor-pointer ps-8 pe-20 max-sm:w-32"
+        className={cn(
+          "cursor-pointer max-sm:w-32",
+          isRTL ? "pr-8 pl-3 sm:pl-20 text-right" : "pl-8 pr-3 sm:pr-20 text-left"
+        )}
         onKeyDown={handleKeyDown}
         tabIndex={0}
       />
-      <SearchIcon className="absolute start-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <SearchIcon
+        className={cn(
+          "absolute top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none",
+          isRTL ? "right-2" : "left-2"
+        )}
+      />
       <Badge
         variant="secondary"
         dir="ltr"

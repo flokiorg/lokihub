@@ -79,7 +79,7 @@ export function AppUsage({ app }: { app: App }) {
               <CardTitle>{t("usage.isolatedBalance", "Isolated Balance")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-end">
+              <div className="flex flex-wrap justify-between items-center sm:items-end gap-4">
                 <div>
                   <p className="font-medium text-2xl">
                     <FormattedFlokicoinAmount amount={app.balance} />
@@ -88,7 +88,7 @@ export function AppUsage({ app }: { app: App }) {
                     amount={Math.floor(app.balance / 1000)}
                   />
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                   {app.balance > 0 && (
                     <IsolatedAppDrawDownDialog appId={app.id}>
                       <Button size="sm" variant="outline">
