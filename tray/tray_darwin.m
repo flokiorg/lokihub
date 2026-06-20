@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 
 @interface TrayHandler : NSObject
 - (void)onShow:(id)sender;
@@ -7,6 +8,32 @@
 
 extern void goShowCallback();
 extern void goQuitCallback();
+
+// Called by macOS when the dock icon is clicked and no windows are visible.
+// Injected onto the Wails app delegate at startup so the dock click reopens
+// the window exactly like "Show Lokihub" in the tray menu.
+static BOOL dockReopenHandler(id self, SEL _cmd, NSApplication *app, BOOL hasVisibleWindows) {
+    if (!hasVisibleWindows) {
+        goShowCallback();
+    }
+    return YES;
+}
+
+void installDockReopenHandler(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        id delegate = [NSApp delegate];
+        if (!delegate) return;
+
+        Class cls = [delegate class];
+        SEL sel = @selector(applicationShouldHandleReopen:hasVisibleWindows:);
+
+        if (!class_getInstanceMethod(cls, sel)) {
+            class_addMethod(cls, sel, (IMP)dockReopenHandler, "B@:@B");
+        } else {
+            method_setImplementation(class_getInstanceMethod(cls, sel), (IMP)dockReopenHandler);
+        }
+    });
+}
 
 static NSStatusItem *statusItem;
 static TrayHandler *handler;

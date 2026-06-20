@@ -7,6 +7,7 @@ package tray
 void createTray(const char* title, const void* iconData, int iconLen);
 void hideFromDock(void);
 void showInDock(void);
+void installDockReopenHandler(void);
 */
 import "C"
 import "unsafe"
@@ -42,4 +43,5 @@ func Setup(title string, icon []byte, onShow func(), onQuit func()) {
 		iconPtr = unsafe.Pointer(&icon[0])
 	}
 	C.createTray(cTitle, iconPtr, C.int(len(icon)))
+	C.installDockReopenHandler()
 }
