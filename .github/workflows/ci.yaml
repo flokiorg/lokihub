@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-go:
+    name: Go build, vet, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race -count=1 ./...
+
+  lint-go:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  security-go:
+    name: govulncheck + gosec
+    runs-on: ubuntu-latest
+    # Non-blocking initially: the first run surfaced a real, pre-existing
+    # baseline (see docs/audits/security-self-review-2026-07.md / docs/audits/security-audit-scope.md)
+    # that hasn't been triaged yet. Flip continue-on-error to false once that
+    # baseline is either fixed or explicitly accepted.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: gosec
+        run: go run github.com/securego/gosec/v2/cmd/gosec@latest ./...
+
+  frontend:
+    name: Frontend lint, typecheck, build, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Set up Go
+        # Only needed for the osv-scanner dependency audit below - yarn
+        # classic's own `yarn audit` backend is permanently down (registry
+        # returns 410, a known yarn-v1 EOL issue), so this uses osv-scanner
+        # against yarn.lock directly instead. See docs/audits/security-audit-scope.md.
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build
+        run: yarn build:http
+
+      - name: Dependency audit
+        # Non-blocking initially: first run surfaced a real, untriaged
+        # baseline (see docs/audits/security-audit-scope.md) - mostly build-tooling
+        # transitive deps (vite/rollup/esbuild/babel), not runtime code.
+        continue-on-error: true
+        run: yarn run audit:deps
