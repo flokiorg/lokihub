@@ -10,8 +10,8 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
-	"github.com/flokiorg/lokihub/pkg/version"
 	"github.com/flokiorg/lokihub/swaps"
+	"github.com/flokiorg/lokihub/version"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -63,7 +63,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 		Msg("Starting Lokihub")
 
 	// To debug go-nostr, run with -tags "debug dev" (dev tag so FLND build doesn't break with debug tag set)
-	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=v1.20.0'" cmd/http/main.go
+	// go run -tags "debug dev" -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag=v1.20.0'" cmd/http/main.go
 	if logger.Logger.GetLevel() >= 4 {
 		nostr.InfoLogger.SetOutput(logger.Writer)
 		nostr.DebugLogger.SetOutput(logger.Writer)

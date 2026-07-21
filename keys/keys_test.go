@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests/db"

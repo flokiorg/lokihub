@@ -1,7 +1,7 @@
 package mocks
 
 import (
-	"github.com/flokiorg/lokihub/pkg/appstore"
+	"github.com/flokiorg/lokihub/appstore"
 	mock "github.com/stretchr/testify/mock"
 )
 

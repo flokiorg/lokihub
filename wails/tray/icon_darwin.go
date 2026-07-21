@@ -1,4 +1,5 @@
 //go:build darwin
+
 package tray
 
 // RenderIcon renders the SVG as a 36×36 full-colour PNG.

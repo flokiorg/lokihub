@@ -5,13 +5,13 @@
 package mocks
 
 import (
+	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
-	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 	mock "github.com/stretchr/testify/mock"

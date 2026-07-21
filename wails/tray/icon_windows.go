@@ -1,4 +1,5 @@
 //go:build windows
+
 package tray
 
 import (
@@ -47,11 +48,11 @@ func wrapICO(pngData []byte, w, h int) []byte {
 	binary.Write(buf, binary.LittleEndian, uint16(1)) // type = ICO
 	binary.Write(buf, binary.LittleEndian, uint16(1)) // image count
 	// Image directory entry
-	buf.Write([]byte{byte(w), byte(h), 0, 0})                        // w, h, colorcount, reserved
-	binary.Write(buf, binary.LittleEndian, uint16(1))                 // planes
-	binary.Write(buf, binary.LittleEndian, uint16(32))                // bit depth
-	binary.Write(buf, binary.LittleEndian, uint32(len(pngData)))      // data size
-	binary.Write(buf, binary.LittleEndian, offset)                    // data offset
+	buf.Write([]byte{byte(w), byte(h), 0, 0})                    // w, h, colorcount, reserved
+	binary.Write(buf, binary.LittleEndian, uint16(1))            // planes
+	binary.Write(buf, binary.LittleEndian, uint16(32))           // bit depth
+	binary.Write(buf, binary.LittleEndian, uint32(len(pngData))) // data size
+	binary.Write(buf, binary.LittleEndian, offset)               // data offset
 	// Image data
 	buf.Write(pngData)
 	return buf.Bytes()

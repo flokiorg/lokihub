@@ -1,4 +1,5 @@
 //go:build linux
+
 package tray
 
 // Linux system tray via the StatusNotifierItem D-Bus spec.
@@ -55,7 +56,7 @@ func (s *sniMethods) SecondaryActivate(x, y int32) *dbus.Error {
 	return nil
 }
 
-func (s *sniMethods) ContextMenu(x, y int32) *dbus.Error { return nil }
+func (s *sniMethods) ContextMenu(x, y int32) *dbus.Error                 { return nil }
 func (s *sniMethods) Scroll(delta int32, orientation string) *dbus.Error { return nil }
 
 // menuNode matches the D-Bus type (ia{sv}av) used by com.canonical.dbusmenu.
@@ -169,7 +170,7 @@ func pngToPixmaps(data []byte) []pixmap {
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			r, g, bv, a := img.At(x, y).RGBA()
-			i := ((y-b.Min.Y)*w + (x-b.Min.X)) * 4
+			i := ((y-b.Min.Y)*w + (x - b.Min.X)) * 4
 			argb[i] = byte(a >> 8)
 			argb[i+1] = byte(r >> 8)
 			argb[i+2] = byte(g >> 8)

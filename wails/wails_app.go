@@ -10,7 +10,7 @@ import (
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
-	lokitray "github.com/flokiorg/lokihub/tray"
+	lokitray "github.com/flokiorg/lokihub/wails/tray"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
