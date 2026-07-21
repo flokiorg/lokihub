@@ -21,15 +21,15 @@ type AppConfig struct {
 	FLNDCertFile     string `envconfig:"FLND_CERT_FILE"`
 	FLNDMacaroonFile string `envconfig:"FLND_MACAROON_FILE"`
 
-	Workdir             string `envconfig:"WORK_DIR"`
-	Port            string `envconfig:"PORT" default:"1610"`
-	DatabaseUri     string `envconfig:"DATABASE_URI" default:"nwc.db"`
-	LogLevel        string `envconfig:"LOG_LEVEL" default:"4"`
-	LogToFile       bool   `envconfig:"LOG_TO_FILE" default:"true"`
-	Network         string `envconfig:"NETWORK"`
-	MempoolApi      string `envconfig:"MEMPOOL_API"`
-	BaseUrl         string `envconfig:"BASE_URL"`
-	FrontendUrl     string `envconfig:"FRONTEND_URL"`
+	Workdir     string `envconfig:"WORK_DIR"`
+	Port        string `envconfig:"PORT" default:"1610"`
+	DatabaseUri string `envconfig:"DATABASE_URI" default:"nwc.db"`
+	LogLevel    string `envconfig:"LOG_LEVEL" default:"4"`
+	LogToFile   bool   `envconfig:"LOG_TO_FILE" default:"true"`
+	Network     string `envconfig:"NETWORK"`
+	MempoolApi  string `envconfig:"MEMPOOL_API"`
+	BaseUrl     string `envconfig:"BASE_URL"`
+	FrontendUrl string `envconfig:"FRONTEND_URL"`
 
 	GoProfilerAddr      string `envconfig:"GO_PROFILER_ADDR"`
 	EnableAdvancedSetup bool   `envconfig:"ENABLE_ADVANCED_SETUP" default:"true"`
@@ -43,6 +43,18 @@ type AppConfig struct {
 	EnableSwap            bool   `envconfig:"ENABLE_SWAP" default:"false"`
 	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 	LSP                   string `envconfig:"LSP"`
+
+	// JITWalletRateLimitPerHour caps create_jit_wallet calls per calling app
+	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
+	// against a shared long-lived hub).
+	JITWalletRateLimitPerHour int `envconfig:"JIT_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
+	// JITWalletClaimRateLimitPerHour caps claim_funds calls per calling jit_wallet
+	// app pubkey (separate limiter from JITWalletRateLimitPerHour). 0 disables
+	// the limit entirely.
+	JITWalletClaimRateLimitPerHour int `envconfig:"JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
+	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
+	// app pubkey. 0 disables the limit entirely.
+	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
 }
 
 func (c *AppConfig) GetBaseFrontendUrl() string {
@@ -83,6 +95,12 @@ type Config interface {
 	SetMessageboardNwcUrl(value string) error
 	GetRelay() string
 	SetRelay(value string) error
+	GetGeneralRelayUrls() []string
+	GetGeneralRelay() string
+	SetGeneralRelay(value string) error
+	GetSearchRelayUrls() []string
+	GetSearchRelay() string
+	SetSearchRelay(value string) error
 
 	EnableSwap() bool
 	SetEnableSwap(value bool) error

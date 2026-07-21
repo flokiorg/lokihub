@@ -120,6 +120,58 @@ func (_mock *MockKeys) GetAppWalletKey(childIndex uint) (string, error) {
 	return r0, r1
 }
 
+// GetJITPairingKey provides a mock function for the type MockKeys
+func (_mock *MockKeys) GetJITPairingKey(appID uint) (string, error) {
+	ret := _mock.Called(appID)
+	if len(ret) == 0 {
+		panic("no return value specified for GetJITPairingKey")
+	}
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(uint) (string, error)); ok {
+		return returnFunc(appID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(uint) string); ok {
+		r0 = returnFunc(appID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
+		r1 = returnFunc(appID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeys_GetJITPairingKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetJITPairingKey'
+type MockKeys_GetJITPairingKey_Call struct {
+	*mock.Call
+}
+
+// GetJITPairingKey is a helper method to define mock.On call
+//   - appID
+func (_e *MockKeys_Expecter) GetJITPairingKey(appID interface{}) *MockKeys_GetJITPairingKey_Call {
+	return &MockKeys_GetJITPairingKey_Call{Call: _e.mock.On("GetJITPairingKey", appID)}
+}
+
+func (_c *MockKeys_GetJITPairingKey_Call) Run(run func(appID uint)) *MockKeys_GetJITPairingKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint))
+	})
+	return _c
+}
+
+func (_c *MockKeys_GetJITPairingKey_Call) Return(s string, err error) *MockKeys_GetJITPairingKey_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockKeys_GetJITPairingKey_Call) RunAndReturn(run func(appID uint) (string, error)) *MockKeys_GetJITPairingKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // MockKeys_GetAppWalletKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAppWalletKey'
 type MockKeys_GetAppWalletKey_Call struct {
 	*mock.Call

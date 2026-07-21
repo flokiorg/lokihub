@@ -96,7 +96,7 @@ func TestHandleCreateConnectionEvent_PubkeyAlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 
 	appsSvc := apps.NewAppsService(svc.DB, svc.EventPublisher, svc.Keys, svc.Cfg)
-	_, _, err = appsSvc.CreateApp("Existing App", pairingPublicKey, 0, constants.BUDGET_RENEWAL_NEVER, nil, []string{models.GET_INFO_METHOD}, false, nil)
+	_, _, err = appsSvc.CreateApp("Existing App", pairingPublicKey, 0, constants.BUDGET_RENEWAL_NEVER, nil, []string{models.GET_INFO_METHOD}, db.AppKindStandard, nil, "", nil)
 
 	nip47CreateConnectionJson := fmt.Sprintf(`
 {

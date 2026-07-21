@@ -21,12 +21,122 @@ import (
 )
 
 type AppsService interface {
-	CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string, expiresAt *time.Time, scopes []string, isolated bool, metadata map[string]interface{}) (*db.App, string, error)
+	// CreateApp creates a new NWC app connection.
+	// kind must be one of the db.AppKind* constants.
+	// parentAppID / parentKind are set for sub-wallets (jit_wallet, circle_child).
+	CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, kind string,
+		parentAppID *uint, parentKind string,
+		metadata map[string]interface{}) (*db.App, string, error)
+	// CreateAppTx is CreateApp run inside a caller-provided transaction instead of
+	// opening its own. Use this when app creation must be atomic with another
+	// check made in the same transaction (e.g. a Postgres advisory lock guarding
+	// a budget-commitment check) — see create_circle_wallet_controller.go and
+	// create_jit_wallet_controller.go's allocation-claim path.
+	//
+	// Unlike CreateApp, this does NOT publish "nwc_app_created" itself — the
+	// caller's transaction is not guaranteed committed yet when CreateAppTx
+	// returns (there may be more work left in the same transaction, e.g. a
+	// membership-uniqueness insert), and createAppConsumer's event handler
+	// looks the new app up via a separate, non-transactional connection. If
+	// the event fired before commit, that lookup would race the commit and
+	// could miss it, permanently skipping the new app's relay subscription
+	// setup with no retry. The caller MUST call NotifyAppCreated(app) itself,
+	// once its own transaction has successfully committed.
+	CreateAppTx(tx *gorm.DB, name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, kind string,
+		parentAppID *uint, parentKind string,
+		metadata map[string]interface{}) (*db.App, string, error)
+	// NotifyAppCreated publishes the "nwc_app_created" event for app, which
+	// (among other things) triggers the new app's relay subscription setup.
+	// CreateApp calls this itself, after its own transaction commits. Callers
+	// of CreateAppTx must call this explicitly once their own outer
+	// transaction has committed — see CreateAppTx's doc comment.
+	NotifyAppCreated(app *db.App)
+	// CreateJITHub creates a jit_hub app and persists its JITHubConfig.
+	CreateJITHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
+		config db.JITHubConfig) (*db.App, string, error)
+	// GetJITHubConfig returns the JITHubConfig for a jit_hub app.
+	GetJITHubConfig(appID uint) (*db.JITHubConfig, error)
+	// UpdateJITHubConfig updates a jit_hub's PerWalletMaxMloki and/or MaxExpSecs.
+	// A nil pointer leaves that field unchanged; a non-nil pointer must be positive.
+	UpdateJITHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int) error
+	// CreateCircleHub creates a circle_hub app and persists its CircleHubConfig,
+	// attaching it to either an existing CircleIdentity (identityRef.ExistingID) or a
+	// brand-new one created from identityRef's remaining fields.
+	CreateCircleHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
+		identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error)
+	// GetCircleHubConfig returns the CircleHubConfig (with CircleIdentity preloaded)
+	// for a circle_hub app.
+	GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error)
+	// UpdateCircleHubConfig updates a circle_hub's MaxExpSecs, FeesPpm,
+	// PerWalletMaxMloki, and/or MinBudgetRenewal. A nil pointer leaves that
+	// field unchanged.
+	UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
+	CreateCircleIdentity(name, policy, providerPubkey string) (*db.CircleIdentity, error)
+	// GetCircleIdentity returns a CircleIdentity by ID.
+	GetCircleIdentity(id uint) (*db.CircleIdentity, error)
+	// ListCircleIdentities returns every CircleIdentity, ordered by ID.
+	ListCircleIdentities() ([]db.CircleIdentity, error)
+	// DeleteCircleIdentity refuses (ErrInvalidParams) if any circle_hub still
+	// references the identity; otherwise deletes it (cascading its allowlist).
+	DeleteCircleIdentity(id uint) error
 	DeleteApp(app *db.App) error
 	GetAppByPubkey(pubkey string) *db.App
 	GetAppById(id uint) *db.App
 	SetAppMetadata(appId uint, metadata map[string]interface{}) error
 	HasLightningAddress(app *db.App) bool
+
+	// CreateJITWalletClaims batch-inserts one JITWalletClaim row per recipient
+	// of a freshly-created, shared jit_wallet app. Called once by
+	// jitwallet.Commit right after the wallet app itself is created.
+	CreateJITWalletClaims(walletAppID uint, entries []db.JITWalletClaim) error
+	// ListClaimsForWallet returns every recipient slice (claimed or not) of a
+	// single jit_wallet app — the roster the list_recipients NIP-47 method
+	// exposes. Ordered by created_at asc.
+	ListClaimsForWallet(walletAppID uint) ([]db.JITWalletClaim, error)
+	// ListJITHubWalletChildren returns every jit_wallet app that is a child of
+	// hubID, queried directly from apps. Ordered by created_at asc.
+	ListJITHubWalletChildren(hubID uint) ([]db.App, error)
+	// ListJITWalletClaims returns every JITWalletClaim belonging to any
+	// jit_wallet child of hubID, joined with its wallet's ExpiresAt, newest
+	// first, unfiltered/unpaginated — the caller applies status filtering,
+	// counts, and pagination in memory.
+	ListJITWalletClaims(hubID uint) ([]JITWalletClaimRow, error)
+	// GetJITWalletClaim is a read-only lookup of one recipient's still-unclaimed
+	// slice, used by claim_funds to verify identity/attestation proof (which
+	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the
+	// atomic claim — so an invalid/unverifiable proof never touches the atomic
+	// slot at all, which would otherwise let anyone who merely knows a
+	// recipient's identity_value (exposed via list_recipients) briefly grief a
+	// legitimate concurrent claimer without ever proving ownership. Returns
+	// nil, nil if no unclaimed row matches.
+	GetJITWalletClaim(walletAppID uint, identityType, identityValue string) (*db.JITWalletClaim, error)
+	// ClaimJITWalletSlice atomically marks one recipient's slice claimed, guarded
+	// by "WHERE claimed_at IS NULL" so concurrent/replayed claims can't double-pay.
+	// Returns the claimed row's AmountMloki, or a constants.ErrInvalidParams-wrapped
+	// error if no matching unclaimed row exists (never existed, wrong identity, or
+	// already claimed — all three look identical to the caller by design).
+	ClaimJITWalletSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
+	// UnclaimJITWalletSlice reverts ClaimJITWalletSlice, guarded so it can only
+	// undo the exact claim it's asked to. Used to roll back a slice claim when
+	// the invoice-amount check or the payment itself subsequently fails.
+	UnclaimJITWalletSlice(walletAppID uint, identityType, identityValue string) error
+	// DeleteJITWalletClaim removes an unclaimed slice from a jit_wallet. Returns
+	// an error if the claim is not found, belongs to a different wallet, or has
+	// already been claimed. The caller is responsible for sweeping the slice's
+	// AmountMloki back to the hub before calling this.
+	DeleteJITWalletClaim(walletAppID uint, claimID uint) (*db.JITWalletClaim, error)
+}
+
+// JITWalletClaimRow is one row of ListJITWalletClaims' result — a
+// JITWalletClaim joined with its wallet's ExpiresAt.
+type JITWalletClaimRow struct {
+	db.JITWalletClaim
+	WalletExpiresAt *time.Time
 }
 
 type appsService struct {
@@ -45,16 +155,91 @@ func NewAppsService(db *gorm.DB, eventPublisher events.EventPublisher, keys keys
 	}
 }
 
-func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string, expiresAt *time.Time, scopes []string, isolated bool, metadata map[string]interface{}) (*db.App, string, error) {
+func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+	expiresAt *time.Time, scopes []string, kind string,
+	parentAppID *uint, parentKind string,
+	metadata map[string]interface{}) (*db.App, string, error) {
+
+	app, pairingSecretKey, err := svc.prepareApp(svc.db, name, pubkey, budgetRenewal, scopes, kind, parentAppID, parentKind, expiresAt, metadata)
+	if err != nil {
+		return nil, "", err
+	}
+
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		return svc.saveAppTx(tx, app, scopes, maxAmountLoki, budgetRenewal, expiresAt)
+	})
+
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to save app")
+		return nil, "", err
+	}
+
+	svc.NotifyAppCreated(app)
+
+	return app, pairingSecretKey, nil
+}
+
+// CreateAppTx is CreateApp run inside a caller-provided transaction. See the
+// interface doc comment for why this exists (atomicity with an advisory lock
+// held by the caller) and why, unlike CreateApp, it does not call
+// NotifyAppCreated itself.
+func (svc *appsService) CreateAppTx(tx *gorm.DB, name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+	expiresAt *time.Time, scopes []string, kind string,
+	parentAppID *uint, parentKind string,
+	metadata map[string]interface{}) (*db.App, string, error) {
+
+	app, pairingSecretKey, err := svc.prepareApp(tx, name, pubkey, budgetRenewal, scopes, kind, parentAppID, parentKind, expiresAt, metadata)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err := svc.saveAppTx(tx, app, scopes, maxAmountLoki, budgetRenewal, expiresAt); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to save app")
+		return nil, "", err
+	}
+
+	return app, pairingSecretKey, nil
+}
+
+// NotifyAppCreated publishes "nwc_app_created" for app. See the AppsService
+// interface doc comment on CreateAppTx for why this is a separate method
+// rather than something CreateAppTx calls itself.
+func (svc *appsService) NotifyAppCreated(app *db.App) {
+	svc.eventPublisher.Publish(&events.Event{
+		Event: "nwc_app_created",
+		Properties: map[string]interface{}{
+			"name": app.Name,
+			"id":   app.ID,
+		},
+	})
+}
+
+// prepareApp validates inputs, resolves the pairing keypair and a free name,
+// and builds the App row — everything that doesn't need to happen inside the
+// eventual save transaction. Shared by CreateApp and CreateAppTx. queryDB is
+// the handle its two uniqueness-check reads run against — CreateApp passes
+// svc.db (no transaction open yet), CreateAppTx passes the caller's tx. This
+// must be the caller's own transaction handle when called from CreateAppTx,
+// not svc.db: an independent read via svc.db while the caller's tx is still
+// open raced that open transaction (both contending on the same underlying
+// SQLite file lock) and could stall indefinitely — found via
+// create_circle_wallet_controller.go, the only CreateAppTx caller,
+// deadlocking inside its own outer transaction.
+func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string, budgetRenewal string, scopes []string, kind string,
+	parentAppID *uint, parentKind string, expiresAt *time.Time, metadata map[string]interface{}) (*db.App, string, error) {
+
 	if name == "" {
 		return nil, "", errors.New("no app name provided")
 	}
-	if isolated {
-		if slices.Contains(scopes, constants.SIGN_MESSAGE_SCOPE) {
-			// cannot sign messages because the isolated app is a custodial sub-wallet
-			return nil, "", errors.New("Sub-wallet app connection cannot have sign_message scope")
-		}
 
+	if kind == "" {
+		kind = db.AppKindStandard
+	}
+
+	if db.IsIsolatedKind(kind) {
+		if slices.Contains(scopes, constants.SIGN_MESSAGE_SCOPE) {
+			return nil, "", errors.New("sub-wallet app connection cannot have sign_message scope")
+		}
 	}
 
 	if budgetRenewal == "" {
@@ -65,7 +250,6 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		return nil, "", fmt.Errorf("invalid budget renewal. Must be one of %s", strings.Join(constants.GetBudgetRenewals(), ","))
 	}
 
-	// ensure there is at least one scope
 	if len(scopes) == 0 {
 		return nil, "", errors.New("no scopes provided")
 	}
@@ -81,7 +265,6 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		}
 	} else {
 		pairingPublicKey = pubkey
-		//validate public key
 		decoded, err := hex.DecodeString(pairingPublicKey)
 		if err != nil || len(decoded) != 32 {
 			logger.Logger.Error().Interface("pairingPublicKey", pairingPublicKey).Msg("Invalid public key format")
@@ -91,7 +274,6 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 
 	var metadataBytes []byte
 	if metadata != nil {
-		var err error
 		metadataBytes, err = json.Marshal(metadata)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to serialize metadata")
@@ -107,79 +289,111 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		if nameIndex > 0 {
 			freeName += fmt.Sprintf(" (%d)", nameIndex)
 		}
-		existingApp := svc.GetAppByName(freeName)
-		if existingApp == nil {
+		var existingApp db.App
+		err := queryDB.Where("name = ?", freeName).First(&existingApp).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			break
 		}
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
-	if svc.GetAppByPubkey(pairingPublicKey) != nil {
+	var existingByPubkey db.App
+	err = queryDB.Where("app_pubkey = ?", pairingPublicKey).First(&existingByPubkey).Error
+	if err == nil {
 		return nil, "", errors.New("duplicated key not allowed")
 	}
-
-	kind := db.AppKindStandard
-	if isolated {
-		kind = db.AppKindIsolated
-	}
-	app := db.App{Name: freeName, AppPubkey: pairingPublicKey, Kind: kind, Metadata: datatypes.JSON(metadataBytes)}
-
-	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		err := tx.Save(&app).Error
-		if err != nil {
-			return err
-		}
-
-		for _, scope := range scopes {
-			appPermission := db.AppPermission{
-				App:       app,
-				Scope:     scope,
-				ExpiresAt: expiresAt,
-				//these fields are only relevant for pay_invoice
-				MaxAmountLoki: int(maxAmountLoki),
-				BudgetRenewal: budgetRenewal,
-			}
-			err = tx.Create(&appPermission).Error
-			if err != nil {
-				return err
-			}
-		}
-
-		appWalletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
-		if err != nil {
-			return fmt.Errorf("error generating wallet child private key: %w", err)
-		}
-
-		appWalletPubkey, err := nostr.GetPublicKey(appWalletPrivKey)
-		if err != nil {
-			return fmt.Errorf("error generating wallet child public key: %w", err)
-		}
-
-		err = tx.Model(&app).Update("wallet_pubkey", appWalletPubkey).Error
-		if err != nil {
-			return err
-		}
-
-		// commit transaction
-		return nil
-	})
-
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to save app")
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, "", err
 	}
 
-	svc.eventPublisher.Publish(&events.Event{
-		Event: "nwc_app_created",
-		Properties: map[string]interface{}{
-			"name": name,
-			"id":   app.ID,
-		},
-	})
+	app := &db.App{
+		Name:        freeName,
+		AppPubkey:   pairingPublicKey,
+		Kind:        kind,
+		ParentAppID: parentAppID,
+		ParentKind:  parentKind,
+		ExpiresAt:   expiresAt,
+		Metadata:    datatypes.JSON(metadataBytes),
+	}
 
-	return &app, pairingSecretKey, nil
+	return app, pairingSecretKey, nil
+}
+
+// saveAppTx persists app, its AppPermission rows, and its derived wallet
+// pubkey, all within tx. Shared by CreateApp (which wraps it in its own
+// transaction) and CreateAppTx (which runs it inside the caller's).
+func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, maxAmountLoki uint64,
+	budgetRenewal string, expiresAt *time.Time) error {
+
+	if err := tx.Save(app).Error; err != nil {
+		return err
+	}
+
+	for _, scope := range scopes {
+		appPermission := db.AppPermission{
+			App:           *app,
+			Scope:         scope,
+			ExpiresAt:     expiresAt,
+			MaxAmountLoki: int(maxAmountLoki),
+			BudgetRenewal: budgetRenewal,
+		}
+		if err := tx.Create(&appPermission).Error; err != nil {
+			return err
+		}
+	}
+
+	appWalletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
+	if err != nil {
+		return fmt.Errorf("error generating wallet child private key: %w", err)
+	}
+
+	appWalletPubkey, err := nostr.GetPublicKey(appWalletPrivKey)
+	if err != nil {
+		return fmt.Errorf("error generating wallet child public key: %w", err)
+	}
+
+	return tx.Model(app).Update("wallet_pubkey", appWalletPubkey).Error
 }
 
 func (svc *appsService) DeleteApp(app *db.App) error {
+	if app.Kind == db.AppKindCircleHub {
+		var childCount int64
+		if err := svc.db.Model(&db.App{}).
+			Where("parent_app_id = ? AND parent_kind = ?", app.ID, db.ParentKindCircle).
+			Count(&childCount).Error; err != nil {
+			return err
+		}
+		if childCount > 0 {
+			// This generic delete has no cascade/balance-safety for circle_wallet
+			// children (App.ParentAppID has no DB-level cascade) — refuse rather than
+			// silently orphan them. Callers must use the dedicated
+			// POST /api/apps/:id/circle/delete flow (api.DeleteCircleHub), which
+			// checks each child's balance and lets the caller choose how to proceed.
+			return fmt.Errorf("%w: circle_hub still has %d member wallet(s); use the circle delete endpoint instead",
+				constants.ErrInvalidParams, childCount)
+		}
+	}
+	if app.Kind == db.AppKindJITHub {
+		var childCount int64
+		if err := svc.db.Model(&db.App{}).
+			Where("parent_app_id = ? AND parent_kind = ?", app.ID, db.ParentKindJIT).
+			Count(&childCount).Error; err != nil {
+			return err
+		}
+		if childCount > 0 {
+			// Same orphan hazard as circle_hub above: a jit_wallet child's
+			// parent_app_id has no DB-level cascade, and deleting the hub out
+			// from under it leaves the child's periodic reclaim
+			// (jit_cleanup_service.ReclaimAndDeleteSubWallet) trying to credit a
+			// parent app row that no longer exists — a FOREIGN KEY violation on
+			// every cleanup tick, forever. Refuse until the children have
+			// expired/reclaimed on their own or been deleted individually.
+			return fmt.Errorf("%w: jit_hub still has %d issued wallet(s); wait for them to expire/reclaim or delete them first",
+				constants.ErrInvalidParams, childCount)
+		}
+	}
 
 	err := svc.db.Delete(app).Error
 	if err != nil {

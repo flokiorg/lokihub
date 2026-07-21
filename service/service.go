@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/adrg/xdg"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
 	"github.com/joho/godotenv"
@@ -43,8 +43,10 @@ type service struct {
 	appStoreSvc         appstore.Service
 	eventPublisher      events.EventPublisher
 	ctx                 context.Context
-	wg                  *sync.WaitGroup
+	shutdownGroup       *errgroup.Group
+	nostrGroup          *errgroup.Group
 	nip47Service        nip47.Nip47Service
+	socialCache         *nostrSocialCache
 	lsps5Listener       *lspsnostr.Listener
 	liquidityManager    *manager.LiquidityManager
 	appCancelFn         context.CancelFunc
@@ -129,15 +131,16 @@ func NewService(ctx context.Context) (*service, error) {
 
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
-	var wg sync.WaitGroup
+	socialCache := NewNostrSocialCache(cfg)
+
 	svc := &service{
 		cfg:            cfg,
 		ctx:            ctx,
-		wg:             &wg,
 		eventPublisher: eventPublisher,
 		lokiSvc:        lokiSvc,
 
 		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher),
+		socialCache:         socialCache,
 		transactionsService: transactionsSvc,
 		db:                  gormDB,
 		keys:                keys,
@@ -237,8 +240,8 @@ func finishRestoreNode(workDir string) error {
 	return nil
 }
 
-func (svc *service) Shutdown() {
-	svc.StopApp()
+func (svc *service) Shutdown(ctx context.Context) {
+	svc.StopApp(ctx)
 	svc.eventPublisher.PublishSync(&events.Event{
 		Event: "nwc_stopped",
 	})
@@ -259,6 +262,31 @@ func (svc *service) GetLokiSvc() loki.LokiService {
 
 func (svc *service) GetNip47Service() nip47.Nip47Service {
 	return svc.nip47Service
+}
+
+// WarmCircleFollowingCache immediately fetches and caches providerPubkey's
+// contact list, returning the fetched set. Called right after creating a
+// following-policy Circle Hub, and reused by the manual "Sync" flow.
+func (svc *service) WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error) {
+	return svc.socialCache.WarmFollowingCache(ctx, providerPubkey)
+}
+
+// WarmGeneralRelays re-connects the shared Nostr pool to the current General
+// relay list — call after the user updates that setting.
+func (svc *service) WarmGeneralRelays() {
+	svc.socialCache.WarmGeneralRelays()
+}
+
+func (svc *service) ContactCount(ctx context.Context, ownerPubkey string) (int, error) {
+	return svc.socialCache.ContactCount(ctx, ownerPubkey)
+}
+
+func (svc *service) PeekContactCount(ownerPubkey string) (int, bool) {
+	return svc.socialCache.PeekContactCount(ownerPubkey)
+}
+
+func (svc *service) PeekContactSyncedAt(ownerPubkey string) (time.Time, bool) {
+	return svc.socialCache.PeekContactSyncedAt(ownerPubkey)
 }
 
 func (svc *service) GetEventPublisher() events.EventPublisher {

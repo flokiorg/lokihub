@@ -28,7 +28,7 @@ func CreateAppWithPrivateKey(svc *TestService, senderPrivkey, nip47Encryption st
 	}
 
 	var expiresAt *time.Time
-	app, pairingSecretKey, err := svc.AppsService.CreateApp("test", senderPubkey, 0, "monthly", expiresAt, []string{constants.GET_INFO_SCOPE}, false, nil)
+	app, pairingSecretKey, err := svc.AppsService.CreateApp("test", senderPubkey, 0, "monthly", expiresAt, []string{constants.GET_INFO_SCOPE}, "", nil, "", nil)
 	if pairingSecretKey == "" {
 		pairingSecretKey = senderPrivkey
 	}

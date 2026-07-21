@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 		return fmt.Errorf("failed to reset router: %w", err)
 	}
 	// Stop the app to ensure no new requests are processed.
-	api.svc.StopApp()
+	api.svc.StopApp(context.Background())
 
 	// Closing the database leaves the service in an inconsistent state,
 	// but that should not be a problem since the app is not expected
@@ -232,7 +233,7 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 
 	go func() {
 		logger.Logger.Info().Msg("Backup restored. Shutting down Lokihub...")
-		api.svc.Shutdown()
+		api.svc.Shutdown(context.Background())
 		// ensure no -shm or -wal files exist as they will stop the restore
 		for _, filename := range []string{"nwc.db", "nwc.db-shm", "nwc.db-wal"} {
 			err = os.Remove(filepath.Join(workDir, filename))

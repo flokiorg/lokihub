@@ -91,7 +91,7 @@ func TestHandleGetInfoEvent_SubwalletNoPermission(t *testing.T) {
 
 	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
 
-	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, true, metadata)
+	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", metadata)
 	assert.NoError(t, err)
 
 	nip47Request := &models.Request{}
@@ -195,7 +195,7 @@ func TestHandleGetInfoEvent_WithMetadata(t *testing.T) {
 		"a": 123,
 	}
 
-	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, false, metadata)
+	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindStandard, nil, "", metadata)
 	assert.NoError(t, err)
 
 	nip47Request := &models.Request{}
@@ -254,7 +254,7 @@ func TestHandleGetInfoEvent_SubwalletWithMetadata(t *testing.T) {
 	}
 
 	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
-	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, true, metadata)
+	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", metadata)
 	assert.NoError(t, err)
 
 	nip47Request := &models.Request{}
