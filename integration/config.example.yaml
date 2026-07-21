@@ -1,0 +1,13 @@
+# Copy this file to config.local.yaml (gitignored) and point it at a real,
+# already-running lokihub instance's admin API. See integration/README.md -
+# every jit_hub/circle_hub/simple-wallet fixture a test needs (including
+# synthetic Nostr identities for circle "following" policy) is provisioned
+# on demand through this API and torn down again afterward (see
+# ephemeral_test.go), so there's nothing else to hand-provision here.
+#
+# token is a bearer JWT, not a permanent API key - mint one with POST
+# {base_url}/api/unlock (unlock_password, permission: "full", an explicit
+# token_expiry_days), and refresh it here once it expires.
+admin_api:
+  base_url: "http://localhost:1610"
+  token: "<jwt from POST /api/unlock>"
