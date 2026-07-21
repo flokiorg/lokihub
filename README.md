@@ -138,7 +138,7 @@ For more information on the Go pprof library, see the [official documentation](h
 
 ### Versioning
 
-    $ go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=v0.1.0'" cmd/http/main.go
+    $ go run -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag=v0.1.0'" cmd/http/main.go
 
 ## Optional configuration parameters
 

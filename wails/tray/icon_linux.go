@@ -1,4 +1,5 @@
 //go:build linux
+
 package tray
 
 // RenderIcon renders the SVG as a 32×32 full-colour PNG for the

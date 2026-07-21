@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/lokihub/constants"
+	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"

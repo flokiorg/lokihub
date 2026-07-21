@@ -9,12 +9,12 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
-	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
 )

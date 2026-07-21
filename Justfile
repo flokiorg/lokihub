@@ -40,29 +40,29 @@ build-front:
 run-1:
     WORK_DIR=$(pwd)/data/account-1 \
     PORT=1610 \
-    go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'" ./cmd/http
+    go run -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'" ./cmd/http
 
 # Debug HTTP server locally (Account 1) with Delve
 debug-1:
     WORK_DIR=$(pwd)/data/account-1 \
     PORT=1610 \
-    dlv debug ./cmd/http --headless --listen=:2345 --api-version=2 --accept-multiclient -- -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"
+    dlv debug ./cmd/http --headless --listen=:2345 --api-version=2 --accept-multiclient -- -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'"
 
 # Run HTTP server locally (Account 2)
 run-2:
     WORK_DIR=$(pwd)/data/account-2 \
     PORT=1611 \
-    go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'" ./cmd/http
+    go run -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'" ./cmd/http
 
 # Run Wails app locally
 run-wails:
-    wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'"
+    wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'"
 
 # Run HTTP server locally (Account 3)
 run-3:
     WORK_DIR=$(pwd)/data/account-3 \
     PORT=1612 \
-    go run -ldflags="-X 'github.com/flokiorg/lokihub/pkg/version.Tag={{VERSION}}'" ./cmd/http
+    go run -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'" ./cmd/http
 
 # Start development environment
 rundev:

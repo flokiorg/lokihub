@@ -61,7 +61,7 @@ function Build-Http {
     $env:GOOS = "windows"
     $env:GOARCH = $Arch
     
-    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:VERSION_STRING)'" `
+    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=$($env:VERSION_STRING)'" `
         -o "ops/bin/$OutputName" ./cmd/http
 
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
@@ -105,7 +105,7 @@ function Build-Desktop {
     
     # We explicitly force windowsgui via Wails default behavior
     # LDFLAGS only needs version info now
-    $LdFlags = "-X 'github.com/flokiorg/lokihub/pkg/version.Tag=$($env:VERSION_STRING)'"
+    $LdFlags = "-X 'github.com/flokiorg/lokihub/version.Tag=$($env:VERSION_STRING)'"
 
     # 1. Enforce Clean Build
     if (Test-Path "build/bin") {
