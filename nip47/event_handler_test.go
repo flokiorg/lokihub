@@ -64,7 +64,7 @@ func doTestCreateResponse(t *testing.T, svc *tests.TestService, nip47Encryption 
 		},
 	}
 
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	res, err := nip47svc.CreateResponse(reqEvent, nip47Response, nostr.Tags{}, nip47Cipher, svc.Keys.GetNostrSecretKey())
 	assert.NoError(t, err)
@@ -102,7 +102,7 @@ func TestHandleResponse_Nip44_WithPermission(t *testing.T) {
 }
 
 func doTestHandleResponse_WithPermission(t *testing.T, svc *tests.TestService, createAppFn tests.CreateAppFn, encryption string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -190,7 +190,7 @@ func TestHandleResponse_Nip44_DuplicateRequest(t *testing.T) {
 }
 
 func doTestHandleResponse_DuplicateRequest(t *testing.T, svc *tests.TestService, createAppFn tests.CreateAppFn, encryption string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -264,7 +264,7 @@ func TestHandleResponse_Nip44_NoPermission(t *testing.T) {
 }
 
 func doTestHandleResponse_NoPermission(t *testing.T, svc *tests.TestService, createAppFn tests.CreateAppFn, encryption string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -335,7 +335,7 @@ func TestHandleResponse_Nip44_OldRequestForPayment(t *testing.T) {
 }
 
 func doTestHandleResponse_OldRequestForPayment(t *testing.T, svc *tests.TestService, createAppFn tests.CreateAppFn, encryption string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -410,7 +410,7 @@ func TestHandleResponse_Nip44_IncorrectPubkey(t *testing.T) {
 }
 
 func doTestHandleResponse_IncorrectPubkey(t *testing.T, svc *tests.TestService, createAppFn tests.CreateAppFn, encryption string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -467,7 +467,7 @@ func TestHandleResponse_NoApp(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -519,7 +519,7 @@ func TestHandleResponse_UnknownEncryptionTag(t *testing.T) {
 }
 
 func doTestHandleResponse_UnknownEncryptionTag(t *testing.T, svc *tests.TestService, requestEncryptionTag string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -590,7 +590,7 @@ func TestHandleResponse_EncryptionTagDoesNotMatchPayload(t *testing.T) {
 }
 
 func doTestHandleResponse_EncryptionTagDoesNotMatchPayload(t *testing.T, svc *tests.TestService, requestEncryption, requestEncryptionTag string) {
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher)
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
 
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
@@ -655,4 +655,222 @@ func doTestHandleResponse_EncryptionTagDoesNotMatchPayload(t *testing.T, svc *te
 	// assert.Equal(t, models.GET_INFO_METHOD, unmarshalledResponse.ResultType)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, unmarshalledResponse.Error.Code)
 	assert.Contains(t, unmarshalledResponse.Error.Message, "failed to decrypt:")
+}
+
+// TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList
+// verifies the jit_wallet-specific carve-out from the system-wide
+// always-granted method list: get_budget would otherwise reveal a shared
+// wallet's total funded amount (across every recipient) to anyone holding
+// the connection, with no proof required — this must be blocked even though
+// get_budget is unconditionally allowed for every other app kind.
+func TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	app, _, err := svc.AppsService.CreateApp(
+		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
+	require.NoError(t, err)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, models.GET_BUDGET_METHOD)
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
+}
+
+// TestHandleEvent_JITWallet_GetInfo_StillAllowed proves the carve-out is
+// correctly scoped: get_info (harmless capability/introspection metadata,
+// needed for standard NWC client handshake compatibility) must keep working
+// for a jit_wallet even though get_budget doesn't.
+func TestHandleEvent_JITWallet_GetInfo_StillAllowed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	app, _, err := svc.AppsService.CreateApp(
+		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
+	require.NoError(t, err)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, models.GET_INFO_METHOD)
+	assert.Nil(t, response.Error)
+	assert.Equal(t, models.GET_INFO_METHOD, response.ResultType)
+}
+
+// TestHandleEvent_NonJITWallet_GetBudget_StillAllowed confirms the carve-out
+// is specific to AppKindJITWallet and doesn't regress get_budget for any
+// other app kind.
+func TestHandleEvent_NonJITWallet_GetBudget_StillAllowed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	app, cipher, err := tests.CreateAppWithPrivateKey(svc, reqPrivateKey, constants.ENCRYPTION_TYPE_NIP44_V2)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID, App: *app, Scope: constants.PAY_INVOICE_SCOPE,
+	}).Error)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, cipher, reqPrivateKey, reqPubkey, models.GET_BUDGET_METHOD)
+	assert.Nil(t, response.Error)
+	assert.Equal(t, models.GET_BUDGET_METHOD, response.ResultType)
+}
+
+// TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired verifies
+// that a jit_wallet's own ExpiresAt is enforced for claim_funds. Unlike
+// get_budget, claim_funds is not on the always-granted list, so it goes
+// through the normal HasPermission(app, scope) path in HandleEvent — this
+// confirms that path's ExpiresAt check actually fires for a jit_wallet's
+// shared connection, before any claim proof is ever parsed.
+func TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	expiresAt := time.Now().Add(-time.Hour)
+	app, _, err := svc.AppsService.CreateApp(
+		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
+	require.NoError(t, err)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodClaimFunds)
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
+}
+
+// TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired covers
+// the read-only sibling method under the same jit_claim_funds scope —
+// expiry must block roster visibility too, not just the payout call.
+func TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	expiresAt := time.Now().Add(-time.Hour)
+	app, _, err := svc.AppsService.CreateApp(
+		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
+	require.NoError(t, err)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodListRecipients)
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
+}
+
+// TestHandleEvent_JITWallet_CreateConnection_Rejected is a privilege-
+// escalation probe: create_connection requires SUPERUSER_SCOPE, which a
+// jit_wallet is never granted (only jit_claim_funds + get_balance, see
+// jitwallet/create.go). If this method were ever reachable from a jit_wallet's
+// shared connection, holding it would be enough to mint a brand new,
+// unrestricted sibling connection and drain the parent hub — this confirms
+// the generic scope gate actually blocks it, the same way it blocks every
+// other ungranted method, as a regression guard specifically for the
+// highest-value method to leave open by accident.
+func TestHandleEvent_JITWallet_CreateConnection_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+
+	reqPrivateKey := nostr.GeneratePrivateKey()
+	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	require.NoError(t, err)
+
+	app, _, err := svc.AppsService.CreateApp(
+		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
+	require.NoError(t, err)
+
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, models.CREATE_CONNECTION_METHOD)
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
+}
+
+// doHandleEventForMethod builds, signs, and dispatches a bare (no-params)
+// NIP-47 request event for method, and returns the decrypted response.
+func doHandleEventForMethod(t *testing.T, svc *tests.TestService, nip47svc *nip47Service, nip47Cipher *cipher.Nip47Cipher, reqPrivateKey, reqPubkey, method string) models.Response {
+	t.Helper()
+
+	content := map[string]interface{}{"method": method}
+	payloadBytes, err := json.Marshal(content)
+	require.NoError(t, err)
+
+	msg, err := nip47Cipher.Encrypt(string(payloadBytes))
+	require.NoError(t, err)
+
+	reqEvent := &nostr.Event{
+		Kind:      models.REQUEST_KIND,
+		PubKey:    reqPubkey,
+		CreatedAt: nostr.Now(),
+		Tags:      nostr.Tags{{"encryption", constants.ENCRYPTION_TYPE_NIP44_V2}},
+		Content:   msg,
+	}
+	require.NoError(t, reqEvent.Sign(reqPrivateKey))
+
+	pool := tests.NewMockSimplePool()
+	nip47svc.HandleEvent(context.TODO(), pool, reqEvent, svc.LNClient)
+
+	require.NotEmpty(t, pool.PublishedEvents)
+	decrypted, err := nip47Cipher.Decrypt(pool.PublishedEvents[0].Content)
+	require.NoError(t, err)
+
+	var response models.Response
+	require.NoError(t, json.Unmarshal([]byte(decrypted), &response))
+	return response
 }

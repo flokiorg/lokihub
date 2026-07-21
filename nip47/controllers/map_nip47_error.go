@@ -19,6 +19,9 @@ func mapNip47Error(err error) *models.Error {
 	if errors.Is(err, transactions.NewQuotaExceededError()) {
 		code = constants.ERROR_QUOTA_EXCEEDED
 	}
+	if errors.Is(err, transactions.NewJITPartialSpendError()) {
+		code = constants.ERROR_RESTRICTED
+	}
 
 	return &models.Error{
 		Code:    code,

@@ -37,9 +37,20 @@ type transactionsService struct {
 	logger           zerolog.Logger
 }
 
+// InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
+// It is never populated from NIP-47 or HTTP request params — untrusted callers pass nil.
+type InternalMakeInvoiceMeta struct {
+	// OverrideAppID, when non-nil, replaces the appId parameter.
+	// Used only by the Transfer endpoint to route an invoice to a specific sub-wallet.
+	OverrideAppID *uint
+	// InternalTransfer marks the invoice as a hub-internal fund movement,
+	// skipping JIT liquidity provisioning and external fee checks.
+	InternalTransfer bool
+}
+
 type TransactionsService interface {
 	events.EventSubscriber
-	MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (*Transaction, error)
+	MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32, internal *InternalMakeInvoiceMeta) (*Transaction, error)
 	LookupTransaction(ctx context.Context, paymentHash string, transactionType *string, lnClient lnclient.LNClient, appId *uint) (*Transaction, error)
 	ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaidOutgoing bool, unpaidIncoming bool, transactionType *string, lnClient lnclient.LNClient, appId *uint, forceFilterByAppId bool) (transactions []Transaction, totalCount uint64, err error)
 	SendPaymentSync(payReq string, amountMloki *uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint) (*Transaction, error)
@@ -50,6 +61,7 @@ type TransactionsService interface {
 	SetTransactionMetadata(ctx context.Context, id uint, metadata map[string]interface{}) error
 	SetLiquidityManager(lm *manager.LiquidityManager)
 	EstimateFee(payReq string) (uint64, error)
+	SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient)
 }
 
 const (
@@ -61,11 +73,9 @@ const (
 // Payment atomicity is enforced at the database level:
 //   - SQLite: _txlock=immediate acquires a write lock at the start of every
 //     db.Transaction(), serialising all concurrent payment attempts.
-//   - PostgreSQL: the inner db.Transaction() uses READ COMMITTED isolation;
-//     duplicate-payment protection relies on the SETTLED/PENDING check inside
-//     the transaction being visible to concurrent writers (true once committed).
-//     For stricter budget isolation under high concurrency, upgrade to
-//     SERIALIZABLE or use per-app advisory locks.
+//   - PostgreSQL: pg_advisory_xact_lock(appId) is acquired at the start of each
+//     payment transaction, serialising concurrent payments to the same app.
+//     The lock is released automatically on transaction commit or rollback.
 
 type Transaction = db.Transaction
 
@@ -143,6 +153,44 @@ func (err *quotaExceededError) Error() string {
 	return "Your app does not have enough budget remaining to make this payment. Please review this app in the connections page of your Lokihub."
 }
 
+type jitPartialSpendError struct{}
+
+func NewJITPartialSpendError() error {
+	return &jitPartialSpendError{}
+}
+
+func (err *jitPartialSpendError) Error() string {
+	return "JIT wallet must be drained in a single payment (no partial spends allowed)"
+}
+
+// enforceJITFullDrain returns jitPartialSpendError if a JIT wallet payment would
+// leave more than its fee reserve behind. Shared by SendPaymentSync and
+// SendKeysend so the two payment paths can't silently diverge on this check —
+// they previously duplicated it, and only one of the two copies carried the
+// internal-transfer exemption. isInternalTransfer and isJITClaimSlice are
+// explicit at every call site (SendKeysend currently has neither path and
+// passes false for both) so that a future addition to either path only needs
+// to thread its own metadata flag through, not rediscover this rule.
+//
+// isJITClaimSlice exempts claim_funds' payout of one recipient's slice of a
+// SHARED jit_wallet (see nip47/controllers/claim_funds_controller.go). This
+// whole-wallet-balance check is wrong for that case: it would reject a
+// recipient's payout whenever OTHER recipients' unclaimed slices are still
+// sitting in the same balance. claim_funds already enforces the correct,
+// stronger, per-slice exact-amount rule itself before calling
+// SendPaymentSync/SendKeysend with this flag set — this check only ever
+// exists to catch partial spends on an otherwise-unconstrained payment path.
+func enforceJITFullDrain(parentKind string, balance int64, amount uint64, isInternalTransfer, isJITClaimSlice bool) error {
+	if parentKind != db.ParentKindJIT || isInternalTransfer || isJITClaimSlice {
+		return nil
+	}
+	feeReserve := CalculateFeeReserveMloki(amount)
+	if balance-int64(amount) > int64(feeReserve) {
+		return NewJITPartialSpendError()
+	}
+	return nil
+}
+
 func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *transactionsService {
 	return &transactionsService{
 		db:             db,
@@ -155,7 +203,7 @@ func (svc *transactionsService) SetLiquidityManager(lm *manager.LiquidityManager
 	svc.liquidityManager = lm
 }
 
-func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (*Transaction, error) {
+func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, description string, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, appId *uint, requestEventId *uint, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32, internal *InternalMakeInvoiceMeta) (*Transaction, error) {
 	svc.logger.Debug().
 		Interface("app_id", appId).
 		Interface("request_event_id", requestEventId).
@@ -179,26 +227,23 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		}
 	}
 
-	if metadata["app_id"] != nil {
-		overwriteAppIdType, ok := metadata["app_id"].(float64)
-		if !ok {
-			return nil, errors.New("failed to overwrite app ID")
+	// Apply trusted caller overrides. Sanitize the user-supplied metadata map to
+	// prevent any injected "app_id" or "internal_transfer" keys from having effect.
+	if metadata != nil {
+		delete(metadata, "app_id")
+		delete(metadata, "internal_transfer")
+	}
+	isInternalTransfer := false
+	if internal != nil {
+		if internal.OverrideAppID != nil {
+			svc.logger.Info().Uint("app_id", *internal.OverrideAppID).Msg("Making invoice with overwritten app ID")
+			appId = internal.OverrideAppID
 		}
-		overwriteAppId := uint(overwriteAppIdType)
-		svc.logger.Info().Uint("app_id", overwriteAppId).Msg("Making invoice with overwritten app ID")
-		appId = &overwriteAppId
+		isInternalTransfer = internal.InternalTransfer
 	}
 
 	// JIT Liquidity Check
 	invoiceAmount := amount // Default to requested amount
-	isInternalTransfer := false
-	if metadata != nil {
-		if val, ok := metadata["internal_transfer"]; ok {
-			if boolVal, ok := val.(bool); ok && boolVal {
-				isInternalTransfer = true
-			}
-		}
-	}
 
 	if svc.liquidityManager != nil && lspJitChannelSCID == nil && !isInternalTransfer {
 		jitHints, err := svc.liquidityManager.EnsureInboundLiquidity(ctx, amount) // Buy for GROSS amount
@@ -375,6 +420,12 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	}
 
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		if tx.Dialector.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil {
+				return fmt.Errorf("acquire payment lock: %w", err)
+			}
+		}
+
 		var existingSettledTransaction db.Transaction
 		if tx.Limit(1).Find(&existingSettledTransaction, &db.Transaction{
 			Type:        constants.TRANSACTION_TYPE_OUTGOING,
@@ -393,7 +444,26 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			return errors.New("there is already a payment pending for this invoice")
 		}
 
-		if err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment); err != nil {
+		// Internal transfers (hub cleanup, self-payment) and claim_funds' own
+		// per-slice payout (which enforces its own, stronger exact-amount rule
+		// upstream) are exempt from both the fee-reserve balance/quota headroom
+		// (validateCanPay) and the whole-wallet full-drain shape check
+		// (enforceJITFullDrain) below. Internal transfers are additionally
+		// exempt from the MaxAmountLoki budget cap itself (skipBudgetCap) -
+		// see validateCanPay's doc comment.
+		isInternalTransfer, _ := metadata["internal_transfer"].(bool)
+		isJITClaimSlice, _ := metadata["jit_claim_slice"].(bool)
+
+		balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment, validateCanPayExemptions{
+			SkipFeeReserve: isJITClaimSlice,
+			SkipBudgetCap:  isInternalTransfer,
+		})
+		if err != nil {
+			return err
+		}
+		// JIT wallets must drain their full balance in a single payment.
+		// Enforced here (shared layer) so the HTTP API and keysend paths cannot bypass it.
+		if err := enforceJITFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isJITClaimSlice); err != nil {
 			return err
 		}
 
@@ -408,6 +478,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			Type:            constants.TRANSACTION_TYPE_OUTGOING,
 			State:           constants.TRANSACTION_STATE_PENDING,
 			FeeReserveMloki: CalculateFeeReserveMloki(paymentAmount),
+			FeeSkimMloki:    feeSkimMloki,
 			AmountMloki:     paymentAmount,
 			PaymentRequest:  payReq,
 			PaymentHash:     paymentRequest.PaymentHash,
@@ -446,15 +517,41 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	}
 
 	if err != nil {
-		svc.logger.Error().Err(err).
+		rpcErr := err
+		svc.logger.Error().Err(rpcErr).
 			Str("bolt11", payReq).
 			Msg("Failed to send payment")
 
-		svc.db.Transaction(func(tx *gorm.DB) error {
-			return svc.markPaymentFailed(tx, &dbTransaction, err.Error())
+		var failedTransaction *db.Transaction
+		dbErr := svc.db.Transaction(func(tx *gorm.DB) error {
+			var markErr error
+			failedTransaction, markErr = svc.markPaymentFailed(tx, &dbTransaction, rpcErr.Error())
+			return markErr
 		})
+		if dbErr != nil {
+			return nil, dbErr
+		}
+		if failedTransaction != nil {
+			return nil, rpcErr
+		}
 
-		return nil, err
+		// markPaymentFailed no-opped: most likely the payment-sent-event
+		// subscription already settled this same payment hash before this
+		// error branch ran (see markPaymentFailed's doc comment). Re-fetch and
+		// return the settled transaction instead of surfacing a stale RPC
+		// error for a payment that actually went out - mirrors the identical
+		// re-fetch pattern used below for the success-path settle race.
+		var existing db.Transaction
+		if lookupErr := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; lookupErr != nil {
+			// Not actually settled (e.g. the no-op was an already-FAILED
+			// duplicate call) - the original RPC error is the right one to surface.
+			return nil, rpcErr
+		}
+		return &existing, nil
 	}
 
 	// the payment definitely succeeded
@@ -525,7 +622,18 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 	selfPayment := destination == lnClient.GetPubkey()
 
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		if err := svc.validateCanPay(tx, appId, amount, "", selfPayment); err != nil {
+		if tx.Dialector.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil {
+				return fmt.Errorf("acquire payment lock: %w", err)
+			}
+		}
+
+		balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, amount, "", selfPayment, validateCanPayExemptions{})
+		if err != nil {
+			return err
+		}
+		// SendKeysend has no internal-transfer or claim_funds path today (see enforceJITFullDrain doc).
+		if err := enforceJITFullDrain(parentKind, balance, amount, false, false); err != nil {
 			return err
 		}
 
@@ -536,6 +644,7 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			Type:            constants.TRANSACTION_TYPE_OUTGOING,
 			State:           constants.TRANSACTION_STATE_PENDING,
 			FeeReserveMloki: CalculateFeeReserveMloki(uint64(amount)),
+			FeeSkimMloki:    feeSkimMloki,
 			AmountMloki:     amount,
 			Metadata:        datatypes.JSON(metadataBytes),
 			Boostagram:      datatypes.JSON(boostagramBytes),
@@ -589,23 +698,38 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 	}
 
 	if err != nil {
-		svc.logger.Error().Err(err).
+		rpcErr := err
+		svc.logger.Error().Err(rpcErr).
 			Str("destination", destination).
 			Uint64("amount", amount).
 			Msg("Failed to send payment")
 
-		dbErr := svc.db.Model(&dbTransaction).Updates(&db.Transaction{
-			PaymentHash: paymentHash,
-			State:       constants.TRANSACTION_STATE_FAILED,
-		}).Error
+		// Route through markPaymentFailed (not a raw Updates() call) so this
+		// shares its guard against downgrading an already-SETTLED transaction -
+		// the async payment-sent-event subscription can settle this same
+		// payment hash before this error branch runs, same as SendPaymentSync.
+		var failedTransaction *db.Transaction
+		dbErr := svc.db.Transaction(func(tx *gorm.DB) error {
+			var markErr error
+			failedTransaction, markErr = svc.markPaymentFailed(tx, &dbTransaction, rpcErr.Error())
+			return markErr
+		})
 		if dbErr != nil {
-			svc.logger.Error().Err(dbErr).
-				Str("destination", destination).
-				Uint64("amount", amount).
-				Msg("Failed to update DB transaction")
+			return nil, dbErr
+		}
+		if failedTransaction != nil {
+			return nil, rpcErr
 		}
 
-		return nil, err
+		var existing db.Transaction
+		if lookupErr := svc.db.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			PaymentHash: dbTransaction.PaymentHash,
+			State:       constants.TRANSACTION_STATE_SETTLED,
+		}).First(&existing).Error; lookupErr != nil {
+			return nil, rpcErr
+		}
+		return &existing, nil
 	}
 
 	// the payment definitely succeeded
@@ -687,7 +811,7 @@ func (svc *transactionsService) LookupTransaction(ctx context.Context, paymentHa
 	}
 
 	if transaction.State == constants.TRANSACTION_STATE_PENDING {
-		svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
+		_ = svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
 	}
 
 	return &transaction, nil
@@ -777,12 +901,12 @@ func (svc *transactionsService) checkUnsettledTransactions(ctx context.Context, 
 		return
 	}
 	for _, transaction := range transactions {
-		svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
+		_ = svc.checkUnsettledTransaction(ctx, &transaction, lnClient)
 	}
 }
-func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, transaction *db.Transaction, lnClient lnclient.LNClient) {
+func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, transaction *db.Transaction, lnClient lnclient.LNClient) error {
 	if slices.Contains(lnClient.GetSupportedNIP47NotificationTypes(), "payment_received") {
-		return
+		return nil
 	}
 
 	lnClientTransaction, err := lnClient.LookupInvoice(ctx, transaction.PaymentHash)
@@ -790,7 +914,7 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 		svc.logger.Error().Err(err).
 			Str("bolt11", transaction.PaymentRequest).
 			Msg("Failed to check transaction")
-		return
+		return err
 	}
 	// update transaction state
 	if lnClientTransaction.SettledAt != nil {
@@ -805,6 +929,46 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 			svc.logger.Error().Err(err).Msg("Failed to mark payment sent when checking unsettled transaction")
 		} else if settledTx != nil {
 			svc.publishSettleEvent(settledTx)
+		}
+	}
+	return nil
+}
+
+const stalePendingTTL = 48 * time.Hour
+
+// SweepStalePendingOutgoing cancels outgoing payments that have been stuck in
+// PENDING state for longer than stalePendingTTL (2× the practical HTLC expiry
+// window). Before cancelling, it attempts LN reconciliation so that a payment
+// which did settle is correctly marked as successful rather than failed.
+func (svc *transactionsService) SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient) {
+	var stale []db.Transaction
+	cutoff := time.Now().Add(-stalePendingTTL)
+	if err := svc.db.Where(
+		"type = ? AND state = ? AND created_at < ?",
+		constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING, cutoff,
+	).Find(&stale).Error; err != nil {
+		svc.logger.Error().Err(err).Msg("SweepStalePendingOutgoing: failed to query stale transactions")
+		return
+	}
+
+	for i := range stale {
+		if err := svc.checkUnsettledTransaction(ctx, &stale[i], lnClient); err != nil {
+			// LN node was unreachable — payment state is unknown; do not force-cancel.
+			svc.logger.Warn().Err(err).Uint("tx_id", stale[i].ID).
+				Msg("SweepStalePendingOutgoing: skipping — LN unreachable, state unknown")
+			continue
+		}
+
+		var refreshed db.Transaction
+		if err := svc.db.First(&refreshed, stale[i].ID).Error; err != nil {
+			continue
+		}
+		if refreshed.State == constants.TRANSACTION_STATE_PENDING {
+			if err := svc.db.Model(&refreshed).Update("state", constants.TRANSACTION_STATE_FAILED).Error; err != nil {
+				svc.logger.Error().Err(err).Uint("tx_id", refreshed.ID).Msg("SweepStalePendingOutgoing: failed to cancel stale transaction")
+			} else {
+				svc.logger.Warn().Uint("tx_id", refreshed.ID).Str("payment_hash", refreshed.PaymentHash).Msg("SweepStalePendingOutgoing: cancelled stale pending outgoing payment")
+			}
 		}
 	}
 }
@@ -873,6 +1037,17 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 						Str("payment_hash", lnClientTransaction.PaymentHash).
 						Msg("Failed to create transaction")
 					return err
+				}
+			}
+
+			// Serialise against any other transaction locked on this app (e.g.
+			// DeleteCircleHub checking+deleting a circle_wallet child) so this
+			// settlement can't commit in the gap between a balance check and a
+			// dependent write on the same app — same lock key/semantics as the
+			// outgoing-payment paths above.
+			if tx.Dialector.Name() == "postgres" && dbTransaction.AppId != nil {
+				if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*dbTransaction.AppId)).Error; err != nil {
+					return fmt.Errorf("acquire payment lock: %w", err)
 				}
 			}
 
@@ -991,9 +1166,12 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			return
 		}
 
-		svc.db.Transaction(func(tx *gorm.DB) error {
-			return svc.markPaymentFailed(tx, &dbTransaction, paymentFailedAsyncProperties.Reason)
-		})
+		if err := svc.db.Transaction(func(tx *gorm.DB) error {
+			_, markErr := svc.markPaymentFailed(tx, &dbTransaction, paymentFailedAsyncProperties.Reason)
+			return markErr
+		}); err != nil {
+			svc.logger.Error().Err(err).Str("payment_hash", lnClientTransaction.PaymentHash).Msg("Failed to mark transaction as failed from async event")
+		}
 	}
 }
 
@@ -1132,46 +1310,135 @@ func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnC
 	}
 }
 
-func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount uint64, description string, selfPayment bool) error {
-	amountWithFeeReserve := amount
-	if !selfPayment {
-		amountWithFeeReserve += CalculateFeeReserveMloki(amount)
-	}
+// validateCanPay checks whether the given app is permitted to pay the given amount.
+// Returns the isolated balance (0 if not isolated) and the app's parent_kind so
+// the JIT full-drain check can be applied by the caller without an extra DB query.
+//
+// skipFeeReserve additionally exempts claim_funds' per-slice payout from the
+// fee-reserve headroom below, for the same reason it's exempt from
+// enforceJITFullDrain: a shared JIT wallet is funded with EXACTLY the sum of
+// its recipients' declared slices (jitwallet.Commit), and each slice's own
+// budget cap (AppPermission.MaxAmountLoki) is set to that same exact sum —
+// so "balance/budget must cover amount + reserve" is never satisfiable for a
+// wallet's last (or only) recipient no matter the amount's scale, since the
+// reserve is strictly positive and the balance available for that specific
+// claim can be exactly the claimed amount. claim_funds already independently
+// enforces its own, stronger exact-match rule (invoice amount == the proven
+// slice, checked before payment) — this reserve is a generic conservative
+// pre-check for arbitrary payments, and is redundant/counter-productive for
+// a payout whose amount is already pinned by that stronger rule.
+//
+// skipBudgetCap exempts a hub-internal reclaim transfer (a wallet's leftover
+// balance being paid back to its own parent on teardown - see
+// service.ReclaimAndDeleteSubWallet) from the MaxAmountLoki/budget-usage
+// check below. Without this, a wallet whose lifetime spend has already
+// reached its own cap could never be reclaimed/deleted again: returning its
+// residual balance home is itself an outgoing payment from that same app,
+// so it would trip the very cap it's trying to close out, permanently
+// stranding both the leftover funds and the DB row. The isolated-balance
+// check above this still applies unconditionally - a reclaim still can't
+// move more than the wallet actually holds.
+// validateCanPayExemptions bundles the two exemption flags below into named
+// fields. Both are plain bools with unrelated meanings (see validateCanPay's
+// own doc comments on skipFeeReserve/skipBudgetCap for what each actually
+// exempts a payment from and why that's safe) - passed positionally into
+// validateCanPay, a same-type pair like this gets no compiler protection
+// against being swapped or misordered by a future edit; naming them at every
+// call site removes that risk.
+type validateCanPayExemptions struct {
+	SkipFeeReserve bool
+	SkipBudgetCap  bool
+}
 
+func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount uint64, description string, selfPayment bool, exemptions validateCanPayExemptions) (isolatedBalance int64, parentKind string, feeSkimMloki uint64, err error) {
+	skipFeeReserve := exemptions.SkipFeeReserve
+	skipBudgetCap := exemptions.SkipBudgetCap
 	if appId == nil {
-		return nil
+		return 0, "", 0, nil
 	}
 
-	// Fetch app and its pay_invoice permission in a single JOIN so we only hit the DB once.
+	// Fetch app and its pay-capable permission in a single JOIN so we only hit
+	// the DB once. parent_kind is returned so the caller can enforce JIT
+	// full-drain without a second query. Matches against
+	// constants.PayCapableScopes (not just PAY_INVOICE_SCOPE alone) since
+	// jit_wallet children carry JIT_CLAIM_FUNDS_SCOPE instead — without this,
+	// claim_funds would fail every call with "app does not have pay_invoice
+	// scope" the moment it reaches this shared payment layer.
+	//
+	// The LEFT JOIN to circle_hub_configs resolves a circle_wallet's parent
+	// hub's forwarding-fee rate in the same query: apps.parent_app_id only
+	// ever matches a circle_hub_configs.app_id row when this app is a
+	// circle_wallet child of a circle_hub, so chc.fees_ppm is harmlessly NULL
+	// (coalesced to 0) for every other app kind/lineage.
 	var row struct {
 		AppName       string
 		AppKind       string
+		ParentKind    string
 		MaxAmountLoki int
 		BudgetRenewal string
 		PermAppId     uint
+		FeesPpm       int
 	}
+	// LEFT JOIN (not INNER) so apps.kind/parent_kind still resolve even when
+	// no PayCapableScopes permission row exists — needed for skipBudgetCap's
+	// hub-decrease case below, where the payer (e.g. a circle_hub, which is
+	// deliberately never NWC-granted pay_invoice — see
+	// create_circle_wallet_controller.go) has no such row by design.
 	result := tx.Table("apps").
-		Select("apps.name AS app_name, apps.kind AS app_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id").
-		Joins("JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope = ?", constants.PAY_INVOICE_SCOPE).
+		Select("apps.name AS app_name, apps.kind AS app_kind, apps.parent_kind AS parent_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id, COALESCE(chc.fees_ppm, 0) AS fees_ppm").
+		Joins("LEFT JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope IN ?", constants.PayCapableScopes).
+		Joins("LEFT JOIN circle_hub_configs chc ON chc.app_id = apps.parent_app_id").
 		Where("apps.id = ?", *appId).
 		Scan(&row)
 	if result.Error != nil {
-		return result.Error
+		return 0, "", 0, result.Error
+	}
+	if row.AppKind == "" {
+		return 0, "", 0, NewNotFoundError()
 	}
 	if row.PermAppId == 0 {
-		if tx.Limit(1).Find(&db.App{}, *appId).RowsAffected == 0 {
-			return NewNotFoundError()
+		// skipBudgetCap (internal_transfer) is only ever set by trusted
+		// server-side call sites (api.Transfer's admin-initiated balance
+		// decrease, hub reclaim/cleanup) — never reachable from an external
+		// NWC pay_invoice/keysend/claim_funds request, which all strip this
+		// flag from caller-supplied metadata before it gets here (see
+		// pay_invoice_controller.go/claim_funds_controller.go). So it's safe
+		// to let an admin manually decrease a hub's own balance (still fully
+		// subject to the isolated-balance check below - just not gated on a
+		// pay_invoice scope the hub was deliberately never granted over NWC)
+		// without opening any real payment capability to that hub's own,
+		// often-shared/public NWC connection.
+		if !skipBudgetCap {
+			return 0, "", 0, errors.New("app does not have pay_invoice scope")
 		}
-		return errors.New("app does not have pay_invoice scope")
+	}
+
+	// A selfPayment (lnClient's own self-payment-interception shortcut, hit
+	// whenever the invoice being paid was minted by an app on this same
+	// lokihub instance) is exempt from the skim — by design, not just for the
+	// hub's own internal_transfer reclaim. Every JIT wallet, circle wallet,
+	// and generic NWC app sharing this instance settles between each other
+	// this way, so this single flag is exactly "member-to-member / member-to-
+	// any-other-app-on-this-instance" traffic, which should stay fee-free;
+	// only a payment that genuinely leaves this instance over the real
+	// Lightning network is skimmable.
+	if row.AppKind == db.AppKindCircleWallet && !selfPayment {
+		feeSkimMloki = CalculateFeeSkimMloki(amount, row.FeesPpm)
+	}
+
+	amountWithFeeReserve := amount + feeSkimMloki
+	if !selfPayment && !skipFeeReserve {
+		amountWithFeeReserve += CalculateFeeReserveMloki(amount)
 	}
 
 	if db.IsIsolatedKind(row.AppKind) {
-		balance := queries.GetIsolatedBalance(tx, *appId)
-		if int64(amountWithFeeReserve) > balance {
+		isolatedBalance = queries.GetIsolatedBalance(tx, *appId)
+		if int64(amountWithFeeReserve) > isolatedBalance {
 			svc.logger.Debug().
-				Int64("balance", balance).
+				Int64("balance", isolatedBalance).
 				Bool("self_payment", selfPayment).
 				Uint64("amount", amount).
+				Uint64("fee_skim", feeSkimMloki).
 				Uint64("amount_with_fee_reserve", amountWithFeeReserve).
 				Msg("Insufficient budget to make payment from isolated app")
 			message := NewInsufficientBalanceError().Error()
@@ -1186,11 +1453,11 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 					"message":  message,
 				},
 			})
-			return NewInsufficientBalanceError()
+			return 0, "", 0, NewInsufficientBalanceError()
 		}
 	}
 
-	if row.MaxAmountLoki > 0 {
+	if row.MaxAmountLoki > 0 && !skipBudgetCap {
 		appPermission := db.AppPermission{
 			AppId:         *appId,
 			MaxAmountLoki: row.MaxAmountLoki,
@@ -1210,16 +1477,29 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 					"message":  message,
 				},
 			})
-			return NewQuotaExceededError()
+			return 0, "", 0, NewQuotaExceededError()
 		}
 	}
 
-	return nil
+	return isolatedBalance, row.ParentKind, feeSkimMloki, nil
 }
 
 // max of 1% or 10000 milliloki (10 loki)
 func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
 	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), 10000))
+}
+
+// CalculateFeeSkimMloki computes a circle_hub's forwarding-fee cut of an
+// outgoing payment: floor(amountMloki * feesPpm / constants.PPM_DIVISOR).
+// Pure integer math (no floating point) so it's exact and can't round a skim
+// up past what CircleHubConfig.FeesPpm actually authorizes. feesPpm <= 0
+// (unset, or a defensively-clamped negative) always yields zero — callers
+// don't need to guard the call themselves.
+func CalculateFeeSkimMloki(amountMloki uint64, feesPpm int) uint64 {
+	if feesPpm <= 0 {
+		return 0
+	}
+	return amountMloki * uint64(feesPpm) / constants.PPM_DIVISOR
 }
 
 func makePreimageHex() ([]byte, error) {
@@ -1412,7 +1692,8 @@ func (svc *transactionsService) CancelHoldInvoice(ctx context.Context, paymentHa
 			return NewNotFoundError()
 		}
 
-		return svc.markPaymentFailed(tx, &dbTransaction, "Hold invoice was cancelled")
+		_, markErr := svc.markPaymentFailed(tx, &dbTransaction, "Hold invoice was cancelled")
+		return markErr
 	})
 
 	if err != nil {
@@ -1500,11 +1781,77 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		Str("type", dbTransaction.Type).
 		Msg("Marked transaction as settled")
 
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.FeeSkimMloki > 0 {
+		if err := svc.creditCircleHubFeeSkim(tx, dbTransaction); err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", dbTransaction.PaymentHash).
+				Msg("Failed to credit circle hub fee skim")
+			return nil, err
+		}
+	}
+
 	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.AppId != nil {
 		svc.checkBudgetUsage(dbTransaction, tx)
 	}
 
 	return dbTransaction, nil
+}
+
+// creditCircleHubFeeSkim credits a circle_hub with the forwarding fee it
+// skimmed off one of its circle_wallet children's just-settled outgoing
+// payment. The debit side already happened at payment initiation —
+// dbTransaction.FeeSkimMloki was set on the child's own pending transaction
+// row by validateCanPay and is included in every isolated-balance/budget-usage
+// calculation (see db/queries), so this only needs to add the matching credit
+// for the hub. Runs inside the same DB transaction as the child's settlement
+// update (its caller, markTransactionSettled), so the debit and credit commit
+// atomically together.
+func (svc *transactionsService) creditCircleHubFeeSkim(tx *gorm.DB, dbTransaction *db.Transaction) error {
+	var childApp db.App
+	if tx.Select("parent_app_id").Limit(1).Find(&childApp, *dbTransaction.AppId).RowsAffected == 0 {
+		return fmt.Errorf("failed to look up circle_wallet parent for fee skim: app %d not found", *dbTransaction.AppId)
+	}
+	if childApp.ParentAppID == nil {
+		// Unreachable in practice — validateCanPay only ever computes a nonzero
+		// FeeSkimMloki for a circle_wallet, which always has a parent hub — but
+		// never silently skim into the void if lineage is somehow missing.
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("circle_wallet has FeeSkimMloki but no parent hub app; skipping fee credit")
+		return nil
+	}
+
+	metadataBytes, err := json.Marshal(map[string]interface{}{
+		"circle_fee_skim_source_app_id":       *dbTransaction.AppId,
+		"circle_fee_skim_source_payment_hash": dbTransaction.PaymentHash,
+	})
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	hubCredit := db.Transaction{
+		AppId:       childApp.ParentAppID,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: dbTransaction.FeeSkimMloki,
+		PaymentHash: deriveCircleFeeSkimPaymentHash(dbTransaction.PaymentHash),
+		Description: "Circle hub forwarding fee",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	return tx.Create(&hubCredit).Error
+}
+
+// deriveCircleFeeSkimPaymentHash generates a distinct, deterministic synthetic
+// payment hash for a circle_hub's fee-skim ledger credit, derived from the
+// child payment's own hash. It deliberately never collides with a real bolt11
+// payment hash (a second-preimage attack would be required), so PaymentHash-
+// scoped lookups (LookupTransaction et al.) never confuse this internal
+// accounting row with the real payment it was skimmed from.
+func deriveCircleFeeSkimPaymentHash(sourcePaymentHash string) string {
+	sum := sha256.Sum256([]byte(sourcePaymentHash + ":circle_fee_skim"))
+	return hex.EncodeToString(sum[:])
 }
 
 func (svc *transactionsService) publishSettleEvent(dbTransaction *db.Transaction) {
@@ -1554,7 +1901,11 @@ func (svc *transactionsService) checkBudgetUsage(dbTransaction *db.Transaction, 
 	}
 }
 
-func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db.Transaction, reason string) error {
+// markPaymentFailed marks dbTransaction as FAILED, unless it's already FAILED
+// or SETTLED, in which case it's a no-op and returns (nil, nil) - mirroring
+// markTransactionSettled's own no-op-returns-nil convention below, so callers
+// use the same "re-fetch the settled row if nil" pattern for both races.
+func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db.Transaction, reason string) (*db.Transaction, error) {
 	var existingTransaction db.Transaction
 	result := tx.Limit(1).Find(&existingTransaction, &db.Transaction{
 		ID: dbTransaction.ID,
@@ -1562,12 +1913,24 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 
 	if result.Error != nil {
 		svc.logger.Error().Err(result.Error).Str("payment_hash", dbTransaction.PaymentHash).Msg("could not find transaction to mark as failed")
-		return result.Error
+		return nil, result.Error
 	}
 
 	if existingTransaction.State == constants.TRANSACTION_STATE_FAILED {
 		svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already marked as failed")
-		return nil
+		return nil, nil
+	}
+
+	// The payment-sent-event subscription can race the synchronous SendPaymentSync
+	// call and settle this same row (see markTransactionSettled's own reverse-direction
+	// guard) before this failure branch runs. Without this check, a payment that
+	// actually succeeded would get flipped to FAILED here, dropping its amount out of
+	// isolated-balance accounting (which only sums SETTLED rows) even though the funds
+	// already left the node — and, for a JIT claim, incorrectly reopening the slice for
+	// a second payout. Never downgrade an already-settled transaction to failed.
+	if existingTransaction.State == constants.TRANSACTION_STATE_SETTLED {
+		svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already settled; ignoring late failure notification")
+		return nil, nil
 	}
 
 	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
@@ -1579,14 +1942,14 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 		svc.logger.Error().Err(err).
 			Str("payment_hash", dbTransaction.PaymentHash).
 			Msg("Failed to mark transaction as failed")
-		return err
+		return nil, err
 	}
 	svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("Marked transaction as failed")
 	svc.eventPublisher.Publish(&events.Event{
 		Event:      "nwc_payment_failed",
 		Properties: dbTransaction,
 	})
-	return nil
+	return dbTransaction, nil
 }
 
 // EstimateFee calculates potential fees based on route hints in the invoice

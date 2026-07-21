@@ -37,7 +37,7 @@ func (api *api) CreateInvoice(ctx context.Context, req *MakeInvoiceRequest) (*Ma
 		lspFeeProp = &fp
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), req.AppId, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, req.Amount, req.Description, req.DescriptionHash, 0, nil, api.svc.GetLNClient(), req.AppId, nil, lspPubkey, lspScid, lspCltv, lspFeeBase, lspFeeProp, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 		}
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, map[string]interface{}{"internal_transfer": true}, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, map[string]interface{}{"internal_transfer": true}, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil, nil)
 
 	if err != nil {
 		return err
