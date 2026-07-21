@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.4
+FROM golang:1.26.1 AS dev
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CGO_ENABLED=1 \
+    GOOS=linux
+
+WORKDIR /app
+
+RUN go install github.com/air-verse/air@latest
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+# Baseline copy so the image is runnable even without the dev bind mount;
+# docker-compose.dev.yml overlays the live working tree on top of this at
+# runtime, which is what air actually watches/rebuilds.
+COPY . .
+
+EXPOSE 1610
+
+ENTRYPOINT ["air", "-c", ".air.toml"]

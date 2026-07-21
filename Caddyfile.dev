@@ -1,0 +1,40 @@
+# Dev-only reverse proxy in front of the Vite dev server.
+#
+# Vite's server.allowedHosts rejects requests whose Host header isn't
+# localhost/127.0.0.1/etc, so hitting the frontend container through an
+# external hostname (e.g. a tunnel domain) gets "Blocked request. This
+# host is not allowed." Rather than loosen allowedHosts (which is a CVE
+# fix, not a nuisance check), rewrite the Host header to something Vite
+# already trusts before forwarding.
+#
+# :443 uses `tls internal` -- Caddy's own self-signed CA -- instead of
+# ACME, since there's no public domain to issue a real cert for in dev.
+# Browsers will flag it as untrusted on first visit; that's expected.
+#
+# The site address must name the host ("localhost") rather than just
+# ":443" -- tls internal issues a cert per-identifier, and without a
+# hostname to key off, Caddy has nothing to match incoming SNI against
+# and the handshake fails with a TLS internal-error alert.
+#
+# Naming that host also makes Caddy's automatic-HTTPS logic insert an
+# HTTP->HTTPS redirect for "localhost" on port 80 -- even though the
+# :80 block below is declared http://-only -- since it scans all port
+# 80 blocks for hostnames that have HTTPS configured elsewhere.
+# disable_redirects turns that off so plain HTTP on :80 still works.
+{
+	admin off
+	auto_https disable_redirects
+}
+
+http://:80 {
+	reverse_proxy frontend:5173 {
+		header_up Host "localhost:5173"
+	}
+}
+
+https://localhost:443 {
+	tls internal
+	reverse_proxy frontend:5173 {
+		header_up Host "localhost:5173"
+	}
+}
