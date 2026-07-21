@@ -29,11 +29,13 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/jitwallet"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
+	"github.com/flokiorg/lokihub/transactions"
 
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
@@ -59,6 +61,7 @@ type api struct {
 	startupErrorTime time.Time
 	eventPublisher   events.EventPublisher
 	lspManager       *manager.LSPManager
+	iaManager        *apps.IdentityAuthorityManager
 }
 
 func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys keys.Keys, lokiSvc loki.LokiService, eventPublisher events.EventPublisher) *api {
@@ -72,6 +75,7 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 		lokiSvc:        lokiSvc,
 		eventPublisher: eventPublisher,
 		lspManager:     manager.NewLSPManager(gormDB),
+		iaManager:      apps.NewIdentityAuthorityManager(gormDB),
 	}
 }
 
@@ -94,25 +98,80 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
-	kind := db.AppKindStandard
-	if createAppRequest.Isolated {
-		kind = db.AppKindIsolated
+	kind := createAppRequest.Kind
+	if kind == "" {
+		kind = db.AppKindStandard
 	}
-	app, pairingSecretKey, err := api.appsSvc.CreateApp(
-		createAppRequest.Name,
-		createAppRequest.Pubkey,
-		createAppRequest.MaxAmountLoki,
-		createAppRequest.BudgetRenewal,
-		expiresAt,
-		createAppRequest.Scopes,
-		kind,
-		nil,
-		"",
-		createAppRequest.Metadata,
-	)
+
+	var app *db.App
+	var pairingSecretKey string
+
+	switch kind {
+	case db.AppKindJITHub:
+		app, pairingSecretKey, err = api.appsSvc.CreateJITHub(
+			createAppRequest.Name,
+			createAppRequest.Pubkey,
+			createAppRequest.MaxAmountLoki,
+			createAppRequest.BudgetRenewal,
+			expiresAt,
+			createAppRequest.Scopes,
+			createAppRequest.Metadata,
+			db.JITHubConfig{
+				PerWalletMaxMloki: createAppRequest.JITPerWalletMaxMloki,
+				MaxExpSecs:        createAppRequest.JITMaxExpSecs,
+			},
+		)
+	case db.AppKindCircleHub:
+		app, pairingSecretKey, err = api.appsSvc.CreateCircleHub(
+			createAppRequest.Name,
+			createAppRequest.Pubkey,
+			createAppRequest.MaxAmountLoki,
+			createAppRequest.BudgetRenewal,
+			expiresAt,
+			createAppRequest.Scopes,
+			createAppRequest.Metadata,
+			apps.CircleIdentityRef{
+				ExistingID:     createAppRequest.CircleIdentityId,
+				Name:           createAppRequest.CircleIdentityName,
+				Policy:         createAppRequest.CirclePolicy,
+				ProviderPubkey: createAppRequest.ProviderPubkey,
+			},
+			db.CircleHubConfig{
+				MaxExpSecs:        createAppRequest.CircleMaxExpSecs,
+				FeesPpm:           createAppRequest.CircleFeesPpm,
+				PerWalletMaxMloki: createAppRequest.CirclePerWalletMaxMloki,
+				MinBudgetRenewal:  createAppRequest.CircleMinBudgetRenewal,
+			},
+		)
+	default:
+		app, pairingSecretKey, err = api.appsSvc.CreateApp(
+			createAppRequest.Name,
+			createAppRequest.Pubkey,
+			createAppRequest.MaxAmountLoki,
+			createAppRequest.BudgetRenewal,
+			expiresAt,
+			createAppRequest.Scopes,
+			kind,
+			nil,
+			"",
+			createAppRequest.Metadata,
+		)
+	}
 
 	if err != nil {
 		return nil, err
+	}
+
+	if kind == db.AppKindCircleHub {
+		// Resolve the actual identity attached (whether newly created or reused)
+		// to find its real policy/pubkey — createAppRequest's circlePolicy/
+		// providerPubkey are only populated on the create-new-identity path.
+		if cfg, cfgErr := api.appsSvc.GetCircleHubConfig(app.ID); cfgErr == nil && cfg.CircleIdentity.Policy == db.CirclePolicyFollowing {
+			if _, err := api.svc.WarmCircleFollowingCache(context.Background(), cfg.CircleIdentity.ProviderPubkey); err != nil {
+				logger.Logger.Warn().Err(err).Uint("app_id", app.ID).
+					Msg("Failed to warm following-policy social cache at creation; will self-heal on next periodic refresh")
+			}
+		}
 	}
 
 	relayUrls := api.cfg.GetRelayUrls()
@@ -186,38 +245,13 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 				return fmt.Errorf("won't update an app to have no name")
 			}
 			if name != userApp.Name {
+				// JIT/circle wallet names are system-generated and carry the
+				// identity used to resolve a Nostr profile for display —
+				// renaming here would silently break that.
+				if db.IsNameImmutableKind(userApp.Kind) {
+					return constants.ErrKindImmutable
+				}
 				err := tx.Model(&db.App{}).Where("id", userApp.ID).Update("name", name).Error
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		// Update app isolation if provided and different
-		if updateAppRequest.Isolated != nil {
-			isolated := *updateAppRequest.Isolated
-			if isolated != userApp.IsIsolated() {
-				if !isolated {
-					var existingMetadata Metadata
-					if userApp.Metadata != nil {
-						err := json.Unmarshal(userApp.Metadata, &existingMetadata)
-						if err != nil {
-							logger.Logger.Error().Err(err).
-								Uint("app_id", userApp.ID).
-								Msg("Failed to deserialize app metadata")
-							return err
-						}
-						if existingMetadata["app_store_app_id"] == constants.SUBWALLET_APPSTORE_APP_ID {
-							return errors.New("Cannot update sub-wallet to be non-isolated")
-						}
-					}
-				}
-
-				kind := db.AppKindStandard
-				if isolated {
-					kind = db.AppKindIsolated
-				}
-				err := tx.Model(&db.App{}).Where("id", userApp.ID).Update("kind", kind).Error
 				if err != nil {
 					return err
 				}
@@ -243,6 +277,21 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		if updateAppRequest.Scopes != nil || updateAppRequest.MaxAmountLoki != nil ||
 			updateAppRequest.BudgetRenewal != nil || updateAppRequest.ExpiresAt != nil || updateAppRequest.UpdateExpiresAt {
 
+			// Privileged kinds are managed by dedicated APIs; generic UpdateApp must not
+			// change their scopes after issuance.
+			if updateAppRequest.Scopes != nil && db.IsPrivilegedKind(userApp.Kind) {
+				return constants.ErrKindImmutable
+			}
+
+			// Some privileged kinds also have system-managed budget/expiry
+			// (e.g. circle wallets, JIT allocations); a circle hub's own
+			// budget/expiry, however, is user-configurable like a regular app.
+			if (updateAppRequest.MaxAmountLoki != nil || updateAppRequest.BudgetRenewal != nil ||
+				updateAppRequest.ExpiresAt != nil || updateAppRequest.UpdateExpiresAt) &&
+				db.IsBudgetImmutableKind(userApp.Kind) {
+				return constants.ErrKindImmutable
+			}
+
 			// Get current values or use provided ones
 			var maxAmount uint64
 			var budgetRenewal string
@@ -256,9 +305,11 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 
 			// Use existing values as defaults
 			if len(existingPermissions) > 0 {
-				// Find pay_invoice permission for budget-related fields
+				// Find the pay-capable permission for budget-related fields
+				// (constants.PayCapableScopes, not just pay_invoice alone —
+				// jit_wallet apps carry jit_claim_funds instead).
 				for _, perm := range existingPermissions {
-					if perm.Scope == constants.PAY_INVOICE_SCOPE {
+					if slices.Contains(constants.PayCapableScopes, perm.Scope) {
 						maxAmount = uint64(perm.MaxAmountLoki)
 						budgetRenewal = perm.BudgetRenewal
 						expiresAt = perm.ExpiresAt
@@ -293,6 +344,14 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 			}).Error
 			if err != nil {
 				return err
+			}
+
+			// Sync the denormalized App.ExpiresAt used by the cleanup cron index.
+			if updateAppRequest.ExpiresAt != nil || updateAppRequest.UpdateExpiresAt {
+				if err := tx.Model(&db.App{}).Where("id = ?", userApp.ID).
+					Update("expires_at", expiresAt).Error; err != nil {
+					return err
+				}
 			}
 
 			// Handle scope changes only if scopes were provided
@@ -349,16 +408,49 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		// commit transaction
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	if userApp.Kind == db.AppKindJITHub &&
+		(updateAppRequest.JITPerWalletMaxMloki != nil || updateAppRequest.JITMaxExpSecs != nil) {
+		if err := api.appsSvc.UpdateJITHubConfig(userApp.ID,
+			updateAppRequest.JITPerWalletMaxMloki, updateAppRequest.JITMaxExpSecs); err != nil {
+			return err
+		}
+	}
+
+	if userApp.Kind == db.AppKindCircleHub &&
+		(updateAppRequest.CircleMaxExpSecs != nil || updateAppRequest.CircleFeesPpm != nil ||
+			updateAppRequest.CirclePerWalletMaxMloki != nil || updateAppRequest.CircleMinBudgetRenewal != nil) {
+		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID,
+			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
+			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (api *api) DeleteApp(userApp *db.App) error {
+	// jit_wallet/circle_wallet hold a shared balance that must be reclaimed
+	// back to their hub before the row disappears — apps.DeleteApp has no
+	// such logic (it only guards the hub kinds against orphaning children),
+	// so a plain delete here would silently destroy any remaining balance.
+	// Route through the same reclaim-then-delete path the dedicated
+	// DeleteJITWallet/DeleteCircleWalletChild endpoints use, so this generic
+	// path (e.g. the app detail page's Disconnect action) is safe too,
+	// regardless of claim state.
+	if userApp.Kind == db.AppKindJITWallet || userApp.Kind == db.AppKindCircleWallet {
+		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
+			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp)
+	}
 
 	return api.appsSvc.DeleteApp(userApp)
 }
 
-func (api *api) GetApp(dbApp *db.App) *App {
+func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 
 	paySpecificPermission := db.AppPermission{}
 	appPermissions := []db.AppPermission{}
@@ -368,17 +460,43 @@ func (api *api) GetApp(dbApp *db.App) *App {
 	requestMethods := []string{}
 	for _, appPerm := range appPermissions {
 		expiresAt = appPerm.ExpiresAt
-		if appPerm.Scope == constants.PAY_INVOICE_SCOPE {
-			// find the pay_invoice-specific permissions
+		if slices.Contains(constants.PayCapableScopes, appPerm.Scope) {
+			// find the pay-capable permission (pay_invoice, or jit_claim_funds
+			// for a jit_wallet)
 			paySpecificPermission = appPerm
 		}
 		requestMethods = append(requestMethods, appPerm.Scope)
 	}
 
+	// A pay_invoice-scoped app tracks its budget on that row. Some kinds are
+	// user-configurable-budget but never granted pay_invoice (e.g. circle_hub,
+	// which only issues children — it must never gain pay_invoice itself), so
+	// fall back to any permission row: CreateApp/UpdateApp always write the
+	// same MaxAmountLoki/BudgetRenewal to every scope row of an app, so any
+	// row carries the same value a pay_invoice row would have.
+	budgetPermission := paySpecificPermission
+	if budgetPermission.Scope == "" && len(appPermissions) > 0 {
+		budgetPermission = appPermissions[0]
+	}
+
 	// renewsIn := ""
 	budgetUsage := uint64(0)
-	maxAmount := uint64(paySpecificPermission.MaxAmountLoki)
-	budgetUsage = queries.GetBudgetUsageSat(api.db, &paySpecificPermission)
+	maxAmount := uint64(budgetPermission.MaxAmountLoki)
+	if dbApp.Kind == db.AppKindCircleHub {
+		// A circle_hub never spends directly (only its children do), so the
+		// generic outgoing-transaction usage sum below is always ~0 and
+		// meaningless here. "Used" for a hub's own budget means "currently
+		// committed to live children" — the same metric enforced in
+		// nip47/controllers/create_circle_wallet_controller.go.
+		commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID)
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
+		} else {
+			budgetUsage = uint64(commitmentMloki) / 1000
+		}
+	} else {
+		budgetUsage = queries.GetBudgetUsageSat(api.db, &budgetPermission)
+	}
 
 	var metadata Metadata
 	if dbApp.Metadata != nil {
@@ -408,7 +526,8 @@ func (api *api) GetApp(dbApp *db.App) *App {
 		MaxAmountLoki:      maxAmount,
 		Scopes:             requestMethods,
 		BudgetUsage:        budgetUsage,
-		BudgetRenewal:      paySpecificPermission.BudgetRenewal,
+		BudgetRenewal:      budgetPermission.BudgetRenewal,
+		Kind:               dbApp.Kind,
 		Isolated:           dbApp.IsIsolated(),
 		Metadata:           metadata,
 		WalletPubkey:       walletPubkey,
@@ -420,7 +539,170 @@ func (api *api) GetApp(dbApp *db.App) *App {
 		response.Balance = queries.GetIsolatedBalance(api.db, dbApp.ID)
 	}
 
+	if dbApp.Kind == db.AppKindJITHub {
+		if cfg, cfgErr := api.appsSvc.GetJITHubConfig(dbApp.ID); cfgErr == nil {
+			response.JITPerWalletMaxMloki = &cfg.PerWalletMaxMloki
+			response.JITMaxExpSecs = &cfg.MaxExpSecs
+		}
+	}
+
+	if dbApp.Kind == db.AppKindCircleHub {
+		response.CircleIdentity = api.circleIdentitySummaryForApp(ctx, dbApp.ID, true)
+		if cfg, cfgErr := api.appsSvc.GetCircleHubConfig(dbApp.ID); cfgErr == nil {
+			response.CircleMaxExpSecs = &cfg.MaxExpSecs
+			response.CircleFeesPpm = &cfg.FeesPpm
+			response.CirclePerWalletMaxMloki = &cfg.PerWalletMaxMloki
+			response.CircleMinBudgetRenewal = &cfg.MinBudgetRenewal
+		}
+	}
+
 	return &response
+}
+
+// circleIdentitySummaryForApp resolves a circle_hub app's attached identity
+// and its policy-specific counts for inline enrichment. allowBlockingFetch
+// mirrors buildCircleIdentityCounts: ListApps passes false (PeekContactCount,
+// never fetches — a following-policy identity with no cached count yet
+// simply omits FollowingCount, which the frontend renders as still-loading),
+// while GetApp passes true since it's a single deliberate target.
+func (api *api) circleIdentitySummaryForApp(ctx context.Context, appID uint, allowBlockingFetch bool) *CircleIdentitySummaryWithCounts {
+	cfg, err := api.appsSvc.GetCircleHubConfig(appID)
+	if err != nil {
+		return nil
+	}
+	summary, err := api.buildCircleIdentityCounts(ctx, &cfg.CircleIdentity, allowBlockingFetch)
+	if err != nil {
+		return nil
+	}
+	return summary
+}
+
+// buildCircleIdentityCounts computes policy-specific counts for identity.
+// allowBlockingFetch controls whether a following-policy count may cold-fetch
+// via a live relay query (GetCircleIdentity, a single deliberate target) or
+// must stay non-blocking (circleIdentitySummaryForApp, iterating many rows).
+func (api *api) buildCircleIdentityCounts(ctx context.Context, identity *db.CircleIdentity, allowBlockingFetch bool) (*CircleIdentitySummaryWithCounts, error) {
+	summary := &CircleIdentitySummaryWithCounts{
+		CircleIdentitySummary: CircleIdentitySummary{
+			ID:             identity.ID,
+			Name:           identity.Name,
+			Policy:         identity.Policy,
+			ProviderPubkey: identity.ProviderPubkey,
+		},
+	}
+	switch identity.Policy {
+	case db.CirclePolicyFollowing:
+		if allowBlockingFetch {
+			count, err := api.svc.ContactCount(ctx, identity.ProviderPubkey)
+			if err != nil {
+				return nil, err
+			}
+			summary.FollowingCount = &count
+		} else if count, ok := api.svc.PeekContactCount(identity.ProviderPubkey); ok {
+			summary.FollowingCount = &count
+		}
+		if syncedAt, ok := api.svc.PeekContactSyncedAt(identity.ProviderPubkey); ok {
+			summary.PolicySyncedAt = &syncedAt
+		}
+	case db.CirclePolicyAllowlist:
+		var count int64
+		if err := api.db.Model(&db.CircleIdentityAllowedPubkey{}).
+			Where("circle_identity_id = ?", identity.ID).Count(&count).Error; err != nil {
+			return nil, err
+		}
+		summary.AllowlistCount = int(count)
+		// Model-level Find (not a raw MAX(created_at) scan) so gorm applies its
+		// usual string->time.Time conversion for the sqlite driver.
+		var latest db.CircleIdentityAllowedPubkey
+		err := api.db.Where("circle_identity_id = ?", identity.ID).
+			Order("created_at DESC").First(&latest).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if err == nil {
+			summary.PolicySyncedAt = &latest.CreatedAt
+		}
+	}
+	return summary, nil
+}
+
+// ListCircleIdentities returns every CircleIdentity, for the circle-creation-time
+// picker and the manage-identities list — both need UsedByCount to show which
+// identities are safe to delete, so it's computed here via one grouped query
+// rather than a per-identity round trip.
+func (api *api) ListCircleIdentities() ([]CircleIdentitySummary, error) {
+	identities, err := api.appsSvc.ListCircleIdentities()
+	if err != nil {
+		return nil, err
+	}
+
+	var counts []struct {
+		CircleIdentityID uint
+		Count            int
+	}
+	if err := api.db.Model(&db.CircleHubConfig{}).
+		Select("circle_identity_id, count(*) as count").
+		Group("circle_identity_id").
+		Find(&counts).Error; err != nil {
+		return nil, err
+	}
+	usedByCount := make(map[uint]int, len(counts))
+	for _, c := range counts {
+		usedByCount[c.CircleIdentityID] = c.Count
+	}
+
+	summaries := make([]CircleIdentitySummary, 0, len(identities))
+	for _, identity := range identities {
+		summaries = append(summaries, CircleIdentitySummary{
+			ID:             identity.ID,
+			Name:           identity.Name,
+			Policy:         identity.Policy,
+			ProviderPubkey: identity.ProviderPubkey,
+			UsedByCount:    usedByCount[identity.ID],
+		})
+	}
+	return summaries, nil
+}
+
+// DeleteCircleIdentity removes a standalone CircleIdentity — refuses
+// (ErrInvalidParams) if any circle_hub app still references it.
+func (api *api) DeleteCircleIdentity(id uint) error {
+	return api.appsSvc.DeleteCircleIdentity(id)
+}
+
+// GetCircleIdentity returns full identity detail: policy-specific counts (a
+// following-policy count may cold-fetch once, since this is a single
+// deliberate target, not a list), the full allowlist pubkeys for allowlist
+// policy, and how many circle_hub apps currently reference this identity.
+func (api *api) GetCircleIdentity(ctx context.Context, id uint) (*CircleIdentityResponse, error) {
+	identity, err := api.appsSvc.GetCircleIdentity(id)
+	if err != nil {
+		return nil, err
+	}
+	summary, err := api.buildCircleIdentityCounts(ctx, identity, true)
+	if err != nil {
+		return nil, err
+	}
+	resp := &CircleIdentityResponse{CircleIdentitySummaryWithCounts: *summary}
+
+	if identity.Policy == db.CirclePolicyAllowlist {
+		var entries []db.CircleIdentityAllowedPubkey
+		if err := api.db.Where("circle_identity_id = ?", identity.ID).Order("pubkey asc").Find(&entries).Error; err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			resp.AllowlistPubkeys = append(resp.AllowlistPubkeys, e.Pubkey)
+		}
+	}
+
+	var usedByCount int64
+	if err := api.db.Model(&db.CircleHubConfig{}).
+		Where("circle_identity_id = ?", identity.ID).Count(&usedByCount).Error; err != nil {
+		return nil, err
+	}
+	resp.UsedByCount = int(usedByCount)
+
+	return resp, nil
 }
 
 func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, orderBy string) (*ListAppsResponse, error) {
@@ -455,6 +737,12 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			query = query.Where("metadata IS NULL OR metadata->>'app_store_app_id' IS NULL OR metadata->>'app_store_app_id' != ?", constants.SUBWALLET_APPSTORE_APP_ID)
 		}
 	}
+
+	// jit_wallet children are ephemeral, spend-only wallets issued on demand by
+	// a JIT Hub — they're reachable via the hub's allocations list/reveal flow
+	// and their own AppDetails page, but must never surface in general app
+	// listings (Connections page, command palette, unused-apps nudges, etc.).
+	query = query.Where("kind != ?", db.AppKindJITWallet)
 
 	if orderBy == "" {
 		orderBy = "last_used_at"
@@ -516,6 +804,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			CreatedAt:          dbApp.CreatedAt,
 			UpdatedAt:          dbApp.UpdatedAt,
 			AppPubkey:          dbApp.AppPubkey,
+			Kind:               dbApp.Kind,
 			Isolated:           dbApp.IsIsolated(),
 			WalletPubkey:       walletPubkey,
 			UniqueWalletPubkey: uniqueWalletPubkey,
@@ -526,13 +815,37 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			apiApp.Balance = queries.GetIsolatedBalance(api.db, dbApp.ID)
 		}
 
-		for _, appPermission := range permissionsMap[dbApp.ID] {
+		if dbApp.Kind == db.AppKindCircleHub {
+			apiApp.CircleIdentity = api.circleIdentitySummaryForApp(context.Background(), dbApp.ID, false)
+		}
+
+		var budgetPermission *db.AppPermission
+		for i := range permissionsMap[dbApp.ID] {
+			appPermission := permissionsMap[dbApp.ID][i]
 			apiApp.Scopes = append(apiApp.Scopes, appPermission.Scope)
 			apiApp.ExpiresAt = appPermission.ExpiresAt
-			if appPermission.Scope == constants.PAY_INVOICE_SCOPE {
-				apiApp.BudgetRenewal = appPermission.BudgetRenewal
-				apiApp.MaxAmountLoki = uint64(appPermission.MaxAmountLoki)
-				apiApp.BudgetUsage = queries.GetBudgetUsageSat(api.db, &appPermission)
+			if slices.Contains(constants.PayCapableScopes, appPermission.Scope) {
+				budgetPermission = &appPermission
+			}
+		}
+		// See GetApp for why non-pay_invoice kinds (e.g. circle_hub) fall back
+		// to any permission row for their budget fields.
+		if budgetPermission == nil && len(permissionsMap[dbApp.ID]) > 0 {
+			budgetPermission = &permissionsMap[dbApp.ID][0]
+		}
+		if budgetPermission != nil {
+			apiApp.BudgetRenewal = budgetPermission.BudgetRenewal
+			apiApp.MaxAmountLoki = uint64(budgetPermission.MaxAmountLoki)
+			if dbApp.Kind == db.AppKindCircleHub {
+				// See GetApp: "used" for a circle_hub means live commitment
+				// to children, not its own (always ~0) outgoing spend.
+				if commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID); err != nil {
+					logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
+				} else {
+					apiApp.BudgetUsage = uint64(commitmentMloki) / 1000
+				}
+			} else {
+				apiApp.BudgetUsage = queries.GetBudgetUsageSat(api.db, budgetPermission)
 			}
 		}
 
@@ -684,7 +997,9 @@ func (api *api) Stop() error {
 
 	// stop the lnclient, nostr relay etc.
 	// The user will be forced to re-enter their unlock password to restart the node
-	api.svc.StopApp(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), constants.APP_SHUTDOWN_TIMEOUT)
+	defer cancel()
+	api.svc.StopApp(ctx)
 
 	return nil
 }
@@ -1158,6 +1473,8 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.LokihubServicesURL = api.cfg.GetLokihubServicesURL()
 	info.SwapServiceUrl = api.cfg.GetSwapServiceURL()
 	info.Relay = api.cfg.GetRelay()
+	info.GeneralRelay = api.cfg.GetGeneralRelay()
+	info.SearchRelay = api.cfg.GetSearchRelay()
 
 	// Populate selected LSPs
 	if lm := api.svc.GetLiquidityManager(); lm != nil {
@@ -1279,6 +1596,39 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		}
 		if err := api.svc.ReloadNostr(); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to reload Nostr service")
+		}
+	}
+
+	if updateSettingsRequest.GeneralRelay != nil {
+		for _, u := range strings.Split(*updateSettingsRequest.GeneralRelay, ",") {
+			u = strings.TrimSpace(u)
+			if u == "" {
+				continue
+			}
+			if err := utils.ValidateWebSocketURL(u); err != nil {
+				return fmt.Errorf("invalid General Relay URL: %w", err)
+			}
+		}
+		if err := api.cfg.SetGeneralRelay(*updateSettingsRequest.GeneralRelay); err != nil {
+			return fmt.Errorf("failed to set GeneralRelay: %w", err)
+		}
+		// Re-warm the pool against the new relay list now, backgrounded since a
+		// slow/unreachable relay shouldn't block this settings save.
+		go api.svc.WarmGeneralRelays()
+	}
+
+	if updateSettingsRequest.SearchRelay != nil {
+		for _, u := range strings.Split(*updateSettingsRequest.SearchRelay, ",") {
+			u = strings.TrimSpace(u)
+			if u == "" {
+				continue
+			}
+			if err := utils.ValidateWebSocketURL(u); err != nil {
+				return fmt.Errorf("invalid Search Relay URL: %w", err)
+			}
+		}
+		if err := api.cfg.SetSearchRelay(*updateSettingsRequest.SearchRelay); err != nil {
+			return fmt.Errorf("failed to set SearchRelay: %w", err)
 		}
 	}
 
@@ -2240,4 +2590,736 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// ReplaceCircleAllowlist replaces the full allowlist for the CircleIdentity
+// attached to a circle_hub app. Since an identity may be shared by
+// multiple providers, this affects every provider referencing it.
+func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
+	if app.Kind != db.AppKindCircleHub {
+		return fmt.Errorf("app is not a circle_hub")
+	}
+	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
+	if err != nil {
+		return fmt.Errorf("circle_hub has no config: %w", err)
+	}
+	identityID := cfg.CircleIdentityID
+	return api.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("circle_identity_id = ?", identityID).Delete(&db.CircleIdentityAllowedPubkey{}).Error; err != nil {
+			return err
+		}
+		for _, pk := range pubkeys {
+			pk = strings.TrimSpace(pk)
+			if pk == "" {
+				continue
+			}
+			// Validate: must be a 64-char lowercase-hex 32-byte Nostr pubkey.
+			if len(pk) != 64 || pk != strings.ToLower(pk) {
+				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
+			}
+			if _, decErr := hex.DecodeString(pk); decErr != nil {
+				return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pk)
+			}
+			if err := tx.Create(&db.CircleIdentityAllowedPubkey{CircleIdentityID: identityID, Pubkey: pk}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// RemoveCircleAllowedPubkey removes a single pubkey from the CircleIdentity
+// attached to a circle_hub app's allowlist.
+func (api *api) RemoveCircleAllowedPubkey(app *db.App, pubkey string) error {
+	if app.Kind != db.AppKindCircleHub {
+		return fmt.Errorf("app is not a circle_hub")
+	}
+	// Same format check as ReplaceCircleAllowlist: a malformed pubkey can never
+	// match a stored row (a no-op delete either way), but validating up front
+	// gives the caller a clear error instead of a silent no-op.
+	if len(pubkey) != 64 || pubkey != strings.ToLower(pubkey) {
+		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
+	}
+	if _, err := hex.DecodeString(pubkey); err != nil {
+		return fmt.Errorf("%w: %q is not a valid 64-char lowercase-hex pubkey", constants.ErrInvalidParams, pubkey)
+	}
+	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
+	if err != nil {
+		return fmt.Errorf("circle_hub has no config: %w", err)
+	}
+	return api.db.Where("circle_identity_id = ? AND pubkey = ?", cfg.CircleIdentityID, pubkey).
+		Delete(&db.CircleIdentityAllowedPubkey{}).Error
+}
+
+// ListCircleAllowlist returns the current allowlisted pubkeys for the
+// CircleIdentity attached to a circle_hub app.
+func (api *api) ListCircleAllowlist(app *db.App) ([]string, error) {
+	if app.Kind != db.AppKindCircleHub {
+		return nil, fmt.Errorf("app is not a circle_hub")
+	}
+	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("circle_hub has no config: %w", err)
+	}
+	var entries []db.CircleIdentityAllowedPubkey
+	if err := api.db.Where("circle_identity_id = ?", cfg.CircleIdentityID).Order("pubkey asc").Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	pubkeys := make([]string, 0, len(entries))
+	for _, e := range entries {
+		pubkeys = append(pubkeys, e.Pubkey)
+	}
+	return pubkeys, nil
+}
+
+// fetchCircleFollowingPubkeys re-fetches providerPubkey's kind:3 contact list
+// via the shared nostrSocialCache (WarmCircleFollowingCache), so the manual
+// "Sync"/refresh flow stays in agreement with the automatic following-policy
+// auth path instead of running its own separate relay query. Shared by
+// RefreshCircleAllowlist (which applies the result) and PreviewCircleRefresh
+// (which only diffs it).
+func (api *api) fetchCircleFollowingPubkeys(ctx context.Context, providerPubkey string) ([]string, error) {
+	contacts, err := api.svc.WarmCircleFollowingCache(ctx, providerPubkey)
+	if err != nil {
+		return nil, err
+	}
+	pubkeys := make([]string, 0, len(contacts))
+	for pubkey := range contacts {
+		pubkeys = append(pubkeys, pubkey)
+	}
+	return pubkeys, nil
+}
+
+// circleHubFollowingConfig loads app's CircleHubConfig and validates
+// it's eligible for a following-policy relay refresh — shared by
+// RefreshCircleAllowlist and PreviewCircleRefresh so both reject the same way
+// for an allowlist-policy circle (refreshing from relays would silently
+// clobber a manually-curated member list with the owner's raw following list,
+// which only makes sense for following-policy circles in the first place).
+func (api *api) circleHubFollowingConfig(app *db.App) (*db.CircleHubConfig, error) {
+	if app.Kind != db.AppKindCircleHub {
+		return nil, fmt.Errorf("app is not a circle_hub")
+	}
+	providerConfig, err := api.appsSvc.GetCircleHubConfig(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("circle_hub has no config: %w", err)
+	}
+	if providerConfig.CircleIdentity.Policy != db.CirclePolicyFollowing {
+		return nil, fmt.Errorf("%w: refresh from relays only applies to following-policy circles", constants.ErrInvalidParams)
+	}
+	if providerConfig.CircleIdentity.ProviderPubkey == "" {
+		return nil, fmt.Errorf("circle_hub has no provider_pubkey set")
+	}
+	return providerConfig, nil
+}
+
+// RefreshCircleAllowlist re-fetches the provider's kind:3 contacts from nostr relays
+// and rebuilds the allowlist for the CircleIdentity attached to this circle_hub app.
+// Only valid for following-policy circles — see circleHubFollowingConfig.
+func (api *api) RefreshCircleAllowlist(ctx context.Context, app *db.App) error {
+	providerConfig, err := api.circleHubFollowingConfig(app)
+	if err != nil {
+		return err
+	}
+	providerPubkey := providerConfig.CircleIdentity.ProviderPubkey
+	pubkeys, err := api.fetchCircleFollowingPubkeys(ctx, providerPubkey)
+	if err != nil {
+		return err
+	}
+	// fetchCircleFollowingPubkeys already warms the nostrSocialCache entry as
+	// part of this same fetch (see WarmCircleFollowingCache), so the
+	// following-count/synced-at shown on the app's detail page reflects this
+	// refresh immediately without a second, separate relay round-trip.
+	return api.ReplaceCircleAllowlist(app, pubkeys)
+}
+
+// PreviewCircleRefresh re-fetches the provider's kind:3 contacts and reports
+// how they'd differ from the currently-stored allowlist, without applying
+// anything. Only valid for following-policy circles — see
+// circleHubFollowingConfig.
+func (api *api) PreviewCircleRefresh(ctx context.Context, app *db.App) (*CircleRefreshPreview, error) {
+	providerConfig, err := api.circleHubFollowingConfig(app)
+	if err != nil {
+		return nil, err
+	}
+	fresh, err := api.fetchCircleFollowingPubkeys(ctx, providerConfig.CircleIdentity.ProviderPubkey)
+	if err != nil {
+		return nil, err
+	}
+	current, err := api.ListCircleAllowlist(app)
+	if err != nil {
+		return nil, err
+	}
+
+	currentSet := make(map[string]bool, len(current))
+	for _, pk := range current {
+		currentSet[pk] = true
+	}
+	freshSet := make(map[string]bool, len(fresh))
+	var added []string
+	for _, pk := range fresh {
+		freshSet[pk] = true
+		if !currentSet[pk] {
+			added = append(added, pk)
+		}
+	}
+	var removed []string
+	for _, pk := range current {
+		if !freshSet[pk] {
+			removed = append(removed, pk)
+		}
+	}
+
+	return &CircleRefreshPreview{Pubkeys: fresh, Added: added, Removed: removed}, nil
+}
+
+// getCircleChildren returns app's circle_wallet children, newest first, using
+// tx (so callers can run this consistently with a transaction, e.g. inside
+// DeleteCircleHub).
+func getCircleChildren(tx *gorm.DB, parentAppID uint) ([]db.App, error) {
+	var children []db.App
+	err := tx.Where("parent_app_id = ? AND parent_kind = ?", parentAppID, db.ParentKindCircle).
+		Order("created_at DESC").
+		Find(&children).Error
+	return children, err
+}
+
+// ListCircleChildrenBalances returns a page of a circle_hub's circle_wallet
+// children together with each one's current isolated balance, for both the
+// wallets list and the pre-delete confirmation UI. limit == 0 returns every
+// child unpaginated (used by the pre-delete confirmation UI, which needs the
+// full set). totalCount is the child count before paging, for the caller to
+// compute page count from.
+func (api *api) ListCircleChildrenBalances(app *db.App, limit uint64, offset uint64) ([]CircleChildBalance, uint64, error) {
+	if app.Kind != db.AppKindCircleHub {
+		return nil, 0, fmt.Errorf("app is not a circle_hub")
+	}
+
+	children, err := getCircleChildren(api.db, app.ID)
+	if err != nil {
+		return nil, 0, err
+	}
+	totalCount := uint64(len(children))
+
+	if limit > 0 {
+		children = paginateSlice(children, limit, offset)
+	}
+
+	balancesByID, err := queries.GetIsolatedBalancesByAppIDs(api.db, childAppIDs(children))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	requesterPubkeysByID, err := queries.GetCircleWalletMembershipPubkeysByWalletAppIDs(api.db, childAppIDs(children))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	balances := make([]CircleChildBalance, 0, len(children))
+	for _, child := range children {
+		balances = append(balances, CircleChildBalance{
+			AppID:           child.ID,
+			Name:            child.Name,
+			RequesterPubkey: requesterPubkeysByID[child.ID],
+			AppPubkey:       child.AppPubkey,
+			BalanceMloki:    balancesByID[child.ID],
+		})
+	}
+	return balances, totalCount, nil
+}
+
+// paginateSlice returns the [offset, offset+limit) window of s, clamped to
+// its bounds. Used by list endpoints that build their full result in memory
+// (e.g. by merging multiple sources) before paging it, rather than paginating
+// at the SQL level.
+func paginateSlice[T any](s []T, limit uint64, offset uint64) []T {
+	if offset >= uint64(len(s)) {
+		return []T{}
+	}
+	end := offset + limit
+	if end > uint64(len(s)) {
+		end = uint64(len(s))
+	}
+	return s[offset:end]
+}
+
+// childAppIDs extracts the IDs from a slice of apps, for batched balance lookups.
+func childAppIDs(children []db.App) []uint {
+	ids := make([]uint, len(children))
+	for i, child := range children {
+		ids[i] = child.ID
+	}
+	return ids
+}
+
+// DeleteCircleWalletChild removes a single circle_wallet child from a
+// circle_hub, in any state (empty or with a remaining balance) — unlike
+// DeleteCircleHub, which only ever operates on the whole hub at once. Any
+// remaining balance is first reclaimed back to the hub and the child app
+// deleted (service.ReclaimAndDeleteSubWallet), the same way
+// DeleteJITHubAllocation handles a claimed JIT wallet.
+func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
+	var hub db.App
+	if err := api.db.First(&hub, hubAppID).Error; err != nil {
+		return fmt.Errorf("app not found: %w", err)
+	}
+	if hub.Kind != db.AppKindCircleHub {
+		return fmt.Errorf("app is not a circle_hub")
+	}
+
+	var child db.App
+	if err := api.db.Where("id = ? AND parent_app_id = ? AND parent_kind = ?",
+		childAppID, hubAppID, db.ParentKindCircle).First(&child).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: circle wallet not found for this hub", constants.ErrInvalidParams)
+		}
+		return err
+	}
+
+	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), child)
+}
+
+// DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
+// mode must be db.CircleDeleteModeAll (delete every child regardless of balance) or
+// db.CircleDeleteModeEmptyOnly (delete only zero-balance children — if any child
+// still has balance, the provider itself is left intact so the admin can retry once
+// the rest have drained). Guarded by the same per-provider advisory lock used by
+// create_circle_wallet, so this can't race a concurrent wallet creation on the app.
+func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error) {
+	if app.Kind != db.AppKindCircleHub {
+		return nil, fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
+	}
+	if mode != db.CircleDeleteModeAll && mode != db.CircleDeleteModeEmptyOnly {
+		return nil, fmt.Errorf("%w: mode must be %q or %q", constants.ErrInvalidParams,
+			db.CircleDeleteModeAll, db.CircleDeleteModeEmptyOnly)
+	}
+
+	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
+	err := api.db.Transaction(func(tx *gorm.DB) error {
+		if tx.Dialector.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
+				return fmt.Errorf("acquire circle delete lock: %w", err)
+			}
+		}
+
+		children, err := getCircleChildren(tx, app.ID)
+		if err != nil {
+			return err
+		}
+
+		// Only mode=empty_only needs balances at all — mode=all deletes every
+		// child regardless, so skip the extra round-trip in the common case.
+		var balancesByID map[uint]int64
+		if mode == db.CircleDeleteModeEmptyOnly {
+			balancesByID, err = queries.GetIsolatedBalancesByAppIDs(tx, childAppIDs(children))
+			if err != nil {
+				return err
+			}
+		}
+
+		var idsToDelete []uint
+		for _, child := range children {
+			if mode == db.CircleDeleteModeEmptyOnly && balancesByID[child.ID] != 0 {
+				result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
+				continue
+			}
+			idsToDelete = append(idsToDelete, child.ID)
+		}
+
+		if len(idsToDelete) > 0 {
+			if err := tx.Where("id IN ?", idsToDelete).Delete(&db.App{}).Error; err != nil {
+				return err
+			}
+			result.DeletedChildIDs = idsToDelete
+		}
+
+		if len(result.SkippedChildIDs) > 0 {
+			// At least one child still has balance and was left intact — abort the
+			// provider deletion so an admin can retry once it drains.
+			return nil
+		}
+
+		if err := tx.Delete(app).Error; err != nil {
+			return err
+		}
+		result.HubDeleted = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, childID := range result.DeletedChildIDs {
+		api.eventPublisher.Publish(&events.Event{
+			Event:      "nwc_app_deleted",
+			Properties: map[string]interface{}{"id": childID},
+		})
+	}
+	if result.HubDeleted {
+		api.eventPublisher.Publish(&events.Event{
+			Event:      "nwc_app_deleted",
+			Properties: map[string]interface{}{"name": app.Name, "id": app.ID},
+		})
+	}
+
+	return result, nil
+}
+
+// jitClaimStatus buckets a claim row into one of the JITAllocationStatus*
+// values. Unlike the old spend-fraction-based grouping (unavoidable when one
+// wallet == one recipient sharing a balance that could be partially drained),
+// a claim's status is now a plain binary — ClaimedAt set or not — since
+// claim_funds either pays a slice out completely or rolls back entirely.
+// "expired" only applies to a still-unclaimed row whose wallet's deadline has
+// passed.
+func jitClaimStatus(claimed bool, expiresAt *int64, now time.Time) string {
+	if claimed {
+		return JITAllocationStatusClaimed
+	}
+	if expiresAt != nil && *expiresAt < now.Unix() {
+		return JITAllocationStatusExpired
+	}
+	return JITAllocationStatusUnclaimed
+}
+
+// ListJITWalletClaims returns a page of a jit_hub's recipient slices (one row
+// per JITWalletClaim, across every jit_wallet child), newest first. limit ==
+// 0 returns every row unpaginated. status filters by JITAllocationStatus*
+// ("" means unfiltered); the returned counts always reflect the full,
+// unfiltered set regardless of status or paging.
+func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]JITWalletClaimResponse, uint64, JITWalletClaimCounts, error) {
+	var app db.App
+	if err := api.db.First(&app, appID).Error; err != nil {
+		return nil, 0, JITWalletClaimCounts{}, fmt.Errorf("app not found: %w", err)
+	}
+	if app.Kind != db.AppKindJITHub {
+		return nil, 0, JITWalletClaimCounts{}, fmt.Errorf("app is not a jit_hub")
+	}
+
+	rows, err := api.appsSvc.ListJITWalletClaims(appID)
+	if err != nil {
+		return nil, 0, JITWalletClaimCounts{}, err
+	}
+
+	result := make([]JITWalletClaimResponse, 0, len(rows))
+	for _, row := range rows {
+		r := JITWalletClaimResponse{
+			ID:            row.ID,
+			WalletAppID:   row.WalletAppID,
+			IdentityType:  row.IdentityType,
+			IdentityValue: row.IdentityValue,
+			AmountMloki:   row.AmountMloki,
+			Claimed:       row.ClaimedAt != nil,
+			CreatedAt:     row.CreatedAt.Unix(),
+		}
+		if row.ClaimedAt != nil {
+			claimedAt := row.ClaimedAt.Unix()
+			r.ClaimedAt = &claimedAt
+		}
+		if row.WalletExpiresAt != nil {
+			ts := row.WalletExpiresAt.Unix()
+			r.ExpiresAt = &ts
+		}
+		result = append(result, r)
+	}
+
+	// Counts are taken over the full, unfiltered set - computed before the
+	// status filter below so a UI's tab counts stay accurate regardless of
+	// which tab (if any) is currently selected.
+	now := time.Now()
+	counts := JITWalletClaimCounts{All: uint64(len(result))}
+	for _, r := range result {
+		switch jitClaimStatus(r.Claimed, r.ExpiresAt, now) {
+		case JITAllocationStatusUnclaimed:
+			counts.Unclaimed++
+		case JITAllocationStatusClaimed:
+			counts.Claimed++
+		case JITAllocationStatusExpired:
+			counts.Expired++
+		}
+	}
+
+	if status != "" {
+		filtered := make([]JITWalletClaimResponse, 0, len(result))
+		for _, r := range result {
+			if jitClaimStatus(r.Claimed, r.ExpiresAt, now) == status {
+				filtered = append(filtered, r)
+			}
+		}
+		result = filtered
+	}
+
+	totalCount := uint64(len(result))
+	if limit > 0 {
+		result = paginateSlice(result, limit, offset)
+	}
+	return result, totalCount, counts, nil
+}
+
+// DeleteJITWalletClaim removes an unclaimed slice, sweeping its AmountMloki
+// back to the hub via an internal transfer before deleting the row — so
+// removing one bad recipient from a shared wallet doesn't strand unclaimable
+// balance in it. If that was the wallet's last remaining recipient, the now
+// claims-less wallet is reclaimed and deleted too: ListJITWalletClaims is an
+// inner join starting from the claims table (apps/jit_hub_service.go), so a
+// wallet with zero claims can never appear there under any filter - left
+// behind, it would still count against its hub's apps.DeleteApp child-count
+// guard forever, with no way for an operator to ever find and remove it
+// through the normal listing/delete flow again.
+func (api *api) DeleteJITWalletClaim(walletAppID uint, claimID uint) error {
+	var wallet db.App
+	if err := api.db.First(&wallet, walletAppID).Error; err != nil {
+		return fmt.Errorf("app not found: %w", err)
+	}
+	if wallet.Kind != db.AppKindJITWallet {
+		return fmt.Errorf("app is not a jit_wallet")
+	}
+
+	claim, err := api.appsSvc.DeleteJITWalletClaim(walletAppID, claimID)
+	if err != nil {
+		return err
+	}
+
+	if claim.AmountMloki > 0 && wallet.ParentAppID != nil {
+		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
+			context.Background(), uint64(claim.AmountMloki), "jit claim removed: sweep back to hub", "", 0,
+			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
+			&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create sweep-back invoice: %w", err)
+		}
+		if _, err := api.svc.GetTransactionsService().SendPaymentSync(
+			invoice.PaymentRequest, nil, map[string]interface{}{"internal_transfer": true},
+			api.svc.GetLNClient(), &walletAppID, nil,
+		); err != nil {
+			return fmt.Errorf("failed to sweep removed claim's balance back to hub: %w", err)
+		}
+	}
+
+	remainingClaims, err := api.appsSvc.ListClaimsForWallet(walletAppID)
+	if err != nil {
+		return fmt.Errorf("failed to check remaining claims: %w", err)
+	}
+	if len(remainingClaims) > 0 {
+		return nil
+	}
+	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
+}
+
+// DeleteJITWallet reclaims any remaining balance of a jit_wallet child back
+// to its hub and deletes it (service.ReclaimAndDeleteSubWallet), regardless
+// of how much of it has already been spent — the same pattern
+// DeleteCircleWalletChild uses for the sibling Circles feature.
+func (api *api) DeleteJITWallet(hubAppID uint, walletAppID uint) error {
+	var hub db.App
+	if err := api.db.First(&hub, hubAppID).Error; err != nil {
+		return fmt.Errorf("app not found: %w", err)
+	}
+	if hub.Kind != db.AppKindJITHub {
+		return fmt.Errorf("app is not a jit_hub")
+	}
+
+	var wallet db.App
+	if err := api.db.Where("id = ? AND parent_app_id = ? AND parent_kind = ? AND kind = ?",
+		walletAppID, hubAppID, db.ParentKindJIT, db.AppKindJITWallet).First(&wallet).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: JIT wallet not found for this hub", constants.ErrInvalidParams)
+		}
+		return err
+	}
+
+	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
+}
+
+// GetJITWalletConnection returns the NWC pairing URI for an already-created JIT
+// wallet. Unlike a normal app's pairing secret (a random key generated once at
+// creation and never persisted), a JIT wallet's pairing key is deterministic —
+// derived on demand from the wallet's own app ID via keys.GetJITPairingKey,
+// specifically so the connection_key claim flow never has to store it. That
+// same determinism means it can be safely re-derived here any number of
+// times: nothing is rotated or invalidated for a client already using it.
+func (api *api) GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse, error) {
+	var app db.App
+	if err := api.db.First(&app, appID).Error; err != nil {
+		return nil, fmt.Errorf("app not found: %w", err)
+	}
+	if app.Kind != db.AppKindJITWallet {
+		return nil, fmt.Errorf("app is not a jit_wallet")
+	}
+	if app.WalletPubkey == nil {
+		return nil, fmt.Errorf("jit wallet has no wallet pubkey")
+	}
+
+	pairingSecretKey, err := api.keys.GetJITPairingKey(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive JIT pairing key: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString("nostr+walletconnect://")
+	b.WriteString(*app.WalletPubkey)
+	b.WriteString("?relay=")
+	b.WriteString(strings.Join(api.cfg.GetRelayUrls(), "&relay="))
+	b.WriteString("&secret=")
+	b.WriteString(pairingSecretKey)
+
+	return &JITWalletConnectionResponse{PairingURI: b.String()}, nil
+}
+
+// GetJITWalletRecipients returns every recipient slice of a single
+// jit_wallet, claimed or not — the admin-API counterpart of list_recipients
+// (which is scoped to whoever holds the wallet's NWC connection), used by a
+// jit_wallet's own AppDetails page. A wallet can serve more than one
+// beneficiary now, so this can return more than one row.
+func (api *api) GetJITWalletRecipients(appID uint) ([]JITWalletClaimResponse, error) {
+	var app db.App
+	if err := api.db.First(&app, appID).Error; err != nil {
+		return nil, fmt.Errorf("app not found: %w", err)
+	}
+	if app.Kind != db.AppKindJITWallet {
+		return nil, fmt.Errorf("app is not a jit_wallet")
+	}
+
+	claims, err := api.appsSvc.ListClaimsForWallet(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list JIT wallet recipients: %w", err)
+	}
+
+	result := make([]JITWalletClaimResponse, 0, len(claims))
+	for _, c := range claims {
+		r := JITWalletClaimResponse{
+			ID:            c.ID,
+			WalletAppID:   c.WalletAppID,
+			IdentityType:  c.IdentityType,
+			IdentityValue: c.IdentityValue,
+			AmountMloki:   c.AmountMloki,
+			Claimed:       c.ClaimedAt != nil,
+			CreatedAt:     c.CreatedAt.Unix(),
+		}
+		if c.ClaimedAt != nil {
+			claimedAt := c.ClaimedAt.Unix()
+			r.ClaimedAt = &claimedAt
+		}
+		if app.ExpiresAt != nil {
+			ts := app.ExpiresAt.Unix()
+			r.ExpiresAt = &ts
+		}
+		result = append(result, r)
+	}
+	return result, nil
+}
+
+// CreateJITWallet is the admin equivalent of a hub calling create_jit_wallet
+// over NWC: it immediately creates, funds, and returns the plaintext pairing
+// URI for a shared JIT wallet serving every recipient in the request in one
+// shot — the connection is meant to be distributed to the whole recipient
+// group by the hub owner afterward.
+func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*CreateJITWalletResponse, error) {
+	var hub db.App
+	if err := api.db.First(&hub, hubID).Error; err != nil {
+		return nil, fmt.Errorf("app not found: %w", err)
+	}
+	if hub.Kind != db.AppKindJITHub {
+		return nil, fmt.Errorf("app is not a jit_hub")
+	}
+
+	// Serialize concurrent create_jit_wallet attempts against this hub (across
+	// this admin HTTP path and the NWC path,
+	// nip47/controllers/create_jit_wallet_controller.go) so two racing
+	// requests can't both pass jitwallet.Resolve's balance pre-check against
+	// the same stale balance before either one's Commit actually transfers
+	// funds out.
+	release, ok := jitwallet.LockHub(hub.ID)
+	if !ok {
+		return nil, fmt.Errorf("%w: wallet creation already in progress for this hub", constants.ErrInvalidParams)
+	}
+	defer release()
+
+	recipients := make([]jitwallet.RecipientInput, len(req.Recipients))
+	for i, r := range req.Recipients {
+		recipients[i] = jitwallet.RecipientInput{
+			IdentityType:  r.IdentityType,
+			IdentityValue: r.IdentityValue,
+			IAPubkey:      r.IAPubkey,
+			AmountMloki:   uint64(r.AmountMloki),
+		}
+	}
+
+	result, err := jitwallet.Create(context.Background(), jitwallet.Deps{
+		AppsService:         api.appsSvc,
+		TransactionsService: api.svc.GetTransactionsService(),
+		LNClient:            api.svc.GetLNClient(),
+		Keys:                api.keys,
+		DB:                  api.db,
+		RelayURLs:           api.cfg.GetRelayUrls(),
+		IAChecker:           api.iaManager,
+	}, jitwallet.Params{
+		HubApp:     &hub,
+		Recipients: recipients,
+		ExpirySecs: req.ExpirySecs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	recipientResults := make([]JITWalletRecipient, len(result.Recipients))
+	for i, r := range result.Recipients {
+		recipientResults[i] = JITWalletRecipient{
+			IdentityType:  r.IdentityType,
+			IdentityValue: r.IdentityValue,
+			AmountMloki:   int64(r.AmountMloki),
+		}
+	}
+
+	return &CreateJITWalletResponse{
+		AppID:      result.WalletApp.ID,
+		PairingURI: result.PairingURI,
+		ExpiresAt:  result.ExpiresAt.Unix(),
+		Recipients: recipientResults,
+	}, nil
+}
+
+// ListIdentityAuthorities returns every registered Identity Authority.
+func (api *api) ListIdentityAuthorities() ([]IdentityAuthorityResponse, error) {
+	authorities, err := api.iaManager.List()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]IdentityAuthorityResponse, 0, len(authorities))
+	for _, a := range authorities {
+		result = append(result, identityAuthorityToResponse(a))
+	}
+	return result, nil
+}
+
+// AddIdentityAuthority registers a new trusted Identity Authority.
+func (api *api) AddIdentityAuthority(req *AddIdentityAuthorityRequest) (*IdentityAuthorityResponse, error) {
+	authority, err := api.iaManager.Add(req.Pubkey, req.Name, req.RelayURLs)
+	if err != nil {
+		return nil, err
+	}
+	response := identityAuthorityToResponse(*authority)
+	return &response, nil
+}
+
+// DeleteIdentityAuthority removes an Identity Authority from the trusted registry.
+func (api *api) DeleteIdentityAuthority(pubkey string) error {
+	return api.iaManager.Delete(pubkey)
+}
+
+func identityAuthorityToResponse(a apps.IdentityAuthority) IdentityAuthorityResponse {
+	var relayURLs []string
+	if a.RelayURLs != "" {
+		relayURLs = strings.Split(a.RelayURLs, ",")
+	}
+	return IdentityAuthorityResponse{
+		Pubkey:    a.Pubkey,
+		Name:      a.Name,
+		RelayURLs: relayURLs,
+		CreatedAt: a.CreatedAt.Unix(),
+	}
 }

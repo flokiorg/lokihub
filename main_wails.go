@@ -8,6 +8,7 @@ import (
 	"embed"
 	"net"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/wails"
@@ -64,7 +65,9 @@ func main() {
 	logger.Logger.Info().Msg("Cancelling service context...")
 	// cancel the service context
 	cancel()
-	svc.Shutdown(context.Background())
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.APP_SHUTDOWN_TIMEOUT)
+	defer shutdownCancel()
+	svc.Shutdown(shutdownCtx)
 	logger.Logger.Info().Msg("Service exited")
 	logger.Logger.Info().Msg("Lokihub needs to stay online to send and receive transactions. Channels may be closed if your hub stays offline for an extended period of time.")
 }

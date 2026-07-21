@@ -26,14 +26,9 @@ type stubTransactionsService struct {
 func (s *stubTransactionsService) ConsumeEvent(_ context.Context, _ *events.Event, _ map[string]interface{}) {
 }
 
-func (s *stubTransactionsService) SweepStalePendingOutgoing(_ context.Context, _ lnclient.LNClient) {
-	panic("SweepStalePendingOutgoing: unexpected call in test")
-}
-
 func (s *stubTransactionsService) MakeInvoice(
 	_ context.Context, _ uint64, _, _ string, _ uint64, _ map[string]interface{},
-	_ lnclient.LNClient, _ *uint, _ *uint, _ *string, _ *string, _ *uint16, _ *uint64, _ *uint32,
-	_ *transactions.InternalMakeInvoiceMeta,
+	_ lnclient.LNClient, _ *uint, _ *uint, _ *string, _ *string, _ *uint16, _ *uint64, _ *uint32, _ *transactions.InternalMakeInvoiceMeta,
 ) (*transactions.Transaction, error) {
 	panic("MakeInvoice: unexpected call in test")
 }
@@ -75,6 +70,9 @@ func (s *stubTransactionsService) SetTransactionMetadata(_ context.Context, _ ui
 }
 
 func (s *stubTransactionsService) SetLiquidityManager(_ *manager.LiquidityManager) {}
+
+func (s *stubTransactionsService) SweepStalePendingOutgoing(_ context.Context, _ lnclient.LNClient) {
+}
 
 func (s *stubTransactionsService) EstimateFee(_ string) (uint64, error) {
 	panic("EstimateFee: unexpected call in test")
@@ -133,6 +131,52 @@ func TestSendPayment_WithoutAppId_PassesNilToSendPaymentSync(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, preimage, *resp.Preimage)
+	txSvc.AssertExpectations(t)
+}
+
+// TestSendPayment_StripsSpoofedInternalMetadataFlags is the regression test
+// for the admin SendPayment API stripping caller-supplied "internal_transfer"
+// and "jit_claim_slice" metadata keys before they ever reach SendPaymentSync -
+// same spoofing prevention pay_invoice_controller.go and claim_funds_controller.go
+// already apply on the NWC-facing side (see transactions_service.go's
+// validateCanPay doc comment: skipBudgetCap/skipFeeReserve are only ever meant
+// to be set by trusted server-side call sites, never from caller-supplied
+// metadata). Before this fix, only "internal_transfer" was stripped here -
+// "jit_claim_slice" was not - so a caller of this admin API could set
+// jit_claim_slice=true on an ordinary send-payment call and bypass both the
+// fee-reserve check and enforceJITFullDrain's "a jit_wallet must drain its
+// full balance in one payment" rule, which that function's own doc comment
+// says is enforced at this shared layer specifically so the HTTP API can't
+// bypass it.
+func TestSendPayment_StripsSpoofedInternalMetadataFlags(t *testing.T) {
+	lnClient := mocks.NewMockLNClient(t)
+	svc := mocks.NewMockService(t)
+	txSvc := &stubTransactionsService{}
+
+	appID := uint(42)
+	invoice := "lnbc123..."
+	preimage := "preimage_abc"
+	settled := makeSettledTransaction(preimage)
+
+	spoofedMetadata := map[string]interface{}{
+		"internal_transfer": true,
+		"jit_claim_slice":   true,
+		"note":              "kept",
+	}
+	expectedMetadata := map[string]interface{}{
+		"note": "kept",
+	}
+
+	svc.On("GetLNClient").Return(lnClient)
+	svc.On("GetTransactionsService").Return(txSvc)
+	txSvc.On("SendPaymentSync", invoice, (*uint64)(nil), expectedMetadata, lnClient, &appID, (*uint)(nil)).
+		Return(settled, nil)
+
+	theAPI := instantiateAPIWithService(svc)
+	resp, err := theAPI.SendPayment(context.Background(), invoice, nil, &appID, spoofedMetadata)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	txSvc.AssertExpectations(t)
 }
 
