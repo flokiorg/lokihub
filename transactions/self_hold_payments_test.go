@@ -43,8 +43,18 @@ func TestSelfHoldPaymentSettled(t *testing.T) {
 		assert.Equal(t, false, result.Hold)
 	}()
 
-	// wait for payment to be accepted
-	time.Sleep(10 * time.Millisecond)
+	// Wait for the payment to actually be accepted (i.e. for
+	// interceptSelfHoldPayment to have registered its event subscriber and be
+	// blocked in its select) before settling - a fixed sleep here is flaky
+	// under load (e.g. running the full test suite in parallel): if it's too
+	// short, the settle event below publishes before the subscriber
+	// registers and is never delivered, hanging the goroutine forever on an
+	// unreceived channel.
+	require.Eventually(t, func() bool {
+		incomingTransactionType := constants.TRANSACTION_TYPE_INCOMING
+		tx, lookupErr := transactionsService.LookupTransaction(ctx, paymentHash, &incomingTransactionType, svc.LNClient, nil)
+		return lookupErr == nil && tx != nil && tx.State == constants.TRANSACTION_STATE_ACCEPTED
+	}, 2*time.Second, 2*time.Millisecond, "hold invoice was never marked accepted")
 	settledTransaction, err := transactionsService.SettleHoldInvoice(ctx, preimage, svc.LNClient)
 	assert.NoError(t, err)
 	require.NotNil(t, settledTransaction)
@@ -54,8 +64,6 @@ func TestSelfHoldPaymentSettled(t *testing.T) {
 	wg.Wait()
 }
 func TestSelfHoldPaymentCanceled(t *testing.T) {
-	t.Skip("deadlocks under go test -race: https://github.com/flokiorg/lokihub/issues/3")
-
 	ctx := context.TODO()
 
 	svc, err := tests.CreateTestService(t)
@@ -88,8 +96,14 @@ func TestSelfHoldPaymentCanceled(t *testing.T) {
 		assert.Equal(t, false, failedOutgoingTransaction.Hold)
 	}()
 
-	// wait for payment to be accepted
-	time.Sleep(10 * time.Millisecond)
+	// See TestSelfHoldPaymentSettled's identical wait for why this can't be a
+	// fixed sleep: canceling before interceptSelfHoldPayment's subscriber is
+	// registered would hang that goroutine forever.
+	require.Eventually(t, func() bool {
+		incomingTransactionType := constants.TRANSACTION_TYPE_INCOMING
+		tx, lookupErr := transactionsService.LookupTransaction(ctx, paymentHash, &incomingTransactionType, svc.LNClient, nil)
+		return lookupErr == nil && tx != nil && tx.State == constants.TRANSACTION_STATE_ACCEPTED
+	}, 2*time.Second, 2*time.Millisecond, "hold invoice was never marked accepted")
 	err = transactionsService.CancelHoldInvoice(ctx, paymentHash, svc.LNClient)
 	assert.NoError(t, err)
 

@@ -23,21 +23,29 @@ type Nip47InfoPublishRequest struct {
 	Attempt          uint32
 }
 
+// buffered so that typical bursts (e.g. many apps created at once) don't need
+// a throwaway goroutine per enqueue just to avoid blocking the caller
+const nip47InfoPublishQueueBufferSize = 64
+
 type nip47InfoPublishQueue struct {
 	channel chan *Nip47InfoPublishRequest
 }
 
 func NewNip47InfoPublishQueue() *nip47InfoPublishQueue {
 	return &nip47InfoPublishQueue{
-		channel: make(chan *Nip47InfoPublishRequest),
+		channel: make(chan *Nip47InfoPublishRequest, nip47InfoPublishQueueBufferSize),
 	}
 }
 
 func (q *nip47InfoPublishQueue) AddToQueue(req *Nip47InfoPublishRequest) {
-	// thread will be blocked if the channel is full, so execute in a separate goroutine
-	go func() {
-		q.channel <- req
-	}()
+	select {
+	case q.channel <- req:
+	default:
+		// buffer is full, fall back to a goroutine so the caller isn't blocked
+		go func() {
+			q.channel <- req
+		}()
+	}
 }
 
 func (q *nip47InfoPublishQueue) Channel() <-chan *Nip47InfoPublishRequest {

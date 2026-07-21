@@ -25,8 +25,12 @@ type Keys interface {
 	GetNostrSecretKey() string
 	// Swap rescue key derived from master key using BIP-85
 	GetSwapMnemonic() string
-	// Derives a BIP32 child key from appKey derived child dedicated for app wallet keys
+	// Derives a BIP32 child key from appKey dedicated for app wallet keys (branch H+1)
 	GetAppWalletKey(childIndex uint) (string, error)
+	// Derives the NWC pairing private key for a JIT pending-claim wallet (branch H+2).
+	// Cryptographically independent of GetAppWalletKey (different hardened branch index).
+	// Never needs to be stored — re-derive at claim time from the app ID.
+	GetJITPairingKey(appID uint) (string, error)
 	// Derives a child BIP-32 key from the app key (derived from the mnemonic)
 	DeriveKey(path []uint32) (*bip32.Key, error)
 	// Derives a BIP32 child key from appKey derived child dedicated for swaps
@@ -146,6 +150,22 @@ func (keys *keys) GetAppWalletKey(appID uint) (string, error) {
 	}
 	childPrivKey, _ := btcec.PrivKeyFromBytes(key.Key)
 	return hex.EncodeToString(childPrivKey.Serialize()), nil
+}
+
+// GetJITPairingKey derives the NWC client pairing private key for a JIT wallet using
+// BIP32 branch H+2, which is cryptographically independent of the wallet key branch H+1.
+// This eliminates the need to store the pairing secret in the database — derive it at
+// creation time to register the app pubkey, then re-derive it at claim time to build the URI.
+func (keys *keys) GetJITPairingKey(appID uint) (string, error) {
+	path := []uint32{bip32.FirstHardenedChild + 2, bip32.FirstHardenedChild + uint32(appID)}
+	key, err := keys.DeriveKey(path)
+	if err != nil {
+		return "", err
+	}
+	childPrivKey, _ := btcec.PrivKeyFromBytes(key.Key)
+	privHex := hex.EncodeToString(childPrivKey.Serialize())
+	childPrivKey.Zero()
+	return privHex, nil
 }
 
 func (keys *keys) DeriveKey(path []uint32) (*bip32.Key, error) {

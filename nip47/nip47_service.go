@@ -11,6 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/flokiorg/lokihub/nip47/controllers"
 	"github.com/flokiorg/lokihub/nip47/notifications"
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
@@ -32,6 +33,11 @@ type nip47Service struct {
 	db                     *gorm.DB
 	eventPublisher         events.EventPublisher
 	logger                 zerolog.Logger
+	socialCache            controllers.NostrSocialCache
+	jitRateLimiter         controllers.RateLimiter
+	jitClaimLimiter        controllers.RateLimiter
+	circleRateLimiter      controllers.RateLimiter
+	identityAuthorityMgr   *apps.IdentityAuthorityManager
 }
 
 type Nip47Service interface {
@@ -46,7 +52,7 @@ type Nip47Service interface {
 	EnqueueNip47InfoPublishRequest(appId uint, appWalletPubKey, appWalletPrivKey, relayUrl string)
 }
 
-func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher) *nip47Service {
+func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
 	return &nip47Service{
 		nip47NotificationQueue: notifications.NewNip47NotificationQueue(),
 		nip47InfoPublishQueue:  NewNip47InfoPublishQueue(),
@@ -58,6 +64,11 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 		eventPublisher:         eventPublisher,
 		keys:                   keys,
 		logger:                 logger.Logger.With().Str("component", "nip47").Logger(),
+		socialCache:            socialCache,
+		jitRateLimiter:         controllers.NewRateLimiter(),
+		jitClaimLimiter:        controllers.NewRateLimiter(),
+		circleRateLimiter:      controllers.NewRateLimiter(),
+		identityAuthorityMgr:   apps.NewIdentityAuthorityManager(db),
 	}
 }
 
@@ -104,30 +115,43 @@ func (svc *nip47Service) enqueueNip47InfoPublishRequestWithAttempt(appId uint, a
 	})
 }
 
-func (svc *nip47Service) StartNip47InfoPublisher(ctx context.Context, pool *nostr.SimplePool, lnClient lnclient.LNClient) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				// relay disconnected
-				return
-			case req := <-svc.nip47InfoPublishQueue.Channel():
-				_, err := svc.PublishNip47Info(ctx, pool, req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, lnClient)
-				if err != nil {
-					svc.logger.Error().Err(err).
-						Str("wallet_pubkey", req.AppWalletPubKey).
-						Str("relay_url", req.RelayUrl).
-						Msg("Failed to publish NIP47 info from queue")
+// minNip47InfoPublisherWorkers is a floor on the worker pool size so that even
+// a single configured relay still gets some concurrency for retries.
+const minNip47InfoPublisherWorkers = 4
 
-					// wait and then re-add the item to the queue
-					// done async to ensure an offline relay does not delay
-					// the publishing of newly created app connections
-					go func() {
-						time.Sleep((5 * time.Duration(req.Attempt+1)) * time.Second)
-						svc.enqueueNip47InfoPublishRequestWithAttempt(req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, req.Attempt+1)
-					}()
-				}
+// StartNip47InfoPublisher runs a small pool of workers draining the publish
+// queue concurrently. A single consumer would let one slow/unresponsive relay
+// head-of-line-block every other queued publish (including for healthy
+// relays and unrelated apps); a bounded pool avoids that without retrying
+// faster or waiting longer on any individual publish.
+func (svc *nip47Service) StartNip47InfoPublisher(ctx context.Context, pool *nostr.SimplePool, lnClient lnclient.LNClient) {
+	workers := max(len(svc.cfg.GetRelayUrls()), minNip47InfoPublisherWorkers)
+	for range workers {
+		go svc.runNip47InfoPublisherWorker(ctx, pool, lnClient)
+	}
+}
+
+func (svc *nip47Service) runNip47InfoPublisherWorker(ctx context.Context, pool *nostr.SimplePool, lnClient lnclient.LNClient) {
+	for {
+		select {
+		case <-ctx.Done():
+			// relay disconnected
+			return
+		case req := <-svc.nip47InfoPublishQueue.Channel():
+			_, err := svc.PublishNip47Info(ctx, pool, req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, lnClient)
+			if err != nil {
+				svc.logger.Error().Err(err).
+					Str("wallet_pubkey", req.AppWalletPubKey).
+					Str("relay_url", req.RelayUrl).
+					Msg("Failed to publish NIP47 info from queue")
+
+				// wait and then re-add the item to the queue, without holding
+				// a goroutine (and its stack) parked for the whole backoff
+				delay := (5 * time.Duration(req.Attempt+1)) * time.Second
+				time.AfterFunc(delay, func() {
+					svc.enqueueNip47InfoPublishRequestWithAttempt(req.AppId, req.AppWalletPubKey, req.AppWalletPrivKey, req.RelayUrl, req.Attempt+1)
+				})
 			}
 		}
-	}()
+	}
 }

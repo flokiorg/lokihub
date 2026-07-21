@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -195,7 +197,7 @@ func TestHandleGetInfoEvent_WithMetadata(t *testing.T) {
 		"a": 123,
 	}
 
-	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindStandard, nil, "", metadata)
+	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, "", nil, "", metadata)
 	assert.NoError(t, err)
 
 	nip47Request := &models.Request{}
@@ -350,4 +352,169 @@ func TestHandleGetInfoEvent_WithNotifications(t *testing.T) {
 	assert.Equal(t, tests.MockNodeInfo.BlockHash, *nodeInfo.BlockHash)
 	assert.Contains(t, nodeInfo.Methods, "get_info")
 	assert.Equal(t, []string{"payment_received", "payment_sent"}, nodeInfo.Notifications)
+}
+
+func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+
+	circleAdmin, _, err := svc.AppsService.CreateCircleHub(
+		"Circle Admin",
+		"",
+		0,
+		constants.BUDGET_RENEWAL_NEVER,
+		nil,
+		[]string{constants.GET_INFO_SCOPE, constants.CIRCLE_WALLET_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "Circle Admin", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{
+			MaxExpSecs:        7200,
+			FeesPpm:           500,
+			PerWalletMaxMloki: 100_000,
+		},
+	)
+	require.NoError(t, err)
+
+	// Pre-fund the circle admin with 200_000 mloki.
+	svc.DB.Create(&db.Transaction{
+		AppId:       &circleAdmin.ID,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		AmountMloki: 200_000,
+		PaymentHash: "circlefund",
+	})
+
+	// Commit 50_000 mloki via an existing active child wallet.
+	future := time.Now().Add(time.Hour)
+	_, _, err = svc.AppsService.CreateApp(
+		"child1",
+		"",
+		50, // 50 loki = 50_000 mloki
+		constants.BUDGET_RENEWAL_NEVER,
+		&future,
+		[]string{constants.PAY_INVOICE_SCOPE},
+		db.AppKindCircleWallet,
+		&circleAdmin.ID,
+		db.ParentKindCircle,
+		nil,
+	)
+	require.NoError(t, err)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleGetInfoEvent(ctx, nip47Request, dbRequestEvent.ID, circleAdmin, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	})
+
+	assert.Nil(t, publishedResponse.Error)
+	nodeInfo := publishedResponse.Result.(*getInfoResponse)
+	require.NotNil(t, nodeInfo.CircleWallet, "circle_admin app must have circle_wallet block in get_info response")
+	assert.Equal(t, int64(150_000), nodeInfo.CircleWallet.AvailableMloki) // 200k - 50k commitment
+	assert.Equal(t, 7200, nodeInfo.CircleWallet.MaxExpSecs)
+	assert.Equal(t, 500, nodeInfo.CircleWallet.FeesPpm)
+	assert.Equal(t, db.CirclePolicyAllowlist, nodeInfo.CircleWallet.CirclePolicy)
+}
+
+func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMloki(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+
+	circleAdmin, _, err := svc.AppsService.CreateCircleHub(
+		"Circle Admin Zero",
+		"",
+		0,
+		constants.BUDGET_RENEWAL_NEVER,
+		nil,
+		[]string{constants.GET_INFO_SCOPE, constants.CIRCLE_WALLET_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "Circle Admin Zero", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
+	)
+	require.NoError(t, err)
+
+	// Pre-fund the circle admin with only 50_000 mloki.
+	svc.DB.Create(&db.Transaction{
+		AppId:       &circleAdmin.ID,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		AmountMloki: 50_000,
+		PaymentHash: "circlefund2",
+	})
+
+	// Create a child with 80_000 mloki commitment — exceeds balance.
+	future := time.Now().Add(time.Hour)
+	_, _, err = svc.AppsService.CreateApp(
+		"child-over",
+		"",
+		80, // 80 loki = 80_000 mloki
+		constants.BUDGET_RENEWAL_NEVER,
+		&future,
+		[]string{constants.PAY_INVOICE_SCOPE},
+		db.AppKindCircleWallet,
+		&circleAdmin.ID,
+		db.ParentKindCircle,
+		nil,
+	)
+	require.NoError(t, err)
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleGetInfoEvent(ctx, nip47Request, dbRequestEvent.ID, circleAdmin, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	})
+
+	assert.Nil(t, publishedResponse.Error)
+	nodeInfo := publishedResponse.Result.(*getInfoResponse)
+	require.NotNil(t, nodeInfo.CircleWallet)
+	// commitment (80k) > balance (50k) → available_mloki must be clamped to 0, not negative.
+	assert.Equal(t, int64(0), nodeInfo.CircleWallet.AvailableMloki)
+}
+
+func TestHandleGetInfoEvent_NonCircleAdmin_NoCircleWalletBlock(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+
+	// Grant get_info permission.
+	svc.DB.Create(&db.AppPermission{AppId: app.ID, Scope: constants.GET_INFO_SCOPE})
+
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleGetInfoEvent(ctx, nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	})
+
+	assert.Nil(t, publishedResponse.Error)
+	nodeInfo := publishedResponse.Result.(*getInfoResponse)
+	assert.Nil(t, nodeInfo.CircleWallet, "non-circle_admin app must not have circle_wallet block")
 }

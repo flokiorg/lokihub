@@ -139,7 +139,7 @@ func NewService(ctx context.Context) (*service, error) {
 		eventPublisher: eventPublisher,
 		lokiSvc:        lokiSvc,
 
-		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher),
+		nip47Service:        nip47.NewNip47Service(gormDB, cfg, keys, eventPublisher, socialCache),
 		socialCache:         socialCache,
 		transactionsService: transactionsSvc,
 		db:                  gormDB,

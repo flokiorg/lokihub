@@ -215,33 +215,21 @@ func TestMarkSettled_Twice(t *testing.T) {
 	var wg sync.WaitGroup
 	n := 10
 	wg.Add(n)
-	// initialTx is snapshotted once here, before any goroutine starts, so
-	// each goroutine's own localTx copy below is race-free by construction
-	// (no concurrent read against a variable anything else might write).
-	initialTx := dbTransaction
 	for range n {
 		go func() {
 			defer wg.Done()
+			var settled *db.Transaction
 			// txErr is goroutine-local - the outer err (from CreateTestService,
 			// already asserted above) must not be written from multiple
 			// goroutines at once.
-			// localTx is a goroutine-local copy - only the one goroutine that
-			// actually wins the settle race (settled != nil) writes back to
-			// the shared dbTransaction below, so passing the shared struct's
-			// address into markTransactionSettled from all n goroutines
-			// concurrently (which mutates it via gorm's Updates) would
-			// otherwise race even though only one call actually settles.
-			localTx := initialTx
-			var settled *db.Transaction
 			txErr := svc.DB.Transaction(func(tx *gorm.DB) error {
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
 				var markErr error
-				settled, markErr = transactionsService.markTransactionSettled(tx, &localTx, "test", 0, false)
+				settled, markErr = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
 				return markErr
 			})
 			if settled != nil {
-				dbTransaction = *settled
 				transactionsService.publishSettleEvent(settled)
 			}
 			require.NoError(t, txErr)
@@ -335,7 +323,8 @@ func TestMarkFailed(t *testing.T) {
 	svc.EventPublisher.RegisterSubscriber(mockEventConsumer)
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 	err = svc.DB.Transaction(func(tx *gorm.DB) error {
-		return transactionsService.markPaymentFailed(tx, &dbTransaction, "some routing error")
+		_, markErr := transactionsService.markPaymentFailed(tx, &dbTransaction, "some routing error")
+		return markErr
 	})
 
 	assert.NoError(t, err)
@@ -366,12 +355,133 @@ func TestDoNotMarkFailedTwice(t *testing.T) {
 	svc.EventPublisher.RegisterSubscriber(mockEventConsumer)
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 	err = svc.DB.Transaction(func(tx *gorm.DB) error {
-		return transactionsService.markPaymentFailed(tx, &dbTransaction, "some routing error")
+		_, markErr := transactionsService.markPaymentFailed(tx, &dbTransaction, "some routing error")
+		return markErr
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, updatedAt, dbTransaction.UpdatedAt)
 	assert.Zero(t, len(mockEventConsumer.GetConsumedEvents()))
+}
+
+// TestMarkPaymentFailed_DoesNotDowngradeSettled is the direct regression test
+// for the settle-vs-fail race: if the async payment-sent-event subscription
+// settles a transaction before the synchronous SendPaymentSync error branch
+// gets a chance to run, markPaymentFailed must never flip that row back to
+// FAILED - the funds already left the node, and get_isolated_balance only
+// sums SETTLED rows, so downgrading it would silently drop the paid-out
+// amount from balance accounting and (for a JIT claim) reopen the slice.
+func TestMarkPaymentFailed_DoesNotDowngradeSettled(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	settledAt := time.Now().Add(time.Duration(-1) * time.Minute)
+	preimage := "123preimage"
+	dbTransaction := db.Transaction{
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		Type:        constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentHash: tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki: 123000,
+		Preimage:    &preimage,
+		SettledAt:   &settledAt,
+	}
+	svc.DB.Create(&dbTransaction)
+
+	mockEventConsumer := tests.NewMockEventConsumer()
+	svc.EventPublisher.RegisterSubscriber(mockEventConsumer)
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+
+	var failedTransaction *db.Transaction
+	err = svc.DB.Transaction(func(tx *gorm.DB) error {
+		var markErr error
+		failedTransaction, markErr = transactionsService.markPaymentFailed(tx, &dbTransaction, "late RPC timeout error")
+		return markErr
+	})
+
+	assert.NoError(t, err)
+	assert.Nil(t, failedTransaction)
+	assert.Zero(t, len(mockEventConsumer.GetConsumedEvents()))
+
+	var reloaded db.Transaction
+	require.NoError(t, svc.DB.First(&reloaded, dbTransaction.ID).Error)
+	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, reloaded.State)
+	assert.Equal(t, preimage, *reloaded.Preimage)
+	assert.NotNil(t, reloaded.SettledAt)
+	assert.Empty(t, reloaded.FailureReason)
+}
+
+// TestMarkPaymentFailed_DoesNotDowngradeSettled_IncomingTransaction covers the
+// same guard for incoming (hold-invoice) transactions, since markPaymentFailed
+// is also reached from the hold-invoice-cancellation path (CancelHoldInvoice).
+func TestMarkPaymentFailed_DoesNotDowngradeSettled_IncomingTransaction(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	settledAt := time.Now().Add(time.Duration(-1) * time.Minute)
+	preimage := "123preimage"
+	dbTransaction := db.Transaction{
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		PaymentHash: tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki: 123000,
+		Preimage:    &preimage,
+		SettledAt:   &settledAt,
+	}
+	svc.DB.Create(&dbTransaction)
+
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+
+	var failedTransaction *db.Transaction
+	err = svc.DB.Transaction(func(tx *gorm.DB) error {
+		var markErr error
+		failedTransaction, markErr = transactionsService.markPaymentFailed(tx, &dbTransaction, "hold invoice cancellation raced settlement")
+		return markErr
+	})
+
+	assert.NoError(t, err)
+	assert.Nil(t, failedTransaction)
+
+	var reloaded db.Transaction
+	require.NoError(t, svc.DB.First(&reloaded, dbTransaction.ID).Error)
+	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, reloaded.State)
+}
+
+// TestMarkTransactionSettled_UpgradesPreviouslyFailed documents and locks in
+// the intentionally *asymmetric* counterpart to the two tests above: unlike
+// markPaymentFailed (never downgrades SETTLED -> FAILED), markTransactionSettled
+// deliberately has no guard against settling an already-FAILED row - this is
+// desired self-healing behavior (see TestConsumeEvent_FailedMarkedAsSuccessful),
+// not a second instance of the same bug class, because upgrading a stale FAILED
+// marking to SETTLED once real settlement is observed can only ever correct the
+// ledger in the safe direction (crediting funds that did leave the node), while
+// the reverse (downgrading a real SETTLED to FAILED) would hide funds that did.
+func TestMarkTransactionSettled_UpgradesPreviouslyFailed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	dbTransaction := db.Transaction{
+		State:       constants.TRANSACTION_STATE_FAILED,
+		Type:        constants.TRANSACTION_TYPE_OUTGOING,
+		PaymentHash: tests.MockLNClientTransaction.PaymentHash,
+		AmountMloki: 123000,
+	}
+	svc.DB.Create(&dbTransaction)
+
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+
+	var settled *db.Transaction
+	err = svc.DB.Transaction(func(tx *gorm.DB) error {
+		var settleErr error
+		settled, settleErr = transactionsService.markTransactionSettled(tx, &dbTransaction, "123preimage", 0, false)
+		return settleErr
+	})
+
+	assert.NoError(t, err)
+	require.NotNil(t, settled)
+	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, settled.State)
 }
 
 func TestSendPaymentSync_FailedRemovesFeeReserve(t *testing.T) {
@@ -428,6 +538,76 @@ func TestSendPaymentSync_PendingHasFeeReserve(t *testing.T) {
 	assert.Equal(t, constants.TRANSACTION_STATE_PENDING, transaction.State)
 	assert.Equal(t, uint64(10000), transaction.FeeReserveMloki)
 	assert.Nil(t, transaction.Preimage)
+}
+
+// TestSendPaymentSync_SettleRacesFailure_ReturnsSettled is the end-to-end
+// regression test for the settle-vs-fail race, exercised through the real
+// SendPaymentSync call (not just the markPaymentFailed unit tests above).
+// The synchronous RPC call is delayed and configured to ultimately error; while
+// it's in flight, an async "nwc_lnclient_payment_sent" event (the same kind a
+// real subscribePayments-style goroutine would emit) settles the same payment
+// hash first. SendPaymentSync must not surface the stale RPC error for a
+// payment that actually went out - it must return the settled transaction
+// with no error, and the isolated balance must reflect the amount as spent,
+// not silently reappear as available for a second payment/claim.
+func TestSendPaymentSync_SettleRacesFailure_ReturnsSettled(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	delay := 100 * time.Millisecond
+	mockLn := svc.LNClient.(*tests.MockLn)
+	mockLn.PaymentDelay = &delay
+	mockLn.PayInvoiceErrors = append(mockLn.PayInvoiceErrors, errors.New("timeout talking to node"))
+	mockLn.PayInvoiceResponses = append(mockLn.PayInvoiceResponses, nil)
+
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+
+	var wg sync.WaitGroup
+	var result *Transaction
+	var sendErr error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		result, sendErr = transactionsService.SendPaymentSync(tests.MockLNClientTransaction.Invoice, nil, nil, svc.LNClient, nil, nil)
+	}()
+
+	// Wait for the goroutine to actually create the PENDING row before firing
+	// the settle event - a fixed sleep here is flaky under load (e.g. running
+	// the full test suite in parallel), since it races the same 100ms mock
+	// delay this test depends on to open the window in the first place.
+	require.Eventually(t, func() bool {
+		var pending db.Transaction
+		return svc.DB.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			PaymentHash: tests.MockLNClientTransaction.PaymentHash,
+		}).First(&pending).Error == nil
+	}, 2*time.Second, 2*time.Millisecond, "PENDING transaction row was never created")
+
+	transactionsService.ConsumeEvent(context.TODO(), &events.Event{
+		Event: "nwc_lnclient_payment_sent",
+		Properties: &lnclient.Transaction{
+			Type:            tests.MockLNClientTransaction.Type,
+			Invoice:         tests.MockLNClientTransaction.Invoice,
+			Description:     tests.MockLNClientTransaction.Description,
+			DescriptionHash: tests.MockLNClientTransaction.DescriptionHash,
+			Preimage:        tests.MockLNClientTransaction.Preimage,
+			PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
+			Amount:          tests.MockLNClientTransaction.Amount,
+			FeesPaid:        tests.MockLNClientTransaction.FeesPaid,
+		},
+	}, nil)
+
+	wg.Wait()
+
+	assert.NoError(t, sendErr)
+	require.NotNil(t, result)
+	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, result.State)
+
+	var reloaded db.Transaction
+	require.NoError(t, svc.DB.First(&reloaded, result.ID).Error)
+	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, reloaded.State)
 }
 
 func TestConsumeEvent_FailedMarkedAsSuccessful(t *testing.T) {

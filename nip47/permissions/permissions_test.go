@@ -162,3 +162,120 @@ func TestGetPermittedMethods_PayInvoiceScopeGivesAllPaymentMethods(t *testing.T)
 	assert.Contains(t, result, models.MULTI_PAY_INVOICE_METHOD)
 	assert.Contains(t, result, models.MULTI_PAY_KEYSEND_METHOD)
 }
+
+// JIT Hub scope: bidirectional mapping. claim_jit_wallet no longer exists —
+// create_jit_wallet is the only method this scope grants (replaced entirely
+// by the new shared-wallet + claim_funds model).
+func TestScopeToRequestMethods_JITHub(t *testing.T) {
+	methods := scopeToRequestMethods(constants.JIT_HUB_SCOPE)
+	assert.Equal(t, []string{constants.NIP47MethodCreateJITWallet}, methods)
+}
+
+func TestRequestMethodToScope_JITHub(t *testing.T) {
+	scope, err := RequestMethodToScope(constants.NIP47MethodCreateJITWallet)
+	require.NoError(t, err)
+	assert.Equal(t, constants.JIT_HUB_SCOPE, scope)
+}
+
+// JIT Claim Funds scope: bidirectional mapping. Granted on jit_wallet
+// children instead of pay_invoice — covers both claim_funds (the payout) and
+// list_recipients (the read-only roster), since anyone allowed to attempt a
+// claim may reasonably see the roster first.
+func TestScopeToRequestMethods_JITClaimFunds(t *testing.T) {
+	methods := scopeToRequestMethods(constants.JIT_CLAIM_FUNDS_SCOPE)
+	assert.ElementsMatch(t, []string{constants.NIP47MethodClaimFunds, constants.NIP47MethodListRecipients}, methods)
+}
+
+func TestRequestMethodToScope_ClaimFunds(t *testing.T) {
+	scope, err := RequestMethodToScope(constants.NIP47MethodClaimFunds)
+	require.NoError(t, err)
+	assert.Equal(t, constants.JIT_CLAIM_FUNDS_SCOPE, scope)
+}
+
+func TestRequestMethodToScope_ListRecipients(t *testing.T) {
+	scope, err := RequestMethodToScope(constants.NIP47MethodListRecipients)
+	require.NoError(t, err)
+	assert.Equal(t, constants.JIT_CLAIM_FUNDS_SCOPE, scope)
+}
+
+func TestAllScopes_IncludesJITClaimFunds(t *testing.T) {
+	assert.Contains(t, AllScopes(), constants.JIT_CLAIM_FUNDS_SCOPE)
+}
+
+// GetPermittedMethods must include claim_funds/list_recipients for a
+// jit_wallet regardless of what the (mock) LN client's own
+// GetSupportedNIP47Methods() advertises — these are app-level abstractions
+// over pay_invoice, not real LN-backend methods, mirroring how
+// create_jit_wallet/create_circle_wallet are already bypassed here.
+func TestGetPermittedMethods_JITClaimFundsScope(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID,
+		App:   *app,
+		Scope: constants.JIT_CLAIM_FUNDS_SCOPE,
+	}).Error)
+
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
+	assert.Contains(t, result, constants.NIP47MethodClaimFunds)
+	assert.Contains(t, result, constants.NIP47MethodListRecipients)
+	assert.NotContains(t, result, models.PAY_INVOICE_METHOD)
+}
+
+func TestGetPermittedMethods_JITHubScope(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID,
+		App:   *app,
+		Scope: constants.JIT_HUB_SCOPE,
+	}).Error)
+
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
+	assert.Contains(t, result, constants.NIP47MethodCreateJITWallet)
+	assert.NotContains(t, result, constants.NIP47MethodCreateCircleWallet)
+}
+
+// Circle Wallet scope: bidirectional mapping
+func TestScopeToRequestMethods_CircleWallet(t *testing.T) {
+	methods := scopeToRequestMethods(constants.CIRCLE_WALLET_SCOPE)
+	assert.Equal(t, []string{constants.NIP47MethodCreateCircleWallet}, methods)
+}
+
+func TestRequestMethodToScope_CircleWallet(t *testing.T) {
+	scope, err := RequestMethodToScope(constants.NIP47MethodCreateCircleWallet)
+	require.NoError(t, err)
+	assert.Equal(t, constants.CIRCLE_WALLET_SCOPE, scope)
+}
+
+func TestGetPermittedMethods_CircleWalletScope(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID,
+		App:   *app,
+		Scope: constants.CIRCLE_WALLET_SCOPE,
+	}).Error)
+
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
+	assert.Contains(t, result, constants.NIP47MethodCreateCircleWallet)
+	assert.NotContains(t, result, constants.NIP47MethodCreateJITWallet)
+}
