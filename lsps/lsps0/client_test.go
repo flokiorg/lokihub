@@ -3,6 +3,7 @@ package lsps0
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/flokiorg/lokihub/lnclient"
@@ -12,6 +13,7 @@ import (
 
 // Reusing MockLNClient logic (simplified)
 type mockLNClient struct {
+	mu        sync.Mutex
 	sendCalls []sendCall
 	msgChan   chan lnclient.CustomMessage
 	errChan   chan error
@@ -32,8 +34,20 @@ func newMockLNClient() *mockLNClient {
 }
 
 func (m *mockLNClient) SendCustomMessage(ctx context.Context, peerPubkey string, msgType uint32, data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sendCalls = append(m.sendCalls, sendCall{peerPubkey, msgType, data})
 	return nil
+}
+
+// pendingSendCall returns the first recorded send call, if any, race-safely.
+func (m *mockLNClient) pendingSendCall() (sendCall, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.sendCalls) == 0 {
+		return sendCall{}, false
+	}
+	return m.sendCalls[0], true
 }
 
 func (m *mockLNClient) SubscribeCustomMessages(ctx context.Context) (<-chan lnclient.CustomMessage, <-chan error, error) {
@@ -164,8 +178,7 @@ func TestClient_ListProtocols(t *testing.T) {
 			case <-stopCh:
 				return
 			default:
-				if len(mockLN.sendCalls) > 0 {
-					call := mockLN.sendCalls[0]
+				if call, ok := mockLN.pendingSendCall(); ok {
 					var req JsonRpcRequest
 					if err := json.Unmarshal(call.data, &req); err == nil {
 						// Respond
@@ -177,7 +190,7 @@ func TestClient_ListProtocols(t *testing.T) {
 							},
 						}
 						respBytes, _ := json.Marshal(resp)
-						client.HandleMessage(peer, respBytes)
+						_ = client.HandleMessage(peer, respBytes)
 						return // Done
 					}
 				}

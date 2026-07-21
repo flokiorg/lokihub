@@ -166,8 +166,6 @@ func TestConsumeMessageStream_DrainsMsgsBeforeReturning(t *testing.T) {
 	msgs := make(chan lnclient.CustomMessage, 5)
 	errs := make(chan error, 1)
 
-	dispatched := atomic.Int32{}
-
 	m := newStreamTestManager(t, &mockStreamClient{})
 	// Intercept dispatchMessage by injecting a handler via the lsps0 client.
 	// Since the messages have type 0 (not LSPS), dispatchMessage is a fast no-op,
@@ -179,8 +177,6 @@ func TestConsumeMessageStream_DrainsMsgsBeforeReturning(t *testing.T) {
 	// consumeMessageStream returns, the msgs channel must be empty.
 	msgs <- lnclient.CustomMessage{Type: 0}
 	msgs <- lnclient.CustomMessage{Type: 0}
-
-	_ = dispatched
 
 	errs <- errors.New("boom")
 	close(errs)

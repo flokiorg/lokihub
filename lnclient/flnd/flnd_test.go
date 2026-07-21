@@ -80,7 +80,7 @@ func TestFLNDConnection(t *testing.T) {
 	require.NoError(t, err, "NewFLNDService should not error")
 	require.NotNil(t, flndService, "FLNDService should not be nil")
 
-	defer flndService.Shutdown()
+	defer func() { _ = flndService.Shutdown() }()
 
 	t.Run("GetInfo", func(t *testing.T) {
 		info, err := flndService.GetInfo(ctx)
