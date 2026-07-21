@@ -30,7 +30,10 @@ frontend/.yarn
 *.db-shm
 *.db-wal
 *.db-journal
-data
+data/
 lokihub-services/
 lokihub-store/
-docs/
+docs/audits/
+
+# real NWC parent connection strings, provisioned per-machine
+integration/config.local.yaml

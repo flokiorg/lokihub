@@ -1,0 +1,27 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ./cmd/http"
+  bin = "./tmp/main"
+  full_bin = "./tmp/main"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "vendor", "frontend", "data", "ops", "tests", "integration", "build", "releases"]
+  exclude_regex = ["_test.go"]
+  delay = 1000
+  kill_delay = "2s"
+  send_interrupt = true
+  stop_on_error = true
+  log = "build-errors.log"
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = false

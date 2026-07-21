@@ -17,7 +17,6 @@ import (
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
 	"github.com/flokiorg/lokihub/decodepay"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/flokiorg/flnd/lnrpc"
@@ -118,14 +117,17 @@ func (svc *FLNDService) trackForwardedPayments(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-			time.Sleep(1 * time.Minute)
+		case <-time.After(1 * time.Minute):
 			nextTime := time.Now()
 			forwardedPayments, err := svc.client.ForwardingHistory(ctx, &lnrpc.ForwardingHistoryRequest{
 				StartTime: uint64(lastTime.Unix()),
 				EndTime:   uint64(nextTime.Unix()),
 			})
 			if err != nil {
+				if ctx.Err() != nil {
+					// context was cancelled while waiting for the timer or during the RPC call, exiting
+					return
+				}
 				logger.Logger.Error().Err(err).Msg("failed to read forwarding history")
 				continue
 			}
@@ -153,7 +155,7 @@ func (svc *FLNDService) subscribePayments(ctx context.Context) {
 				NoInflightUpdates: true,
 			})
 			if err != nil {
-				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+				if ctx.Err() != nil {
 					return
 				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to payments")
@@ -168,7 +170,7 @@ func (svc *FLNDService) subscribePayments(ctx context.Context) {
 			for {
 				payment, err := paymentStream.Recv()
 				if err != nil {
-					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					if ctx.Err() != nil {
 						return
 					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive payment")
@@ -222,7 +224,7 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 		default:
 			invoiceStream, err := svc.client.SubscribeInvoices(ctx, &lnrpc.InvoiceSubscription{})
 			if err != nil {
-				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+				if ctx.Err() != nil {
 					return
 				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to invoices")
@@ -237,7 +239,7 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 			for {
 				invoice, err := invoiceStream.Recv()
 				if err != nil {
-					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					if ctx.Err() != nil {
 						return
 					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive invoice")
@@ -272,7 +274,7 @@ func (svc *FLNDService) subscribeChannelEvents(ctx context.Context) {
 		default:
 			channelEvents, err := svc.client.SubscribeChannelEvents(ctx, &lnrpc.ChannelEventSubscription{})
 			if err != nil {
-				if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+				if ctx.Err() != nil {
 					return
 				}
 				logger.Logger.Error().Err(err).Msg("Error subscribing to channel events")
@@ -287,7 +289,7 @@ func (svc *FLNDService) subscribeChannelEvents(ctx context.Context) {
 			for {
 				event, err := channelEvents.Recv()
 				if err != nil {
-					if errors.Is(ctx.Err(), context.Canceled) || status.Code(err) == codes.Canceled {
+					if ctx.Err() != nil {
 						return
 					}
 					logger.Logger.Error().Err(err).Msg("Failed to receive channel event")
@@ -358,7 +360,7 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 	for _, invoice := range listInvoicesResponse.Invoices {
 		if invoice.State == lnrpc.Invoice_OPEN {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
-			logger.Logger.Info().
+			logger.Logger.Debug().
 				Str("payment_hash", paymentHashHex).
 				Uint64("addIndex", invoice.AddIndex).
 				Msg("Resubscribing to pending hold invoice")
@@ -377,7 +379,7 @@ func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 	paymentHashHex := hex.EncodeToString(paymentHashBytes)
 	log := logger.Logger.With().Str("payment_hash", paymentHashHex).Logger()
 
-	log.Info().Msg("Starting subscribeSingleInvoice goroutine")
+	log.Debug().Msg("Starting subscribeSingleInvoice goroutine")
 
 	subReq := &invoicesrpc.SubscribeSingleInvoiceRequest{
 		RHash: paymentHashBytes,
@@ -390,10 +392,10 @@ func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 		return
 	}
 
-	log.Info().Msg("Successfully subscribed to single invoice stream")
+	log.Debug().Msg("Successfully subscribed to single invoice stream")
 
 	defer func() {
-		log.Info().Msg("Exiting subscribeSingleInvoice goroutine")
+		log.Debug().Msg("Exiting subscribeSingleInvoice goroutine")
 		if r := recover(); r != nil {
 			log.Error().Interface("panic", r).Msg("PANIC recovered in single invoice stream processing")
 		}
@@ -403,15 +405,15 @@ func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 		invoice, err := invoiceStream.Recv()
 
 		if err != nil {
+			if ctx.Err() != nil {
+				log.Debug().Msg("Context cancelled, exiting single invoice subscription loop")
+				return
+			}
 			log.Error().Err(err).Msg("Failed to receive single invoice update from stream")
 			return
 		}
-		if ctx.Err() != nil {
-			log.Info().Msg("Context cancelled, exiting single invoice subscription loop")
-			return
-		}
 
-		log.Info().
+		log.Debug().
 			Str("rawState", invoice.State.String()).
 			Uint64("addIndex", invoice.AddIndex).
 			Uint64("settleIndex", invoice.SettleIndex).
@@ -719,7 +721,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 				logger.Logger.Debug().
 					Uint64("channel_id", channel.ChanId).
 					Int64("remote_balance_msat", remoteBalanceMsat).
-					Int64("invoice_amount_msat", amount).
+					Int64("invoice_amount_mloki", amount).
 					Msg("Skipping channel with insufficient inbound capacity for route hints")
 				continue
 			}
@@ -742,7 +744,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 			}
 
 			if remotePolicy == nil {
-				logger.Logger.Error().Err(err).
+				logger.Logger.Debug().
 					Uint64("channel_id", channel.ChanId).
 					Msg("Remote channel policy does not exist")
 				continue
@@ -800,7 +802,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 		logger.Logger.Info().
 			Int("selected_hints", selectedCount).
 			Int("total_candidates", len(candidates)).
-			Int64("invoice_amount_msat", amount).
+			Int64("invoice_amount_mloki", amount).
 			Bool("filtered_by_pubkey", throughNodePubkey != nil).
 			Msg("Route hint selection completed")
 
@@ -811,7 +813,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 			// For wallets with only private channels but no suitable hints, this is acceptable
 			// FLND will handle it, though payment success may be lower
 			logger.Logger.Warn().
-				Int64("invoice_amount_msat", amount).
+				Int64("invoice_amount_mloki", amount).
 				Msg("No suitable private channels found for route hints - invoice may have reduced payment success")
 		}
 	}
@@ -1854,7 +1856,7 @@ func (svc *FLNDService) subscribeTransactions(ctx context.Context) {
 
 			_, err := stream.Recv()
 			if err != nil {
-				if errors.Is(ctx.Err(), context.Canceled) {
+				if ctx.Err() != nil {
 					return
 				}
 				svc.logger.Error().Err(err).Msg("Failed to receive transaction update")

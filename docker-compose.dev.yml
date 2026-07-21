@@ -1,0 +1,103 @@
+services:
+  flnd:
+    build:
+      context: ../flnd
+      dockerfile: dev.Dockerfile
+      additional_contexts:
+        # flnd, walletd, and flokicoin-neutrino evolve in lockstep on this
+        # fork; this builds flnd against whatever's on disk in these sibling
+        # checkouts instead of their go.mod/go.sum-pinned versions (see
+        # flnd/dev.Dockerfile).
+        walletd: ../walletd
+        flokicoin-neutrino: ../flokicoin-neutrino
+    container_name: lokihub-dev-flnd
+    restart: unless-stopped
+    volumes:
+      - ./data/flnd:/root/.flnd
+    # dev.Dockerfile's ENTRYPOINT is already ["flnd"] -- only pass flags here.
+    command: --configfile=/root/.flnd/flnd.conf
+    healthcheck:
+      test: ["CMD", "ls", "/root/.flnd/tls.cert"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "${FLND_RPC_PORT:-10005}:10005"
+    networks:
+      - lokihub-dev
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: lokihub-dev-backend
+    restart: unless-stopped
+    # ports:
+    #   - "${PORT:-1610}:1610"
+    environment:
+      - WORK_DIR=/data
+      - PORT=1610
+      - NETWORK=flokicoin
+      - BASE_URL=http://localhost:${PORT:-1610}
+      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-5173}
+      - LN_BACKEND_TYPE=FLND
+      - FLND_ADDRESS=flnd:10005
+      # No FLND_CERT_FILE: flnd's flnd/wrapper falls back to
+      # InsecureSkipVerify when it's unset, so we don't need to distribute
+      # tls.cert into this container at all.
+      - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
+    volumes:
+      - .:/app
+      - ./data/hub:/data
+      - ./data/flnd:/flnd-data:ro
+      - lokihub-go-mod-cache:/go/pkg/mod
+      - lokihub-go-build-cache:/root/.cache/go-build
+    depends_on:
+      flnd:
+        condition: service_healthy
+    networks:
+      - lokihub-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: lokihub-dev-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://backend:1610
+      # Bind mounts frequently don't propagate inotify events into the
+      # container, silently breaking HMR — see vite.config.ts.
+      - VITE_USE_POLLING=true
+    depends_on:
+      - backend
+    networks:
+      - lokihub-dev
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: lokihub-dev-caddy
+    restart: unless-stopped
+    ports:
+      - "${CADDY_PORT:-5610}:80"
+      - "${CADDY_HTTPS_PORT:-5611}:443"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - lokihub-caddy-data:/data
+    depends_on:
+      - frontend
+    networks:
+      - lokihub-dev
+
+networks:
+  lokihub-dev:
+    driver: bridge
+
+volumes:
+  lokihub-go-mod-cache:
+  lokihub-go-build-cache:
+  lokihub-caddy-data:

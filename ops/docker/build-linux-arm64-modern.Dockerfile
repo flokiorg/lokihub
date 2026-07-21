@@ -19,7 +19,7 @@ RUN mkdir -p /sysroot/arm64 && \
 # -----------------------------------------------------------------------------
 FROM debian:bookworm
 
-ARG GO_VERSION=1.24.9
+ARG GO_VERSION=1.26.1
 
 # Install Go manually
 RUN apt-get update && apt-get install -y --no-install-recommends \
