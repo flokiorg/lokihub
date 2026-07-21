@@ -327,6 +327,12 @@ func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string,
 func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, maxAmountLoki uint64,
 	budgetRenewal string, expiresAt *time.Time) error {
 
+	if app.ParentAppID != nil {
+		if err := svc.verifyParentHubTx(tx, *app.ParentAppID, app.ParentKind); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.Save(app).Error; err != nil {
 		return err
 	}
@@ -357,45 +363,54 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 	return tx.Model(app).Update("wallet_pubkey", appWalletPubkey).Error
 }
 
-func (svc *appsService) DeleteApp(app *db.App) error {
-	if app.Kind == db.AppKindCircleHub {
-		var childCount int64
-		if err := svc.db.Model(&db.App{}).
-			Where("parent_app_id = ? AND parent_kind = ?", app.ID, db.ParentKindCircle).
-			Count(&childCount).Error; err != nil {
-			return err
-		}
-		if childCount > 0 {
-			// This generic delete has no cascade/balance-safety for circle_wallet
-			// children (App.ParentAppID has no DB-level cascade) — refuse rather than
-			// silently orphan them. Callers must use the dedicated
-			// POST /api/apps/:id/circle/delete flow (api.DeleteCircleHub), which
-			// checks each child's balance and lets the caller choose how to proceed.
-			return fmt.Errorf("%w: circle_hub still has %d member wallet(s); use the circle delete endpoint instead",
-				constants.ErrInvalidParams, childCount)
-		}
+// verifyParentHubTx checks, within tx, that parentAppID still exists and is
+// the hub kind parentKind expects. Called before inserting a circle_wallet/
+// jit_wallet child, inside the same transaction as the insert, so a
+// concurrent DeleteApp on that hub can't race a child creation into
+// orphaning it: App.ParentAppID has no DB-level cascade. On Postgres, an
+// advisory lock keyed by the hub's own ID serializes this check+insert
+// against deleteHubAppTx's own check+delete across processes — the same lock
+// and keyspace create_circle_wallet_controller.go already uses for its own
+// commitment check. Sqlite needs no explicit lock: its transactions
+// serialize by default (only one writer active at a time), so wrapping the
+// check and the insert in one transaction — which saveAppTx's callers
+// already do — is sufficient there.
+func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentKind string) error {
+	expectedHubKind, ok := map[string]string{
+		db.ParentKindCircle: db.AppKindCircleHub,
+		db.ParentKindJIT:    db.AppKindJITHub,
+	}[parentKind]
+	if !ok {
+		return fmt.Errorf("%w: unrecognized parent_kind %q", constants.ErrInvalidParams, parentKind)
 	}
-	if app.Kind == db.AppKindJITHub {
-		var childCount int64
-		if err := svc.db.Model(&db.App{}).
-			Where("parent_app_id = ? AND parent_kind = ?", app.ID, db.ParentKindJIT).
-			Count(&childCount).Error; err != nil {
-			return err
-		}
-		if childCount > 0 {
-			// Same orphan hazard as circle_hub above: a jit_wallet child's
-			// parent_app_id has no DB-level cascade, and deleting the hub out
-			// from under it leaves the child's periodic reclaim
-			// (jit_cleanup_service.ReclaimAndDeleteSubWallet) trying to credit a
-			// parent app row that no longer exists — a FOREIGN KEY violation on
-			// every cleanup tick, forever. Refuse until the children have
-			// expired/reclaimed on their own or been deleted individually.
-			return fmt.Errorf("%w: jit_hub still has %d issued wallet(s); wait for them to expire/reclaim or delete them first",
-				constants.ErrInvalidParams, childCount)
+
+	if tx.Dialector.Name() == "postgres" {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(parentAppID)).Error; err != nil {
+			return fmt.Errorf("acquire parent hub lock: %w", err)
 		}
 	}
 
-	err := svc.db.Delete(app).Error
+	var parent db.App
+	if err := tx.First(&parent, parentAppID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: parent app %d not found", constants.ErrInvalidParams, parentAppID)
+		}
+		return err
+	}
+	if parent.Kind != expectedHubKind {
+		return fmt.Errorf("%w: parent app %d is not a %s", constants.ErrInvalidParams, parentAppID, expectedHubKind)
+	}
+	return nil
+}
+
+func (svc *appsService) DeleteApp(app *db.App) error {
+	var err error
+	switch app.Kind {
+	case db.AppKindCircleHub, db.AppKindJITHub:
+		err = svc.deleteHubAppTx(app)
+	default:
+		err = svc.db.Delete(app).Error
+	}
 	if err != nil {
 		return err
 	}
@@ -407,6 +422,52 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 		},
 	})
 	return nil
+}
+
+// deleteHubAppTx deletes a circle_hub/jit_hub app, refusing if it still has
+// children (App.ParentAppID has no DB-level cascade, so a plain delete would
+// orphan them). The child-count check and the delete run inside one
+// transaction, with the same Postgres advisory lock (keyed by this hub's own
+// ID) that verifyParentHubTx takes before inserting a new child — otherwise a
+// concurrent circle_wallet/jit_wallet creation for this exact hub could still
+// commit in the gap between a separate count-then-delete, orphaning it. On
+// sqlite no explicit lock is needed: wrapping the count and the delete in one
+// transaction is sufficient on its own, since sqlite transactions serialize
+// by default (only one writer active at a time).
+func (svc *appsService) deleteHubAppTx(app *db.App) error {
+	parentKind, kindLabel, hint := db.ParentKindCircle, "circle_hub", "member wallet(s); use the circle delete endpoint instead"
+	if app.Kind == db.AppKindJITHub {
+		// Same orphan hazard as circle_hub, but for jit_hub: a jit_wallet
+		// child's periodic reclaim (jit_cleanup_service.ReclaimAndDeleteSubWallet)
+		// would try to credit a parent app row that no longer exists — a
+		// FOREIGN KEY violation on every cleanup tick, forever.
+		parentKind, kindLabel, hint = db.ParentKindJIT, "jit_hub", "issued wallet(s); wait for them to expire/reclaim or delete them first"
+	}
+
+	return svc.db.Transaction(func(tx *gorm.DB) error {
+		if tx.Dialector.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
+				return fmt.Errorf("acquire hub delete lock: %w", err)
+			}
+		}
+
+		var childCount int64
+		if err := tx.Model(&db.App{}).
+			Where("parent_app_id = ? AND parent_kind = ?", app.ID, parentKind).
+			Count(&childCount).Error; err != nil {
+			return err
+		}
+		if childCount > 0 {
+			// This generic delete has no cascade/balance-safety for the hub's
+			// children — refuse rather than silently orphan them. Circle hubs
+			// have a dedicated POST /api/apps/:id/circle/delete flow
+			// (api.DeleteCircleHub) that checks each child's balance and lets
+			// the caller choose how to proceed instead.
+			return fmt.Errorf("%w: %s still has %d %s", constants.ErrInvalidParams, kindLabel, childCount, hint)
+		}
+
+		return tx.Delete(app).Error
+	})
 }
 
 func (svc *appsService) GetAppByPubkey(pubkey string) *db.App {

@@ -184,6 +184,15 @@ func (svc *appsService) UnclaimJITWalletSlice(walletAppID uint, identityType, id
 // DeleteJITWalletClaim removes an unclaimed slice. The caller is responsible
 // for sweeping its AmountMloki back to the hub before calling this — the
 // returned row gives the caller the amount to sweep.
+//
+// The delete itself is conditioned on "AND claimed_at IS NULL", the same
+// guard ClaimJITWalletSlice's own update uses, so a claim that gets claimed
+// concurrently — after this function's own read above but before its delete
+// runs — is never removed out from under the payout that just claimed it.
+// Without that guard on the delete statement, that race can double-count
+// funds: the concurrent claim pays the recipient, and this function still
+// reports success to a caller who then sweeps the same amount back to the
+// hub, since the row it read a moment ago still had claimed_at == nil.
 func (svc *appsService) DeleteJITWalletClaim(walletAppID uint, claimID uint) (*db.JITWalletClaim, error) {
 	var claim db.JITWalletClaim
 	if err := svc.db.Where("id = ? AND wallet_app_id = ?", claimID, walletAppID).First(&claim).Error; err != nil {
@@ -195,8 +204,13 @@ func (svc *appsService) DeleteJITWalletClaim(walletAppID uint, claimID uint) (*d
 	if claim.ClaimedAt != nil {
 		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
 	}
-	if err := svc.db.Delete(&claim).Error; err != nil {
-		return nil, err
+	result := svc.db.Where("id = ? AND claimed_at IS NULL", claim.ID).Delete(&db.JITWalletClaim{})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		// Lost a race against a concurrent claim between the read above and this delete.
+		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
 	}
 	return &claim, nil
 }

@@ -406,6 +406,63 @@ func TestDeleteJITWalletClaim_WrongWallet(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestClaimAndDeleteJITWalletClaim_ConcurrentRace_NeverBothSucceed is the
+// regression test for the double-pay race found in code review:
+// DeleteJITWalletClaim used to delete unconditionally once its own read saw
+// claimed_at == nil, without re-checking that condition on the delete
+// statement itself (unlike ClaimJITWalletSlice's own guarded update) - so a
+// ClaimJITWalletSlice call that committed in the gap between
+// DeleteJITWalletClaim's read and its delete would still have its slice
+// deleted out from under it, letting a caller sweep the same funds back to
+// the hub that ClaimJITWalletSlice had just paid out. Mirrors
+// TestClaimJITWalletSlice_ConcurrentRace_ExactlyOneWinner's barrier-goroutine
+// pattern, run over many trials since the race window is timing-dependent:
+// under the fix, the two operations are mutually exclusive by construction
+// (both conditioned on "claimed_at IS NULL" with a RowsAffected check), so
+// this must never flake regardless of interleaving.
+func TestClaimAndDeleteJITWalletClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 1_000_000, 3600)
+
+	const trials = 200
+	for trial := 0; trial < trials; trial++ {
+		wallet := newJITWallet(t, svc, hub)
+		pubkey := randomHex32()
+		require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+		}))
+		var claim db.JITWalletClaim
+		require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&claim).Error)
+
+		ready := make(chan struct{})
+		var wg sync.WaitGroup
+		var claimErr, deleteErr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, claimErr = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+		}()
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, deleteErr = svc.AppsService.DeleteJITWalletClaim(wallet.ID, claim.ID)
+		}()
+		close(ready)
+		wg.Wait()
+
+		claimSucceeded := claimErr == nil
+		deleteSucceeded := deleteErr == nil
+		require.Falsef(t, claimSucceeded && deleteSucceeded,
+			"trial %d: claim and delete both reported success for the same claim row — double-pay", trial)
+		require.Truef(t, claimSucceeded || deleteSucceeded,
+			"trial %d: neither claim nor delete succeeded (claimErr=%v, deleteErr=%v) — one of them always should", trial, claimErr, deleteErr)
+	}
+}
+
 // --- ListClaimsForWallet ---
 
 func TestListClaimsForWallet_ReturnsClaimedAndUnclaimed(t *testing.T) {

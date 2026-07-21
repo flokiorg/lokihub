@@ -58,7 +58,7 @@ func TestRunJITCleanup_NotExpired_AppNotCleaned(t *testing.T) {
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeFutureTime())
@@ -78,7 +78,7 @@ func TestRunJITCleanup_ZeroBalance_AppDeleted(t *testing.T) {
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
@@ -102,7 +102,7 @@ func TestRunJITCleanup_CleanupInProgress_Skipped(t *testing.T) {
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
@@ -131,7 +131,7 @@ func TestRunJITCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	svc.LNClient.(*tests.MockLn).Pubkey = selfPaymentPubkey
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
@@ -230,7 +230,7 @@ func TestRunJITCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
@@ -263,7 +263,7 @@ func TestRunJITCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	mockLN := svc.LNClient.(*tests.MockLn)
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindIsolated, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
 	require.NoError(t, err)
 
 	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
