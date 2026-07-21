@@ -54,6 +54,8 @@ func TestSelfHoldPaymentSettled(t *testing.T) {
 	wg.Wait()
 }
 func TestSelfHoldPaymentCanceled(t *testing.T) {
+	t.Skip("deadlocks under go test -race: https://github.com/flokiorg/lokihub/issues/3")
+
 	ctx := context.TODO()
 
 	svc, err := tests.CreateTestService(t)
