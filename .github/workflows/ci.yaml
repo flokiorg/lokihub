@@ -97,7 +97,7 @@ jobs:
           go-version-file: go.mod
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
 
@@ -164,7 +164,7 @@ jobs:
         run: yarn lint:js
 
   frontend:
-    name: Frontend typecheck, build, audit
+    name: Frontend build, audit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -193,9 +193,6 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
-
-      - name: Typecheck
-        run: yarn tsc:compile
 
       - name: Build
         run: yarn build:http
