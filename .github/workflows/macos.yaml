@@ -22,7 +22,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          # Tracks go.mod's own directive instead of a hardcoded string, so
+          # this can't silently drift out of sync with it again - it had
+          # (go.mod requires >= 1.26.1, this was pinned at 1.24, which
+          # can't build the repo at all).
+          go-version-file: go.mod
 
       - name: Setup Node
         uses: actions/setup-node@v4
