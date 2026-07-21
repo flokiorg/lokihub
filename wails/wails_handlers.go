@@ -295,6 +295,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		`^/api/apps/([0-9]+)/jit-wallets/([0-9]+)/claims/([0-9]+)$`,
 	)
 	if m := jitWalletClaimDeleteRegex.FindStringSubmatch(route); len(m) == 4 && method == "DELETE" {
+		hubId, err := strconv.ParseUint(m[1], 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
 		walletId, err := strconv.ParseUint(m[2], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
@@ -303,7 +307,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		if err := app.api.DeleteJITWalletClaim(uint(walletId), uint(claimId)); err != nil {
+		if err := app.api.DeleteJITWalletClaim(uint(hubId), uint(walletId), uint(claimId)); err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}

@@ -3067,13 +3067,22 @@ func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, sta
 // behind, it would still count against its hub's apps.DeleteApp child-count
 // guard forever, with no way for an operator to ever find and remove it
 // through the normal listing/delete flow again.
-func (api *api) DeleteJITWalletClaim(walletAppID uint, claimID uint) error {
-	var wallet db.App
-	if err := api.db.First(&wallet, walletAppID).Error; err != nil {
+func (api *api) DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID uint) error {
+	var hub db.App
+	if err := api.db.First(&hub, hubAppID).Error; err != nil {
 		return fmt.Errorf("app not found: %w", err)
 	}
-	if wallet.Kind != db.AppKindJITWallet {
-		return fmt.Errorf("app is not a jit_wallet")
+	if hub.Kind != db.AppKindJITHub {
+		return fmt.Errorf("app is not a jit_hub")
+	}
+
+	var wallet db.App
+	if err := api.db.Where("id = ? AND parent_app_id = ? AND parent_kind = ? AND kind = ?",
+		walletAppID, hubAppID, db.ParentKindJIT, db.AppKindJITWallet).First(&wallet).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: JIT wallet not found for this hub", constants.ErrInvalidParams)
+		}
+		return err
 	}
 
 	claim, err := api.appsSvc.DeleteJITWalletClaim(walletAppID, claimID)

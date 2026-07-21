@@ -2190,6 +2190,13 @@ func (httpSvc *HttpService) jitWalletsCreateHandler(c echo.Context) error {
 // sweeping its amount back to the hub. To remove the whole wallet (every
 // slice), use jitWalletDeleteHandler instead.
 func (httpSvc *HttpService) jitWalletClaimDeleteHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindJITHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	}
 	walletId, parseErr := strconv.ParseUint(c.Param("walletId"), 10, 64)
 	if parseErr != nil || walletId == 0 {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid wallet app ID"})
@@ -2198,9 +2205,9 @@ func (httpSvc *HttpService) jitWalletClaimDeleteHandler(c echo.Context) error {
 	if parseErr != nil || claimId == 0 {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid claim ID"})
 	}
-	if deleteErr := httpSvc.api.DeleteJITWalletClaim(uint(walletId), uint(claimId)); deleteErr != nil {
+	if deleteErr := httpSvc.api.DeleteJITWalletClaim(dbApp.ID, uint(walletId), uint(claimId)); deleteErr != nil {
 		httpSvc.logger.Error().Err(deleteErr).
-			Uint64("wallet_id", walletId).Uint64("claim_id", claimId).
+			Uint("hub_id", dbApp.ID).Uint64("wallet_id", walletId).Uint64("claim_id", claimId).
 			Msg("Failed to delete JIT wallet claim")
 		code, msg := mapJITAllocError(deleteErr)
 		return c.JSON(code, ErrorResponse{Message: msg})

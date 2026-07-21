@@ -402,3 +402,41 @@ func TestJITWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 				"can never surface again")
 	})
 }
+
+// TestDeleteJITWalletClaim_WrongHub_Rejected is the regression test for a
+// cross-hub deletion bug found in code review: DELETE
+// /api/apps/:id/jit-wallets/:walletId/claims/:claimId used to never validate
+// that walletId/claimId actually belonged to the hub named by :id - the
+// server-side handler parsed the URL's other IDs but silently ignored the
+// hub id entirely. A caller scoped to hub A's endpoint could delete (and
+// redirect the sweep-back of) a claim that actually belonged to a completely
+// unrelated hub B, simply by supplying hub B's walletId/claimId while hitting
+// hub A's URL.
+func TestDeleteJITWalletClaim_WrongHub_Rejected(t *testing.T) {
+	cfg := requireConfig(t)
+	_, hubAppIDA, admin := createEphemeralJITHub(t, cfg, "wrong-hub-a", nil)
+	hubB, hubAppIDB, _ := createEphemeralJITHub(t, cfg, "wrong-hub-b", nil)
+
+	hubBClient := mustConnect(t, hubB.Connection)
+	pub := mustPubkey(t, newTestPrivkey(t))
+	var created CreateJITWalletResult
+	require.NoError(t, hubBClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		Recipients: []JITWalletRecipientParam{
+			{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: happyPathAmountMloki},
+		},
+		Expiry: happyPathExpirySecs,
+	}, &created))
+
+	claimsB, err := admin.listJITWalletClaims(hubAppIDB)
+	require.NoError(t, err)
+	require.Len(t, claimsB, 1)
+	claimB := claimsB[0]
+
+	// hubA's own ID in the URL, but walletAppID/claimID actually belong to hubB.
+	err = admin.deleteJITWalletClaim(hubAppIDA, claimB.WalletAppID, claimB.ID)
+	require.Error(t, err, "a claim belonging to a different hub must not be deletable through this hub's endpoint")
+
+	claimsBAfter, err := admin.listJITWalletClaims(hubAppIDB)
+	require.NoError(t, err)
+	require.Len(t, claimsBAfter, 1, "hubB's claim must be untouched by the rejected cross-hub request")
+}
