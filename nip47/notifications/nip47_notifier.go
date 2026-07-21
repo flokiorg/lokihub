@@ -103,7 +103,7 @@ func (notifier *Nip47Notifier) notifySubscribers(ctx context.Context, notificati
 	}
 
 	for _, app := range apps {
-		if app.Isolated && (appId == nil || app.ID != *appId) {
+		if app.IsIsolated() && (appId == nil || app.ID != *appId) {
 			continue
 		}
 

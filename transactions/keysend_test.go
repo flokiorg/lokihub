@@ -219,7 +219,7 @@ func TestSendKeysend_App_BalanceExceeded(t *testing.T) {
 	dbRequestEvent := &db.RequestEvent{}
 	err = svc.DB.Create(&dbRequestEvent).Error
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -255,7 +255,7 @@ func TestSendKeysend_App_BalanceSufficient(t *testing.T) {
 	dbRequestEvent := &db.RequestEvent{}
 	err = svc.DB.Create(&dbRequestEvent).Error
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -349,7 +349,7 @@ func TestSendKeysend_IsolatedAppToNoApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 
@@ -412,13 +412,13 @@ func TestSendKeysend_IsolatedAppToIsolatedApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 
 	app2, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app2.Isolated = true
+	app2.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app2).Error
 	assert.NoError(t, err)
 

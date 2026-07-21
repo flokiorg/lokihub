@@ -181,9 +181,9 @@ func TestHandleMultiPayKeysendEvent_IsolatedApp_ConcurrentPayments(t *testing.T)
 	defer svc.Remove()
 
 	app, _, err := tests.CreateApp(svc)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{

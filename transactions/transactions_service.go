@@ -643,12 +643,12 @@ func (svc *transactionsService) LookupTransaction(ctx context.Context, paymentHa
 
 	tx := svc.db
 
-	var isIsolatedApp bool
+	var appKind string
 	if appId != nil {
 		err := svc.db.
 			Model(&db.App{}).
 			Where("id", *appId).
-			Pluck("isolated", &isIsolatedApp).
+			Pluck("kind", &appKind).
 			Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -658,7 +658,7 @@ func (svc *transactionsService) LookupTransaction(ctx context.Context, paymentHa
 		}
 	}
 
-	if isIsolatedApp {
+	if db.IsIsolatedKind(appKind) {
 		tx = tx.Where("app_id = ?", *appId)
 	}
 
@@ -696,12 +696,12 @@ func (svc *transactionsService) LookupTransaction(ctx context.Context, paymentHa
 func (svc *transactionsService) ListTransactions(ctx context.Context, from, until, limit, offset uint64, unpaidOutgoing bool, unpaidIncoming bool, transactionType *string, lnClient lnclient.LNClient, appId *uint, forceFilterByAppId bool) (transactions []Transaction, totalCount uint64, err error) {
 	svc.checkUnsettledTransactions(ctx, lnClient)
 
-	var isIsolatedApp bool
+	var appKind string
 	if appId != nil {
 		err := svc.db.
 			Model(&db.App{}).
 			Where("id", *appId).
-			Pluck("isolated", &isIsolatedApp).
+			Pluck("kind", &appKind).
 			Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -713,7 +713,7 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 
 	tx := svc.db
 
-	if isIsolatedApp || forceFilterByAppId {
+	if db.IsIsolatedKind(appKind) || forceFilterByAppId {
 		tx = tx.Where("app_id = ?", *appId)
 	}
 
@@ -1145,13 +1145,13 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	// Fetch app and its pay_invoice permission in a single JOIN so we only hit the DB once.
 	var row struct {
 		AppName       string
-		AppIsolated   bool
+		AppKind       string
 		MaxAmountLoki int
 		BudgetRenewal string
 		PermAppId     uint
 	}
 	result := tx.Table("apps").
-		Select("apps.name AS app_name, apps.isolated AS app_isolated, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id").
+		Select("apps.name AS app_name, apps.kind AS app_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id").
 		Joins("JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope = ?", constants.PAY_INVOICE_SCOPE).
 		Where("apps.id = ?", *appId).
 		Scan(&row)
@@ -1165,7 +1165,7 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 		return errors.New("app does not have pay_invoice scope")
 	}
 
-	if row.AppIsolated {
+	if db.IsIsolatedKind(row.AppKind) {
 		balance := queries.GetIsolatedBalance(tx, *appId)
 		if int64(amountWithFeeReserve) > balance {
 			svc.logger.Debug().
@@ -1527,7 +1527,7 @@ func (svc *transactionsService) checkBudgetUsage(dbTransaction *db.Transaction, 
 		svc.logger.Error().Interface("app_id", dbTransaction.AppId).Msg("failed to find app by id")
 		return
 	}
-	if app.Isolated {
+	if app.IsIsolated() {
 		return
 	}
 
