@@ -80,7 +80,7 @@ func TestHandleCreateConnectionEvent(t *testing.T) {
 	assert.Equal(t, constants.PAY_INVOICE_SCOPE, permissions[1].Scope)
 	assert.Equal(t, constants.NOTIFICATIONS_SCOPE, permissions[2].Scope)
 
-	assert.True(t, app.Isolated)
+	assert.True(t, app.IsIsolated())
 	assert.Equal(t, 100_000, permissions[1].MaxAmountLoki)
 	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, permissions[1].BudgetRenewal)
 }

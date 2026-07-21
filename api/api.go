@@ -133,7 +133,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				query.Add("relay", relayUrl)
 			}
 			query.Add("pubkey", *app.WalletPubkey)
-			if lightningAddress != "" && !app.Isolated {
+			if lightningAddress != "" && !app.IsIsolated() {
 				query.Add("lud16", lightningAddress)
 			}
 			returnToUrl.RawQuery = query.Encode()
@@ -142,7 +142,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	}
 
 	var lud16 string
-	if lightningAddress != "" && !app.Isolated {
+	if lightningAddress != "" && !app.IsIsolated() {
 		lud16 = fmt.Sprintf("&lud16=%s", lightningAddress)
 	}
 	responseBody.PairingUri = fmt.Sprintf("nostr+walletconnect://%s?relay=%s&secret=%s%s", *app.WalletPubkey, strings.Join(relayUrls, "&relay="), pairingSecretKey, lud16)
@@ -190,7 +190,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		// Update app isolation if provided and different
 		if updateAppRequest.Isolated != nil {
 			isolated := *updateAppRequest.Isolated
-			if isolated != userApp.Isolated {
+			if isolated != userApp.IsIsolated() {
 				if !isolated {
 					var existingMetadata Metadata
 					if userApp.Metadata != nil {
@@ -207,7 +207,11 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 					}
 				}
 
-				err := tx.Model(&db.App{}).Where("id", userApp.ID).Update("isolated", isolated).Error
+				kind := db.AppKindStandard
+				if isolated {
+					kind = db.AppKindIsolated
+				}
+				err := tx.Model(&db.App{}).Where("id", userApp.ID).Update("kind", kind).Error
 				if err != nil {
 					return err
 				}
@@ -399,14 +403,14 @@ func (api *api) GetApp(dbApp *db.App) *App {
 		Scopes:             requestMethods,
 		BudgetUsage:        budgetUsage,
 		BudgetRenewal:      paySpecificPermission.BudgetRenewal,
-		Isolated:           dbApp.Isolated,
+		Isolated:           dbApp.IsIsolated(),
 		Metadata:           metadata,
 		WalletPubkey:       walletPubkey,
 		UniqueWalletPubkey: uniqueWalletPubkey,
 		LastUsedAt:         dbApp.LastUsedAt,
 	}
 
-	if dbApp.Isolated {
+	if dbApp.IsIsolated() {
 		response.Balance = queries.GetIsolatedBalance(api.db, dbApp.ID)
 	}
 
@@ -506,13 +510,13 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			CreatedAt:          dbApp.CreatedAt,
 			UpdatedAt:          dbApp.UpdatedAt,
 			AppPubkey:          dbApp.AppPubkey,
-			Isolated:           dbApp.Isolated,
+			Isolated:           dbApp.IsIsolated(),
 			WalletPubkey:       walletPubkey,
 			UniqueWalletPubkey: uniqueWalletPubkey,
 			LastUsedAt:         dbApp.LastUsedAt,
 		}
 
-		if dbApp.Isolated {
+		if dbApp.IsIsolated() {
 			apiApp.Balance = queries.GetIsolatedBalance(api.db, dbApp.ID)
 		}
 

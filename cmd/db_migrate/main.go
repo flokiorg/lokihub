@@ -22,6 +22,13 @@ var expectedTables = []string{
 	"swaps",
 	"user_configs",
 	"forwards",
+	"circle_identities",
+	"circle_identity_allowed_pubkeys",
+	"jit_hub_configs",
+	"circle_hub_configs",
+	"jit_wallet_claims",
+	"circle_wallet_identity_proofs",
+	"circle_wallet_memberships",
 }
 
 func main() {

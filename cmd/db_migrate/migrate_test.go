@@ -161,7 +161,7 @@ func insertMockData(t *testing.T, tx *gorm.DB) {
 		WalletPubkey: ptr("f766024546ddbdc45db6016714047e34117d5e0d68e51fae06ffca9687783995"),
 		CreatedAt:    baseTime,
 		UpdatedAt:    baseTime,
-		Isolated:     false,
+		Kind:         db.AppKindStandard,
 		Metadata:     datatypes.JSON("{}"),
 	}
 	create(t, tx, app1)
@@ -184,7 +184,7 @@ func insertMockData(t *testing.T, tx *gorm.DB) {
 		WalletPubkey: ptr("b44c5b3e9c3105b9347cce9f4bbfc899df13c591976fe0f706c1aacd4358020b"),
 		CreatedAt:    baseTime,
 		UpdatedAt:    baseTime,
-		Isolated:     false,
+		Kind:         db.AppKindStandard,
 		Metadata:     datatypes.JSON("{}"),
 	}
 	create(t, tx, app2)
