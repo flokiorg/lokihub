@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
 )
@@ -85,6 +88,10 @@ func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *ui
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
+	if metadata != nil {
+		delete(metadata, "internal_transfer")
+		delete(metadata, "jit_claim_slice")
+	}
 	transaction, err := api.svc.GetTransactionsService().SendPaymentSync(invoice, amountMloki, metadata, api.svc.GetLNClient(), appID, nil)
 	if err != nil {
 		return nil, err
@@ -142,6 +149,7 @@ func toApiTransaction(transaction *transactions.Transaction) *Transaction {
 		Amount:          transaction.AmountMloki,
 		AppId:           transaction.AppId,
 		FeesPaid:        transaction.FeeMloki,
+		FeeSkim:         transaction.FeeSkimMloki,
 		UpdatedAt:       updatedAt,
 		CreatedAt:       createdAt,
 		SettledAt:       settledAt,
@@ -165,16 +173,24 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 			if !dbApp.IsIsolated() {
 				return errors.New("app is not isolated")
 			}
+			// jit_wallet/circle_wallet balances only move via their hub's own
+			// allocation transfer (jitwallet.Create) and the wallet's own spend —
+			// a manual transfer here would desync that accounting.
+			if dbApp.Kind == db.AppKindJITWallet || dbApp.Kind == db.AppKindCircleWallet {
+				return fmt.Errorf("%w: manual transfers are not allowed for %s apps", constants.ErrInvalidParams, dbApp.Kind)
+			}
 		}
 	}
 
-	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, map[string]interface{}{"internal_transfer": true}, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil, nil)
+	transaction, err := api.svc.GetTransactionsService().MakeInvoice(ctx, amountMloki, "transfer", "", 0, nil, api.svc.GetLNClient(), toAppId, nil, nil, nil, nil, nil, nil, &transactions.InternalMakeInvoiceMeta{InternalTransfer: true})
 
 	if err != nil {
 		return err
 	}
 
-	_, err = api.svc.GetTransactionsService().SendPaymentSync(transaction.PaymentRequest, nil, nil, api.svc.GetLNClient(), fromAppId, nil)
+	_, err = api.svc.GetTransactionsService().SendPaymentSync(transaction.PaymentRequest, nil,
+		map[string]interface{}{"internal_transfer": true},
+		api.svc.GetLNClient(), fromAppId, nil)
 	return err
 }
 

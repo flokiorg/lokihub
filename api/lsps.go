@@ -614,12 +614,29 @@ func (api *api) saveLSPsToDatabase(lsps []LSPSettingInput) error {
 	return nil
 }
 
-// UpdateLSPS1OrderState updates the state of an LSPS1 order from a webhook notification
-func (api *api) UpdateLSPS1OrderState(ctx context.Context, orderID, state string) error {
+// UpdateLSPS1OrderState updates the state of an LSPS1 order from a webhook
+// notification. The caller (lsps5WebhookCallbackHandler) has already verified
+// lspPubkey via a signature, but that only proves the sender controls
+// lspPubkey — not that lspPubkey is a real LSP this hub trusts, nor that it's
+// the specific LSP that owns orderID. Both are checked here so a notification
+// self-signed by any keypair can't forge a state transition for an order it
+// doesn't own.
+func (api *api) UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error {
+	// Ownership is checked before touching the LiquidityManager at all: it's a
+	// pure authorization decision against api.lspManager (always available,
+	// doesn't depend on whether the manager has started), and rejecting a
+	// forged notification shouldn't be gated on unrelated service state.
+	order, err := api.lspManager.GetOrder(orderID)
+	if err != nil {
+		return fmt.Errorf("order %s not found: %w", orderID, err)
+	}
+	if order.LSPPubkey != lspPubkey {
+		return fmt.Errorf("lsp pubkey does not match the LSP that created order %s", orderID)
+	}
 	if api.svc.GetLiquidityManager() == nil {
 		return fmt.Errorf("LiquidityManager not started")
 	}
-	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, "")
+	api.svc.GetLiquidityManager().HandleOrderStateUpdate(orderID, state, lspPubkey)
 	return nil
 }
 

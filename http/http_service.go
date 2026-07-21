@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,10 +24,12 @@ import (
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
+	"github.com/flokiorg/lokihub/constants"
 	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
+	"github.com/flokiorg/lokihub/transactions"
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/frontend"
@@ -53,6 +56,9 @@ type HttpService struct {
 	appsSvc        apps.AppsService
 	appStoreSvc    appstore.Service
 	logger         zerolog.Logger
+
+	shutdownOnce sync.Once
+	shutdownCh   chan struct{}
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -65,16 +71,37 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		appsSvc:        apps.NewAppsService(svc.GetDB(), eventPublisher, svc.GetKeys(), svc.GetConfig()),
 		appStoreSvc:    svc.GetAppStoreSvc(),
 		logger:         logger.Logger.With().Str("component", "http").Logger(),
+		shutdownCh:     make(chan struct{}),
 	}
+}
+
+// Shutdown signals long-lived handlers (e.g. SSE streams) to stop.
+// http.Server.Shutdown only waits for active connections to go idle; it does
+// not cancel in-flight request contexts, so a handler that blocks forever
+// (like an SSE loop) would otherwise stall echo.Shutdown() until its deadline.
+// Call this before/alongside echo.Shutdown() so those handlers return promptly.
+func (httpSvc *HttpService) Shutdown() {
+	httpSvc.shutdownOnce.Do(func() {
+		close(httpSvc.shutdownCh)
+	})
 }
 
 func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.HideBanner = true
 
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
-		ContentTypeNosniff:    "nosniff",
-		XFrameOptions:         "DENY",
-		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self';",
+		ContentTypeNosniff: "nosniff",
+		XFrameOptions:      "DENY",
+		// connect-src allows https: so NIP-05 lookups (fetch to
+		// <domain>/.well-known/nostr.json, an unbounded set of hosts) and the
+		// NIP-50 profile search succeed. img-src stays 'self'/data: only —
+		// Nostr profile pictures (kind:0 "picture" field, also an unbounded
+		// set of hosts) are fetched server-side and streamed back through
+		// avatar_proxy.go instead of hotlinked, so the browser itself never
+		// needs to reach an arbitrary image host. Keep this in sync with the
+		// dev CSP meta tag in frontend/vite.config.ts, which has no shared
+		// source with this header.
+		ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://wails.localhost:*; img-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self';",
 		ReferrerPolicy:        "no-referrer",
 	}))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
@@ -108,7 +135,9 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	e.POST("/api/setup/manual", httpSvc.setupManualHandler)
 	e.POST("/api/restore", httpSvc.restoreBackupHandler)
 
-	// Public app store routes
+	// Public app store routes — logos are served from a fixed local path
+	// resolved by appId (appStoreSvc.GetLogoPath), never a caller-supplied
+	// URL, so there's no arbitrary-fetch/SSRF surface here to gate.
 	e.GET("/api/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
 
 	// allow one unlock request per second
@@ -151,6 +180,15 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// Read-only API group - accessible to both full and readonly tokens
 	readOnlyApiGroup := e.Group("/api")
 	readOnlyApiGroup.Use(echojwt.WithConfig(jwtConfig))
+
+	// Avatar proxy — see avatar_proxy.go. Requires login: unlike the app
+	// store logos route, this one fetches an arbitrary caller-supplied URL
+	// server-side, so leaving it unauthenticated would let anyone who can
+	// reach this port use the backend as an open SSRF-probe against its own
+	// local network, no login required. <img> tags can't set an
+	// Authorization header, so the frontend passes the token via the
+	// query-param fallback (TokenLookup above) instead.
+	readOnlyApiGroup.GET("/circle/avatar-proxy", httpSvc.avatarProxyHandler)
 
 	readOnlyApiGroup.GET("/apps", httpSvc.appsListHandler)
 	readOnlyApiGroup.GET("/apps/:pubkey", httpSvc.appsShowByPubkeyHandler)
@@ -195,6 +233,26 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/apps/:pubkey", httpSvc.appsDeleteHandler)
 	fullAccessApiGroup.POST("/transfers", httpSvc.transfersHandler)
 	fullAccessApiGroup.POST("/apps", httpSvc.appsCreateHandler)
+	fullAccessApiGroup.GET("/apps/:id/circle/allowlist", httpSvc.circleAllowlistListHandler)
+	fullAccessApiGroup.PUT("/apps/:id/circle/allowlist", httpSvc.circleAllowlistReplaceHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/circle/allowlist/:pubkey", httpSvc.circleAllowlistRemoveHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/refresh/preview", httpSvc.circleAllowlistRefreshPreviewHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/refresh", httpSvc.circleAllowlistRefreshHandler)
+	fullAccessApiGroup.GET("/apps/:id/circle/children", httpSvc.circleChildrenListHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/circle/children/:childId", httpSvc.circleChildDeleteHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/delete", httpSvc.circleHubDeleteHandler)
+	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
+	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
+	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
+	fullAccessApiGroup.GET("/apps/:id/jit-wallets", httpSvc.jitWalletClaimsListHandler)
+	fullAccessApiGroup.POST("/apps/:id/jit-wallets", httpSvc.jitWalletsCreateHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/jit-wallets/:walletId", httpSvc.jitWalletDeleteHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/jit-wallets/:walletId/claims/:claimId", httpSvc.jitWalletClaimDeleteHandler)
+	fullAccessApiGroup.GET("/apps/:id/jit-connection", httpSvc.jitWalletConnectionHandler)
+	fullAccessApiGroup.GET("/apps/:id/jit-wallet-recipients", httpSvc.jitWalletRecipientsHandler)
+	fullAccessApiGroup.GET("/identity-authorities", httpSvc.identityAuthoritiesListHandler)
+	fullAccessApiGroup.POST("/identity-authorities", httpSvc.identityAuthoritiesCreateHandler)
+	fullAccessApiGroup.DELETE("/identity-authorities/:pubkey", httpSvc.identityAuthoritiesDeleteHandler)
 
 	fullAccessApiGroup.POST("/mnemonic", httpSvc.mnemonicHandler)
 	fullAccessApiGroup.PATCH("/backup-reminder", httpSvc.backupReminderHandler)
@@ -279,6 +337,7 @@ func (httpSvc *HttpService) infoHandler(c echo.Context) error {
 
 	if !unlocked {
 		responseBody.WorkDir = "" // Don't expose workdir if not unlocked
+		responseBody.RedactForUnauthenticated()
 	}
 	responseBody.Unlocked = unlocked
 
@@ -1036,7 +1095,7 @@ func (httpSvc *HttpService) appsShowByPubkeyHandler(c echo.Context) error {
 		})
 	}
 
-	response := httpSvc.api.GetApp(dbApp)
+	response := httpSvc.api.GetApp(c.Request().Context(), dbApp)
 
 	return c.JSON(http.StatusOK, response)
 }
@@ -1064,7 +1123,7 @@ func (httpSvc *HttpService) appsShowHandler(c echo.Context) error {
 		})
 	}
 
-	response := httpSvc.api.GetApp(dbApp)
+	response := httpSvc.api.GetApp(c.Request().Context(), dbApp)
 
 	return c.JSON(http.StatusOK, response)
 }
@@ -1138,6 +1197,18 @@ func (httpSvc *HttpService) appsDeleteHandler(c echo.Context) error {
 	}
 
 	if err := httpSvc.api.DeleteApp(dbApp); err != nil {
+		// apps.DeleteApp's own child-count guard (a jit_hub/circle_hub still
+		// has live children attached) returns a constants.ErrInvalidParams-
+		// wrapped, human-readable reason - surface it as a 400 like every
+		// other admin delete handler in this file (see mapJITAllocError/
+		// mapCircleAllowlistError) instead of flattening every error into an
+		// opaque 500, which left a caller unable to tell "refused, fix your
+		// request" from "something broke server-side".
+		if errors.Is(err, constants.ErrInvalidParams) {
+			return c.JSON(http.StatusBadRequest, ErrorResponse{
+				Message: err.Error(),
+			})
+		}
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: "Failed to delete app",
 		})
@@ -1786,4 +1857,455 @@ func (httpSvc *HttpService) estimateInvoiceFeeHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]uint64{"estimatedFeeMloki": fee})
+}
+
+// mapCircleAllowlistError mirrors mapJITAllocError's pattern: our own validation
+// errors are human-readable and safe to surface as 400s, everything else is a 500.
+func mapCircleAllowlistError(err error) (int, string) {
+	if errors.Is(err, constants.ErrInvalidParams) {
+		return http.StatusBadRequest, err.Error()
+	}
+	return http.StatusInternalServerError, "internal error"
+}
+
+func (httpSvc *HttpService) circleAllowlistListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	pubkeys, listErr := httpSvc.api.ListCircleAllowlist(dbApp)
+	if listErr != nil {
+		httpSvc.logger.Error().Err(listErr).Msg("Failed to list circle allowlist")
+		code, msg := mapCircleAllowlistError(listErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, map[string][]string{"pubkeys": pubkeys})
+}
+
+func (httpSvc *HttpService) circleAllowlistReplaceHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	var body struct {
+		Pubkeys []string `json:"pubkeys"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+
+	if err := httpSvc.api.ReplaceCircleAllowlist(dbApp, body.Pubkeys); err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to replace circle allowlist")
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) circleAllowlistRemoveHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	pubkey := c.Param("pubkey")
+	if pubkey == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "pubkey is required"})
+	}
+
+	if err := httpSvc.api.RemoveCircleAllowedPubkey(dbApp, pubkey); err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to remove circle allowed pubkey")
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) circleAllowlistRefreshPreviewHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	preview, previewErr := httpSvc.api.PreviewCircleRefresh(c.Request().Context(), dbApp)
+	if previewErr != nil {
+		httpSvc.logger.Error().Err(previewErr).Msg("Failed to preview circle allowlist refresh")
+		code, msg := mapCircleAllowlistError(previewErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, preview)
+}
+
+func (httpSvc *HttpService) circleAllowlistRefreshHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	if err := httpSvc.api.RefreshCircleAllowlist(c.Request().Context(), dbApp); err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to refresh circle allowlist")
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) circleChildrenListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCircleHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a circle_hub"})
+	}
+
+	// limit defaults to 0 (unpaginated) — the pre-delete confirmation dialog
+	// (DisconnectCircleHub) relies on getting every child in one call and
+	// never sends a limit; the paginated wallets list always sends one explicitly.
+	limit := uint64(0)
+	offset := uint64(0)
+	if limitParam := c.QueryParam("limit"); limitParam != "" {
+		if parsedLimit, err := strconv.ParseUint(limitParam, 10, 64); err == nil {
+			limit = parsedLimit
+		}
+	}
+	if offsetParam := c.QueryParam("offset"); offsetParam != "" {
+		if parsedOffset, err := strconv.ParseUint(offsetParam, 10, 64); err == nil {
+			offset = parsedOffset
+		}
+	}
+
+	children, totalCount, listErr := httpSvc.api.ListCircleChildrenBalances(dbApp, limit, offset)
+	if listErr != nil {
+		httpSvc.logger.Error().Err(listErr).Uint("app_id", dbApp.ID).
+			Msg("Failed to list circle children balances")
+		code, msg := mapCircleAllowlistError(listErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, api.ListCircleChildrenBalancesResponse{Children: children, TotalCount: totalCount})
+}
+
+// circleChildDeleteHandler removes a single circle_wallet child, in any state
+// (empty or with a remaining balance) — unlike circleHubDeleteHandler, which
+// only ever operates on the whole hub at once.
+func (httpSvc *HttpService) circleChildDeleteHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCircleHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a circle_hub"})
+	}
+	childId, parseErr := strconv.ParseUint(c.Param("childId"), 10, 64)
+	if parseErr != nil || childId == 0 {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid child app ID"})
+	}
+	if deleteErr := httpSvc.api.DeleteCircleWalletChild(dbApp.ID, uint(childId)); deleteErr != nil {
+		httpSvc.logger.Error().Err(deleteErr).
+			Uint("hub_id", dbApp.ID).Uint64("child_id", childId).
+			Msg("Failed to delete circle wallet child")
+		code, msg := mapCircleAllowlistError(deleteErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) circleHubDeleteHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCircleHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a circle_hub"})
+	}
+
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+
+	result, deleteErr := httpSvc.api.DeleteCircleHub(dbApp, body.Mode)
+	if deleteErr != nil {
+		httpSvc.logger.Error().Err(deleteErr).Uint("app_id", dbApp.ID).
+			Msg("Failed to delete circle hub")
+		code, msg := mapCircleAllowlistError(deleteErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// circleIdentitiesListHandler lists every CircleIdentity, for the
+// circle-creation-time "use existing identity" picker.
+func (httpSvc *HttpService) circleIdentitiesListHandler(c echo.Context) error {
+	identities, err := httpSvc.api.ListCircleIdentities()
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to list circle identities")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string][]api.CircleIdentitySummary{"identities": identities})
+}
+
+// circleIdentityGetHandler returns full detail for a single CircleIdentity —
+// note :id here is the identity's own ID, not an app ID, so this doesn't go
+// through getAppByIDParam.
+func (httpSvc *HttpService) circleIdentityGetHandler(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid identity ID"})
+	}
+
+	resp, getErr := httpSvc.api.GetCircleIdentity(c.Request().Context(), uint(id))
+	if getErr != nil {
+		httpSvc.logger.Error().Err(getErr).Uint64("identity_id", id).Msg("Failed to get circle identity")
+		code, msg := mapCircleAllowlistError(getErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// circleIdentityDeleteHandler deletes a standalone CircleIdentity — the API
+// layer refuses (ErrInvalidParams, mapped to 400) if any circle_hub app
+// still references it, so this never silently breaks a live circle.
+func (httpSvc *HttpService) circleIdentityDeleteHandler(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid identity ID"})
+	}
+
+	if delErr := httpSvc.api.DeleteCircleIdentity(uint(id)); delErr != nil {
+		httpSvc.logger.Error().Err(delErr).Uint64("identity_id", id).Msg("Failed to delete circle identity")
+		code, msg := mapCircleAllowlistError(delErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) getAppByIDParam(c echo.Context, param string) (*lokidb.App, error) {
+	idStr := c.Param(param)
+	appId, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid app ID")
+	}
+	dbApp := httpSvc.appsSvc.GetAppById(uint(appId))
+	if dbApp == nil {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "App not found")
+	}
+	return dbApp, nil
+}
+
+// mapJITAllocError maps a JIT allocation/wallet/Identity-Authority service error
+// to an HTTP status code and a client-safe message. Raw DB/GORM details are
+// never forwarded to callers.
+func mapJITAllocError(err error) (int, string) {
+	switch {
+	case errors.Is(err, transactions.NewInsufficientBalanceError()):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, transactions.NewQuotaExceededError()):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, constants.ErrInvalidParams):
+		// Our own validation messages are human-readable and safe to surface.
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, constants.ErrDuplicate):
+		return http.StatusConflict, "an allocation for this identity already exists"
+	case errors.Is(err, apps.ErrInvalidIdentityAuthorityPubkey):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, apps.ErrDuplicateIdentityAuthorityPubkey):
+		return http.StatusConflict, err.Error()
+	case errors.Is(err, apps.ErrIdentityAuthorityNotFound):
+		return http.StatusNotFound, err.Error()
+	default:
+		return http.StatusInternalServerError, "internal error"
+	}
+}
+
+// jitWalletClaimsListHandler lists a hub's recipient slices — one row per
+// JITWalletClaim, across every jit_wallet child.
+func (httpSvc *HttpService) jitWalletClaimsListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	// Pre-flight kind check using the already-fetched app — avoids a wasted service call
+	// and keeps the error path symmetric with create/delete handlers.
+	if dbApp.Kind != lokidb.AppKindJITHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	}
+
+	limit := uint64(20)
+	offset := uint64(0)
+	if limitParam := c.QueryParam("limit"); limitParam != "" {
+		if parsedLimit, err := strconv.ParseUint(limitParam, 10, 64); err == nil {
+			limit = parsedLimit
+		}
+	}
+	if offsetParam := c.QueryParam("offset"); offsetParam != "" {
+		if parsedOffset, err := strconv.ParseUint(offsetParam, 10, 64); err == nil {
+			offset = parsedOffset
+		}
+	}
+	status := c.QueryParam("status")
+
+	claims, totalCount, counts, listErr := httpSvc.api.ListJITWalletClaims(dbApp.ID, limit, offset, status)
+	if listErr != nil {
+		httpSvc.logger.Error().Err(listErr).Uint("hub_id", dbApp.ID).
+			Msg("Failed to list JIT wallet claims")
+		code, msg := mapJITAllocError(listErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, api.ListJITWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts})
+}
+
+// jitWalletsCreateHandler creates, funds, and reveals a shared JIT wallet
+// serving every recipient in the request in one shot.
+func (httpSvc *HttpService) jitWalletsCreateHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindJITHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	}
+	var req api.CreateJITWalletRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest,
+			ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	result, createErr := httpSvc.api.CreateJITWallet(dbApp.ID, &req)
+	if createErr != nil {
+		httpSvc.logger.Error().Err(createErr).Uint("hub_id", dbApp.ID).
+			Msg("Failed to create JIT wallet")
+		code, msg := mapJITAllocError(createErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusCreated, result)
+}
+
+// jitWalletClaimDeleteHandler removes a single unclaimed recipient slice,
+// sweeping its amount back to the hub. To remove the whole wallet (every
+// slice), use jitWalletDeleteHandler instead.
+func (httpSvc *HttpService) jitWalletClaimDeleteHandler(c echo.Context) error {
+	walletId, parseErr := strconv.ParseUint(c.Param("walletId"), 10, 64)
+	if parseErr != nil || walletId == 0 {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid wallet app ID"})
+	}
+	claimId, parseErr := strconv.ParseUint(c.Param("claimId"), 10, 64)
+	if parseErr != nil || claimId == 0 {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid claim ID"})
+	}
+	if deleteErr := httpSvc.api.DeleteJITWalletClaim(uint(walletId), uint(claimId)); deleteErr != nil {
+		httpSvc.logger.Error().Err(deleteErr).
+			Uint64("wallet_id", walletId).Uint64("claim_id", claimId).
+			Msg("Failed to delete JIT wallet claim")
+		code, msg := mapJITAllocError(deleteErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// jitWalletDeleteHandler removes a single jit_wallet child (every recipient
+// slice it serves), in any claim state — reclaiming any remaining balance
+// back to the hub first. To remove just one recipient's unclaimed slice from
+// an otherwise-live shared wallet, use jitWalletClaimDeleteHandler instead.
+func (httpSvc *HttpService) jitWalletDeleteHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindJITHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	}
+	walletId, parseErr := strconv.ParseUint(c.Param("walletId"), 10, 64)
+	if parseErr != nil || walletId == 0 {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid wallet app ID"})
+	}
+	if deleteErr := httpSvc.api.DeleteJITWallet(dbApp.ID, uint(walletId)); deleteErr != nil {
+		httpSvc.logger.Error().Err(deleteErr).
+			Uint("hub_id", dbApp.ID).Uint64("wallet_id", walletId).
+			Msg("Failed to delete JIT wallet")
+		code, msg := mapJITAllocError(deleteErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) jitWalletConnectionHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindJITWallet {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_wallet"})
+	}
+	connection, connErr := httpSvc.api.GetJITWalletConnection(dbApp.ID)
+	if connErr != nil {
+		httpSvc.logger.Error().Err(connErr).Uint("app_id", dbApp.ID).
+			Msg("Failed to derive JIT wallet connection")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "internal error"})
+	}
+	return c.JSON(http.StatusOK, connection)
+}
+
+// jitWalletRecipientsHandler lists a single jit_wallet's own recipient
+// slices — unlike jitWalletClaimsListHandler (paginated, scoped to a
+// jit_hub), this is scoped to the wallet's own app ID, for its own
+// AppDetails page to show who it serves.
+func (httpSvc *HttpService) jitWalletRecipientsHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindJITWallet {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_wallet"})
+	}
+	recipients, listErr := httpSvc.api.GetJITWalletRecipients(dbApp.ID)
+	if listErr != nil {
+		httpSvc.logger.Error().Err(listErr).Uint("app_id", dbApp.ID).
+			Msg("Failed to list JIT wallet recipients")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "internal error"})
+	}
+	return c.JSON(http.StatusOK, api.ListJITWalletClaimsResponse{
+		Claims:     recipients,
+		TotalCount: uint64(len(recipients)),
+	})
+}
+
+func (httpSvc *HttpService) identityAuthoritiesListHandler(c echo.Context) error {
+	authorities, err := httpSvc.api.ListIdentityAuthorities()
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to list identity authorities")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "internal error"})
+	}
+	return c.JSON(http.StatusOK, authorities)
+}
+
+func (httpSvc *HttpService) identityAuthoritiesCreateHandler(c echo.Context) error {
+	var req api.AddIdentityAuthorityRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest,
+			ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	authority, err := httpSvc.api.AddIdentityAuthority(&req)
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to add identity authority")
+		code, msg := mapJITAllocError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusCreated, authority)
+}
+
+func (httpSvc *HttpService) identityAuthoritiesDeleteHandler(c echo.Context) error {
+	pubkey := c.Param("pubkey")
+	if err := httpSvc.api.DeleteIdentityAuthority(pubkey); err != nil {
+		httpSvc.logger.Error().Err(err).Str("pubkey", pubkey).
+			Msg("Failed to delete identity authority")
+		code, msg := mapJITAllocError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
 }

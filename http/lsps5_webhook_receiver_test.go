@@ -18,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/persist"
 	"github.com/flokiorg/lokihub/tests/db"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/labstack/echo/v4"
@@ -64,6 +65,19 @@ func createTestHttpService(t *testing.T, needsLNClient bool) (*HttpService, chan
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 
 	return httpSvc, receivedEvents
+}
+
+// registerTestLSP inserts pubkey directly into the lsps table so it passes
+// lsps5WebhookCallbackHandler's registered-LSP check — the lightweight
+// equivalent of the real admin-authenticated "add LSP" flow, without needing
+// a full LiquidityManager/peer-connection in these unit tests.
+func registerTestLSP(t *testing.T, httpSvc *HttpService, pubkey string) {
+	t.Helper()
+	require.NoError(t, httpSvc.db.Create(&persist.LSP{
+		Pubkey: pubkey,
+		Host:   "test.invalid:9735",
+		Name:   "Test LSP",
+	}).Error)
 }
 
 // waitForEvent waits for an event with a timeout
@@ -211,6 +225,8 @@ func TestLSPS5WebhookCallback_UnknownMethodReturns200(t *testing.T) {
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
 	// Unknown method
+	registerTestLSP(t, httpSvc, lspPubkey)
+
 	reqBody := `{"jsonrpc":"2.0","method":"lsps99.unknown","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
@@ -235,6 +251,8 @@ func TestLSPS5WebhookCallback_ExpirySoonReturns200(t *testing.T) {
 	require.NoError(t, err)
 	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+
+	registerTestLSP(t, httpSvc, lspPubkey)
 
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.expiry_soon","params":{"timeout":144}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
@@ -261,6 +279,8 @@ func TestLSPS5WebhookCallback_WebhookRegisteredReturns200(t *testing.T) {
 	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
+	registerTestLSP(t, httpSvc, lspPubkey)
+
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
@@ -286,6 +306,8 @@ func TestLSPS5WebhookCallback_LiquidityRequestReturns200(t *testing.T) {
 	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
+	registerTestLSP(t, httpSvc, lspPubkey)
+
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.liquidity_management_request","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
@@ -300,6 +322,99 @@ func TestLSPS5WebhookCallback_LiquidityRequestReturns200(t *testing.T) {
 	err = httpSvc.lsps5WebhookCallbackHandler(c)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// TestLSPS5WebhookCallback_UnregisteredLSP_Rejected is the regression test for
+// the fix: a well-formed, validly-signed notification from a pubkey nobody
+// added as an LSP must be rejected, not silently accepted — previously any
+// freshly generated keypair (anyone can make one) would pass, because the
+// signature only proves self-consistency ("this claimed pubkey signed this
+// message"), not that the claimed pubkey is an LSP this hub actually trusts.
+func TestLSPS5WebhookCallback_UnregisteredLSP_Rejected(t *testing.T) {
+	e := echo.New()
+	httpSvc, _ := createTestHttpService(t, false)
+
+	// Deliberately NOT calling registerTestLSP — this pubkey is a fresh,
+	// never-added keypair, exactly what an attacker would use.
+	privKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+
+	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
+	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-lsps5-timestamp", timestamp)
+	req.Header.Set("x-lsps5-signature", sig)
+	rec := httptest.NewRecorder()
+
+	c := e.NewContext(req, rec)
+
+	err = httpSvc.lsps5WebhookCallbackHandler(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	var resp ErrorResponse
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	assert.Contains(t, resp.Message, "not registered")
+}
+
+// TestLSPS5WebhookCallback_OrderStateChanged_WrongLSP_NotApplied is the
+// regression test for the order-ownership half of the fix: a registered LSP
+// (call it LSP B) must not be able to forge a state transition for an order
+// that actually belongs to a different LSP (LSP A) — the notification is
+// signed correctly and B is a real, trusted LSP, but B doesn't own this
+// specific order. UpdateLSPS1OrderState must reject the mismatch, so the
+// order's persisted state must be unchanged afterward.
+func TestLSPS5WebhookCallback_OrderStateChanged_WrongLSP_NotApplied(t *testing.T) {
+	e := echo.New()
+	httpSvc, _ := createTestHttpService(t, false)
+
+	ownerPrivKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	ownerPubkey := hex.EncodeToString(ownerPrivKey.PubKey().SerializeCompressed())
+
+	impostorPrivKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	impostorPubkey := hex.EncodeToString(impostorPrivKey.PubKey().SerializeCompressed())
+
+	// Both pubkeys are registered, real LSPs — the attack here isn't an
+	// unregistered identity, it's one real LSP claiming another real LSP's order.
+	registerTestLSP(t, httpSvc, ownerPubkey)
+	registerTestLSP(t, httpSvc, impostorPubkey)
+
+	const orderID = "order-owned-by-owner-pubkey"
+	require.NoError(t, httpSvc.db.Create(&persist.LSPS1Order{
+		OrderID:   orderID,
+		LSPPubkey: ownerPubkey,
+		State:     "CREATED",
+	}).Error)
+
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	reqBody := `{"jsonrpc":"2.0","method":"lsps5.order_state_changed","params":{"order_id":"` + orderID + `","state":"COMPLETED"}}`
+	sig := generateLSPS5Signature(t, impostorPrivKey, timestamp, []byte(reqBody))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+impostorPubkey+"&order="+orderID, bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-lsps5-timestamp", timestamp)
+	req.Header.Set("x-lsps5-signature", sig)
+	rec := httptest.NewRecorder()
+
+	c := e.NewContext(req, rec)
+
+	err = httpSvc.lsps5WebhookCallbackHandler(c)
+	require.NoError(t, err)
+	// Per the LSPS5 spec, the endpoint still returns 200 even when handling
+	// the notification's *content* fails internally (the LSP shouldn't retry
+	// based on our handling) — the security property to assert is that the
+	// order's state was never actually changed, not the HTTP status.
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var order persist.LSPS1Order
+	require.NoError(t, httpSvc.db.First(&order, "order_id = ?", orderID).Error)
+	assert.Equal(t, "CREATED", order.State, "a registered LSP must not be able to change the state of an order it doesn't own")
 }
 
 // ========================
