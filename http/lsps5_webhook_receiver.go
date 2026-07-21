@@ -202,6 +202,35 @@ func (httpSvc *HttpService) lsps5WebhookCallbackHandler(c echo.Context) error {
 		Bool("signature_valid", valid).
 		Msg("Received verified LSPS5 webhook notification")
 
+	// The signature above only proves the sender controls lspPubkey — anyone
+	// can generate a keypair and sign their own claimed pubkey. It does not
+	// prove lspPubkey is an LSP this hub actually added/trusts, so check it
+	// against the registered-LSP list before acting on the notification at
+	// all. (Order-specific notifications get a second, narrower check —
+	// ownership of the specific order — inside UpdateLSPS1OrderState.)
+	registeredLSPs, err := httpSvc.api.ListLSPs()
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("lsp", lspPubkey).Msg("Failed to load registered LSPs for webhook verification")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: "Failed to verify LSP",
+		})
+	}
+	isRegistered := false
+	for _, lsp := range registeredLSPs {
+		if lsp.Pubkey == lspPubkey {
+			isRegistered = true
+			break
+		}
+	}
+	if !isRegistered {
+		logger.Logger.Warn().
+			Str("lsp", lspPubkey).
+			Msg("LSPS5 webhook notification from an unregistered LSP pubkey - rejecting")
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Message: "LSP is not registered with this hub",
+		})
+	}
+
 	// Handle the notification based on method
 	if err := httpSvc.handleLSPS5Notification(lspPubkey, orderID, &notification); err != nil {
 		logger.Logger.Error().
@@ -289,7 +318,7 @@ func (httpSvc *HttpService) handleLSPS5Notification(lspPubkey, orderID string, n
 
 		// HandleOrderStateUpdate (called inside) persists state and publishes
 		// LSPS5_EVENT_ORDER_STATE_CHANGED to the frontend SSE — skip the generic publish below.
-		if err := httpSvc.api.UpdateLSPS1OrderState(context.Background(), orderID, params.State); err != nil {
+		if err := httpSvc.api.UpdateLSPS1OrderState(context.Background(), lspPubkey, orderID, params.State); err != nil {
 			logger.Logger.Warn().Err(err).Str("order_id", orderID).Msg("Failed to update persistent order state from webhook")
 		}
 		return nil
@@ -357,6 +386,8 @@ func (httpSvc *HttpService) lsps5EventsSSEHandler(c echo.Context) error {
 	for {
 		select {
 		case <-c.Request().Context().Done():
+			return nil
+		case <-httpSvc.shutdownCh:
 			return nil
 		case <-ticker.C:
 			// Send keepalive comment

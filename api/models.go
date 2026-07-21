@@ -18,7 +18,38 @@ type API interface {
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error
 	DeleteApp(app *db.App) error
-	GetApp(app *db.App) *App
+	ReplaceCircleAllowlist(app *db.App, pubkeys []string) error
+	RemoveCircleAllowedPubkey(app *db.App, pubkey string) error
+	RefreshCircleAllowlist(ctx context.Context, app *db.App) error
+	// PreviewCircleRefresh re-fetches the provider's kind:3 contacts and reports
+	// how they'd differ from the currently-stored allowlist, without applying
+	// anything — lets a caller show the delta and get confirmation before
+	// calling RefreshCircleAllowlist to actually replace the list.
+	PreviewCircleRefresh(ctx context.Context, app *db.App) (*CircleRefreshPreview, error)
+	ListCircleAllowlist(app *db.App) ([]string, error)
+	// ListCircleChildrenBalances returns a page of a circle_hub's circle_wallet
+	// children, each with its current isolated balance. limit == 0 returns
+	// every child unpaginated (used by the pre-delete confirmation UI).
+	ListCircleChildrenBalances(app *db.App, limit uint64, offset uint64) ([]CircleChildBalance, uint64, error)
+	DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error)
+	// DeleteCircleWalletChild removes a single circle_wallet child in any state
+	// (empty or with a remaining balance), unlike DeleteCircleHub which only
+	// operates on the whole hub at once.
+	DeleteCircleWalletChild(hubAppID uint, childAppID uint) error
+	// ListCircleIdentities returns every CircleIdentity, for the circle-creation-time picker.
+	ListCircleIdentities() ([]CircleIdentitySummary, error)
+	// GetCircleIdentity returns identity details plus policy-specific counts and
+	// (for allowlist policy) the full pubkey list, and how many circle_hub
+	// apps currently reference it.
+	GetCircleIdentity(ctx context.Context, id uint) (*CircleIdentityResponse, error)
+	// DeleteCircleIdentity removes a standalone CircleIdentity — refuses
+	// (ErrInvalidParams) if any circle_hub app still references it.
+	DeleteCircleIdentity(id uint) error
+	// GetApp returns full detail for a single app — for a circle_hub app with
+	// a following-policy identity, this may cold-fetch the follower count
+	// once (single deliberate target, like GetCircleIdentity), unlike ListApps
+	// which never blocks on a whole page of apps.
+	GetApp(ctx context.Context, app *db.App) *App
 	ListApps(limit uint64, offset uint64, filters ListAppsFilters, orderBy string) (*ListAppsResponse, error)
 
 	ListChannels(ctx context.Context) ([]Channel, error)
@@ -98,7 +129,11 @@ type API interface {
 	LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest) (interface{}, error)
 	LSPS5ListWebhooks(ctx context.Context, req *LSPS5ListWebhooksRequest) (interface{}, error)
 	LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookRequest) (interface{}, error)
-	UpdateLSPS1OrderState(ctx context.Context, orderID, state string) error
+	// UpdateLSPS1OrderState updates orderID's state on behalf of lspPubkey.
+	// Rejects the update if orderID's persisted LSPPubkey doesn't match
+	// lspPubkey — the caller (an LSPS5 webhook notification) only proves it
+	// controls lspPubkey, not that it's the LSP that actually owns this order.
+	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error
 	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
 
 	// LSP Management
@@ -117,26 +152,117 @@ type API interface {
 
 	// Invoice Fee Estimation
 	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
+
+	// JIT wallets / claims
+	// ListJITWalletClaims returns a page of a jit_hub's recipient slices
+	// (one row per JITWalletClaim, across every jit_wallet child). limit == 0
+	// returns every row unpaginated. status filters by JITAllocationStatus*
+	// ("" means unfiltered); counts in the returned JITWalletClaimCounts
+	// always reflect the full, unfiltered set so a UI can show per-tab totals
+	// regardless of which tab is selected.
+	ListJITWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]JITWalletClaimResponse, uint64, JITWalletClaimCounts, error)
+	// CreateJITWallet creates, funds, and reveals a shared JIT wallet serving
+	// every recipient in the request in one shot — the admin equivalent of a
+	// beneficiary calling create_jit_wallet over NWC.
+	CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*CreateJITWalletResponse, error)
+	// DeleteJITWalletClaim removes an unclaimed slice, sweeping its amount
+	// back to the hub. To delete the whole wallet (all its slices), use
+	// DeleteJITWallet instead.
+	DeleteJITWalletClaim(walletAppID uint, claimID uint) error
+	// DeleteJITWallet reclaims any remaining balance back to the hub and
+	// deletes a jit_wallet child, regardless of how much of it has been spent.
+	DeleteJITWallet(hubAppID uint, walletAppID uint) error
+	GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse, error)
+	// GetJITWalletRecipients returns every recipient slice of a single
+	// jit_wallet (claimed or not), scoped by the wallet's own app ID rather
+	// than its parent hub's — for a jit_wallet's own AppDetails page to show
+	// who it serves, which may be more than one beneficiary.
+	GetJITWalletRecipients(appID uint) ([]JITWalletClaimResponse, error)
+
+	// Identity Authority registry
+	ListIdentityAuthorities() ([]IdentityAuthorityResponse, error)
+	AddIdentityAuthority(req *AddIdentityAuthorityRequest) (*IdentityAuthorityResponse, error)
+	DeleteIdentityAuthority(pubkey string) error
 }
 
 type App struct {
-	ID                 uint       `json:"id"`
-	Name               string     `json:"name"`
-	Description        string     `json:"description"`
-	AppPubkey          string     `json:"appPubkey"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
-	LastUsedAt         *time.Time `json:"lastUsedAt"`
-	ExpiresAt          *time.Time `json:"expiresAt"`
-	Scopes             []string   `json:"scopes"`
-	MaxAmountLoki      uint64     `json:"maxAmount"`
-	BudgetUsage        uint64     `json:"budgetUsage"`
-	BudgetRenewal      string     `json:"budgetRenewal"`
-	Isolated           bool       `json:"isolated"`
-	WalletPubkey       string     `json:"walletPubkey"`
-	UniqueWalletPubkey bool       `json:"uniqueWalletPubkey"`
-	Balance            int64      `json:"balance"`
-	Metadata           Metadata   `json:"metadata,omitempty"`
+	ID            uint       `json:"id"`
+	Name          string     `json:"name"`
+	Description   string     `json:"description"`
+	AppPubkey     string     `json:"appPubkey"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	LastUsedAt    *time.Time `json:"lastUsedAt"`
+	ExpiresAt     *time.Time `json:"expiresAt"`
+	Scopes        []string   `json:"scopes"`
+	MaxAmountLoki uint64     `json:"maxAmount"`
+	BudgetUsage   uint64     `json:"budgetUsage"`
+	BudgetRenewal string     `json:"budgetRenewal"`
+	Kind          string     `json:"kind"`
+	// Isolated is derived from Kind (db.App.IsIsolated) — true for every kind
+	// that maintains its own balance (isolated, jit_hub, jit_wallet,
+	// circle_hub, circle_wallet). Kept as an explicit field because the
+	// frontend gates isolated-balance UI (e.g. the increase/decrease buttons)
+	// on it directly rather than duplicating the kind list client-side.
+	Isolated           bool     `json:"isolated"`
+	WalletPubkey       string   `json:"walletPubkey"`
+	UniqueWalletPubkey bool     `json:"uniqueWalletPubkey"`
+	Balance            int64    `json:"balance"`
+	Metadata           Metadata `json:"metadata,omitempty"`
+	// CircleIdentity is set only for circle_hub apps — a lightweight
+	// summary of the attached identity plus policy-specific counts, so the
+	// frontend Circles card doesn't need an extra round-trip per app.
+	CircleIdentity *CircleIdentitySummaryWithCounts `json:"circleIdentity,omitempty"`
+	// JITPerWalletMaxMloki/JITMaxExpSecs are set only for jit_hub apps — the
+	// hub-wide defaults set at creation time, surfaced here so Edit Connection
+	// can display and update them instead of only being settable once.
+	JITPerWalletMaxMloki *int `json:"jitPerWalletMaxMloki,omitempty"`
+	JITMaxExpSecs        *int `json:"jitMaxExpSecs,omitempty"`
+	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
+	// are set only for circle_hub apps — the hub-wide defaults set at
+	// creation time, for the same reason as above.
+	CircleMaxExpSecs        *int    `json:"circleMaxExpSecs,omitempty"`
+	CircleFeesPpm           *int    `json:"circleFeesPpm,omitempty"`
+	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki,omitempty"`
+	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal,omitempty"`
+}
+
+// CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
+// UsedByCount is how many circle_hub apps currently reference this identity —
+// the picker and the manage-identities list both need it to show which identities
+// are safe to delete without a per-row round trip.
+type CircleIdentitySummary struct {
+	ID             uint   `json:"id"`
+	Name           string `json:"name"`
+	Policy         string `json:"policy"`
+	ProviderPubkey string `json:"providerPubkey"`
+	UsedByCount    int    `json:"usedByCount"`
+}
+
+// CircleIdentitySummaryWithCounts adds policy-specific counts, used when an
+// identity is embedded inline on an App (list/get). FollowingCount is only
+// populated from a non-blocking cache peek — nil means "not yet known," not
+// "zero" — the frontend should render a loading state in that case rather
+// than treating it as an authoritative zero.
+type CircleIdentitySummaryWithCounts struct {
+	CircleIdentitySummary
+	FollowingCount *int `json:"followingCount,omitempty"`
+	AllowlistCount int  `json:"allowlistCount"`
+	// PolicySyncedAt is "last policy update" — when the current membership was
+	// last confirmed from its source of truth: for "following", the relay
+	// cache's last fetch time (nil if not yet cached, same semantics as
+	// FollowingCount); for "allowlist", the last time a pubkey was added or
+	// removed (nil if the allowlist has never been populated).
+	PolicySyncedAt *time.Time `json:"policySyncedAt,omitempty"`
+}
+
+// CircleIdentityResponse is the full single-identity detail response —
+// includes (for allowlist policy) the full pubkey list, unlike the inline
+// per-App summary above which stays lean for list responses. UsedByCount is
+// inherited from CircleIdentitySummary.
+type CircleIdentityResponse struct {
+	CircleIdentitySummaryWithCounts
+	AllowlistPubkeys []string `json:"allowlistPubkeys,omitempty"`
 }
 
 type ListAppsFilters struct {
@@ -159,7 +285,17 @@ type UpdateAppRequest struct {
 	UpdateExpiresAt bool      `json:"updateExpiresAt"`
 	Scopes          []string  `json:"scopes"`
 	Metadata        *Metadata `json:"metadata"`
-	Isolated        *bool     `json:"isolated"`
+	// JITPerWalletMaxMloki/JITMaxExpSecs update a jit_hub's JITHubConfig; nil
+	// leaves the corresponding field unchanged. Ignored for other app kinds.
+	JITPerWalletMaxMloki *int `json:"jitPerWalletMaxMloki"`
+	JITMaxExpSecs        *int `json:"jitMaxExpSecs"`
+	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
+	// update a circle_hub's CircleHubConfig; nil leaves the
+	// corresponding field unchanged. Ignored for other app kinds.
+	CircleMaxExpSecs        *int    `json:"circleMaxExpSecs"`
+	CircleFeesPpm           *int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki"`
+	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal"`
 }
 
 type TransferRequest struct {
@@ -169,21 +305,123 @@ type TransferRequest struct {
 }
 
 type CreateAppRequest struct {
-	Name           string   `json:"name"`
-	Pubkey         string   `json:"pubkey"`
-	MaxAmountLoki  uint64   `json:"maxAmount"`
-	BudgetRenewal  string   `json:"budgetRenewal"`
-	ExpiresAt      string   `json:"expiresAt"`
-	Scopes         []string `json:"scopes"`
-	ReturnTo       string   `json:"returnTo"`
-	Isolated       bool     `json:"isolated"`
-	Metadata       Metadata `json:"metadata,omitempty"`
-	UnlockPassword string   `json:"unlockPassword"`
+	Name                    string   `json:"name"`
+	Pubkey                  string   `json:"pubkey"`
+	MaxAmountLoki           uint64   `json:"maxAmount"`
+	BudgetRenewal           string   `json:"budgetRenewal"`
+	ExpiresAt               string   `json:"expiresAt"`
+	Scopes                  []string `json:"scopes"`
+	ReturnTo                string   `json:"returnTo"`
+	Kind                    string   `json:"kind"`
+	Metadata                Metadata `json:"metadata,omitempty"`
+	UnlockPassword          string   `json:"unlockPassword"`
+	JITPerWalletMaxMloki    int      `json:"jitPerWalletMaxMloki"`
+	JITMaxExpSecs           int      `json:"jitMaxExpSecs"`
+	CircleMaxExpSecs        int      `json:"circleMaxExpSecs"`
+	CircleFeesPpm           int      `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki int      `json:"circlePerWalletMaxMloki"`
+	CircleMinBudgetRenewal  string   `json:"circleMinBudgetRenewal"`
+	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
+	// CircleIdentityName/ProviderPubkey below are ignored.
+	CircleIdentityId *uint `json:"circleIdentityId"`
+	// CircleIdentityName/CirclePolicy/ProviderPubkey create a brand-new
+	// CircleIdentity — used only when CircleIdentityId is nil.
+	CircleIdentityName string `json:"circleIdentityName"`
+	CirclePolicy       string `json:"circlePolicy"`
+	ProviderPubkey     string `json:"providerPubkey"`
 }
 
 type CreateLightningAddressRequest struct {
 	Address string `json:"address"`
 	AppId   uint   `json:"appId"`
+}
+
+// JIT wallet / claim types.
+
+// JITWalletRecipient describes one recipient's requested slice when creating
+// a (possibly shared) JIT wallet — a wallet may serve several recipients at
+// once, each with their own amount, all sharing the wallet's one expiry.
+type JITWalletRecipient struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key"
+	IdentityValue string `json:"identity_value"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
+	AmountMloki   int64  `json:"amount_mloki"`
+}
+
+type CreateJITWalletRequest struct {
+	Recipients []JITWalletRecipient `json:"recipients"`
+	ExpirySecs int                  `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+}
+
+type CreateJITWalletResponse struct {
+	AppID      uint                 `json:"app_id"`
+	PairingURI string               `json:"pairing_uri"`
+	ExpiresAt  int64                `json:"expires_at"`
+	Recipients []JITWalletRecipient `json:"recipients"`
+}
+
+// ListJITWalletClaimsResponse is the paginated response for
+// ListJITWalletClaims — mirrors ListTransactionsResponse's shape.
+type ListJITWalletClaimsResponse struct {
+	Claims     []JITWalletClaimResponse `json:"claims"`
+	TotalCount uint64                   `json:"totalCount"`
+	Counts     JITWalletClaimCounts     `json:"counts"`
+}
+
+// JIT claim status filter values, accepted by ListJITWalletClaims' status
+// param and returned by jitClaimStatus.
+const (
+	JITAllocationStatusUnclaimed = "unclaimed"
+	JITAllocationStatusClaimed   = "claimed"
+	JITAllocationStatusExpired   = "expired"
+)
+
+// JITWalletClaimCounts totals a hub's claim rows by status, over the full
+// unfiltered set — meant for a UI's per-tab counts.
+type JITWalletClaimCounts struct {
+	All       uint64 `json:"all"`
+	Unclaimed uint64 `json:"unclaimed"`
+	Claimed   uint64 `json:"claimed"`
+	Expired   uint64 `json:"expired"`
+}
+
+// JITWalletClaimResponse represents one recipient's slice of a jit_wallet.
+// ID is the claim's own row ID (delete via DeleteJITWalletClaim, unclaimed
+// only); WalletAppID identifies the shared connection this slice belongs to
+// (reveal via GetJITWalletConnection, delete the whole wallet via
+// DeleteJITWallet). Claimed is a plain boolean (ClaimedAt != nil) — unlike
+// the old single-recipient-per-wallet model, there's no spend-fraction
+// derivation here, since claim_funds either pays a slice out completely or
+// not at all.
+type JITWalletClaimResponse struct {
+	ID            uint   `json:"id"`
+	WalletAppID   uint   `json:"wallet_app_id"`
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value"`
+	AmountMloki   int64  `json:"amount_mloki"`
+	ExpiresAt     *int64 `json:"expires_at,omitempty"` // inherited from the wallet
+	Claimed       bool   `json:"claimed"`
+	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
+type JITWalletConnectionResponse struct {
+	PairingURI string `json:"pairing_uri"`
+}
+
+// Identity Authority registry types.
+
+type AddIdentityAuthorityRequest struct {
+	Pubkey    string   `json:"pubkey"`
+	Name      string   `json:"name"`
+	RelayURLs []string `json:"relay_urls,omitempty"`
+}
+
+type IdentityAuthorityResponse struct {
+	Pubkey    string   `json:"pubkey"`
+	Name      string   `json:"name"`
+	RelayURLs []string `json:"relay_urls,omitempty"`
+	CreatedAt int64    `json:"created_at"`
 }
 
 type InitiateSwapRequest struct {
@@ -344,6 +582,47 @@ type User struct {
 	Email string `json:"email"`
 }
 
+// CircleChildBalance describes one circle_wallet child's current isolated balance,
+// used both for the wallets list and to warn an admin before deleting its circle_hub.
+type CircleChildBalance struct {
+	AppID uint   `json:"appId"`
+	Name  string `json:"name"`
+	// RequesterPubkey is the circle member's nostr identity (from
+	// CircleWalletMembership), used by the frontend to resolve a profile
+	// (avatar/display name) for the list — distinct from AppPubkey, which
+	// is this wallet's own NWC connection pubkey.
+	RequesterPubkey string `json:"requesterPubkey"`
+	AppPubkey       string `json:"appPubkey"`
+	BalanceMloki    int64  `json:"balanceMloki"`
+}
+
+// ListCircleChildrenBalancesResponse is the paginated response for
+// ListCircleChildrenBalances — mirrors ListTransactionsResponse's shape.
+type ListCircleChildrenBalancesResponse struct {
+	Children   []CircleChildBalance `json:"children"`
+	TotalCount uint64               `json:"totalCount"`
+}
+
+// CircleRefreshPreview reports the delta a following-policy refresh would
+// apply — Added/Removed relative to the currently-stored allowlist — plus
+// the full freshly-fetched list, so a confirmed refresh can act on exactly
+// what was previewed without a second relay round-trip.
+type CircleRefreshPreview struct {
+	Pubkeys []string `json:"pubkeys"`
+	Added   []string `json:"added"`
+	Removed []string `json:"removed"`
+}
+
+// DeleteCircleHubResult reports what DeleteCircleHub actually did:
+// whether the provider itself was deleted, and which children were deleted vs
+// left intact (skipped children only occur with CircleDeleteModeEmptyOnly when
+// they still hold a nonzero balance — in that case HubDeleted is false).
+type DeleteCircleHubResult struct {
+	HubDeleted      bool   `json:"hubDeleted"`
+	DeletedChildIDs []uint `json:"deletedChildIds"`
+	SkippedChildIDs []uint `json:"skippedChildIds"`
+}
+
 type InfoResponseRelay struct {
 	Url    string `json:"url"`
 	Online bool   `json:"online"`
@@ -373,6 +652,8 @@ type InfoResponse struct {
 	FlokicoinDisplayFormat      string              `json:"flokicoinDisplayFormat"`
 	Relays                      []InfoResponseRelay `json:"relays"`
 	Relay                       string              `json:"relay"`
+	GeneralRelay                string              `json:"generalRelay"`
+	SearchRelay                 string              `json:"searchRelay"`
 	NodeAlias                   string              `json:"nodeAlias"`
 	MempoolUrl                  string              `json:"mempoolUrl"`
 	LSPs                        []LSPInfo           `json:"lsps"`
@@ -385,12 +666,46 @@ type InfoResponse struct {
 	EnablePolling               bool                `json:"enablePolling"`
 }
 
+// RedactForUnauthenticated strips fields that let an unauthenticated caller
+// fingerprint a configured node (alias, relays, LSP host/pubkey, version,
+// network, etc). It's a no-op during initial setup (SetupCompleted false),
+// since the setup wizard reads these same fields before any credential
+// exists. Callers must only invoke this once they've established the
+// request is not authenticated.
+func (r *InfoResponse) RedactForUnauthenticated() {
+	if !r.SetupCompleted {
+		return
+	}
+	r.BackendType = ""
+	r.Version = ""
+	r.Network = ""
+	r.AutoUnlockPasswordSupported = false
+	r.AutoUnlockPasswordEnabled = false
+	r.Currency = ""
+	r.FlokicoinDisplayFormat = ""
+	r.Relays = []InfoResponseRelay{}
+	r.Relay = ""
+	r.GeneralRelay = ""
+	r.SearchRelay = ""
+	r.NodeAlias = ""
+	r.MempoolUrl = ""
+	r.LSPs = []LSPInfo{}
+	r.LokihubServicesURL = ""
+	r.SwapServiceUrl = ""
+	r.MessageboardNwcUrl = ""
+	r.EnableSwap = false
+	r.EnableMessageboardNwc = false
+	r.EnablePolling = false
+}
+
 type UpdateSettingsRequest struct {
 	Currency               string            `json:"currency"`
 	FlokicoinDisplayFormat string            `json:"flokicoinDisplayFormat"`
 	LokihubServicesURL     string            `json:"lokihubServicesURL"`
 	SwapServiceUrl         string            `json:"swapServiceUrl"`
 	Relay                  string            `json:"relay"`
+	GeneralRelay           *string           `json:"generalRelay"`
+	SearchRelay            *string           `json:"searchRelay"`
 	MessageboardNwcUrl     string            `json:"messageboardNwcUrl"`
 	MempoolApi             string            `json:"mempoolApi"`
 	LSPs                   []LSPSettingInput `json:"lsps,omitempty"`
@@ -466,6 +781,7 @@ type Transaction struct {
 	PaymentHash     string      `json:"paymentHash"`
 	Amount          uint64      `json:"amount"`
 	FeesPaid        uint64      `json:"feesPaid"`
+	FeeSkim         uint64      `json:"feeSkim,omitempty"`
 	UpdatedAt       string      `json:"updatedAt"`
 	CreatedAt       string      `json:"createdAt"`
 	SettledAt       *string     `json:"settledAt"`

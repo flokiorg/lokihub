@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
@@ -30,10 +30,10 @@ func main() {
 		for {
 			// wait for exit signal
 			signal = <-osSignalChannel
-			logger.Logger.Info().Interface("signal", signal).Msg("Received OS signal")
+			logger.Logger.Info().Str("signal", signal.String()).Msg("Received OS signal")
 
 			if signal == syscall.SIGPIPE {
-				logger.Logger.Warn().Interface("signal", signal).Msg("Ignoring SIGPIPE signal")
+				logger.Logger.Warn().Str("signal", signal.String()).Msg("Ignoring SIGPIPE signal")
 				continue
 			}
 
@@ -63,16 +63,29 @@ func main() {
 
 	//handle graceful shutdown
 	<-ctx.Done()
-	logger.Logger.Info().Interface("signal", signal).Msg("Context Done")
-	logger.Logger.Info().Msg("Shutting down echo server...")
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = e.Shutdown(ctx)
+	if signal != nil {
+		logger.Logger.Info().Str("signal", signal.String()).Msg("Shutting down")
+	} else {
+		logger.Logger.Info().Msg("Shutting down (triggered internally)")
+	}
+	// unblock long-lived handlers (e.g. SSE streams) so they don't stall
+	// echo's Shutdown() below, which only waits for connections to go idle
+	// and never cancels in-flight request contexts on its own.
+	httpSvc.Shutdown()
+
+	echoShutdownCtx, echoShutdownCancel := context.WithTimeout(context.Background(), constants.APP_SHUTDOWN_TIMEOUT)
+	defer echoShutdownCancel()
+	err = e.Shutdown(echoShutdownCtx)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to shutdown echo server")
 	}
 	logger.Logger.Info().Msg("Echo server exited")
-	svc.Shutdown(ctx)
+
+	// use a fresh timeout budget so a slow/stuck echo shutdown above cannot
+	// starve the app subsystems below of their own shutdown window
+	svcShutdownCtx, svcShutdownCancel := context.WithTimeout(context.Background(), constants.APP_SHUTDOWN_TIMEOUT)
+	defer svcShutdownCancel()
+	svc.Shutdown(svcShutdownCtx)
 	logger.Logger.Info().Msg("Service exited")
 	logger.Logger.Info().Msg("Lokihub needs to stay online to send and receive transactions. ")
 }

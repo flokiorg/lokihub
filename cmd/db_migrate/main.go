@@ -16,6 +16,13 @@ import (
 var expectedTables = []string{
 	"apps",
 	"app_permissions",
+	"circle_identities",
+	"circle_identity_allowed_pubkeys",
+	"circle_hub_configs",
+	"circle_wallet_identity_proofs",
+	"circle_wallet_memberships",
+	"jit_wallet_claims",
+	"jit_hub_configs",
 	"request_events",
 	"response_events",
 	"transactions",
