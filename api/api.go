@@ -94,6 +94,10 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
+	kind := db.AppKindStandard
+	if createAppRequest.Isolated {
+		kind = db.AppKindIsolated
+	}
 	app, pairingSecretKey, err := api.appsSvc.CreateApp(
 		createAppRequest.Name,
 		createAppRequest.Pubkey,
@@ -101,7 +105,9 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		createAppRequest.BudgetRenewal,
 		expiresAt,
 		createAppRequest.Scopes,
-		createAppRequest.Isolated,
+		kind,
+		nil,
+		"",
 		createAppRequest.Metadata,
 	)
 
@@ -678,7 +684,7 @@ func (api *api) Stop() error {
 
 	// stop the lnclient, nostr relay etc.
 	// The user will be forced to re-enter their unlock password to restart the node
-	api.svc.StopApp()
+	api.svc.StopApp(context.Background())
 
 	return nil
 }

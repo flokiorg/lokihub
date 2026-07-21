@@ -161,12 +161,52 @@ func (cfg *config) Unlock(encryptionKey string) error {
 		}
 	}
 	cfg.jwtSecret = jwtSecret
+
+	// Seed the default General relay list on first run only. SetIgnore is a
+	// no-op if "GeneralRelay" already exists, even if the user has since
+	// cleared it to empty, so this never overwrites an explicit user choice.
+	if err := cfg.SetIgnore("GeneralRelay", strings.Join(constants.DefaultGeneralRelays, ","), ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("failed to seed default GeneralRelay")
+		return err
+	}
+
+	// Seed the default Search relay list on first run only, same as GeneralRelay.
+	if err := cfg.SetIgnore("SearchRelay", strings.Join(constants.DefaultSearchRelays, ","), ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("failed to seed default SearchRelay")
+		return err
+	}
+
 	return nil
 }
 
 func (cfg *config) GetRelayUrls() []string {
 	relayUrls, _ := cfg.Get("Relay", "")
 	return strings.Split(relayUrls, ",")
+}
+
+// GetGeneralRelayUrls returns the relays used to fetch general Nostr social
+// data — profiles, notes, and events, including Circle contact lists
+// (kind:0/kind:1/kind:3) — independent of GetRelayUrls, which is used for
+// NWC. An explicitly empty list is a valid state (the user deleted every
+// relay), unlike strings.Split("", ",") which would otherwise yield a single
+// blank-URL element.
+func (cfg *config) GetGeneralRelayUrls() []string {
+	value, _ := cfg.Get("GeneralRelay", "")
+	if value == "" {
+		return []string{}
+	}
+	return strings.Split(value, ",")
+}
+
+// GetSearchRelayUrls returns the relays used only for NIP-50 search queries —
+// independent of GetRelayUrls (NWC) and GetGeneralRelayUrls (general social
+// data). See GetGeneralRelayUrls for why the empty case is guarded explicitly.
+func (cfg *config) GetSearchRelayUrls() []string {
+	value, _ := cfg.Get("SearchRelay", "")
+	if value == "" {
+		return []string{}
+	}
+	return strings.Split(value, ",")
 }
 
 func (cfg *config) GetNetwork() string {
@@ -557,6 +597,43 @@ func (cfg *config) SetRelay(value string) error {
 	err := cfg.SetUpdate("Relay", value, "")
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to update Relay")
+		return err
+	}
+	return nil
+}
+
+func (cfg *config) GetGeneralRelay() string {
+	value, err := cfg.Get("GeneralRelay", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch GeneralRelay")
+	}
+	return value
+}
+
+// SetGeneralRelay deliberately allows an empty value, unlike SetRelay — an
+// empty General relay list is a valid, user-chosen state.
+func (cfg *config) SetGeneralRelay(value string) error {
+	err := cfg.SetUpdate("GeneralRelay", value, "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update GeneralRelay")
+		return err
+	}
+	return nil
+}
+
+func (cfg *config) GetSearchRelay() string {
+	value, err := cfg.Get("SearchRelay", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch SearchRelay")
+	}
+	return value
+}
+
+// SetSearchRelay deliberately allows an empty value, same rationale as SetGeneralRelay.
+func (cfg *config) SetSearchRelay(value string) error {
+	err := cfg.SetUpdate("SearchRelay", value, "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update SearchRelay")
 		return err
 	}
 	return nil

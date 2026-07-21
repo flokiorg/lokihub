@@ -35,6 +35,12 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 
 	appConfig := &config.AppConfig{
 		Workdir: ".test",
+		// Explicit, since this literal bypasses envconfig.Process's struct-tag
+		// defaults (0 means "no limit" for these two fields, so leaving them
+		// zero-value here would silently disable rate-limit tests).
+		JITWalletRateLimitPerHour:      10,
+		JITWalletClaimRateLimitPerHour: 20,
+		CircleWalletRateLimitPerHour:   3,
 	}
 
 	cfg, err := config.NewConfig(

@@ -46,17 +46,21 @@ func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 
 	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet priv key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet priv key")
 		return
 	}
 	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
 		return
 	}
 	for _, relayUrl := range s.svc.cfg.GetRelayUrls() {
 		s.svc.nip47Service.EnqueueNip47InfoPublishRequest(id, walletPubKey, walletPrivKey, relayUrl)
 	}
 
-	go s.svc.startAppWalletSubscription(ctx, s.pool, walletPubKey)
+	// Snapshot svc.nostrGroup synchronously, here, rather than let the spawned
+	// goroutine read the field itself — a concurrent ReloadNostr could swap it
+	// to a new group between now and whenever that goroutine actually runs.
+	group := s.svc.nostrGroup
+	go s.svc.startAppWalletSubscription(ctx, s.pool, walletPubKey, group)
 }

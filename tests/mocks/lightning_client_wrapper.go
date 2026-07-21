@@ -355,43 +355,6 @@ func (_m *LightningClientWrapper) LookupInvoice(ctx context.Context, req *lnrpc.
 	return r0, r1
 }
 
-// SendPaymentSync provides a mock function with given fields: req, options
-func (_m *LightningClientWrapper) SendPaymentSync(req *lnrpc.SendRequest, options ...grpc.CallOption) (*lnrpc.SendResponse, error) {
-	_va := make([]interface{}, len(options))
-	for _i := range options {
-		_va[_i] = options[_i]
-	}
-	var _ca []interface{}
-	_ca = append(_ca, req)
-	_ca = append(_ca, _va...)
-	ret := _m.Called(_ca...)
-
-	if len(ret) == 0 {
-		panic("no return value specified for SendPaymentSync")
-	}
-
-	var r0 *lnrpc.SendResponse
-	var r1 error
-	if rf, ok := ret.Get(0).(func(*lnrpc.SendRequest, ...grpc.CallOption) (*lnrpc.SendResponse, error)); ok {
-		return rf(req, options...)
-	}
-	if rf, ok := ret.Get(0).(func(*lnrpc.SendRequest, ...grpc.CallOption) *lnrpc.SendResponse); ok {
-		r0 = rf(req, options...)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*lnrpc.SendResponse)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(*lnrpc.SendRequest, ...grpc.CallOption) error); ok {
-		r1 = rf(req, options...)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // SettleInvoice provides a mock function with given fields: ctx, req, options
 func (_m *LightningClientWrapper) SettleInvoice(ctx context.Context, req *invoicesrpc.SettleInvoiceMsg, options ...grpc.CallOption) (*invoicesrpc.SettleInvoiceResp, error) {
 	_va := make([]interface{}, len(options))

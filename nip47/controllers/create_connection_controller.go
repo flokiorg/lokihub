@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -108,7 +109,11 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 		scopes = append(scopes, constants.NOTIFICATIONS_SCOPE)
 	}
 
-	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, params.Isolated, params.Metadata)
+	kind := db.AppKindStandard
+	if params.Isolated {
+		kind = db.AppKindIsolated
+	}
+	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, kind, nil, "", params.Metadata)
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Interface("request_event_id", requestEventId).
