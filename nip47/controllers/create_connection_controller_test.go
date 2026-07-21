@@ -39,7 +39,7 @@ func TestHandleCreateConnectionEvent(t *testing.T) {
 		"notification_types": ["payment_received"],
 		"max_amount": 100000000,
 		"budget_renewal": "monthly",
-		"isolated": true
+		"kind": "isolated"
 	}
 }
 `, pairingPublicKey)
@@ -80,7 +80,7 @@ func TestHandleCreateConnectionEvent(t *testing.T) {
 	assert.Equal(t, constants.PAY_INVOICE_SCOPE, permissions[1].Scope)
 	assert.Equal(t, constants.NOTIFICATIONS_SCOPE, permissions[2].Scope)
 
-	assert.True(t, app.IsIsolated())
+	assert.Equal(t, db.AppKindIsolated, app.Kind)
 	assert.Equal(t, 100_000, permissions[1].MaxAmountLoki)
 	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, permissions[1].BudgetRenewal)
 }
@@ -96,7 +96,7 @@ func TestHandleCreateConnectionEvent_PubkeyAlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 
 	appsSvc := apps.NewAppsService(svc.DB, svc.EventPublisher, svc.Keys, svc.Cfg)
-	_, _, err = appsSvc.CreateApp("Existing App", pairingPublicKey, 0, constants.BUDGET_RENEWAL_NEVER, nil, []string{models.GET_INFO_METHOD}, db.AppKindStandard, nil, "", nil)
+	_, _, err = appsSvc.CreateApp("Existing App", pairingPublicKey, 0, constants.BUDGET_RENEWAL_NEVER, nil, []string{models.GET_INFO_METHOD}, "", nil, "", nil)
 
 	nip47CreateConnectionJson := fmt.Sprintf(`
 {

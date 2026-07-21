@@ -21,7 +21,7 @@ type createConnectionParams struct {
 	MaxAmount         uint64                 `json:"max_amount"`
 	BudgetRenewal     string                 `json:"budget_renewal"`
 	ExpiresAt         *uint64                `json:"expires_at"` // unix timestamp
-	Isolated          bool                   `json:"isolated"`
+	Kind              string                 `json:"kind"`
 	Metadata          map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -109,11 +109,18 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 		scopes = append(scopes, constants.NOTIFICATIONS_SCOPE)
 	}
 
-	kind := db.AppKindStandard
-	if params.Isolated {
-		kind = db.AppKindIsolated
+	if params.Kind != "" && params.Kind != db.AppKindStandard && params.Kind != db.AppKindIsolated {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "invalid kind: must be \"standard\" or \"isolated\"",
+			},
+		}, nostr.Tags{})
+		return
 	}
-	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, kind, nil, "", params.Metadata)
+
+	app, _, err := controller.appsService.CreateApp(params.Name, params.Pubkey, maxAmountLoki, params.BudgetRenewal, expiresAt, scopes, params.Kind, nil, "", params.Metadata)
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Interface("request_event_id", requestEventId).

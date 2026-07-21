@@ -26,9 +26,14 @@ type stubTransactionsService struct {
 func (s *stubTransactionsService) ConsumeEvent(_ context.Context, _ *events.Event, _ map[string]interface{}) {
 }
 
+func (s *stubTransactionsService) SweepStalePendingOutgoing(_ context.Context, _ lnclient.LNClient) {
+	panic("SweepStalePendingOutgoing: unexpected call in test")
+}
+
 func (s *stubTransactionsService) MakeInvoice(
 	_ context.Context, _ uint64, _, _ string, _ uint64, _ map[string]interface{},
 	_ lnclient.LNClient, _ *uint, _ *uint, _ *string, _ *string, _ *uint16, _ *uint64, _ *uint32,
+	_ *transactions.InternalMakeInvoiceMeta,
 ) (*transactions.Transaction, error) {
 	panic("MakeInvoice: unexpected call in test")
 }

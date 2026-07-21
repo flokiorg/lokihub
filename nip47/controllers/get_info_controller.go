@@ -6,22 +6,31 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
 )
 
+type circleWalletInfo struct {
+	AvailableMloki int64  `json:"available_mloki"`
+	MaxExpSecs     int    `json:"max_exp_secs"`
+	FeesPpm        int    `json:"fees_ppm"`
+	CirclePolicy   string `json:"circle_policy"`
+}
+
 type getInfoResponse struct {
-	Alias            *string     `json:"alias"`
-	Color            *string     `json:"color"`
-	Pubkey           *string     `json:"pubkey"`
-	Network          *string     `json:"network"`
-	BlockHeight      *uint32     `json:"block_height"`
-	BlockHash        *string     `json:"block_hash"`
-	Methods          []string    `json:"methods"`
-	Notifications    []string    `json:"notifications"`
-	Metadata         interface{} `json:"metadata,omitempty"`
-	LightningAddress *string     `json:"lud16"`
+	Alias            *string           `json:"alias"`
+	Color            *string           `json:"color"`
+	Pubkey           *string           `json:"pubkey"`
+	Network          *string           `json:"network"`
+	BlockHeight      *uint32           `json:"block_height"`
+	BlockHash        *string           `json:"block_hash"`
+	Methods          []string          `json:"methods"`
+	Notifications    []string          `json:"notifications"`
+	Metadata         interface{}       `json:"metadata,omitempty"`
+	LightningAddress *string           `json:"lud16"`
+	CircleWallet     *circleWalletInfo `json:"circle_wallet,omitempty"`
 }
 
 func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
@@ -96,6 +105,25 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 			}
 
 			responsePayload.Metadata = metadata
+		}
+
+		// For circle_hub apps, expose terms so callers can discover the wallet policy.
+		if app.Kind == db.AppKindCircleHub {
+			balance := queries.GetIsolatedBalance(controller.db, app.ID)
+			commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
+			available := balance - commitment
+			if available < 0 {
+				available = 0
+			}
+			providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
+			if err == nil {
+				responsePayload.CircleWallet = &circleWalletInfo{
+					AvailableMloki: available,
+					MaxExpSecs:     providerConfig.MaxExpSecs,
+					FeesPpm:        providerConfig.FeesPpm,
+					CirclePolicy:   providerConfig.CircleIdentity.Policy,
+				}
+			}
 		}
 	}
 

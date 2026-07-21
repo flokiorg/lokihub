@@ -48,6 +48,8 @@ func (controller *nip47Controller) HandlePayInvoiceEvent(ctx context.Context, ni
 		return
 	}
 
+	// JIT full-drain enforcement is applied inside SendPaymentSync (transactions_service.go)
+	// so it covers all payment paths (NIP-47, HTTP API, keysend) uniformly.
 	controller.pay(bolt11, payParams.Amount, payParams.Metadata, paymentRequest, nip47Request, requestEventId, app, publishResponse, tags)
 }
 
@@ -57,6 +59,17 @@ func (controller *nip47Controller) pay(bolt11 string, amount *uint64, metadata m
 		Interface("app_id", app.ID).
 		Interface("bolt11", bolt11).
 		Msg("Sending payment")
+
+	// Prevent user-supplied metadata from spoofing internal_transfer (bypasses
+	// JIT full-drain enforcement) or jit_claim_slice (bypasses the fee-reserve
+	// headroom in validateCanPay's balance/budget checks) — both flags are
+	// meant to be set only by their own trusted call sites (hub cleanup/self
+	// -payment, and claim_funds_controller.go's own proof-gated payout,
+	// respectively), never by an arbitrary pay_invoice/multi_pay_invoice caller.
+	if metadata != nil {
+		delete(metadata, "internal_transfer")
+		delete(metadata, "jit_claim_slice")
+	}
 
 	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, amount, metadata, controller.lnClient, &app.ID, &requestEventId)
 	if err != nil {
