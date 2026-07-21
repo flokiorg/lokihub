@@ -275,7 +275,7 @@ func TestHandleMultiPayInvoiceEvent_IsolatedApp_OneBudgetExceeded(t *testing.T) 
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	svc.DB.Create(&db.Transaction{
@@ -434,7 +434,7 @@ func TestHandleMultiPayInvoiceEvent_IsolatedApp_ConcurrentPayments(t *testing.T)
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	svc.DB.Create(&db.Transaction{

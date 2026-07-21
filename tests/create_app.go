@@ -45,7 +45,7 @@ func CreateAppWithSharedWalletPubkey(svc *TestService, senderPrivkey, nip47Encry
 
 	pairingPublicKey, _ := nostr.GetPublicKey(senderPrivkey)
 
-	app = &db.App{Name: "test", AppPubkey: pairingPublicKey, Isolated: false}
+	app = &db.App{Name: "test", AppPubkey: pairingPublicKey, Kind: db.AppKindStandard}
 
 	err = svc.DB.Transaction(func(tx *gorm.DB) error {
 		err := tx.Save(&app).Error

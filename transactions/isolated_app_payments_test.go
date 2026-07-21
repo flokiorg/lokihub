@@ -18,7 +18,7 @@ func TestSendPaymentSync_IsolatedApp_NoBalance(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -48,7 +48,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -95,7 +95,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -135,7 +135,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient_OutstandingPayment(t *t
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -179,7 +179,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficient_SettledPayment(t *testi
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -223,7 +223,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient_UnrelatedPayment(t *testi
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -269,7 +269,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceSufficient_FailedPayment(t *testing.
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{
@@ -315,7 +315,7 @@ func TestSendPaymentSync_IsolatedApp_BalanceInsufficientThenSufficient(t *testin
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	appPermission := &db.AppPermission{

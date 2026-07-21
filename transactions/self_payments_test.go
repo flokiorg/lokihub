@@ -67,7 +67,7 @@ func TestSendPaymentSync_SelfPayment_NoAppToIsolatedApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -173,7 +173,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToNoApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 
@@ -245,7 +245,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 	app2, _, err := tests.CreateApp(svc)
@@ -321,12 +321,12 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToIsolatedApp(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 	app2, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app2.Isolated = true
+	app2.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app2).Error
 	assert.NoError(t, err)
 
@@ -421,7 +421,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToSelf(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 
@@ -496,7 +496,7 @@ func TestSendPaymentSync_SelfPayment_IsolatedAppToApp_AmountProvidedIgnoredOnNon
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	err = svc.DB.Save(&app).Error
 	assert.NoError(t, err)
 	app2, _, err := tests.CreateApp(svc)

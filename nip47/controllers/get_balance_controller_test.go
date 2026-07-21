@@ -63,7 +63,7 @@ func TestHandleGetBalanceEvent_IsolatedApp_NoTransactions(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -94,7 +94,7 @@ func TestHandleGetBalanceEvent_IsolatedApp_Transactions(t *testing.T) {
 
 	app, _, err := tests.CreateApp(svc)
 	assert.NoError(t, err)
-	app.Isolated = true
+	app.Kind = db.AppKindIsolated
 	svc.DB.Save(&app)
 
 	svc.DB.Create(&db.Transaction{

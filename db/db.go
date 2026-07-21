@@ -2,6 +2,8 @@ package db
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 
 	"gorm.io/driver/postgres"
@@ -31,9 +33,20 @@ func NewDBWithConfig(cfg *Config) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
 		TranslateError: true,
 	}
+	// Always install our own logger rather than leaving it nil: a nil Logger
+	// makes GORM fall back to its package-level default, which logs at Warn
+	// level and does not ignore record-not-found errors. That turns expected
+	// existence checks (duplicate name/pubkey lookups, allocation lookups)
+	// into error-shaped log lines even when query logging is off. Error level
+	// keeps genuine errors (constraint violations, etc.) visible either way.
+	logLevel := gorm_logger.Error
 	if cfg.LogQueries {
-		gormConfig.Logger = gorm_logger.Default.LogMode(gorm_logger.Info)
+		logLevel = gorm_logger.Info
 	}
+	gormConfig.Logger = gorm_logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gorm_logger.Config{
+		LogLevel:                  logLevel,
+		IgnoreRecordNotFoundError: true,
+	})
 
 	var ret *gorm.DB
 

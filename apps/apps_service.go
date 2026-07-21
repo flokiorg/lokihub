@@ -117,7 +117,11 @@ func (svc *appsService) CreateApp(name string, pubkey string, maxAmountLoki uint
 		return nil, "", errors.New("duplicated key not allowed")
 	}
 
-	app := db.App{Name: freeName, AppPubkey: pairingPublicKey, Isolated: isolated, Metadata: datatypes.JSON(metadataBytes)}
+	kind := db.AppKindStandard
+	if isolated {
+		kind = db.AppKindIsolated
+	}
+	app := db.App{Name: freeName, AppPubkey: pairingPublicKey, Kind: kind, Metadata: datatypes.JSON(metadataBytes)}
 
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
 		err := tx.Save(&app).Error

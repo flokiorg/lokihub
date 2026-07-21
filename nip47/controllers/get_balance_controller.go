@@ -28,7 +28,7 @@ func (controller *nip47Controller) HandleGetBalanceEvent(ctx context.Context, ni
 		Msg("Getting balance")
 
 	balance := int64(0)
-	if app.Isolated {
+	if app.IsIsolated() {
 		balance = queries.GetIsolatedBalance(controller.db, app.ID)
 	} else {
 		balances, err := controller.lnClient.GetBalances(ctx, true)

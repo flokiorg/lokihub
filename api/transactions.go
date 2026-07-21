@@ -162,7 +162,7 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 			if dbApp == nil {
 				return errors.New("app does not exist")
 			}
-			if !dbApp.Isolated {
+			if !dbApp.IsIsolated() {
 				return errors.New("app is not isolated")
 			}
 		}
