@@ -89,7 +89,7 @@ func AddFileLogger(workdir string) error {
 
 	crashLogPath := filepath.Join(workdir, logDir, "crash.log")
 	if crashFile, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		crashlog.RedirectStderr(crashFile)
+		_ = crashlog.RedirectStderr(crashFile)
 	}
 
 	fileLogger := &lumberjack.Logger{

@@ -177,7 +177,7 @@ func TestClient_ListProtocols(t *testing.T) {
 							},
 						}
 						respBytes, _ := json.Marshal(resp)
-						client.HandleMessage(peer, respBytes)
+						_ = client.HandleMessage(peer, respBytes)
 						return // Done
 					}
 				}
