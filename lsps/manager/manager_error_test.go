@@ -184,7 +184,7 @@ func TestLSPS1ErrorPropagation(t *testing.T) {
 		go func() {
 			// Reply with flspd Code 100 error
 			errResp := fmt.Sprintf(`{"jsonrpc":"2.0", "id":"%s", "error": {"code": 100, "message": "Client balance out of bounds", "data": {"min": 0, "max": 100}} }`, id)
-			m.lsps1Client.HandleMessage("lsp_pubkey", []byte(errResp))
+			_ = m.lsps1Client.HandleMessage("lsp_pubkey", []byte(errResp))
 		}()
 	}).Return(nil)
 
@@ -205,7 +205,7 @@ func extractIdFromBytes(data []byte) string {
 	var req struct {
 		ID string `json:"id"`
 	}
-	json.Unmarshal(data, &req) // ignore err
+	_ = json.Unmarshal(data, &req) // ignore err
 	return req.ID
 }
 
@@ -213,7 +213,7 @@ func extractMethodFromBytes(data []byte) string {
 	var req struct {
 		Method string `json:"method"`
 	}
-	json.Unmarshal(data, &req)
+	_ = json.Unmarshal(data, &req)
 	return req.Method
 }
 

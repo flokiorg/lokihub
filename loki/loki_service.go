@@ -71,7 +71,7 @@ func (svc *lokiService) GetFlokicoinRate(ctx context.Context) (*FlokicoinRate, e
 		return nil, err
 	}
 
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -141,7 +141,7 @@ func (svc *lokiService) GetCurrencies(ctx context.Context) (map[string]LokiCurre
 		return nil, fmt.Errorf("backend failed to fetch rates: %w", err)
 	}
 
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -197,7 +197,7 @@ func (svc *lokiService) GetInfo(ctx context.Context) (*LokiInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -231,7 +231,7 @@ func (svc *lokiService) GetFAQ(ctx context.Context) ([]FAQ, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

@@ -215,27 +215,42 @@ func TestMarkSettled_Twice(t *testing.T) {
 	var wg sync.WaitGroup
 	n := 10
 	wg.Add(n)
+	// initialTx is snapshotted once here, before any goroutine starts, so
+	// each goroutine's own localTx copy below is race-free by construction
+	// (no concurrent read against a variable anything else might write).
+	initialTx := dbTransaction
 	for range n {
 		go func() {
 			defer wg.Done()
+			// txErr is goroutine-local - the outer err (from CreateTestService,
+			// already asserted above) must not be written from multiple
+			// goroutines at once.
+			// localTx is a goroutine-local copy - only the one goroutine that
+			// actually wins the settle race (settled != nil) writes back to
+			// the shared dbTransaction below, so passing the shared struct's
+			// address into markTransactionSettled from all n goroutines
+			// concurrently (which mutates it via gorm's Updates) would
+			// otherwise race even though only one call actually settles.
+			localTx := initialTx
 			var settled *db.Transaction
-			err = svc.DB.Transaction(func(tx *gorm.DB) error {
+			txErr := svc.DB.Transaction(func(tx *gorm.DB) error {
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
-				settled, err = transactionsService.markTransactionSettled(tx, &dbTransaction, "test", 0, false)
+				var markErr error
+				settled, markErr = transactionsService.markTransactionSettled(tx, &localTx, "test", 0, false)
 				time.Sleep(time.Duration(n) * 10 * time.Millisecond)
-				return err
+				return markErr
 			})
 			if settled != nil {
+				dbTransaction = *settled
 				transactionsService.publishSettleEvent(settled)
 			}
-			require.NoError(t, err)
+			require.NoError(t, txErr)
 		}()
 	}
 	wg.Wait()
 
 	// ensure we only mark transaction settled once and only fire
 	// settled notifications once
-	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, dbTransaction.State)
 	assert.Equal(t, 1, len(mockEventConsumer.GetConsumedEvents()))
 	assert.Equal(t, "nwc_payment_sent", mockEventConsumer.GetConsumedEvents()[0].Event)
