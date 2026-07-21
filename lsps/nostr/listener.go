@@ -10,8 +10,8 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/service/keys"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 	"github.com/nbd-wtf/go-nostr"
 )

@@ -21,11 +21,11 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
 	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/pkg/appstore"
 	"github.com/flokiorg/lokihub/service"
 
 	"github.com/flokiorg/lokihub/api"

@@ -85,7 +85,7 @@ rm -f ops/bin/*.AppImage*
 rm -rf build/bin
 mkdir -p build/bin
 
-LDFLAGS="-X 'github.com/flokiorg/lokihub/pkg/version.Tag=${VERSION_STRING}'"
+LDFLAGS="-X 'github.com/flokiorg/lokihub/version.Tag=${VERSION_STRING}'"
 
 # Wails Build
 echo "--- Building Desktop Binary (Direct Go) ---"

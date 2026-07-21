@@ -10,8 +10,8 @@ import (
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/service"
-	lokitray "github.com/flokiorg/lokihub/tray"
 	"github.com/flokiorg/lokihub/wails"
+	lokitray "github.com/flokiorg/lokihub/wails/tray"
 )
 
 //go:embed all:frontend/dist

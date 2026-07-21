@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
+	"github.com/flokiorg/lokihub/decodepay"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 

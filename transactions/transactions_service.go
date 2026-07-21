@@ -17,10 +17,10 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
+	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"

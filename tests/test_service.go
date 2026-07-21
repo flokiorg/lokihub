@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"testing"
 
-
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests/db"
@@ -13,8 +12,8 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/service/keys"
 )
 
 func CreateTestService(t *testing.T) (svc *TestService, err error) {

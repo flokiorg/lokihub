@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	decodepay "github.com/flokiorg/lokihub/pkg/decodepay"
 	"github.com/flokiorg/go-flokicoin/chaincfg"
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	"github.com/flokiorg/go-flokicoin/chainutil/hdkeychain"
@@ -23,10 +22,11 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/lightzapp/lightz-client/pkg/lightz"
 	"github.com/rs/zerolog"
@@ -582,7 +582,7 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 		svc.logger.Error().Err(err).Fields(map[string]interface{}{
 			"swap_id":      swap.Id,
 			"payment_hash": invoice.PaymentHash,
-			"metadata":    metadata,
+			"metadata":     metadata,
 		}).Msg("Failed to add swap metadata to lightning payment")
 		return nil, err
 	}

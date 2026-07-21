@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/pkg/version"
+	"github.com/flokiorg/lokihub/version"
 )
 
 type eventPublisher struct {

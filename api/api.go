@@ -35,12 +35,12 @@ import (
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
 
+	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
-	"github.com/flokiorg/lokihub/pkg/version"
 	"github.com/flokiorg/lokihub/service"
-	"github.com/flokiorg/lokihub/service/keys"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/utils"
+	"github.com/flokiorg/lokihub/version"
 )
 
 const (
@@ -1384,7 +1384,7 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 				}
 			}
 			macaroonHex := hex.EncodeToString(macBytes)
-			
+
 			// Verify if the node is actually up (important for Docker startup order)
 			err = api.verifyFLNDConnection(ctx, env.FLNDAddress, certHex, macaroonHex)
 			if err == nil {
@@ -1415,7 +1415,7 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 		// instead of falling back to localhost (which would be wrong in Docker).
 		// This ensures the UI shows "Offline" but with the CORRECT address/port.
 		logger.Logger.Info().Msg("Returning unverified environment credentials to UI")
-		
+
 		// Try to at least get hex values for the UI/Setup
 		macaroonHex := ""
 		macBytes, err := os.ReadFile(env.FLNDMacaroonFile)
