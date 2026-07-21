@@ -167,8 +167,11 @@ type API interface {
 	CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*CreateJITWalletResponse, error)
 	// DeleteJITWalletClaim removes an unclaimed slice, sweeping its amount
 	// back to the hub. To delete the whole wallet (all its slices), use
-	// DeleteJITWallet instead.
-	DeleteJITWalletClaim(walletAppID uint, claimID uint) error
+	// DeleteJITWallet instead. Rejects if walletAppID is not actually a
+	// jit_wallet child of hubAppID, mirroring DeleteJITWallet's own check —
+	// callers must not be able to reach into a hub they don't own by
+	// supplying an arbitrary walletAppID/claimID pair.
+	DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID uint) error
 	// DeleteJITWallet reclaims any remaining balance back to the hub and
 	// deletes a jit_wallet child, regardless of how much of it has been spent.
 	DeleteJITWallet(hubAppID uint, walletAppID uint) error

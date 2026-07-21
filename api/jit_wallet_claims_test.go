@@ -197,7 +197,7 @@ func TestDeleteJITWalletClaim_Unclaimed_SweepsBackToHub(t *testing.T) {
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&claim).Error)
 
 	theAPI := newTestAPIWithService(t, svc)
-	err = theAPI.DeleteJITWalletClaim(wallet.ID, claim.ID)
+	err = theAPI.DeleteJITWalletClaim(hub.ID, wallet.ID, claim.ID)
 	require.NoError(t, err)
 
 	var count int64
@@ -235,7 +235,7 @@ func TestDeleteJITWalletClaim_OneOfMultiple_WalletSurvives(t *testing.T) {
 	require.NoError(t, svc.DB.Where("wallet_app_id = ? AND identity_value = ?", wallet.ID, pkRemoved).First(&claimToRemove).Error)
 
 	theAPI := newTestAPIWithService(t, svc)
-	require.NoError(t, theAPI.DeleteJITWalletClaim(wallet.ID, claimToRemove.ID))
+	require.NoError(t, theAPI.DeleteJITWalletClaim(hub.ID, wallet.ID, claimToRemove.ID))
 
 	var removedCount int64
 	svc.DB.Model(&db.JITWalletClaim{}).Where("id = ?", claimToRemove.ID).Count(&removedCount)
@@ -268,7 +268,7 @@ func TestDeleteJITWalletClaim_AlreadyClaimed_Rejected(t *testing.T) {
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&claim).Error)
 
 	theAPI := newTestAPIWithService(t, svc)
-	err = theAPI.DeleteJITWalletClaim(wallet.ID, claim.ID)
+	err = theAPI.DeleteJITWalletClaim(hub.ID, wallet.ID, claim.ID)
 	require.Error(t, err, "deleting an already-claimed slice must be rejected")
 
 	var count int64
@@ -276,7 +276,7 @@ func TestDeleteJITWalletClaim_AlreadyClaimed_Rejected(t *testing.T) {
 	assert.EqualValues(t, 1, count, "the claim row must be untouched")
 }
 
-func TestDeleteJITWalletClaim_NotJITWallet(t *testing.T) {
+func TestDeleteJITWalletClaim_NotJITHub(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -288,9 +288,62 @@ func TestDeleteJITWalletClaim_NotJITWallet(t *testing.T) {
 	require.NoError(t, err)
 
 	theAPI := newTestAPIWithService(t, svc)
-	err = theAPI.DeleteJITWalletClaim(isolatedApp.ID, 1)
+	err = theAPI.DeleteJITWalletClaim(isolatedApp.ID, 1, 1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a jit_wallet")
+	assert.Contains(t, err.Error(), "not a jit_hub")
+}
+
+func TestDeleteJITWalletClaim_NotJITWallet(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 10_000, 3600)
+	isolatedApp, _, err := svc.AppsService.CreateApp(
+		"iso", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", nil,
+	)
+	require.NoError(t, err)
+
+	theAPI := newTestAPIWithService(t, svc)
+	err = theAPI.DeleteJITWalletClaim(hub.ID, isolatedApp.ID, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JIT wallet not found for this hub")
+}
+
+// TestDeleteJITWalletClaim_WrongHub_Rejected is the regression test for the
+// cross-hub deletion bug found in code review: api.DeleteJITWalletClaim used
+// to take only (walletAppID, claimID), with no check that walletAppID
+// actually belonged to the hub named in the request's URL - so a caller
+// scoped to hub A could delete (and redirect the sweep-back of) a claim that
+// actually belonged to a completely unrelated hub B, simply by supplying
+// hub B's walletId/claimId while hitting hub A's endpoint. hubAppID is now a
+// required parameter, checked the same way DeleteJITWallet already checks it.
+func TestDeleteJITWalletClaim_WrongHub_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hubA := tests.CreateJITHub(t, svc, 10_000, 3600)
+	hubB := tests.CreateJITHub(t, svc, 10_000, 3600)
+	walletB := newBareJITWallet(t, svc, hubB, 3)
+	pk := tests.RandomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(walletB.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk, AmountMloki: 3000},
+	}))
+
+	var claim db.JITWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", walletB.ID).First(&claim).Error)
+
+	theAPI := newTestAPIWithService(t, svc)
+	// hubA's URL, but walletB/claim actually belong to hubB.
+	err = theAPI.DeleteJITWalletClaim(hubA.ID, walletB.ID, claim.ID)
+	require.Error(t, err, "a claim belonging to a different hub must not be deletable through this hub's endpoint")
+	assert.Contains(t, err.Error(), "not found for this hub")
+
+	var count int64
+	svc.DB.Model(&db.JITWalletClaim{}).Where("id = ?", claim.ID).Count(&count)
+	assert.EqualValues(t, 1, count, "the claim must be untouched")
 }
 
 // --- GetJITWalletConnection ---

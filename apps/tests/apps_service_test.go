@@ -69,7 +69,7 @@ func TestCreateApp_ParentAppID_SetForSubWallets(t *testing.T) {
 	parent, _, err := newAppsService(svc).CreateApp(
 		"hub", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE},
-		db.AppKindIsolated, nil, "", nil,
+		db.AppKindJITHub, nil, "", nil,
 	)
 	require.NoError(t, err)
 
