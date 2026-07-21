@@ -872,6 +872,112 @@ func (_mock *MockConfig) SetRelay(value string) error {
 	return r0
 }
 
+// GetGeneralRelayUrls provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetGeneralRelayUrls() []string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGeneralRelayUrls")
+	}
+
+	var r0 []string
+	if returnFunc, ok := ret.Get(0).(func() []string); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	return r0
+}
+
+// GetGeneralRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetGeneralRelay() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGeneralRelay")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// SetGeneralRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetGeneralRelay(value string) error {
+	ret := _mock.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetGeneralRelay")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// GetSearchRelayUrls provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetSearchRelayUrls() []string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSearchRelayUrls")
+	}
+
+	var r0 []string
+	if returnFunc, ok := ret.Get(0).(func() []string); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	return r0
+}
+
+// GetSearchRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) GetSearchRelay() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSearchRelay")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// SetSearchRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetSearchRelay(value string) error {
+	ret := _mock.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetSearchRelay")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
 // SetupCompleted provides a mock function for the type MockConfig
 func (_mock *MockConfig) SetupCompleted() bool {
 	ret := _mock.Called()

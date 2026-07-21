@@ -72,7 +72,7 @@ func main() {
 		logger.Logger.Error().Err(err).Msg("Failed to shutdown echo server")
 	}
 	logger.Logger.Info().Msg("Echo server exited")
-	svc.Shutdown()
+	svc.Shutdown(ctx)
 	logger.Logger.Info().Msg("Service exited")
 	logger.Logger.Info().Msg("Lokihub needs to stay online to send and receive transactions. ")
 }

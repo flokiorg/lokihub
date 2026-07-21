@@ -5,6 +5,9 @@
 package mocks
 
 import (
+	"context"
+	"time"
+
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
@@ -556,8 +559,8 @@ func (_c *MockService_InitSwapsService_Call) RunAndReturn(run func()) *MockServi
 }
 
 // Shutdown provides a mock function for the type MockService
-func (_mock *MockService) Shutdown() {
-	_mock.Called()
+func (_mock *MockService) Shutdown(ctx context.Context) {
+	_mock.Called(ctx)
 	return
 }
 
@@ -567,13 +570,14 @@ type MockService_Shutdown_Call struct {
 }
 
 // Shutdown is a helper method to define mock.On call
-func (_e *MockService_Expecter) Shutdown() *MockService_Shutdown_Call {
-	return &MockService_Shutdown_Call{Call: _e.mock.On("Shutdown")}
+//   - ctx
+func (_e *MockService_Expecter) Shutdown(ctx interface{}) *MockService_Shutdown_Call {
+	return &MockService_Shutdown_Call{Call: _e.mock.On("Shutdown", ctx)}
 }
 
-func (_c *MockService_Shutdown_Call) Run(run func()) *MockService_Shutdown_Call {
+func (_c *MockService_Shutdown_Call) Run(run func(ctx context.Context)) *MockService_Shutdown_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -583,7 +587,7 @@ func (_c *MockService_Shutdown_Call) Return() *MockService_Shutdown_Call {
 	return _c
 }
 
-func (_c *MockService_Shutdown_Call) RunAndReturn(run func()) *MockService_Shutdown_Call {
+func (_c *MockService_Shutdown_Call) RunAndReturn(run func(ctx context.Context)) *MockService_Shutdown_Call {
 	_c.Run(run)
 	return _c
 }
@@ -634,8 +638,8 @@ func (_c *MockService_StartApp_Call) RunAndReturn(run func(encryptionKey string)
 }
 
 // StopApp provides a mock function for the type MockService
-func (_mock *MockService) StopApp() {
-	_mock.Called()
+func (_mock *MockService) StopApp(ctx context.Context) {
+	_mock.Called(ctx)
 	return
 }
 
@@ -645,13 +649,14 @@ type MockService_StopApp_Call struct {
 }
 
 // StopApp is a helper method to define mock.On call
-func (_e *MockService_Expecter) StopApp() *MockService_StopApp_Call {
-	return &MockService_StopApp_Call{Call: _e.mock.On("StopApp")}
+//   - ctx
+func (_e *MockService_Expecter) StopApp(ctx interface{}) *MockService_StopApp_Call {
+	return &MockService_StopApp_Call{Call: _e.mock.On("StopApp", ctx)}
 }
 
-func (_c *MockService_StopApp_Call) Run(run func()) *MockService_StopApp_Call {
+func (_c *MockService_StopApp_Call) Run(run func(ctx context.Context)) *MockService_StopApp_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -661,7 +666,7 @@ func (_c *MockService_StopApp_Call) Return() *MockService_StopApp_Call {
 	return _c
 }
 
-func (_c *MockService_StopApp_Call) RunAndReturn(run func()) *MockService_StopApp_Call {
+func (_c *MockService_StopApp_Call) RunAndReturn(run func(ctx context.Context)) *MockService_StopApp_Call {
 	_c.Run(run)
 	return _c
 }
@@ -706,6 +711,259 @@ func (_c *MockService_ReloadNostr_Call) Return(err error) *MockService_ReloadNos
 }
 
 func (_c *MockService_ReloadNostr_Call) RunAndReturn(run func() error) *MockService_ReloadNostr_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WarmCircleFollowingCache provides a mock function for the type MockService
+func (_mock *MockService) WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error) {
+	ret := _mock.Called(ctx, providerPubkey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WarmCircleFollowingCache")
+	}
+
+	var r0 map[string]struct{}
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (map[string]struct{}, error)); ok {
+		return returnFunc(ctx, providerPubkey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) map[string]struct{}); ok {
+		r0 = returnFunc(ctx, providerPubkey)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]struct{})
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, providerPubkey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_WarmCircleFollowingCache_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WarmCircleFollowingCache'
+type MockService_WarmCircleFollowingCache_Call struct {
+	*mock.Call
+}
+
+// WarmCircleFollowingCache is a helper method to define mock.On call
+//   - ctx
+//   - providerPubkey
+func (_e *MockService_Expecter) WarmCircleFollowingCache(ctx interface{}, providerPubkey interface{}) *MockService_WarmCircleFollowingCache_Call {
+	return &MockService_WarmCircleFollowingCache_Call{Call: _e.mock.On("WarmCircleFollowingCache", ctx, providerPubkey)}
+}
+
+func (_c *MockService_WarmCircleFollowingCache_Call) Run(run func(ctx context.Context, providerPubkey string)) *MockService_WarmCircleFollowingCache_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_WarmCircleFollowingCache_Call) Return(contacts map[string]struct{}, err error) *MockService_WarmCircleFollowingCache_Call {
+	_c.Call.Return(contacts, err)
+	return _c
+}
+
+func (_c *MockService_WarmCircleFollowingCache_Call) RunAndReturn(run func(ctx context.Context, providerPubkey string) (map[string]struct{}, error)) *MockService_WarmCircleFollowingCache_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WarmGeneralRelays provides a mock function for the type MockService
+func (_mock *MockService) WarmGeneralRelays() {
+	_mock.Called()
+	return
+}
+
+// MockService_WarmGeneralRelays_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WarmGeneralRelays'
+type MockService_WarmGeneralRelays_Call struct {
+	*mock.Call
+}
+
+// WarmGeneralRelays is a helper method to define mock.On call
+func (_e *MockService_Expecter) WarmGeneralRelays() *MockService_WarmGeneralRelays_Call {
+	return &MockService_WarmGeneralRelays_Call{Call: _e.mock.On("WarmGeneralRelays")}
+}
+
+func (_c *MockService_WarmGeneralRelays_Call) Run(run func()) *MockService_WarmGeneralRelays_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockService_WarmGeneralRelays_Call) Return() *MockService_WarmGeneralRelays_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockService_WarmGeneralRelays_Call) RunAndReturn(run func()) *MockService_WarmGeneralRelays_Call {
+	_c.Run(run)
+	return _c
+}
+
+// ContactCount provides a mock function for the type MockService
+func (_mock *MockService) ContactCount(ctx context.Context, ownerPubkey string) (int, error) {
+	ret := _mock.Called(ctx, ownerPubkey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ContactCount")
+	}
+
+	var r0 int
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (int, error)); ok {
+		return returnFunc(ctx, ownerPubkey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) int); ok {
+		r0 = returnFunc(ctx, ownerPubkey)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, ownerPubkey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_ContactCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ContactCount'
+type MockService_ContactCount_Call struct {
+	*mock.Call
+}
+
+// ContactCount is a helper method to define mock.On call
+//   - ctx
+//   - ownerPubkey
+func (_e *MockService_Expecter) ContactCount(ctx interface{}, ownerPubkey interface{}) *MockService_ContactCount_Call {
+	return &MockService_ContactCount_Call{Call: _e.mock.On("ContactCount", ctx, ownerPubkey)}
+}
+
+func (_c *MockService_ContactCount_Call) Run(run func(ctx context.Context, ownerPubkey string)) *MockService_ContactCount_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_ContactCount_Call) Return(count int, err error) *MockService_ContactCount_Call {
+	_c.Call.Return(count, err)
+	return _c
+}
+
+func (_c *MockService_ContactCount_Call) RunAndReturn(run func(ctx context.Context, ownerPubkey string) (int, error)) *MockService_ContactCount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PeekContactCount provides a mock function for the type MockService
+func (_mock *MockService) PeekContactCount(ownerPubkey string) (int, bool) {
+	ret := _mock.Called(ownerPubkey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PeekContactCount")
+	}
+
+	var r0 int
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func(string) (int, bool)); ok {
+		return returnFunc(ownerPubkey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) int); ok {
+		r0 = returnFunc(ownerPubkey)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
+		r1 = returnFunc(ownerPubkey)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockService_PeekContactCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PeekContactCount'
+type MockService_PeekContactCount_Call struct {
+	*mock.Call
+}
+
+// PeekContactCount is a helper method to define mock.On call
+//   - ownerPubkey
+func (_e *MockService_Expecter) PeekContactCount(ownerPubkey interface{}) *MockService_PeekContactCount_Call {
+	return &MockService_PeekContactCount_Call{Call: _e.mock.On("PeekContactCount", ownerPubkey)}
+}
+
+func (_c *MockService_PeekContactCount_Call) Run(run func(ownerPubkey string)) *MockService_PeekContactCount_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_PeekContactCount_Call) Return(count int, ok bool) *MockService_PeekContactCount_Call {
+	_c.Call.Return(count, ok)
+	return _c
+}
+
+func (_c *MockService_PeekContactCount_Call) RunAndReturn(run func(ownerPubkey string) (int, bool)) *MockService_PeekContactCount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PeekContactSyncedAt provides a mock function for the type MockService
+func (_mock *MockService) PeekContactSyncedAt(ownerPubkey string) (time.Time, bool) {
+	ret := _mock.Called(ownerPubkey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PeekContactSyncedAt")
+	}
+
+	var r0 time.Time
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func(string) (time.Time, bool)); ok {
+		return returnFunc(ownerPubkey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) time.Time); ok {
+		r0 = returnFunc(ownerPubkey)
+	} else {
+		r0 = ret.Get(0).(time.Time)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
+		r1 = returnFunc(ownerPubkey)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockService_PeekContactSyncedAt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PeekContactSyncedAt'
+type MockService_PeekContactSyncedAt_Call struct {
+	*mock.Call
+}
+
+// PeekContactSyncedAt is a helper method to define mock.On call
+//   - ownerPubkey
+func (_e *MockService_Expecter) PeekContactSyncedAt(ownerPubkey interface{}) *MockService_PeekContactSyncedAt_Call {
+	return &MockService_PeekContactSyncedAt_Call{Call: _e.mock.On("PeekContactSyncedAt", ownerPubkey)}
+}
+
+func (_c *MockService_PeekContactSyncedAt_Call) Run(run func(ownerPubkey string)) *MockService_PeekContactSyncedAt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_PeekContactSyncedAt_Call) Return(syncedAt time.Time, ok bool) *MockService_PeekContactSyncedAt_Call {
+	_c.Call.Return(syncedAt, ok)
+	return _c
+}
+
+func (_c *MockService_PeekContactSyncedAt_Call) RunAndReturn(run func(ownerPubkey string) (time.Time, bool)) *MockService_PeekContactSyncedAt_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -77,12 +77,21 @@ var MockLNClientHoldTransaction = &lnclient.Transaction{
 }
 
 type MockLn struct {
-	PayInvoiceResponses        []*lnclient.PayInvoiceResponse
-	PayInvoiceErrors           []error
+	PayInvoiceResponses []*lnclient.PayInvoiceResponse
+	PayInvoiceErrors    []error
+	// MakeInvoiceQueue, when non-empty, is dequeued one entry per MakeInvoice call.
+	// Use this to return different invoices (with distinct PaymentHash values) across
+	// consecutive calls in the same test, preventing the "already paid" duplicate-hash error.
+	MakeInvoiceQueue           []*lnclient.Transaction
 	PaymentDelay               *time.Duration
 	Pubkey                     string
 	MockTransaction            *lnclient.Transaction
 	SupportedNotificationTypes *[]string
+	// MockLookupInvoiceError, when non-nil, is returned by LookupInvoice instead of MockTransaction.
+	// Use this to simulate a node being unreachable during payment reconciliation.
+	MockLookupInvoiceError error
+	// SendKeysendError, when non-nil, is returned by SendKeysend instead of a success response.
+	SendKeysendError error
 }
 
 func NewMockLn() (*MockLn, error) {
@@ -90,15 +99,19 @@ func NewMockLn() (*MockLn, error) {
 }
 
 func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+	// Delay applies before consuming a queued response/error too, so a test can
+	// simulate a slow RPC call that ultimately errors (e.g. to race an async
+	// settle notification in ahead of the synchronous error return).
+	if mln.PaymentDelay != nil {
+		time.Sleep(*mln.PaymentDelay)
+	}
+
 	if len(mln.PayInvoiceResponses) > 0 {
 		response := mln.PayInvoiceResponses[0]
 		err := mln.PayInvoiceErrors[0]
 		mln.PayInvoiceResponses = mln.PayInvoiceResponses[1:]
 		mln.PayInvoiceErrors = mln.PayInvoiceErrors[1:]
 		return response, err
-	}
-	if mln.PaymentDelay != nil {
-		time.Sleep(*mln.PaymentDelay)
 	}
 
 	return &lnclient.PayInvoiceResponse{
@@ -107,6 +120,12 @@ func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64) (*lnclient.Pay
 }
 
 func (mln *MockLn) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	if mln.PaymentDelay != nil {
+		time.Sleep(*mln.PaymentDelay)
+	}
+	if mln.SendKeysendError != nil {
+		return nil, mln.SendKeysendError
+	}
 	return &lnclient.PayKeysendResponse{
 		Fee: 1,
 	}, nil
@@ -117,6 +136,11 @@ func (mln *MockLn) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, err er
 }
 
 func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
+	if len(mln.MakeInvoiceQueue) > 0 {
+		tx := mln.MakeInvoiceQueue[0]
+		mln.MakeInvoiceQueue = mln.MakeInvoiceQueue[1:]
+		return tx, nil
+	}
 	return MockLNClientTransaction, nil
 }
 
@@ -133,6 +157,9 @@ func (mln *MockLn) CancelHoldInvoice(ctx context.Context, paymentHash string) (e
 }
 
 func (mln *MockLn) LookupInvoice(ctx context.Context, paymentHash string) (transaction *lnclient.Transaction, err error) {
+	if mln.MockLookupInvoiceError != nil {
+		return nil, mln.MockLookupInvoiceError
+	}
 	if mln.MockTransaction != nil {
 		return mln.MockTransaction, nil
 	}

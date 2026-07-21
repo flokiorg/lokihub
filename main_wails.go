@@ -64,7 +64,7 @@ func main() {
 	logger.Logger.Info().Msg("Cancelling service context...")
 	// cancel the service context
 	cancel()
-	svc.Shutdown()
+	svc.Shutdown(context.Background())
 	logger.Logger.Info().Msg("Service exited")
 	logger.Logger.Info().Msg("Lokihub needs to stay online to send and receive transactions. Channels may be closed if your hub stays offline for an extended period of time.")
 }

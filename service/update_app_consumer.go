@@ -31,12 +31,12 @@ func (s *updateAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 	}
 	walletPrivKey, err := s.svc.keys.GetAppWalletKey(id)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet priv key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet priv key")
 		return
 	}
 	walletPubKey, err := nostr.GetPublicKey(walletPrivKey)
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to calculate app wallet pub key")
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
 		return
 	}
 
