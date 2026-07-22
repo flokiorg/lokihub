@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,22 @@ import (
 	"github.com/flokiorg/lokihub/utils"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+// backupMagic prefixes backups written by encryptingWriter starting with the
+// versioned format (backupFormatCTR). Legacy backups (pre-dating this
+// versioning) have no prefix at all - their first bytes are just the random
+// salt - so a 4-byte magic keeps the false-positive rate of misreading a
+// legacy salt as a version header astronomically low (unlike a 1-byte
+// marker, which a random salt byte would collide with 1/256 of the time).
+var backupMagic = []byte("LKHB")
+
+// backupFormatCTR marks a backup encrypted with AES-CTR (see encryptingWriter).
+// AES-OFB (used by the unversioned legacy format) is deprecated: it's an
+// unauthenticated stream cipher, allowing bit-flipping attacks against the
+// ciphertext. Since backups are a persisted, user-facing format, old backups
+// must remain restorable, so decryptingReader still supports reading OFB
+// when no magic/version prefix is present.
+const backupFormatCTR = 0x02
 
 func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	logger.Logger.Info().Msg("Creating backup to migrate Lokihub to another device")
@@ -272,6 +289,14 @@ func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
 		return nil, fmt.Errorf("failed to generate IV: %w", err)
 	}
 
+	if _, err = w.Write(backupMagic); err != nil {
+		return nil, fmt.Errorf("failed to write format magic: %w", err)
+	}
+
+	if _, err = w.Write([]byte{backupFormatCTR}); err != nil {
+		return nil, fmt.Errorf("failed to write format version: %w", err)
+	}
+
 	_, err = w.Write(salt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write salt: %w", err)
@@ -282,7 +307,7 @@ func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
 		return nil, fmt.Errorf("failed to write IV: %w", err)
 	}
 
-	stream := cipher.NewOFB(block, iv)
+	stream := cipher.NewCTR(block, iv)
 	cw := &cipher.StreamWriter{
 		S: stream,
 		W: w,
@@ -292,6 +317,28 @@ func encryptingWriter(w io.Writer, password string) (io.Writer, error) {
 }
 
 func decryptingReader(r io.Reader, password string) (io.Reader, error) {
+	header := make([]byte, len(backupMagic)+1)
+	n, err := io.ReadFull(r, header)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, fmt.Errorf("failed to read backup header: %w", err)
+	}
+
+	var streamCipher func(block cipher.Block, iv []byte) cipher.Stream
+	if n == len(header) && bytes.Equal(header[:len(backupMagic)], backupMagic) {
+		switch header[len(backupMagic)] {
+		case backupFormatCTR:
+			streamCipher = cipher.NewCTR
+		default:
+			return nil, fmt.Errorf("unsupported backup format version: %d", header[len(backupMagic)])
+		}
+	} else {
+		// No recognized magic/version prefix: assume a legacy (pre-versioning)
+		// OFB-encrypted backup, whose first bytes are the random salt itself.
+		// Splice the bytes already consumed from r back onto the front.
+		r = io.MultiReader(bytes.NewReader(header[:n]), r)
+		streamCipher = cipher.NewOFB //nolint:staticcheck // required to decrypt pre-versioning backups; new backups use backupFormatCTR
+	}
+
 	salt := make([]byte, 8)
 	if _, err := io.ReadFull(r, salt); err != nil {
 		return nil, fmt.Errorf("failed to read salt: %w", err)
@@ -308,7 +355,7 @@ func decryptingReader(r io.Reader, password string) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	stream := cipher.NewOFB(block, iv)
+	stream := streamCipher(block, iv)
 	cr := &cipher.StreamReader{
 		S: stream,
 		R: r,
