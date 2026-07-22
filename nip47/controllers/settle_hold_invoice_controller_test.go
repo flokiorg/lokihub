@@ -21,15 +21,6 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-const nip47SettleHoldInvoiceJson = `
-{
-"method": "settle_hold_invoice",
-"params": {
-"preimage": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-}
-}
-`
-
 const testSettlePreimage = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 const testSettlePaymentHash = "b7e060a60bb7a82f536a73c17bde37a1b6cf5769ee4a8325bff76c55a95b6aa4"
 
