@@ -96,7 +96,7 @@ func (s *appStoreService) Sync() {
 	cacheDir := filepath.Join(s.cfg.GetDefaultWorkDir(), constants.APP_STORE_CACHE_DIR)
 	logosDir := filepath.Join(cacheDir, "logos")
 
-	if err := os.MkdirAll(logosDir, 0755); err != nil {
+	if err := os.MkdirAll(logosDir, 0750); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to create app store cache directories")
 		return
 	}
@@ -243,7 +243,7 @@ func (s *appStoreService) loadFromCache() error {
 
 func (s *appStoreService) saveToCache(apps []App) error {
 	cacheDir := filepath.Join(s.cfg.GetDefaultWorkDir(), constants.APP_STORE_CACHE_DIR)
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
 		return err
 	}
 

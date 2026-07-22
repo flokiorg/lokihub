@@ -367,6 +367,7 @@ func TestHandlePayInvoiceEvent_JITWallet_InternalTransferBypassRejected(t *testi
 	svc.DB.Create(&db.AppPermission{AppId: jitWallet.ID, Scope: constants.PAY_INVOICE_SCOPE})
 
 	// Include "internal_transfer":true in user-controlled pay_invoice metadata.
+	//nolint:gosec // test fixture bolt11 invoice, not a credential
 	const bypassAttemptJson = `{
 		"method": "pay_invoice",
 		"params": {
@@ -419,6 +420,7 @@ func TestHandlePayInvoiceEvent_JitClaimSliceMetadataSpoofRejected(t *testing.T) 
 	})
 	svc.DB.Create(&db.AppPermission{AppId: isolatedApp.ID, Scope: constants.PAY_INVOICE_SCOPE})
 
+	//nolint:gosec // test fixture bolt11 invoice, not a credential
 	const bypassAttemptJson = `{
 		"method": "pay_invoice",
 		"params": {

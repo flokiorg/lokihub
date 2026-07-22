@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/pprof"
+	"time"
 )
 
 func startProfiler(ctx context.Context, addr string) {
@@ -17,13 +18,19 @@ func startProfiler(ctx context.Context, addr string) {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
 		<-ctx.Done()
-		err := server.Shutdown(context.Background())
+		// A fresh context is required here: ctx is already Done(), and
+		// Shutdown needs its own (bounded) deadline to wait for in-flight
+		// requests instead of blocking forever.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:gosec // ctx is already cancelled at this point; a fresh, bounded context is required for graceful shutdown
+		defer cancel()
+		err := server.Shutdown(shutdownCtx)
 		if err != nil {
 			panic("pprof server shutdown failed: " + err.Error())
 		}
