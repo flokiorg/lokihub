@@ -484,7 +484,7 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclien
 		return nil, err
 	}
 
-	paymentAmountMloki := uint64(paymentRequest.MSat)
+	paymentAmountMloki := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int64/uint64 range
 	if amount != nil {
 		paymentAmountMloki = *amount
 	}
@@ -526,7 +526,7 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclien
 
 	return &lnclient.PayInvoiceResponse{
 		Preimage: resp.PaymentPreimage,
-		Fee:      uint64(resp.FeeMsat),
+		Fee:      uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
 	}, nil
 }
 
@@ -577,7 +577,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 		DestCustomRecords: destCustomRecords,
 		MaxParts:          MAX_PARTIAL_PAYMENTS,
 		TimeoutSeconds:    SEND_PAYMENT_TIMEOUT,
-		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMloki(amount)),
+		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMloki(amount)), //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
@@ -621,7 +621,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 		Msg("Keysend payment successful")
 
 	return &lnclient.PayKeysendResponse{
-		Fee: uint64(resp.FeeMsat),
+		Fee: uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
 	}, nil
 }
 
@@ -1142,7 +1142,7 @@ func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, e
 		channels[i] = lnclient.Channel{
 			InternalChannel:                          flndChannel,
 			LocalBalance:                             flndChannel.LocalBalance * 1000,
-			LocalSpendableBalance:                    int64(math.Max(float64((flndChannel.LocalBalance-int64(flndChannel.LocalConstraints.ChanReserveSat))*1000), float64(0))),
+			LocalSpendableBalance:                    int64(math.Max(float64((flndChannel.LocalBalance-int64(flndChannel.LocalConstraints.ChanReserveSat))*1000), float64(0))), //nolint:gosec // channel reserve sat amounts are always far below int64 range
 			RemoteBalance:                            flndChannel.RemoteBalance * 1000,
 			RemotePubkey:                             flndChannel.RemotePubkey,
 			Id:                                       strconv.FormatUint(flndChannel.ChanId, 10),
@@ -1494,7 +1494,7 @@ func (svc *FLNDService) RedeemOnchainFunds(ctx context.Context, toAddress string
 	sendCoinsRequest := &lnrpc.SendCoinsRequest{
 		Addr:    toAddress,
 		SendAll: sendAll,
-		Amount:  int64(amount),
+		Amount:  int64(amount), //nolint:gosec // sat amounts are always far below int64 range
 	}
 
 	if feeRate != nil {
@@ -1631,12 +1631,12 @@ func (svc *FLNDService) GetBalances(ctx context.Context, includeInactiveChannels
 	for _, channel := range resp.Channels {
 		// Unnecessary since ListChannels only returns active channels
 		if channel.Active || includeInactiveChannels {
-			channelSpendable := max(channel.LocalBalance*1000-int64(channel.LocalConstraints.ChanReserveSat*1000), 0)
-			channelReceivable := max(channel.RemoteBalance*1000-int64(channel.RemoteConstraints.ChanReserveSat*1000), 0)
+			channelSpendable := max(channel.LocalBalance*1000-int64(channel.LocalConstraints.ChanReserveSat*1000), 0)    //nolint:gosec // channel reserve sat amounts are always far below int64 range
+			channelReceivable := max(channel.RemoteBalance*1000-int64(channel.RemoteConstraints.ChanReserveSat*1000), 0) //nolint:gosec // channel reserve sat amounts are always far below int64 range
 
 			// spending or receiving amount may be constrained by channel configuration (e.g. ACINQ does this)
-			channelConstrainedSpendable := min(channelSpendable, int64(channel.RemoteConstraints.MaxPendingAmtMsat))
-			channelConstrainedReceivable := min(channelReceivable, int64(channel.LocalConstraints.MaxPendingAmtMsat))
+			channelConstrainedSpendable := min(channelSpendable, int64(channel.RemoteConstraints.MaxPendingAmtMsat))  //nolint:gosec // msat amounts are always far below int64 range
+			channelConstrainedReceivable := min(channelReceivable, int64(channel.LocalConstraints.MaxPendingAmtMsat)) //nolint:gosec // msat amounts are always far below int64 range
 
 			nextMaxSpendable = max(nextMaxSpendable, channelConstrainedSpendable)
 			nextMaxReceivable = max(nextMaxReceivable, channelConstrainedReceivable)

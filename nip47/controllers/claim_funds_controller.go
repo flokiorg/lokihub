@@ -185,11 +185,11 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// the invoice's resolved amount must equal the slice exactly. Mirrors
 	// SendPaymentSync's own amount resolution (invoice's own MSat, or the
 	// caller's override only for a zero-amount invoice).
-	resolvedAmount := uint64(paymentRequest.MSat)
+	resolvedAmount := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int64/uint64 range
 	if resolvedAmount == 0 && params.Amount != nil {
 		resolvedAmount = *params.Amount
 	}
-	if resolvedAmount != uint64(claimedAmount) {
+	if resolvedAmount != uint64(claimedAmount) { //nolint:gosec // internally-computed slice amount, always non-negative
 		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, params.IdentityType, params.IdentityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back JIT wallet slice claim after amount mismatch")
 		}

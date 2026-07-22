@@ -249,8 +249,8 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	var newApp *db.App
 	var pairingSecretKey string
 	err = controller.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Dialector.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
+		if tx.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire circle commitment lock: %w", err)
 			}
 		}
@@ -260,7 +260,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			return fmt.Errorf("commitment check failed: %w", err)
 		}
 		balance := queries.GetIsolatedBalance(tx, app.ID)
-		if commitment+int64(params.MaxAmount) > balance {
+		if commitment+int64(params.MaxAmount) > balance { //nolint:gosec // params.MaxAmount > math.MaxInt64 already rejected above
 			return errCircleQuotaExceeded
 		}
 
@@ -274,7 +274,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			First(&hubPermission).Error; err != nil {
 			return fmt.Errorf("failed to load hub permission: %w", err)
 		}
-		if hubPermission.MaxAmountLoki > 0 && commitment+int64(params.MaxAmount) > int64(hubPermission.MaxAmountLoki)*1000 {
+		if hubPermission.MaxAmountLoki > 0 && commitment+int64(params.MaxAmount) > int64(hubPermission.MaxAmountLoki)*1000 { //nolint:gosec // params.MaxAmount > math.MaxInt64 already rejected above; MaxAmountLoki is an app-internal budget value
 			return errCircleHubBudgetExceeded
 		}
 

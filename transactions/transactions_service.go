@@ -21,6 +21,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -414,14 +415,14 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 
 	var dbTransaction db.Transaction
 
-	paymentAmount := uint64(paymentRequest.MSat)
+	paymentAmount := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int/uint64 range
 	if amountMloki != nil && paymentRequest.MSat == 0 {
 		paymentAmount = *amountMloki
 	}
 
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Dialector.Name() == "postgres" && appId != nil {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil {
+		if tx.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
 			}
 		}
@@ -622,8 +623,8 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 	selfPayment := destination == lnClient.GetPubkey()
 
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Dialector.Name() == "postgres" && appId != nil {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil {
+		if tx.Name() == "postgres" && appId != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
 			}
 		}
@@ -871,10 +872,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	tx = tx.Order("updated_at desc")
 
 	if limit > 0 {
-		tx = tx.Limit(int(limit))
+		tx = tx.Limit(utils.ClampUint64ToInt(limit))
 	}
 	if offset > 0 {
-		tx = tx.Offset(int(offset))
+		tx = tx.Offset(utils.ClampUint64ToInt(offset))
 	}
 
 	result = tx.Find(&transactions)
@@ -1045,8 +1046,8 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			// settlement can't commit in the gap between a balance check and a
 			// dependent write on the same app — same lock key/semantics as the
 			// outgoing-payment paths above.
-			if tx.Dialector.Name() == "postgres" && dbTransaction.AppId != nil {
-				if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*dbTransaction.AppId)).Error; err != nil {
+			if tx.Name() == "postgres" && dbTransaction.AppId != nil {
+				if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*dbTransaction.AppId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 					return fmt.Errorf("acquire payment lock: %w", err)
 				}
 			}
@@ -1464,7 +1465,12 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 			BudgetRenewal: row.BudgetRenewal,
 		}
 		budgetUsageSat := queries.GetBudgetUsageSat(tx, &appPermission)
-		if int(amountWithFeeReserve/1000) > row.MaxAmountLoki-int(budgetUsageSat) {
+		// Compare as amountLoki+budgetUsageSat > maxAmountLoki rather than
+		// amountLoki > maxAmountLoki-budgetUsageSat: arithmetically
+		// equivalent, but avoids narrowing amountWithFeeReserve/1000 (uint64)
+		// to int, which could wrap negative for an oversized amount and make
+		// this quota check silently fail open.
+		if amountWithFeeReserve/1000+budgetUsageSat > uint64(row.MaxAmountLoki) { //nolint:gosec // row.MaxAmountLoki > 0 is checked above
 			message := NewQuotaExceededError().Error()
 			if description != "" {
 				message += " " + description

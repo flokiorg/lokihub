@@ -45,7 +45,7 @@ func (controller *nip47Controller) HandleGetBudgetEvent(ctx context.Context, nip
 
 	usedBudget := queries.GetBudgetUsageSat(controller.db, &appPermission)
 	responsePayload := &getBudgetResponse{
-		TotalBudget:   uint64(maxAmount * 1000),
+		TotalBudget:   uint64(maxAmount * 1000), //nolint:gosec // app-internal budget value, always non-negative
 		UsedBudget:    usedBudget * 1000,
 		RenewalPeriod: appPermission.BudgetRenewal,
 		RenewsAt:      queries.GetBudgetRenewsAt(appPermission.BudgetRenewal),
