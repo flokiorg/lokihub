@@ -57,7 +57,11 @@ func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
 		creds = credentials.NewClientTLSFromCert(cp, "")
 		// if a path to a cert file is provided
 	} else {
-		creds = credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
+		creds = credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // no cert configured; connection
+			// security then relies on network trust (e.g. localhost/private network).
+			// TODO: consider erroring instead when the FLND address is non-loopback.
+		})
 	}
 	const (
 		maxGrpcRecvMsgSize = 50 * 1024 * 1024

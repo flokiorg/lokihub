@@ -1800,12 +1800,12 @@ func (api *api) discoverFlndConfig(ctx context.Context) (string, string, string,
 	macaroonPath := filepath.Join(flndDir, "data", "chain", "flokicoin", "main", "admin.macaroon")
 	certPath := filepath.Join(flndDir, "tls.cert")
 
-	macaroonBytes, err := os.ReadFile(macaroonPath)
+	macaroonBytes, err := os.ReadFile(macaroonPath) //nolint:gosec // path is built from a fixed OS app-data dir + hardcoded subpath, not external input
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to read admin.macaroon: %w", err)
 	}
 
-	certBytes, err := os.ReadFile(certPath)
+	certBytes, err := os.ReadFile(certPath) //nolint:gosec // path is built from a fixed OS app-data dir + hardcoded subpath, not external input
 	if err != nil && !os.IsNotExist(err) {
 		return "", "", "", fmt.Errorf("failed to read tls.cert: %w", err)
 	}

@@ -41,6 +41,11 @@ var backupMagic = []byte("LKHB")
 // when no magic/version prefix is present.
 const backupFormatCTR = 0x02
 
+// maxBackupEntrySize caps how much a single zip entry may decompress to when
+// restoring a backup, guarding against a decompression bomb filling the
+// disk. Generous enough to cover a Lightning node's db/channel state.
+const maxBackupEntrySize = 20 * 1024 * 1024 * 1024 // 20 GiB
+
 func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	logger.Logger.Info().Msg("Creating backup to migrate Lokihub to another device")
 	var err error
@@ -123,7 +128,7 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	defer zw.Close()
 
 	addFileToZip := func(fsPath, zipPath string) error {
-		inF, err := os.Open(fsPath)
+		inF, err := os.Open(fsPath) //nolint:gosec // fsPath comes from this node's own configured DatabaseUri/workdir, not external input
 		if err != nil {
 			return fmt.Errorf("failed to open source file for reading: %w", err)
 		}
@@ -235,8 +240,15 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		}
 		defer outF.Close()
 
-		if _, err = io.Copy(outF, inF); err != nil {
+		// Cap decompressed output regardless of what the zip's central
+		// directory claims, guarding against a decompression bomb filling
+		// the disk.
+		written, err := io.CopyN(outF, inF, maxBackupEntrySize+1)
+		if err != nil && !errors.Is(err, io.EOF) {
 			return fmt.Errorf("failed to write zip entry to destination file: %w", err)
+		}
+		if written > maxBackupEntrySize {
+			return fmt.Errorf("zip entry %q exceeds maximum allowed size", zipFile.Name)
 		}
 
 		return nil
