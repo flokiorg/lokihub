@@ -73,37 +73,42 @@ export function AppUsage({ app }: { app: App }) {
   return (
     <>
       {app.isolated && (
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-2 slashed-zero">
           <Card className="justify-between">
-            <CardHeader>
-              <CardTitle>{t("usage.isolatedBalance", "Isolated Balance")}</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">{t("usage.isolatedBalance", "Isolated Balance")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap justify-between items-center sm:items-end gap-4">
                 <div>
-                  <p className="font-medium text-2xl">
+                  <p className="font-medium text-2xl balance sensitive">
                     <FormattedFlokicoinAmount amount={app.balance} />
                   </p>
                   <FormattedFiatAmount
                     amount={Math.floor(app.balance / 1000)}
                   />
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                  {app.balance > 0 && (
-                    <IsolatedAppDrawDownDialog appId={app.id}>
+                {/* jit_wallet/circle_wallet balances only move via their hub's
+                    allocation transfer and the wallet's own spend — manual
+                    admin adjustment here would bypass that accounting. */}
+                {app.kind !== "jit_wallet" && app.kind !== "circle_wallet" && (
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {app.balance > 0 && (
+                      <IsolatedAppDrawDownDialog appId={app.id}>
+                        <Button size="sm" variant="outline">
+                          <CircleMinusIcon />
+                          {t("usage.decrease", "Decrease")}
+                        </Button>
+                      </IsolatedAppDrawDownDialog>
+                    )}
+                    <IsolatedAppTopupDialog appId={app.id}>
                       <Button size="sm" variant="outline">
-                        <CircleMinusIcon />
-                        {t("usage.decrease", "Decrease")}
+                        <CirclePlusIcon />
+                        {t("usage.increase", "Increase")}
                       </Button>
-                    </IsolatedAppDrawDownDialog>
-                  )}
-                  <IsolatedAppTopupDialog appId={app.id}>
-                    <Button size="sm" variant="outline">
-                      <CirclePlusIcon />
-                      {t("usage.increase", "Increase")}
-                    </Button>
-                  </IsolatedAppTopupDialog>
-                </div>
+                    </IsolatedAppTopupDialog>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -111,35 +116,39 @@ export function AppUsage({ app }: { app: App }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("usage.totalSpent", "Total Spent")}</CardTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 slashed-zero">
+        <Card className="flex flex-1 flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">{t("usage.totalSpent", "Total Spent")}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="font-medium text-2xl">
-              <FormattedFlokicoinAmount amount={totalSpent * 1000} />
-            </p>
+          <CardContent className="grow">
+            <div className="mb-1">
+              <span className="text-2xl font-medium balance sensitive">
+                <FormattedFlokicoinAmount amount={totalSpent * 1000} />
+              </span>
+            </div>
             <FormattedFiatAmount amount={totalSpent} />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("usage.totalReceived", "Total Received")}</CardTitle>
+        <Card className="flex flex-1 flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">{t("usage.totalReceived", "Total Received")}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="font-medium text-2xl">
-              <FormattedFlokicoinAmount amount={totalReceived * 1000} />
-            </p>
+          <CardContent className="grow">
+            <div className="mb-1">
+              <span className="text-2xl font-medium balance sensitive">
+                <FormattedFlokicoinAmount amount={totalReceived * 1000} />
+              </span>
+            </div>
             <FormattedFiatAmount amount={totalReceived} />
           </CardContent>
         </Card>
       </div>
 
       {app.maxAmount > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("usage.budget", "Budget")}</CardTitle>
+        <Card className="slashed-zero">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">{t("usage.budget", "Budget")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-row justify-between mb-2">
@@ -147,7 +156,7 @@ export function AppUsage({ app }: { app: App }) {
                 <p className="text-xs text-secondary-foreground font-medium">
                   {t("usage.leftInBudget", "Left in budget")}
                 </p>
-                <p className="text-xl font-medium">
+                <p className="text-xl font-medium balance sensitive">
                   <FormattedFlokicoinAmount
                     amount={(app.maxAmount - app.budgetUsage) * 1000}
                   />
@@ -158,7 +167,7 @@ export function AppUsage({ app }: { app: App }) {
                 <p className="text-xs text-secondary-foreground font-medium">
                   {t("usage.budgetRenewal", "Budget renewal")}
                 </p>
-                <p className="text-xl font-medium">
+                <p className="text-xl font-medium balance sensitive">
                   <FormattedFlokicoinAmount amount={app.maxAmount * 1000} />
                   {app.budgetRenewal !== "never" && (
                     <> / {getBudgetRenewalLabel(app.budgetRenewal)}</>

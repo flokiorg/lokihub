@@ -54,6 +54,10 @@
     "loading": "Загрузка...",
     "running": "Работает"
   },
+  "boolean": {
+    "yes": "Да",
+    "no": "Нет"
+  },
   "labels": {
     "password": "Пароль",
     "amount": "Сумма",

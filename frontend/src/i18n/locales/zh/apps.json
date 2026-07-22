@@ -12,6 +12,18 @@
     "close": "关闭",
     "cancel": "取消"
   },
+  "connectionDetailsModal": {
+    "title": "连接详情",
+    "appId": "应用程序 ID",
+    "appPubkey": "应用程序公钥",
+    "walletPubkey": "钱包公钥",
+    "noUniqueWalletPubkey": "此连接没有自己独有的钱包公钥",
+    "lastUsed": "上次使用",
+    "never": "从未使用",
+    "created": "创建时间",
+    "metadata": "元数据",
+    "close": "关闭"
+  },
   "permissions": {
     "title": "权限",
     "pay": "支付发票",
@@ -89,6 +101,40 @@
     "leftInBudget": "预算剩余",
     "budgetRenewal": "预算续期"
   },
+  "isolatedKind": {
+    "jit_hub": "JIT 钱包",
+    "jit_wallet": "JIT 钱包",
+    "circle_hub": "圈子钱包",
+    "circle_wallet": "圈子钱包",
+    "subwallet": "子钱包",
+    "isolatedApp": "隔离应用程序"
+  },
+  "circleHub": {
+    "revealConnection": "显示连接",
+    "permissionsManagedNote": "此连接的权限由系统自动管理，无法在此处更改。",
+    "budgetManagedNote": "此连接请求的权限由系统自动管理，但其预算和有效期仍可在下方更改。",
+    "hubSettingsTitle": "中心设置",
+    "jitHubSettingsDescription": "更改仅适用于此后发放的 JIT 钱包，不会影响已发放的钱包。",
+    "circleHubSettingsDescription": "更改仅适用于此后创建的圈子钱包，不会影响已创建的钱包。",
+    "maxWalletBudgetLabel": "最大钱包预算",
+    "jitMaxWalletBudgetHelper": "此中心发放的每个 JIT 钱包可分配的最大预算（默认：1,000 loki）",
+    "circleMaxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算（默认：1,000 loki）",
+    "maxWalletExpiryLabel": "最长钱包有效期",
+    "jitMaxExpiryHelper": "已发放 JIT 钱包的最长有效期（默认：1 天）",
+    "circleMaxExpiryHelper": "已发放圈子钱包的最长有效期（默认：30 天）",
+    "minRenewalLabel": "最短续期周期",
+    "minRenewalHelper": "成员为其圈子钱包预算可申请的最短续期周期（默认：每月）",
+    "feePpmLabel": "手续费（ppm）",
+    "feePpmHelper": "圈子钱包付款收取的百万分之一手续费（0 = 免费）",
+    "allowlistTitle": "允许列表",
+    "addMember": "添加成员",
+    "circleWalletsTitle": "圈子钱包",
+    "jitWalletsTitle": "JIT 钱包",
+    "addJitWallet": "添加 JIT 钱包",
+    "errors": {
+      "loadJitConnection": "加载 JIT 钱包连接失败"
+    }
+  },
   "newApp": {
     "unsupportedApp": "不支持的应用程序",
     "unsupportedMethods": "此应用程序请求您的钱包不支持的方法：{{methods}}",
@@ -117,9 +163,11 @@
     "confirmNewConnection": "确认新连接",
     "lokiGoPermission": "Loki Go 将获得创建其他应用程序连接的权限，这些连接可以使用您的余额。",
     "warningLokiGo": "警告：Loki Go 创建的连接预算可能超过 Loki Go 本身设置的预算。请务必设置预算。",
+    "warningJitHub": "警告：此应用将能够从其余额中创建新钱包并直接向第三方付款，无需每次都征得您的同意。它最多可以花费您为此连接充值的余额。",
     "enterUnlockPassword": "请输入解锁密码以继续。",
     "unlockPassword": "解锁密码",
     "specifyWalletPermissions": "请指定钱包权限。",
+    "specifyJitHubLimits": "请指定 JIT 钱包的预算和有效期限制。",
     "appCreated": "应用程序已创建",
     "failedToCreate": "创建应用程序失败",
     "configure": "配置",

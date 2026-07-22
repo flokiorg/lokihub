@@ -56,6 +56,10 @@
     "loading": "Loading...",
     "running": "Running"
   },
+  "boolean": {
+    "yes": "Yes",
+    "no": "No"
+  },
   "labels": {
     "password": "Password",
     "amount": "Amount",

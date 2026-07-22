@@ -32,6 +32,13 @@ interface PermissionsProps {
   budgetUsage?: number;
   isNewConnection: boolean;
   showBudgetUsage?: boolean;
+  // Lets a caller opt a non-pay_invoice app (e.g. a circle_hub, which is
+  // never granted pay_invoice) into the budget UI below. Defaults to the
+  // usual pay_invoice-scope check so existing callers are unaffected.
+  showBudgetSection?: boolean;
+  // Optional note rendered directly under the budget field, e.g. to explain
+  // what this budget covers for a circle_hub.
+  budgetCaption?: React.ReactNode;
 }
 
 const Permissions: React.FC<PermissionsProps> = ({
@@ -45,10 +52,12 @@ const Permissions: React.FC<PermissionsProps> = ({
   budgetReadOnly,
   expiresAtReadOnly,
   showBudgetUsage = true,
+  showBudgetSection = permissions.scopes.includes("pay_invoice"),
+  budgetCaption,
 }) => {
   const { t } = useTranslation("apps");
   const [showBudgetOptions, setShowBudgetOptions] = React.useState(
-    permissions.scopes.includes("pay_invoice") && permissions.maxAmount > 0
+    showBudgetSection && permissions.maxAmount > 0
   );
   const [showExpiryOptions, setShowExpiryOptions] = React.useState(
     !!permissions.expiresAt
@@ -66,7 +75,36 @@ const Permissions: React.FC<PermissionsProps> = ({
 
   const onScopesChanged = React.useCallback(
     (scopes: Scope[], isolated: boolean) => {
-      handlePermissionsChange({ scopes, isolated });
+      // Un-isolating always drops any pending JIT Hub escalation with it —
+      // kind "jit_hub" cannot exist without isolation server-side (see
+      // Scopes.tsx), so keep local state from drifting into that impossible
+      // combination even transiently.
+      handlePermissionsChange({
+        scopes,
+        isolated,
+        ...(!isolated && { jitHub: false }),
+      });
+    },
+    [handlePermissionsChange]
+  );
+
+  const onJitHubChanged = React.useCallback(
+    (jitHub: boolean) => {
+      handlePermissionsChange({ jitHub });
+    },
+    [handlePermissionsChange]
+  );
+
+  const onJitHubConfigChanged = React.useCallback(
+    (config: { perWalletMaxLoki?: number; maxExpSecs?: number }) => {
+      handlePermissionsChange({
+        ...(config.perWalletMaxLoki !== undefined && {
+          jitPerWalletMaxLoki: config.perWalletMaxLoki,
+        }),
+        ...(config.maxExpSecs !== undefined && {
+          jitMaxExpSecs: config.maxExpSecs,
+        }),
+      });
     },
     [handlePermissionsChange]
   );
@@ -101,6 +139,11 @@ const Permissions: React.FC<PermissionsProps> = ({
           isolated={permissions.isolated}
           onScopesChanged={onScopesChanged}
           isNewConnection={isNewConnection}
+          jitHub={permissions.jitHub}
+          jitPerWalletMaxLoki={permissions.jitPerWalletMaxLoki}
+          jitMaxExpSecs={permissions.jitMaxExpSecs}
+          onJitHubChanged={onJitHubChanged}
+          onJitHubConfigChanged={onJitHubConfigChanged}
         />
       ) : (
         <>
@@ -125,7 +168,7 @@ const Permissions: React.FC<PermissionsProps> = ({
         </>
       )}
 
-      {permissions.scopes.includes("pay_invoice") && showBudgetUsage && (
+      {showBudgetSection && showBudgetUsage && (
         <>
           {!readOnly && !budgetReadOnly ? (
             <>
@@ -194,6 +237,9 @@ const Permissions: React.FC<PermissionsProps> = ({
                 </p>
               </div>
             </div>
+          )}
+          {budgetCaption && (
+            <p className="text-muted-foreground text-sm -mt-2">{budgetCaption}</p>
           )}
         </>
       )}

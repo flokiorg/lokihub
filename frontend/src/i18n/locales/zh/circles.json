@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "移除",
+    "removeSelected": "移除所选",
+    "clear": "清除",
+    "add": "添加",
+    "addWithCount": "添加（{{count}}）",
+    "selectedCount": "已选择 {{count}} 个",
+    "selectAll": "全选",
+    "memberColumn": "成员",
+    "selectMember": "选择成员",
+    "nameLabel": "名称",
+    "maxWalletBudgetLabel": "最大钱包预算",
+    "minRenewalLabel": "最短续期周期",
+    "minRenewalHelper": "成员为其圈子钱包预算可申请的最短续期周期",
+    "maxWalletExpiryLabel": "最长钱包有效期",
+    "feePpmLabel": "手续费（ppm）",
+    "feePpmHelper": "圈子钱包付款收取的百万分之一手续费（0 = 免费）",
+    "advancedSettings": "高级设置",
+    "inUse": "使用中",
+    "hexPlaceholder": "64 个字符的十六进制字符串",
+    "syncingFollowing": "正在同步关注列表…",
+    "sync": "同步",
+    "following": "关注 {{count}} 人",
+    "synced": "已同步 {{time}}",
+    "updated": "已更新 {{time}}",
+    "total": "总计",
+    "anonymous": "匿名"
+  },
+  "policyLabel": {
+    "following": "按关注",
+    "allowlist": "允许列表"
+  },
+  "identityType": {
+    "pubkey": "Nostr 公钥",
+    "connectionKey": "连接密钥"
+  },
+  "avatarStack": {
+    "more": "还有 {{count}} 位"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 已验证",
+    "verifyingNip05": "正在验证 NIP-05",
+    "lightningAddress": "拥有 Lightning 地址"
+  },
+  "searchDropdown": {
+    "searching": "正在搜索…",
+    "noMatches": "无匹配结果"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "您的 Nostr 身份",
+    "defaultHelper": "用于解析您的关注列表以进行成员授权",
+    "invalidHelper": "看起来不是有效的 npub、十六进制公钥、nprofile 或 NIP-05 地址",
+    "placeholder": "npub1...、十六进制、nprofile1...、you@domain.com，或搜索名称",
+    "change": "更改"
+  },
+  "memberPicker": {
+    "noneYet": "尚未固定任何成员。",
+    "removeMember": "移除成员",
+    "enterIdentity": "请在上方输入有效的 Nostr 身份以进行搜索。",
+    "searchPlaceholder": "按名称、NIP-05 搜索 Nostr，或粘贴 npub/十六进制",
+    "alreadyMember": "已是成员。",
+    "searching": "正在搜索…",
+    "noMatchesNostr": "Nostr 上无匹配结果。",
+    "alreadyMemberBadge": "已是成员",
+    "resolving": "正在解析…",
+    "searchHint": "按名称、NIP-05、npub 搜索，或粘贴公钥。"
+  },
+  "followingPreview": {
+    "empty": "该身份尚未关注任何人 —— 成员将在被关注后自动获得授权。",
+    "summary_one": "现在将授权 {{count}} 人，且该列表会随着该身份关注或取消关注他人而自动保持同步。",
+    "summary_other": "现在将授权 {{count}} 人，且该列表会随着该身份关注或取消关注他人而自动保持同步。"
+  },
+  "claimBadge": {
+    "claimed": "已领取",
+    "unclaimed": "未领取"
+  },
+  "claimDeadline": {
+    "expired": "领取窗口已过期",
+    "withinMinutes_one": "需在 {{count}} 分钟内领取",
+    "withinMinutes_other": "需在 {{count}} 分钟内领取",
+    "withinHours": "需在 {{count}} 小时内领取",
+    "byDate": "需在 {{date}} 前领取",
+    "none": "无领取截止时间"
+  },
+  "circleCard": {
+    "member_one": "{{count}} 位成员",
+    "member_other": "{{count}} 位成员"
+  },
+  "childIdentityCard": {
+    "circleWallet": "圈子钱包",
+    "jitWallet": "JIT 钱包",
+    "claimedCount": "已领取 {{claimed}}/{{total}}",
+    "errors": {
+      "loadRecipients": "加载 JIT 钱包接收人失败"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "管理",
+    "title": "管理身份",
+    "description": "仍关联到某个圈子的身份无法删除 —— 请先将其从所有圈子中移除。",
+    "noneSaved": "尚无已保存的身份。",
+    "usedBy_one": "被 {{count}} 个圈子使用",
+    "usedBy_other": "被 {{count}} 个圈子使用",
+    "unused": "未使用",
+    "stillUsedBy_one": "仍被 {{count}} 个圈子使用 —— 请先将其从这些圈子中移除。",
+    "stillUsedBy_other": "仍被 {{count}} 个圈子使用 —— 请先将其从这些圈子中移除。",
+    "deleteTitle": "删除“{{name}}”？",
+    "deleteDescription": "该身份未关联任何圈子。删除后无法撤销。",
+    "delete": "删除"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "关注列表已同步",
+    "errors": {
+      "sync": "同步关注列表失败"
+    }
+  },
+  "circleAllowlist": {
+    "description": "管理哪些 nostr 公钥有权从此圈子钱包中心申请钱包。",
+    "sharedWarning_one": "该身份还被另外 {{count}} 个圈子共用 —— 此处的更改将应用于全部圈子。",
+    "sharedWarning_other": "该身份还被另外 {{count}} 个圈子共用 —— 此处的更改将应用于全部圈子。",
+    "addMemberHeading": "添加成员",
+    "addMembersTitle": "添加成员",
+    "removeMemberTitle": "移除该成员？",
+    "removeMemberDescription": "该成员将无法再从此圈子钱包中心申请钱包。此操作无法撤销。",
+    "removeSelectedTitle_one": "移除 {{count}} 位成员？",
+    "removeSelectedTitle_other": "移除 {{count}} 位成员？",
+    "addedToast_one": "成员已添加到允许列表",
+    "addedToast_other": "已将 {{count}} 位成员添加到允许列表",
+    "removedOneToast": "公钥已从允许列表移除",
+    "removedToast_one": "成员已从允许列表移除",
+    "removedToast_other": "已从允许列表移除 {{count}} 位成员",
+    "errors": {
+      "load": "加载圈子允许列表失败",
+      "add": "添加到允许列表失败",
+      "removeOne": "移除公钥失败",
+      "removeSelected": "从允许列表移除失败"
+    }
+  },
+  "circleWallets": {
+    "description": "已为此圈子成员创建的钱包。",
+    "empty": "尚未创建任何圈子钱包。",
+    "selectWallet": "选择圈子钱包",
+    "removeTitle": "移除该圈子钱包？",
+    "removeDescription": "其剩余余额将转回此中心，其 NWC 连接将立即停止工作。此操作无法撤销。",
+    "removeSelectedTitle_one": "移除 {{count}} 个圈子钱包？",
+    "removeSelectedTitle_other": "移除 {{count}} 个圈子钱包？",
+    "removeSelectedDescription": "它们的剩余余额将转回此中心，其 NWC 连接将立即停止工作。此操作无法撤销。",
+    "removedToast": "圈子钱包已移除",
+    "removedSelectedToast_one": "已移除 {{count}} 个圈子钱包",
+    "removedSelectedToast_other": "已移除 {{count}} 个圈子钱包",
+    "errors": {
+      "remove": "移除圈子钱包失败",
+      "removeSelected": "移除所选圈子钱包失败"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}} 和 {{second}}",
+    "participantsOthers": "{{first}} 及另外 {{count}} 人",
+    "durationDays_one": "{{count}} 天",
+    "durationDays_other": "{{count}} 天",
+    "durationHours_one": "{{count}} 小时",
+    "durationHours_other": "{{count}} 小时",
+    "durationMinutes": "{{count}} 分钟",
+    "removeRecipient": "移除接收人",
+    "pubkeyLabel": "Nostr 公钥",
+    "pubkeyHelper": "按名称、NIP-05 搜索，或粘贴 npub/十六进制/nprofile",
+    "connectionKeyLabel": "连接密钥（十六进制）",
+    "iaPubkeyLabel": "身份认证机构公钥（十六进制）",
+    "iaPubkeyHelper": "必须是受信任的身份认证机构（设置 → 身份认证机构）",
+    "duplicateIdentity": "该身份已被此钱包中的另一位接收人使用。每位接收人都需要使用不同的身份。",
+    "walletBudgetLabel": "钱包预算",
+    "requestedSummary": "已申请 {{total}} loki",
+    "requestedSummaryWithMax": "已申请 {{total}} loki，占此中心最大钱包预算 {{max}} loki 的一部分",
+    "claimDeadlineLabel": "领取截止时间",
+    "deadlineExceeds": "超过此中心的最长领取截止时间 {{max}}",
+    "deadlineHelp": "每位接收人都必须在创建后的这段时间内领取自己的份额",
+    "deadlineHelpWithMax": "每位接收人都必须在创建后的这段时间内领取自己的份额（默认使用此中心的上限：{{max}}）",
+    "addRecipient": "添加另一位接收人",
+    "setClaimDeadline": "设置领取截止时间",
+    "statusAll": "全部",
+    "statusExpired": "已过期",
+    "allocatedSummary": "本页已分配 {{allocated}} loki · 共 {{total}} 个{{status}}",
+    "recipientColumn": "接收人",
+    "revealConnection": "显示 NWC 连接",
+    "groupSummary_one": "{{count}} 位接收人 · 已领取 {{claimed}}/{{count}}",
+    "groupSummary_other": "{{count}} 位接收人 · 已领取 {{claimed}}/{{count}}",
+    "selectRecipient": "选择接收人",
+    "selectAllInWallet": "选择此钱包的所有接收人",
+    "collapseRecipients": "收起接收人",
+    "expandRecipients": "展开接收人",
+    "removeWallet": "移除钱包",
+    "noneFiltered": "没有{{status}}的 JIT 钱包。",
+    "noneOnPage": "此页没有 JIT 钱包。",
+    "addHeading": "添加 JIT 钱包",
+    "createDialogTitle": "创建 JIT 钱包",
+    "removeRecipientTitle": "移除该接收人？",
+    "removeRecipientDescription": "该身份将无法再领取此钱包中的份额。已分配的余额将转回此中心。此操作无法撤销。",
+    "removeWalletTitle": "移除该钱包？",
+    "removeWalletDescription": "此钱包的剩余余额将转回此中心，其 NWC 连接将立即停止工作。如果此钱包服务于其他接收人，他们也将失去访问权限 —— 包括尚未领取份额的人。此操作无法撤销。",
+    "removeSelectedTitle_one": "移除 {{count}} 位接收人？",
+    "removeSelectedTitle_other": "移除 {{count}} 位接收人？",
+    "removeSelectedDescription": "这些身份将无法再领取其钱包中的份额。已分配的余额将转回此中心。此操作无法撤销。",
+    "createdToast_one": "JIT 钱包已创建并注资",
+    "createdToast_other": "JIT 钱包已创建并为 {{count}} 位接收人注资",
+    "recipientRemovedToast": "JIT 钱包接收人已移除",
+    "walletRemovedToast": "JIT 钱包已移除",
+    "recipientsRemovedToast_one": "JIT 钱包接收人已移除",
+    "recipientsRemovedToast_other": "已移除 {{count}} 位 JIT 钱包接收人",
+    "errors": {
+      "loadConnection": "加载 JIT 钱包连接失败",
+      "load": "加载 JIT 钱包失败",
+      "create": "创建 JIT 钱包失败",
+      "removeRecipient": "移除 JIT 钱包接收人失败",
+      "removeWallet": "移除 JIT 钱包失败",
+      "removeSelected": "移除所选接收人失败"
+    }
+  },
+  "newCircleHub": {
+    "title": "新建圈子钱包中心",
+    "description": "创建一个圈子钱包中心 —— 一个共享的钱包资金池，授权成员可从中获得由其余额提供资金的专属圈子钱包。",
+    "identityModeLabel": "成员身份",
+    "selectIdentityPlaceholder": "选择一个身份",
+    "createNewIdentity": "创建新身份",
+    "existingIdentities": "现有身份",
+    "identityReuseHelper": "一个身份（策略 + 成员）可以在多个圈子中重复使用，这些圈子随后会自动保持同步。",
+    "enterIdentityHelper": "请在上方输入有效的 Nostr 身份以继续。",
+    "memberModeLabel": "谁可以从此圈子申请钱包",
+    "modeSyncTitle": "我关注的所有人",
+    "modeSyncDescription": "自动 —— 该身份当前或以后关注的所有人。无需任何管理。",
+    "modePinnedTitle": "自定义成员",
+    "modePinnedDescription": "在 Nostr 上搜索，并手动选择允许谁加入。",
+    "pinMemberHelper": "请至少固定一位成员，或切换到“我关注的所有人”。",
+    "identityNameLabel": "此身份的标签（可选）",
+    "identityNamePlaceholder": "例如：我的关注圈子",
+    "identityNameHelper": "仅用于在多个圈子中重复使用时识别此已保存的身份 —— 不会在任何地方公开发布。",
+    "maxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算",
+    "maxExpiryHelper": "已发放圈子钱包的最长有效期",
+    "hubBudgetLabel": "中心预算（可选）",
+    "hubBudgetHelper": "限制此圈子同时存在的所有钱包的总预算上限。留空则不设上限，仅受此中心实际余额的限制。",
+    "hubBudgetRenewalLabel": "中心预算续期",
+    "hubBudgetRenewalHelper": "不会重置上方的上限 —— 这是同时持有的钱包的实时上限，而非支出速率。随着钱包到期，容量会自动释放。",
+    "hubExpiryLabel": "中心有效期（可选）",
+    "hubExpiryHelper": "此日期之后，该圈子将停止发放新钱包。",
+    "submit": "创建圈子钱包中心",
+    "selectExistingHint": "请选择一个现有身份以继续。",
+    "enterNameHint": "请输入名称以继续。",
+    "createdToast": "圈子钱包中心“{{name}}”已创建",
+    "allowlistSeedFailedToast": "圈子钱包中心“{{name}}”已创建，但初始化成员列表失败 —— 请从该中心的允许列表页面添加成员。",
+    "errors": {
+      "create": "创建圈子钱包中心失败"
+    }
+  },
+  "newJitHub": {
+    "title": "新建 JIT 钱包中心",
+    "description": "创建一个预先注资的中心，为受益人发放仅支持支出的 JIT 钱包",
+    "maxWalletBudgetHelper": "此中心发放的每个 JIT 钱包可分配的最大预算",
+    "maxExpiryHelper": "已发放 JIT 钱包的最长有效期",
+    "submit": "创建 JIT 钱包中心",
+    "createdToast": "JIT 钱包中心“{{name}}”已创建",
+    "errors": {
+      "create": "创建 JIT 钱包中心失败"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "您确定要删除此圈子吗？",
+    "checking": "正在检查成员钱包余额…",
+    "allEmpty": "此圈子中所有成员钱包均为空。删除该圈子也将删除其所有成员钱包。",
+    "hasBalance_one": "此圈子中有 {{count}} 个成员钱包仍持有余额。删除钱包不会销毁这些资金，但会移除成员对这些资金的记录与访问权限，且无法恢复。",
+    "hasBalance_other": "此圈子中有 {{count}} 个成员钱包仍持有余额。删除钱包不会销毁这些资金，但会移除成员对这些资金的记录与访问权限，且无法恢复。",
+    "colName": "名称",
+    "colPubkey": "公钥",
+    "colBalance": "余额（loki）",
+    "totalSummary_one": "共 {{count}} 个钱包，合计 {{total}} loki。",
+    "totalSummary_other": "共 {{count}} 个钱包，合计 {{total}} loki。",
+    "deleteEmptyOnly": "仅删除空钱包",
+    "deleteAll": "删除全部",
+    "deletedToast": "圈子已删除",
+    "partialDeleteToast_one": "已删除 {{count}} 个空钱包",
+    "partialDeleteToast_other": "已删除 {{count}} 个空钱包",
+    "partialDeleteDescription_one": "{{count}} 个有余额的钱包未被处理 —— 该圈子未被删除。",
+    "partialDeleteDescription_other": "{{count}} 个有余额的钱包未被处理 —— 该圈子未被删除。",
+    "errors": {
+      "load": "加载圈子钱包失败",
+      "delete": "删除圈子失败"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "您确定要删除此 JIT 钱包中心吗？",
+    "checking": "正在检查已发放的 JIT 钱包…",
+    "hasOutstanding_one": "此中心已发放的 JIT 钱包中仍有 {{count}} 份接收人份额。请先从下方的 JIT 钱包列表中移除它们（或等待其过期），然后再删除此中心。",
+    "hasOutstanding_other": "此中心已发放的 JIT 钱包中仍有 {{count}} 份接收人份额。请先从下方的 JIT 钱包列表中移除它们（或等待其过期），然后再删除此中心。",
+    "safeToDelete": "已连接的应用程序将无法再使用此连接。此过程不会造成任何资金损失，余额将保留在您的钱包中。",
+    "close": "关闭",
+    "errors": {
+      "check": "检查已发放的 JIT 钱包失败"
+    }
+  }
+}

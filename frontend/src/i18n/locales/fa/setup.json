@@ -8,7 +8,7 @@
   },
   "welcome": {
     "title": "به Lokihub خوش آمدید",
-    "subtitle": "رابط مدیریت گره لایتنینگ شما",
+    "subtitle": "رابط مدیریت گره Lightning شما",
     "getStarted": "شروع کنید"
   },
   "password": {
@@ -112,7 +112,7 @@
         "description": "برای ارتباط Wallet Connect (NWC) به چند رله Nostr متصل شوید."
       },
       "lsp": {
-        "title": "ارائه‌دهندگان خدمات لایتنینگ",
+        "title": "ارائه‌دهندگان خدمات Lightning",
         "description": "مدیریت LSPها برای کانال‌های JIT و نقدینگی ورودی.",
         "communityBadge": "پیشنهاد شده توسط جامعه",
         "active": "فعال",
@@ -132,7 +132,7 @@
       },
       "swap": {
         "title": "سرویس تبادل",
-        "description": "تبادل لایتنینگ به آن‌چین (و بالعکس) را فعال می‌کند.",
+        "description": "تبادل Lightning به آن‌چین (و بالعکس) را فعال می‌کند.",
         "custom": "سرویس تبادل سفارشی"
       },
       "messageboard": {

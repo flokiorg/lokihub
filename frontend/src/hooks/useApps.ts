@@ -23,7 +23,21 @@ export function useApps(
     isEnabled
       ? `/api/apps?limit=${limit}&offset=${offset}&filters=${JSON.stringify(filters || {})}&order_by=${orderBy || ""}`
       : undefined,
-    swrFetcher
+    swrFetcher,
+    {
+      // Circle Hub cards show a "following count" enriched from a
+      // non-blocking cache peek (see CircleIdentitySummaryWithCounts) that
+      // may still be unpopulated on the first response — poll until it
+      // resolves instead of leaving the card's skeleton stuck forever.
+      refreshInterval: (data) =>
+        data?.apps.some(
+          (app) =>
+            app.circleIdentity?.policy === "following" &&
+            app.circleIdentity.followingCount === undefined
+        )
+          ? 3000
+          : 0,
+    }
   );
 }
 

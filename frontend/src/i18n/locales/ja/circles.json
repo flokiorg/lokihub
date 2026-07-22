@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "削除",
+    "removeSelected": "選択項目を削除",
+    "clear": "クリア",
+    "add": "追加",
+    "addWithCount": "追加（{{count}}）",
+    "selectedCount": "{{count}} 件選択中",
+    "selectAll": "すべて選択",
+    "memberColumn": "メンバー",
+    "selectMember": "メンバーを選択",
+    "nameLabel": "名前",
+    "maxWalletBudgetLabel": "ウォレットの最大予算",
+    "minRenewalLabel": "最短更新間隔",
+    "minRenewalHelper": "メンバーがサークルウォレットの予算に対してリクエストできる最短の更新間隔",
+    "maxWalletExpiryLabel": "ウォレットの最長有効期限",
+    "feePpmLabel": "手数料（ppm）",
+    "feePpmHelper": "サークルウォレットが行う支払いに課される100万分の1単位の手数料（0 = 無料）",
+    "advancedSettings": "詳細設定",
+    "inUse": "使用中",
+    "hexPlaceholder": "64文字の16進数文字列",
+    "syncingFollowing": "フォローリストを同期しています…",
+    "sync": "同期",
+    "following": "フォロー {{count}} 人",
+    "synced": "{{time}} に同期",
+    "updated": "{{time}} に更新",
+    "total": "合計",
+    "anonymous": "匿名"
+  },
+  "policyLabel": {
+    "following": "フォローに基づく",
+    "allowlist": "許可リスト"
+  },
+  "identityType": {
+    "pubkey": "Nostr 公開鍵",
+    "connectionKey": "接続キー"
+  },
+  "avatarStack": {
+    "more": "他 {{count}} 人"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 認証済み",
+    "verifyingNip05": "NIP-05 を確認中",
+    "lightningAddress": "Lightning アドレスあり"
+  },
+  "searchDropdown": {
+    "searching": "検索中…",
+    "noMatches": "一致する結果がありません"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "あなたの Nostr アイデンティティ",
+    "defaultHelper": "メンバー認証のためにフォローリストを解決するために使用されます",
+    "invalidHelper": "有効な npub、16進数の公開鍵、nprofile、または NIP-05 アドレスではないようです",
+    "placeholder": "npub1...、16進数、nprofile1...、you@domain.com、または名前で検索",
+    "change": "変更"
+  },
+  "memberPicker": {
+    "noneYet": "まだピン留めされたメンバーはいません。",
+    "removeMember": "メンバーを削除",
+    "enterIdentity": "検索するには、上に有効な Nostr アイデンティティを入力してください。",
+    "searchPlaceholder": "名前、NIP-05 で Nostr を検索するか、npub/16進数を貼り付け",
+    "alreadyMember": "すでにメンバーです。",
+    "searching": "検索中…",
+    "noMatchesNostr": "Nostr 上に一致する結果がありません。",
+    "alreadyMemberBadge": "すでにメンバー",
+    "resolving": "解決中…",
+    "searchHint": "名前、NIP-05、npub で検索するか、公開鍵を貼り付けてください。"
+  },
+  "followingPreview": {
+    "empty": "このアイデンティティはまだ誰もフォローしていません — フォローされ次第、メンバーは自動的に認証されます。",
+    "summary_one": "現在 {{count}} 人が認証されます。このアイデンティティがフォロー・フォロー解除するたびに、リストは自動的に同期され続けます。",
+    "summary_other": "現在 {{count}} 人が認証されます。このアイデンティティがフォロー・フォロー解除するたびに、リストは自動的に同期され続けます。"
+  },
+  "claimBadge": {
+    "claimed": "受け取り済み",
+    "unclaimed": "未受け取り"
+  },
+  "claimDeadline": {
+    "expired": "受け取り期限が切れました",
+    "withinMinutes_one": "{{count}} 分以内に受け取り",
+    "withinMinutes_other": "{{count}} 分以内に受け取り",
+    "withinHours": "{{count}} 時間以内に受け取り",
+    "byDate": "{{date}} までに受け取り",
+    "none": "受け取り期限なし"
+  },
+  "circleCard": {
+    "member_one": "メンバー {{count}} 人",
+    "member_other": "メンバー {{count}} 人"
+  },
+  "childIdentityCard": {
+    "circleWallet": "サークルウォレット",
+    "jitWallet": "JIT ウォレット",
+    "claimedCount": "{{claimed}}/{{total}} 件受け取り済み",
+    "errors": {
+      "loadRecipients": "JIT ウォレットの受取人の読み込みに失敗しました"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "管理",
+    "title": "アイデンティティを管理",
+    "description": "サークルに紐付いたままのアイデンティティは削除できません — 先にすべてのサークルから外してください。",
+    "noneSaved": "保存されたアイデンティティはまだありません。",
+    "usedBy_one": "{{count}} 件のサークルで使用中",
+    "usedBy_other": "{{count}} 件のサークルで使用中",
+    "unused": "未使用",
+    "stillUsedBy_one": "まだ {{count}} 件のサークルで使用されています — 先にそこから外してください。",
+    "stillUsedBy_other": "まだ {{count}} 件のサークルで使用されています — 先にそこから外してください。",
+    "deleteTitle": "「{{name}}」を削除しますか？",
+    "deleteDescription": "このアイデンティティはどのサークルにも紐付いていません。削除すると元に戻せません。",
+    "delete": "削除"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "フォローリストを同期しました",
+    "errors": {
+      "sync": "フォローリストの同期に失敗しました"
+    }
+  },
+  "circleAllowlist": {
+    "description": "このサークルウォレットハブからウォレットをリクエストできる nostr 公開鍵を管理します。",
+    "sharedWarning_one": "このアイデンティティは他に {{count}} 件のサークルと共有されています — ここでの変更はすべてに適用されます。",
+    "sharedWarning_other": "このアイデンティティは他に {{count}} 件のサークルと共有されています — ここでの変更はすべてに適用されます。",
+    "addMemberHeading": "メンバーを追加",
+    "addMembersTitle": "メンバーを追加",
+    "removeMemberTitle": "このメンバーを削除しますか？",
+    "removeMemberDescription": "このメンバーはこのサークルウォレットハブからウォレットをリクエストできなくなります。元に戻すことはできません。",
+    "removeSelectedTitle_one": "{{count}} 人のメンバーを削除しますか？",
+    "removeSelectedTitle_other": "{{count}} 人のメンバーを削除しますか？",
+    "addedToast_one": "メンバーを許可リストに追加しました",
+    "addedToast_other": "{{count}} 人のメンバーを許可リストに追加しました",
+    "removedOneToast": "公開鍵を許可リストから削除しました",
+    "removedToast_one": "メンバーを許可リストから削除しました",
+    "removedToast_other": "{{count}} 人のメンバーを許可リストから削除しました",
+    "errors": {
+      "load": "サークルの許可リストの読み込みに失敗しました",
+      "add": "許可リストへの追加に失敗しました",
+      "removeOne": "公開鍵の削除に失敗しました",
+      "removeSelected": "許可リストからの削除に失敗しました"
+    }
+  },
+  "circleWallets": {
+    "description": "このサークルのメンバー向けにすでに作成されたウォレット。",
+    "empty": "まだサークルウォレットは作成されていません。",
+    "selectWallet": "サークルウォレットを選択",
+    "removeTitle": "このサークルウォレットを削除しますか？",
+    "removeDescription": "残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。元に戻すことはできません。",
+    "removeSelectedTitle_one": "{{count}} 件のサークルウォレットを削除しますか？",
+    "removeSelectedTitle_other": "{{count}} 件のサークルウォレットを削除しますか？",
+    "removeSelectedDescription": "残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。元に戻すことはできません。",
+    "removedToast": "サークルウォレットを削除しました",
+    "removedSelectedToast_one": "{{count}} 件のサークルウォレットを削除しました",
+    "removedSelectedToast_other": "{{count}} 件のサークルウォレットを削除しました",
+    "errors": {
+      "remove": "サークルウォレットの削除に失敗しました",
+      "removeSelected": "選択したサークルウォレットの削除に失敗しました"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}} と {{second}}",
+    "participantsOthers": "{{first}} 他 {{count}} 人",
+    "durationDays_one": "{{count}} 日",
+    "durationDays_other": "{{count}} 日",
+    "durationHours_one": "{{count}} 時間",
+    "durationHours_other": "{{count}} 時間",
+    "durationMinutes": "{{count}} 分",
+    "removeRecipient": "受取人を削除",
+    "pubkeyLabel": "Nostr 公開鍵",
+    "pubkeyHelper": "名前、NIP-05 で検索するか、npub/16進数/nprofile を貼り付けてください",
+    "connectionKeyLabel": "接続キー（16進数）",
+    "iaPubkeyLabel": "アイデンティティ機関の公開鍵（16進数）",
+    "iaPubkeyHelper": "信頼できるアイデンティティ機関である必要があります（設定 → アイデンティティ機関）",
+    "duplicateIdentity": "このアイデンティティはこのウォレット内の別の受取人によってすでに使用されています。各受取人には異なるアイデンティティが必要です。",
+    "walletBudgetLabel": "ウォレット予算",
+    "requestedSummary": "{{total}} loki をリクエスト",
+    "requestedSummaryWithMax": "{{total}} loki をリクエスト（このハブの最大ウォレット予算 {{max}} loki のうち）",
+    "claimDeadlineLabel": "受け取り期限",
+    "deadlineExceeds": "このハブの最大受け取り期限 {{max}} を超えています",
+    "deadlineHelp": "各受取人は作成からこの期間内に自分の分を受け取る必要があります",
+    "deadlineHelpWithMax": "各受取人は作成からこの期間内に自分の分を受け取る必要があります（デフォルトはこのハブの上限：{{max}}）",
+    "addRecipient": "受取人をさらに追加",
+    "setClaimDeadline": "受け取り期限を設定",
+    "statusAll": "すべて",
+    "statusExpired": "期限切れ",
+    "allocatedSummary": "このページで {{allocated}} loki が割り当て済み · 合計 {{total}} 件（{{status}}）",
+    "recipientColumn": "受取人",
+    "revealConnection": "NWC 接続を表示",
+    "groupSummary_one": "受取人 {{count}} 人 · {{claimed}}/{{count}} 件受け取り済み",
+    "groupSummary_other": "受取人 {{count}} 人 · {{claimed}}/{{count}} 件受け取り済み",
+    "selectRecipient": "受取人を選択",
+    "selectAllInWallet": "このウォレットの受取人をすべて選択",
+    "collapseRecipients": "受取人を折りたたむ",
+    "expandRecipients": "受取人を展開",
+    "removeWallet": "ウォレットを削除",
+    "noneFiltered": "{{status}} の JIT ウォレットはありません。",
+    "noneOnPage": "このページに JIT ウォレットはありません。",
+    "addHeading": "JIT ウォレットを追加",
+    "createDialogTitle": "JIT ウォレットを作成",
+    "removeRecipientTitle": "この受取人を削除しますか？",
+    "removeRecipientDescription": "このアイデンティティはこのウォレットの取り分を受け取れなくなります。割り当てられた残高はこのハブに払い戻されます。元に戻すことはできません。",
+    "removeWalletTitle": "このウォレットを削除しますか？",
+    "removeWalletDescription": "このウォレットの残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。このウォレットが他の受取人にも対応している場合、まだ受け取っていない人も含めてアクセスできなくなります。元に戻すことはできません。",
+    "removeSelectedTitle_one": "{{count}} 人の受取人を削除しますか？",
+    "removeSelectedTitle_other": "{{count}} 人の受取人を削除しますか？",
+    "removeSelectedDescription": "これらのアイデンティティはそれぞれのウォレットの取り分を受け取れなくなります。割り当てられた残高はこのハブに払い戻されます。元に戻すことはできません。",
+    "createdToast_one": "JIT ウォレットを作成し、資金を提供しました",
+    "createdToast_other": "JIT ウォレットを作成し、{{count}} 人の受取人に資金を提供しました",
+    "recipientRemovedToast": "JIT ウォレットの受取人を削除しました",
+    "walletRemovedToast": "JIT ウォレットを削除しました",
+    "recipientsRemovedToast_one": "JIT ウォレットの受取人を削除しました",
+    "recipientsRemovedToast_other": "{{count}} 人の JIT ウォレット受取人を削除しました",
+    "errors": {
+      "loadConnection": "JIT ウォレットの接続の読み込みに失敗しました",
+      "load": "JIT ウォレットの読み込みに失敗しました",
+      "create": "JIT ウォレットの作成に失敗しました",
+      "removeRecipient": "JIT ウォレットの受取人の削除に失敗しました",
+      "removeWallet": "JIT ウォレットの削除に失敗しました",
+      "removeSelected": "選択した受取人の削除に失敗しました"
+    }
+  },
+  "newCircleHub": {
+    "title": "新しいサークルウォレットハブ",
+    "description": "サークルウォレットハブを作成します — 認証されたメンバーが、その残高から資金を得た自分専用のサークルウォレットを受け取る共有ウォレットプールです。",
+    "identityModeLabel": "メンバーシップのアイデンティティ",
+    "selectIdentityPlaceholder": "アイデンティティを選択",
+    "createNewIdentity": "新しいアイデンティティを作成",
+    "existingIdentities": "既存のアイデンティティ",
+    "identityReuseHelper": "アイデンティティ（ポリシー＋メンバー）は複数のサークルで再利用でき、その後も自動的に同期され続けます。",
+    "enterIdentityHelper": "続けるには、上に有効な Nostr アイデンティティを入力してください。",
+    "memberModeLabel": "このサークルからウォレットをリクエストできる人",
+    "modeSyncTitle": "フォローしている全員",
+    "modeSyncDescription": "自動 — 現在または今後このアイデンティティがフォローする全員。管理は不要です。",
+    "modePinnedTitle": "カスタムメンバー",
+    "modePinnedDescription": "Nostr を検索し、許可する相手を手動で選びます。",
+    "pinMemberHelper": "少なくとも1人のメンバーをピン留めするか、「フォローしている全員」に切り替えてください。",
+    "identityNameLabel": "このアイデンティティのラベル（任意）",
+    "identityNamePlaceholder": "例：フォロー中のサークル",
+    "identityNameHelper": "複数のサークルで再利用する際にこの保存済みアイデンティティを識別するためだけに使用され、どこにも公開されません。",
+    "maxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算",
+    "maxExpiryHelper": "発行されたサークルウォレットの最長有効期限",
+    "hubBudgetLabel": "ハブの予算（任意）",
+    "hubBudgetHelper": "このサークルが同時に保持できるすべてのウォレットの合計予算に上限を設けます。空欄の場合、このハブの実際の残高以外に上限はありません。",
+    "hubBudgetRenewalLabel": "ハブの予算の更新",
+    "hubBudgetRenewalHelper": "上記の上限をリセットするものではありません — これは同時に保持されるウォレットに対する常時の上限であり、消費レートではありません。ウォレットが期限切れになると容量は自動的に解放されます。",
+    "hubExpiryLabel": "ハブの有効期限（任意）",
+    "hubExpiryHelper": "この日付以降、このサークルは新しいウォレットの発行を停止します。",
+    "submit": "サークルウォレットハブを作成",
+    "selectExistingHint": "続けるには既存のアイデンティティを選択してください。",
+    "enterNameHint": "続けるには名前を入力してください。",
+    "createdToast": "サークルウォレットハブ「{{name}}」を作成しました",
+    "allowlistSeedFailedToast": "サークルウォレットハブ「{{name}}」を作成しましたが、メンバーリストの初期設定に失敗しました — ハブの許可リストページからメンバーを追加してください。",
+    "errors": {
+      "create": "サークルウォレットハブの作成に失敗しました"
+    }
+  },
+  "newJitHub": {
+    "title": "新しい JIT ウォレットハブ",
+    "description": "受取人に支出専用の JIT ウォレットを発行する、事前に資金提供されたハブを作成します",
+    "maxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算",
+    "maxExpiryHelper": "発行された JIT ウォレットの最長有効期限",
+    "submit": "JIT ウォレットハブを作成",
+    "createdToast": "JIT ウォレットハブ「{{name}}」を作成しました",
+    "errors": {
+      "create": "JIT ウォレットハブの作成に失敗しました"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "このサークルを削除してもよろしいですか？",
+    "checking": "メンバーウォレットの残高を確認しています…",
+    "allEmpty": "このサークルのすべてのメンバーウォレットは空です。サークルを削除すると、すべてのメンバーウォレットも削除されます。",
+    "hasBalance_one": "このサークルには残高が残っているメンバーウォレットが {{count}} 件あります。ウォレットを削除しても資金自体は失われませんが、メンバー自身の記録とアクセス権が失われ、元に戻すことはできません。",
+    "hasBalance_other": "このサークルには残高が残っているメンバーウォレットが {{count}} 件あります。ウォレットを削除しても資金自体は失われませんが、メンバー自身の記録とアクセス権が失われ、元に戻すことはできません。",
+    "colName": "名前",
+    "colPubkey": "公開鍵",
+    "colBalance": "残高（loki）",
+    "totalSummary_one": "合計 {{total}} loki（{{count}} 件のウォレット）。",
+    "totalSummary_other": "合計 {{total}} loki（{{count}} 件のウォレット）。",
+    "deleteEmptyOnly": "空のものだけ削除",
+    "deleteAll": "すべて削除",
+    "deletedToast": "サークルを削除しました",
+    "partialDeleteToast_one": "空のウォレットを {{count}} 件削除しました",
+    "partialDeleteToast_other": "空のウォレットを {{count}} 件削除しました",
+    "partialDeleteDescription_one": "残高があるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
+    "partialDeleteDescription_other": "残高があるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
+    "errors": {
+      "load": "サークルウォレットの読み込みに失敗しました",
+      "delete": "サークルの削除に失敗しました"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "この JIT ウォレットハブを削除してもよろしいですか？",
+    "checking": "発行済みの JIT ウォレットを確認しています…",
+    "hasOutstanding_one": "このハブが発行した JIT ウォレットには、まだ {{count}} 件の受取人分の割り当てが残っています。ハブを削除する前に、下の JIT ウォレット一覧から削除するか、期限切れになるまでお待ちください。",
+    "hasOutstanding_other": "このハブが発行した JIT ウォレットには、まだ {{count}} 件の受取人分の割り当てが残っています。ハブを削除する前に、下の JIT ウォレット一覧から削除するか、期限切れになるまでお待ちください。",
+    "safeToDelete": "接続済みのアプリはこの接続を使用できなくなります。この処理で資金が失われることはなく、残高はそのままウォレットに残ります。",
+    "close": "閉じる",
+    "errors": {
+      "check": "発行済みの JIT ウォレットの確認に失敗しました"
+    }
+  }
+}

@@ -97,14 +97,37 @@
     "warning": "Warning",
     "warningText": "You are responsible for the services you connect to. Ensure you trust the providers of these URLs.",
     "configErrors": "Configuration Errors",
+    "unsavedChanges": {
+      "title": "Unsaved changes",
+      "description": "You've made changes to your services configuration that haven't been saved. If you leave now, these changes will be lost.",
+      "stay": "Keep Editing",
+      "discard": "Leave Without Saving",
+      "save": "Save & Leave",
+      "saving": "Saving..."
+    },
     "explorer": {
       "title": "Flokicoin Explorer",
       "description": "Used for fee estimation and transaction details.",
       "custom": "Custom Explorer"
     },
-    "relay": {
+    "relayGroup": {
       "title": "Nostr Relays",
-      "description": "Connect to multiple Nostr relays for Wallet Connect (NWC) communication. Multiple relays improve availability."
+      "description": "Each purpose below keeps its own independent relay list — changing one doesn't affect the others."
+    },
+    "relay": {
+      "tabLabel": "Wallet Connect",
+      "title": "Nostr Relays",
+      "description": "Used for Nostr Wallet Connect (NWC) communication. Multiple relays improve availability."
+    },
+    "generalRelay": {
+      "tabLabel": "General",
+      "title": "General Relays",
+      "description": "Used to fetch Nostr profiles, notes, and events — including Circle followers and contact lists (kind:0/kind:1/kind:3)."
+    },
+    "searchRelay": {
+      "tabLabel": "Search",
+      "title": "Search Relays",
+      "description": "Used only for NIP-50 search queries."
     },
     "lsp": {
       "title": "Lightning Service Providers",

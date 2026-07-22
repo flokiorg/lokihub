@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "حذف",
+    "removeSelected": "حذف موارد انتخاب‌شده",
+    "clear": "پاک کردن",
+    "add": "افزودن",
+    "addWithCount": "افزودن ({{count}})",
+    "selectedCount": "{{count}} مورد انتخاب شد",
+    "selectAll": "انتخاب همه",
+    "memberColumn": "عضو",
+    "selectMember": "انتخاب عضو",
+    "nameLabel": "نام",
+    "maxWalletBudgetLabel": "حداکثر بودجه کیف‌پول",
+    "minRenewalLabel": "کوتاه‌ترین دوره تجدید",
+    "minRenewalHelper": "کوتاه‌ترین دوره تجدید که یک عضو می‌تواند برای بودجه کیف‌پول حلقه خود درخواست کند",
+    "maxWalletExpiryLabel": "حداکثر مدت اعتبار کیف‌پول",
+    "feePpmLabel": "کارمزد (ppm)",
+    "feePpmHelper": "کارمزد به ازای هر میلیون که از پرداخت‌های کیف‌پول‌های حلقه دریافت می‌شود (۰ = رایگان)",
+    "advancedSettings": "تنظیمات پیشرفته",
+    "inUse": "در حال استفاده",
+    "hexPlaceholder": "رشته هگزادسیمال ۶۴ کاراکتری",
+    "syncingFollowing": "در حال همگام‌سازی فهرست دنبال‌شوندگان…",
+    "sync": "همگام‌سازی",
+    "following": "{{count}} دنبال‌شونده",
+    "synced": "همگام‌سازی شد {{time}}",
+    "updated": "به‌روزرسانی شد {{time}}",
+    "total": "مجموع",
+    "anonymous": "ناشناس"
+  },
+  "policyLabel": {
+    "following": "بر اساس دنبال‌شوندگان",
+    "allowlist": "فهرست مجاز"
+  },
+  "identityType": {
+    "pubkey": "کلید عمومی Nostr",
+    "connectionKey": "کلید اتصال"
+  },
+  "avatarStack": {
+    "more": "+{{count}} نفر دیگر"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 تأیید شد",
+    "verifyingNip05": "در حال تأیید NIP-05",
+    "lightningAddress": "آدرس Lightning دارد"
+  },
+  "searchDropdown": {
+    "searching": "در حال جستجو…",
+    "noMatches": "هیچ نتیجه‌ای یافت نشد"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "هویت Nostr شما",
+    "defaultHelper": "برای تعیین فهرست دنبال‌شوندگان شما جهت تأیید اعضا استفاده می‌شود",
+    "invalidHelper": "به نظر نمی‌رسد npub، کلید عمومی هگزادسیمال، nprofile یا آدرس NIP-05 معتبری باشد",
+    "placeholder": "npub1...، هگزادسیمال، nprofile1...، you@domain.com، یا جستجو بر اساس نام",
+    "change": "تغییر"
+  },
+  "memberPicker": {
+    "noneYet": "هنوز هیچ عضوی پین نشده است.",
+    "removeMember": "حذف عضو",
+    "enterIdentity": "برای جستجو، یک هویت معتبر Nostr در بالا وارد کنید.",
+    "searchPlaceholder": "جستجوی Nostr بر اساس نام، NIP-05، یا جای‌گذاری npub/هگزادسیمال",
+    "alreadyMember": "از قبل عضو است.",
+    "searching": "در حال جستجو…",
+    "noMatchesNostr": "هیچ نتیجه‌ای در Nostr یافت نشد.",
+    "alreadyMemberBadge": "از قبل عضو است",
+    "resolving": "در حال بررسی…",
+    "searchHint": "بر اساس نام، NIP-05، npub جستجو کنید یا یک کلید عمومی جای‌گذاری کنید."
+  },
+  "followingPreview": {
+    "empty": "این هویت هنوز کسی را دنبال نمی‌کند — با دنبال کردن افراد، اعضا به‌طور خودکار تأیید خواهند شد.",
+    "summary_one": "اکنون {{count}} نفر تأیید خواهند شد و با دنبال کردن یا لغو دنبال کردن دیگران توسط این هویت، فهرست به‌طور خودکار همگام می‌ماند.",
+    "summary_other": "اکنون {{count}} نفر تأیید خواهند شد و با دنبال کردن یا لغو دنبال کردن دیگران توسط این هویت، فهرست به‌طور خودکار همگام می‌ماند."
+  },
+  "claimBadge": {
+    "claimed": "دریافت شده",
+    "unclaimed": "دریافت‌نشده"
+  },
+  "claimDeadline": {
+    "expired": "مهلت دریافت به پایان رسیده است",
+    "withinMinutes_one": "دریافت ظرف {{count}} دقیقه",
+    "withinMinutes_other": "دریافت ظرف {{count}} دقیقه",
+    "withinHours": "دریافت ظرف {{count}} ساعت",
+    "byDate": "دریافت تا {{date}}",
+    "none": "بدون مهلت دریافت"
+  },
+  "circleCard": {
+    "member_one": "{{count}} عضو",
+    "member_other": "{{count}} عضو"
+  },
+  "childIdentityCard": {
+    "circleWallet": "کیف‌پول حلقه",
+    "jitWallet": "کیف‌پول JIT",
+    "claimedCount": "{{claimed}}/{{total}} دریافت شده",
+    "errors": {
+      "loadRecipients": "بارگذاری دریافت‌کنندگان کیف‌پول JIT ناموفق بود"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "مدیریت",
+    "title": "مدیریت هویت‌ها",
+    "description": "هویت‌هایی که هنوز به یک حلقه متصل هستند قابل حذف نیستند — ابتدا آن‌ها را از تمام حلقه‌ها حذف کنید.",
+    "noneSaved": "هنوز هیچ هویتی ذخیره نشده است.",
+    "usedBy_one": "در {{count}} حلقه استفاده می‌شود",
+    "usedBy_other": "در {{count}} حلقه استفاده می‌شود",
+    "unused": "استفاده‌نشده",
+    "stillUsedBy_one": "هنوز در {{count}} حلقه استفاده می‌شود — ابتدا آن را از آنجا حذف کنید.",
+    "stillUsedBy_other": "هنوز در {{count}} حلقه استفاده می‌شود — ابتدا آن را از آنجا حذف کنید.",
+    "deleteTitle": "«{{name}}» حذف شود؟",
+    "deleteDescription": "این هویت به هیچ حلقه‌ای متصل نیست. حذف آن قابل بازگشت نیست.",
+    "delete": "حذف"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "فهرست دنبال‌شوندگان همگام‌سازی شد",
+    "errors": {
+      "sync": "همگام‌سازی فهرست دنبال‌شوندگان ناموفق بود"
+    }
+  },
+  "circleAllowlist": {
+    "description": "مدیریت کلیدهای عمومی nostr که مجاز به درخواست کیف‌پول از این هاب کیف‌پول حلقه هستند.",
+    "sharedWarning_one": "این هویت با {{count}} حلقه دیگر مشترک است — تغییرات اینجا روی همه آن‌ها اعمال می‌شود.",
+    "sharedWarning_other": "این هویت با {{count}} حلقه دیگر مشترک است — تغییرات اینجا روی همه آن‌ها اعمال می‌شود.",
+    "addMemberHeading": "افزودن عضو",
+    "addMembersTitle": "افزودن اعضا",
+    "removeMemberTitle": "این عضو حذف شود؟",
+    "removeMemberDescription": "این عضو دیگر نمی‌تواند از این هاب کیف‌پول حلقه درخواست کیف‌پول دهد. این کار قابل بازگشت نیست.",
+    "removeSelectedTitle_one": "{{count}} عضو حذف شود؟",
+    "removeSelectedTitle_other": "{{count}} عضو حذف شود؟",
+    "addedToast_one": "عضو به فهرست مجاز افزوده شد",
+    "addedToast_other": "{{count}} عضو به فهرست مجاز افزوده شد",
+    "removedOneToast": "کلید عمومی از فهرست مجاز حذف شد",
+    "removedToast_one": "عضو از فهرست مجاز حذف شد",
+    "removedToast_other": "{{count}} عضو از فهرست مجاز حذف شد",
+    "errors": {
+      "load": "بارگذاری فهرست مجاز حلقه ناموفق بود",
+      "add": "افزودن به فهرست مجاز ناموفق بود",
+      "removeOne": "حذف کلید عمومی ناموفق بود",
+      "removeSelected": "حذف از فهرست مجاز ناموفق بود"
+    }
+  },
+  "circleWallets": {
+    "description": "کیف‌پول‌هایی که قبلاً برای اعضای این حلقه ایجاد شده‌اند.",
+    "empty": "هنوز هیچ کیف‌پول حلقه‌ای ایجاد نشده است.",
+    "selectWallet": "انتخاب کیف‌پول حلقه",
+    "removeTitle": "این کیف‌پول حلقه حذف شود؟",
+    "removeDescription": "موجودی باقی‌مانده آن به این هاب بازگردانده می‌شود و اتصال NWC آن بلافاصله از کار می‌افتد. این کار قابل بازگشت نیست.",
+    "removeSelectedTitle_one": "{{count}} کیف‌پول حلقه حذف شود؟",
+    "removeSelectedTitle_other": "{{count}} کیف‌پول حلقه حذف شود؟",
+    "removeSelectedDescription": "موجودی باقی‌مانده آن‌ها به این هاب بازگردانده می‌شود و اتصالات NWC آن‌ها بلافاصله از کار می‌افتند. این کار قابل بازگشت نیست.",
+    "removedToast": "کیف‌پول حلقه حذف شد",
+    "removedSelectedToast_one": "{{count}} کیف‌پول حلقه حذف شد",
+    "removedSelectedToast_other": "{{count}} کیف‌پول حلقه حذف شد",
+    "errors": {
+      "remove": "حذف کیف‌پول حلقه ناموفق بود",
+      "removeSelected": "حذف کیف‌پول‌های حلقه انتخاب‌شده ناموفق بود"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}} و {{second}}",
+    "participantsOthers": "{{first}} و {{count}} نفر دیگر",
+    "durationDays_one": "{{count}} روز",
+    "durationDays_other": "{{count}} روز",
+    "durationHours_one": "{{count}} ساعت",
+    "durationHours_other": "{{count}} ساعت",
+    "durationMinutes": "{{count}} دقیقه",
+    "removeRecipient": "حذف دریافت‌کننده",
+    "pubkeyLabel": "کلید عمومی Nostr",
+    "pubkeyHelper": "بر اساس نام، NIP-05 جستجو کنید یا npub/هگزادسیمال/nprofile جای‌گذاری کنید",
+    "connectionKeyLabel": "کلید اتصال (هگزادسیمال)",
+    "iaPubkeyLabel": "کلید عمومی مرجع هویت (هگزادسیمال)",
+    "iaPubkeyHelper": "باید یک مرجع هویت مورد اعتماد باشد (تنظیمات ← مراجع هویت)",
+    "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری در این کیف‌پول استفاده می‌شود. هر دریافت‌کننده باید هویت متفاوتی داشته باشد.",
+    "walletBudgetLabel": "بودجه کیف‌پول",
+    "requestedSummary": "{{total}} loki درخواست شد",
+    "requestedSummaryWithMax": "{{total}} loki درخواست شد از حداکثر بودجه کیف‌پول این هاب که {{max}} loki است",
+    "claimDeadlineLabel": "مهلت دریافت",
+    "deadlineExceeds": "از حداکثر مهلت دریافت این هاب که {{max}} است بیشتر می‌شود",
+    "deadlineHelp": "هر دریافت‌کننده باید سهم خود را ظرف این مدت از زمان ایجاد دریافت کند",
+    "deadlineHelpWithMax": "هر دریافت‌کننده باید سهم خود را ظرف این مدت از زمان ایجاد دریافت کند (پیش‌فرض حداکثر این هاب: {{max}})",
+    "addRecipient": "افزودن دریافت‌کننده دیگر",
+    "setClaimDeadline": "تعیین مهلت دریافت",
+    "statusAll": "همه",
+    "statusExpired": "منقضی‌شده",
+    "allocatedSummary": "{{allocated}} loki در این صفحه تخصیص یافته · {{total}} {{status}}",
+    "recipientColumn": "دریافت‌کننده",
+    "revealConnection": "نمایش اتصال NWC",
+    "groupSummary_one": "{{count}} دریافت‌کننده · {{claimed}}/{{count}} دریافت شده",
+    "groupSummary_other": "{{count}} دریافت‌کننده · {{claimed}}/{{count}} دریافت شده",
+    "selectRecipient": "انتخاب دریافت‌کننده",
+    "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این کیف‌پول",
+    "collapseRecipients": "جمع کردن دریافت‌کنندگان",
+    "expandRecipients": "گسترش دریافت‌کنندگان",
+    "removeWallet": "حذف کیف‌پول",
+    "noneFiltered": "هیچ کیف‌پول JIT با وضعیت «{{status}}» وجود ندارد.",
+    "noneOnPage": "هیچ کیف‌پول JIT در این صفحه وجود ندارد.",
+    "addHeading": "افزودن کیف‌پول JIT",
+    "createDialogTitle": "ایجاد کیف‌پول JIT",
+    "removeRecipientTitle": "این دریافت‌کننده حذف شود؟",
+    "removeRecipientDescription": "این هویت دیگر نمی‌تواند سهم خود از این کیف‌پول را دریافت کند. موجودی تخصیص‌یافته به آن به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
+    "removeWalletTitle": "این کیف‌پول حذف شود؟",
+    "removeWalletDescription": "موجودی باقی‌مانده این کیف‌پول به این هاب بازگردانده می‌شود و اتصال NWC آن بلافاصله از کار می‌افتد. اگر این کیف‌پول به دریافت‌کنندگان دیگری نیز خدمت می‌کند، آن‌ها نیز دسترسی خود را از دست می‌دهند — از جمله کسانی که هنوز سهم خود را دریافت نکرده‌اند. این کار قابل بازگشت نیست.",
+    "removeSelectedTitle_one": "{{count}} دریافت‌کننده حذف شود؟",
+    "removeSelectedTitle_other": "{{count}} دریافت‌کننده حذف شود؟",
+    "removeSelectedDescription": "این هویت‌ها دیگر نمی‌توانند سهم خود از کیف‌پول‌هایشان را دریافت کنند. موجودی تخصیص‌یافته به آن‌ها به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
+    "createdToast_one": "کیف‌پول JIT ایجاد و تأمین مالی شد",
+    "createdToast_other": "کیف‌پول JIT ایجاد و برای {{count}} دریافت‌کننده تأمین مالی شد",
+    "recipientRemovedToast": "دریافت‌کننده کیف‌پول JIT حذف شد",
+    "walletRemovedToast": "کیف‌پول JIT حذف شد",
+    "recipientsRemovedToast_one": "دریافت‌کننده کیف‌پول JIT حذف شد",
+    "recipientsRemovedToast_other": "{{count}} دریافت‌کننده کیف‌پول JIT حذف شد",
+    "errors": {
+      "loadConnection": "بارگذاری اتصال کیف‌پول JIT ناموفق بود",
+      "load": "بارگذاری کیف‌پول‌های JIT ناموفق بود",
+      "create": "ایجاد کیف‌پول JIT ناموفق بود",
+      "removeRecipient": "حذف دریافت‌کننده کیف‌پول JIT ناموفق بود",
+      "removeWallet": "حذف کیف‌پول JIT ناموفق بود",
+      "removeSelected": "حذف دریافت‌کنندگان انتخاب‌شده ناموفق بود"
+    }
+  },
+  "newCircleHub": {
+    "title": "هاب کیف‌پول حلقه جدید",
+    "description": "یک هاب کیف‌پول حلقه ایجاد کنید — یک استخر کیف‌پول مشترک که در آن اعضای مجاز، کیف‌پول حلقه اختصاصی خود را که از موجودی آن تأمین مالی می‌شود دریافت می‌کنند.",
+    "identityModeLabel": "هویت عضویت",
+    "selectIdentityPlaceholder": "یک هویت انتخاب کنید",
+    "createNewIdentity": "ایجاد هویت جدید",
+    "existingIdentities": "هویت‌های موجود",
+    "identityReuseHelper": "یک هویت (سیاست + اعضا) می‌تواند در چندین حلقه استفاده مجدد شود، که پس از آن به‌طور خودکار همگام می‌مانند.",
+    "enterIdentityHelper": "برای ادامه، یک هویت معتبر Nostr در بالا وارد کنید.",
+    "memberModeLabel": "چه کسی می‌تواند از این حلقه کیف‌پول درخواست کند",
+    "modeSyncTitle": "هرکسی که دنبال می‌کنم",
+    "modeSyncDescription": "خودکار — همه کسانی که این هویت اکنون یا بعداً دنبال می‌کند. نیازی به مدیریت نیست.",
+    "modePinnedTitle": "اعضای سفارشی",
+    "modePinnedDescription": "در Nostr جستجو کنید و دقیقاً مشخص کنید چه کسی مجاز است.",
+    "pinMemberHelper": "حداقل یک عضو را پین کنید یا به «هرکسی که دنبال می‌کنم» تغییر دهید.",
+    "identityNameLabel": "برچسب این هویت (اختیاری)",
+    "identityNamePlaceholder": "مثلاً: حلقه دنبال‌شوندگان من",
+    "identityNameHelper": "فقط برای شناسایی این هویت ذخیره‌شده هنگام استفاده مجدد در حلقه‌ها استفاده می‌شود — در هیچ‌جا منتشر نمی‌شود.",
+    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که یک عضو می‌تواند برای کیف‌پول حلقه خود درخواست کند",
+    "maxExpiryHelper": "حداکثر مدت اعتبار کیف‌پول‌های حلقه صادرشده",
+    "hubBudgetLabel": "بودجه هاب (اختیاری)",
+    "hubBudgetHelper": "بودجه ترکیبی همه کیف‌پول‌هایی که این حلقه می‌تواند هم‌زمان فعال داشته باشد را محدود می‌کند. برای عدم اعمال محدودیت فراتر از موجودی واقعی این هاب، خالی بگذارید.",
+    "hubBudgetRenewalLabel": "تجدید بودجه هاب",
+    "hubBudgetRenewalHelper": "سقف بالا را بازنشانی نمی‌کند — این یک سقف لحظه‌ای برای کیف‌پول‌های نگه‌داشته‌شده هم‌زمان است، نه نرخ مصرف. با انقضای کیف‌پول‌ها، ظرفیت به‌طور خودکار آزاد می‌شود.",
+    "hubExpiryLabel": "تاریخ انقضای هاب (اختیاری)",
+    "hubExpiryHelper": "این حلقه پس از این تاریخ صدور کیف‌پول‌های جدید را متوقف می‌کند.",
+    "submit": "ایجاد هاب کیف‌پول حلقه",
+    "selectExistingHint": "برای ادامه یک هویت موجود را انتخاب کنید.",
+    "enterNameHint": "برای ادامه یک نام وارد کنید.",
+    "createdToast": "هاب کیف‌پول حلقه «{{name}}» ایجاد شد",
+    "allowlistSeedFailedToast": "هاب کیف‌پول حلقه «{{name}}» ایجاد شد، اما مقداردهی اولیه فهرست اعضا ناموفق بود — اعضا را از صفحه فهرست مجاز هاب اضافه کنید.",
+    "errors": {
+      "create": "ایجاد هاب کیف‌پول حلقه ناموفق بود"
+    }
+  },
+  "newJitHub": {
+    "title": "هاب کیف‌پول JIT جدید",
+    "description": "یک هاب از پیش تأمین‌مالی‌شده ایجاد کنید که کیف‌پول‌های JIT مخصوص خرج کردن را برای ذی‌نفعان صادر می‌کند",
+    "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر کیف‌پول JIT صادرشده از این هاب تخصیص داد",
+    "maxExpiryHelper": "حداکثر مدت اعتبار کیف‌پول‌های JIT صادرشده",
+    "submit": "ایجاد هاب کیف‌پول JIT",
+    "createdToast": "هاب کیف‌پول JIT «{{name}}» ایجاد شد",
+    "errors": {
+      "create": "ایجاد هاب کیف‌پول JIT ناموفق بود"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "آیا مطمئن هستید که می‌خواهید این حلقه را حذف کنید؟",
+    "checking": "در حال بررسی موجودی کیف‌پول اعضا…",
+    "allEmpty": "همه کیف‌پول‌های اعضای این حلقه خالی هستند. حذف حلقه، همه کیف‌پول‌های اعضای آن را نیز حذف می‌کند.",
+    "hasBalance_one": "{{count}} کیف‌پول عضو در این حلقه هنوز موجودی دارد. حذف یک کیف‌پول آن وجوه را از بین نمی‌برد، اما ثبت و دسترسی خود عضو به آن‌ها را حذف می‌کند، بدون هیچ راهی برای بازگرداندن آن.",
+    "hasBalance_other": "{{count}} کیف‌پول عضو در این حلقه هنوز موجودی دارند. حذف یک کیف‌پول آن وجوه را از بین نمی‌برد، اما ثبت و دسترسی خود عضو به آن‌ها را حذف می‌کند، بدون هیچ راهی برای بازگرداندن آن.",
+    "colName": "نام",
+    "colPubkey": "کلید عمومی",
+    "colBalance": "موجودی (loki)",
+    "totalSummary_one": "مجموعاً {{total}} loki در {{count}} کیف‌پول.",
+    "totalSummary_other": "مجموعاً {{total}} loki در {{count}} کیف‌پول.",
+    "deleteEmptyOnly": "فقط موارد خالی حذف شود",
+    "deleteAll": "حذف همه",
+    "deletedToast": "حلقه حذف شد",
+    "partialDeleteToast_one": "{{count}} کیف‌پول خالی حذف شد",
+    "partialDeleteToast_other": "{{count}} کیف‌پول خالی حذف شد",
+    "partialDeleteDescription_one": "{{count}} کیف‌پول دارای موجودی دست‌نخورده باقی ماند — حلقه حذف نشد.",
+    "partialDeleteDescription_other": "{{count}} کیف‌پول دارای موجودی دست‌نخورده باقی ماندند — حلقه حذف نشد.",
+    "errors": {
+      "load": "بارگذاری کیف‌پول‌های حلقه ناموفق بود",
+      "delete": "حذف حلقه ناموفق بود"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "آیا مطمئن هستید که می‌خواهید این هاب کیف‌پول JIT را حذف کنید؟",
+    "checking": "در حال بررسی کیف‌پول‌های JIT صادرشده…",
+    "hasOutstanding_one": "این هاب هنوز {{count}} سهم دریافت‌کننده معلق در کیف‌پول‌های JIT صادرشده خود دارد. پیش از حذف هاب، آن را از فهرست کیف‌پول‌های JIT در پایین حذف کنید (یا منتظر انقضای آن بمانید).",
+    "hasOutstanding_other": "این هاب هنوز {{count}} سهم دریافت‌کننده معلق در کیف‌پول‌های JIT صادرشده خود دارد. پیش از حذف هاب، آن‌ها را از فهرست کیف‌پول‌های JIT در پایین حذف کنید (یا منتظر انقضای آن‌ها بمانید).",
+    "safeToDelete": "اپلیکیشن‌های متصل دیگر نمی‌توانند از این اتصال استفاده کنند. در این فرآیند هیچ وجهی از دست نمی‌رود و موجودی در کیف‌پول شما باقی می‌ماند.",
+    "close": "بستن",
+    "errors": {
+      "check": "بررسی کیف‌پول‌های JIT صادرشده ناموفق بود"
+    }
+  }
+}

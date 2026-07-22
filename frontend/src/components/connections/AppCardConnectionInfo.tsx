@@ -1,5 +1,12 @@
 import dayjs from "dayjs";
-import { BrickWallIcon, CircleCheckIcon, PlusCircleIcon } from "lucide-react";
+import {
+  BrickWallIcon,
+  CircleCheckIcon,
+  NetworkIcon,
+  PlusCircleIcon,
+  UsersIcon,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { Progress } from "src/components/ui/progress";
@@ -13,23 +20,52 @@ type AppCardConnectionInfoProps = {
   readonly?: boolean;
 };
 
+// Isolated apps span several distinct kinds now (plain sub-wallets, JIT
+// Hubs/Wallets, Circle Hubs/Wallets) — label and icon must reflect the
+// actual kind rather than collapsing everything into "Sub-wallet".
+const isolatedKindDisplay: Record<
+  string,
+  {
+    Icon: typeof BrickWallIcon;
+    labelKey:
+      | "isolatedKind.jit_hub"
+      | "isolatedKind.jit_wallet"
+      | "isolatedKind.circle_hub"
+      | "isolatedKind.circle_wallet";
+  }
+> = {
+  jit_hub: { Icon: NetworkIcon, labelKey: "isolatedKind.jit_hub" },
+  jit_wallet: { Icon: NetworkIcon, labelKey: "isolatedKind.jit_wallet" },
+  circle_hub: { Icon: UsersIcon, labelKey: "isolatedKind.circle_hub" },
+  circle_wallet: { Icon: UsersIcon, labelKey: "isolatedKind.circle_wallet" },
+};
+
 export function AppCardConnectionInfo({
   connection,
-  budgetRemainingText = "Left in budget",
+  budgetRemainingText,
   readonly = false,
 }: AppCardConnectionInfoProps) {
+  const { t } = useTranslation("apps");
+  const resolvedBudgetRemainingText =
+    budgetRemainingText ?? t("usage.leftInBudget", "Left in budget");
+  const isolatedDisplay = connection.kind
+    ? isolatedKindDisplay[connection.kind]
+    : undefined;
+  const IsolatedIcon = isolatedDisplay?.Icon ?? BrickWallIcon;
+  const isolatedLabel = isolatedDisplay
+    ? t(isolatedDisplay.labelKey)
+    : connection.metadata?.app_store_app_id === SUBWALLET_APPSTORE_APP_ID
+      ? t("isolatedKind.subwallet")
+      : t("isolatedKind.isolatedApp");
+
   return (
     <>
       {connection.isolated ? (
         <>
           <div className="text-sm text-secondary-foreground font-medium w-full h-full flex flex-col gap-2">
             <div className="flex flex-row items-center gap-2">
-              <BrickWallIcon className="size-4" />
-
-              {connection.metadata?.app_store_app_id ===
-              SUBWALLET_APPSTORE_APP_ID
-                ? "Sub-wallet"
-                : "Isolated App"}
+              <IsolatedIcon className="size-4" />
+              {isolatedLabel}
             </div>
           </div>
           <div className="flex flex-row justify-between text-xs items-end mt-2">
@@ -52,7 +88,7 @@ export function AppCardConnectionInfo({
           <div className="flex flex-row justify-between">
             <div className="mb-2">
               <p className="text-xs text-secondary-foreground font-medium">
-                {budgetRemainingText}
+                {resolvedBudgetRemainingText}
               </p>
               <p className="text-xl font-medium">
                 <FormattedFlokicoinAmount

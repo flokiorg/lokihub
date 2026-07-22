@@ -1,7 +1,6 @@
-import React from "react";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { Label } from "src/components/ui/label";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 
 function BudgetAmountSelect({
@@ -13,14 +12,9 @@ function BudgetAmountSelect({
   onChange: (value: number) => void;
   minAmount?: number;
 }) {
-  const { scaleInputAmount, parseInputAmount, displayFormat } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(value || undefined);
 
   const flcPresets = [21, 500, 2100];
   const lokiPresets = [21000, 500000, 21000000];

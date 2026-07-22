@@ -10,8 +10,23 @@ interface CurrencyInputProps extends Omit<React.ComponentProps<"input">, "value"
   onInputUnitChange: (unit: "FLC" | "loki") => void;
 }
 
-export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitChange, ...props }: CurrencyInputProps) {
+export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitChange, onFocus, onBlur, ...props }: CurrencyInputProps) {
   const { displayFormat } = useUnit();
+  // Callers typically derive `amount` from a parsed number (e.g.
+  // scaleInputAmount(loki, unit).toString()), which round-trips through
+  // parseFloat on every keystroke. Deleting down to something like "0.0000"
+  // parses to the number 0, and callers' `amount ? ... : ""` ternaries then
+  // render "" — wiping the field mid-edit. Keeping our own text buffer while
+  // focused avoids letting that recomputed prop clobber in-progress typing;
+  // we only resync from `amount` when the field isn't actively being edited.
+  const [text, setText] = React.useState(amount);
+  const isFocusedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!isFocusedRef.current) {
+      setText(amount);
+    }
+  }, [amount]);
 
   const Adornment = () => {
     if (displayFormat !== "auto") {
@@ -61,12 +76,13 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
       rawValue = parts[0] + "." + parts.slice(1).join("");
     }
 
+    setText(rawValue);
     onAmountChange(rawValue);
   };
 
-  let displayValue = amount;
-  if (amount) {
-    const parts = amount.split(".");
+  let displayValue = text;
+  if (text) {
+    const parts = text.split(".");
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     displayValue = parts.join(".");
   }
@@ -78,6 +94,15 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
       inputMode="decimal"
       value={displayValue}
       onChange={handleAmountChange}
+      onFocus={(e) => {
+        isFocusedRef.current = true;
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        isFocusedRef.current = false;
+        setText(amount);
+        onBlur?.(e);
+      }}
       endAdornment={<Adornment />}
       {...props}
     />

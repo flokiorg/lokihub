@@ -7,6 +7,8 @@ import {
   SquarePenIcon,
 } from "lucide-react";
 import React from "react";
+import { Link } from "react-router-dom";
+import { JITHubConfigCard } from "src/components/JITHubConfigCard";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Label } from "src/components/ui/label";
@@ -47,19 +49,45 @@ const scopeGroupDescriptions: Record<ScopeGroup, string> = {
   custom: "Define specific permissions for this app's wallet access",
 };
 
+// Defaults applied the moment JIT Hub is switched on — same starting values
+// as the dedicated Sub-wallets "New JIT Hub" flow (NewJITHub.tsx). Exported
+// so callers (NewApp.tsx) can seed the same values into AppPermissions up
+// front, since these fields only get a value pushed up via
+// onJitHubConfigChanged once the user actually edits one of the inputs.
+export const DEFAULT_JIT_PER_WALLET_MAX_LOKI = 1000;
+export const DEFAULT_JIT_MAX_EXP_SECS = 86400;
+
 interface ScopesProps {
   capabilities: WalletCapabilities;
   scopes: Scope[];
   isolated: boolean;
   isNewConnection: boolean;
   onScopesChanged: (scopes: Scope[], isolated: boolean) => void;
+  // JIT Hub escalation — only ever offered on a brand-new connection (kind is
+  // immutable after creation, see AppDetails' own Hub Settings card for
+  // editing an existing hub) and only once the connection is isolated, since
+  // kind "jit_hub" always carries its own isolated balance server-side.
+  jitHub?: boolean;
+  jitPerWalletMaxLoki?: number;
+  jitMaxExpSecs?: number;
+  onJitHubChanged?: (jitHub: boolean) => void;
+  onJitHubConfigChanged?: (config: {
+    perWalletMaxLoki?: number;
+    maxExpSecs?: number;
+  }) => void;
 }
 
 const Scopes: React.FC<ScopesProps> = ({
   capabilities,
   scopes,
   isolated,
+  isNewConnection,
   onScopesChanged,
+  jitHub = false,
+  jitPerWalletMaxLoki = DEFAULT_JIT_PER_WALLET_MAX_LOKI,
+  jitMaxExpSecs = DEFAULT_JIT_MAX_EXP_SECS,
+  onJitHubChanged,
+  onJitHubConfigChanged,
 }) => {
   const [isSheetOpen, setSheetOpen] = React.useState(false);
   const fullAccessScopes: Scope[] = React.useMemo(() => {
@@ -183,6 +211,28 @@ const Scopes: React.FC<ScopesProps> = ({
                 </button>
               );
             })}
+            {!isNewConnection && (
+              <p className="text-xs text-muted-foreground px-1">
+                An existing connection can't be upgraded to JIT or Circle
+                wallets.{" "}
+                <Link
+                  to="/sub-wallets/new/jit"
+                  className="underline hover:text-foreground"
+                  onClick={() => setSheetOpen(false)}
+                >
+                  Create a JIT Hub
+                </Link>{" "}
+                or{" "}
+                <Link
+                  to="/sub-wallets/new/circle"
+                  className="underline hover:text-foreground"
+                  onClick={() => setSheetOpen(false)}
+                >
+                  Create a Circle Hub
+                </Link>{" "}
+                instead.
+              </p>
+            )}
           </div>
           <SheetFooter>
             <Button type="submit">Save changes</Button>
@@ -252,6 +302,42 @@ const Scopes: React.FC<ScopesProps> = ({
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {isNewConnection && isolated && onJitHubChanged && (
+        <div className="mb-2 border rounded-md p-4">
+          <p className="font-medium text-sm mb-2">JIT Hub (optional)</p>
+          <div className="flex items-center">
+            <Checkbox
+              id="jitHub"
+              className="me-2"
+              onCheckedChange={() => onJitHubChanged(!jitHub)}
+              checked={jitHub}
+            />
+            <Label htmlFor="jitHub" className="cursor-pointer">
+              Also allow this app to create JIT wallets, paying third parties
+              directly from its balance
+            </Label>
+          </div>
+          {jitHub && onJitHubConfigChanged && (
+            <div className="mt-3">
+              <JITHubConfigCard
+                budgetLabel="Max Wallet Budget"
+                budgetHelper="Maximum budget that can be allocated to each JIT wallet issued from this connection"
+                expiryLabel="Max Wallet Expiry"
+                expiryHelper="Maximum lifetime for issued JIT wallets"
+                perWalletMaxLoki={jitPerWalletMaxLoki}
+                onPerWalletMaxLokiChange={(perWalletMaxLoki) =>
+                  onJitHubConfigChanged({ perWalletMaxLoki })
+                }
+                maxExpSecs={jitMaxExpSecs}
+                onMaxExpSecsChange={(maxExpSecs) =>
+                  onJitHubConfigChanged({ maxExpSecs })
+                }
+              />
+            </div>
+          )}
         </div>
       )}
     </>

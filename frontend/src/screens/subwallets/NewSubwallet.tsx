@@ -1,119 +1,52 @@
-import { HelpCircleIcon } from "lucide-react";
-import React from "react";
+import { HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
-import Loading from "src/components/Loading";
 import { SubWalletInfoDialog } from "src/components/SubWalletInfoDialog";
 import { Button } from "src/components/ui/button";
-import { LoadingButton } from "src/components/ui/custom/loading-button";
-import { Input } from "src/components/ui/input";
-import { Label } from "src/components/ui/label";
-import { SUBWALLET_APPSTORE_APP_ID } from "src/constants";
-import { useApps } from "src/hooks/useApps";
-import { useInfo } from "src/hooks/useInfo";
-import { createApp } from "src/requests/createApp";
-import { CreateAppRequest } from "src/types";
-import { handleRequestError } from "src/utils/handleRequestError";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
+import { getWalletTypes } from "src/screens/subwallets/walletTypes";
 
 export function NewSubwallet() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
-  const { t: tCommon } = useTranslation("common");
-  const [name, setName] = React.useState("");
-  const { data: appsData } = useApps(
-    undefined,
-    undefined,
-    {
-      appStoreAppId: SUBWALLET_APPSTORE_APP_ID,
-    },
-    "created_at"
-  );
-  const { data: info } = useInfo();
-
-  const [isLoading, setLoading] = React.useState(false);
-
-  if (!info || !appsData) {
-    return <Loading />;
-  }
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
-
-    try {
-      const createAppRequest: CreateAppRequest = {
-        name,
-        scopes: [
-          "get_balance",
-          "get_info",
-          "list_transactions",
-          "lookup_invoice",
-          "make_invoice",
-          "notifications",
-          "pay_invoice",
-        ],
-        isolated: true,
-        metadata: {
-          app_store_app_id: SUBWALLET_APPSTORE_APP_ID,
-        },
-      };
-
-      const createAppResponse = await createApp(createAppRequest);
-
-      navigate("/sub-wallets/created", {
-        state: createAppResponse,
-      });
-
-      toast(t("subwallets.create.toast", { name }));
-    } catch (error) {
-      handleRequestError("Failed to create app", error);
-    }
-    setLoading(false);
-  };
+  const walletTypes = getWalletTypes(t);
 
   return (
     <div className="grid gap-5">
       <AppHeader
-        title={t("subwallets.create.title")}
+        title={t("subwallets.typeChooser.title")}
+        description={t("subwallets.typeChooser.description")}
         contentRight={
-          <>
-            <SubWalletInfoDialog
-              trigger={
-                <Button variant="outline">
-                  <HelpCircleIcon className="w-4 h-4 me-2" />
-                  {tCommon("nav.help")}
-                </Button>
-              }
-            />
-          </>
+          <SubWalletInfoDialog
+            trigger={
+              <Button variant="outline" size="icon">
+                <HelpCircle className="size-4" />
+              </Button>
+            }
+          />
         }
       />
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col items-start gap-3 max-w-lg"
-      >
-        <div className="w-full grid gap-1.5 mb-4">
-          <Label htmlFor="name">{t("subwallets.create.nameLabel")}</Label>
-          <Input
-            autoFocus
-            type="text"
-            name="name"
-            value={name}
-            id="name"
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="off"
-          />
-          <p className="text-muted-foreground text-sm">
-            {t("subwallets.create.nameHelper")}
-          </p>
-        </div>
-        <LoadingButton loading={isLoading} type="submit">
-          {t("subwallets.create.button")}
-        </LoadingButton>
-      </form>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {walletTypes.map(({ to, icon: Icon, title, description }) => (
+          <Card
+            key={to}
+            className="flex flex-col cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground hover:border-primary/50"
+            onClick={() => navigate(to)}
+          >
+            <CardHeader>
+              <Icon className="size-6 text-muted-foreground" />
+              <CardTitle className="text-lg mt-2">{title}</CardTitle>
+              <CardDescription>{description}</CardDescription>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

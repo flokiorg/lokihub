@@ -8,7 +8,7 @@
   },
   "welcome": {
     "title": "Lokihub へようこそ",
-    "subtitle": "ライトニングノード管理インターフェース",
+    "subtitle": "Lightning ノード管理インターフェース",
     "getStarted": "はじめる"
   },
   "password": {
@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "Lokihubへようこそ",
-      "subtitle": "次世代のエンゲージメントウェブを支えるフロキコインのライトニングウォレット。",
+      "subtitle": "次世代のエンゲージメントウェブを支えるフロキコインの Lightning ウォレット。",
       "next": "次へ"
     },
     "slide2": {
@@ -103,6 +103,14 @@
     "warning": "警告",
     "warningText": "接続するサービスの責任はあなたにあります。これらのURLのプロバイダーを信頼していることを確認してください。",
     "configErrors": "設定エラー",
+    "unsavedChanges": {
+      "title": "未保存の変更",
+      "description": "サービス設定に未保存の変更があります。このままページを離れると、変更内容は失われます。",
+      "stay": "編集を続ける",
+      "discard": "保存せずに離れる",
+      "save": "保存して離れる",
+      "saving": "保存中..."
+    },
     "explorer": {
       "title": "Flokicoinエクスプローラー",
       "description": "手数料の見積もりとトランザクション詳細に使用します。",
@@ -113,7 +121,7 @@
       "description": "Wallet Connect (NWC) 通信のために複数のNostrリレーに接続します。複数のリレーにより可用性が向上します。"
     },
     "lsp": {
-      "title": "ライトニングサービスプロバイダー",
+      "title": "Lightning サービスプロバイダー",
       "description": "JITチャネルとインバウンド流動性のためのLSPを管理します。",
       "communityBadge": "コミュニティが提案",
       "active": "有効",
@@ -133,7 +141,7 @@
     },
     "swap": {
       "title": "スワップサービス",
-      "description": "ライトニングとオンチェーンのスワップ（およびその逆）を有効にします。",
+      "description": "Lightning とオンチェーンのスワップ（およびその逆）を有効にします。",
       "custom": "カスタムスワップサービス"
     },
     "messageboard": {

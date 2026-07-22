@@ -16,7 +16,7 @@ import { CurrencyInput } from "src/components/CurrencyInput";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { useBalances } from "src/hooks/useBalances";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { PayInvoiceResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -24,20 +24,14 @@ export default function ZeroAmount() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
 
   const invoice = state?.args?.paymentRequest as Invoice;
   const [amountDisplay, setAmountDisplay] = React.useState("");
   const [isLoading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.lightning.totalSpendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {
