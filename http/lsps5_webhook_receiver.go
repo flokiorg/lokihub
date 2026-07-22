@@ -16,7 +16,6 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/lsps/lsps0"
 	"github.com/labstack/echo/v4"
 	"github.com/tv42/zbase32"
 )
@@ -414,24 +413,6 @@ type lsps5EventSubscriber struct {
 
 func (s *lsps5EventSubscriber) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
 	s.handler(event)
-}
-
-// Helper functions
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// JSON-RPC notification helper for parsing
-func parseJsonRpcNotification(data []byte) (*lsps0.JsonRpcRequest, error) {
-	var notification lsps0.JsonRpcRequest
-	if err := json.Unmarshal(data, &notification); err != nil {
-		return nil, err
-	}
-	return &notification, nil
 }
 
 // verifyLSPS5Signature verifies an LSPS5 webhook signature
