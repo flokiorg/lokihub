@@ -13,12 +13,11 @@ type Props = {
 export default function AppAvatar({ app, className }: Props) {
   const { apps: appStoreApps } = useAppStore();
 
-  const appStoreApp = appStoreApps.find(
-    (suggestedApp) =>
-      (app?.metadata?.app_store_app_id &&
-        suggestedApp.id === app.metadata?.app_store_app_id) ||
-      app.name.toLowerCase().includes(suggestedApp.title.toLowerCase())
-  );
+  const appStoreApp = app?.metadata?.app_store_app_id
+    ? appStoreApps.find(
+        (suggestedApp) => suggestedApp.id === app.metadata?.app_store_app_id
+      )
+    : undefined;
 
   const logoSrc = useAppLogo(appStoreApp?.id);
 

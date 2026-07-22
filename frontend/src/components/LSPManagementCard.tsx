@@ -113,7 +113,10 @@ export function LSPManagementCard({
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="text-base">{t("services.lsp.title")}</CardTitle>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Droplet className="w-5 h-5 text-primary" />
+          {t("services.lsp.title")}
+        </CardTitle>
         <CardDescription>
           {t("services.lsp.description")}
         </CardDescription>
