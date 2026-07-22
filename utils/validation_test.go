@@ -46,7 +46,7 @@ func TestValidateHTTPURL(t *testing.T) {
 
 func TestValidateMessageBoardURL(t *testing.T) {
 	validPubkey := "b42337d4576dfd22384a654eac18840c558c4456543b573663a702952865955a"
-	validSecret := "f9d86337d4576dfd22384a654eac18840c558c4456543b573663a702952865955a"
+	validSecret := "f9d86337d4576dfd22384a654eac18840c558c4456543b573663a702952865955a" //nolint:gosec // test fixture, not a real credential
 	tests := []struct {
 		name    string
 		urlStr  string
