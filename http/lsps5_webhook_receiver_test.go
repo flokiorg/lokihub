@@ -80,16 +80,6 @@ func registerTestLSP(t *testing.T, httpSvc *HttpService, pubkey string) {
 	}).Error)
 }
 
-// waitForEvent waits for an event with a timeout
-func waitForEvent(eventChan chan *events.Event, timeout time.Duration) *events.Event {
-	select {
-	case ev := <-eventChan:
-		return ev
-	case <-time.After(timeout):
-		return nil
-	}
-}
-
 // Helper to generate a valid LSPS5 signature
 func generateLSPS5Signature(t *testing.T, privKey *btcec.PrivateKey, timestamp string, body []byte) string {
 	message := fmt.Sprintf("LSPS5: DO NOT SIGN THIS MESSAGE MANUALLY: LSP: At %s I notify %s", timestamp, string(body))

@@ -15,15 +15,6 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-const nip47CancelHoldInvoiceJson = `
-{
-"method": "cancel_hold_invoice",
-"params": {
-"payment_hash": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-}
-}
-`
-
 const testCancelPaymentHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 
 type cancelHoldInvoiceTestSetup struct {

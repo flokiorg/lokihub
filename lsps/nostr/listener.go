@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/flokiorg/lokihub/config"
@@ -34,7 +33,6 @@ type Listener struct {
 	pool              nostrPool
 	eventPublisher    events.EventPublisher
 	relays            []string
-	mu                sync.Mutex
 	stop              chan struct{}
 	getTrustedPubkeys func() []string
 	lsps5             *nostrlsps5.LSPS5

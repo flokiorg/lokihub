@@ -279,6 +279,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.POST("/swaps/in", httpSvc.initiateSwapInHandler)
 	fullAccessApiGroup.POST("/swaps/refund", httpSvc.refundSwapHandler)
 	fullAccessApiGroup.POST("/autoswap", httpSvc.enableAutoSwapOutHandler)
+	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
 	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
 
