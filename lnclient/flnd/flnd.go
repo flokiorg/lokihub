@@ -35,6 +35,27 @@ import (
 	// "gorm.io/gorm"
 )
 
+// clampUint64ToUint32 and clampInt64ToUint32 clamp externally/remotely
+// sourced fee-policy values (e.g. an LSP's quoted fee, or another node's
+// gossip-advertised routing policy) into uint32 route-hint fields without
+// silently wrapping an out-of-range value into a misleadingly small one.
+func clampUint64ToUint32(v uint64) uint32 {
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
+func clampInt64ToUint32(v int64) uint32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
 type FLNDService struct {
 	client         *wrapper.FLNDWrapper
 	nodeInfo       *lnclient.NodeInfo
@@ -120,8 +141,8 @@ func (svc *FLNDService) trackForwardedPayments(ctx context.Context) {
 		case <-time.After(1 * time.Minute):
 			nextTime := time.Now()
 			forwardedPayments, err := svc.client.ForwardingHistory(ctx, &lnrpc.ForwardingHistoryRequest{
-				StartTime: uint64(lastTime.Unix()),
-				EndTime:   uint64(nextTime.Unix()),
+				StartTime: uint64(lastTime.Unix()), //nolint:gosec // time.Now().Unix() is always positive post-1970
+				EndTime:   uint64(nextTime.Unix()), //nolint:gosec // time.Now().Unix() is always positive post-1970
 			})
 			if err != nil {
 				if ctx.Err() != nil {
@@ -350,7 +371,7 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 
 	listInvoicesResponse, err := svc.client.ListInvoices(ctx, &lnrpc.ListInvoiceRequest{
 		PendingOnly:       true,
-		CreationDateStart: uint64(oneWeekAgo),
+		CreationDateStart: uint64(oneWeekAgo), //nolint:gosec // time.Now()-derived Unix seconds is always positive
 	})
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to list invoices for open hold invoices subscription")
@@ -426,8 +447,8 @@ func (svc *FLNDService) subscribeSingleInvoice(paymentHashBytes []byte) {
 			transaction := flndInvoiceToTransaction(invoice)
 			var minExpiry uint32
 			for _, htlc := range invoice.Htlcs {
-				if htlc.ExpiryHeight < int32(minExpiry) || minExpiry == 0 {
-					minExpiry = uint32(htlc.ExpiryHeight)
+				if htlc.ExpiryHeight < int32(minExpiry) || minExpiry == 0 { //nolint:gosec // block height, always tiny relative to int32 range
+					minExpiry = uint32(htlc.ExpiryHeight) //nolint:gosec // LND-reported HTLC expiry height is always non-negative
 				}
 			}
 			transaction.SettleDeadline = &minExpiry
@@ -470,11 +491,11 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclien
 	sendRequest := &routerrpc.SendPaymentRequest{
 		PaymentRequest: payReq,
 		MaxParts:       MAX_PARTIAL_PAYMENTS,
-		FeeLimitMsat:   int64(transactions.CalculateFeeReserveMloki(paymentAmountMloki)),
+		FeeLimitMsat:   int64(transactions.CalculateFeeReserveMloki(paymentAmountMloki)), //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	if amount != nil {
-		sendRequest.AmtMsat = int64(*amount)
+		sendRequest.AmtMsat = int64(*amount) //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendRequest)
@@ -550,7 +571,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 	destCustomRecords[KEYSEND_CUSTOM_RECORD] = preImageBytes
 	sendPaymentRequest := &routerrpc.SendPaymentRequest{
 		Dest:              destBytes,
-		AmtMsat:           int64(amount),
+		AmtMsat:           int64(amount), //nolint:gosec // msat amounts are always far below int64 range
 		PaymentHash:       paymentHashBytes,
 		DestFeatures:      []lnrpc.FeatureBit{lnrpc.FeatureBit_TLV_ONION_REQ},
 		DestCustomRecords: destCustomRecords,
@@ -669,7 +690,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 				{
 					NodeId:                    *throughNodePubkey,
 					ChanId:                    scid,
-					FeeBaseMsat:               uint32(*lspFeeBaseMloki),
+					FeeBaseMsat:               clampUint64ToUint32(*lspFeeBaseMloki),
 					FeeProportionalMillionths: *lspFeeProportionalMillionths,
 					CltvExpiryDelta:           uint32(*lspCltvExpiryDelta),
 				},
@@ -781,8 +802,8 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 					{
 						NodeId:                    candidate.channel.RemotePubkey,
 						ChanId:                    candidate.channelId,
-						FeeBaseMsat:               uint32(candidate.remotePolicy.FeeBaseMsat),
-						FeeProportionalMillionths: uint32(candidate.remotePolicy.FeeRateMilliMsat),
+						FeeBaseMsat:               clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat),
+						FeeProportionalMillionths: clampInt64ToUint32(candidate.remotePolicy.FeeRateMilliMsat),
 						CltvExpiryDelta:           candidate.remotePolicy.TimeLockDelta,
 					},
 				},
@@ -794,7 +815,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 			logger.Logger.Debug().
 				Uint64("channel_id", candidate.channel.ChanId).
 				Int64("remote_balance_sat", candidate.channel.RemoteBalance).
-				Uint32("fee_base_msat", uint32(candidate.remotePolicy.FeeBaseMsat)).
+				Uint32("fee_base_msat", clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat)).
 				Str("remote_pubkey", candidate.channel.RemotePubkey).
 				Msg("Added channel to route hints")
 		}
@@ -1068,8 +1089,14 @@ func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, e
 	// hardcoding required confirmations as there seems to be no way to get the number of required confirmations in FLND
 	var confirmationsRequired uint32 = 6
 	// get recent transactions to check how many confirmations pending channel(s) have
+	// Guard against underflow (wrapping to a huge uint32, then a garbage
+	// negative StartHeight) on a fresh chain where BlockHeight < 6.
+	var startHeight int32
+	if nodeInfo.BlockHeight > confirmationsRequired {
+		startHeight = int32(nodeInfo.BlockHeight - confirmationsRequired) //nolint:gosec // guarded above; real block heights are far below int32 range
+	}
 	recentOnchainTransactions, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{
-		StartHeight: int32(nodeInfo.BlockHeight - confirmationsRequired),
+		StartHeight: startHeight,
 	})
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch onchain transactions")
@@ -1106,8 +1133,8 @@ func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, e
 					policy = channelEdge.Node2Policy
 				}
 				if policy != nil {
-					forwardingFeeBaseMloki = uint32(policy.FeeBaseMsat)
-					forwardingFeeProportionalMillionths = uint32(policy.FeeRateMilliMsat)
+					forwardingFeeBaseMloki = clampInt64ToUint32(policy.FeeBaseMsat)
+					forwardingFeeProportionalMillionths = clampInt64ToUint32(policy.FeeRateMilliMsat)
 				}
 			}
 		}
@@ -1143,7 +1170,7 @@ func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, e
 		var confirmations *uint32
 		for _, t := range recentOnchainTransactions.Transactions {
 			if t.TxHash == fundingTxId {
-				confirmations32 := uint32(t.NumConfirmations)
+				confirmations32 := uint32(t.NumConfirmations) //nolint:gosec // transaction confirmation counts are always small and non-negative
 				confirmations = &confirmations32
 			}
 		}
@@ -1908,7 +1935,7 @@ func (svc *FLNDService) refreshTransactionCache(ctx context.Context) error {
 				CreatedAt:        uint64(tx.TimeStamp),
 				State:            state,
 				Type:             txType,
-				NumConfirmations: uint32(tx.NumConfirmations),
+				NumConfirmations: uint32(tx.NumConfirmations), //nolint:gosec // transaction confirmation counts are always small and non-negative
 				TxId:             tx.TxHash,
 			})
 		}
@@ -1925,7 +1952,7 @@ func (svc *FLNDService) refreshTransactionCache(ctx context.Context) error {
 		// It usually corresponds to the number of transactions to skip if sorted?
 		// FLND documentation says: "The index of the transaction that will be used as either the start or end of a query to determine which transactions should be returned in the response."
 		// Simpler approach: offset by count.
-		offset += uint32(len(resp.Transactions))
+		offset += uint32(len(resp.Transactions)) //nolint:gosec // page size is bounded by the hardcoded 1000-row batch limit above
 	}
 
 	// Sort by CreatedAt descending (newest first)
@@ -1959,19 +1986,24 @@ func (svc *FLNDService) ListOnchainTransactions(ctx context.Context, from, until
 	svc.txCacheMtx.RLock()
 	defer svc.txCacheMtx.RUnlock()
 
-	// Slice from cache
-	start := int(offset)
-	end := start + int(limit)
+	// Slice from cache. Keep arithmetic in uint64 and bound everything by
+	// cacheLen before ever narrowing to int, so an oversized caller-supplied
+	// offset/limit can't wrap to a negative int (which would otherwise blow
+	// up the make() call below into an attempted multi-exabyte allocation).
+	cacheLen := uint64(len(svc.txCache))
 
-	if start > len(svc.txCache) {
-		start = len(svc.txCache)
+	start := cacheLen
+	if offset < cacheLen {
+		start = offset
 	}
 
 	// If limit is 0, return all from start
-	if limit == 0 {
-		end = len(svc.txCache)
-	} else if end > len(svc.txCache) {
-		end = len(svc.txCache)
+	end := cacheLen
+	if limit != 0 {
+		remaining := cacheLen - start
+		if limit < remaining {
+			end = start + limit
+		}
 	}
 
 	// Return a copy to be safe? Or just slice (since it's read-only usually, copy is safer but slower)

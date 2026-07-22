@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"regexp"
@@ -10,6 +11,18 @@ import (
 	"strings"
 	"unicode"
 )
+
+// ClampUint64ToInt converts v to an int, clamping to math.MaxInt instead of
+// silently wrapping to a negative number when v exceeds what int can hold.
+// Intended for pagination params (offset/limit) that reach APIs typed as
+// int (e.g. gorm's Offset/Limit), so an oversized caller-supplied value
+// can't reinterpret as negative and be treated as "no limit" downstream.
+func ClampUint64ToInt(v uint64) int {
+	if v > uint64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(v)
+}
 
 func ReadFileTail(filePath string, maxLen int) (data []byte, err error) {
 	f, err := os.Open(filePath)
