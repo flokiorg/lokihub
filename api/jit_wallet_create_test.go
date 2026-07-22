@@ -165,6 +165,37 @@ func TestCreateJITWallet_InsufficientBalance(t *testing.T) {
 	assert.Empty(t, childApps)
 }
 
+// TestCreateJITWallet_NegativeAmountRejected guards against a
+// uint64(int64) wraparound: AmountMloki on the request is int64 (unlike
+// the NWC create_jit_wallet controller's own uint64-typed field, which
+// gets this rejection for free from JSON unmarshaling), so a negative
+// value must be explicitly rejected before it silently becomes a huge
+// uint64 in jitwallet.RecipientInput.
+func TestCreateJITWallet_NegativeAmountRejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
+		Recipients: []JITWalletRecipient{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: -1},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be negative")
+
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps)
+	assert.Empty(t, childApps)
+}
+
 func TestCreateJITWallet_NotJITHub(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

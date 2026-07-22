@@ -310,7 +310,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 				// jit_wallet apps carry jit_claim_funds instead).
 				for _, perm := range existingPermissions {
 					if slices.Contains(constants.PayCapableScopes, perm.Scope) {
-						maxAmount = uint64(perm.MaxAmountLoki)
+						maxAmount = uint64(perm.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 						budgetRenewal = perm.BudgetRenewal
 						expiresAt = perm.ExpiresAt
 						break
@@ -481,7 +481,7 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 
 	// renewsIn := ""
 	budgetUsage := uint64(0)
-	maxAmount := uint64(budgetPermission.MaxAmountLoki)
+	maxAmount := uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 	if dbApp.Kind == db.AppKindCircleHub {
 		// A circle_hub never spends directly (only its children do), so the
 		// generic outgoing-transaction usage sum below is always ~0 and
@@ -492,7 +492,7 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
 		} else {
-			budgetUsage = uint64(commitmentMloki) / 1000
+			budgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
 		}
 	} else {
 		budgetUsage = queries.GetBudgetUsageSat(api.db, &budgetPermission)
@@ -835,14 +835,14 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		}
 		if budgetPermission != nil {
 			apiApp.BudgetRenewal = budgetPermission.BudgetRenewal
-			apiApp.MaxAmountLoki = uint64(budgetPermission.MaxAmountLoki)
+			apiApp.MaxAmountLoki = uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 			if dbApp.Kind == db.AppKindCircleHub {
 				// See GetApp: "used" for a circle_hub means live commitment
 				// to children, not its own (always ~0) outgoing spend.
 				if commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID); err != nil {
 					logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
 				} else {
-					apiApp.BudgetUsage = uint64(commitmentMloki) / 1000
+					apiApp.BudgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
 				}
 			} else {
 				apiApp.BudgetUsage = queries.GetBudgetUsageSat(api.db, budgetPermission)
@@ -864,7 +864,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 	}
 	return &ListAppsResponse{
 		Apps:       apiApps,
-		TotalCount: uint64(totalCount),
+		TotalCount: uint64(totalCount), //nolint:gosec // DB row count, always non-negative
 	}, nil
 }
 
@@ -2899,7 +2899,7 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
 	err := api.db.Transaction(func(tx *gorm.DB) error {
 		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire circle delete lock: %w", err)
 			}
 		}
@@ -3251,6 +3251,9 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 
 	recipients := make([]jitwallet.RecipientInput, len(req.Recipients))
 	for i, r := range req.Recipients {
+		if r.AmountMloki < 0 {
+			return nil, fmt.Errorf("%w: recipient amount_mloki must not be negative", constants.ErrInvalidParams)
+		}
 		recipients[i] = jitwallet.RecipientInput{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
@@ -3281,7 +3284,7 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 		recipientResults[i] = JITWalletRecipient{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
-			AmountMloki:   int64(r.AmountMloki),
+			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // msat amounts are always far below int64 range
 		}
 	}
 

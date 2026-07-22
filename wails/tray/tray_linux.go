@@ -171,13 +171,13 @@ func pngToPixmaps(data []byte) []pixmap {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			r, g, bv, a := img.At(x, y).RGBA()
 			i := ((y-b.Min.Y)*w + (x - b.Min.X)) * 4
-			argb[i] = byte(a >> 8)
-			argb[i+1] = byte(r >> 8)
-			argb[i+2] = byte(g >> 8)
-			argb[i+3] = byte(bv >> 8)
+			argb[i] = byte(a >> 8)    //nolint:gosec // deliberate byte extraction from a 16-bit RGBA channel, not a narrowing overflow
+			argb[i+1] = byte(r >> 8)  //nolint:gosec // deliberate byte extraction from a 16-bit RGBA channel, not a narrowing overflow
+			argb[i+2] = byte(g >> 8)  //nolint:gosec // deliberate byte extraction from a 16-bit RGBA channel, not a narrowing overflow
+			argb[i+3] = byte(bv >> 8) //nolint:gosec // deliberate byte extraction from a 16-bit RGBA channel, not a narrowing overflow
 		}
 	}
-	return []pixmap{{int32(w), int32(h), argb}}
+	return []pixmap{{int32(w), int32(h), argb}} //nolint:gosec // tray icon dimensions are always tiny
 }
 
 func HideFromDock() {}

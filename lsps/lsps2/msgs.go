@@ -47,19 +47,22 @@ func (p *RawOpeningFeeParams) IntoOpeningFeeParams(promiseSecret []byte, counter
 	h := hmac.New(sha256.New, promiseSecret)
 	h.Write([]byte(counterpartyNodeID))
 
-	// Write all fields to HMAC in Big Endian order (to match Rust to_be_bytes)
+	// Write all fields to HMAC in Big Endian order (to match Rust to_be_bytes).
+	// Each byte(x >> 8*i) below is deliberate manual big-endian serialization
+	// (extracting one byte at a time), not an accidental narrowing overflow -
+	// gosec's G115 can't distinguish the two, hence the nolint on each.
 
 	// MinFeeMloki (u64)
 	minFeeBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
-		minFeeBytes[7-i] = byte(p.MinFeeMloki >> (8 * i))
+		minFeeBytes[7-i] = byte(p.MinFeeMloki >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(minFeeBytes)
 
 	// Proportional (u32)
 	propBytes := make([]byte, 4)
 	for i := 0; i < 4; i++ {
-		propBytes[3-i] = byte(p.Proportional >> (8 * i))
+		propBytes[3-i] = byte(p.Proportional >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(propBytes)
 
@@ -69,28 +72,28 @@ func (p *RawOpeningFeeParams) IntoOpeningFeeParams(promiseSecret []byte, counter
 	// MinLifetime (u32)
 	lifetimeBytes := make([]byte, 4)
 	for i := 0; i < 4; i++ {
-		lifetimeBytes[3-i] = byte(p.MinLifetime >> (8 * i))
+		lifetimeBytes[3-i] = byte(p.MinLifetime >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(lifetimeBytes)
 
 	// MaxClientToSelfDelay (u32)
 	delayBytes := make([]byte, 4)
 	for i := 0; i < 4; i++ {
-		delayBytes[3-i] = byte(p.MaxClientToSelfDelay >> (8 * i))
+		delayBytes[3-i] = byte(p.MaxClientToSelfDelay >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(delayBytes)
 
 	// MinPaymentSizeMloki (u64)
 	minPaymentBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
-		minPaymentBytes[7-i] = byte(p.MinPaymentSizeMloki >> (8 * i))
+		minPaymentBytes[7-i] = byte(p.MinPaymentSizeMloki >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(minPaymentBytes)
 
 	// MaxPaymentSizeMloki (u64)
 	maxPaymentBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
-		maxPaymentBytes[7-i] = byte(p.MaxPaymentSizeMloki >> (8 * i))
+		maxPaymentBytes[7-i] = byte(p.MaxPaymentSizeMloki >> (8 * i)) //nolint:gosec // deliberate byte extraction, not a narrowing overflow
 	}
 	h.Write(maxPaymentBytes)
 

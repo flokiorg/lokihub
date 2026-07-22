@@ -15,6 +15,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/utils"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -342,7 +343,7 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 			App:           *app,
 			Scope:         scope,
 			ExpiresAt:     expiresAt,
-			MaxAmountLoki: int(maxAmountLoki),
+			MaxAmountLoki: utils.ClampUint64ToInt(maxAmountLoki),
 			BudgetRenewal: budgetRenewal,
 		}
 		if err := tx.Create(&appPermission).Error; err != nil {
@@ -384,8 +385,8 @@ func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentK
 		return fmt.Errorf("%w: unrecognized parent_kind %q", constants.ErrInvalidParams, parentKind)
 	}
 
-	if tx.Dialector.Name() == "postgres" {
-		if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(parentAppID)).Error; err != nil {
+	if tx.Name() == "postgres" {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(parentAppID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 			return fmt.Errorf("acquire parent hub lock: %w", err)
 		}
 	}
@@ -445,8 +446,8 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 	}
 
 	return svc.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Dialector.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
+		if tx.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire hub delete lock: %w", err)
 			}
 		}

@@ -46,7 +46,7 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 	var expiresAt *time.Time
 	if params.ExpiresAt != nil {
 		expiresAtUnsigned := *params.ExpiresAt
-		expiresAtValue := time.Unix(int64(expiresAtUnsigned), 0)
+		expiresAtValue := time.Unix(int64(expiresAtUnsigned), 0) //nolint:gosec // an oversized caller value only fails closed (treated as already-expired)
 		expiresAt = &expiresAtValue
 	}
 

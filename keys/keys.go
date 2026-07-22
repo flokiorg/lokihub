@@ -143,7 +143,7 @@ func (keys *keys) GetNostrSecretKey() string {
 }
 
 func (keys *keys) GetAppWalletKey(appID uint) (string, error) {
-	path := []uint32{bip32.FirstHardenedChild + 1, bip32.FirstHardenedChild + uint32(appID)}
+	path := []uint32{bip32.FirstHardenedChild + 1, bip32.FirstHardenedChild + uint32(appID)} //nolint:gosec // appID is a small auto-increment DB primary key
 	key, err := keys.DeriveKey(path)
 	if err != nil {
 		return "", err
@@ -157,7 +157,7 @@ func (keys *keys) GetAppWalletKey(appID uint) (string, error) {
 // This eliminates the need to store the pairing secret in the database — derive it at
 // creation time to register the app pubkey, then re-derive it at claim time to build the URI.
 func (keys *keys) GetJITPairingKey(appID uint) (string, error) {
-	path := []uint32{bip32.FirstHardenedChild + 2, bip32.FirstHardenedChild + uint32(appID)}
+	path := []uint32{bip32.FirstHardenedChild + 2, bip32.FirstHardenedChild + uint32(appID)} //nolint:gosec // appID is a small auto-increment DB primary key
 	key, err := keys.DeriveKey(path)
 	if err != nil {
 		return "", err
@@ -188,7 +188,7 @@ func (keys *keys) DeriveKey(path []uint32) (*bip32.Key, error) {
 }
 
 func (keys *keys) GetSwapKey(swapID uint) (*btcec.PrivateKey, error) {
-	path := []uint32{44, 0, 0, 0, uint32(swapID)}
+	path := []uint32{44, 0, 0, 0, uint32(swapID)} //nolint:gosec // swapID is a small auto-increment DB primary key
 
 	key := keys.swapKey
 	for _, index := range path {
