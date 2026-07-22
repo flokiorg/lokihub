@@ -17,6 +17,7 @@ func TestCheckCache_NoEncryptionKey(t *testing.T) {
 	logger.Init(strconv.Itoa(int(4)))
 
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
 	err = migrations.Migrate(db)
 	require.NoError(t, err)
 
@@ -48,6 +49,7 @@ func TestCheckUnlockPasswordCache(t *testing.T) {
 	unlockPassword := "123"
 
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
 	err = migrations.Migrate(db)
 	require.NoError(t, err)
 

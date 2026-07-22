@@ -18,6 +18,7 @@ func TestCipher(t *testing.T) {
 func doTestCipher(t *testing.T, encryption string) {
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	assert.NoError(t, err)
 
 	nip47Cipher, err := NewNip47Cipher(encryption, reqPubkey, reqPrivateKey)
 	assert.NoError(t, err)
