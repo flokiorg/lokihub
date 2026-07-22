@@ -1104,6 +1104,8 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 						Msg("Could not process refund")
 				}
 				return
+			default:
+				// other event types are not relevant to this swap-in flow; keep waiting
 			}
 		}
 	}
@@ -1410,6 +1412,8 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 					Msg("Swap out failed, HTLC is cancelled")
 				err = errors.New(update.Status)
 				return
+			default:
+				// other event types are not relevant to this swap-out flow; keep waiting
 			}
 		}
 	}
