@@ -763,7 +763,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		logger.Logger.Error().Err(result.Error).Msg("Failed to count DB apps")
 		return nil, result.Error
 	}
-	query = query.Offset(int(offset)).Limit(int(limit))
+	query = query.Offset(utils.ClampUint64ToInt(offset)).Limit(utils.ClampUint64ToInt(limit))
 
 	err := query.Find(&dbApps).Error
 
