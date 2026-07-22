@@ -46,7 +46,7 @@ func TestUnlock_IncorrectPassword(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -80,7 +80,7 @@ func TestUnlock_UnknownPermission(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "unknown"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -111,7 +111,7 @@ func TestGetApps_NoToken(t *testing.T) {
 	httpSvc := NewHttpService(mockSvc, mockEventPublisher)
 	httpSvc.RegisterSharedRoutes(e)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -144,7 +144,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "readonly"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -197,7 +197,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -287,7 +287,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "full"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -346,7 +346,7 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 
 	requestBody := api.UnlockRequest{UnlockPassword: "123", Permission: "readonly"}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/unlock", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
