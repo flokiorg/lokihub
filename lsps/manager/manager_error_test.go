@@ -119,13 +119,14 @@ func TestJitRetryOnExpiredParams(t *testing.T) {
 				id := extractIdFromBytes(data)
 				method := extractMethodFromBytes(data)
 
-				if method == "lsps2.get_info" {
+				switch method {
+				case "lsps2.get_info":
 					// Respond with Fee Params
 					go func() {
 						resp := fmt.Sprintf(`{"jsonrpc":"2.0", "id":"%s", "result": {"opening_fee_params_menu": [{"min_fee_mloki": "100", "proportional": 100, "valid_until": "2099-01-01T00:00:00Z", "min_payment_size_mloki": "1000", "max_payment_size_mloki": "1000000", "promise": "fake_promise"}]}}`, id)
 						_ = m.lsps2Client.HandleMessage("lsp_pubkey", []byte(resp))
 					}()
-				} else if method == "lsps2.buy" {
+				case "lsps2.buy":
 					attempts++
 					go func() {
 						// First attempt fails with specific code

@@ -71,9 +71,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	}
 	// check for a p tag
 	var walletPubkey string
-	pTag := event.Tags.GetFirst([]string{"p", ""})
+	pTag := event.Tags.Find("p")
 	if pTag != nil {
-		walletPubkey = (*pTag)[1]
+		walletPubkey = pTag[1]
 	}
 
 	app := db.App{}

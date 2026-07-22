@@ -496,7 +496,7 @@ func (api *api) HandleUpdateLSP(ctx context.Context, pubkey string, req *UpdateL
 		}
 		// Disconnect
 		if err := api.disconnectLSP(ctx, pubkey); err != nil {
-			// ignore disconnect error?
+			logger.Logger.Warn().Err(err).Str("lsp", pubkey).Msg("Failed to disconnect LSP")
 		}
 	}
 	return nil
@@ -605,7 +605,7 @@ func (api *api) saveLSPsToDatabase(lsps []LSPSettingInput) error {
 		} else {
 			go func(pk string) {
 				if err := api.disconnectLSP(ctx, pk); err != nil {
-					// Ignore
+					logger.Logger.Warn().Err(err).Str("pubkey", pk).Msg("Failed to disconnect LSP in setup")
 				}
 			}(pubkey)
 		}

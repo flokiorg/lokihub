@@ -399,7 +399,7 @@ func (httpSvc *HttpService) lsps5EventsSSEHandler(c echo.Context) error {
 			if err != nil {
 				continue
 			}
-			if _, err := c.Response().Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event.Event, string(data)))); err != nil {
+			if _, err := fmt.Fprintf(c.Response(), "event: %s\ndata: %s\n\n", event.Event, string(data)); err != nil {
 				return nil
 			}
 			c.Response().Flush()

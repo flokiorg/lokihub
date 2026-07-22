@@ -713,7 +713,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 	if filters.Name != "" {
 		// searching for "Damus" will return "Damus" and "Damus (1)"
 		// Use case-insensitive search for both SQLite and PostgreSQL
-		if api.db.Dialector.Name() == "postgres" {
+		if api.db.Name() == "postgres" {
 			query = query.Where("name ILIKE ?", filters.Name+"%")
 		} else {
 			query = query.Where("name LIKE ?", filters.Name+"%")
@@ -731,7 +731,7 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 
 	if filters.SubWallets != nil && !*filters.SubWallets {
 		// exclude subwallets :scream:
-		if api.db.Dialector.Name() == "sqlite" {
+		if api.db.Name() == "sqlite" {
 			query = query.Where("metadata is NULL OR JSON_EXTRACT(metadata, '$.app_store_app_id') IS NULL OR JSON_EXTRACT(metadata, '$.app_store_app_id') != ?", constants.SUBWALLET_APPSTORE_APP_ID)
 		} else {
 			query = query.Where("metadata IS NULL OR metadata->>'app_store_app_id' IS NULL OR metadata->>'app_store_app_id' != ?", constants.SUBWALLET_APPSTORE_APP_ID)
@@ -2077,7 +2077,8 @@ func (api *api) GetLogOutput(ctx context.Context, logType string, getLogRequest 
 	var err error
 	var logData []byte
 
-	if logType == LogTypeNode {
+	switch logType {
+	case LogTypeNode:
 		if api.svc.GetLNClient() == nil {
 			return nil, errors.New("LNClient not started")
 		}
@@ -2086,7 +2087,7 @@ func (api *api) GetLogOutput(ctx context.Context, logType string, getLogRequest 
 		if err != nil {
 			return nil, err
 		}
-	} else if logType == LogTypeApp {
+	case LogTypeApp:
 		logFileName := logger.GetLogFilePath()
 		if logFileName == "" {
 			logData = []byte("file log is disabled")
@@ -2096,7 +2097,7 @@ func (api *api) GetLogOutput(ctx context.Context, logType string, getLogRequest 
 				return nil, err
 			}
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("invalid log type: '%s'", logType)
 	}
 
@@ -2897,7 +2898,7 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 
 	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
 	err := api.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Dialector.Name() == "postgres" {
+		if tx.Name() == "postgres" {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil {
 				return fmt.Errorf("acquire circle delete lock: %w", err)
 			}
