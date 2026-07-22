@@ -1,6 +1,7 @@
 package appstore
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -160,7 +161,11 @@ func (s *appStoreService) Sync() {
 
 func (s *appStoreService) fetchRemoteApps() ([]App, error) {
 	url := fmt.Sprintf("%s/apps.json", s.cfg.GetLokihubStoreURL())
-	resp, err := s.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +184,11 @@ func (s *appStoreService) fetchRemoteApps() ([]App, error) {
 
 func (s *appStoreService) downloadLogo(filename, appId, outputDir string) error {
 	url := fmt.Sprintf("%s/logos/%s", s.cfg.GetLokihubStoreURL(), filename)
-	resp, err := s.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
