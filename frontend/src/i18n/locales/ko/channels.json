@@ -23,7 +23,7 @@
       "localBalance": "로컬 잔액",
       "remoteBalance": "원격 잔액",
       "actions": "작업",
-      "typeTooltip": "라이트닝 채널 유형. 대부분의 사용자에게는 비공개가 권장됩니다.",
+      "typeTooltip": "Lightning 채널 유형. 대부분의 사용자에게는 비공개가 권장됩니다.",
       "reserveTooltip": "각 참가자가 사기 방지를 위해 예약하는 자금으로, 채널 기간 동안 사용할 수 없습니다."
     },
     "closeDialog": {
@@ -112,7 +112,7 @@
     "publicChannel": "공개 채널",
     "publicChannelDesc": "대부분의 사용자에게는 권장되지 않습니다.",
     "confirmTitle": "채널 개설 확인",
-    "confirmDesc": "다음 세부 정보로 라이트닝 채널을 열겠습니까?",
+    "confirmDesc": "다음 세부 정보로 Lightning 채널을 열겠습니까?",
     "channelType": "채널 유형",
     "paymentMethod": "결제 방법",
     "nodePublicKey": "노드 공개 키",
