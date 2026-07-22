@@ -23,7 +23,7 @@
       "localBalance": "ローカル残高",
       "remoteBalance": "リモート残高",
       "actions": "操作",
-      "typeTooltip": "ライトニングチャンネルの種類。ほとんどのユーザーにはプライベートが推奨されます。",
+      "typeTooltip": "Lightning チャンネルの種類。ほとんどのユーザーにはプライベートが推奨されます。",
       "reserveTooltip": "各参加者が不正行為防止のために確保する資金で、チャンネル存続中は使用できません。"
     },
     "closeDialog": {
@@ -112,7 +112,7 @@
     "publicChannel": "パブリックチャンネル",
     "publicChannelDesc": "ほとんどのユーザーには推奨されません。",
     "confirmTitle": "チャンネル開設を確認",
-    "confirmDesc": "以下の詳細でライトニングチャンネルを開いてもよいですか？",
+    "confirmDesc": "以下の詳細で Lightning チャンネルを開いてもよいですか？",
     "channelType": "チャンネルタイプ",
     "paymentMethod": "支払い方法",
     "nodePublicKey": "ノードの公開鍵",

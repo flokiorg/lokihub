@@ -122,7 +122,7 @@
     "publicChannel": "کانال عمومی",
     "publicChannelDesc": "برای اکثر کاربران توصیه نمی شود.",
     "confirmTitle": "تأیید باز کردن کانال",
-    "confirmDesc": "آیا مطمئن هستید که می خواهید یک کانال لایتنینگ با جزئیات زیر باز کنید؟",
+    "confirmDesc": "آیا مطمئن هستید که می خواهید یک کانال Lightning با جزئیات زیر باز کنید؟",
     "channelType": "نوع کانال",
     "paymentMethod": "روش پرداخت",
     "nodePublicKey": "کلید عمومی نود",
