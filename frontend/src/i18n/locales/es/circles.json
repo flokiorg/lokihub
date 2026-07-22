@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "Eliminar",
+    "removeSelected": "Eliminar seleccionados",
+    "clear": "Limpiar",
+    "add": "Añadir",
+    "addWithCount": "Añadir ({{count}})",
+    "selectedCount": "{{count}} seleccionados",
+    "selectAll": "Seleccionar todo",
+    "memberColumn": "Miembro",
+    "selectMember": "Seleccionar miembro",
+    "nameLabel": "Nombre",
+    "maxWalletBudgetLabel": "Presupuesto máximo de la billetera",
+    "minRenewalLabel": "Renovación mínima",
+    "minRenewalHelper": "Período de renovación más corto que un miembro puede solicitar para el presupuesto de su billetera",
+    "maxWalletExpiryLabel": "Caducidad máxima de la billetera",
+    "feePpmLabel": "Comisión (ppm)",
+    "feePpmHelper": "Comisión por millón cobrada en los pagos realizados por las billeteras de círculo (0 = gratis)",
+    "advancedSettings": "Ajustes avanzados",
+    "inUse": "En uso",
+    "hexPlaceholder": "Cadena hexadecimal de 64 caracteres",
+    "syncingFollowing": "Sincronizando lista de seguidos…",
+    "sync": "Sincronizar",
+    "following": "Sigue a {{count}}",
+    "synced": "Sincronizado {{time}}",
+    "updated": "Actualizado {{time}}",
+    "total": "total",
+    "anonymous": "Anónimo"
+  },
+  "policyLabel": {
+    "following": "Seguidos",
+    "allowlist": "Lista de permitidos"
+  },
+  "identityType": {
+    "pubkey": "Clave pública de Nostr",
+    "connectionKey": "Clave de conexión"
+  },
+  "avatarStack": {
+    "more": "+{{count}} más"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 verificado",
+    "verifyingNip05": "Verificando NIP-05",
+    "lightningAddress": "Tiene una dirección Lightning"
+  },
+  "searchDropdown": {
+    "searching": "Buscando…",
+    "noMatches": "Sin coincidencias"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "Tu identidad de Nostr",
+    "defaultHelper": "Se usa para resolver tu lista de seguidos para la autorización de miembros",
+    "invalidHelper": "No parece un npub, clave pública hex, nprofile o dirección NIP-05 válidos",
+    "placeholder": "npub1..., hex, nprofile1..., tu@dominio.com, o busca un nombre",
+    "change": "Cambiar"
+  },
+  "memberPicker": {
+    "noneYet": "Aún no hay miembros fijados.",
+    "removeMember": "Eliminar miembro",
+    "enterIdentity": "Introduce una identidad Nostr válida arriba para buscar.",
+    "searchPlaceholder": "Busca en Nostr por nombre, NIP-05, o pega un npub/hex",
+    "alreadyMember": "Ya es miembro.",
+    "searching": "Buscando…",
+    "noMatchesNostr": "Sin coincidencias en Nostr.",
+    "alreadyMemberBadge": "Ya es miembro",
+    "resolving": "Resolviendo…",
+    "searchHint": "Busca por nombre, NIP-05, npub, o pega una clave pública."
+  },
+  "followingPreview": {
+    "empty": "Esta identidad aún no sigue a nadie — los miembros se autorizarán automáticamente a medida que los siga.",
+    "summary_one": "{{count}} persona será autorizada ahora, y la lista se mantendrá sincronizada automáticamente a medida que esta identidad siga o deje de seguir a otros.",
+    "summary_other": "{{count}} personas serán autorizadas ahora, y la lista se mantendrá sincronizada automáticamente a medida que esta identidad siga o deje de seguir a otros."
+  },
+  "claimBadge": {
+    "claimed": "Reclamado",
+    "unclaimed": "Sin reclamar"
+  },
+  "claimDeadline": {
+    "expired": "Plazo de reclamo vencido",
+    "withinMinutes_one": "Reclamar en {{count}} min",
+    "withinMinutes_other": "Reclamar en {{count}} min",
+    "withinHours": "Reclamar en {{count}}h",
+    "byDate": "Reclamar antes del {{date}}",
+    "none": "Sin plazo de reclamo"
+  },
+  "circleCard": {
+    "member_one": "{{count}} miembro",
+    "member_other": "{{count}} miembros"
+  },
+  "childIdentityCard": {
+    "circleWallet": "Billetera de círculo",
+    "jitWallet": "Billetera JIT",
+    "claimedCount": "{{claimed}}/{{total}} reclamados",
+    "errors": {
+      "loadRecipients": "Error al cargar los destinatarios de la billetera JIT"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "Gestionar",
+    "title": "Gestionar identidades",
+    "description": "Las identidades aún vinculadas a un círculo no se pueden eliminar — elimínalas de todos los círculos primero.",
+    "noneSaved": "Aún no hay identidades guardadas.",
+    "usedBy_one": "Usada por {{count}} círculo",
+    "usedBy_other": "Usada por {{count}} círculos",
+    "unused": "Sin usar",
+    "stillUsedBy_one": "Todavía usada por {{count}} círculo — elimínala de ahí primero.",
+    "stillUsedBy_other": "Todavía usada por {{count}} círculos — elimínala de ahí primero.",
+    "deleteTitle": "¿Eliminar \"{{name}}\"?",
+    "deleteDescription": "Esta identidad no está vinculada a ningún círculo. Eliminarla no se puede deshacer.",
+    "delete": "Eliminar"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "Lista de seguidos sincronizada",
+    "errors": {
+      "sync": "Error al sincronizar la lista de seguidos"
+    }
+  },
+  "circleAllowlist": {
+    "description": "Gestiona qué claves públicas de nostr están autorizadas a solicitar una billetera de este Hub de Billetera de Círculo.",
+    "sharedWarning_one": "Esta identidad es compartida por {{count}} otro círculo — los cambios aquí se aplican a todos ellos.",
+    "sharedWarning_other": "Esta identidad es compartida por otros {{count}} círculos — los cambios aquí se aplican a todos ellos.",
+    "addMemberHeading": "Añadir miembro",
+    "addMembersTitle": "Añadir miembros",
+    "removeMemberTitle": "¿Eliminar a este miembro?",
+    "removeMemberDescription": "Ya no podrá solicitar una billetera de este Hub de Billetera de Círculo. Esto no se puede deshacer.",
+    "removeSelectedTitle_one": "¿Eliminar {{count}} miembro?",
+    "removeSelectedTitle_other": "¿Eliminar {{count}} miembros?",
+    "addedToast_one": "Miembro añadido a la lista de permitidos",
+    "addedToast_other": "{{count}} miembros añadidos a la lista de permitidos",
+    "removedOneToast": "Clave pública eliminada de la lista de permitidos",
+    "removedToast_one": "Miembro eliminado de la lista de permitidos",
+    "removedToast_other": "{{count}} miembros eliminados de la lista de permitidos",
+    "errors": {
+      "load": "Error al cargar la lista de permitidos del círculo",
+      "add": "Error al añadir a la lista de permitidos",
+      "removeOne": "Error al eliminar la clave pública",
+      "removeSelected": "Error al eliminar de la lista de permitidos"
+    }
+  },
+  "circleWallets": {
+    "description": "Billeteras ya creadas para los miembros de este círculo.",
+    "empty": "Aún no se han creado billeteras de círculo.",
+    "selectWallet": "Seleccionar billetera de círculo",
+    "removeTitle": "¿Eliminar esta billetera de círculo?",
+    "removeDescription": "Su saldo restante se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Esto no se puede deshacer.",
+    "removeSelectedTitle_one": "¿Eliminar {{count}} billetera de círculo?",
+    "removeSelectedTitle_other": "¿Eliminar {{count}} billeteras de círculo?",
+    "removeSelectedDescription": "Sus saldos restantes se transferirán de vuelta a este hub, y sus conexiones NWC dejarán de funcionar de inmediato. Esto no se puede deshacer.",
+    "removedToast": "Billetera de círculo eliminada",
+    "removedSelectedToast_one": "Billetera de círculo eliminada",
+    "removedSelectedToast_other": "{{count}} billeteras de círculo eliminadas",
+    "errors": {
+      "remove": "Error al eliminar la billetera de círculo",
+      "removeSelected": "Error al eliminar las billeteras de círculo seleccionadas"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}} y {{second}}",
+    "participantsOthers": "{{first}} y {{count}} más",
+    "durationDays_one": "{{count}} día",
+    "durationDays_other": "{{count}} días",
+    "durationHours_one": "{{count}} hora",
+    "durationHours_other": "{{count}} horas",
+    "durationMinutes": "{{count}} min",
+    "removeRecipient": "Eliminar destinatario",
+    "pubkeyLabel": "Clave pública de Nostr",
+    "pubkeyHelper": "Busca por nombre, NIP-05, o pega un npub/hex/nprofile",
+    "connectionKeyLabel": "Clave de conexión (hex)",
+    "iaPubkeyLabel": "Clave pública de la Autoridad de Identidad (hex)",
+    "iaPubkeyHelper": "Debe ser una Autoridad de Identidad de confianza (Ajustes → Autoridades de Identidad)",
+    "duplicateIdentity": "Esta identidad ya la usa otro destinatario en esta billetera. Cada destinatario necesita una identidad distinta.",
+    "walletBudgetLabel": "Presupuesto de la billetera",
+    "requestedSummary": "{{total}} loki solicitados",
+    "requestedSummaryWithMax": "{{total}} loki solicitados de un presupuesto máximo de billetera de este hub de {{max}} loki",
+    "claimDeadlineLabel": "Plazo de reclamo",
+    "deadlineExceeds": "Supera el plazo máximo de reclamo de este hub de {{max}}",
+    "deadlineHelp": "Cada destinatario debe reclamar su parte dentro de este tiempo desde la creación",
+    "deadlineHelpWithMax": "Cada destinatario debe reclamar su parte dentro de este tiempo desde la creación (por defecto, el máximo de este hub: {{max}})",
+    "addRecipient": "Añadir otro destinatario",
+    "setClaimDeadline": "Establecer plazo de reclamo",
+    "statusAll": "Todos",
+    "statusExpired": "Vencidos",
+    "allocatedSummary": "{{allocated}} loki asignados en esta página · {{total}} {{status}}",
+    "recipientColumn": "Destinatario",
+    "revealConnection": "Revelar conexión NWC",
+    "groupSummary_one": "{{count}} destinatario · {{claimed}}/{{count}} reclamados",
+    "groupSummary_other": "{{count}} destinatarios · {{claimed}}/{{count}} reclamados",
+    "selectRecipient": "Seleccionar destinatario",
+    "selectAllInWallet": "Seleccionar todos los destinatarios de esta billetera",
+    "collapseRecipients": "Contraer destinatarios",
+    "expandRecipients": "Expandir destinatarios",
+    "removeWallet": "Eliminar billetera",
+    "noneFiltered": "No hay billeteras JIT {{status}}.",
+    "noneOnPage": "No hay billeteras JIT en esta página.",
+    "addHeading": "Añadir billetera JIT",
+    "createDialogTitle": "Crear billetera JIT",
+    "removeRecipientTitle": "¿Eliminar a este destinatario?",
+    "removeRecipientDescription": "Esta identidad ya no podrá reclamar su parte de esta billetera. Su saldo asignado se transferirá de vuelta a este hub. Esto no se puede deshacer.",
+    "removeWalletTitle": "¿Eliminar esta billetera?",
+    "removeWalletDescription": "El saldo restante de esta billetera se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Si esta billetera sirve a otros destinatarios, ellos también perderán el acceso — incluidos quienes aún no hayan reclamado su parte. Esto no se puede deshacer.",
+    "removeSelectedTitle_one": "¿Eliminar {{count}} destinatario?",
+    "removeSelectedTitle_other": "¿Eliminar {{count}} destinatarios?",
+    "removeSelectedDescription": "Estas identidades ya no podrán reclamar su parte de sus billeteras. Sus saldos asignados se transferirán de vuelta a este hub. Esto no se puede deshacer.",
+    "createdToast_one": "Billetera JIT creada y financiada",
+    "createdToast_other": "Billetera JIT creada y financiada para {{count}} destinatarios",
+    "recipientRemovedToast": "Destinatario de la billetera JIT eliminado",
+    "walletRemovedToast": "Billetera JIT eliminada",
+    "recipientsRemovedToast_one": "Destinatario de la billetera JIT eliminado",
+    "recipientsRemovedToast_other": "{{count}} destinatarios de la billetera JIT eliminados",
+    "errors": {
+      "loadConnection": "Error al cargar la conexión de la billetera JIT",
+      "load": "Error al cargar las billeteras JIT",
+      "create": "Error al crear la billetera JIT",
+      "removeRecipient": "Error al eliminar el destinatario de la billetera JIT",
+      "removeWallet": "Error al eliminar la billetera JIT",
+      "removeSelected": "Error al eliminar los destinatarios seleccionados"
+    }
+  },
+  "newCircleHub": {
+    "title": "Nuevo Hub de Billetera de Círculo",
+    "description": "Crea un Hub de Billetera de Círculo — un fondo de billetera compartido donde los miembros autorizados reciben su propia billetera de círculo financiada desde su saldo.",
+    "identityModeLabel": "Identidad de membresía",
+    "selectIdentityPlaceholder": "Selecciona una identidad",
+    "createNewIdentity": "Crear nueva identidad",
+    "existingIdentities": "Identidades existentes",
+    "identityReuseHelper": "Una identidad (política + miembros) se puede reutilizar en varios círculos, que luego se mantendrán sincronizados automáticamente.",
+    "enterIdentityHelper": "Introduce una identidad Nostr válida arriba para continuar.",
+    "memberModeLabel": "Quién puede solicitar una billetera de este círculo",
+    "modeSyncTitle": "Cualquiera que siga",
+    "modeSyncDescription": "Automático — todos los que esta identidad sigue, ahora o en el futuro. Nada que gestionar.",
+    "modePinnedTitle": "Miembros personalizados",
+    "modePinnedDescription": "Busca en Nostr y elige exactamente a quién permitir.",
+    "pinMemberHelper": "Fija al menos un miembro, o cambia a Cualquiera que siga.",
+    "identityNameLabel": "Etiqueta para esta identidad (opcional)",
+    "identityNamePlaceholder": "p. ej. Mi círculo de seguidos",
+    "identityNameHelper": "Se usa solo para identificar esta identidad guardada cuando se reutiliza en varios círculos — no se publica en ningún sitio.",
+    "maxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo",
+    "maxExpiryHelper": "Vida útil máxima de las billeteras de círculo emitidas",
+    "hubBudgetLabel": "Presupuesto del hub (opcional)",
+    "hubBudgetHelper": "Limita el presupuesto combinado de todas las billeteras que este círculo puede tener activas a la vez. Déjalo en blanco para no tener más límite que el saldo real de este hub.",
+    "hubBudgetRenewalLabel": "Renovación del presupuesto del hub",
+    "hubBudgetRenewalHelper": "No reinicia el límite anterior — es un techo activo sobre las billeteras que hay a la vez, no una tasa de gasto. La capacidad se libera automáticamente a medida que las billeteras caducan.",
+    "hubExpiryLabel": "Caducidad del hub (opcional)",
+    "hubExpiryHelper": "Este círculo deja de emitir nuevas billeteras después de esta fecha.",
+    "submit": "Crear Hub de Billetera de Círculo",
+    "selectExistingHint": "Selecciona una identidad existente para continuar.",
+    "enterNameHint": "Introduce un nombre para continuar.",
+    "createdToast": "Hub de Billetera de Círculo \"{{name}}\" creado",
+    "allowlistSeedFailedToast": "Hub de Billetera de Círculo \"{{name}}\" creado, pero no se pudo sembrar la lista de miembros — añade miembros desde la página de Lista de Permitidos del hub.",
+    "errors": {
+      "create": "Error al crear el Hub de Billetera de Círculo"
+    }
+  },
+  "newJitHub": {
+    "title": "Nuevo Hub de Billetera JIT",
+    "description": "Crea un hub prefinanciado que emite billeteras JIT de solo gasto a los beneficiarios",
+    "maxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada billetera JIT emitida desde este hub",
+    "maxExpiryHelper": "Vida útil máxima de las billeteras JIT emitidas",
+    "submit": "Crear Hub de Billetera JIT",
+    "createdToast": "Hub de Billetera JIT \"{{name}}\" creado",
+    "errors": {
+      "create": "Error al crear el Hub de Billetera JIT"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "¿Seguro que quieres eliminar este círculo?",
+    "checking": "Comprobando los saldos de las billeteras de los miembros…",
+    "allEmpty": "Todas las billeteras de los miembros de este círculo están vacías. Eliminar el círculo también eliminará todas sus billeteras de miembros.",
+    "hasBalance_one": "{{count}} billetera de miembro en este círculo todavía tiene saldo. Eliminar una billetera no destruye esos fondos, pero sí elimina el propio registro y acceso del miembro a ellos, sin forma de recuperarlo.",
+    "hasBalance_other": "{{count}} billeteras de miembros en este círculo todavía tienen saldo. Eliminar una billetera no destruye esos fondos, pero sí elimina el propio registro y acceso del miembro a ellos, sin forma de recuperarlo.",
+    "colName": "Nombre",
+    "colPubkey": "Clave pública",
+    "colBalance": "Saldo (loki)",
+    "totalSummary_one": "{{total}} loki en total en {{count}} billetera.",
+    "totalSummary_other": "{{total}} loki en total en {{count}} billeteras.",
+    "deleteEmptyOnly": "Eliminar solo las vacías",
+    "deleteAll": "Eliminar todas",
+    "deletedToast": "Círculo eliminado",
+    "partialDeleteToast_one": "{{count}} billetera vacía eliminada",
+    "partialDeleteToast_other": "{{count}} billeteras vacías eliminadas",
+    "partialDeleteDescription_one": "{{count}} billetera con saldo se dejó intacta — el círculo no se eliminó.",
+    "partialDeleteDescription_other": "{{count}} billeteras con saldo se dejaron intactas — el círculo no se eliminó.",
+    "errors": {
+      "load": "Error al cargar las billeteras del círculo",
+      "delete": "Error al eliminar el círculo"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "¿Seguro que quieres eliminar este Hub de Billetera JIT?",
+    "checking": "Comprobando las billeteras JIT emitidas…",
+    "hasOutstanding_one": "Este hub todavía tiene {{count}} parte de destinatario pendiente en sus billeteras JIT emitidas. Elimínala de la lista de Billeteras JIT de abajo (o espera a que caduque) antes de eliminar el hub.",
+    "hasOutstanding_other": "Este hub todavía tiene {{count}} partes de destinatarios pendientes en sus billeteras JIT emitidas. Elimínalas de la lista de Billeteras JIT de abajo (o espera a que caduquen) antes de eliminar el hub.",
+    "safeToDelete": "Las apps conectadas ya no podrán usar esta conexión. No se perderán fondos durante este proceso, el saldo permanecerá en tu billetera.",
+    "close": "Cerrar",
+    "errors": {
+      "check": "Error al comprobar las billeteras JIT emitidas"
+    }
+  }
+}

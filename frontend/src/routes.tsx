@@ -50,6 +50,10 @@ import { SetupPassword } from "src/screens/setup/SetupPassword";
 import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
+import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
+import { NewJITHub } from "src/screens/subwallets/NewJITHub";
+import { NewSimpleSubwallet } from "src/screens/subwallets/NewSimpleSubwallet";
 import { NewSubwallet } from "src/screens/subwallets/NewSubwallet";
 import { SubwalletCreated } from "src/screens/subwallets/SubwalletCreated";
 import { SubwalletList } from "src/screens/subwallets/SubwalletList";
@@ -218,6 +222,10 @@ const routes: RouteObject[] = [
                 handle: { crumb: () => "Services" },
               },
               {
+                path: "identity-authorities",
+                element: <Navigate to="/settings/services" replace />,
+              },
+              {
                 path: "about",
                 element: <About />,
                 handle: { crumb: () => "About" },
@@ -292,6 +300,18 @@ const routes: RouteObject[] = [
             element: <NewSubwallet />,
           },
           {
+            path: "new/simple",
+            element: <NewSimpleSubwallet />,
+          },
+          {
+            path: "new/jit",
+            element: <NewJITHub />,
+          },
+          {
+            path: "new/circle",
+            element: <NewCircleHub />,
+          },
+          {
             path: "created",
             element: <SubwalletCreated />,
           },
@@ -301,7 +321,12 @@ const routes: RouteObject[] = [
         path: "internal-apps",
         element: <DefaultRedirect />,
         handle: { crumb: () => "Connections" },
-
+        children: [
+          {
+            path: ":id",
+            element: <InternalAppDetail />,
+          },
+        ],
       },
       {
         path: "appstore",

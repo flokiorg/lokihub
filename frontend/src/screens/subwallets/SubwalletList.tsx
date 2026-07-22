@@ -4,11 +4,12 @@ import {
     HelpCircle,
     ShieldCheckIcon,
     TriangleAlert,
-    TriangleAlertIcon
+    TriangleAlertIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import AppHeader from "src/components/AppHeader";
 import AppCard from "src/components/connections/AppCard";
+import { CircleCard } from "src/components/circles/CircleCard";
 import { CustomPagination } from "src/components/CustomPagination";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
@@ -71,6 +72,9 @@ export function SubwalletList() {
     subwalletApps.reduce((total, app) => total + app.balance, 0) || 0;
   const isSufficientlyBacked =
     subwalletTotalAmount <= balances.lightning.totalSpendable;
+  const backingShortfall =
+    subwalletTotalAmount - balances.lightning.totalSpendable;
+
 
   return (
     <div className="grid gap-4">
@@ -103,14 +107,29 @@ export function SubwalletList() {
           <AlertTitle>
             Sub-wallets you manage are insufficiently backed
           </AlertTitle>
-          <AlertDescription className="flex flex-row gap-3">
-            There's not enough flokicoin in your spending balance to honor all
-            balances of sub-wallets under your management. Increase spending
-            capacity by opening a channel or review your channel statuses to
-            back them up again.
-            <LinkButton to="/wallet/receive" variant="secondary">
-              Deposit Flokicoin
-            </LinkButton>
+          <AlertDescription className="flex flex-col gap-3">
+            <div className="flex flex-row flex-wrap items-center gap-x-2">
+              There's not enough flokicoin in your spending balance to honor
+              all balances of sub-wallets under your management. Increase
+              spending capacity by opening a channel or review your channel
+              statuses to back them up again.
+              <LinkButton to="/wallet/receive" variant="secondary">
+                Deposit Flokicoin
+              </LinkButton>
+            </div>
+            <div className="text-sm">
+              Your spendable balance is{" "}
+              <span className="font-medium sensitive">
+                <FormattedFlokicoinAmount
+                  amount={balances.lightning.totalSpendable}
+                />
+              </span>
+              , which is{" "}
+              <span className="font-medium sensitive">
+                <FormattedFlokicoinAmount amount={backingShortfall} />
+              </span>{" "}
+              short of the total sub-wallet balance.
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -163,9 +182,13 @@ export function SubwalletList() {
           ref={appsListRef}
           className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch app-list"
         >
-          {subwalletApps.map((app, index) => (
-            <AppCard key={index} app={app} />
-          ))}
+          {subwalletApps.map((app, index) =>
+            app.kind === "circle_hub" ? (
+              <CircleCard key={app.id} app={app} />
+            ) : (
+              <AppCard key={index} app={app} />
+            )
+          )}
         </div>
       </div>
 

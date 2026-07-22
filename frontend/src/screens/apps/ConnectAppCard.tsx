@@ -22,10 +22,21 @@ export function ConnectAppCard({
   app,
   pairingUri,
   appStoreApp,
+  variant = "create",
+  showConnectionStatus = variant === "create",
 }: {
   app: App;
   pairingUri: string;
   appStoreApp?: AppStoreApp;
+  // "create": full Card with header, used on standalone pairing pages.
+  // "reveal": bare content (no Card wrapper) for showing a secret inside a
+  // Dialog that already provides its own header/footer chrome.
+  variant?: "create" | "reveal";
+  // Whether to show the "Waiting for app to connect..."/"App connected"
+  // status block. Defaults to variant === "create", but can be set
+  // independently — e.g. a Dialog-hosted "reveal" layout for a brand-new,
+  // not-yet-connected wallet still wants this status shown.
+  showConnectionStatus?: boolean;
 }) {
   const [timeout, setTimeout] = useState(false);
   const [isQRCodeVisible, setIsQRCodeVisible] = useState(false);
@@ -44,13 +55,10 @@ export function ConnectAppCard({
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-center">{t("connectAppCard.connectionSecret", "Connection Secret")}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-5">
-        {!app.lastUsedAt ? (
+  const content = (
+    <>
+      {showConnectionStatus &&
+        (!app.lastUsedAt ? (
           <>
             <div className="flex flex-row items-center gap-2 text-sm z-10">
               <Loading className="size-4" />
@@ -70,45 +78,61 @@ export function ConnectAppCard({
             <CheckIcon />
             {t("connectAppCard.appConnected", "App connected")}
           </Badge>
-        )}
-        {!appStoreApp?.hideConnectionQr ? (
-          <div className="relative">
-            <div
-              className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
-              onClick={() => setIsQRCodeVisible(true)}
-            >
-              <QRCode value={pairingUri} withIcon={false} />
-              {logoSrc ? (
-                <img
-                  src={logoSrc}
-                  className="absolute w-12 h-12 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-muted p-1 rounded-xl"
-                />
-              ) : null}
-            </div>
-            {!isQRCodeVisible ? (
-              <Button
-                onClick={() => {
-                  setIsQRCodeVisible(true);
-                }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-              >
-                <EyeIcon />
-                {t("connectAppCard.revealQR", "Reveal QR")}
-              </Button>
+        ))}
+      {!appStoreApp?.hideConnectionQr ? (
+        <div className="relative mb-4">
+          <div
+            className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
+            onClick={() => setIsQRCodeVisible(true)}
+          >
+            <QRCode value={pairingUri} withIcon={!logoSrc} />
+            {logoSrc ? (
+              <img
+                src={logoSrc}
+                className="absolute w-12 h-12 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-muted p-1 rounded-xl"
+              />
             ) : null}
           </div>
-        ) : null}
-        <div className="flex gap-2">
-          <Button onClick={copy} variant="outline">
-            <CopyIcon />
-            {t("connectAppCard.copySecret", "Copy Connection Secret")}
-          </Button>
-          {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
-          {/* <ExternalLinkButton to={pairingUri} variant="outline">
-            <ExternalLinkIcon />
-            Open In App
-          </ExternalLinkButton> */}
+          {!isQRCodeVisible ? (
+            <Button
+              onClick={() => {
+                setIsQRCodeVisible(true);
+              }}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            >
+              <EyeIcon />
+              {t("connectAppCard.revealQR", "Reveal QR")}
+            </Button>
+          ) : null}
         </div>
+      ) : null}
+      <div className="flex gap-2">
+        <Button onClick={copy} variant="outline">
+          <CopyIcon />
+          {t("connectAppCard.copySecret", "Copy Connection Secret")}
+        </Button>
+        {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
+        {/* <ExternalLinkButton to={pairingUri} variant="outline">
+          <ExternalLinkIcon />
+          Open In App
+        </ExternalLinkButton> */}
+      </div>
+    </>
+  );
+
+  if (variant === "reveal") {
+    return (
+      <div className="flex flex-col items-center gap-5">{content}</div>
+    );
+  }
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="text-center">{t("connectAppCard.connectionSecret", "Connection Secret")}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-5">
+        {content}
       </CardContent>
     </Card>
   );

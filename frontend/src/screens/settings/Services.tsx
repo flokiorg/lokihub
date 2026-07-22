@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useBlocker } from "react-router-dom";
 import { toast } from "sonner";
 import Loading from "src/components/Loading";
 import {
@@ -7,11 +8,23 @@ import {
   ServiceConfigState,
   validateServiceConfig
 } from "src/components/ServiceConfigForm";
+import { IdentityAuthorityManagementCard } from "src/components/settings/IdentityAuthorityManagementCard";
 import SettingsHeader from "src/components/SettingsHeader";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
+import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPSManagement } from "src/hooks/useLSPSManagement";
-import { LSP } from "src/types";
+import { IdentityAuthority, LSP } from "src/types";
 import { request } from "src/utils/request";
 
 
@@ -22,6 +35,8 @@ export function Services() {
   const [config, setConfig] = useState<ServiceConfigState>({
       mempoolApi: "",
       relay: "",
+      generalRelay: "",
+      searchRelay: "",
       swapServiceUrl: "",
       messageboardNwcUrl: "",
       enableSwap: true,
@@ -31,7 +46,16 @@ export function Services() {
 
   // LSP Management Hook
   const { lsps: backendLSPs, fetchLSPs, saveLSPChanges, initialized: lspInitialized } = useLSPSManagement();
-  
+
+  // Identity Authority Management Hook
+  const {
+    authorities: backendAuthorities,
+    fetchIdentityAuthorities,
+    saveIdentityAuthorityChanges,
+    initialized: authoritiesInitialized,
+  } = useIdentityAuthorities();
+  const [localAuthorities, setLocalAuthorities] = useState<IdentityAuthority[]>([]);
+
   // Track changes for Save button
   const [servicesDirty, setServicesDirty] = useState(false);
   const [savingServices, setSavingServices] = useState(false);
@@ -46,6 +70,8 @@ export function Services() {
         swapServiceUrl: info.swapServiceUrl || "",
         messageboardNwcUrl: info.messageboardNwcUrl || "",
         relay: info.relay || "",
+        generalRelay: info.generalRelay || "",
+        searchRelay: info.searchRelay || "",
         mempoolApi: info.mempoolUrl || "",
         enableSwap: info.enableSwap ?? true,
         enableMessageboardNwc: info.enableMessageboardNwc ?? true,
@@ -57,6 +83,10 @@ export function Services() {
   useEffect(() => {
     fetchLSPs();
   }, [fetchLSPs]);
+
+  useEffect(() => {
+    fetchIdentityAuthorities();
+  }, [fetchIdentityAuthorities]);
 
   // Sync local LSPs with backend LSPs whenever backend updates and we aren't dirty
   // Also merge with community LSPs
@@ -78,6 +108,19 @@ export function Services() {
     }
   }, [backendLSPs, servicesDirty, lspInitialized]);
 
+  // Sync local Identity Authorities with backend the same way as LSPs above.
+  const hasSyncedAuthorities = useRef(false);
+  useEffect(() => {
+    if (authoritiesInitialized) {
+        if (!hasSyncedAuthorities.current) {
+            setLocalAuthorities(backendAuthorities);
+            hasSyncedAuthorities.current = true;
+        } else if (!servicesDirty) {
+            setLocalAuthorities(backendAuthorities);
+        }
+    }
+  }, [backendAuthorities, servicesDirty, authoritiesInitialized]);
+
 
   // Track dirty state
   useEffect(() => {
@@ -88,6 +131,8 @@ export function Services() {
     // Check general settings dirty
     const settingsDirty =
       config.relay !== (info.relay || "") ||
+      config.generalRelay !== (info.generalRelay || "") ||
+      config.searchRelay !== (info.searchRelay || "") ||
       config.mempoolApi !== (info.mempoolUrl || "") ||
       config.swapServiceUrl !== (info.swapServiceUrl || "") ||
       config.messageboardNwcUrl !== (info.messageboardNwcUrl || "") ||
@@ -115,13 +160,21 @@ export function Services() {
     
     const lspDirtySmart = JSON.stringify(strip(config.lsps)) !== JSON.stringify(strip(backendLSPs));
 
-    const hasChanges = settingsDirty || lspDirtySmart;
+    // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, same strip-and-sort approach as LSPs.
+    const stripAuthorities = (authorities: IdentityAuthority[]) => authorities
+        .map(a => ({
+            pubkey: a.pubkey, name: a.name, relay_urls: a.relay_urls ?? []
+        })).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+
+    const authoritiesDirtySmart = JSON.stringify(stripAuthorities(localAuthorities)) !== JSON.stringify(stripAuthorities(backendAuthorities));
+
+    const hasChanges = settingsDirty || lspDirtySmart || authoritiesDirtySmart;
 
     setServicesDirty(hasChanges);
     if (!hasChanges) {
       setValidationErrors([]);
     }
-  }, [info, config, backendLSPs]);
+  }, [info, config, backendLSPs, localAuthorities, backendAuthorities]);
 
 
   async function updateSettings(
@@ -141,10 +194,10 @@ export function Services() {
     }
   }
 
-  async function saveServices() {
+  async function saveServices(): Promise<boolean> {
     setSavingServices(true);
     setValidationErrors([]);
-    
+
     const errors = validateServiceConfig(config, t);
 
     if (errors.length > 0) {
@@ -153,7 +206,7 @@ export function Services() {
         setTimeout(() => {
             document.getElementById("service-config-errors")?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 100);
-        return;
+        return false;
     }
 
     try {
@@ -164,15 +217,20 @@ export function Services() {
           await saveLSPChanges(backendLSPs, config.lsps);
       }
 
-      // 2. Save other settings via UpdateSettings
+      // 2. Save Identity Authorities via the same diff-based approach
+      await saveIdentityAuthorityChanges(backendAuthorities, localAuthorities);
+
+      // 3. Save other settings via UpdateSettings
       await updateSettings({
         relay: config.relay,
+        generalRelay: config.generalRelay,
+        searchRelay: config.searchRelay,
         mempoolApi: config.mempoolApi,
         swapServiceUrl: config.swapServiceUrl,
         messageboardNwcUrl: config.messageboardNwcUrl,
         enableSwap: config.enableSwap,
         enableMessageboardNwc: config.enableMessageboardNwc,
-        // LSPs omitted, handled above
+        // LSPs and Identity Authorities omitted, handled above
       });
 
       // Reload
@@ -181,12 +239,39 @@ export function Services() {
           fetchLSPs()
       ]);
       toast.success("Services updated successfully");
-      
+
       setServicesDirty(false);
+      return true;
     } catch (e: any) {
         toast.error("Failed to save services", { description: e.message });
+        return false;
     } finally {
       setSavingServices(false);
+    }
+  }
+
+  // Block in-app navigation away from this page while there are unsaved changes.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      servicesDirty && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  // Warn on tab close / refresh while there are unsaved changes.
+  useEffect(() => {
+    if (!servicesDirty) {
+      return;
+    }
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [servicesDirty]);
+
+  async function handleSaveAndLeave() {
+    const saved = await saveServices();
+    if (saved && blocker.state === "blocked") {
+      blocker.proceed();
     }
   }
 
@@ -203,11 +288,17 @@ export function Services() {
       <div className="w-full flex flex-col gap-8">
         {/* Services Section */}
         <div className="space-y-4">
-          
-          <ServiceConfigForm 
-            state={config} 
-            onChange={setConfig} 
+
+          <ServiceConfigForm
+            state={config}
+            onChange={setConfig}
             validationErrors={validationErrors}
+          />
+
+          <IdentityAuthorityManagementCard
+            localAuthorities={localAuthorities}
+            setLocalAuthorities={setLocalAuthorities}
+            className="border-border shadow-sm"
           />
 
           {/* Save Services Button */}
@@ -223,6 +314,39 @@ export function Services() {
 
         </div>
       </div>
+
+      <AlertDialog
+        open={blocker.state === "blocked"}
+        onOpenChange={(open) => {
+          if (!open && blocker.state === "blocked") {
+            blocker.reset();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("services.unsavedChanges.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("services.unsavedChanges.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => blocker.state === "blocked" && blocker.reset()}>
+              {t("services.unsavedChanges.stay")}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => blocker.state === "blocked" && blocker.proceed()}
+            >
+              {t("services.unsavedChanges.discard")}
+            </Button>
+            <AlertDialogAction disabled={savingServices} onClick={handleSaveAndLeave}>
+              {savingServices ? t("services.unsavedChanges.saving") : t("services.unsavedChanges.save")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -1,6 +1,6 @@
 {
   "balance": {
-    "lightning": "ライトニング残高",
+    "lightning": "Lightning 残高",
     "onchain": "オンチェーン残高",
     "total": "合計残高",
     "available": "利用可能",
@@ -20,7 +20,7 @@
   },
   "receive": {
     "title": "受け取る",
-    "invoice": "ライトニングインボイス",
+    "invoice": "Lightning インボイス",
     "address": "ビットコインアドレス",
     "amount": "金額",
     "description": "説明",
@@ -39,7 +39,7 @@
       "backToWallet": "ウォレットに戻る"
     },
     "lightning": {
-      "title": "ライトニングで受け取る"
+      "title": "Lightning で受け取る"
     },
     "buyingLiquidity": "インバウンド流動性を購入中...",
     "amountTooSmall": "JIT支払いには金額が少なすぎます。最小値：{{amount}} {{unit}}。",
@@ -47,7 +47,7 @@
     "failedToBuyLiquidity": "流動性の購入に失敗しました",
     "successCreated": "インボイスが正常に作成されました",
     "failedToCreate": "インボイスの作成に失敗しました",
-    "lightningInvoice": "ライトニングインボイス",
+    "lightningInvoice": "Lightning インボイス",
     "createInvoice": "インボイスを作成",
     "waiting": "支払いを待っています",
     "paymentReceived": "支払いを受け取りました",
@@ -59,7 +59,7 @@
     "jitPayment": "JIT支払い",
     "jitExplainedTitle": "JIT支払いの説明",
     "jitWhyNeededTitle": "なぜ必要なのですか？",
-    "jitWhyNeededDesc": "ライトニング支払いには<strong>インバウンド流動性</strong>（受信容量）が必要です。現在、この金額を直接受け取るのに十分な容量がありません。",
+    "jitWhyNeededDesc": "Lightning 支払いには<strong>インバウンド流動性</strong>（受信容量）が必要です。現在、この金額を直接受け取るのに十分な容量がありません。",
     "jitHowWorksTitle": "仕組み",
     "jitHowWorksDesc": "LSPは支払いが到着したときに自動的に新しいチャンネルを<strong>ジャストインタイム（JIT）</strong>で開きます。これにより、チャンネルを手動で管理することなく、支払いが即座に成功します。",
     "feeStructure": "手数料体系",
@@ -157,6 +157,24 @@
     "about": {
       "title": "サブウォレットについて",
       "close": "閉じる"
+    },
+    "typeChooser": {
+      "title": "新しいサブウォレット",
+      "description": "作成するサブウォレットの種類を選択してください"
+    },
+    "walletTypes": {
+      "simple": {
+        "title": "シンプルなサブウォレット",
+        "description": "独自の残高を持つ独立したウォレットで、ハブから資金提供され、送受信の権限を完全に備えています。"
+      },
+      "jit": {
+        "title": "JIT ウォレットハブ",
+        "description": "Lightning ウォレットを持たない受取人が支払いを受け取る必要があるたびに、支出専用のウォレットを自動的に発行します。"
+      },
+      "circle": {
+        "title": "サークルウォレットハブ",
+        "description": "あなたの Nostr サークルの認証済みメンバーは、あなたのフォローリストまたは許可リストに基づいて検証された Lightning ウォレットをリクエストできます。"
+      }
     }
   },
   "onchain": {

@@ -1,0 +1,12 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json yarn.lock ./
+RUN yarn install --network-timeout 3000000
+
+COPY . .
+
+EXPOSE 5173
+
+CMD ["yarn", "dev:http", "--", "--host"]

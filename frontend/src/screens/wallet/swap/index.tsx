@@ -35,7 +35,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { useSwapInfo } from "src/hooks/useSwaps";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { SwapResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -93,18 +93,13 @@ function SwapInForm() {
   const { data: balances } = useBalances();
   const { data: swapInfo, error } = useSwapInfo("in");
   const { data: channels } = useChannels();
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
   const navigate = useNavigate();
 
   const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
-  useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (swapAmountDisplay) {
@@ -317,19 +312,14 @@ function SwapOutForm() {
   const { data: info } = useInfo();
   const navigate = useNavigate();
   const { data: balances } = useBalances();
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
   const [swapAmountDisplay, setSwapAmountDisplay] = useState("");
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
-  useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.lightning.totalSpendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (swapAmountDisplay) {

@@ -5,7 +5,7 @@ import {
     MoveRightIcon,
     XCircleIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
@@ -20,7 +20,7 @@ import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useAutoSwapsConfig, useSwapInfo } from "src/hooks/useSwaps";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { AutoSwapConfig } from "src/types";
 import { request } from "src/utils/request";
 
@@ -60,7 +60,7 @@ function AutoSwapOutForm() {
   const { mutate } = useAutoSwapsConfig();
   const { data: swapInfo } = useSwapInfo("out");
   const { data: info } = useInfo();
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
 
   const [isInternalSwap, setInternalSwap] = useState(true);
   const [balanceThresholdDisplay, setBalanceThresholdDisplay] = useState("");
@@ -71,12 +71,7 @@ function AutoSwapOutForm() {
   );
   const [loading, setLoading] = useState(false);
 
-  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
-  useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (balanceThresholdDisplay) {

@@ -215,7 +215,7 @@
       "dependOnBalanceDesc": "Sub-wallets are using your Hubs node liquidity. They can receive funds as long as you have enough receive limit in your channels.",
       "waryOfSpendingTitle": "Be wary of spending sub-wallets funds",
       "waryOfSpendingDesc": "Make sure you always maintain enough funds in your spending balance to prevent sub-wallets becoming unspendable. Sub-wallet payments might fail if the amount isn't available in your spending balance.",
-      "createButton": "Create Sub-wallet"
+      "walletTypesTitle": "Three ways to create a sub-wallet"
     },
     "increaseBalance": {
       "title": "Increase Balance",
@@ -236,6 +236,24 @@
       "nameHelper": "Name your friend, family member or coworker",
       "button": "Create Sub-wallet",
       "toast": "New sub-wallet created for {{name}}"
+    },
+    "typeChooser": {
+      "title": "New Sub-wallet",
+      "description": "Choose the type of sub-wallet to create"
+    },
+    "walletTypes": {
+      "simple": {
+        "title": "Simple Sub-wallet",
+        "description": "A standalone wallet with its own balance, funded from your Hub, with full send and receive permissions."
+      },
+      "jit": {
+        "title": "JIT Wallet Hub",
+        "description": "Automatically issues a spend-only wallet whenever a recipient without a Lightning Wallet needs to get paid."
+      },
+      "circle": {
+        "title": "Circle Wallet Hub",
+        "description": "Authorized members of your Nostr circle can request a Lightning Wallet from you, verified against your following list or allowlist."
+      }
     }
   },
   "onchain": {

@@ -43,7 +43,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useChannels } from "src/hooks/useChannels";
 import { useInfo } from "src/hooks/useInfo";
 import { usePeers } from "src/hooks/usePeers";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
 import {
@@ -80,15 +80,10 @@ function NewChannelInternal({
   const { data: balances } = useBalances();
   const { t } = useTranslation("channels");
   const { t: tc } = useTranslation("common");
-  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
+  const { parseInputAmount, scaleInputAmount } = useUnit();
   const navigate = useNavigate();
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (order.amount) {

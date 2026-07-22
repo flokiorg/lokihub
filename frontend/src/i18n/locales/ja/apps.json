@@ -12,6 +12,18 @@
     "close": "閉じる",
     "cancel": "キャンセル"
   },
+  "connectionDetailsModal": {
+    "title": "接続の詳細",
+    "appId": "アプリ ID",
+    "appPubkey": "アプリの公開鍵",
+    "walletPubkey": "ウォレットの公開鍵",
+    "noUniqueWalletPubkey": "この接続には固有のウォレット公開鍵がありません",
+    "lastUsed": "最終使用",
+    "never": "未使用",
+    "created": "作成日時",
+    "metadata": "メタデータ",
+    "close": "閉じる"
+  },
   "permissions": {
     "title": "権限",
     "pay": "インボイスの支払い",
@@ -89,6 +101,40 @@
     "leftInBudget": "予算の残高",
     "budgetRenewal": "予算の更新"
   },
+  "isolatedKind": {
+    "jit_hub": "JIT ウォレット",
+    "jit_wallet": "JIT ウォレット",
+    "circle_hub": "サークルウォレット",
+    "circle_wallet": "サークルウォレット",
+    "subwallet": "サブウォレット",
+    "isolatedApp": "隔離アプリ"
+  },
+  "circleHub": {
+    "revealConnection": "接続を表示",
+    "permissionsManagedNote": "この接続の権限は自動的に管理されており、ここでは変更できません。",
+    "budgetManagedNote": "この接続がリクエストする権限は自動的に管理されていますが、予算と有効期限は以下で変更できます。",
+    "hubSettingsTitle": "ハブ設定",
+    "jitHubSettingsDescription": "変更は今後発行される JIT ウォレットにのみ適用され、すでに発行されたウォレットには影響しません。",
+    "circleHubSettingsDescription": "変更は今後作成されるサークルウォレットにのみ適用され、すでに作成されたウォレットには影響しません。",
+    "maxWalletBudgetLabel": "ウォレットの最大予算",
+    "jitMaxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算（デフォルト：1,000 loki）",
+    "circleMaxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算（デフォルト：1,000 loki）",
+    "maxWalletExpiryLabel": "ウォレットの最長有効期限",
+    "jitMaxExpiryHelper": "発行された JIT ウォレットの最長有効期限（デフォルト：1日）",
+    "circleMaxExpiryHelper": "発行されたサークルウォレットの最長有効期限（デフォルト：30日）",
+    "minRenewalLabel": "最短更新間隔",
+    "minRenewalHelper": "メンバーがサークルウォレットの予算に対してリクエストできる最短の更新間隔（デフォルト：毎月）",
+    "feePpmLabel": "手数料（ppm）",
+    "feePpmHelper": "サークルウォレットが行う支払いに課される100万分の1単位の手数料（0 = 無料）",
+    "allowlistTitle": "許可リスト",
+    "addMember": "メンバーを追加",
+    "circleWalletsTitle": "サークルウォレット",
+    "jitWalletsTitle": "JIT ウォレット",
+    "addJitWallet": "JIT ウォレットを追加",
+    "errors": {
+      "loadJitConnection": "JIT ウォレットの接続の読み込みに失敗しました"
+    }
+  },
   "newApp": {
     "unsupportedApp": "未対応のアプリ",
     "unsupportedMethods": "このアプリはウォレットが対応していないメソッドを要求しています：{{methods}}",
@@ -117,9 +163,11 @@
     "confirmNewConnection": "新しい接続を確認",
     "lokiGoPermission": "Loki Go はあなたの残高を使用できる他のアプリ接続を作成する権限を付与されます。",
     "warningLokiGo": "警告：Loki Go は Loki Go に設定した予算より大きな予算の接続を作成できます。必ず予算を設定してください。",
+    "warningJitHub": "警告：このアプリは、その残高から新しいウォレットを作成し、第三者に直接支払うことができるようになります。毎回確認を求めることはありません。この接続にチャージした残高の範囲内でのみ使用できます。",
     "enterUnlockPassword": "続行するにはロック解除パスワードを入力してください。",
     "unlockPassword": "ロック解除パスワード",
     "specifyWalletPermissions": "ウォレットの権限を指定してください。",
+    "specifyJitHubLimits": "JITウォレットの予算と有効期限の上限を指定してください。",
     "appCreated": "アプリが作成されました",
     "failedToCreate": "アプリの作成に失敗しました",
     "configure": "設定",

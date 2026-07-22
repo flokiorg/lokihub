@@ -2,12 +2,15 @@ import {
     BellIcon,
     CirclePlusIcon,
     CrownIcon,
+    GiftIcon,
     HandCoinsIcon,
     InfoIcon,
     LucideIcon,
+    NetworkIcon,
     NotebookTabsIcon,
     PenLineIcon,
     SearchIcon,
+    UsersIcon,
     WalletMinimalIcon,
 } from "lucide-react";
 
@@ -46,7 +49,10 @@ export type Scope =
   | "list_transactions"
   | "sign_message"
   | "notifications" // covers all notification types
-  | "superuser";
+  | "superuser"
+  | "jit_hub"
+  | "circle_wallet"
+  | "jit_claim_funds";
 
 export type Nip47NotificationType = "payment_received" | "payment_sent";
 
@@ -64,6 +70,9 @@ export const scopeIconMap: ScopeIconMap = {
   sign_message: PenLineIcon,
   notifications: BellIcon,
   superuser: CrownIcon,
+  jit_hub: NetworkIcon,
+  circle_wallet: UsersIcon,
+  jit_claim_funds: GiftIcon,
 };
 
 export type WalletCapabilities = {
@@ -90,6 +99,9 @@ export const scopeDescriptions: Record<Scope, string> = {
   sign_message: "Sign messages",
   notifications: "Receive wallet notifications",
   superuser: "Create other app connections",
+  jit_hub: "Issue spend-only wallets on demand to beneficiaries",
+  circle_wallet: "Issue wallets to your circle's members",
+  jit_claim_funds: "Claim your allocated share of a shared JIT wallet",
 };
 
 export const expiryOptions: Record<string, number> = {
@@ -122,6 +134,7 @@ export interface App {
   lastUsedAt?: string;
   expiresAt?: string;
   isolated: boolean;
+  kind?: string;
   balance: number;
 
   scopes: Scope[];
@@ -129,6 +142,59 @@ export interface App {
   budgetUsage: number;
   budgetRenewal: BudgetRenewalType;
   metadata?: AppMetadata;
+  // circleIdentity is set only for circle_hub apps — a lightweight
+  // summary of the attached (possibly shared) identity plus policy-specific
+  // counts, so the Circles card doesn't need an extra round-trip per app.
+  // followingCount is undefined (not 0) when not yet known — the backend
+  // only ever returns it from a non-blocking cache peek, never a live fetch,
+  // so a brand-new following-policy identity should render as still-loading
+  // rather than "0 following" until the periodic refresher populates it.
+  circleIdentity?: CircleIdentitySummary & {
+    followingCount?: number;
+    allowlistCount: number;
+    // policySyncedAt is "last policy update" — when membership was last
+    // confirmed from its source of truth (relay fetch for "following", last
+    // allowlist add/remove for "allowlist"). Undefined (not "never") when not
+    // yet known, same loading semantics as followingCount.
+    policySyncedAt?: string;
+  };
+  // jitPerWalletMaxMloki/jitMaxExpSecs are set only for jit_hub apps — the
+  // hub-wide defaults set at creation time, editable from Edit Connection.
+  jitPerWalletMaxMloki?: number;
+  jitMaxExpSecs?: number;
+  // circleMaxExpSecs/circleFeesPpm/circlePerWalletMaxMloki/circleMinBudgetRenewal
+  // are set only for circle_hub apps, for the same reason as above.
+  circleMaxExpSecs?: number;
+  circleFeesPpm?: number;
+  circlePerWalletMaxMloki?: number;
+  circleMinBudgetRenewal?: BudgetRenewalType;
+}
+
+export interface CircleIdentitySummary {
+  id: number;
+  name: string;
+  policy: "following" | "allowlist";
+  providerPubkey: string;
+  // How many circle_hub apps currently reference this identity — an
+  // identity with usedByCount > 0 can't be deleted until those are removed.
+  usedByCount: number;
+}
+
+export interface CircleIdentityResponse extends CircleIdentitySummary {
+  followingCount?: number;
+  allowlistCount: number;
+  allowlistPubkeys?: string[];
+  usedByCount: number;
+}
+
+// CircleRefreshPreview is the delta a following-policy allowlist refresh
+// would apply, plus the full freshly-fetched list — confirming applies
+// `pubkeys` directly rather than re-fetching from relays a second time, so
+// what's applied always matches exactly what was shown for review.
+export interface CircleRefreshPreview {
+  pubkeys: string[];
+  added: string[];
+  removed: string[];
 }
 
 export interface AppPermissions {
@@ -137,6 +203,13 @@ export interface AppPermissions {
   budgetRenewal: BudgetRenewalType;
   expiresAt?: Date;
   isolated: boolean;
+  // jitHub/jitPerWalletMaxLoki/jitMaxExpSecs are only meaningful for a new
+  // connection (isNewConnection) — they select kind "jit_hub" instead of
+  // "isolated" at creation time and are never editable afterward here (see
+  // AppDetails' dedicated Hub Settings card for that).
+  jitHub?: boolean;
+  jitPerWalletMaxLoki?: number;
+  jitMaxExpSecs?: number;
 }
 
 export interface LSP {
@@ -170,6 +243,8 @@ export interface InfoResponse {
   swapServiceUrl: string;
   messageboardNwcUrl: string;
   relay: string;
+  generalRelay: string;
+  searchRelay: string;
   lsps: LSP[];
   enableSwap: boolean;
   enableMessageboardNwc: boolean;
@@ -200,6 +275,13 @@ export type Network = "flokicoin" | "testnet" | "signet";
 export type AppMetadata = {
   app_store_app_id?: string;
   lud16?: string;
+  // Full nostr pubkey behind a JIT/circle wallet's identity, stored for
+  // display purposes (resolving a profile name instead of the npub prefix
+  // baked into the app name). "identity_pubkey" for JIT wallets (pubkey mode
+  // at creation, connection_key mode once claimed), "requester_pubkey" for
+  // circle wallets.
+  identity_pubkey?: string;
+  requester_pubkey?: string;
 } & Record<string, unknown>;
 
 export type AutoSwapConfig = {
@@ -265,7 +347,21 @@ export interface CreateAppRequest {
   expiresAt?: string;
   scopes: Scope[];
   returnTo?: string;
-  isolated?: boolean;
+  kind?: string;
+  jitPerWalletMaxMloki?: number;
+  jitMaxExpSecs?: number;
+  circleMaxExpSecs?: number;
+  circleFeesPpm?: number;
+  circlePerWalletMaxMloki?: number;
+  circleMinBudgetRenewal?: BudgetRenewalType;
+  // circleIdentityId reuses an existing CircleIdentity — when set,
+  // circleIdentityName/circlePolicy/providerPubkey below are ignored.
+  circleIdentityId?: number;
+  // circleIdentityName/circlePolicy/providerPubkey create a brand-new
+  // CircleIdentity — used only when circleIdentityId is not set.
+  circleIdentityName?: string;
+  circlePolicy?: string;
+  providerPubkey?: string;
   metadata?: AppMetadata;
   unlockPassword?: string; // required to create superuser apps
 }
@@ -282,6 +378,27 @@ export interface CreateAppResponse {
   returnTo: string;
 }
 
+export type CircleDeleteMode = "all" | "empty_only";
+
+export interface CircleChildBalance {
+  appId: number;
+  name: string;
+  requesterPubkey: string;
+  appPubkey: string;
+  balanceMloki: number;
+}
+
+export interface ListCircleChildrenBalancesResponse {
+  children: CircleChildBalance[];
+  totalCount: number;
+}
+
+export interface DeleteCircleHubResult {
+  hubDeleted: boolean;
+  deletedChildIds: number[];
+  skippedChildIds: number[];
+}
+
 export type UpdateAppRequest = {
   name?: string;
   maxAmount?: number;
@@ -291,6 +408,14 @@ export type UpdateAppRequest = {
   scopes?: Scope[];
   metadata?: AppMetadata;
   isolated?: boolean;
+  // jit_hub only
+  jitPerWalletMaxMloki?: number;
+  jitMaxExpSecs?: number;
+  // circle_hub only
+  circleMaxExpSecs?: number;
+  circleFeesPpm?: number;
+  circlePerWalletMaxMloki?: number;
+  circleMinBudgetRenewal?: BudgetRenewalType;
 };
 
 export type Channel = {
@@ -740,5 +865,63 @@ export interface LSPS2BuyResponse {
   interceptScid: string; // Backend returns as string
   cltvExpiryDelta: number;
   lspNodeID: string;
+}
+
+// JITWalletClaim represents one recipient's slice of a (possibly shared)
+// jit_wallet. id is the claim's own row ID (DELETE
+// /jit-wallets/{wallet_app_id}/claims/{id}, unclaimed only); wallet_app_id
+// identifies the shared connection this slice belongs to (reveal via
+// /jit-connection, delete the whole wallet via DELETE
+// /jit-wallets/{wallet_app_id}). claimed is a plain boolean — claim_funds
+// either pays a slice out completely or not at all, so there's no
+// partial/active state to derive.
+export interface JITWalletClaim {
+  id: number;
+  wallet_app_id: number;
+  identity_type: "pubkey" | "connection_key";
+  identity_value: string;
+  amount_mloki: number;
+  expires_at?: number;
+  claimed: boolean;
+  claimed_at?: number;
+  created_at: number;
+}
+
+export type JITAllocationStatus = "unclaimed" | "claimed" | "expired";
+
+export interface JITWalletClaimCounts {
+  all: number;
+  unclaimed: number;
+  claimed: number;
+  expired: number;
+}
+
+export interface ListJITWalletClaimsResponse {
+  claims: JITWalletClaim[];
+  totalCount: number;
+  counts: JITWalletClaimCounts;
+}
+
+// JITWalletRecipient describes one recipient's requested slice when creating
+// a (possibly shared) JIT wallet.
+export interface JITWalletRecipient {
+  identity_type: "pubkey" | "connection_key";
+  identity_value: string;
+  ia_pubkey?: string; // required iff identity_type === "connection_key"
+  amount_mloki: number;
+}
+
+export interface CreateJITWalletResponse {
+  app_id: number;
+  pairing_uri: string;
+  expires_at: number;
+  recipients: JITWalletRecipient[];
+}
+
+export interface IdentityAuthority {
+  pubkey: string;
+  name: string;
+  relay_urls?: string[];
+  created_at: number;
 }
 

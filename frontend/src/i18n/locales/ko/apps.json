@@ -12,6 +12,18 @@
     "close": "닫기",
     "cancel": "취소"
   },
+  "connectionDetailsModal": {
+    "title": "연결 상세",
+    "appId": "앱 ID",
+    "appPubkey": "앱 공개 키",
+    "walletPubkey": "지갑 공개 키",
+    "noUniqueWalletPubkey": "이 연결에는 고유한 지갑 공개 키가 없습니다",
+    "lastUsed": "마지막 사용",
+    "never": "사용한 적 없음",
+    "created": "생성일",
+    "metadata": "메타데이터",
+    "close": "닫기"
+  },
   "permissions": {
     "title": "권한",
     "pay": "인보이스 결제",
@@ -89,6 +101,40 @@
     "leftInBudget": "예산 잔액",
     "budgetRenewal": "예산 갱신"
   },
+  "isolatedKind": {
+    "jit_hub": "JIT 지갑",
+    "jit_wallet": "JIT 지갑",
+    "circle_hub": "서클 지갑",
+    "circle_wallet": "서클 지갑",
+    "subwallet": "서브 지갑",
+    "isolatedApp": "격리된 앱"
+  },
+  "circleHub": {
+    "revealConnection": "연결 표시",
+    "permissionsManagedNote": "이 연결의 권한은 자동으로 관리되며 여기서 변경할 수 없습니다.",
+    "budgetManagedNote": "이 연결이 요청한 권한은 자동으로 관리되지만, 예산과 만료일은 아래에서 변경할 수 있습니다.",
+    "hubSettingsTitle": "허브 설정",
+    "jitHubSettingsDescription": "변경 사항은 이후 발급되는 JIT 지갑에만 적용되며, 이미 발급된 지갑에는 영향을 주지 않습니다.",
+    "circleHubSettingsDescription": "변경 사항은 이후 생성되는 서클 지갑에만 적용되며, 이미 생성된 지갑에는 영향을 주지 않습니다.",
+    "maxWalletBudgetLabel": "최대 지갑 예산",
+    "jitMaxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산 (기본값: 1,000 loki)",
+    "circleMaxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산 (기본값: 1,000 loki)",
+    "maxWalletExpiryLabel": "최대 지갑 만료 기간",
+    "jitMaxExpiryHelper": "발급된 JIT 지갑의 최대 유효 기간 (기본값: 1일)",
+    "circleMaxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간 (기본값: 30일)",
+    "minRenewalLabel": "최소 갱신 주기",
+    "minRenewalHelper": "멤버가 자신의 서클 지갑 예산에 대해 요청할 수 있는 가장 짧은 갱신 주기 (기본값: 매월)",
+    "feePpmLabel": "수수료 (ppm)",
+    "feePpmHelper": "서클 지갑이 진행하는 결제에 부과되는 백만분율 수수료 (0 = 무료)",
+    "allowlistTitle": "허용 목록",
+    "addMember": "멤버 추가",
+    "circleWalletsTitle": "서클 지갑",
+    "jitWalletsTitle": "JIT 지갑",
+    "addJitWallet": "JIT 지갑 추가",
+    "errors": {
+      "loadJitConnection": "JIT 지갑 연결을 불러오지 못했습니다"
+    }
+  },
   "newApp": {
     "unsupportedApp": "지원되지 않는 앱",
     "unsupportedMethods": "이 앱은 지갑에서 지원하지 않는 메서드를 요청합니다: {{methods}}",
@@ -117,9 +163,11 @@
     "confirmNewConnection": "새 연결 확인",
     "lokiGoPermission": "Loki Go는 잔액을 사용할 수 있는 다른 앱 연결을 생성할 권한을 받게 됩니다.",
     "warningLokiGo": "경고: Loki Go는 Loki Go에 설정된 예산보다 더 큰 예산으로 연결을 생성할 수 있습니다. 항상 예산을 설정하세요.",
+    "warningJitHub": "경고: 이 앱은 잔액에서 새 지갑을 생성하고 제3자에게 직접 결제할 수 있게 됩니다. 매번 다시 확인을 요청하지 않습니다. 이 연결에 충전한 잔액 한도 내에서만 사용할 수 있습니다.",
     "enterUnlockPassword": "계속하려면 잠금 해제 비밀번호를 입력하세요.",
     "unlockPassword": "잠금 해제 비밀번호",
     "specifyWalletPermissions": "지갑 권한을 지정하세요.",
+    "specifyJitHubLimits": "JIT 지갑의 예산 및 만료 한도를 지정해 주세요.",
     "appCreated": "앱이 생성되었습니다",
     "failedToCreate": "앱 생성에 실패했습니다",
     "configure": "구성",

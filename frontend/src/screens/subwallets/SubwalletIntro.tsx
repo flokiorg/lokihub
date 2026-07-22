@@ -6,6 +6,7 @@ import {
     Wallet2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import AppHeader from "src/components/AppHeader";
 
 import SubWalletDark from "src/assets/illustrations/sub-wallet-dark.svg?react";
@@ -13,10 +14,11 @@ import SubWalletLight from "src/assets/illustrations/sub-wallet-light.svg?react"
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import { SubWalletInfoDialog } from "src/components/SubWalletInfoDialog";
 import { Button } from "src/components/ui/button";
-import { LinkButton } from "src/components/ui/custom/link-button";
+import { getWalletTypes } from "src/screens/subwallets/walletTypes";
 
 export function SubwalletIntro() {
   const { t } = useTranslation("wallet");
+  const walletTypes = getWalletTypes(t);
 
   return (
     <div className="grid gap-4">
@@ -41,8 +43,8 @@ export function SubwalletIntro() {
         }
       />
       <div>
-        <div className="flex flex-col gap-6 max-w-(--breakpoint-md)">
-          <div className="mb-2">
+        <div className="flex flex-col gap-6 max-w-(--breakpoint-md) pb-6">
+          <div className="mb-2 flex justify-center sm:justify-start">
             <SubWalletDark className="w-72 hidden dark:block" />
             <SubWalletLight className="w-72 dark:hidden" />
           </div>
@@ -80,9 +82,24 @@ export function SubwalletIntro() {
             </div>
           </div>
           <div>
-            <LinkButton to="/sub-wallets/new" className="mt-4">
-              {t("subwallets.intro.createButton")}
-            </LinkButton>
+            <div className="font-medium mb-3">
+              {t("subwallets.intro.walletTypesTitle")}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {walletTypes.map(({ to, icon: Icon, title, description }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className="flex flex-col gap-1 rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground hover:border-primary/50"
+                >
+                  <Icon className="size-5 text-muted-foreground" />
+                  <div className="font-medium text-sm">{title}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {description}
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </div>

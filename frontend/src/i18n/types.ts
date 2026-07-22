@@ -6,6 +6,7 @@ import enSetup from "./locales/en/setup.json";
 import enChannels from "./locales/en/channels.json";
 import enApps from "./locales/en/apps.json";
 import enHelp from "./locales/en/help.json";
+import enCircles from "./locales/en/circles.json";
 
 declare module "i18next" {
   interface CustomTypeOptions {
@@ -19,6 +20,7 @@ declare module "i18next" {
       channels: typeof enChannels;
       apps: typeof enApps;
       help: typeof enHelp;
+      circles: typeof enCircles;
     };
   }
 }

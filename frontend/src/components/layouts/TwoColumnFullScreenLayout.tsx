@@ -29,14 +29,12 @@ export default function TwoColumnFullScreenLayout() {
 
         <div className="flex flex-col relative z-10 text-start">
           <h1
-            className="text-4xl font-black text-white tracking-tight mb-6"
-            style={{ textShadow: "0 4px 12px rgba(0,0,0,0.6)" }}
+            className="text-4xl font-black text-white tracking-tight mb-6 text-hero-heading"
           >
-            Your Gateway to the<br /> Lightning Network
+            Your Hub, Your Rules
           </h1>
           <p
-            className="text-white/90 text-xl font-medium leading-relaxed max-w-lg"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}
+            className="text-white/90 text-xl font-medium leading-relaxed max-w-lg text-hero-subtitle"
           >
             Manage your channels, connect apps, and make instant payments.
           </p>

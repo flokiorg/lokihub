@@ -30,6 +30,7 @@ export const NAMESPACES = [
   "channels",
   "apps",
   "help",
+  "circles",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

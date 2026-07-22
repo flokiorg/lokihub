@@ -1,6 +1,6 @@
 {
   "balance": {
-    "lightning": "رصيد شبكة البرق",
+    "lightning": "رصيد شبكة Lightning",
     "onchain": "الرصيد على السلسلة",
     "total": "الرصيد الإجمالي",
     "available": "المتاح",
@@ -48,7 +48,7 @@
   },
   "receive": {
     "title": "استقبال",
-    "invoice": "فاتورة البرق",
+    "invoice": "فاتورة Lightning",
     "address": "عنوان البيتكوين",
     "amount": "المبلغ",
     "description": "الوصف",
@@ -67,7 +67,7 @@
       "backToWallet": "العودة إلى المحفظة"
     },
     "lightning": {
-      "title": "استلام عبر لايتنينغ"
+      "title": "استلام عبر Lightning"
     },
     "buyingLiquidity": "شراء سيولة واردة...",
     "amountTooSmall": "المبلغ صغير جدا لدفع JIT. الحد الأدنى: {{amount}} {{unit}}.",
@@ -75,7 +75,7 @@
     "failedToBuyLiquidity": "فشل شراء السيولة",
     "successCreated": "تم إنشاء الفاتورة بنجاح",
     "failedToCreate": "فشل إنشاء الفاتورة",
-    "lightningInvoice": "فاتورة لايتنينغ",
+    "lightningInvoice": "فاتورة Lightning",
     "createInvoice": "إنشاء فاتورة",
     "waiting": "في انتظار الدفع",
     "paymentReceived": "تم استلام الدفع",
@@ -87,7 +87,7 @@
     "jitPayment": "دفع JIT",
     "jitExplainedTitle": "شرح دفع JIT",
     "jitWhyNeededTitle": "لماذا هذا مطلوب؟",
-    "jitWhyNeededDesc": "تتطلب مدفوعات لايتنينغ <strong>سيولة واردة</strong> (سعة استلام). ليس لديك حاليا سعة كافية لاستلام هذا المبلغ مباشرة.",
+    "jitWhyNeededDesc": "تتطلب مدفوعات Lightning <strong>سيولة واردة</strong> (سعة استلام). ليس لديك حاليا سعة كافية لاستلام هذا المبلغ مباشرة.",
     "jitHowWorksTitle": "كيف يعمل",
     "jitHowWorksDesc": "سيقوم LSP الخاص بك تلقائيا بفتح قناة جديدة <strong>في الوقت المناسب (JIT)</strong> عند وصول الدفع. يضمن هذا نجاح الدفع على الفور دون الحاجة إلى إدارة القنوات يدويا.",
     "feeStructure": "هيكل الرسوم",
@@ -115,7 +115,7 @@
   "send": {
     "title": "إرسال",
     "destination": "الوجهة",
-    "placeholder": "فاتورة، عنوان البرق، عنوان على السلسلة",
+    "placeholder": "فاتورة، عنوان Lightning، عنوان على السلسلة",
     "amount": "المبلغ",
     "description": "الوصف",
     "confirm": "تأكيد الدفع",
@@ -236,6 +236,24 @@
       "nameHelper": "سمِّ صديقك أو أحد أفراد عائلتك أو زميلك في العمل",
       "button": "إنشاء محفظة فرعية",
       "toast": "تم إنشاء محفظة فرعية جديدة لـ {{name}}"
+    },
+    "typeChooser": {
+      "title": "محفظة فرعية جديدة",
+      "description": "اختر نوع المحفظة الفرعية التي تريد إنشاءها"
+    },
+    "walletTypes": {
+      "simple": {
+        "title": "محفظة فرعية بسيطة",
+        "description": "محفظة مستقلة برصيدها الخاص، تُموَّل من مركزك، وتتمتع بصلاحيات كاملة للإرسال والاستلام."
+      },
+      "jit": {
+        "title": "مركز محفظة JIT",
+        "description": "يصدر تلقائيًا محفظة مخصصة للإنفاق فقط كلما احتاج مستلم لا يمتلك محفظة Lightning إلى تلقي دفعة."
+      },
+      "circle": {
+        "title": "مركز محفظة الدائرة",
+        "description": "يمكن للأعضاء المصرَّح لهم في دائرة Nostr الخاصة بك طلب محفظة Lightning منك، يتم التحقق منها وفق قائمة متابَعيك أو القائمة المسموح بها."
+      }
     }
   },
   "onchain": {

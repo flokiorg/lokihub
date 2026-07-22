@@ -44,6 +44,8 @@ export function GlobalError({ error }: GlobalErrorProps) {
   const [config, setConfig] = useState<ServiceConfigState>({
       mempoolApi: "",
       relay: "",
+      generalRelay: "",
+      searchRelay: "",
       swapServiceUrl: "",
       messageboardNwcUrl: "",
       enableSwap: true,
@@ -69,6 +71,8 @@ export function GlobalError({ error }: GlobalErrorProps) {
                 setConfig({
                   mempoolApi: info.mempoolUrl || "",
                   relay: info.relay || "",
+                  generalRelay: info.generalRelay || "",
+                  searchRelay: info.searchRelay || "",
                   swapServiceUrl: info.swapServiceUrl || "",
                   messageboardNwcUrl: info.messageboardNwcUrl || "",
                   enableSwap: info.enableSwap ?? true,
@@ -120,6 +124,8 @@ export function GlobalError({ error }: GlobalErrorProps) {
               swapServiceUrl: config.swapServiceUrl,
               messageboardNwcUrl: config.messageboardNwcUrl,
               relay: config.relay,
+              generalRelay: config.generalRelay,
+              searchRelay: config.searchRelay,
               enableSwap: config.enableSwap,
               enableMessageboardNwc: config.enableMessageboardNwc,
               lsps: config.lsps.map(l => ({

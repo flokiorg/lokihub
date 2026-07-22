@@ -14,17 +14,19 @@ interface BudgetRenewalProps {
   value: BudgetRenewalType;
   onChange: (value: BudgetRenewalType) => void;
   onClose?: () => void;
+  label?: string;
 }
 
 const BudgetRenewalSelect: React.FC<BudgetRenewalProps> = ({
   value,
   onChange,
   onClose,
+  label = "Budget Renewal",
 }) => {
   return (
     <>
       <Label htmlFor="budget-renewal" className="block mb-2">
-        Budget Renewal
+        {label}
       </Label>
       <div className="flex gap-2 items-center text-muted-foreground mb-4 text-sm">
         <Select value={value} onValueChange={onChange}>

@@ -22,9 +22,19 @@ const daysFromNow = (date?: Date) => {
 interface ExpiryProps {
   value?: Date | undefined;
   onChange: (expiryDate?: Date) => void;
+  label?: string;
+  // maxDate disables any preset or custom date past it (and disables "Never"
+  // entirely, since an unbounded expiry always exceeds a finite cap) — used
+  // where a caller enforces its own ceiling (e.g. a JIT Hub's max_exp_secs).
+  maxDate?: Date;
 }
 
-const ExpirySelect: React.FC<ExpiryProps> = ({ value, onChange }) => {
+const ExpirySelect: React.FC<ExpiryProps> = ({
+  value,
+  onChange,
+  label = "Connection expiration",
+  maxDate,
+}) => {
   const [expiryDays, setExpiryDays] = React.useState(daysFromNow(value));
   const [customExpiry, setCustomExpiry] = React.useState(() => {
     const _daysFromNow = daysFromNow(value);
@@ -36,13 +46,19 @@ const ExpirySelect: React.FC<ExpiryProps> = ({ value, onChange }) => {
   });
   return (
     <>
-      <p className="font-medium text-sm mb-2">Connection expiration</p>
+      <p className="font-medium text-sm mb-2">{label}</p>
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
         {Object.keys(expiryOptions).map((expiry) => {
+          const days = expiryOptions[expiry];
+          // days === 0 means "Never" — always exceeds any finite maxDate.
+          const exceedsMax =
+            maxDate !== undefined &&
+            (days === 0 || dayjs().add(days, "day").endOf("day").isAfter(maxDate));
           return (
             <button
               type="button"
               key={expiry}
+              disabled={exceedsMax}
               onClick={() => {
                 setCustomExpiry(false);
                 let date: Date | undefined;
@@ -57,6 +73,7 @@ const ExpirySelect: React.FC<ExpiryProps> = ({ value, onChange }) => {
               }}
               className={cn(
                 "cursor-pointer rounded text-nowrap border-2 text-center p-4",
+                exceedsMax && "cursor-not-allowed opacity-40",
                 !customExpiry && expiryDays == expiryOptions[expiry]
                   ? "border-primary"
                   : "border-muted"
@@ -88,6 +105,7 @@ const ExpirySelect: React.FC<ExpiryProps> = ({ value, onChange }) => {
               mode="single"
               disabled={{
                 before: new Date(),
+                ...(maxDate ? { after: maxDate } : {}),
               }}
               selected={value}
               onSelect={(date?: Date) => {

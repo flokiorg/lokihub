@@ -1,6 +1,6 @@
 {
   "balance": {
-    "lightning": "闪电网络余额",
+    "lightning": "Lightning 网络余额",
     "onchain": "链上余额",
     "total": "总余额",
     "available": "可用",
@@ -20,7 +20,7 @@
   },
   "receive": {
     "title": "收款",
-    "invoice": "闪电发票",
+    "invoice": "Lightning 发票",
     "address": "比特币地址",
     "amount": "金额",
     "description": "说明",
@@ -39,7 +39,7 @@
       "backToWallet": "返回钱包"
     },
     "lightning": {
-      "title": "通过闪电网络收款"
+      "title": "通过 Lightning 网络收款"
     },
     "buyingLiquidity": "正在购买入账流动性...",
     "amountTooSmall": "金额太小，无法进行 JIT 支付。最低：{{amount}} {{unit}}。",
@@ -47,7 +47,7 @@
     "failedToBuyLiquidity": "购买流动性失败",
     "successCreated": "成功创建发票",
     "failedToCreate": "创建发票失败",
-    "lightningInvoice": "闪电网络发票",
+    "lightningInvoice": "Lightning 网络发票",
     "createInvoice": "创建发票",
     "waiting": "等待付款",
     "paymentReceived": "收到付款",
@@ -59,7 +59,7 @@
     "jitPayment": "JIT 支付",
     "jitExplainedTitle": "JIT 支付说明",
     "jitWhyNeededTitle": "为什么需要这个？",
-    "jitWhyNeededDesc": "闪电网络支付需要<strong>入账流动性</strong>（接收容量）。您目前没有足够的容量来直接接收这笔金额。",
+    "jitWhyNeededDesc": "Lightning 网络支付需要<strong>入账流动性</strong>（接收容量）。您目前没有足够的容量来直接接收这笔金额。",
     "jitHowWorksTitle": "它是如何工作的",
     "jitHowWorksDesc": "您的 LSP 将在付款到达时自动<strong>即时（JIT）</strong>打开一个新通道。这确保您的付款立即成功，而无需您手动管理通道。",
     "feeStructure": "费用结构",
@@ -157,6 +157,24 @@
     "about": {
       "title": "关于子钱包",
       "close": "关闭"
+    },
+    "typeChooser": {
+      "title": "新建子钱包",
+      "description": "选择要创建的子钱包类型"
+    },
+    "walletTypes": {
+      "simple": {
+        "title": "简单子钱包",
+        "description": "一个拥有独立余额的独立钱包，由您的中心提供资金，具有完整的收发权限。"
+      },
+      "jit": {
+        "title": "JIT 钱包中心",
+        "description": "每当没有 Lightning 钱包的接收人需要收款时，自动发放一个仅支持支出的钱包。"
+      },
+      "circle": {
+        "title": "圈子钱包中心",
+        "description": "您 Nostr 圈子中获得授权的成员可以向您申请 Lightning 钱包，系统会根据您的关注列表或允许列表进行验证。"
+      }
     }
   },
   "onchain": {

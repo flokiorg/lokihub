@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "Remove",
+    "removeSelected": "Remove selected",
+    "clear": "Clear",
+    "add": "Add",
+    "addWithCount": "Add ({{count}})",
+    "selectedCount": "{{count}} selected",
+    "selectAll": "Select all",
+    "memberColumn": "Member",
+    "selectMember": "Select member",
+    "nameLabel": "Name",
+    "maxWalletBudgetLabel": "Max Wallet Budget",
+    "minRenewalLabel": "Min Renewal",
+    "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget",
+    "maxWalletExpiryLabel": "Max Wallet Expiry",
+    "feePpmLabel": "Fee (ppm)",
+    "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
+    "advancedSettings": "Advanced settings",
+    "inUse": "In use",
+    "hexPlaceholder": "64-character hex string",
+    "syncingFollowing": "Syncing following list…",
+    "sync": "Sync",
+    "following": "{{count}} following",
+    "synced": "Synced {{time}}",
+    "updated": "Updated {{time}}",
+    "total": "total",
+    "anonymous": "Anonymous"
+  },
+  "policyLabel": {
+    "following": "Following",
+    "allowlist": "Allowlist"
+  },
+  "identityType": {
+    "pubkey": "Nostr Pubkey",
+    "connectionKey": "Connection Key"
+  },
+  "avatarStack": {
+    "more": "+{{count}} more"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 verified",
+    "verifyingNip05": "Verifying NIP-05",
+    "lightningAddress": "Has a lightning address"
+  },
+  "searchDropdown": {
+    "searching": "Searching…",
+    "noMatches": "No matches"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "Your Nostr Identity",
+    "defaultHelper": "Used to resolve your following list for member authorization",
+    "invalidHelper": "Doesn't look like a valid npub, hex pubkey, nprofile, or NIP-05 address",
+    "placeholder": "npub1..., hex, nprofile1..., you@domain.com, or search a name",
+    "change": "Change"
+  },
+  "memberPicker": {
+    "noneYet": "No members pinned yet.",
+    "removeMember": "Remove member",
+    "enterIdentity": "Enter a valid Nostr identity above to search.",
+    "searchPlaceholder": "Search Nostr by name, NIP-05, or paste an npub/hex",
+    "alreadyMember": "Already a member.",
+    "searching": "Searching…",
+    "noMatchesNostr": "No matches on Nostr.",
+    "alreadyMemberBadge": "Already a member",
+    "resolving": "Resolving…",
+    "searchHint": "Search by name, NIP-05, npub, or paste a pubkey."
+  },
+  "followingPreview": {
+    "empty": "This identity isn't following anyone yet — members will be authorized automatically as they're followed.",
+    "summary_one": "{{count}} person will be authorized now, and the list stays in sync automatically as this identity follows or unfollows others.",
+    "summary_other": "{{count}} people will be authorized now, and the list stays in sync automatically as this identity follows or unfollows others."
+  },
+  "claimBadge": {
+    "claimed": "Claimed",
+    "unclaimed": "Unclaimed"
+  },
+  "claimDeadline": {
+    "expired": "Claim window expired",
+    "withinMinutes_one": "Claim within {{count}} min",
+    "withinMinutes_other": "Claim within {{count}} min",
+    "withinHours": "Claim within {{count}}h",
+    "byDate": "Claim by {{date}}",
+    "none": "No claim deadline"
+  },
+  "circleCard": {
+    "member_one": "{{count}} member",
+    "member_other": "{{count}} members"
+  },
+  "childIdentityCard": {
+    "circleWallet": "Circle Wallet",
+    "jitWallet": "JIT Wallet",
+    "claimedCount": "{{claimed}}/{{total}} claimed",
+    "errors": {
+      "loadRecipients": "Failed to load JIT wallet recipients"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "Manage",
+    "title": "Manage identities",
+    "description": "Identities still attached to a circle can't be deleted — remove them from every circle first.",
+    "noneSaved": "No saved identities yet.",
+    "usedBy_one": "Used by {{count}} circle",
+    "usedBy_other": "Used by {{count}} circles",
+    "unused": "Unused",
+    "stillUsedBy_one": "Still used by {{count}} circle — remove it from those first.",
+    "stillUsedBy_other": "Still used by {{count}} circles — remove it from those first.",
+    "deleteTitle": "Delete \"{{name}}\"?",
+    "deleteDescription": "This identity isn't attached to any circle. Deleting it can't be undone.",
+    "delete": "Delete"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "Following list synced",
+    "errors": {
+      "sync": "Failed to sync following list"
+    }
+  },
+  "circleAllowlist": {
+    "description": "Manage which nostr pubkeys are authorized to request a wallet from this Circle Wallet Hub.",
+    "sharedWarning_one": "This identity is shared by {{count}} other circle — changes here apply to all of them.",
+    "sharedWarning_other": "This identity is shared by {{count}} other circles — changes here apply to all of them.",
+    "addMemberHeading": "Add member",
+    "addMembersTitle": "Add members",
+    "removeMemberTitle": "Remove this member?",
+    "removeMemberDescription": "They will no longer be able to request a wallet from this Circle Wallet Hub. This can't be undone.",
+    "removeSelectedTitle_one": "Remove {{count}} member?",
+    "removeSelectedTitle_other": "Remove {{count}} members?",
+    "addedToast_one": "Member added to allowlist",
+    "addedToast_other": "{{count}} members added to allowlist",
+    "removedOneToast": "Pubkey removed from allowlist",
+    "removedToast_one": "Member removed from allowlist",
+    "removedToast_other": "{{count}} members removed from allowlist",
+    "errors": {
+      "load": "Failed to load circle allowlist",
+      "add": "Failed to add to allowlist",
+      "removeOne": "Failed to remove pubkey",
+      "removeSelected": "Failed to remove from allowlist"
+    }
+  },
+  "circleWallets": {
+    "description": "Wallets already created for members of this circle.",
+    "empty": "No circle wallets created yet.",
+    "selectWallet": "Select circle wallet",
+    "removeTitle": "Remove this circle wallet?",
+    "removeDescription": "Its remaining balance will be transferred back to this hub, and its NWC connection will stop working immediately. This can't be undone.",
+    "removeSelectedTitle_one": "Remove {{count}} circle wallet?",
+    "removeSelectedTitle_other": "Remove {{count}} circle wallets?",
+    "removeSelectedDescription": "Their remaining balances will be transferred back to this hub, and their NWC connections will stop working immediately. This can't be undone.",
+    "removedToast": "Circle wallet removed",
+    "removedSelectedToast_one": "Circle wallet removed",
+    "removedSelectedToast_other": "{{count}} circle wallets removed",
+    "errors": {
+      "remove": "Failed to remove circle wallet",
+      "removeSelected": "Failed to remove selected circle wallets"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}} & {{second}}",
+    "participantsOthers": "{{first}} & {{count}} others",
+    "durationDays_one": "{{count}} day",
+    "durationDays_other": "{{count}} days",
+    "durationHours_one": "{{count}} hour",
+    "durationHours_other": "{{count}} hours",
+    "durationMinutes": "{{count}} min",
+    "removeRecipient": "Remove recipient",
+    "pubkeyLabel": "Nostr Pubkey",
+    "pubkeyHelper": "Search by name, NIP-05, or paste an npub/hex/nprofile",
+    "connectionKeyLabel": "Connection Key (hex)",
+    "iaPubkeyLabel": "Identity Authority Pubkey (hex)",
+    "iaPubkeyHelper": "Must be a trusted Identity Authority (Settings → Identity Authorities)",
+    "duplicateIdentity": "This identity is already used by another recipient in this wallet. Each recipient needs a distinct identity.",
+    "walletBudgetLabel": "Wallet Budget",
+    "requestedSummary": "{{total}} loki requested",
+    "requestedSummaryWithMax": "{{total}} loki requested of this hub's max wallet budget of {{max}} loki",
+    "claimDeadlineLabel": "Claim Deadline",
+    "deadlineExceeds": "Exceeds this hub's max claim deadline of {{max}}",
+    "deadlineHelp": "Every recipient must claim their slice within this long of creation",
+    "deadlineHelpWithMax": "Every recipient must claim their slice within this long of creation (defaults to this hub's max: {{max}})",
+    "addRecipient": "Add another recipient",
+    "setClaimDeadline": "Set claim deadline",
+    "statusAll": "All",
+    "statusExpired": "Expired",
+    "allocatedSummary": "{{allocated}} loki allocated on this page · {{total}} {{status}}",
+    "recipientColumn": "Recipient",
+    "revealConnection": "Reveal NWC connection",
+    "groupSummary_one": "{{count}} recipient · {{claimed}}/{{count}} claimed",
+    "groupSummary_other": "{{count}} recipients · {{claimed}}/{{count}} claimed",
+    "selectRecipient": "Select recipient",
+    "selectAllInWallet": "Select all recipients in this wallet",
+    "collapseRecipients": "Collapse recipients",
+    "expandRecipients": "Expand recipients",
+    "removeWallet": "Remove wallet",
+    "noneFiltered": "No {{status}} JIT wallets.",
+    "noneOnPage": "No JIT wallets on this page.",
+    "addHeading": "Add JIT wallet",
+    "createDialogTitle": "Create JIT wallet",
+    "removeRecipientTitle": "Remove this recipient?",
+    "removeRecipientDescription": "This identity will no longer be able to claim its slice of this wallet. Its allocated balance will be transferred back to this hub. This can't be undone.",
+    "removeWalletTitle": "Remove this wallet?",
+    "removeWalletDescription": "This wallet's remaining balance will be transferred back to this hub, and its NWC connection will stop working immediately. If this wallet serves other recipients, they will lose access too — including anyone who hasn't claimed their slice yet. This can't be undone.",
+    "removeSelectedTitle_one": "Remove {{count}} recipient?",
+    "removeSelectedTitle_other": "Remove {{count}} recipients?",
+    "removeSelectedDescription": "These identities will no longer be able to claim their slice of their wallets. Their allocated balances will be transferred back to this hub. This can't be undone.",
+    "createdToast_one": "JIT wallet created and funded",
+    "createdToast_other": "JIT wallet created and funded for {{count}} recipients",
+    "recipientRemovedToast": "JIT wallet recipient removed",
+    "walletRemovedToast": "JIT wallet removed",
+    "recipientsRemovedToast_one": "JIT wallet recipient removed",
+    "recipientsRemovedToast_other": "{{count}} JIT wallet recipients removed",
+    "errors": {
+      "loadConnection": "Failed to load JIT wallet connection",
+      "load": "Failed to load JIT wallets",
+      "create": "Failed to create JIT wallet",
+      "removeRecipient": "Failed to remove JIT wallet recipient",
+      "removeWallet": "Failed to remove JIT wallet",
+      "removeSelected": "Failed to remove selected recipients"
+    }
+  },
+  "newCircleHub": {
+    "title": "New Circle Wallet Hub",
+    "description": "Create a Circle Wallet Hub — a shared wallet pool where authorized members receive their own circle wallet funded from its balance.",
+    "identityModeLabel": "Membership Identity",
+    "selectIdentityPlaceholder": "Select an identity",
+    "createNewIdentity": "Create new identity",
+    "existingIdentities": "Existing identities",
+    "identityReuseHelper": "An identity (policy + members) can be reused across multiple circles, which then stay in sync automatically.",
+    "enterIdentityHelper": "Enter a valid Nostr identity above to continue.",
+    "memberModeLabel": "Who can request a wallet from this circle",
+    "modeSyncTitle": "Anyone I follow",
+    "modeSyncDescription": "Automatic — everyone this identity follows, now or later. Nothing to manage.",
+    "modePinnedTitle": "Custom members",
+    "modePinnedDescription": "Search Nostr and hand-pick exactly who's allowed.",
+    "pinMemberHelper": "Pin at least one member, or switch to Anyone I follow.",
+    "identityNameLabel": "Label for this identity (optional)",
+    "identityNamePlaceholder": "e.g. My following circle",
+    "identityNameHelper": "Used only to identify this saved identity when reused across circles — not published anywhere.",
+    "maxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet",
+    "maxExpiryHelper": "Maximum lifetime for issued circle wallets",
+    "hubBudgetLabel": "Hub Budget (optional)",
+    "hubBudgetHelper": "Caps the combined budget of every wallet this circle can have live at once. Leave blank for no cap beyond this hub's real balance.",
+    "hubBudgetRenewalLabel": "Hub Budget Renewal",
+    "hubBudgetRenewalHelper": "Doesn't reset the cap above — it's a live ceiling on wallets held at once, not a spend rate. Capacity frees up automatically as wallets expire.",
+    "hubExpiryLabel": "Hub Expiry (optional)",
+    "hubExpiryHelper": "This circle stops issuing new wallets after this date.",
+    "submit": "Create Circle Wallet Hub",
+    "selectExistingHint": "Select an existing identity to continue.",
+    "enterNameHint": "Enter a name to continue.",
+    "createdToast": "Circle Wallet Hub \"{{name}}\" created",
+    "allowlistSeedFailedToast": "Circle Wallet Hub \"{{name}}\" created, but seeding the member list failed — add members from the hub's Allowlist page.",
+    "errors": {
+      "create": "Failed to create Circle Wallet Hub"
+    }
+  },
+  "newJitHub": {
+    "title": "New JIT Wallet Hub",
+    "description": "Create a pre-funded hub that issues spend-only JIT wallets to beneficiaries",
+    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each JIT wallet issued from this hub",
+    "maxExpiryHelper": "Maximum lifetime for issued JIT wallets",
+    "submit": "Create JIT Wallet Hub",
+    "createdToast": "JIT Wallet Hub \"{{name}}\" created",
+    "errors": {
+      "create": "Failed to create JIT Wallet Hub"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "Are you sure you want to delete this circle?",
+    "checking": "Checking member wallet balances…",
+    "allEmpty": "Every member wallet in this circle is empty. Deleting the circle will also delete all of its member wallets.",
+    "hasBalance_one": "{{count}} member wallet in this circle still holds a balance. Deleting a wallet doesn't destroy those funds, but it does remove the member's own record of and access to them, with no way to get it back.",
+    "hasBalance_other": "{{count}} member wallets in this circle still hold a balance. Deleting a wallet doesn't destroy those funds, but it does remove the member's own record of and access to them, with no way to get it back.",
+    "colName": "Name",
+    "colPubkey": "Pubkey",
+    "colBalance": "Balance (loki)",
+    "totalSummary_one": "{{total}} loki total across {{count}} wallet.",
+    "totalSummary_other": "{{total}} loki total across {{count}} wallets.",
+    "deleteEmptyOnly": "Delete Only Empty Ones",
+    "deleteAll": "Delete All",
+    "deletedToast": "Circle deleted",
+    "partialDeleteToast_one": "Deleted {{count}} empty wallet",
+    "partialDeleteToast_other": "Deleted {{count}} empty wallets",
+    "partialDeleteDescription_one": "{{count}} wallet with balance was left untouched — the circle was not deleted.",
+    "partialDeleteDescription_other": "{{count}} wallets with balance were left untouched — the circle was not deleted.",
+    "errors": {
+      "load": "Failed to load circle wallets",
+      "delete": "Failed to delete circle"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "Are you sure you want to delete this JIT Wallet Hub?",
+    "checking": "Checking issued JIT wallets…",
+    "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued JIT wallets. Remove them from the JIT Wallets list below (or wait for them to expire) before deleting the hub.",
+    "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued JIT wallets. Remove them from the JIT Wallets list below (or wait for them to expire) before deleting the hub.",
+    "safeToDelete": "Connected apps will no longer be able to use this connection. No funds will be lost during this process, the balance will remain in your wallet.",
+    "close": "Close",
+    "errors": {
+      "check": "Failed to check issued JIT wallets"
+    }
+  }
+}

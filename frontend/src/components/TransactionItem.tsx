@@ -32,6 +32,7 @@ import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useSwap } from "src/hooks/useSwaps";
 import { useLocale } from "src/hooks/useLocale";
+import i18n from "src/i18n";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { Transaction } from "src/types";
@@ -48,6 +49,37 @@ function safeNpubEncode(hex: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// These metadata fields are already surfaced elsewhere in the dialog
+// (description, from/to, nostr zap link, swap link), so they're excluded
+// from the generic key/value dump below.
+const HANDLED_METADATA_KEYS = new Set([
+  "comment",
+  "payer_data",
+  "recipient_data",
+  "nostr",
+  "swap_id",
+]);
+
+function humanizeMetadataKey(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatMetadataValue(value: unknown): string {
+  if (typeof value === "boolean") {
+    const t = i18n.getFixedT(null, "common");
+    return value ? t("boolean.yes") : t("boolean.no");
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
 }
 
 function TransactionItem({ tx }: Props) {
@@ -92,6 +124,12 @@ function TransactionItem({ tx }: Props) {
       : undefined;
 
   const eventId = tx.metadata?.nostr?.tags?.find((t) => t[0] === "e")?.[1];
+
+  const otherMetadataEntries = tx.metadata
+    ? Object.entries(tx.metadata).filter(
+        ([key, value]) => !HANDLED_METADATA_KEYS.has(key) && value !== undefined
+      )
+    : [];
 
   const description = tx.description || tx.metadata?.comment;
 
@@ -432,19 +470,34 @@ function TransactionItem({ tx }: Props) {
                       </div>
                     </div>
                   )}
-                  {tx.metadata && (
+                  {otherMetadataEntries.length > 0 && (
                     <div className="mt-6">
                       <p>{t("transactions.metadata")}</p>
-                      <div className="flex items-center gap-4">
-                        <p className="text-muted-foreground break-all" dir="ltr">
-                          {JSON.stringify(tx.metadata)}
-                        </p>
-                        <CopyIcon
-                          className="cursor-pointer text-muted-foreground size-4 shrink-0"
-                          onClick={() => {
-                            copy(JSON.stringify(tx.metadata));
-                          }}
-                        />
+                      <div className="flex flex-col gap-3 mt-2">
+                        {otherMetadataEntries.map(([key, value]) => (
+                          <div
+                            key={key}
+                            className="flex items-start justify-between gap-4"
+                          >
+                            <p className="text-sm text-muted-foreground shrink-0">
+                              {humanizeMetadataKey(key)}
+                            </p>
+                            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                              <p
+                                className="break-all whitespace-pre-wrap text-right"
+                                dir="ltr"
+                              >
+                                {formatMetadataValue(value)}
+                              </p>
+                              <CopyIcon
+                                className="cursor-pointer text-muted-foreground size-4 shrink-0"
+                                onClick={() => {
+                                  copy(formatMetadataValue(value));
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
