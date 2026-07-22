@@ -23,7 +23,7 @@
       "localBalance": "本地余额",
       "remoteBalance": "远程余额",
       "actions": "操作",
-      "typeTooltip": "闪电通道类型。大多数用户推荐私有通道。",
+      "typeTooltip": "Lightning 通道类型。大多数用户推荐私有通道。",
       "reserveTooltip": "每个参与者预留的资金，用于防止欺诈，通道生命周期内不可花费。"
     },
     "closeDialog": {
@@ -112,7 +112,7 @@
     "publicChannel": "公共通道",
     "publicChannelDesc": "不推荐给大多数用户。",
     "confirmTitle": "确认开通通道",
-    "confirmDesc": "您确定要使用以下详细信息开通闪电网络通道吗？",
+    "confirmDesc": "您确定要使用以下详细信息开通 Lightning 网络通道吗？",
     "channelType": "通道类型",
     "paymentMethod": "付款方式",
     "nodePublicKey": "节点公钥",

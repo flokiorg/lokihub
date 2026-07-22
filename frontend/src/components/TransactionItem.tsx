@@ -337,14 +337,14 @@ function TransactionItem({ tx }: Props) {
             )}
             <div className="mt-6">
               <p>{t("transactions.dateTime")}</p>
-              <p className="text-muted-foreground text-end" dir="ltr">
+              <p className="text-muted-foreground" dir="ltr">
                 {dayjs(tx.updatedAt).local().format("D MMMM YYYY, HH:mm")}
               </p>
             </div>
             {tx.state != "failed" && type == "outgoing" && (
               <div className="mt-6">
                 <p>{t("transactions.fee")}</p>
-                <p className="text-muted-foreground text-end" dir="ltr">
+                <p className="text-muted-foreground" dir="ltr">
                   <FormattedFlokicoinAmount amount={tx.feesPaid} />
                   {tx.feesPaid > 0 && (
                     <>&nbsp;({((tx.feesPaid / tx.amount) * 100).toFixed(2)}%)</>

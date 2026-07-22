@@ -5,8 +5,8 @@ import { Banner } from "src/components/Banner";
 import { CommandPalette } from "src/components/CommandPalette";
 import { SidebarInset, SidebarProvider } from "src/components/ui/sidebar";
 import {
-    CommandPaletteProvider,
-    useCommandPaletteContext,
+  CommandPaletteProvider,
+  useCommandPaletteContext,
 } from "src/contexts/CommandPaletteContext";
 import { useBanner } from "src/hooks/useBanner";
 import { useInfo } from "src/hooks/useInfo";
@@ -55,7 +55,7 @@ function AppLayoutInner() {
             <SidebarInset className="min-w-0">
               <div
                 className={cn(
-                  "flex flex-1 flex-col gap-4 p-4",
+                  "flex flex-1 flex-col gap-4 p-4 min-w-0",
                   showBanner && "mt-14 md:mt-9" // Banner height is 36px with 1 line (>=md width) and 56px with 2 lines (<md width)
                 )}
               >
