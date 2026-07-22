@@ -44,7 +44,7 @@ func TestCheckUnlockPasswordCache_InvalidFirst(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "THIS STRING SHOULD MATCH IF PASSWORD IS CORRECT", value)
 
-	value, err = svc.Cfg.Get("UnlockPasswordCheck", unlockPassword+"1")
+	_, err = svc.Cfg.Get("UnlockPasswordCheck", unlockPassword+"1")
 	require.Error(t, err)
 
 	assert.False(t, svc.Cfg.CheckUnlockPassword(""))
@@ -264,14 +264,14 @@ func TestJWTSecret_ChangePassword(t *testing.T) {
 	err = cfg.ChangeUnlockPassword("", "1234")
 	require.NoError(t, err)
 
-	newJwtSecret, err := cfg.GetJWTSecret()
+	_, err = cfg.GetJWTSecret()
 	require.ErrorContains(t, err, "unlock")
 
 	err = cfg.Unlock("1234")
 	require.NoError(t, err)
 
 	// a new JWT secret must be generated after password change
-	newJwtSecret, err = cfg.GetJWTSecret()
+	newJwtSecret, err := cfg.GetJWTSecret()
 	require.NoError(t, err)
 	assert.NotEmpty(t, newJwtSecret)
 	assert.NotEqual(t, newJwtSecret, jwtSecret)
