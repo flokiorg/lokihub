@@ -1,19 +1,55 @@
-import { AlertCircleIcon } from "lucide-react";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import { AlertCircleIcon, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Button } from "src/components/ui/button";
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "src/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "src/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "src/components/ui/tooltip";
+import { copyToClipboard } from "src/lib/clipboard";
 import { App } from "src/types";
+
+dayjs.extend(relativeTime);
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
+function CopyableValue({ value }: { value: string | number }) {
+  return (
+    <button
+      type="button"
+      onClick={() => copyToClipboard(String(value))}
+      className="flex w-full items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-start font-mono text-sm break-all hover:bg-muted/60"
+    >
+      <span className="break-all">{value}</span>
+      <Copy className="ms-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
 
 export function ConnectionDetailsModal({
   app,
@@ -22,65 +58,80 @@ export function ConnectionDetailsModal({
   app: App;
   onClose: () => void;
 }) {
+  const { t } = useTranslation("apps");
   return (
-    <AlertDialog open>
-      <AlertDialogContent>
-        <AlertDialogTitle>Connection Details</AlertDialogTitle>
-        <AlertDialogDescription className="flex flex-col gap-2">
-          <div>
-            <p className="font-medium">App ID</p>
-            <p className="text-muted-foreground break-all">{app.id}</p>
-          </div>
-          <div>
-            <p className="font-medium">App Public Key</p>
-            <p className="text-muted-foreground break-all">{app.appPubkey}</p>
-          </div>
-          <div>
-            <p className="font-medium">Wallet Public Key</p>
-            <p className="text-muted-foreground break-all">
-              <span className="break-all">{app.walletPubkey}</span>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("connectionDetailsModal.title")}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <DetailRow label={t("connectionDetailsModal.appId")}>
+            <CopyableValue value={app.id} />
+          </DetailRow>
+
+          <DetailRow label={t("connectionDetailsModal.appPubkey")}>
+            <CopyableValue value={app.appPubkey} />
+          </DetailRow>
+
+          <DetailRow label={t("connectionDetailsModal.walletPubkey")}>
+            <div className="flex items-center gap-2">
+              <CopyableValue value={app.walletPubkey} />
               {!app.uniqueWalletPubkey && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <AlertCircleIcon className="w-3 h-3 ms-2 flex-shrink-0" />
+                      <AlertCircleIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      This connection does not have its own unique wallet
-                      pubkey. Re-connect for additional privacy.
+                      {t("connectionDetailsModal.noUniqueWalletPubkey")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Last used</p>
-            <p className="text-muted-foreground break-all">
-              {app.lastUsedAt ? new Date(app.lastUsedAt).toString() : "Never"}
-            </p>
-          </div>
+            </div>
+          </DetailRow>
 
-          <div>
-            <p className="font-medium">Created At</p>
-            <p className="text-muted-foreground break-all">
-              {new Date(app.createdAt).toString()}
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            <DetailRow label={t("connectionDetailsModal.lastUsed")}>
+              <p
+                className="text-muted-foreground"
+                title={
+                  app.lastUsedAt
+                    ? dayjs(app.lastUsedAt).format("D MMMM YYYY, HH:mm")
+                    : undefined
+                }
+              >
+                {app.lastUsedAt
+                  ? dayjs(app.lastUsedAt).fromNow()
+                  : t("connectionDetailsModal.never")}
+              </p>
+            </DetailRow>
+
+            <DetailRow label={t("connectionDetailsModal.created")}>
+              <p
+                className="text-muted-foreground"
+                title={dayjs(app.createdAt).format("D MMMM YYYY, HH:mm")}
+              >
+                {dayjs(app.createdAt).fromNow()}
+              </p>
+            </DetailRow>
           </div>
 
           {app.metadata && (
-            <div>
-              <p className="font-medium">Metadata</p>
-              <p className="text-muted-foreground break-all whitespace-pre-wrap p-2">
-                {JSON.stringify(app.metadata, null, 4)}
-              </p>
-            </div>
+            <DetailRow label={t("connectionDetailsModal.metadata")}>
+              <pre className="overflow-x-auto rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground">
+                {JSON.stringify(app.metadata, null, 2)}
+              </pre>
+            </DetailRow>
           )}
-        </AlertDialogDescription>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>Close</AlertDialogCancel>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("connectionDetailsModal.close")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
