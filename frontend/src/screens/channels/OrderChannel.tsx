@@ -29,7 +29,7 @@ import { useLSPEventContext } from "src/context/LSPEventContext"; // Use global 
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { LSPS1CreateOrderRequest, LSPS1GetInfoResponse } from "src/types";
 import { LSPS5EventType } from "src/types/lspsEvents";
@@ -52,14 +52,9 @@ export default function OrderChannel() {
   // Unified loading and error state handling
   const { getInfo, createOrder, getOrder, isLoading: lsps1Loading, error: lsps1Error } = useLSPS1(selectedLSP);
   const { lastEvent } = useLSPEventContext(); 
-  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
-  
-  const [inputUnit, setInputUnit] = useState<"FLC" | "loki">("FLC");
-  useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const { parseInputAmount, scaleInputAmount } = useUnit();
+
+  const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {

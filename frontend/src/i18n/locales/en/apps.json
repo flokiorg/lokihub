@@ -12,6 +12,18 @@
     "close": "Close",
     "cancel": "Cancel"
   },
+  "connectionDetailsModal": {
+    "title": "Connection Details",
+    "appId": "App ID",
+    "appPubkey": "App Public Key",
+    "walletPubkey": "Wallet Public Key",
+    "noUniqueWalletPubkey": "This connection does not have its own unique wallet public key",
+    "lastUsed": "Last used",
+    "never": "Never",
+    "created": "Created",
+    "metadata": "Metadata",
+    "close": "Close"
+  },
   "permissions": {
     "title": "Permissions",
     "pay": "Pay invoices",
@@ -31,7 +43,8 @@
     "spent": "Spent",
     "remaining": "Remaining",
     "set": "Set budget",
-    "used": "used"
+    "used": "used",
+    "circleSharedCaption": "Shared by all wallets in this circle."
   },
   "renewals": {
     "daily": "Daily",
@@ -60,7 +73,9 @@
     "pay_invoice": "Send payments",
     "sign_message": "Sign messages",
     "notifications": "Receive wallet notifications",
-    "superuser": "Create other app connections"
+    "superuser": "Create other app connections",
+    "jit_hub": "Issue JIT Wallets",
+    "circle_wallet": "Issue Circle Wallets"
   },
   "disconnectApp": {
     "cancel": "Cancel"
@@ -110,6 +125,40 @@
     "leftInBudget": "Left in budget",
     "budgetRenewal": "Budget renewal"
   },
+  "isolatedKind": {
+    "jit_hub": "JIT Wallets",
+    "jit_wallet": "JIT Wallet",
+    "circle_hub": "Circle Wallets",
+    "circle_wallet": "Circle Wallet",
+    "subwallet": "Sub-wallet",
+    "isolatedApp": "Isolated App"
+  },
+  "circleHub": {
+    "revealConnection": "Reveal Connection",
+    "permissionsManagedNote": "Permissions for this connection are managed automatically and can't be changed here.",
+    "budgetManagedNote": "This connection's requested permissions are managed automatically, but its budget and expiry can still be changed below.",
+    "hubSettingsTitle": "Hub Settings",
+    "jitHubSettingsDescription": "Changes only apply to JIT wallets issued from now on and won't affect wallets already issued.",
+    "circleHubSettingsDescription": "Changes only apply to circle wallets created from now on and won't affect wallets already created.",
+    "maxWalletBudgetLabel": "Max Wallet Budget",
+    "jitMaxWalletBudgetHelper": "Maximum budget that can be allocated to each JIT wallet issued from this hub (default: 1,000 loki)",
+    "circleMaxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet (default: 1,000 loki)",
+    "maxWalletExpiryLabel": "Max Wallet Expiry",
+    "jitMaxExpiryHelper": "Maximum lifetime for issued JIT wallets (default: 1 day)",
+    "circleMaxExpiryHelper": "Maximum lifetime for issued circle wallets (default: 30 days)",
+    "minRenewalLabel": "Min Renewal",
+    "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget (default: monthly)",
+    "feePpmLabel": "Fee (ppm)",
+    "feePpmHelper": "Per-million fee charged on payments made by circle wallets (0 = free)",
+    "allowlistTitle": "Allowlist",
+    "addMember": "Add member",
+    "circleWalletsTitle": "Circle Wallets",
+    "jitWalletsTitle": "JIT Wallets",
+    "addJitWallet": "Add JIT wallet",
+    "errors": {
+      "loadJitConnection": "Failed to load JIT wallet connection"
+    }
+  },
   "newApp": {
     "title": "Connect a New App",
     "description": "Paste a connection string or scan a QR code to connect an app to your wallet.",
@@ -136,16 +185,18 @@
     "connectionEstablished": "Connection established!",
     "canUseApp": "You can now use the app with your Lokihub.",
     "openApp": "Open the app you wish to connect to",
-    "findSettings": "Find settings to connect your wallet (may be under <1>Nostr Wallet Connect</1> or <2>NWC</2>).",
+    "findSettings": "Find settings to connect your wallet (may be under Nostr Wallet Connect or NWC).",
     "scanOrPaste": "Scan or paste the connection secret",
     "optionalTopUp": "Optional: Top up sub-wallet balance ({{amount}})",
     "topUp": "Top Up",
     "confirmNewConnection": "Confirm New Connection",
     "lokiGoPermission": "Loki Go will be given permission to create other app connections which can spend your balance.",
     "warningLokiGo": "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.",
+    "warningJitHub": "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.",
     "enterUnlockPassword": "Please enter your unlock password to continue.",
     "unlockPassword": "Unlock Password",
     "specifyWalletPermissions": "Please specify wallet permissions.",
+    "specifyJitHubLimits": "Please specify JIT wallet budget and expiry limits.",
     "appCreated": "App created",
     "failedToCreate": "Failed to create app",
     "configure": "Configure",

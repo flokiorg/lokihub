@@ -44,7 +44,7 @@ import {
   SelectValue,
 } from "src/components/ui/select";
 import { useBalances } from "src/hooks/useBalances";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 
 
 import { useInfo } from "src/hooks/useInfo";
@@ -59,14 +59,9 @@ export default function ReceiveInvoice() {
   const { t } = useTranslation(["wallet", "common"]);
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
-  const { parseAmount, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { parseAmount, scaleInputAmount, parseInputAmount } = useUnit();
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(undefined);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {
@@ -508,7 +503,7 @@ export default function ReceiveInvoice() {
                                                     <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.feeStructure")}</h4>
                                                     <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
                                                         <span className="text-muted-foreground">{t("wallet:receive.minFee")}</span>
-                                                        <span className="font-medium text-end">{jitFeeParams.min_fee_mloki ? scaleInputAmount(parseInt(jitFeeParams.min_fee_mloki)/1000, inputUnit) : 0} {inputUnit}</span>
+                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={jitFeeParams.min_fee_mloki ? parseInt(jitFeeParams.min_fee_mloki) : 0} /></span>
 
                                                         
                                                         <span className="text-muted-foreground">{t("wallet:receive.propRate")}</span>

@@ -56,6 +56,12 @@ body {
   .rotate-x-180 {
     transform: rotateX(180deg);
   }
+  .text-hero-heading {
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  }
+  .text-hero-subtitle {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
 }
 
 /* flokicoin-connect styles */

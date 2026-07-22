@@ -3,6 +3,8 @@ import {
     ArrowLeftRight,
     Globe,
     MessageCircle,
+    Search,
+    Users,
     Zap
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,6 +22,7 @@ import {
     CardTitle,
 } from "src/components/ui/card";
 import { Switch } from "src/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LSP } from "src/types";
 import { request } from "src/utils/request";
 import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "src/utils/validation";
@@ -27,6 +30,8 @@ import { validateHTTPURL, validateMessageBoardURL, validateWebSocketURL } from "
 export interface ServiceConfigState {
     mempoolApi: string;
     relay: string;
+    generalRelay: string;
+    searchRelay: string;
     swapServiceUrl: string;
     messageboardNwcUrl: string;
     enableSwap: boolean;
@@ -39,6 +44,12 @@ export interface ServiceConfigFormProps {
     onChange: (state: ServiceConfigState) => void;
     className?: string;
     validationErrors?: string[];
+    // General/Search relay configuration isn't part of initial setup/recovery
+    // flows (those save via SetupRequest/SetupLocalRequest/SetupManualRequest,
+    // which have no generalRelay/searchRelay field) — only the main Settings >
+    // Services screen (PATCH /api/settings) persists them. Default to true.
+    showGeneralRelay?: boolean;
+    showSearchRelay?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,6 +85,24 @@ export const validateServiceConfig = (state: ServiceConfigState, t: TFunction = 
         }
     }
 
+    const generalRelays = state.generalRelay.split(",").map(r => r.trim()).filter(r => r.length > 0);
+    for (const relayUrl of generalRelays) {
+        const generalRelayErr = validateWebSocketURL(relayUrl, "General Relay URL");
+        if (generalRelayErr) {
+            errors.push(t("services.validation.invalidUrl", { field: "General Relay URL" }));
+            break;
+        }
+    }
+
+    const searchRelays = state.searchRelay.split(",").map(r => r.trim()).filter(r => r.length > 0);
+    for (const relayUrl of searchRelays) {
+        const searchRelayErr = validateWebSocketURL(relayUrl, "Search Relay URL");
+        if (searchRelayErr) {
+            errors.push(t("services.validation.invalidUrl", { field: "Search Relay URL" }));
+            break;
+        }
+    }
+
     if (!state.mempoolApi) {
         errors.push(t("services.validation.explorerRequired"));
     } else {
@@ -102,8 +131,14 @@ export const validateServiceConfig = (state: ServiceConfigState, t: TFunction = 
     return errors;
 };
 
-export function ServiceConfigForm({ state, onChange, className, validationErrors = [] }: ServiceConfigFormProps) {
+export function ServiceConfigForm({ state, onChange, className, validationErrors = [], showGeneralRelay = true, showSearchRelay = true }: ServiceConfigFormProps) {
     const { t } = useTranslation("setup");
+
+    const relayTabs = [
+        { key: "nwc", label: t("services.relay.tabLabel"), icon: Zap },
+        ...(showGeneralRelay ? [{ key: "general", label: t("services.generalRelay.tabLabel"), icon: Users }] : []),
+        ...(showSearchRelay ? [{ key: "search", label: t("services.searchRelay.tabLabel"), icon: Search }] : []),
+    ];
 
     const [communityOptions, setCommunityOptions] = useState<{
         swap: ServiceOption[];
@@ -195,24 +230,69 @@ export function ServiceConfigForm({ state, onChange, className, validationErrors
                 </CardContent>
             </Card>
 
-            {/* Nostr Relays */}
+            {/* Nostr Relays — grouped: Wallet Connect, General, Search each keep their own independent list */}
             <Card className="border-border shadow-sm">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                         <Zap className="w-5 h-5 text-primary" />
-                        {t("services.relay.title")}
+                        {t("services.relayGroup.title")}
                     </CardTitle>
                     <CardDescription>
-                        {t("services.relay.description")}
+                        {t("services.relayGroup.description")}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <MultiRelayInput
-                        value={state.relay}
-                        onChange={(val) => onChange({ ...state, relay: val })}
-                        options={communityOptions.relay}
-                        placeholder="wss://..."
-                    />
+                    {relayTabs.length > 1 ? (
+                        <Tabs defaultValue={relayTabs[0].key}>
+                            <TabsList className="mb-4">
+                                {relayTabs.map(({ key, label, icon: Icon }) => (
+                                    <TabsTrigger key={key} value={key} className="gap-1.5">
+                                        <Icon className="w-3.5 h-3.5" />
+                                        {label}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+
+                            <TabsContent value="nwc" className="space-y-3">
+                                <p className="text-sm text-muted-foreground">{t("services.relay.description")}</p>
+                                <MultiRelayInput
+                                    value={state.relay}
+                                    onChange={(val) => onChange({ ...state, relay: val })}
+                                    options={communityOptions.relay}
+                                    placeholder="wss://..."
+                                />
+                            </TabsContent>
+
+                            {showGeneralRelay && (
+                                <TabsContent value="general" className="space-y-3">
+                                    <p className="text-sm text-muted-foreground">{t("services.generalRelay.description")}</p>
+                                    <MultiRelayInput
+                                        value={state.generalRelay}
+                                        onChange={(val) => onChange({ ...state, generalRelay: val })}
+                                        placeholder="wss://..."
+                                    />
+                                </TabsContent>
+                            )}
+
+                            {showSearchRelay && (
+                                <TabsContent value="search" className="space-y-3">
+                                    <p className="text-sm text-muted-foreground">{t("services.searchRelay.description")}</p>
+                                    <MultiRelayInput
+                                        value={state.searchRelay}
+                                        onChange={(val) => onChange({ ...state, searchRelay: val })}
+                                        placeholder="wss://..."
+                                    />
+                                </TabsContent>
+                            )}
+                        </Tabs>
+                    ) : (
+                        <MultiRelayInput
+                            value={state.relay}
+                            onChange={(val) => onChange({ ...state, relay: val })}
+                            options={communityOptions.relay}
+                            placeholder="wss://..."
+                        />
+                    )}
                 </CardContent>
             </Card>
 

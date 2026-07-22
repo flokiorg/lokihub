@@ -72,6 +72,10 @@
     "failedToSave": "保存に失敗しました",
     "tryAgain": "もう一度お試しください"
   },
+  "boolean": {
+    "yes": "はい",
+    "no": "いいえ"
+  },
   "labels": {
     "amount": "金額",
     "currency": "通貨",

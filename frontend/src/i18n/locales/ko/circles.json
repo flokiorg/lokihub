@@ -1,0 +1,299 @@
+{
+  "common": {
+    "remove": "제거",
+    "removeSelected": "선택 항목 제거",
+    "clear": "지우기",
+    "add": "추가",
+    "addWithCount": "추가 ({{count}})",
+    "selectedCount": "{{count}}개 선택됨",
+    "selectAll": "전체 선택",
+    "memberColumn": "멤버",
+    "selectMember": "멤버 선택",
+    "nameLabel": "이름",
+    "maxWalletBudgetLabel": "최대 지갑 예산",
+    "minRenewalLabel": "최소 갱신 주기",
+    "minRenewalHelper": "멤버가 자신의 서클 지갑 예산에 대해 요청할 수 있는 가장 짧은 갱신 주기",
+    "maxWalletExpiryLabel": "최대 지갑 만료 기간",
+    "feePpmLabel": "수수료 (ppm)",
+    "feePpmHelper": "서클 지갑이 진행하는 결제에 부과되는 백만분율 수수료 (0 = 무료)",
+    "advancedSettings": "고급 설정",
+    "inUse": "사용 중",
+    "hexPlaceholder": "64자리 16진수 문자열",
+    "syncingFollowing": "팔로잉 목록 동기화 중…",
+    "sync": "동기화",
+    "following": "팔로잉 {{count}}명",
+    "synced": "{{time}} 동기화됨",
+    "updated": "{{time}} 업데이트됨",
+    "total": "전체",
+    "anonymous": "익명"
+  },
+  "policyLabel": {
+    "following": "팔로잉 기반",
+    "allowlist": "허용 목록"
+  },
+  "identityType": {
+    "pubkey": "Nostr 공개 키",
+    "connectionKey": "연결 키"
+  },
+  "avatarStack": {
+    "more": "외 {{count}}명"
+  },
+  "profileRow": {
+    "nip05Verified": "NIP-05 인증됨",
+    "verifyingNip05": "NIP-05 확인 중",
+    "lightningAddress": "Lightning 주소 있음"
+  },
+  "searchDropdown": {
+    "searching": "검색 중…",
+    "noMatches": "일치하는 결과가 없습니다"
+  },
+  "pubkeyInput": {
+    "defaultLabel": "회원님의 Nostr 아이덴티티",
+    "defaultHelper": "멤버 승인을 위해 팔로잉 목록을 확인하는 데 사용됩니다",
+    "invalidHelper": "유효한 npub, 16진수 공개 키, nprofile 또는 NIP-05 주소가 아닌 것 같습니다",
+    "placeholder": "npub1..., 16진수, nprofile1..., you@domain.com, 또는 이름으로 검색",
+    "change": "변경"
+  },
+  "memberPicker": {
+    "noneYet": "아직 고정된 멤버가 없습니다.",
+    "removeMember": "멤버 제거",
+    "enterIdentity": "검색하려면 위에 유효한 Nostr 아이덴티티를 입력하세요.",
+    "searchPlaceholder": "이름, NIP-05로 Nostr 검색 또는 npub/16진수 붙여넣기",
+    "alreadyMember": "이미 멤버입니다.",
+    "searching": "검색 중…",
+    "noMatchesNostr": "Nostr에서 일치하는 결과가 없습니다.",
+    "alreadyMemberBadge": "이미 멤버",
+    "resolving": "확인 중…",
+    "searchHint": "이름, NIP-05, npub으로 검색하거나 공개 키를 붙여넣으세요."
+  },
+  "followingPreview": {
+    "empty": "이 아이덴티티는 아직 아무도 팔로우하고 있지 않습니다 — 팔로우하는 즉시 멤버가 자동으로 승인됩니다.",
+    "summary_one": "지금 {{count}}명이 승인되며, 이 아이덴티티가 팔로우하거나 언팔로우할 때마다 목록이 자동으로 동기화됩니다.",
+    "summary_other": "지금 {{count}}명이 승인되며, 이 아이덴티티가 팔로우하거나 언팔로우할 때마다 목록이 자동으로 동기화됩니다."
+  },
+  "claimBadge": {
+    "claimed": "수령됨",
+    "unclaimed": "미수령"
+  },
+  "claimDeadline": {
+    "expired": "수령 기한이 만료되었습니다",
+    "withinMinutes_one": "{{count}}분 이내 수령",
+    "withinMinutes_other": "{{count}}분 이내 수령",
+    "withinHours": "{{count}}시간 이내 수령",
+    "byDate": "{{date}}까지 수령",
+    "none": "수령 기한 없음"
+  },
+  "circleCard": {
+    "member_one": "멤버 {{count}}명",
+    "member_other": "멤버 {{count}}명"
+  },
+  "childIdentityCard": {
+    "circleWallet": "서클 지갑",
+    "jitWallet": "JIT 지갑",
+    "claimedCount": "{{claimed}}/{{total}} 수령됨",
+    "errors": {
+      "loadRecipients": "JIT 지갑 수령인을 불러오지 못했습니다"
+    }
+  },
+  "manageIdentities": {
+    "trigger": "관리",
+    "title": "아이덴티티 관리",
+    "description": "서클에 연결되어 있는 아이덴티티는 삭제할 수 없습니다 — 먼저 모든 서클에서 제거하세요.",
+    "noneSaved": "아직 저장된 아이덴티티가 없습니다.",
+    "usedBy_one": "{{count}}개 서클에서 사용 중",
+    "usedBy_other": "{{count}}개 서클에서 사용 중",
+    "unused": "미사용",
+    "stillUsedBy_one": "아직 {{count}}개 서클에서 사용 중입니다 — 먼저 그곳에서 제거하세요.",
+    "stillUsedBy_other": "아직 {{count}}개 서클에서 사용 중입니다 — 먼저 그곳에서 제거하세요.",
+    "deleteTitle": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+    "deleteDescription": "이 아이덴티티는 어떤 서클에도 연결되어 있지 않습니다. 삭제하면 되돌릴 수 없습니다.",
+    "delete": "삭제"
+  },
+  "circleIdentityCard": {
+    "syncedToast": "팔로잉 목록이 동기화되었습니다",
+    "errors": {
+      "sync": "팔로잉 목록 동기화에 실패했습니다"
+    }
+  },
+  "circleAllowlist": {
+    "description": "이 서클 지갑 허브에서 지갑을 요청할 수 있는 nostr 공개 키를 관리합니다.",
+    "sharedWarning_one": "이 아이덴티티는 다른 {{count}}개 서클과 공유됩니다 — 여기서의 변경 사항은 모든 서클에 적용됩니다.",
+    "sharedWarning_other": "이 아이덴티티는 다른 {{count}}개 서클과 공유됩니다 — 여기서의 변경 사항은 모든 서클에 적용됩니다.",
+    "addMemberHeading": "멤버 추가",
+    "addMembersTitle": "멤버 추가",
+    "removeMemberTitle": "이 멤버를 제거하시겠습니까?",
+    "removeMemberDescription": "이 멤버는 더 이상 이 서클 지갑 허브에서 지갑을 요청할 수 없습니다. 되돌릴 수 없습니다.",
+    "removeSelectedTitle_one": "멤버 {{count}}명을 제거하시겠습니까?",
+    "removeSelectedTitle_other": "멤버 {{count}}명을 제거하시겠습니까?",
+    "addedToast_one": "멤버가 허용 목록에 추가되었습니다",
+    "addedToast_other": "멤버 {{count}}명이 허용 목록에 추가되었습니다",
+    "removedOneToast": "공개 키가 허용 목록에서 제거되었습니다",
+    "removedToast_one": "멤버가 허용 목록에서 제거되었습니다",
+    "removedToast_other": "멤버 {{count}}명이 허용 목록에서 제거되었습니다",
+    "errors": {
+      "load": "서클 허용 목록을 불러오지 못했습니다",
+      "add": "허용 목록에 추가하지 못했습니다",
+      "removeOne": "공개 키를 제거하지 못했습니다",
+      "removeSelected": "허용 목록에서 제거하지 못했습니다"
+    }
+  },
+  "circleWallets": {
+    "description": "이 서클의 멤버를 위해 이미 생성된 지갑입니다.",
+    "empty": "아직 생성된 서클 지갑이 없습니다.",
+    "selectWallet": "서클 지갑 선택",
+    "removeTitle": "이 서클 지갑을 제거하시겠습니까?",
+    "removeDescription": "남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 되돌릴 수 없습니다.",
+    "removeSelectedTitle_one": "서클 지갑 {{count}}개를 제거하시겠습니까?",
+    "removeSelectedTitle_other": "서클 지갑 {{count}}개를 제거하시겠습니까?",
+    "removeSelectedDescription": "남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 되돌릴 수 없습니다.",
+    "removedToast": "서클 지갑이 제거되었습니다",
+    "removedSelectedToast_one": "서클 지갑 {{count}}개가 제거되었습니다",
+    "removedSelectedToast_other": "서클 지갑 {{count}}개가 제거되었습니다",
+    "errors": {
+      "remove": "서클 지갑을 제거하지 못했습니다",
+      "removeSelected": "선택한 서클 지갑을 제거하지 못했습니다"
+    }
+  },
+  "jitHubAllocations": {
+    "participantsPair": "{{first}}님과 {{second}}님",
+    "participantsOthers": "{{first}}님 외 {{count}}명",
+    "durationDays_one": "{{count}}일",
+    "durationDays_other": "{{count}}일",
+    "durationHours_one": "{{count}}시간",
+    "durationHours_other": "{{count}}시간",
+    "durationMinutes": "{{count}}분",
+    "removeRecipient": "수령인 제거",
+    "pubkeyLabel": "Nostr 공개 키",
+    "pubkeyHelper": "이름, NIP-05로 검색하거나 npub/16진수/nprofile을 붙여넣으세요",
+    "connectionKeyLabel": "연결 키 (16진수)",
+    "iaPubkeyLabel": "신원 인증 기관 공개 키 (16진수)",
+    "iaPubkeyHelper": "신뢰할 수 있는 신원 인증 기관이어야 합니다 (설정 → 신원 인증 기관)",
+    "duplicateIdentity": "이 아이덴티티는 이미 이 지갑의 다른 수령인이 사용 중입니다. 각 수령인은 서로 다른 아이덴티티가 필요합니다.",
+    "walletBudgetLabel": "지갑 예산",
+    "requestedSummary": "{{total}} loki 요청됨",
+    "requestedSummaryWithMax": "{{total}} loki 요청됨 (이 허브의 최대 지갑 예산 {{max}} loki 중)",
+    "claimDeadlineLabel": "수령 기한",
+    "deadlineExceeds": "이 허브의 최대 수령 기한 {{max}}을(를) 초과합니다",
+    "deadlineHelp": "각 수령인은 생성 시점으로부터 이 기간 내에 자신의 몫을 수령해야 합니다",
+    "deadlineHelpWithMax": "각 수령인은 생성 시점으로부터 이 기간 내에 자신의 몫을 수령해야 합니다 (기본값은 이 허브의 최대치: {{max}})",
+    "addRecipient": "수령인 추가",
+    "setClaimDeadline": "수령 기한 설정",
+    "statusAll": "전체",
+    "statusExpired": "만료됨",
+    "allocatedSummary": "이 페이지에서 {{allocated}} loki 할당됨 · 전체 {{total}}건 ({{status}})",
+    "recipientColumn": "수령인",
+    "revealConnection": "NWC 연결 표시",
+    "groupSummary_one": "수령인 {{count}}명 · {{claimed}}/{{count}} 수령됨",
+    "groupSummary_other": "수령인 {{count}}명 · {{claimed}}/{{count}} 수령됨",
+    "selectRecipient": "수령인 선택",
+    "selectAllInWallet": "이 지갑의 모든 수령인 선택",
+    "collapseRecipients": "수령인 목록 접기",
+    "expandRecipients": "수령인 목록 펼치기",
+    "removeWallet": "지갑 제거",
+    "noneFiltered": "{{status}} JIT 지갑이 없습니다.",
+    "noneOnPage": "이 페이지에 JIT 지갑이 없습니다.",
+    "addHeading": "JIT 지갑 추가",
+    "createDialogTitle": "JIT 지갑 생성",
+    "removeRecipientTitle": "이 수령인을 제거하시겠습니까?",
+    "removeRecipientDescription": "이 아이덴티티는 더 이상 이 지갑의 몫을 수령할 수 없습니다. 할당된 잔액은 이 허브로 반환됩니다. 되돌릴 수 없습니다.",
+    "removeWalletTitle": "이 지갑을 제거하시겠습니까?",
+    "removeWalletDescription": "이 지갑의 남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 이 지갑이 다른 수령인에게도 사용되는 경우, 아직 수령하지 않은 사람을 포함해 모두 접근 권한을 잃게 됩니다. 되돌릴 수 없습니다.",
+    "removeSelectedTitle_one": "수령인 {{count}}명을 제거하시겠습니까?",
+    "removeSelectedTitle_other": "수령인 {{count}}명을 제거하시겠습니까?",
+    "removeSelectedDescription": "이 아이덴티티들은 더 이상 각자의 지갑에서 몫을 수령할 수 없습니다. 할당된 잔액은 이 허브로 반환됩니다. 되돌릴 수 없습니다.",
+    "createdToast_one": "JIT 지갑이 생성되고 자금이 지급되었습니다",
+    "createdToast_other": "JIT 지갑이 생성되고 수령인 {{count}}명에게 자금이 지급되었습니다",
+    "recipientRemovedToast": "JIT 지갑 수령인이 제거되었습니다",
+    "walletRemovedToast": "JIT 지갑이 제거되었습니다",
+    "recipientsRemovedToast_one": "JIT 지갑 수령인이 제거되었습니다",
+    "recipientsRemovedToast_other": "JIT 지갑 수령인 {{count}}명이 제거되었습니다",
+    "errors": {
+      "loadConnection": "JIT 지갑 연결을 불러오지 못했습니다",
+      "load": "JIT 지갑을 불러오지 못했습니다",
+      "create": "JIT 지갑을 생성하지 못했습니다",
+      "removeRecipient": "JIT 지갑 수령인을 제거하지 못했습니다",
+      "removeWallet": "JIT 지갑을 제거하지 못했습니다",
+      "removeSelected": "선택한 수령인을 제거하지 못했습니다"
+    }
+  },
+  "newCircleHub": {
+    "title": "새 서클 지갑 허브",
+    "description": "서클 지갑 허브를 생성합니다 — 승인된 멤버가 허브 잔액으로 자금이 지원되는 자신만의 서클 지갑을 받는 공유 지갑 풀입니다.",
+    "identityModeLabel": "멤버십 아이덴티티",
+    "selectIdentityPlaceholder": "아이덴티티 선택",
+    "createNewIdentity": "새 아이덴티티 생성",
+    "existingIdentities": "기존 아이덴티티",
+    "identityReuseHelper": "아이덴티티(정책 + 멤버)는 여러 서클에서 재사용할 수 있으며, 이후 자동으로 동기화됩니다.",
+    "enterIdentityHelper": "계속하려면 위에 유효한 Nostr 아이덴티티를 입력하세요.",
+    "memberModeLabel": "이 서클에서 지갑을 요청할 수 있는 사람",
+    "modeSyncTitle": "내가 팔로우하는 모든 사람",
+    "modeSyncDescription": "자동 — 지금이든 나중이든 이 아이덴티티가 팔로우하는 모든 사람. 관리할 필요가 없습니다.",
+    "modePinnedTitle": "커스텀 멤버",
+    "modePinnedDescription": "Nostr에서 검색하여 허용할 대상을 직접 선택합니다.",
+    "pinMemberHelper": "멤버를 최소 한 명 고정하거나 '내가 팔로우하는 모든 사람'으로 전환하세요.",
+    "identityNameLabel": "이 아이덴티티의 라벨 (선택 사항)",
+    "identityNamePlaceholder": "예: 내 팔로잉 서클",
+    "identityNameHelper": "여러 서클에서 재사용할 때 이 저장된 아이덴티티를 식별하는 용도로만 사용되며, 어디에도 게시되지 않습니다.",
+    "maxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산",
+    "maxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간",
+    "hubBudgetLabel": "허브 예산 (선택 사항)",
+    "hubBudgetHelper": "이 서클이 동시에 보유할 수 있는 모든 지갑의 총 예산 상한을 설정합니다. 비워두면 이 허브의 실제 잔액 외에는 상한이 없습니다.",
+    "hubBudgetRenewalLabel": "허브 예산 갱신",
+    "hubBudgetRenewalHelper": "위 상한을 재설정하지 않습니다 — 이는 소비 속도가 아니라 동시에 보유할 수 있는 지갑에 대한 실시간 상한입니다. 지갑이 만료되면 용량이 자동으로 확보됩니다.",
+    "hubExpiryLabel": "허브 만료일 (선택 사항)",
+    "hubExpiryHelper": "이 날짜 이후 이 서클은 새 지갑 발급을 중단합니다.",
+    "submit": "서클 지갑 허브 생성",
+    "selectExistingHint": "계속하려면 기존 아이덴티티를 선택하세요.",
+    "enterNameHint": "계속하려면 이름을 입력하세요.",
+    "createdToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
+    "allowlistSeedFailedToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었지만 멤버 목록 초기화에 실패했습니다 — 허브의 허용 목록 페이지에서 멤버를 추가하세요.",
+    "errors": {
+      "create": "서클 지갑 허브를 생성하지 못했습니다"
+    }
+  },
+  "newJitHub": {
+    "title": "새 JIT 지갑 허브",
+    "description": "수령인에게 지출 전용 JIT 지갑을 발급하는 사전 자금 지원 허브를 생성합니다",
+    "maxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산",
+    "maxExpiryHelper": "발급된 JIT 지갑의 최대 유효 기간",
+    "submit": "JIT 지갑 허브 생성",
+    "createdToast": "JIT 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
+    "errors": {
+      "create": "JIT 지갑 허브를 생성하지 못했습니다"
+    }
+  },
+  "disconnectCircleHub": {
+    "title": "정말로 이 서클을 삭제하시겠습니까?",
+    "checking": "멤버 지갑 잔액을 확인하는 중…",
+    "allEmpty": "이 서클의 모든 멤버 지갑이 비어 있습니다. 서클을 삭제하면 모든 멤버 지갑도 함께 삭제됩니다.",
+    "hasBalance_one": "이 서클에는 아직 잔액이 남아 있는 멤버 지갑이 {{count}}개 있습니다. 지갑을 삭제해도 해당 자금이 사라지지는 않지만, 멤버 본인의 기록과 접근 권한은 사라지며 복구할 수 없습니다.",
+    "hasBalance_other": "이 서클에는 아직 잔액이 남아 있는 멤버 지갑이 {{count}}개 있습니다. 지갑을 삭제해도 해당 자금이 사라지지는 않지만, 멤버 본인의 기록과 접근 권한은 사라지며 복구할 수 없습니다.",
+    "colName": "이름",
+    "colPubkey": "공개 키",
+    "colBalance": "잔액 (loki)",
+    "totalSummary_one": "총 {{total}} loki, {{count}}개 지갑.",
+    "totalSummary_other": "총 {{total}} loki, {{count}}개 지갑.",
+    "deleteEmptyOnly": "빈 지갑만 삭제",
+    "deleteAll": "전체 삭제",
+    "deletedToast": "서클이 삭제되었습니다",
+    "partialDeleteToast_one": "빈 지갑 {{count}}개가 삭제되었습니다",
+    "partialDeleteToast_other": "빈 지갑 {{count}}개가 삭제되었습니다",
+    "partialDeleteDescription_one": "잔액이 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
+    "partialDeleteDescription_other": "잔액이 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
+    "errors": {
+      "load": "서클 지갑을 불러오지 못했습니다",
+      "delete": "서클을 삭제하지 못했습니다"
+    }
+  },
+  "disconnectJitHub": {
+    "title": "정말로 이 JIT 지갑 허브를 삭제하시겠습니까?",
+    "checking": "발급된 JIT 지갑을 확인하는 중…",
+    "hasOutstanding_one": "이 허브가 발급한 JIT 지갑에는 아직 {{count}}건의 수령인 몫이 남아 있습니다. 허브를 삭제하기 전에 아래 JIT 지갑 목록에서 제거하거나 만료될 때까지 기다리세요.",
+    "hasOutstanding_other": "이 허브가 발급한 JIT 지갑에는 아직 {{count}}건의 수령인 몫이 남아 있습니다. 허브를 삭제하기 전에 아래 JIT 지갑 목록에서 제거하거나 만료될 때까지 기다리세요.",
+    "safeToDelete": "연결된 앱은 더 이상 이 연결을 사용할 수 없게 됩니다. 이 과정에서 자금이 손실되지 않으며, 잔액은 그대로 지갑에 남아 있습니다.",
+    "close": "닫기",
+    "errors": {
+      "check": "발급된 JIT 지갑을 확인하지 못했습니다"
+    }
+  }
+}

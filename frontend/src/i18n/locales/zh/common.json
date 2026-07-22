@@ -76,6 +76,10 @@
     "network": "网络错误，请检查您的连接。",
     "formValidation": "请检查表单中的错误。"
   },
+  "boolean": {
+    "yes": "是",
+    "no": "否"
+  },
   "labels": {
     "amount": "金额",
     "currency": "货币",

@@ -72,6 +72,10 @@
     "failedToSave": "저장 실패",
     "tryAgain": "다시 시도해 주세요"
   },
+  "boolean": {
+    "yes": "예",
+    "no": "아니요"
+  },
   "labels": {
     "amount": "금액",
     "currency": "통화",

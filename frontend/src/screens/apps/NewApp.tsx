@@ -4,7 +4,6 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";
 import {
@@ -36,6 +35,10 @@ import {
 import AppHeader from "src/components/AppHeader";
 import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
 import { InstallApp } from "src/components/connections/InstallApp";
+import {
+  DEFAULT_JIT_MAX_EXP_SECS,
+  DEFAULT_JIT_PER_WALLET_MAX_LOKI,
+} from "src/components/Scopes";
 import { defineStepper } from "src/components/stepper";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Input } from "src/components/ui/input";
@@ -46,7 +49,9 @@ import {
 import { useApp } from "src/hooks/useApp";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
+import { useInfo } from "src/hooks/useInfo";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
+import { formatFlokicoinAmount } from "src/utils/flokicoinFormatting";
 import { handleRequestError } from "src/utils/handleRequestError";
 import Permissions from "../../components/Permissions";
 import { AppStoreApp } from "../../components/connections/SuggestedAppData";
@@ -216,10 +221,8 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
   };
 
   const [superuser, setSuperuser] = useState(appStoreApp?.superuser || false);
-  const [
-    showSuperuserConfirmPasswordDialog,
-    setShowSuperuserConfirmPasswordDialog,
-  ] = useState(false);
+  const [showConfirmPasswordDialog, setShowConfirmPasswordDialog] =
+    useState(false);
   const [unlockPassword, setUnlockPassword] = useState("");
 
   const [permissions, setPermissions] = useState<AppPermissions>({
@@ -233,7 +236,14 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         ? "never"
         : DEFAULT_APP_BUDGET_RENEWAL,
     expiresAt: parseExpiresParam(expiresAtParam),
+    // isolated is URL-drivable (deep links from third-party apps rely on
+    // this), but jitHub deliberately never reads from queryParams — it must
+    // always be an explicit in-page choice, never something a connect link
+    // can pre-select for the user.
     isolated: isolatedParam === "" ? true : isolatedParam === "true",
+    jitHub: false,
+    jitPerWalletMaxLoki: DEFAULT_JIT_PER_WALLET_MAX_LOKI,
+    jitMaxExpSecs: DEFAULT_JIT_MAX_EXP_SECS,
   });
 
   const { Stepper } = React.useMemo(
@@ -261,9 +271,24 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
       toast(t("newApp.specifyWalletPermissions", "Please specify wallet permissions."));
       return;
     }
+    if (
+      permissions.jitHub &&
+      (!permissions.jitPerWalletMaxLoki || !permissions.jitMaxExpSecs)
+    ) {
+      toast(t("newApp.specifyJitHubLimits", "Please specify JIT wallet budget and expiry limits."));
+      return;
+    }
 
     setLoading(true);
     try {
+      // jitHub always implies isolated server-side (kind "jit_hub" carries
+      // its own isolated balance unconditionally), so it takes priority here.
+      const kind = permissions.jitHub
+        ? "jit_hub"
+        : permissions.isolated
+          ? "isolated"
+          : "standard";
+
       const createAppRequest: CreateAppRequest = {
         name: appName,
         pubkey,
@@ -272,10 +297,15 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         scopes: [
           ...permissions.scopes,
           ...(superuser ? ["superuser" satisfies Scope] : []),
+          ...(permissions.jitHub ? ["jit_hub" satisfies Scope] : []),
         ] as Scope[],
         expiresAt: permissions.expiresAt?.toISOString(),
         returnTo: returnTo,
-        isolated: permissions.isolated,
+        kind,
+        ...(permissions.jitHub && {
+          jitPerWalletMaxMloki: (permissions.jitPerWalletMaxLoki || 0) * 1000,
+          jitMaxExpSecs: permissions.jitMaxExpSecs || 0,
+        }),
         metadata: {
           app_store_app_id: appStoreApp?.id || (appId ? appId : undefined),
         },
@@ -393,14 +423,16 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
                           return (
                             <div className="flex flex-col gap-4">
-                            <SuperuserConfirmPasswordDialog
-                              open={showSuperuserConfirmPasswordDialog}
-                              setOpen={setShowSuperuserConfirmPasswordDialog}
+                            <ConfirmPasswordDialog
+                              open={showConfirmPasswordDialog}
+                              setOpen={setShowConfirmPasswordDialog}
                               onSubmit={() => {
                                 handleCreateApp(methods.next);
                               }}
                               unlockPassword={unlockPassword}
                               setUnlockPassword={setUnlockPassword}
+                              superuser={superuser}
+                              jitHub={!!permissions.jitHub}
                             />
                             {!appStoreApp && (
                               <div className="w-full grid gap-1.5">
@@ -494,10 +526,8 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                             onClick={
                               step.id === "configure"
                                 ? () =>
-                                    superuser
-                                      ? setShowSuperuserConfirmPasswordDialog(
-                                          true
-                                        )
+                                    superuser || permissions.jitHub
+                                      ? setShowConfirmPasswordDialog(true)
                                       : handleCreateApp(methods.next)
                                 : methods.next
                             }
@@ -531,6 +561,7 @@ function FinalizeConnection({
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation("apps");
+  const { data: info } = useInfo();
 
   const pairingUri = createAppResponse.pairingUri;
   const { data: app } = useApp(createAppResponse.id, true);
@@ -563,10 +594,11 @@ function FinalizeConnection({
           </ol>
         )}
 
-        {app?.isolated && (
+        {app?.isolated && info && (
           <li>
-            {t("newApp.optionalTopUp", { amount: '' })}
-            <FormattedFlokicoinAmount amount={app.balance} />{" "}
+            {t("newApp.optionalTopUp", {
+              amount: formatFlokicoinAmount(app.balance, info.flokicoinDisplayFormat),
+            })}{" "}
             <IsolatedAppTopupDialog appId={app.id}>
               <Button size="sm" variant="secondary">
                 {t("newApp.topUp", "Top Up")}
@@ -586,21 +618,31 @@ function FinalizeConnection({
   );
 }
 
-type SuperuserConfirmPasswordDialogProps = {
+type ConfirmPasswordDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onSubmit: () => void;
   unlockPassword: string;
   setUnlockPassword: (password: string) => void;
+  superuser: boolean;
+  jitHub: boolean;
 };
 
-function SuperuserConfirmPasswordDialog({
+// Extra unlock-password confirmation gating any connection whose capability
+// goes beyond "spend within its own configured budget" — currently
+// superuser (can create further connections against your balance) and
+// jitHub (can move funds to third parties outside pay_invoice/budget
+// accounting entirely, see JIT Hub security discussion). Both render their
+// own warning paragraph; either (or both) can be true at once.
+function ConfirmPasswordDialog({
   open,
   setOpen,
   onSubmit,
   unlockPassword,
   setUnlockPassword,
-}: SuperuserConfirmPasswordDialogProps) {
+  superuser,
+  jitHub,
+}: ConfirmPasswordDialogProps) {
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
   return (
@@ -616,13 +658,23 @@ function SuperuserConfirmPasswordDialog({
             <AlertDialogTitle>{t("newApp.confirmNewConnection", "Confirm New Connection")}</AlertDialogTitle>
             <AlertDialogDescription>
               <div className="flex flex-col">
-                <p>
-                  {t("newApp.lokiGoPermission", "Loki Go will be given permission to create other app connections which can spend your balance.")}
-                </p>
+                {superuser && (
+                  <>
+                    <p>
+                      {t("newApp.lokiGoPermission", "Loki Go will be given permission to create other app connections which can spend your balance.")}
+                    </p>
 
-                <p className="mt-4">
-                  {t("newApp.warningLokiGo", "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.")}
-                </p>
+                    <p className="mt-4">
+                      {t("newApp.warningLokiGo", "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.")}
+                    </p>
+                  </>
+                )}
+
+                {jitHub && (
+                  <p className="mt-4">
+                    {t("newApp.warningJitHub", "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.")}
+                  </p>
+                )}
 
                 <p className="mt-4">
                   {t("newApp.enterUnlockPassword", "Please enter your unlock password to continue.")}

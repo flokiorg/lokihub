@@ -31,7 +31,7 @@ import { ONCHAIN_DUST_LOKI } from "src/constants";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { copyToClipboard } from "src/lib/clipboard";
 import { RedeemOnchainFundsResponse } from "src/types";
 import { CurrencyInput } from "src/components/CurrencyInput";
@@ -42,15 +42,9 @@ export default function WithdrawOnchainFunds() {
   const [isLoading, setLoading] = React.useState(false);
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { displayFormat, parseInputAmount, scaleInputAmount } = useUnit();
+  const { parseInputAmount, scaleInputAmount } = useUnit();
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {

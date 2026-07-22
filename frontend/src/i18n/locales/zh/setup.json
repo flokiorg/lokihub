@@ -8,7 +8,7 @@
   },
   "welcome": {
     "title": "欢迎使用 Lokihub",
-    "subtitle": "您的闪电节点管理界面",
+    "subtitle": "您的 Lightning 节点管理界面",
     "getStarted": "开始使用"
   },
   "password": {
@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "欢迎使用 Lokihub",
-      "subtitle": "一个强大的、一体化的 Flokicoin 闪电网络钱包，为下一代互动网络提供动力。",
+      "subtitle": "一个强大的、一体化的 Flokicoin Lightning 网络钱包，为下一代互动网络提供动力。",
       "next": "下一步"
     },
     "slide2": {
@@ -103,6 +103,14 @@
     "warning": "警告",
     "warningText": "您对所连接的服务负责。请确保信任这些 URL 的提供商。",
     "configErrors": "配置错误",
+    "unsavedChanges": {
+      "title": "未保存的更改",
+      "description": "您对服务配置进行了更改但尚未保存。如果现在离开，这些更改将会丢失。",
+      "stay": "继续编辑",
+      "discard": "不保存并离开",
+      "save": "保存并离开",
+      "saving": "保存中..."
+    },
     "explorer": {
       "title": "Flokicoin 浏览器",
       "description": "用于费用估算和交易详情。",
@@ -113,7 +121,7 @@
       "description": "连接到多个 Nostr 中继以进行 Wallet Connect (NWC) 通信。多个中继可提高可用性。"
     },
     "lsp": {
-      "title": "闪电网络服务提供商",
+      "title": "Lightning 网络服务提供商",
       "description": "管理 JIT 通道和入站流动性的 LSP。",
       "communityBadge": "由社区提议",
       "active": "活跃",
@@ -133,7 +141,7 @@
     },
     "swap": {
       "title": "兑换服务",
-      "description": "启用闪电网络与链上的兑换（反之亦然）。",
+      "description": "启用 Lightning 网络与链上的兑换（反之亦然）。",
       "custom": "自定义兑换服务"
     },
     "messageboard": {

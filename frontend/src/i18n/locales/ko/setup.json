@@ -8,7 +8,7 @@
   },
   "welcome": {
     "title": "Lokihub에 오신 것을 환영합니다",
-    "subtitle": "라이트닝 노드 관리 인터페이스",
+    "subtitle": "Lightning 노드 관리 인터페이스",
     "getStarted": "시작하기"
   },
   "password": {
@@ -39,7 +39,7 @@
   "intro": {
     "slide1": {
       "title": "Lokihub에 오신 것을 환영합니다",
-      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 Flokicoin 라이트닝 지갑.",
+      "subtitle": "다음 세대의 참여 웹을 지원하는 강력한 올인원 Flokicoin Lightning 지갑.",
       "next": "다음"
     },
     "slide2": {
@@ -103,6 +103,14 @@
     "warning": "경고",
     "warningText": "연결하는 서비스에 대한 책임은 귀하에게 있습니다. 이 URL의 제공업체를 신뢰하는지 확인하세요.",
     "configErrors": "구성 오류",
+    "unsavedChanges": {
+      "title": "저장되지 않은 변경 사항",
+      "description": "서비스 설정을 변경했지만 아직 저장하지 않았습니다. 지금 나가면 변경 사항이 사라집니다.",
+      "stay": "계속 편집",
+      "discard": "저장하지 않고 나가기",
+      "save": "저장 후 나가기",
+      "saving": "저장 중..."
+    },
     "explorer": {
       "title": "Flokicoin 탐색기",
       "description": "수수료 추정 및 트랜잭션 세부 정보에 사용됩니다.",
@@ -113,7 +121,7 @@
       "description": "Wallet Connect (NWC) 통신을 위해 여러 Nostr 릴레이에 연결합니다. 여러 릴레이는 가용성을 향상시킵니다."
     },
     "lsp": {
-      "title": "라이트닝 서비스 제공업체",
+      "title": "Lightning 서비스 제공업체",
       "description": "JIT 채널 및 인바운드 유동성을 위한 LSP를 관리합니다.",
       "communityBadge": "커뮤니티 제안",
       "active": "활성",
@@ -133,7 +141,7 @@
     },
     "swap": {
       "title": "스왑 서비스",
-      "description": "라이트닝과 온체인 간의 스왑(및 그 반대)을 활성화합니다.",
+      "description": "Lightning과 온체인 간의 스왑(및 그 반대)을 활성화합니다.",
       "custom": "사용자 정의 스왑 서비스"
     },
     "messageboard": {

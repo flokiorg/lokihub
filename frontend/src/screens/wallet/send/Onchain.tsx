@@ -29,7 +29,7 @@ import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
 import { useMempoolApi } from "src/hooks/useMempoolApi";
 import { useSwapInfo } from "src/hooks/useSwaps";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { RedeemOnchainFundsResponse, SwapResponse } from "src/types";
 import { request } from "src/utils/request";
 
@@ -115,7 +115,7 @@ function OnchainForm({
   const navigate = useNavigate();
   const { data: info } = useInfo();
   const { data: balances } = useBalances();
-  const { unit, displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { unit, scaleInputAmount, parseInputAmount } = useUnit();
   const { data: recommendedFees, error: mempoolError } = useMempoolApi<{
     fastestFee: number;
     halfHourFee: number;
@@ -123,13 +123,7 @@ function OnchainForm({
     minimumFee: number;
   }>("/v1/fees/recommended");
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {
@@ -343,15 +337,9 @@ function SwapForm({
   const navigate = useNavigate();
   const { data: balances } = useBalances();
   const { data: swapInfo } = useSwapInfo("out");
-  const { displayFormat, scaleInputAmount, parseInputAmount } = useUnit();
+  const { scaleInputAmount, parseInputAmount } = useUnit();
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(balances?.onchain.spendable);
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {

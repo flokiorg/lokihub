@@ -76,6 +76,10 @@
     "network": "Error de red. Por favor, compruebe su conexión.",
     "formValidation": "Por favor, revise el formulario en busca de errores."
   },
+  "boolean": {
+    "yes": "Sí",
+    "no": "No"
+  },
   "labels": {
     "amount": "Cantidad",
     "currency": "Moneda",

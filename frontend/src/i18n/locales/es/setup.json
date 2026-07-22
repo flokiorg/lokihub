@@ -103,6 +103,14 @@
     "warning": "Advertencia",
     "warningText": "Usted es responsable de los servicios a los que se conecta. Asegúrese de confiar en los proveedores de estas URLs.",
     "configErrors": "Errores de configuración",
+    "unsavedChanges": {
+      "title": "Cambios sin guardar",
+      "description": "Has realizado cambios en la configuración de servicios que no se han guardado. Si sales ahora, estos cambios se perderán.",
+      "stay": "Seguir editando",
+      "discard": "Salir sin guardar",
+      "save": "Guardar y salir",
+      "saving": "Guardando..."
+    },
     "explorer": {
       "title": "Explorador Flokicoin",
       "description": "Usado para estimación de comisiones y detalles de transacciones.",

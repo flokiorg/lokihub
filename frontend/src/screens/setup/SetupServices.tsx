@@ -25,6 +25,8 @@ export function SetupServices() {
   const [config, setConfig] = useState<ServiceConfigState>({
       mempoolApi: store.nodeInfo.mempoolApi || "",
       relay: store.nodeInfo.relay || "",
+      generalRelay: "",
+      searchRelay: "",
       swapServiceUrl: store.nodeInfo.swapServiceUrl || "",
       messageboardNwcUrl: store.nodeInfo.messageboardNwcUrl || "",
       enableSwap: store.nodeInfo.enableSwap ?? false,
@@ -149,10 +151,12 @@ export function SetupServices() {
             {loading ? (
                 <ServicesSkeleton />
             ) : (
-                <ServiceConfigForm 
-                    state={config} 
-                    onChange={setConfig} 
+                <ServiceConfigForm
+                    state={config}
+                    onChange={setConfig}
                     validationErrors={validationErrors}
+                    showGeneralRelay={false}
+                    showSearchRelay={false}
                 />
             )}
         </div>

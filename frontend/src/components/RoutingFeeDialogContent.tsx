@@ -4,7 +4,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { useChannels } from "src/hooks/useChannels";
-import { useUnit } from "src/hooks/useUnit";
+import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { Channel, UpdateChannelRequest } from "src/types";
 import { request } from "src/utils/request";
 import {
@@ -26,12 +26,7 @@ export function RoutingFeeDialogContent({ channel }: Props) {
   const currentBaseFeeLoki: number = channel.forwardingFeeBaseMloki / 1000;
   const currentFeePPM: number = channel.forwardingFeeProportionalMillionths;
 
-  const [inputUnit, setInputUnit] = React.useState<"FLC" | "loki">("FLC");
-  React.useEffect(() => {
-    if (displayFormat === "flc") setInputUnit("FLC");
-    else if (displayFormat === "loki") setInputUnit("loki");
-    else setInputUnit("FLC");
-  }, [displayFormat]);
+  const [inputUnit, setInputUnit] = useInputUnit(currentBaseFeeLoki);
 
   const [baseFeeDisplay, setBaseFeeDisplay] = React.useState(
     scaleInputAmount(currentBaseFeeLoki, displayFormat === "loki" ? "loki" : "FLC").toString()
