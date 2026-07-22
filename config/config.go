@@ -592,7 +592,7 @@ func (cfg *config) GetRelay() string {
 
 func (cfg *config) SetRelay(value string) error {
 	if value == "" {
-		return errors.New("Relay cannot be empty")
+		return errors.New("relay cannot be empty")
 	}
 	err := cfg.SetUpdate("Relay", value, "")
 	if err != nil {

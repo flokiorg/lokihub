@@ -13,9 +13,10 @@ type lspsEventConsumer struct {
 }
 
 func (c *lspsEventConsumer) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
-	if event.Event == constants.LSPS5_EVENT_PAYMENT_INCOMING {
+	switch event.Event {
+	case constants.LSPS5_EVENT_PAYMENT_INCOMING:
 		c.handlePaymentIncoming(ctx, event)
-	} else if event.Event == constants.LSPS5_EVENT_ORDER_STATE_NOTIFICATION {
+	case constants.LSPS5_EVENT_ORDER_STATE_NOTIFICATION:
 		c.handleOrderStateChanged(ctx, event)
 	}
 }

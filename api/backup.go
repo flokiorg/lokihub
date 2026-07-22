@@ -37,11 +37,11 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 		return err
 	}
 	if autoUnlockPassword != "" {
-		return errors.New("Please disable auto-unlock before using this feature")
+		return errors.New("please disable auto-unlock before using this feature")
 	}
 
-	if api.db.Dialector.Name() != "sqlite" {
-		return errors.New("Migration with non-sqlite backend is currently not supported")
+	if api.db.Name() != "sqlite" {
+		return errors.New("migration with non-sqlite backend is currently not supported")
 	}
 
 	workDir, err := filepath.Abs(api.cfg.GetEnv().Workdir)

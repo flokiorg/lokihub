@@ -48,7 +48,7 @@ func TestHandleListTransactionsEvent(t *testing.T) {
 	err = svc.DB.Create(&dbRequestEvent).Error
 	assert.NoError(t, err)
 
-	for i, _ := range tests.MockLNClientTransactions {
+	for i := range tests.MockLNClientTransactions {
 		settledAt := time.Unix(*tests.MockLNClientTransactions[i].SettledAt, 0)
 		err = svc.DB.Create(&db.Transaction{
 			Type:            tests.MockLNClientTransactions[i].Type,

@@ -120,8 +120,8 @@ func (l *Listener) runSubscriptionLoop(ctx context.Context, filters nostr.Filter
 			}
 			// Pre-filter: drop untrusted events before spawning a goroutine to
 			// prevent goroutine accumulation under an event flood.
-			if !l.isTrustedPubkey(ev.Event.PubKey) {
-				logger.Logger.Debug().Str("pubkey", ev.Event.PubKey).
+			if !l.isTrustedPubkey(ev.PubKey) {
+				logger.Logger.Debug().Str("pubkey", ev.PubKey).
 					Msg("Dropping LSPS5 event from untrusted source")
 				continue
 			}
