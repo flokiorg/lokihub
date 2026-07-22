@@ -2,10 +2,32 @@ package decodepay
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	fl "github.com/flokiorg/flndecodepay"
 )
+
+// clampIntToUint64 and clampIntToUint32 clamp route hint fields decoded from
+// a bolt11 invoice - genuinely external, potentially adversarial data
+// (anyone can hand you an invoice to pay) - rather than silently wrapping an
+// out-of-range value into a misleadingly small one.
+func clampIntToUint64(v int) uint64 {
+	if v < 0 {
+		return 0
+	}
+	return uint64(v)
+}
+
+func clampIntToUint32(v int) uint32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
 
 type Hop struct {
 	PubKey                    string
@@ -46,9 +68,9 @@ func Decode(bolt11 string) (*Bolt11, error) {
 			hops = append(hops, Hop{
 				PubKey:                    h.PubKey,
 				ChanId:                    0, // flndecodepay has ShortChannelId as string
-				FeeBaseMloki:              uint64(h.FeeBaseMloki),
-				FeeProportionalMillionths: uint64(h.FeeProportionalMillionths),
-				CltvExpiryDelta:           uint32(h.CLTVExpiryDelta),
+				FeeBaseMloki:              clampIntToUint64(h.FeeBaseMloki),
+				FeeProportionalMillionths: clampIntToUint64(h.FeeProportionalMillionths),
+				CltvExpiryDelta:           clampIntToUint32(h.CLTVExpiryDelta),
 			})
 		}
 		routes = append(routes, hops)

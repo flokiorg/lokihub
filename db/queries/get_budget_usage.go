@@ -47,18 +47,18 @@ func GetBudgetRenewsAt(budgetRenewal string) *uint64 {
 	budgetStart := getStartOfBudget(budgetRenewal)
 	switch budgetRenewal {
 	case constants.BUDGET_RENEWAL_DAILY:
-		renewal := uint64(budgetStart.AddDate(0, 0, 1).Unix())
+		renewal := uint64(budgetStart.AddDate(0, 0, 1).Unix()) //nolint:gosec // computed future Unix timestamp, always positive
 		return &renewal
 	case constants.BUDGET_RENEWAL_WEEKLY:
-		renewal := uint64(budgetStart.AddDate(0, 0, 7).Unix())
+		renewal := uint64(budgetStart.AddDate(0, 0, 7).Unix()) //nolint:gosec // computed future Unix timestamp, always positive
 		return &renewal
 
 	case constants.BUDGET_RENEWAL_MONTHLY:
-		renewal := uint64(budgetStart.AddDate(0, 1, 0).Unix())
+		renewal := uint64(budgetStart.AddDate(0, 1, 0).Unix()) //nolint:gosec // computed future Unix timestamp, always positive
 		return &renewal
 
 	case constants.BUDGET_RENEWAL_YEARLY:
-		renewal := uint64(budgetStart.AddDate(1, 0, 0).Unix())
+		renewal := uint64(budgetStart.AddDate(1, 0, 0).Unix()) //nolint:gosec // computed future Unix timestamp, always positive
 		return &renewal
 
 	default: //"never"
