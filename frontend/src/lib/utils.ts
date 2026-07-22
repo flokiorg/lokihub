@@ -77,6 +77,8 @@ export function getBudgetRenewalLabel(renewalType: BudgetRenewalType): string {
 }
 
 export function centerTrim(text: string, keepStart = 8, keepEnd = 8) {
-  if (!text || text.length <= keepStart + keepEnd) return text;
+  if (!text || text.length <= keepStart + keepEnd) {
+    return text;
+  }
   return `${text.slice(0, keepStart)}...${text.slice(-keepEnd)}`;
 }

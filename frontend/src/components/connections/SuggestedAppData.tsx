@@ -1,5 +1,3 @@
-import { App } from "src/types";
-
 export type AppStoreApp = {
   id: string;
   title: string;
@@ -81,18 +79,3 @@ export const appStoreCategories = {
 export const sortedAppStoreCategories = Object.entries(appStoreCategories).sort(
   (a, b) => a[1].priority - b[1].priority
 );
-
-export const appStoreApps: AppStoreApp[] = (
-  [
-    
-  ] satisfies AppStoreApp[]
-)
-
-// .sort((a, b) => (a.title.toUpperCase() > b.title.toUpperCase() ? 1 : -1));
-
-export const getAppStoreApp = (app: App) => {
-  if (!app.metadata?.app_store_app_id) return undefined;
-  return appStoreApps.find(
-    (suggestedApp) => suggestedApp.id === app.metadata?.app_store_app_id
-  );
-};
