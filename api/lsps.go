@@ -110,11 +110,11 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 	}
 
 	// Register webhook for notifications (on-demand, async so as not to block response)
-	go func() {
+	go func() { //nolint:gosec // intentionally decoupled from the request context; see comment below
 		// A fresh context is required here: this goroutine deliberately
 		// outlives the request (fire-and-forget), so the request-scoped ctx
 		// would already be cancelled by the time this runs.
-		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:gosec // intentionally decoupled from the request context; see comment above
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := api.svc.GetLiquidityManager().EnsureWebhookRegistered(bgCtx, req.LSPPubkey); err != nil {
 			logger.Logger.Warn().Err(err).Str("lsp", req.LSPPubkey).Msg("Failed to register webhook")
