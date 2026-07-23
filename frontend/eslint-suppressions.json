@@ -1,0 +1,202 @@
+{
+  "src/components/BudgetAmountSelect.tsx": {
+    "curly": {
+      "count": 2
+    }
+  },
+  "src/components/CurrencyInput.tsx": {
+    "react-hooks/static-components": {
+      "count": 1
+    }
+  },
+  "src/components/GlobalError.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/components/LSPManagementCard.tsx": {
+    "curly": {
+      "count": 3
+    }
+  },
+  "src/components/MultiRelayInput.tsx": {
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/components/ServiceCardSelector.tsx": {
+    "curly": {
+      "count": 3
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/ServiceConfigForm.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    },
+    "curly": {
+      "count": 3
+    }
+  },
+  "src/components/ServiceSelector.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/connections/SuggestedApps.tsx": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/components/home/widgets/LightningMessageboardWidget.tsx": {
+    "curly": {
+      "count": 2
+    }
+  },
+  "src/components/layouts/SettingsLayout.tsx": {
+    "react-hooks/preserve-manual-memoization": {
+      "count": 1
+    }
+  },
+  "src/context/LSPEventContext.tsx": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-console": {
+      "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/hooks/useLSPS0.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/hooks/useLSPS1.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    },
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/hooks/useLSPS2.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/hooks/useLSPS5.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/hooks/useLSPSManagement.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    },
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/hooks/useOnchainTransactions.ts": {
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/screens/Home.tsx": {
+    "curly": {
+      "count": 1
+    },
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "src/screens/channels/IncreaseOutgoingCapacity.tsx": {
+    "curly": {
+      "count": 2
+    }
+  },
+  "src/screens/channels/OrderChannel.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "curly": {
+      "count": 11
+    },
+    "react-hooks/preserve-manual-memoization": {
+      "count": 5
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "src/screens/channels/OrderHistory.tsx": {
+    "curly": {
+      "count": 3
+    },
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "src/screens/settings/Services.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/screens/setup/SetupFinish.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/screens/setup/SetupSecurity.tsx": {
+    "curly": {
+      "count": 1
+    }
+  },
+  "src/screens/setup/SetupServices.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "curly": {
+      "count": 6
+    }
+  },
+  "src/screens/setup/node/FLNDForm.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/screens/wallet/receive/ReceiveInvoice.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "curly": {
+      "count": 3
+    }
+  },
+  "src/screens/wallet/receive/ReceiveOnchain.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/utils/compareVersions.ts": {
+    "curly": {
+      "count": 13
+    }
+  },
+  "src/utils/validation.ts": {
+    "curly": {
+      "count": 6
+    }
+  }
+}

@@ -11,7 +11,7 @@
     "prepare:wails": "shx cp ./platform_specific/wails/src/utils/*.ts src/utils/",
     "prepare:http": "shx cp ./platform_specific/http/src/utils/*.ts src/utils/",
     "lint": "yarn lint:js && yarn tsc:compile && yarn format:fix --report-unused-disable-directives --max-warnings 0",
-    "lint:js": "eslint src --max-warnings 0",
+    "lint:js": "eslint src --max-warnings 17",
     "lint:js:fix": "eslint src --fix",
     "tsc:compile": "tsc --noEmit",
     "format": "prettier --check '**/*.(md|json)' 'src/**/*.(js|ts|tsx)' '!src/assets/**/*.json' 'platform_specific/**/*.ts'",

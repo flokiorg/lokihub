@@ -141,11 +141,19 @@ jobs:
   frontend-lint:
     name: Frontend lint
     runs-on: ubuntu-latest
-    # Non-blocking initially: the first real run of this job surfaced a
-    # pre-existing, untriaged ESLint backlog (123 errors across 31 files -
-    # mostly `curly`, `no-explicit-any`, and a few react-hooks correctness
-    # findings). Flip continue-on-error to false once that's cleaned up.
-    continue-on-error: true
+    # Blocking, via a ratchet rather than a one-time cleanup: the pre-existing
+    # backlog (123 errors across 31 files, mostly `curly`/`no-explicit-any`)
+    # is captured in frontend/eslint-suppressions.json (ESLint's native bulk-
+    # suppressions feature - see `eslint --help` under "Suppressing
+    # Violations"), so those specific, already-known violations don't fail
+    # the build, but any NEW error anywhere does. The remaining 17
+    # react-hooks/exhaustive-deps warnings aren't suppressible the same way
+    # (suppressions only cover error-severity rules) - `--max-warnings 17` in
+    # package.json's lint:js script pins that count as a ceiling instead, so
+    # a new warning also fails the build. Whenever an existing suppressed
+    # error or baseline warning actually gets fixed, re-run
+    # `eslint src --suppress-all --prune-suppressions` and lower
+    # --max-warnings to ratchet the ceiling down.
     defaults:
       run:
         working-directory: frontend
