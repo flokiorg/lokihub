@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"math"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -65,7 +66,10 @@ func (controller *nip47Controller) HandleMakeInvoiceEvent(ctx context.Context, n
 			defer controller.activeCircleInvoices.Delete(appId)
 
 			balance := queries.GetIsolatedBalance(controller.db, appId)
-			if balance+int64(makeInvoiceParams.Amount) > maxMloki {
+			// makeInvoiceParams.Amount is caller-suppliable; a value beyond
+			// int64 range would wrap negative and bypass the cap check
+			// below, so fail closed on the overflow itself.
+			if makeInvoiceParams.Amount > math.MaxInt64 || balance+int64(makeInvoiceParams.Amount) > maxMloki {
 				publishResponse(&models.Response{
 					ResultType: nip47Request.Method,
 					Error: &models.Error{

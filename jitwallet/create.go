@@ -205,15 +205,18 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		if r.AmountMloki > math.MaxInt64 {
 			return nil, fmt.Errorf("%w: recipient %d: amount_mloki %d is too large", constants.ErrInvalidParams, i, r.AmountMloki)
 		}
-		// Reject a sum that would wrap around uint64 — with N recipients each
+		// Reject a sum that would exceed MaxInt64 — with N recipients each
 		// individually under MaxInt64, the running total could still overflow
-		// uint64 before the PerWalletMaxMloki check below ever sees it, silently
-		// wrapping to a small value that passes both that cap and the hub
-		// balance check while leaving individual recipients' stored
-		// entitlements at their original, un-wrapped (and uncollectable)
-		// amounts. Caught with a pre-add overflow check rather than trusting
-		// the cap comparison after the fact.
-		if r.AmountMloki > math.MaxUint64-sum {
+		// before the PerWalletMaxMloki check below ever sees it, silently
+		// wrapping to a small (or negative-when-cast) value that passes both
+		// that cap and the int64(sum) > balance check further down, while
+		// leaving individual recipients' stored entitlements at their
+		// original, un-wrapped (and uncollectable) amounts. Bounded by
+		// MaxInt64 rather than MaxUint64 specifically because that's what
+		// the balance comparison below actually casts sum into. Caught with
+		// a pre-add overflow check rather than trusting the cap comparison
+		// after the fact.
+		if r.AmountMloki > uint64(math.MaxInt64)-sum {
 			return nil, fmt.Errorf("%w: recipient %d: combined recipient amounts overflow", constants.ErrInvalidParams, i)
 		}
 
@@ -249,7 +252,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 
 	// Pre-flight balance check (the transfer itself is the authoritative check).
 	balance := queries.GetIsolatedBalance(deps.DB, params.HubApp.ID)
-	if int64(sum) > balance {
+	if int64(sum) > balance { //nolint:gosec // sum is bounded to <= MaxInt64 by the per-recipient/running-total guards above
 		return nil, fmt.Errorf("%w: insufficient balance in JIT Hub", transactions.NewInsufficientBalanceError())
 	}
 
@@ -343,7 +346,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			IAPubkey:      r.IAPubkey,
-			AmountMloki:   int64(r.AmountMloki),
+			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
 		}
 	}
 	if err := deps.AppsService.CreateJITWalletClaims(newApp.ID, claimRows); err != nil {

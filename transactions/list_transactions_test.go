@@ -394,7 +394,7 @@ func TestListTransactions_FromUntil(t *testing.T) {
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 
-	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, false, false, nil, svc.LNClient, nil, false)
+	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, false, false, nil, svc.LNClient, nil, false) //nolint:gosec // time.Now().Unix() is always positive
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), totalCount)
 	assert.Equal(t, 1, len(incomingTransactions))
@@ -456,7 +456,7 @@ func TestListTransactions_FromUntilUnpaidOutgoing(t *testing.T) {
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 
-	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, true, false, nil, svc.LNClient, nil, false)
+	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, true, false, nil, svc.LNClient, nil, false) //nolint:gosec // time.Now().Unix() is always positive
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), totalCount)
 	assert.Equal(t, "second", incomingTransactions[0].Description)
@@ -518,7 +518,7 @@ func TestListTransactions_FromUntilUnpaidIncoming(t *testing.T) {
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 
-	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, false, true, nil, svc.LNClient, nil, false)
+	incomingTransactions, totalCount, err := transactionsService.ListTransactions(ctx, uint64(time.Now().Add(4*time.Minute).Unix()), uint64(time.Now().Add(6*time.Minute).Unix()), 0, 0, false, true, nil, svc.LNClient, nil, false) //nolint:gosec // time.Now().Unix() is always positive
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), totalCount)
 	assert.Equal(t, "second", incomingTransactions[0].Description)

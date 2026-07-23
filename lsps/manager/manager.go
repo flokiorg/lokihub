@@ -698,7 +698,7 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 	inboundCapacity := balances.Lightning.TotalReceivable
 	// We ensure we compare apples to apples (mloki).
 
-	inboundCapacityMsat := uint64(inboundCapacity) * 1000
+	inboundCapacityMsat := uint64(inboundCapacity) * 1000 //nolint:gosec // LN-node-reported receivable capacity is always non-negative
 	if inboundCapacityMsat >= amountMloki {
 		// Sufficient liquidity
 		return nil, nil

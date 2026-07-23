@@ -341,6 +341,43 @@ func TestCreate_RecipientSumOverflow_Rejected(t *testing.T) {
 	assert.True(t, errors.Is(err, constants.ErrInvalidParams))
 }
 
+// TestCreate_RecipientSumExceedsInt64_Rejected is the regression test for a
+// narrower gap the uint64-wraparound guard above didn't cover: two
+// recipients each individually under MaxInt64 (so neither the single-value
+// guard nor a uint64-wraparound check fires) whose sum still exceeds
+// MaxInt64 - the exact range int64(sum) > balance further down casts into.
+// Pre-fix this sum would silently wrap to a negative int64, comparing as
+// less than any real balance and passing the pre-flight check regardless of
+// the hub's actual balance.
+//
+// PerWalletMaxMloki is forced to 0 directly via the DB (CreateJITHub's own
+// API validation rejects 0, so this simulates a pre-validation/legacy row)
+// so the PerWalletMaxMloki cap check - which, since a cap is itself
+// int-bounded, would otherwise always independently catch any sum this
+// large anyway - doesn't mask whether this guard specifically works.
+func TestCreate_RecipientSumExceedsInt64_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 1, 3600)
+	require.NoError(t, svc.DB.Model(&db.JITHubConfig{}).Where("app_id = ?", hub.ID).Update("per_wallet_max_mloki", 0).Error)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	pk2, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub,
+		Recipients: []RecipientInput{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk1, AmountMloki: math.MaxInt64 - 500},
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk2, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, constants.ErrInvalidParams))
+}
+
 func TestCreate_ExpiryExceedsMax(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
