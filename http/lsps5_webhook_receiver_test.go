@@ -106,7 +106,7 @@ func TestLSPS5WebhookCallback_MissingLspParam(t *testing.T) {
 	// Valid signature but missing param
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback", bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -133,7 +133,7 @@ func TestLSPS5WebhookCallback_MissingHeaders(t *testing.T) {
 	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
 
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.payment_incoming","params":{}}`
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	// Missing x-lsps5-timestamp and x-lsps5-signature
 	rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestLSPS5WebhookCallback_InvalidJSON(t *testing.T) {
 	lspPubkey := hex.EncodeToString(privKey.PubKey().SerializeCompressed())
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString("not json"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", "irrelevant") // Body isn't read successfully to verify signature yet or falls before
@@ -188,7 +188,7 @@ func TestLSPS5WebhookCallback_InvalidJsonRpcVersion(t *testing.T) {
 	reqBody := `{"jsonrpc":"1.0","method":"lsps5.payment_incoming","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -220,7 +220,7 @@ func TestLSPS5WebhookCallback_UnknownMethodReturns200(t *testing.T) {
 	reqBody := `{"jsonrpc":"2.0","method":"lsps99.unknown","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -247,7 +247,7 @@ func TestLSPS5WebhookCallback_ExpirySoonReturns200(t *testing.T) {
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.expiry_soon","params":{"timeout":144}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -274,7 +274,7 @@ func TestLSPS5WebhookCallback_WebhookRegisteredReturns200(t *testing.T) {
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -301,7 +301,7 @@ func TestLSPS5WebhookCallback_LiquidityRequestReturns200(t *testing.T) {
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.liquidity_management_request","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -334,7 +334,7 @@ func TestLSPS5WebhookCallback_UnregisteredLSP_Rejected(t *testing.T) {
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.webhook_registered","params":{}}`
 	sig := generateLSPS5Signature(t, privKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+lspPubkey, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)
@@ -386,7 +386,7 @@ func TestLSPS5WebhookCallback_OrderStateChanged_WrongLSP_NotApplied(t *testing.T
 	reqBody := `{"jsonrpc":"2.0","method":"lsps5.order_state_changed","params":{"order_id":"` + orderID + `","state":"COMPLETED"}}`
 	sig := generateLSPS5Signature(t, impostorPrivKey, timestamp, []byte(reqBody))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lsps5/webhook-callback?lsp="+impostorPubkey+"&order="+orderID, bytes.NewBufferString(reqBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/lsps5/webhook-callback?lsp="+impostorPubkey+"&order="+orderID, bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-lsps5-timestamp", timestamp)
 	req.Header.Set("x-lsps5-signature", sig)

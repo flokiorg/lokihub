@@ -90,6 +90,7 @@ func TestSetIgnore_NoEncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	err = svc.Cfg.SetIgnore("key", "value2", "")
@@ -97,6 +98,7 @@ func TestSetIgnore_NoEncryptionKey(t *testing.T) {
 
 	// value should not be updated
 	updatedValue, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value", updatedValue)
 }
 
@@ -111,6 +113,7 @@ func TestSetIgnore_EncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	invalidValue, err := svc.Cfg.Get("key", unlockPassword+"1")
@@ -122,6 +125,7 @@ func TestSetIgnore_EncryptionKey(t *testing.T) {
 
 	// value should not be updated
 	updatedValue, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value", updatedValue)
 }
 
@@ -134,6 +138,7 @@ func TestSetUpdate_NoEncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	err = svc.Cfg.SetUpdate("key", "value2", "")
@@ -141,6 +146,7 @@ func TestSetUpdate_NoEncryptionKey(t *testing.T) {
 
 	// value should be updated
 	updatedValue, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value2", updatedValue)
 }
 
@@ -155,6 +161,7 @@ func TestSetUpdate_EncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	invalidValue, err := svc.Cfg.Get("key", unlockPassword+"1")
@@ -166,6 +173,7 @@ func TestSetUpdate_EncryptionKey(t *testing.T) {
 
 	// value should be updated
 	updatedValue, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value2", updatedValue)
 }
 
@@ -178,6 +186,7 @@ func TestSetUpdate_NoEncryptionKeyToEncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	unlockPassword := "123"
@@ -187,6 +196,7 @@ func TestSetUpdate_NoEncryptionKeyToEncryptionKey(t *testing.T) {
 
 	// value should be updated
 	updatedValue, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value2", updatedValue)
 }
 
@@ -201,6 +211,7 @@ func TestSetUpdate_EncryptionKeyToNoEncryptionKey(t *testing.T) {
 	require.NoError(t, err)
 
 	value, err := svc.Cfg.Get("key", unlockPassword)
+	assert.NoError(t, err)
 	assert.Equal(t, "value", value)
 
 	err = svc.Cfg.SetUpdate("key", "value2", "")
@@ -208,6 +219,7 @@ func TestSetUpdate_EncryptionKeyToNoEncryptionKey(t *testing.T) {
 
 	// value should be updated
 	updatedValue, err := svc.Cfg.Get("key", "")
+	assert.NoError(t, err)
 	assert.Equal(t, "value2", updatedValue)
 }
 
