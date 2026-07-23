@@ -106,7 +106,7 @@ func TestHandleGetBudgetEvent_NoneUsed(t *testing.T) {
 	assert.Equal(t, uint64(400000), publishedResponse.Result.(*getBudgetResponse).TotalBudget)
 	assert.Equal(t, uint64(0), publishedResponse.Result.(*getBudgetResponse).UsedBudget)
 	renewsAt := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, 1, 0).Unix()
-	assert.Equal(t, uint64(renewsAt), *publishedResponse.Result.(*getBudgetResponse).RenewsAt)
+	assert.Equal(t, uint64(renewsAt), *publishedResponse.Result.(*getBudgetResponse).RenewsAt) //nolint:gosec // time.Date(...).Unix() is always positive
 	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, publishedResponse.Result.(*getBudgetResponse).RenewalPeriod)
 	assert.Nil(t, publishedResponse.Error)
 }
@@ -158,7 +158,7 @@ func TestHandleGetBudgetEvent_HalfUsed(t *testing.T) {
 	assert.Equal(t, uint64(400000), publishedResponse.Result.(*getBudgetResponse).TotalBudget)
 	assert.Equal(t, uint64(200000), publishedResponse.Result.(*getBudgetResponse).UsedBudget)
 	renewsAt := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, 1, 0).Unix()
-	assert.Equal(t, uint64(renewsAt), *publishedResponse.Result.(*getBudgetResponse).RenewsAt)
+	assert.Equal(t, uint64(renewsAt), *publishedResponse.Result.(*getBudgetResponse).RenewsAt) //nolint:gosec // time.Date(...).Unix() is always positive
 	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, publishedResponse.Result.(*getBudgetResponse).RenewalPeriod)
 	assert.Nil(t, publishedResponse.Error)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -160,6 +161,45 @@ func TestHandleMakeInvoiceEvent_CircleChild_CapNotExceeded(t *testing.T) {
 	})
 
 	assert.Nil(t, publishedResponse.Error, "invoice within circle cap must succeed")
+}
+
+// TestHandleMakeInvoiceEvent_CircleChild_OverflowAmountRejected is the
+// regression test for a uint64->int64 overflow that used to bypass the
+// circle-wallet cap check entirely: requesting an amount beyond MaxInt64
+// wrapped negative in `balance+int64(amount) > maxMloki`, making the
+// comparison false and letting the invoice through regardless of the cap.
+func TestHandleMakeInvoiceEvent_CircleChild_OverflowAmountRejected(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	parent, _, err := svc.AppsService.CreateApp("parent3", "", 0, "never", nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
+	require.NoError(t, err)
+
+	// Circle child: cap = 100 loki = 100_000 mloki, currently 0 balance.
+	child, _, err := svc.AppsService.CreateApp("child3", "", 100, "never", nil,
+		[]string{constants.MAKE_INVOICE_SCOPE, constants.PAY_INVOICE_SCOPE},
+		db.AppKindCircleWallet, &parent.ID, db.ParentKindCircle, nil)
+	require.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{AppId: &child.ID}
+	svc.DB.Create(&dbRequestEvent)
+
+	// math.MaxUint64: int64(amount) wraps to -1, which the pre-fix code
+	// compared as 0+(-1) > 100_000 == false, silently passing the cap check.
+	nip47Request := &models.Request{}
+	err = json.Unmarshal([]byte(makeInvoiceRequestJSON(math.MaxUint64)), nip47Request)
+	require.NoError(t, err)
+
+	var publishedResponse *models.Response
+	NewTestNip47Controller(svc).HandleMakeInvoiceEvent(ctx, nip47Request, dbRequestEvent.ID, child.ID, func(r *models.Response, _ nostr.Tags) {
+		publishedResponse = r
+	})
+
+	require.NotNil(t, publishedResponse.Error, "an overflowing amount must not bypass the circle wallet cap")
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
 }
 
 func TestHandleMakeInvoiceEvent_NonCircleChild_NoCap(t *testing.T) {

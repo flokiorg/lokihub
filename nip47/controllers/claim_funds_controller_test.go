@@ -40,7 +40,7 @@ const feeReserveHeadroomMloki = 50_000
 // balance/quota pre-checks on top of the exact slice amount.
 func newFundedJITWallet(t *testing.T, svc *tests.TestService, hub *db.App, totalMloki int64) *db.App {
 	t.Helper()
-	funded := uint64(totalMloki) + feeReserveHeadroomMloki
+	funded := uint64(totalMloki) + feeReserveHeadroomMloki //nolint:gosec // totalMloki is a small test-supplied literal amount
 	wallet, _, err := svc.AppsService.CreateApp(
 		"jit-wallet", "", funded/1000, constants.BUDGET_RENEWAL_NEVER, nil,
 		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},

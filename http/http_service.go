@@ -551,12 +551,19 @@ func (httpSvc *HttpService) createJWT(tokenExpiryDays *uint64, permission string
 	if tokenExpiryDays != nil {
 		expiryDays = *tokenExpiryDays
 	}
+	// Cap at 100 years: caller-suppliable, and an oversized value would
+	// otherwise overflow the day*hour Duration multiplication below and
+	// silently produce a token that's already expired.
+	const maxExpiryDays = 100 * 365
+	if expiryDays > maxExpiryDays {
+		expiryDays = maxExpiryDays
+	}
 
 	// Set custom claims
 	claims := &jwtCustomClaims{
 		Permission: permission,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * time.Duration(expiryDays))),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * time.Duration(expiryDays))), //nolint:gosec // expiryDays is capped above
 		},
 	}
 

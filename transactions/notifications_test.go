@@ -69,7 +69,7 @@ func TestNotifications_ReceivedUnknownPayment(t *testing.T) {
 	transactionType := constants.TRANSACTION_TYPE_INCOMING
 	incomingTransaction, err := transactionsService.LookupTransaction(ctx, tests.MockLNClientTransaction.PaymentHash, &transactionType, svc.LNClient, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(tests.MockLNClientTransaction.Amount), incomingTransaction.AmountMloki)
+	assert.Equal(t, uint64(tests.MockLNClientTransaction.Amount), incomingTransaction.AmountMloki) //nolint:gosec // test fixture amount, always non-negative
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, incomingTransaction.State)
 	assert.Equal(t, tests.MockLNClientTransaction.Preimage, *incomingTransaction.Preimage)
 	assert.Zero(t, incomingTransaction.FeeReserveMloki)

@@ -377,7 +377,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 							App:           *userApp,
 							Scope:         scope,
 							ExpiresAt:     expiresAt,
-							MaxAmountLoki: int(maxAmount),
+							MaxAmountLoki: int(maxAmount), //nolint:gosec // admin-JWT-gated budget config value, same trust boundary as full admin access
 							BudgetRenewal: budgetRenewal,
 						}
 						if err := tx.Create(&perm).Error; err != nil {
@@ -3093,7 +3093,7 @@ func (api *api) DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID ui
 
 	if claim.AmountMloki > 0 && wallet.ParentAppID != nil {
 		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
-			context.Background(), uint64(claim.AmountMloki), "jit claim removed: sweep back to hub", "", 0,
+			context.Background(), uint64(claim.AmountMloki), "jit claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
 			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
 			&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
 		)

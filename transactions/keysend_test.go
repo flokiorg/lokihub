@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"strconv"
 	"testing"
 
@@ -241,6 +242,50 @@ func TestSendKeysend_App_BalanceExceeded(t *testing.T) {
 	transaction, err := transactionsService.SendKeysend(uint64(1000), "fake destination", nil, "", svc.LNClient, &app.ID, &dbRequestEvent.ID)
 
 	assert.ErrorIs(t, err, NewInsufficientBalanceError())
+	assert.Nil(t, transaction)
+}
+
+// TestSendKeysend_App_BalanceExceeded_OverflowAmount is the regression test
+// for a uint64->int64 overflow that used to bypass validateCanPay's
+// isolated-balance check entirely: an amount beyond math.MaxInt64 wrapped
+// negative in `int64(amountWithFeeReserve) > isolatedBalance`, comparing as
+// less than any real balance and letting the payment attempt through
+// regardless of the isolated app's actual (tiny) balance.
+func TestSendKeysend_App_BalanceExceeded_OverflowAmount(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	assert.NoError(t, err)
+
+	dbRequestEvent := &db.RequestEvent{}
+	err = svc.DB.Create(&dbRequestEvent).Error
+	assert.NoError(t, err)
+	app.Kind = db.AppKindIsolated
+	svc.DB.Save(&app)
+
+	appPermission := &db.AppPermission{
+		AppId: app.ID,
+		App:   *app,
+		Scope: constants.PAY_INVOICE_SCOPE,
+	}
+	err = svc.DB.Create(appPermission).Error
+	assert.NoError(t, err)
+
+	svc.DB.Create(&db.Transaction{
+		AppId:       &app.ID,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		AmountMloki: 10000,
+	})
+
+	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+	// math.MaxInt64 + 1000: still well within uint64 range (no uint64 wrap),
+	// but int64(amount) would wrap negative on the pre-fix comparison.
+	transaction, err := transactionsService.SendKeysend(uint64(math.MaxInt64)+1000, "fake destination", nil, "", svc.LNClient, &app.ID, &dbRequestEvent.ID)
+
+	assert.ErrorIs(t, err, NewInsufficientBalanceError(), "an overflowing amount must not bypass the isolated-balance check")
 	assert.Nil(t, transaction)
 }
 

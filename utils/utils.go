@@ -24,6 +24,17 @@ func ClampUint64ToInt(v uint64) int {
 	return int(v)
 }
 
+// ClampUint64ToInt64 converts v to an int64, clamping to math.MaxInt64
+// instead of silently wrapping to a negative number when v exceeds what
+// int64 can hold. Intended for caller-supplied uint64 values (e.g. Unix
+// timestamps) that flow into APIs typed as int64.
+func ClampUint64ToInt64(v uint64) int64 {
+	if v > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(v)
+}
+
 // ReadFileTail's only caller passes logger.GetLogFilePath(), an internally
 // derived path, never caller/request input.
 func ReadFileTail(filePath string, maxLen int) (data []byte, err error) {

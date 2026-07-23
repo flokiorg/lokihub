@@ -1111,9 +1111,17 @@ func (svc *FLNDService) ListChannels(ctx context.Context) ([]lnclient.Channel, e
 			return nil, err
 		}
 
-		// first 3 bytes of the channel ID are the block height
-		channelOpeningBlockHeight := flndChannel.ChanId >> 40
-		confirmations := nodeInfo.BlockHeight - uint32(channelOpeningBlockHeight) + 1
+		// first 3 bytes of the channel ID are the block height (a BOLT7
+		// 24-bit field, always far below uint32 range)
+		channelOpeningBlockHeight := uint32(flndChannel.ChanId >> 40) //nolint:gosec
+		// Guard against uint32 underflow (wrapping to a huge, nonsensical
+		// confirmation count) if the node's reported tip height is ever
+		// behind this channel's own recorded opening height, e.g. right
+		// after a reorg or a stale/inconsistent nodeInfo snapshot.
+		var confirmations uint32
+		if nodeInfo.BlockHeight >= channelOpeningBlockHeight {
+			confirmations = nodeInfo.BlockHeight - channelOpeningBlockHeight + 1
+		}
 
 		var forwardingFeeBaseMloki uint32
 		var forwardingFeeProportionalMillionths uint32
@@ -1459,7 +1467,7 @@ func (svc *FLNDService) GetOnchainBalance(ctx context.Context) (*lnclient.Onchai
 	pendingBalancesFromChannelClosures := uint64(0)
 	pendingBalancesDetails := []lnclient.PendingBalanceDetails{}
 	for _, closingChannel := range pendingChannels.WaitingCloseChannels {
-		pendingBalancesFromChannelClosures += uint64(closingChannel.LimboBalance)
+		pendingBalancesFromChannelClosures += uint64(closingChannel.LimboBalance) //nolint:gosec // LN-node-reported balance is always non-negative
 		if closingChannel.Channel != nil {
 			channelPoint, err := svc.parseChannelPoint(closingChannel.Channel.ChannelPoint)
 			if err != nil {
@@ -1467,7 +1475,7 @@ func (svc *FLNDService) GetOnchainBalance(ctx context.Context) (*lnclient.Onchai
 			}
 			pendingBalancesDetails = append(pendingBalancesDetails, lnclient.PendingBalanceDetails{
 				NodeId:        closingChannel.Channel.RemoteNodePub,
-				Amount:        uint64(closingChannel.LimboBalance),
+				Amount:        uint64(closingChannel.LimboBalance), //nolint:gosec // LN-node-reported balance is always non-negative
 				FundingTxId:   channelPoint.GetFundingTxidStr(),
 				FundingTxVout: channelPoint.GetOutputIndex(),
 			})
@@ -1931,8 +1939,8 @@ func (svc *FLNDService) refreshTransactionCache(ctx context.Context) error {
 			}
 
 			allTransactions = append(allTransactions, lnclient.OnchainTransaction{
-				AmountLoki:       uint64(amountLoki),
-				CreatedAt:        uint64(tx.TimeStamp),
+				AmountLoki:       uint64(amountLoki),   //nolint:gosec // sign-normalized above; LN-node-reported amount is always far below int64 range
+				CreatedAt:        uint64(tx.TimeStamp), //nolint:gosec // LN-node-reported transaction timestamp is always positive
 				State:            state,
 				Type:             txType,
 				NumConfirmations: uint32(tx.NumConfirmations), //nolint:gosec // transaction confirmation counts are always small and non-negative
