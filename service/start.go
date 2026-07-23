@@ -101,7 +101,11 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 				// Force reconnection if offline
 				if !online {
-					go pool.EnsureRelay(relayUrl)
+					go func(relayUrl string) {
+						if _, err := pool.EnsureRelay(relayUrl); err != nil {
+							logger.Logger.Warn().Err(err).Str("relay", relayUrl).Msg("Failed to reconnect to relay")
+						}
+					}(relayUrl)
 				}
 
 				svc.relayStatuses = append(svc.relayStatuses, RelayStatus{

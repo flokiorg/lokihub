@@ -152,8 +152,9 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	// SCID for 800000x1x1: (800000<<40) | (1<<16) | 1 = 879609302220865537
 	jitSCID := uint64(879609302220865537)
 	// Setup DB
-	db, _ := gorm.Open(sqlite.Open("file:memdb_jit?mode=memory&cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&persist.LSP{})
+	db, err := gorm.Open(sqlite.Open("file:memdb_jit?mode=memory&cache=shared"), &gorm.Config{})
+	assert.NoError(t, err)
+	assert.NoError(t, db.AutoMigrate(&persist.LSP{}))
 	lspManager := NewLSPManager(db)
 
 	mockLN := &mockLNClientJIT{
@@ -180,7 +181,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	err := m.AddLSP("TestLSP", lspPubkey+"@host:5521")
+	err = m.AddLSP("TestLSP", lspPubkey+"@host:5521")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}

@@ -23,7 +23,7 @@ func TestHandleCreateConnectionEvent(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""))
 
 	pairingSecretKey := nostr.GeneratePrivateKey()
 	pairingPublicKey, err := nostr.GetPublicKey(pairingSecretKey)

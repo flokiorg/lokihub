@@ -83,16 +83,18 @@ func MigrateCircleIdentityTables(db *gorm.DB) error {
 			for rows.Next() {
 				var c legacyConfig
 				if err := rows.Scan(&c.ID, &c.Name, &c.Policy, &c.ProviderPubkey); err != nil {
-					rows.Close()
+					_ = rows.Close()
 					return err
 				}
 				configs = append(configs, c)
 			}
 			if err := rows.Err(); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return err
 			}
-			rows.Close()
+			if err := rows.Close(); err != nil {
+				return err
+			}
 
 			for _, c := range configs {
 				if err := tx.Exec(`INSERT INTO circle_identities (name, policy, provider_pubkey) VALUES (?, ?, ?)`,

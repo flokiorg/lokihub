@@ -54,7 +54,11 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 // generateRequestID generates a random request ID
 func generateRequestID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand only fails if the OS entropy source is unavailable;
+		// fall back to a timestamp-derived ID rather than blocking the request.
+		return fmt.Sprintf("%032x", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(b)
 }
 

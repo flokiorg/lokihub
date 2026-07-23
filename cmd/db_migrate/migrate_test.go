@@ -55,7 +55,7 @@ func TestSchemaCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dbConn, err := test_db.NewDBWithURI(t, tt.uri)
 			require.NoError(t, err)
-			defer db.Stop(dbConn)
+			defer func() { require.NoError(t, db.Stop(dbConn)) }()
 
 			err = checkSchema(dbConn)
 			require.NoError(t, err)

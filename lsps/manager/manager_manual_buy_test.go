@@ -21,8 +21,9 @@ import (
 
 func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 	// Setup DB
-	db, _ := gorm.Open(sqlite.Open("file:memdb_manual?mode=memory&cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&persist.LSP{})
+	db, err := gorm.Open(sqlite.Open("file:memdb_manual?mode=memory&cache=shared"), &gorm.Config{})
+	assert.NoError(t, err)
+	assert.NoError(t, db.AutoMigrate(&persist.LSP{}))
 	lspManager := NewLSPManager(db)
 
 	mockLN := &mockLNClientJIT{
@@ -46,7 +47,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	err := m.AddLSP("TestLSPManual", lspPubkey+"@host:5521")
+	err = m.AddLSP("TestLSPManual", lspPubkey+"@host:5521")
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

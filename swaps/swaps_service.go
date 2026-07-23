@@ -202,7 +202,9 @@ func (svc *swapsService) runConnectAndDispatch() {
 
 func (svc *swapsService) Stop() {
 	if svc.lightzWs != nil {
-		svc.lightzWs.Close()
+		if err := svc.lightzWs.Close(); err != nil {
+			svc.logger.Warn().Err(err).Msg("Failed to close lightz websocket")
+		}
 		svc.lightzWs = nil
 	}
 }
@@ -1476,7 +1478,7 @@ func (svc *swapsService) doMempoolRequest(endpoint string, result interface{}) e
 		return err
 	}
 
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
@@ -1616,7 +1618,7 @@ func (svc *swapsService) getNextUnusedAddressFromXpub() (string, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer res.Body.Close()
+		defer func() { _ = res.Body.Close() }()
 
 		body, err := io.ReadAll(res.Body)
 		if err != nil {

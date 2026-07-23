@@ -37,11 +37,12 @@ func TestCheckUnsettledTransaction(t *testing.T) {
 	}
 
 	// do not allow checking unsettled transactions if notifications are supported
-	transactionsService.checkUnsettledTransaction(context.TODO(), &dbTransaction, svc.LNClient)
+	err = transactionsService.checkUnsettledTransaction(context.TODO(), &dbTransaction, svc.LNClient)
+	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_PENDING, dbTransaction.State)
 
 	svc.LNClient.(*tests.MockLn).SupportedNotificationTypes = &[]string{}
-	transactionsService.checkUnsettledTransaction(context.TODO(), &dbTransaction, svc.LNClient)
+	err = transactionsService.checkUnsettledTransaction(context.TODO(), &dbTransaction, svc.LNClient)
 
 	assert.NoError(t, err)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, dbTransaction.State)
