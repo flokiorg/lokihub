@@ -268,7 +268,9 @@ func (httpSvc *HttpService) handleLSPS5Notification(lspPubkey, orderID string, n
 			Str("lsp", lspPubkey).
 			Msg("Incoming payment notification received")
 		// Trigger wallet sync
-		httpSvc.api.SyncWallet()
+		if err := httpSvc.api.SyncWallet(); err != nil {
+			logger.Logger.Warn().Err(err).Str("lsp", lspPubkey).Msg("Failed to trigger wallet sync")
+		}
 		event.Event = constants.LSPS5_EVENT_PAYMENT_INCOMING
 
 	case LSPS5MethodExpirySoon:

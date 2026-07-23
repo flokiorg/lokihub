@@ -81,7 +81,7 @@ func doTestSendNotificationPaymentReceived(t *testing.T, svc *tests.TestService,
 	permissionsSvc := permissions.NewPermissionsService(svc.DB, svc.EventPublisher)
 
 	notifier := NewNip47Notifier(pool, svc.DB, svc.Cfg, svc.Keys, permissionsSvc)
-	notifier.ConsumeEvent(ctx, receivedEvent)
+	require.NoError(t, notifier.ConsumeEvent(ctx, receivedEvent))
 
 	var publishedEvent *nostr.Event
 	if nip47Encryption == constants.ENCRYPTION_TYPE_NIP04 {
@@ -195,7 +195,7 @@ func doTestSendNotificationPaymentSent(t *testing.T, svc *tests.TestService, cre
 	permissionsSvc := permissions.NewPermissionsService(svc.DB, svc.EventPublisher)
 
 	notifier := NewNip47Notifier(pool, svc.DB, svc.Cfg, svc.Keys, permissionsSvc)
-	notifier.ConsumeEvent(ctx, receivedEvent)
+	require.NoError(t, notifier.ConsumeEvent(ctx, receivedEvent))
 
 	var publishedEvent *nostr.Event
 	if nip47Encryption == constants.ENCRYPTION_TYPE_NIP04 {
@@ -288,7 +288,9 @@ func doTestSendNotificationNoPermission(t *testing.T, svc *tests.TestService) {
 	permissionsSvc := permissions.NewPermissionsService(svc.DB, svc.EventPublisher)
 
 	notifier := NewNip47Notifier(pool, svc.DB, svc.Cfg, svc.Keys, permissionsSvc)
-	notifier.ConsumeEvent(ctx, receivedEvent)
+	// event.Properties is deliberately the wrong type here, so ConsumeEvent
+	// is expected to fail the cast rather than send a notification.
+	assert.Error(t, notifier.ConsumeEvent(ctx, receivedEvent))
 
 	assert.Nil(t, pool.PublishedEvents)
 }

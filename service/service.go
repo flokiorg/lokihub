@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,8 +58,9 @@ type service struct {
 }
 
 func NewService(ctx context.Context) (*service, error) {
-	// Load config from environment variables / .GetEnv() file
-	godotenv.Load(".env")
+	// Load config from environment variables / .GetEnv() file. Missing
+	// .env is fine — config also comes from real environment variables.
+	_ = godotenv.Load(".env")
 	appConfig := &config.AppConfig{}
 	err := envconfig.Process("", appConfig)
 	if err != nil {
@@ -73,7 +75,9 @@ func NewService(ctx context.Context) (*service, error) {
 		logger.Logger.Info().Interface("workdir", appConfig.Workdir).Msg("No workdir specified, using default")
 	}
 	// make sure workdir exists
-	os.MkdirAll(appConfig.Workdir, os.ModePerm)
+	if err := os.MkdirAll(appConfig.Workdir, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create workdir: %w", err)
+	}
 
 	if appConfig.LogToFile {
 		err = logger.AddFileLogger(appConfig.Workdir)
@@ -245,7 +249,9 @@ func (svc *service) Shutdown(ctx context.Context) {
 	svc.eventPublisher.PublishSync(&events.Event{
 		Event: "nwc_stopped",
 	})
-	db.Stop(svc.db)
+	if err := db.Stop(svc.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to close database connection")
+	}
 }
 
 func (svc *service) GetDB() *gorm.DB {

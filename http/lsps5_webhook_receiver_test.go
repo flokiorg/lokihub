@@ -119,7 +119,7 @@ func TestLSPS5WebhookCallback_MissingLspParam(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Contains(t, resp.Message, "Missing lsp parameter")
 }
 
@@ -145,7 +145,7 @@ func TestLSPS5WebhookCallback_MissingHeaders(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Contains(t, resp.Message, "x-lsps5-timestamp")
 }
 
@@ -171,7 +171,7 @@ func TestLSPS5WebhookCallback_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Contains(t, resp.Message, "Invalid JSON-RPC notification")
 }
 
@@ -201,7 +201,7 @@ func TestLSPS5WebhookCallback_InvalidJsonRpcVersion(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var resp ErrorResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Contains(t, resp.Message, "Invalid jsonrpc version")
 }
 
@@ -347,7 +347,7 @@ func TestLSPS5WebhookCallback_UnregisteredLSP_Rejected(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	var resp ErrorResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Contains(t, resp.Message, "not registered")
 }
 

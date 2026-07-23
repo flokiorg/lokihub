@@ -173,8 +173,15 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 				Str("requestEventNostrId", event.ID).
 				Int("eventKind", event.Kind).
 				Msg("Failed to process event")
+			return
 		}
-		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
+		if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
+		}
 
 		return
 	}
@@ -200,8 +207,13 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 				Str("requestEventNostrId", event.ID).
 				Int("eventKind", event.Kind).
 				Msg("Failed to process event")
+		} else if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
 		}
-		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
 
 		err = svc.db.
 			Model(&requestEvent).
@@ -262,8 +274,15 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 				Str("requestEventNostrId", event.ID).
 				Int("eventKind", event.Kind).
 				Msg("Failed to process event")
+			return
 		}
-		svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app)
+		if err := svc.publishResponseEvent(ctx, pool, &requestEvent, resp, &app); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("requestEventNostrId", event.ID).
+				Str("responseEventNostrId", resp.ID).
+				Int("eventKind", event.Kind).
+				Msg("Failed to publish event")
+		}
 
 		return
 	}

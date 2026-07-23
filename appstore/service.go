@@ -169,7 +169,7 @@ func (s *appStoreService) fetchRemoteApps() ([]App, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bad status: %s", resp.Status)
@@ -192,7 +192,7 @@ func (s *appStoreService) downloadLogo(filename, appId, outputDir string) error 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bad status: %s", resp.Status)
@@ -206,14 +206,20 @@ func (s *appStoreService) downloadLogo(filename, appId, outputDir string) error 
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
+			logger.Logger.Warn().Err(err).Str("path", tempFile.Name()).Msg("Failed to remove temp logo file")
+		}
+	}()
 
 	_, err = io.Copy(tempFile, resp.Body)
 	if err != nil {
-		tempFile.Close()
+		_ = tempFile.Close()
 		return err
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
 
 	// Rename to final path (atomic replace)
 	return os.Rename(tempFile.Name(), outputPath)
@@ -228,7 +234,7 @@ func (s *appStoreService) loadFromCache() error {
 		}
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var apps []App
 	if err := json.NewDecoder(file).Decode(&apps); err != nil {
@@ -252,7 +258,13 @@ func (s *appStoreService) saveToCache(apps []App) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		// A failed Close means the cache file may be left truncated or
+		// unflushed on disk.
+		if err := file.Close(); err != nil {
+			logger.Logger.Error().Err(err).Str("path", cachePath).Msg("Failed to close app store cache file")
+		}
+	}()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
@@ -285,7 +297,9 @@ func (s *appStoreService) cleanupOldLogos(currentApps []App, logosDir string) {
 		id := filename[0 : len(filename)-len(ext)]
 		if !validIds[id] {
 			logger.Logger.Info().Str("file", filename).Msg("Removing orphaned logo")
-			os.Remove(filepath.Join(logosDir, filename))
+			if err := os.Remove(filepath.Join(logosDir, filename)); err != nil {
+				logger.Logger.Warn().Err(err).Str("file", filename).Msg("Failed to remove orphaned logo")
+			}
 		}
 	}
 }

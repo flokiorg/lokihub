@@ -525,7 +525,7 @@ func TestSendPaymentSync_PendingHasFeeReserve(t *testing.T) {
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
 	go func() {
-		transactionsService.SendPaymentSync(tests.MockLNClientTransaction.Invoice, nil, nil, svc.LNClient, nil, nil)
+		_, _ = transactionsService.SendPaymentSync(tests.MockLNClientTransaction.Invoice, nil, nil, svc.LNClient, nil, nil)
 	}()
 	// ensure the goroutine above runs first
 	time.Sleep(10 * time.Millisecond)

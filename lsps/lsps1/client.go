@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/flokiorg/lokihub/lsps/events"
 	"github.com/flokiorg/lokihub/lsps/lsps0"
@@ -38,7 +39,11 @@ func NewClientHandler(transport transport.Transport, eventQueue *events.EventQue
 
 func generateRequestID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand only fails if the OS entropy source is unavailable;
+		// fall back to a timestamp-derived ID rather than blocking the request.
+		return fmt.Sprintf("%032x", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(b)
 }
 

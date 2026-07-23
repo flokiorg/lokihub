@@ -143,7 +143,7 @@ func (m *dbusMenu) Event(id int32, eventID string, data dbus.Variant, timestamp 
 
 func (m *dbusMenu) EventGroup(events []eventEntry) ([]int32, *dbus.Error) {
 	for _, e := range events {
-		m.Event(e.ID, e.EventID, e.Data, e.Timestamp)
+		_ = m.Event(e.ID, e.EventID, e.Data, e.Timestamp)
 	}
 	return []int32{}, nil
 }
@@ -217,10 +217,14 @@ func Setup(title string, icon []byte, onShow func(), onQuit func()) {
 		}
 
 		sni := &sniMethods{onShow: onShow, onQuit: onQuit}
-		conn.Export(sni, sniPath, sniIface)
+		if err := conn.Export(sni, sniPath, sniIface); err != nil {
+			return
+		}
 
 		menu := &dbusMenu{revision: 1, onShow: onShow, onQuit: onQuit}
-		conn.Export(menu, menuPath, menuIface)
+		if err := conn.Export(menu, menuPath, menuIface); err != nil {
+			return
+		}
 
 		watcher := conn.Object(watcherSvc, watcherPath)
 		watcher.Call(watcherSvc+".RegisterStatusNotifierItem", 0, svcName)

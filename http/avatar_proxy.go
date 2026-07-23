@@ -88,7 +88,7 @@ func (httpSvc *HttpService) avatarProxyHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "failed to fetch image"})
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "upstream did not return an image"})

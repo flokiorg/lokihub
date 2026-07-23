@@ -906,7 +906,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		return WailsRequestRouterResponse{Body: map[string]uint64{"estimatedFeeMloki": fee}, Error: ""}
 	case "/api/wallet/sync":
-		app.api.SyncWallet()
+		if err := app.api.SyncWallet(); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	case "/api/wallet/address":
 		address, err := app.api.GetUnusedOnchainAddress(ctx)
@@ -1502,7 +1504,11 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 
-		go app.api.Start(startRequest)
+		go func() {
+			if err := app.api.Start(startRequest); err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to start")
+			}
+		}()
 
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	case "/api/setup":
@@ -1603,7 +1609,11 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 
-		defer backupFile.Close()
+		defer func() {
+			if err := backupFile.Close(); err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to close backup file")
+			}
+		}()
 
 		err = app.api.CreateBackup(backupRequest.UnlockPassword, backupFile)
 
@@ -1651,7 +1661,11 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 
-		defer backupFile.Close()
+		defer func() {
+			if err := backupFile.Close(); err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to close backup file")
+			}
+		}()
 
 		err = app.api.RestoreBackup(restoreRequest.UnlockPassword, backupFile)
 		if err != nil {

@@ -34,7 +34,7 @@ func TestHandleGetInfoEvent_NoPermission(t *testing.T) {
 	assert.NoError(t, err)
 
 	lightningAddress := "hello@flokicoin.org"
-	svc.Cfg.SetUpdate("LightningAddress", lightningAddress, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LightningAddress", lightningAddress, ""))
 
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(nip47GetInfoJson), nip47Request)
@@ -91,7 +91,7 @@ func TestHandleGetInfoEvent_SubwalletNoPermission(t *testing.T) {
 		"lud16":            lightningAddress,
 	}
 
-	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""))
 
 	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", metadata)
 	assert.NoError(t, err)
@@ -191,7 +191,7 @@ func TestHandleGetInfoEvent_WithMetadata(t *testing.T) {
 	defer svc.Remove()
 
 	lightningAddress := "hello@flokicoin.org"
-	svc.Cfg.SetUpdate("LightningAddress", lightningAddress, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LightningAddress", lightningAddress, ""))
 
 	metadata := map[string]interface{}{
 		"a": 123,
@@ -255,7 +255,7 @@ func TestHandleGetInfoEvent_SubwalletWithMetadata(t *testing.T) {
 		"a":                123,
 	}
 
-	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""))
 	app, _, err := svc.AppsService.CreateApp("test", "", 0, "monthly", nil, []string{constants.GET_INFO_SCOPE}, db.AppKindIsolated, nil, "", metadata)
 	assert.NoError(t, err)
 
@@ -360,7 +360,7 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""))
 
 	circleAdmin, _, err := svc.AppsService.CreateCircleHub(
 		"Circle Admin",
@@ -431,7 +431,7 @@ func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMloki(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, "")
+	require.NoError(t, svc.Cfg.SetUpdate("LNBackendType", config.FLNDBackendType, ""))
 
 	circleAdmin, _, err := svc.AppsService.CreateCircleHub(
 		"Circle Admin Zero",
