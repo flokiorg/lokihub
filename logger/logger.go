@@ -88,7 +88,7 @@ func AddFileLogger(workdir string) error {
 	logFilePath = filepath.Join(workdir, logDir, logFilename)
 
 	crashLogPath := filepath.Join(workdir, logDir, "crash.log")
-	if crashFile, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+	if crashFile, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil { //nolint:gosec // crashLogPath is built from the configured workdir + a fixed constant filename, not caller input
 		_ = crashlog.RedirectStderr(crashFile)
 	}
 

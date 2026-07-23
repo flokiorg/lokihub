@@ -1,17 +1,22 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/pbkdf2"
+
+	"github.com/flokiorg/lokihub/tests"
 )
 
 func TestBackupEncryptDecrypt_RoundTrip(t *testing.T) {
@@ -101,4 +106,42 @@ func TestBackupDecrypt_UnsupportedFormatVersion(t *testing.T) {
 
 	_, err = decryptingReader(&buf, "any-password")
 	assert.ErrorContains(t, err, "unsupported backup format version")
+}
+
+// TestRestoreBackup_ZipSlipRejected is the regression test for the zip-slip
+// path-traversal guard in RestoreBackup: a crafted backup whose zip entry
+// name climbs out of the workdir's restore directory (e.g. "../../evil.txt")
+// must be rejected, and must not write anything outside that directory.
+func TestRestoreBackup_ZipSlipRejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	workDir := t.TempDir()
+	svc.Cfg.GetEnv().Workdir = workDir
+
+	password := "test-password"
+	const maliciousEntry = "../../evil.txt"
+
+	var encrypted bytes.Buffer
+	cw, err := encryptingWriter(&encrypted, password)
+	require.NoError(t, err)
+
+	zw := zip.NewWriter(cw)
+	zf, err := zw.Create(maliciousEntry)
+	require.NoError(t, err)
+	_, err = zf.Write([]byte("pwned"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	theAPI := &api{db: svc.DB, cfg: svc.Cfg}
+	err = theAPI.RestoreBackup(password, &encrypted)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "escapes restore directory")
+
+	// Nothing should have been written outside workDir's own restore
+	// directory (in particular, not at the path the traversal targets:
+	// workDir's own parent).
+	_, statErr := os.Stat(filepath.Join(filepath.Dir(workDir), "evil.txt"))
+	assert.True(t, os.IsNotExist(statErr), "zip-slip entry must not have been written outside the restore directory")
 }

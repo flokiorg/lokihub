@@ -462,7 +462,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: "Logo not found"}
 		}
 
-		fileBytes, err := os.ReadFile(path)
+		fileBytes, err := os.ReadFile(path) //nolint:gosec // path is derived from this app's own route within the Wails desktop IPC surface - same trust boundary as the wallet owner's own admin API, see docs/audits/security-audit-scope.md §8
 		if err != nil {
 			// If file not found, return error or empty?
 			// Return error for now.
@@ -1599,7 +1599,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 
-		backupFile, err := os.Create(saveFilePath)
+		backupFile, err := os.Create(saveFilePath) //nolint:gosec // saveFilePath comes from the OS's own native save dialog, chosen by the wallet owner at their own keyboard
 		if err != nil {
 			logger.Logger.Error().Fields(map[string]interface{}{
 				"route":  route,
@@ -1651,7 +1651,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 
-		backupFile, err := os.Open(backupFilePath)
+		backupFile, err := os.Open(backupFilePath) //nolint:gosec // backupFilePath comes from the OS's own native open dialog, chosen by the wallet owner at their own keyboard
 		if err != nil {
 			logger.Logger.Error().Fields(map[string]interface{}{
 				"route":  route,
