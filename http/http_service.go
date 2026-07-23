@@ -824,7 +824,11 @@ func (httpSvc *HttpService) listOnchainTransactionsHandler(c echo.Context) error
 }
 
 func (httpSvc *HttpService) walletSyncHandler(c echo.Context) error {
-	httpSvc.api.SyncWallet()
+	if err := httpSvc.api.SyncWallet(); err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: err.Error(),
+		})
+	}
 
 	return c.NoContent(http.StatusNoContent)
 }
@@ -1388,7 +1392,9 @@ func (httpSvc *HttpService) createBackupHandler(c echo.Context) error {
 	c.Response().Header().Set("Content-Type", "application/octet-stream")
 	c.Response().Header().Set("Content-Disposition", "attachment; filename=lokihub.bkp")
 	c.Response().WriteHeader(http.StatusOK)
-	c.Response().Write(buffer.Bytes())
+	if _, err := c.Response().Write(buffer.Bytes()); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to write backup response")
+	}
 	return nil
 }
 
@@ -1416,7 +1422,7 @@ func (httpSvc *HttpService) restoreBackupHandler(c echo.Context) error {
 			Message: fmt.Sprintf("Failed to open backup file: %v", err),
 		})
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	err = httpSvc.api.RestoreBackup(password, file)
 	if err != nil {

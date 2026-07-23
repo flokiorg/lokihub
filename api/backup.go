@@ -125,14 +125,20 @@ func (api *api) CreateBackup(unlockPassword string, w io.Writer) error {
 	}
 
 	zw := zip.NewWriter(cw)
-	defer zw.Close()
+	defer func() {
+		// A failed Close means the zip's central directory never got
+		// flushed, so the backup archive is likely truncated/corrupt.
+		if err := zw.Close(); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to finalize backup zip archive")
+		}
+	}()
 
 	addFileToZip := func(fsPath, zipPath string) error {
 		inF, err := os.Open(fsPath) //nolint:gosec // fsPath comes from this node's own configured DatabaseUri/workdir, not external input
 		if err != nil {
 			return fmt.Errorf("failed to open source file for reading: %w", err)
 		}
-		defer inF.Close()
+		defer func() { _ = inF.Close() }()
 
 		outW, err := zw.Create(zipPath)
 		if err != nil {
@@ -200,8 +206,12 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		return fmt.Errorf("failed to create temporary output file: %w", err)
 	}
 	tmpName := tmpF.Name()
-	defer os.Remove(tmpName)
-	defer tmpF.Close()
+	defer func() {
+		if err := os.Remove(tmpName); err != nil {
+			logger.Logger.Warn().Err(err).Str("path", tmpName).Msg("Failed to remove temporary restore file")
+		}
+	}()
+	defer func() { _ = tmpF.Close() }()
 
 	zipSize, err := io.Copy(tmpF, cr)
 	if err != nil {
@@ -232,13 +242,19 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("failed to open zip entry for reading: %w", err)
 		}
-		defer inF.Close()
+		defer func() { _ = inF.Close() }()
 
 		outF, err := os.OpenFile(fsFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to create destination file: %w", err)
 		}
-		defer outF.Close()
+		defer func() {
+			// A failed Close here means a restored file may be truncated
+			// on disk without RestoreBackup's caller ever finding out.
+			if err := outF.Close(); err != nil {
+				logger.Logger.Error().Err(err).Str("path", fsFilePath).Msg("Failed to close restored file")
+			}
+		}()
 
 		// Cap decompressed output regardless of what the zip's central
 		// directory claims, guarding against a decompression bomb filling

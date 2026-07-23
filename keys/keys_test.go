@@ -27,7 +27,7 @@ func TestUseExistingMnemonic(t *testing.T) {
 
 	config, err := config.NewConfig(&config.AppConfig{}, gormDb)
 	require.NoError(t, err)
-	config.SetUpdate("Mnemonic", mnemonic, unlockPassword)
+	require.NoError(t, config.SetUpdate("Mnemonic", mnemonic, unlockPassword))
 
 	keys := NewKeys()
 	err = keys.Init(config, unlockPassword)
@@ -119,7 +119,7 @@ func TestGenerateSwapMnemonic(t *testing.T) {
 
 	config, err := config.NewConfig(&config.AppConfig{}, gormDb)
 	require.NoError(t, err)
-	config.SetUpdate("Mnemonic", mnemonic, unlockPassword)
+	require.NoError(t, config.SetUpdate("Mnemonic", mnemonic, unlockPassword))
 
 	keys := NewKeys()
 	err = keys.Init(config, unlockPassword)

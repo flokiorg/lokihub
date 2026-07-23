@@ -1411,7 +1411,7 @@ func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interfa
 		return nil, err
 	}
 
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
@@ -2528,7 +2528,7 @@ func (api *api) verifyFLNDConnection(ctx context.Context, address, certHex, maca
 	if err != nil {
 		return err
 	}
-	defer flndClient.Close()
+	defer func() { _ = flndClient.Close() }()
 
 	// Retry 3 times
 	var lastErr error
@@ -2579,7 +2579,7 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch services: %s", resp.Status)

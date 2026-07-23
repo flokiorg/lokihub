@@ -282,8 +282,8 @@ func TestLiquidityManager_StartInterceptor(t *testing.T) {
 
 	// 4. Test Mixed Case Active LSP Selection -> Expect ZeroConf=true
 	mixedCasePubkey := "03DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
-	m.AddLSP("MixedLSP", mixedCasePubkey+"@1.2.3.4:5521")
-	m.AddSelectedLSP(mixedCasePubkey)
+	assert.NoError(t, m.AddLSP("MixedLSP", mixedCasePubkey+"@1.2.3.4:5521"))
+	assert.NoError(t, m.AddSelectedLSP(mixedCasePubkey))
 
 	req4 := lnclient.ChannelAcceptRequest{
 		ID:         "04",
@@ -471,7 +471,9 @@ func TestHandleChannelAcceptRequest_DBErrorAcceptsWithoutZeroConf(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get sql db: %v", err)
 	}
-	sqlDB.Close()
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close sql db: %v", err)
+	}
 
 	var respondedAccept, respondedZeroConf bool
 	respond := func(_ string, accept bool, zeroConf bool) error {

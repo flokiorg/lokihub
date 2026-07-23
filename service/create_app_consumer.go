@@ -62,5 +62,9 @@ func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 	// goroutine read the field itself — a concurrent ReloadNostr could swap it
 	// to a new group between now and whenever that goroutine actually runs.
 	group := s.svc.nostrGroup
-	go s.svc.startAppWalletSubscription(ctx, s.pool, walletPubKey, group)
+	go func() {
+		if err := s.svc.startAppWalletSubscription(ctx, s.pool, walletPubKey, group); err != nil {
+			logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to start app wallet subscription")
+		}
+	}()
 }
