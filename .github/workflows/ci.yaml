@@ -79,13 +79,11 @@ jobs:
     name: golangci-lint
     needs: build-frontend
     runs-on: ubuntu-latest
-    # Non-blocking initially: this is the first time golangci-lint has
-    # actually run against the repo, and it surfaced a large pre-existing
-    # errcheck backlog (40+ findings across dozens of files, not a handful -
-    # the first ~16 were fixed directly in this PR, but the rest is a
-    # separate cleanup effort, not something to rush through here). Flip
-    # continue-on-error to false once that's triaged.
-    continue-on-error: true
+    # Blocking: the pre-existing findings backlog (errcheck, gosec G304/G301/
+    # G115/G118, noctx, ineffassign, staticcheck) was fully triaged and fixed
+    # across PRs #55-#59. golangci-lint run is 0 issues as of that point -
+    # flip back to continue-on-error: true only if a future finding needs
+    # more than a quick fix and shouldn't block merges in the meantime.
     permissions:
       contents: read
     steps:
