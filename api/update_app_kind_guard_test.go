@@ -141,7 +141,7 @@ func TestUpdateApp_CircleHub_BudgetChange_Succeeds(t *testing.T) {
 
 	var updated db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ?", app.ID).First(&updated).Error)
-	assert.Equal(t, int(maxAmount), updated.MaxAmountLoki)
+	assert.Equal(t, int(maxAmount), updated.MaxAmountLoki) //nolint:gosec // maxAmount is a small hardcoded test literal
 	assert.Equal(t, budgetRenewal, updated.BudgetRenewal)
 }
 
@@ -169,7 +169,7 @@ func TestUpdateApp_JITHub_BudgetChange_Succeeds(t *testing.T) {
 
 	var updated db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ?", app.ID).First(&updated).Error)
-	assert.Equal(t, int(maxAmount), updated.MaxAmountLoki)
+	assert.Equal(t, int(maxAmount), updated.MaxAmountLoki) //nolint:gosec // maxAmount is a small hardcoded test literal
 	assert.Equal(t, budgetRenewal, updated.BudgetRenewal)
 }
 

@@ -186,7 +186,10 @@ func enforceJITFullDrain(parentKind string, balance int64, amount uint64, isInte
 		return nil
 	}
 	feeReserve := CalculateFeeReserveMloki(amount)
-	if balance-int64(amount) > int64(feeReserve) {
+	// amount was already validated against balance by validateCanPay before
+	// this is called; balance/feeReserve are LN mloki amounts, always far
+	// below int64 range.
+	if balance-int64(amount) > int64(feeReserve) { //nolint:gosec
 		return NewJITPartialSpendError()
 	}
 	return nil
@@ -275,7 +278,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		}
 	}
 
-	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(invoiceAmount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths)
+	lnClientTransaction, err := lnClient.MakeInvoice(ctx, int64(invoiceAmount), description, descriptionHash, int64(expiry), throughNodePubkey, lspJitChannelSCID, lspCltvExpiryDelta, lspFeeBaseMloki, lspFeeProportionalMillionths) //nolint:gosec // invoice amount/expiry are always far below int64 range
 	if err != nil {
 		svc.logger.Error().Err(err).Msg("Failed to create transaction")
 		return nil, err
@@ -297,7 +300,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		RequestEventId:  requestEventId,
 		Type:            lnClientTransaction.Type,
 		State:           constants.TRANSACTION_STATE_PENDING,
-		AmountMloki:     uint64(lnClientTransaction.Amount),
+		AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
 		Description:     description,
 		DescriptionHash: descriptionHash,
 		PaymentRequest:  lnClientTransaction.Invoice,
@@ -328,7 +331,7 @@ func (svc *transactionsService) MakeHoldInvoice(ctx context.Context, amount uint
 		}
 	}
 
-	lnClientTransaction, err := lnClient.MakeHoldInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), paymentHash)
+	lnClientTransaction, err := lnClient.MakeHoldInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), paymentHash) //nolint:gosec // invoice amount/expiry are always far below int64 range
 	if err != nil {
 		svc.logger.Error().Err(err).Msg("Failed to create hold invoice via FLN client")
 		return nil, err
@@ -350,7 +353,7 @@ func (svc *transactionsService) MakeHoldInvoice(ctx context.Context, amount uint
 		RequestEventId:  requestEventId,
 		Type:            constants.TRANSACTION_TYPE_INCOMING,
 		State:           constants.TRANSACTION_STATE_PENDING,
-		AmountMloki:     uint64(lnClientTransaction.Amount),
+		AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
 		Description:     description,
 		DescriptionHash: descriptionHash,
 		PaymentRequest:  lnClientTransaction.Invoice,
@@ -855,10 +858,10 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 	}
 
 	if from > 0 {
-		tx = tx.Where("updated_at >= ?", time.Unix(int64(from), 0))
+		tx = tx.Where("updated_at >= ?", time.Unix(utils.ClampUint64ToInt64(from), 0))
 	}
 	if until > 0 {
-		tx = tx.Where("updated_at <= ?", time.Unix(int64(until), 0))
+		tx = tx.Where("updated_at <= ?", time.Unix(utils.ClampUint64ToInt64(until), 0))
 	}
 
 	var totalCount64 int64
@@ -867,7 +870,7 @@ func (svc *transactionsService) ListTransactions(ctx context.Context, from, unti
 		svc.logger.Error().Err(result.Error).Msg("Failed to count DB transactions")
 		return nil, 0, result.Error
 	}
-	totalCount = uint64(totalCount64)
+	totalCount = uint64(totalCount64) //nolint:gosec // a DB row count is always non-negative
 
 	tx = tx.Order("updated_at desc")
 
@@ -922,7 +925,7 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 		var settledTx *db.Transaction
 		err = svc.db.Transaction(func(tx *gorm.DB) error {
 			var txErr error
-			settledTx, txErr = svc.markTransactionSettled(tx, transaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			settledTx, txErr = svc.markTransactionSettled(tx, transaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
 			return txErr
 		})
 
@@ -1022,7 +1025,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 				}
 				dbTransaction = db.Transaction{
 					Type:            constants.TRANSACTION_TYPE_INCOMING,
-					AmountMloki:     uint64(lnClientTransaction.Amount),
+					AmountMloki:     uint64(lnClientTransaction.Amount), //nolint:gosec // LN-client-reported invoice amount is always non-negative
 					PaymentRequest:  lnClientTransaction.Invoice,
 					PaymentHash:     lnClientTransaction.PaymentHash,
 					Description:     description,
@@ -1053,7 +1056,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			}
 
 			var txErr error
-			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
 			return txErr
 		})
 
@@ -1133,7 +1136,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			}
 
 			var txErr error
-			settledOutgoing, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false)
+			settledOutgoing, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
 			return txErr
 		})
 
@@ -1434,7 +1437,11 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 
 	if db.IsIsolatedKind(row.AppKind) {
 		isolatedBalance = queries.GetIsolatedBalance(tx, *appId)
-		if int64(amountWithFeeReserve) > isolatedBalance {
+		// amountWithFeeReserve is built from a caller-suppliable amount (an
+		// "amountless invoice" override); a value beyond int64 range would
+		// wrap negative and bypass this balance check below, so fail closed
+		// on the overflow itself rather than relying on the comparison.
+		if amountWithFeeReserve > math.MaxInt64 || int64(amountWithFeeReserve) > isolatedBalance {
 			svc.logger.Debug().
 				Int64("balance", isolatedBalance).
 				Bool("self_payment", selfPayment).
@@ -1970,7 +1977,7 @@ func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
 	for _, route := range paymentRequest.Route {
 		var routeFeeMloki uint64 = 0
 		for _, hop := range route {
-			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MSat) * uint64(hop.FeeProportionalMillionths) / 1000000)
+			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MSat) * uint64(hop.FeeProportionalMillionths) / 1000000) //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range; this is a fee preview only, doesn't gate actual payment execution
 			routeFeeMloki += fee
 		}
 		if routeFeeMloki > maxHintFeeMloki {

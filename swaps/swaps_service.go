@@ -281,7 +281,7 @@ func (svc *swapsService) EnableAutoSwapOut() error {
 					svc.logger.Error().Err(err).Msg("Failed to get balance")
 					continue
 				}
-				lightningBalance := uint64(balance.Lightning.TotalSpendable)
+				lightningBalance := uint64(balance.Lightning.TotalSpendable) //nolint:gosec // LN-node-reported spendable balance is always non-negative
 				balanceThresholdMilliSats := balanceThreshold * 1000
 				if lightningBalance < balanceThresholdMilliSats {
 					svc.logger.Info().Msg("Threshold requirements not met for swap, ignoring")
@@ -431,7 +431,7 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 
 		err = tx.Model(&dbSwap).Updates(&db.Swap{
 			SwapId:             swap.Id,
-			SendAmount:         uint64(paymentRequest.MSat / 1000),
+			SendAmount:         uint64(paymentRequest.MSat / 1000), //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range
 			Invoice:            swap.Invoice,
 			LockupAddress:      swap.LockupAddress,
 			TimeoutBlockHeight: swap.TimeoutBlockHeight,
@@ -1035,7 +1035,7 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	}
 
 	paymentRequest, _ := decodepay.Decode(swap.Invoice)
-	amount := uint64(paymentRequest.MSat / 1000)
+	amount := uint64(paymentRequest.MSat / 1000) //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range
 
 	for {
 		select {

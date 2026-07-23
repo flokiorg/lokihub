@@ -54,8 +54,8 @@ func doTestSendNotificationPaymentReceived(t *testing.T, svc *tests.TestService,
 		DescriptionHash: tests.MockLNClientTransaction.DescriptionHash,
 		Preimage:        &tests.MockLNClientTransaction.Preimage,
 		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:     uint64(tests.MockLNClientTransaction.Amount),
-		FeeMloki:        uint64(tests.MockLNClientTransaction.FeesPaid),
+		AmountMloki:     uint64(tests.MockLNClientTransaction.Amount),   //nolint:gosec // test fixture amount, always non-negative
+		FeeMloki:        uint64(tests.MockLNClientTransaction.FeesPaid), //nolint:gosec // test fixture amount, always non-negative
 		SettledAt:       &settledAt,
 		AppId:           &app.ID,
 		State:           constants.TRANSACTION_STATE_SETTLED,
@@ -169,8 +169,8 @@ func doTestSendNotificationPaymentSent(t *testing.T, svc *tests.TestService, cre
 		DescriptionHash: tests.MockLNClientTransaction.DescriptionHash,
 		Preimage:        &tests.MockLNClientTransaction.Preimage,
 		PaymentHash:     tests.MockLNClientTransaction.PaymentHash,
-		AmountMloki:     uint64(tests.MockLNClientTransaction.Amount),
-		FeeMloki:        uint64(tests.MockLNClientTransaction.FeesPaid),
+		AmountMloki:     uint64(tests.MockLNClientTransaction.Amount),   //nolint:gosec // test fixture amount, always non-negative
+		FeeMloki:        uint64(tests.MockLNClientTransaction.FeesPaid), //nolint:gosec // test fixture amount, always non-negative
 		SettledAt:       &settledAt,
 		AppId:           &app.ID,
 	}

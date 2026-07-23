@@ -166,11 +166,11 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		if parentExists == 0 {
 			writtenOff = true
 			logger.Logger.Error().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).
-				Uint64("balance_mloki", uint64(balance)).
+				Uint64("balance_mloki", uint64(balance)). //nolint:gosec // guarded by the balance > 0 check above
 				Msg("JIT cleanup: parent app no longer exists, sub-wallet balance cannot be reclaimed and is being written off")
 		} else {
 			invoice, err := transactionsSvc.MakeInvoice(
-				ctx, uint64(balance), "jit cleanup", "", 0,
+				ctx, uint64(balance), "jit cleanup", "", 0, //nolint:gosec // guarded by the balance > 0 check above
 				nil, lnClient, app.ParentAppID, nil, nil, nil, nil, nil, nil,
 				&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
 			)
