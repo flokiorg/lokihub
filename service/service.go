@@ -74,8 +74,9 @@ func NewService(ctx context.Context) (*service, error) {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
 		logger.Logger.Info().Interface("workdir", appConfig.Workdir).Msg("No workdir specified, using default")
 	}
-	// make sure workdir exists
-	if err := os.MkdirAll(appConfig.Workdir, os.ModePerm); err != nil {
+	// make sure workdir exists; it holds the wallet DB and config secrets,
+	// so keep it inaccessible to other local users.
+	if err := os.MkdirAll(appConfig.Workdir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create workdir: %w", err)
 	}
 

@@ -24,8 +24,10 @@ func ClampUint64ToInt(v uint64) int {
 	return int(v)
 }
 
+// ReadFileTail's only caller passes logger.GetLogFilePath(), an internally
+// derived path, never caller/request input.
 func ReadFileTail(filePath string, maxLen int) (data []byte, err error) {
-	f, err := os.Open(filePath)
+	f, err := os.Open(filePath) //nolint:gosec // see doc comment above
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}

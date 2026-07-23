@@ -231,8 +231,16 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		return fmt.Errorf("failed to create zip reader: %w", err)
 	}
 
+	restoreDir := filepath.Join(workDir, "restore")
+
 	extractZipEntry := func(zipFile *zip.File) error {
-		fsFilePath := filepath.Join(workDir, "restore", filepath.FromSlash(zipFile.Name))
+		fsFilePath := filepath.Join(restoreDir, filepath.FromSlash(zipFile.Name))
+
+		// zip-slip guard: a crafted entry name like "../../etc/passwd" would
+		// otherwise let a malicious backup file write outside restoreDir.
+		if fsFilePath != restoreDir && !strings.HasPrefix(fsFilePath, restoreDir+string(os.PathSeparator)) {
+			return fmt.Errorf("zip entry %q escapes restore directory", zipFile.Name)
+		}
 
 		if err = os.MkdirAll(filepath.Dir(fsFilePath), 0700); err != nil {
 			return fmt.Errorf("failed to create directory for zip entry: %w", err)
@@ -244,7 +252,7 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		}
 		defer func() { _ = inF.Close() }()
 
-		outF, err := os.OpenFile(fsFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		outF, err := os.OpenFile(fsFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) //nolint:gosec // fsFilePath is checked above to stay within restoreDir
 		if err != nil {
 			return fmt.Errorf("failed to create destination file: %w", err)
 		}
