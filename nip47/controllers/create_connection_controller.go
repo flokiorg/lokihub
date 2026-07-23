@@ -91,6 +91,16 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 	}
 
 	scopes, err := permissions.RequestMethodsToScopes(params.RequestMethods)
+	if err != nil {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: err.Error(),
+			},
+		}, nostr.Tags{})
+		return
+	}
 
 	supportedNotificationTypes := controller.lnClient.GetSupportedNIP47NotificationTypes()
 	if len(params.NotificationTypes) > 0 {

@@ -1753,7 +1753,7 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		return nil, errors.New("no preimage in payment")
 	}
 
-	if tx.Dialector.Name() == "postgres" {
+	if tx.Name() == "postgres" {
 		// lock based on payment hash to ensure we only mark one transaction as settled
 		// (in sqlite transactions are serializable by default)
 		transactionsWithPaymentHash := []db.Transaction{}

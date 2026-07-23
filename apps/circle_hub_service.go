@@ -87,7 +87,7 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 func (svc *appsService) GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error) {
 	var cfg db.CircleHubConfig
 	if err := svc.db.Preload("CircleIdentity").Where("app_id = ?", appID).First(&cfg).Error; err != nil {
-		return nil, fmt.Errorf("Circle Hub config not found for app %d: %w", appID, err)
+		return nil, fmt.Errorf("circle hub config not found for app %d: %w", appID, err)
 	}
 	return &cfg, nil
 }
@@ -128,7 +128,7 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("Circle Hub config not found for app %d", appID)
+		return fmt.Errorf("circle hub config not found for app %d", appID)
 	}
 	return nil
 }

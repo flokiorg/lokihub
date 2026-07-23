@@ -19,7 +19,7 @@ var (
 	ErrDuplicateIdentityAuthorityPubkey = errors.New("an Identity Authority with this pubkey already exists")
 	// ErrIdentityAuthorityNotFound is returned by
 	// IdentityAuthorityManager.Delete when the pubkey is not registered.
-	ErrIdentityAuthorityNotFound = errors.New("Identity Authority not found")
+	ErrIdentityAuthorityNotFound = errors.New("identity authority not found")
 )
 
 // IdentityAuthority is a Nostr identity the hub owner trusts to attest

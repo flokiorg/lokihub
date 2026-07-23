@@ -28,6 +28,7 @@ func doTestCipher(t *testing.T, encryption string) {
 	assert.NoError(t, err)
 
 	decrypted, err := nip47Cipher.Decrypt(msg)
+	assert.NoError(t, err)
 	assert.Equal(t, payload, decrypted)
 }
 
@@ -42,6 +43,7 @@ func TestCipher_UnsupportedEncrptions(t *testing.T) {
 func doTestCipher_UnsupportedEncrptions(t *testing.T, encryption string) {
 	reqPrivateKey := nostr.GeneratePrivateKey()
 	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
+	assert.NoError(t, err)
 
 	_, err = NewNip47Cipher(encryption, reqPubkey, reqPrivateKey)
 	assert.Error(t, err)

@@ -163,7 +163,7 @@ func TestGetApps_ReadonlyPermission(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
 
-	req2 := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
 	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
 	rec2 := httptest.NewRecorder()
 	e.ServeHTTP(rec2, req2)
@@ -216,7 +216,7 @@ func TestGetApps_FullPermission(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, unlockAuthTokenResponse.Token)
 
-	req2 := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/apps", nil)
 	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
 	rec2 := httptest.NewRecorder()
 	e.ServeHTTP(rec2, req2)
@@ -248,7 +248,7 @@ func TestCreateApp_NoToken(t *testing.T) {
 
 	requestBody := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
 	jsonBody, _ := json.Marshal(requestBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -308,7 +308,7 @@ func TestCreateApp_FullPermission(t *testing.T) {
 
 	requestBody2 := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
 	jsonBody2, _ := json.Marshal(requestBody2)
-	req2 := httptest.NewRequest(http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
 	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
 	req2.Header.Set("Content-Type", "application/json") // Set Content-Type header
 
@@ -367,7 +367,7 @@ func TestCreateApp_ReadonlyPermission(t *testing.T) {
 
 	requestBody2 := api.CreateAppRequest{Name: "Test app", Scopes: []string{constants.PAY_INVOICE_SCOPE}}
 	jsonBody2, _ := json.Marshal(requestBody2)
-	req2 := httptest.NewRequest(http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/apps", bytes.NewBuffer(jsonBody2))
 	req2.Header.Set("Authorization", "Bearer "+unlockAuthTokenResponse.Token)
 	req2.Header.Set("Content-Type", "application/json") // Set Content-Type header
 
