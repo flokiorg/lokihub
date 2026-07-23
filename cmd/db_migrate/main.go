@@ -173,7 +173,7 @@ func migrateDB(from, to *gorm.DB) error {
 		return fmt.Errorf("failed to migrate user_configs: %w", err)
 	}
 
-	if to.Dialector.Name() == "postgres" {
+	if to.Name() == "postgres" {
 		logger.Logger.Info().Msg("resetting sequences...")
 		if err := resetSequences(tx); err != nil {
 			return fmt.Errorf("failed to reset sequences: %w", err)
@@ -240,13 +240,13 @@ func checkSchema(db *gorm.DB) error {
 func listTables(db *gorm.DB) ([]string, error) {
 	var query string
 
-	switch db.Dialector.Name() {
+	switch db.Name() {
 	case "sqlite":
 		query = "SELECT name FROM sqlite_master WHERE type='table'  AND name NOT LIKE 'sqlite_%';"
 	case "postgres":
 		query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';"
 	default:
-		return nil, fmt.Errorf("unsupported database: %q", db.Dialector.Name())
+		return nil, fmt.Errorf("unsupported database: %q", db.Name())
 	}
 
 	rows, err := db.Raw(query).Rows()

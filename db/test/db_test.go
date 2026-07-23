@@ -18,7 +18,7 @@ func TestTempStorePragmaIsApplied(t *testing.T) {
 	require.NoError(t, err)
 	defer db.CloseDB(gormDb)
 
-	if gormDb.Dialector.Name() != "sqlite" {
+	if gormDb.Name() != "sqlite" {
 		t.Skip("Skipping non-sqlite dialector")
 	}
 

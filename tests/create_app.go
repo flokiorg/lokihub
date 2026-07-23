@@ -29,6 +29,9 @@ func CreateAppWithPrivateKey(svc *TestService, senderPrivkey, nip47Encryption st
 
 	var expiresAt *time.Time
 	app, pairingSecretKey, err := svc.AppsService.CreateApp("test", senderPubkey, 0, "monthly", expiresAt, []string{constants.GET_INFO_SCOPE}, "", nil, "", nil)
+	if err != nil {
+		return nil, nil, err
+	}
 	if pairingSecretKey == "" {
 		pairingSecretKey = senderPrivkey
 	}
@@ -70,5 +73,5 @@ func CreateAppWithSharedWalletPubkey(svc *TestService, senderPrivkey, nip47Encry
 	})
 
 	nip47Cipher, err = cipher.NewNip47Cipher(nip47Encryption, svc.Keys.GetNostrPublicKey(), senderPrivkey)
-	return app, nip47Cipher, nil
+	return app, nip47Cipher, err
 }

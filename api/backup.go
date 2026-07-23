@@ -192,7 +192,7 @@ func (api *api) RestoreBackup(unlockPassword string, r io.Reader) error {
 		return errors.New("cannot restore backup when database path is a file URI")
 	}
 
-	if api.db.Dialector.Name() != "sqlite" {
+	if api.db.Name() != "sqlite" {
 		return errors.New("migration to non-sqlite backend is currently not supported")
 	}
 

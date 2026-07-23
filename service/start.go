@@ -47,7 +47,7 @@ func (svc *service) ReloadNostr() error {
 func (svc *service) startNostr(ctx context.Context) error {
 	relayUrls := svc.cfg.GetRelayUrls()
 	if len(relayUrls) == 0 {
-		return errors.New("No relay URLs found")
+		return errors.New("no relay URLs found")
 	}
 
 	// A fresh group per startNostr call (not the service-lifetime svc.shutdownGroup):

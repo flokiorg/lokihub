@@ -683,7 +683,7 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 	}
 	if query.RowsAffected == 0 {
 		svc.logger.Error().Str("swap_id", swapId).Msg("Could not find swap to process refund")
-		return errors.New("Could not find swap")
+		return errors.New("could not find swap")
 	}
 
 	if swap.Type != constants.SWAP_TYPE_IN {

@@ -446,7 +446,7 @@ func TestHandleMultiPayInvoiceEvent_IsolatedApp_ConcurrentPayments(t *testing.T)
 	})
 
 	// force delay inside transaction
-	if svc.DB.Dialector.Name() == "postgres" {
+	if svc.DB.Name() == "postgres" {
 		err = svc.DB.Exec(`
 CREATE OR REPLACE FUNCTION slow_down_query()
 RETURNS TRIGGER AS $slow_down_query$

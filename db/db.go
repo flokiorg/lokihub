@@ -131,7 +131,7 @@ func Stop(db *gorm.DB) error {
 		return fmt.Errorf("failed to get database connection: %w", err)
 	}
 
-	dbBackend := db.Dialector.Name()
+	dbBackend := db.Name()
 	logger.Logger.Debug().Str("db_backend", dbBackend).Msg("shutting down database")
 	if dbBackend == "sqlite" {
 		err = db.Exec("PRAGMA wal_checkpoint(FULL)", nil).Error
