@@ -227,7 +227,7 @@ func (s *appStoreService) downloadLogo(filename, appId, outputDir string) error 
 
 func (s *appStoreService) loadFromCache() error {
 	cachePath := filepath.Join(s.cfg.GetDefaultWorkDir(), constants.APP_STORE_CACHE_DIR, "apps.json")
-	file, err := os.Open(cachePath)
+	file, err := os.Open(cachePath) //nolint:gosec // cachePath is built from the configured workdir + a fixed constant filename, not caller input
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -254,7 +254,7 @@ func (s *appStoreService) saveToCache(apps []App) error {
 	}
 
 	cachePath := filepath.Join(cacheDir, "apps.json")
-	file, err := os.Create(cachePath)
+	file, err := os.Create(cachePath) //nolint:gosec // cachePath is built from the configured workdir + a fixed constant filename, not caller input
 	if err != nil {
 		return err
 	}
