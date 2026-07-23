@@ -23,12 +23,12 @@ func startProfiler(ctx context.Context, addr string) {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	go func() {
+	go func() { //nolint:gosec // ctx is already cancelled at this point; a fresh, bounded context is required for graceful shutdown, see comment below
 		<-ctx.Done()
 		// A fresh context is required here: ctx is already Done(), and
 		// Shutdown needs its own (bounded) deadline to wait for in-flight
 		// requests instead of blocking forever.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:gosec // ctx is already cancelled at this point; a fresh, bounded context is required for graceful shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := server.Shutdown(shutdownCtx)
 		if err != nil {
