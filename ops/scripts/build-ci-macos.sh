@@ -47,10 +47,6 @@ cd ..
 # 2. Build HTTP Server (Universal)
 # -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# 2. Build HTTP Server (Universal)
-# -----------------------------------------------------------------------------
-
 build_http() {
     local OUTPUT_NAME="lokihub-http-macos"
     local TARGET_BINARY_NAME="lokihub"
@@ -94,10 +90,8 @@ build_macos_desktop() {
     # 1. Enforce Clean Build
     rm -rf build/bin
 
-    # Wails universal build can be tricky with CGO constraints.
-    # It is safer to build two native slices and lipo them if the automated 'darwin/universal' fails CGO.
-    # However, Wails 'darwin/universal' flag should handle it IF we setup environment correctly.
-    # But since we saw CGO errors, let's try explicit manual universal build for robustness.
+    # Wails' own 'darwin/universal' build hits CGO cross-compile errors, so
+    # build native amd64/arm64 slices separately and lipo them manually.
 
     echo "Building Desktop AMD64 slice..."
     CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" \
@@ -120,19 +114,11 @@ build_macos_desktop() {
     if [ -d "build/bin/Lokihub.app" ]; then
         mv "build/bin/Lokihub.app" "build/bin/${BASENAME}-arm64.app"
     fi
-            
-    echo "Debugging: Contents of build/bin:"
-    ls -R build/bin
-            
-    # Lipo the binaries inside the app bundles? No, Wails produces a .app.
-    # We need to construct a Universal .app from the two slices.
-    
-    # Path to binaries
+
+    # Wails produces a per-slice .app bundle; build the universal one by
+    # taking the ARM64 bundle as the base and lipo-ing in the amd64 binary.
     local APP_AMD64="build/bin/${BASENAME}-amd64.app"
     local APP_ARM64="build/bin/${BASENAME}-arm64.app"
-    
-    # We will use ARM64 as the base (since we are on arm runner usually, or just pick one)
-    # and replace the binary with the lipo'd one.
     local FINAL_APP="build/bin/${BASENAME}.app"
     
     echo "Creating Universal App Bundle..."
