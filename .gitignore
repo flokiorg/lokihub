@@ -37,3 +37,7 @@ docs/audits/
 
 # real NWC parent connection strings, provisioned per-machine
 integration/config.local.yaml
+
+# air's build output (docker-compose.dev.yml's backend service bind-mounts
+# the repo root, so this lands on the host too, not just in the container)
+tmp/
