@@ -5,17 +5,62 @@ on:
 
 jobs:
   build-linux:
-    name: Build Linux (${{ matrix.arch }})
-    runs-on: [self-hosted, linux]
+    name: Build Linux (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - name: amd64-legacy
+            runner: ubuntu-22.04
+            goarch: amd64
+            deb_suffix: ""
+            libwebkit: libwebkit2gtk-4.0-37
+            libwebkit_dev: libwebkit2gtk-4.0-dev
+            libwebkit_rpm: webkit2gtk3
+            apt_arch: amd64
+            apt_source: "deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse"
+            appimage_arch: x86_64
+            appimage_triplet: x86_64-linux-gnu
+
+          - name: amd64-modern
+            runner: ubuntu-24.04
+            goarch: amd64
+            deb_suffix: "-ubuntu24.04"
+            libwebkit: libwebkit2gtk-4.1-0
+            libwebkit_dev: libwebkit2gtk-4.1-dev
+            libwebkit_rpm: webkit2gtk4.1
+            apt_arch: amd64
+            apt_source: "deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse"
+            appimage_arch: x86_64
+            appimage_triplet: x86_64-linux-gnu
+
+          - name: arm64-legacy
+            runner: ubuntu-22.04-arm
+            goarch: arm64
+            deb_suffix: ""
+            libwebkit: libwebkit2gtk-4.0-37
+            libwebkit_dev: libwebkit2gtk-4.0-dev
+            libwebkit_rpm: webkit2gtk3
+            apt_arch: arm64
+            apt_source: "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse"
+            appimage_arch: aarch64
+            appimage_triplet: aarch64-linux-gnu
+
+          - name: arm64-modern
+            runner: ubuntu-24.04-arm
+            goarch: arm64
+            deb_suffix: "-ubuntu24.04"
+            libwebkit: libwebkit2gtk-4.1-0
+            libwebkit_dev: libwebkit2gtk-4.1-dev
+            libwebkit_rpm: webkit2gtk4.1
+            apt_arch: arm64
+            apt_source: "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse"
+            appimage_arch: aarch64
+            appimage_triplet: aarch64-linux-gnu
     permissions:
       contents: read
     steps:
-      - name: Pre-Checkout Cleanup
-        run: sudo chown -R $USER:$USER . || true
-      
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -35,31 +80,74 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
 
-      - name: Build Builder Image
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo docker build \
-            -t lokihub-builder-${{ matrix.arch }}:latest \
-            -f ops/docker/build-linux-${{ matrix.arch }}.Dockerfile .
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev ${{ matrix.libwebkit_dev }}
 
-      - name: Make Scripts Executable
-        run: chmod +x ops/scripts/*.sh
+      - name: Install nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 
-      - name: Run Build Script in Docker
+      - name: Install appimage-builder
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo docker run --rm \
-            -v ${{ github.workspace }}:/build \
-            -e TAG=${{ env.TAG }} \
-            -e BUILD_TAG=${{ env.BUILD_TAG }} \
-            lokihub-builder-${{ matrix.arch }}:latest \
-            /bin/bash /build/ops/scripts/build-ci-linux.sh
+          sudo apt-get install -y binutils coreutils desktop-file-utils fakeroot fuse \
+            libgdk-pixbuf2.0-dev patchelf python3-pip python3-setuptools squashfs-tools \
+            strace util-linux zsync
+          sudo pip3 install --break-system-packages appimage-builder==1.1.0 \
+            || sudo pip3 install appimage-builder==1.1.0
 
-      - name: Fix Permissions
-        if: always()
-        run: sudo chown -R $USER:$USER ${{ github.workspace }}
+      - name: Run Linux Build Script
+        env:
+          TAG: ${{ env.TAG }}
+          BUILD_TAG: ${{ env.BUILD_TAG }}
+          GOARCH: ${{ matrix.goarch }}
+          DEB_SUFFIX: ${{ matrix.deb_suffix }}
+          LIBWEBKIT: ${{ matrix.libwebkit }}
+          LIBWEBKIT_RPM: ${{ matrix.libwebkit_rpm }}
+        run: |
+          chmod +x ops/scripts/build-ci-linux.sh
+          ./ops/scripts/build-ci-linux.sh
+
+      - name: Build AppImage
+        env:
+          TAG: ${{ env.TAG }}
+          LIBWEBKIT: ${{ matrix.libwebkit }}
+          APPIMAGE_APT_ARCH: ${{ matrix.apt_arch }}
+          APPIMAGE_APT_SOURCE: ${{ matrix.apt_source }}
+          APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
+          APPIMAGE_TRIPLET: ${{ matrix.appimage_triplet }}
+          APPIMAGE_FILE_NAME: "lokihub-desktop-linux${{ matrix.deb_suffix }}-${{ matrix.goarch }}-${{ env.TAG }}.AppImage"
+        run: |
+          for attempt in 1 2 3 4 5; do
+            appimage-builder --recipe=ops/packaging/AppImageBuilder.yml --skip-test && break
+            if [ "$attempt" == 5 ]; then exit 1; fi
+            echo "appimage-builder failed (attempt $attempt), retrying..."
+            sleep $((attempt * 20))
+          done
+
+      - name: Move AppImage to artifact dir
+        run: mv lokihub-desktop-linux*.AppImage ops/bin/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-linux-${{ matrix.arch }}-${{ env.TAG }}
+          name: artifacts-linux-${{ matrix.goarch }}${{ matrix.deb_suffix }}-${{ env.TAG }}
           path: ops/bin/*
           if-no-files-found: error

@@ -16,7 +16,8 @@ contents:
   # Desktop Binary
   - src: "ops/bin/${BINARY_NAME}"
     dst: "/usr/bin/lokihub"
-    type: "tree" 
+    type: "tree"
+    expand: true
     file_info:
       mode: 0755
 
@@ -40,11 +41,3 @@ overrides:
       - ${LIBWEBKIT_RPM}
     recommends:
       - libappindicator-gtk3
-
-# For the server package, we will likely run nfpm with a separate config or override via CLI/Wait... 
-# actually nfpm supports multiple 'packages' in one yaml if using v2.3+, but standard usage is one per config or overrides.
-# We need distinct names "lokihub" vs "lokihub-server". 
-# Strategy: We will use environment variables or separate configs? 
-# Simplest: This config is for DESKTOP. We will make a separate short one for SERVER if needed, 
-# or use env var substitution for 'name' and 'contents'. 
-# Let's start with just DESKTOP as that's the primary "dependency hell" fix.
