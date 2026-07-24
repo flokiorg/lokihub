@@ -2,8 +2,8 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "Windows Build Script Started."
 if (-not $env:TAG) {
-    if (Test-Path "VERSION.txt") {
-        $env:TAG = Get-Content "VERSION.txt"
+    if (Test-Path "VERSION") {
+        $env:TAG = Get-Content "VERSION"
     } else {
         Write-Error "TAG environment variable is required."
         exit 1
@@ -52,7 +52,7 @@ function Build-Http {
     $env:GOOS = "windows"
     $env:GOARCH = $Arch
     
-    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=$($env:VERSION_STRING)'" `
+    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=$($env:VERSION_STRING)'" `
         -o "ops/bin/$OutputName" ./cmd/http
 
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
@@ -91,7 +91,7 @@ function Build-Desktop {
 
     Write-Host "Building Desktop for $Arch..."
 
-    $LdFlags = "-X 'github.com/flokiorg/lokihub/version.Tag=$($env:VERSION_STRING)'"
+    $LdFlags = "-X 'github.com/flokiorg/lokihub/appversion.Tag=$($env:VERSION_STRING)'"
 
     # 1. Enforce Clean Build
     if (Test-Path "build/bin") {

@@ -49,7 +49,7 @@ COPY . .
 COPY --from=frontend /build/frontend/dist ./frontend/dist
 
 RUN GOARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) go build \
-   -ldflags="-X 'github.com/flokiorg/lokihub/version.Tag=$TAG'" \
+   -ldflags="-X 'github.com/flokiorg/lokihub/appversion.Tag=$TAG'" \
    -o main cmd/http/main.go
 
 RUN GOARCH=$(echo "$TARGETPLATFORM" | cut -d'/' -f2) go build \

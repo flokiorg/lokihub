@@ -1,3 +1,3 @@
-package version
+package appversion
 
 var Tag string = ""

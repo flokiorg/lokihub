@@ -23,7 +23,7 @@ import (
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/flokiorg/lokihub/version"
+	"github.com/flokiorg/lokihub/appversion"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
@@ -68,7 +68,7 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	logger.Init(appConfig.LogLevel)
-	logger.Logger.Info().Msg("Lokihub " + version.Tag)
+	logger.Logger.Info().Msg("Lokihub " + appversion.Tag)
 
 	if appConfig.Workdir == "" {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
@@ -164,7 +164,7 @@ func NewService(ctx context.Context) (*service, error) {
 	eventPublisher.Publish(&events.Event{
 		Event: "nwc_started",
 		Properties: map[string]interface{}{
-			"version": version.Tag,
+			"version": appversion.Tag,
 		},
 	})
 
