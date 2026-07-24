@@ -7,8 +7,8 @@ set -e
 # DEB_SUFFIX, LIBWEBKIT, LIBWEBKIT_RPM: set by the workflow matrix for the legacy/modern split
 
 if [ -z "$TAG" ]; then
-    if [ -f "VERSION" ]; then
-        TAG=$(cat VERSION)
+    if [ -f "VERSION.txt" ]; then
+        TAG=$(cat VERSION.txt)
     else
         echo "TAG environment variable is required."
         exit 1

@@ -16,13 +16,13 @@ if [ "$VARIANT" == "modern" ]; then
     CONTAINER_SUFFIX="${ARCH}-modern"
 fi
 
-if [ ! -f "VERSION" ]; then
-    echo "Error: VERSION file not found"
+if [ ! -f "VERSION.txt" ]; then
+    echo "Error: VERSION.txt file not found"
     exit 1
 fi
-TAG=$(cat VERSION | tr -d '[:space:]')
+TAG=$(cat VERSION.txt | tr -d '[:space:]')
 if [ -z "$TAG" ]; then
-    echo "Error: VERSION file is empty"
+    echo "Error: VERSION.txt file is empty"
     exit 1
 fi
 

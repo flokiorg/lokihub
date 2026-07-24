@@ -39,15 +39,15 @@ jobs:
         id: version
         shell: powershell
         run: |
-          if (-not (Test-Path "VERSION")) {
-            Write-Error "Error: VERSION file not found"
+          if (-not (Test-Path "VERSION.txt")) {
+            Write-Error "Error: VERSION.txt file not found"
             exit 1
           }
-          $TAG = (Get-Content "VERSION").Trim()
+          $TAG = (Get-Content "VERSION.txt").Trim()
           $COMMIT_HASH = (git rev-parse --short HEAD).Trim()
           $BUILD_TAG = "$TAG-$COMMIT_HASH"
           if (-not $TAG) {
-            Write-Error "Error: VERSION file is empty"
+            Write-Error "Error: VERSION.txt file is empty"
             exit 1
           }
           "TAG=$TAG" | Out-File -FilePath $env:GITHUB_ENV -Append
