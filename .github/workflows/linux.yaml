@@ -103,6 +103,15 @@ jobs:
       - name: Install nfpm
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 
+      - name: Install appimage-builder
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get install -y binutils coreutils desktop-file-utils fakeroot fuse \
+            libgdk-pixbuf2.0-dev patchelf python3-pip python3-setuptools squashfs-tools \
+            strace util-linux zsync
+          sudo pip3 install --break-system-packages appimage-builder==1.1.0
+
       - name: Run Linux Build Script
         env:
           TAG: ${{ env.TAG }}
@@ -116,9 +125,6 @@ jobs:
           ./ops/scripts/build-ci-linux.sh
 
       - name: Build AppImage
-        uses: AppImageCrafters/build-appimage@57c3bc6963f870ce3be103117de5b5e33ffbaeb6 # v1.3
-        with:
-          recipe: ops/packaging/AppImageBuilder.yml
         env:
           TAG: ${{ env.TAG }}
           LIBWEBKIT: ${{ matrix.libwebkit }}
@@ -127,6 +133,7 @@ jobs:
           APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
           APPIMAGE_TRIPLET: ${{ matrix.appimage_triplet }}
           APPIMAGE_FILE_NAME: "lokihub-desktop-linux${{ matrix.deb_suffix }}-${{ matrix.goarch }}-${{ env.TAG }}.AppImage"
+        run: appimage-builder --recipe=ops/packaging/AppImageBuilder.yml --skip-test
 
       - name: Move AppImage to artifact dir
         run: mv lokihub-desktop-linux*.AppImage ops/bin/
