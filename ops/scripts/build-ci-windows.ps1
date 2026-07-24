@@ -4,8 +4,8 @@ $ErrorActionPreference = "Stop"
 Write-Host "Windows Build Script Started."
 $env:TAG = $env:TAG
 if (-not $env:TAG) {
-    if (Test-Path "VERSION") {
-        $env:TAG = Get-Content "VERSION"
+    if (Test-Path "VERSION.txt") {
+        $env:TAG = Get-Content "VERSION.txt"
     } else {
         Write-Error "TAG environment variable is required."
         exit 1

@@ -5,8 +5,8 @@ set -e
 # TAG: version tag
 
 if [ -z "$TAG" ]; then
-    if [ -f "VERSION" ]; then
-        TAG=$(cat VERSION)
+    if [ -f "VERSION.txt" ]; then
+        TAG=$(cat VERSION.txt)
     else 
         echo "TAG environment variable is required."
         exit 1
