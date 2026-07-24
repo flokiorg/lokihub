@@ -292,6 +292,11 @@ release subcommand="" *args:
       build-linux-arm64           build linux/arm64 artifacts using docker (CI-like environment)
       build-linux-amd64-modern    build linux/amd64 artifacts (modern baseline) using docker
       build-linux-arm64-modern    build linux/arm64 artifacts (modern baseline) using docker
+
+    note: these local docker builds produce the server tarball + desktop
+    binary + deb/rpm packages, but not the .AppImage - that's assembled by
+    the AppImageCrafters/build-appimage GitHub Action in CI, which isn't
+    invoked by this local path.
     USAGE
             ;;
         *)
