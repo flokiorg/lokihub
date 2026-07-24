@@ -1,8 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-# Debug information
 Write-Host "Windows Build Script Started."
-$env:TAG = $env:TAG
 if (-not $env:TAG) {
     if (Test-Path "VERSION.txt") {
         $env:TAG = Get-Content "VERSION.txt"
@@ -28,13 +26,6 @@ Push-Location "frontend"
 try {
     yarn install
     if ($LASTEXITCODE -ne 0) { throw "yarn install failed" }
-    
-    # DEBUG: Check wailsjs existence
-    Write-Host "--- Debug: Listing wailsjs directory ---"
-    if (Test-Path "wailsjs") {
-        Get-ChildItem -Recurse "wailsjs" | Select-Object FullName
-        Write-Warning "wailsjs directory not found (expected if fresh checkout)"
-    }
 
     yarn build:http
     if ($LASTEXITCODE -ne 0) { throw "yarn build:http failed" }
@@ -100,11 +91,6 @@ function Build-Desktop {
 
     Write-Host "Building Desktop for $Arch..."
 
-    # Native Windows Build - No Zig needed!
-    # Wails handles details (using gcc/mingw if CGO needed, or MSVC)
-    
-    # We explicitly force windowsgui via Wails default behavior
-    # LDFLAGS only needs version info now
     $LdFlags = "-X 'github.com/flokiorg/lokihub/version.Tag=$($env:VERSION_STRING)'"
 
     # 1. Enforce Clean Build
@@ -137,7 +123,6 @@ function Build-Desktop {
 # Build Windows AMD64 Desktop
 Build-Desktop "amd64"
 
-# Build Windows ARM64 Desktop
 # Build Windows ARM64 Desktop
 # Build-Desktop "arm64"
 
