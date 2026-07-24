@@ -42,7 +42,7 @@ import (
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/utils"
-	"github.com/flokiorg/lokihub/version"
+	"github.com/flokiorg/lokihub/appversion"
 )
 
 const (
@@ -1441,7 +1441,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		info.StartupErrorTime = api.startupErrorTime
 	}
 	info.BackendType = backendType
-	info.Version = version.Tag
+	info.Version = appversion.Tag
 	info.AutoUnlockPasswordEnabled = autoUnlockPassword != ""
 	info.AutoUnlockPasswordSupported = true
 	info.Relays = []InfoResponseRelay{}

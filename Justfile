@@ -11,7 +11,7 @@
 set shell := ["bash", "-c"]
 set positional-arguments
 
-VERSION := shell('cat VERSION.txt 2>/dev/null || echo "v0.0.1"')
+VERSION := shell('cat VERSION 2>/dev/null || echo "v0.0.1"')
 DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
 # flnd stores its network directory as "main" (chaincfg.Params.Name), but
 # flncli's --network flag only accepts "mainnet" and assumes the directory
@@ -97,7 +97,7 @@ dev subcommand="" *args:
             docker exec -it lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} "$@"
             ;;
         wails)
-            exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/version.Tag={{VERSION}}'"
+            exec wails dev -tags wails,dev -ldflags "-X 'github.com/flokiorg/lokihub/appversion.Tag={{VERSION}}'"
             ;;
         ""|help)
             cat <<'USAGE'
