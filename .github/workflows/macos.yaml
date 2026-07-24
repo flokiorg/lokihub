@@ -6,14 +6,12 @@ on:
 jobs:
   build-macos:
     name: Build macOS Desktop (Universal)
-    # Use Apple Silicon runner for efficient universal builds + signing
-    runs-on: [self-hosted, macos-arm]
+    # Apple Silicon hosted runner - used as the base for the universal
+    # (amd64+arm64) build; build-ci-macos.sh cross-compiles the amd64 slice.
+    runs-on: macos-14
     permissions:
       contents: read
     steps:
-      - name: Pre-Checkout Cleanup
-        run: rm -rf * || true
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
