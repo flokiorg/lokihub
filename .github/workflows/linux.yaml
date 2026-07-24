@@ -134,7 +134,13 @@ jobs:
           APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
           APPIMAGE_TRIPLET: ${{ matrix.appimage_triplet }}
           APPIMAGE_FILE_NAME: "lokihub-desktop-linux${{ matrix.deb_suffix }}-${{ matrix.goarch }}-${{ env.TAG }}.AppImage"
-        run: appimage-builder --recipe=ops/packaging/AppImageBuilder.yml --skip-test
+        run: |
+          for attempt in 1 2 3; do
+            appimage-builder --recipe=ops/packaging/AppImageBuilder.yml --skip-test && break
+            if [ "$attempt" == 3 ]; then exit 1; fi
+            echo "appimage-builder failed (attempt $attempt), retrying..."
+            sleep 15
+          done
 
       - name: Move AppImage to artifact dir
         run: mv lokihub-desktop-linux*.AppImage ops/bin/
