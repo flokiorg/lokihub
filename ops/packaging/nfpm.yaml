@@ -16,7 +16,8 @@ contents:
   # Desktop Binary
   - src: "ops/bin/${BINARY_NAME}"
     dst: "/usr/bin/lokihub"
-    type: "tree" 
+    type: "tree"
+    expand: true
     file_info:
       mode: 0755
 
