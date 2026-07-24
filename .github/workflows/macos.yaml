@@ -37,6 +37,11 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
+      - name: Debug workspace
+        run: |
+          pwd
+          ls -la
+
       - name: Read Version
         id: version
         shell: bash
