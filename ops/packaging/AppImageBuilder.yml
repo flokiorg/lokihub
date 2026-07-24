@@ -1,0 +1,36 @@
+version: 1
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: org.flokiorg.lokihub
+    name: Lokihub
+    icon: lokihub
+    version: '{{TAG}}'
+    exec: usr/bin/lokihub
+    exec_args: $@
+
+  apt:
+    arch: '{{APPIMAGE_APT_ARCH}}'
+    sources:
+      - sourceline: '{{APPIMAGE_APT_SOURCE}}'
+
+    include:
+      - libgtk-3-0
+      - '{{LIBWEBKIT}}'
+      - libappindicator3-1
+
+  files:
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+      - usr/share/lintian
+
+  runtime:
+    env:
+      APPDIR_LIBRARY_PATH: '$APPDIR/usr/lib/{{APPIMAGE_TRIPLET}}:$APPDIR/usr/lib'
+
+AppImage:
+  arch: '{{APPIMAGE_ARCH}}'
+  file_name: '{{APPIMAGE_FILE_NAME}}'
