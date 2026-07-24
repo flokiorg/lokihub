@@ -15,6 +15,7 @@ AppDir:
     arch: '{{APPIMAGE_APT_ARCH}}'
     sources:
       - sourceline: '{{APPIMAGE_APT_SOURCE}}'
+        key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C'
 
     include:
       - libgtk-3-0
