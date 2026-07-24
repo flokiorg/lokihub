@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/version"
+	"github.com/flokiorg/lokihub/appversion"
 )
 
 type eventPublisher struct {
@@ -20,7 +20,7 @@ func NewEventPublisher() *eventPublisher {
 		listeners:        []EventSubscriber{},
 		globalProperties: map[string]interface{}{},
 	}
-	eventPublisher.SetGlobalProperty("version", version.Tag)
+	eventPublisher.SetGlobalProperty("version", appversion.Tag)
 	return eventPublisher
 }
 

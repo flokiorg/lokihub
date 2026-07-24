@@ -7,8 +7,8 @@ set -e
 # DEB_SUFFIX, LIBWEBKIT, LIBWEBKIT_RPM: set by the workflow matrix for the legacy/modern split
 
 if [ -z "$TAG" ]; then
-    if [ -f "VERSION.txt" ]; then
-        TAG=$(cat VERSION.txt)
+    if [ -f "VERSION" ]; then
+        TAG=$(cat VERSION)
     else
         echo "TAG environment variable is required."
         exit 1
@@ -54,7 +54,7 @@ TARGET_BINARY_NAME="lokihub"
 OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
 ARCHIVE_NAME="lokihub-server-${GOOS}-${GOARCH}-${TAG}"
 
-go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/version.Tag=${VERSION_STRING}'" \
+go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
     -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
 
 pushd ops/bin > /dev/null
@@ -72,7 +72,7 @@ rm -rf build AppDir
 mkdir -p build/bin
 
 BASENAME="lokihub-desktop-${GOOS}-${GOARCH}"
-LDFLAGS="-X 'github.com/flokiorg/lokihub/version.Tag=${VERSION_STRING}'"
+LDFLAGS="-X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'"
 
 go build -trimpath -tags wails -ldflags "${LDFLAGS} -s -w" \
     -o "build/bin/${BASENAME}" .
