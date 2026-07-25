@@ -14,37 +14,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get Latest Run IDs
+      - name: Get Latest Build-All Run ID
         id: get_run_ids
         uses: actions/github-script@v7
         with:
           script: |
-            async function getLatestRunId(workflowId) {
-              const runs = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflowId,
-                status: 'success',
-                per_page: 1,
-              });
-              return runs.data.workflow_runs.length > 0 ? runs.data.workflow_runs[0].id : null;
-            }
+            // linux.yaml/macos.yaml/windows.yaml are invoked as reusable
+            // workflows (workflow_call) from build-all.yaml, so their runs
+            // don't show up under their own workflow_id via listWorkflowRuns
+            // - the whole thing is one run, owned by build-all.yaml, with
+            // all three platforms' artifacts attached to that single run.
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-all.yaml',
+              status: 'success',
+              per_page: 1,
+            });
 
-            const linuxId = await getLatestRunId('linux.yaml');
-            const macosId = await getLatestRunId('macos.yaml');
-            const windowsId = await getLatestRunId('windows.yaml');
+            const runId = runs.data.workflow_runs.length > 0 ? runs.data.workflow_runs[0].id : null;
+            if (!runId) core.setFailed("No successful build-all.yaml runs found.");
 
-            if (!linuxId) core.setFailed("No successful Linux runs found.");
-            if (!macosId) core.setFailed("No successful macOS runs found.");
-            if (!windowsId) core.setFailed("No successful Windows runs found.");
-
-            console.log(`Linux Run ID: ${linuxId}`);
-            console.log(`macOS Run ID: ${macosId}`);
-            console.log(`Windows Run ID: ${windowsId}`);
-
-            core.setOutput('linux_run_id', linuxId);
-            core.setOutput('macos_run_id', macosId);
-            core.setOutput('windows_run_id', windowsId);
+            console.log(`build-all.yaml Run ID: ${runId}`);
+            core.setOutput('run_id', runId);
 
       - name: Read Version
         id: version
@@ -73,27 +65,11 @@ jobs:
             echo "No release note found for ${{ env.TAG }}, skipping release."
           fi
 
-      - name: Download Linux Artifacts
+      - name: Download Build Artifacts
         if: steps.check_note.outputs.exists == 'true'
         uses: actions/download-artifact@v4
         with:
-          run-id: ${{ steps.get_run_ids.outputs.linux_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: artifacts
-
-      - name: Download macOS Artifacts
-        if: steps.check_note.outputs.exists == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ steps.get_run_ids.outputs.macos_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: artifacts
-
-      - name: Download Windows Artifacts
-        if: steps.check_note.outputs.exists == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ steps.get_run_ids.outputs.windows_run_id }}
+          run-id: ${{ steps.get_run_ids.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: artifacts
 
