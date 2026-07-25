@@ -1,0 +1,23 @@
+name: Build All Platforms
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux
+    uses: ./.github/workflows/linux.yaml
+    secrets: inherit
+
+  macos:
+    name: macOS
+    uses: ./.github/workflows/macos.yaml
+    secrets: inherit
+
+  windows:
+    name: Windows
+    uses: ./.github/workflows/windows.yaml
+    secrets: inherit
