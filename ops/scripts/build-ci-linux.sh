@@ -49,19 +49,27 @@ cd ..
 # -----------------------------------------------------------------------------
 # 2. HTTP Server Build
 # -----------------------------------------------------------------------------
-echo "--- Building HTTP Server ---"
-TARGET_BINARY_NAME="lokihub"
-OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
-ARCHIVE_NAME="lokihub-server-${GOOS}-${GOARCH}-${TAG}"
+# The server binary has no GTK/webkit dependency, so it's identical across
+# the legacy/modern split - only build it once per arch (in the legacy leg,
+# for the widest glibc compatibility), or it archives under the same
+# filename from both legs and collides when release.yaml uploads assets.
+if [ -z "$DEB_SUFFIX" ]; then
+    echo "--- Building HTTP Server ---"
+    TARGET_BINARY_NAME="lokihub"
+    OUTPUT_NAME="lokihub-http-${GOOS}-${GOARCH}"
+    ARCHIVE_NAME="lokihub-server-${GOOS}-${GOARCH}-${TAG}"
 
-go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
-    -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
+    go build -a -trimpath -ldflags "-s -w -X 'github.com/flokiorg/lokihub/appversion.Tag=${VERSION_STRING}'" \
+        -o "ops/bin/${OUTPUT_NAME}" ./cmd/http
 
-pushd ops/bin > /dev/null
-mv "$OUTPUT_NAME" "$TARGET_BINARY_NAME"
-tar -czf "${ARCHIVE_NAME}.tar.gz" "$TARGET_BINARY_NAME"
-rm "$TARGET_BINARY_NAME"
-popd > /dev/null
+    pushd ops/bin > /dev/null
+    mv "$OUTPUT_NAME" "$TARGET_BINARY_NAME"
+    tar -czf "${ARCHIVE_NAME}.tar.gz" "$TARGET_BINARY_NAME"
+    rm "$TARGET_BINARY_NAME"
+    popd > /dev/null
+else
+    echo "--- Skipping HTTP Server build (already built in the legacy leg for this arch) ---"
+fi
 
 # -----------------------------------------------------------------------------
 # 3. Desktop Binary + AppDir Staging
