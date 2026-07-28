@@ -69,6 +69,38 @@ type ClaimFundsResult struct {
 	FeesPaid uint64 `json:"fees_paid"`
 }
 
+// --- jit_transfer ---
+//
+// Reassigns an unclaimed slice's registered identity without redeeming it
+// (NIP-JW §Transferring a Slice). Proof scheme mirrors claim_funds: an
+// identity-bound caller proves who they currently are via IdentityEvent
+// (bound to the wallet + the target new_identity, not an invoice); a bearer
+// caller instead presents BearerSecret, since a bearer slice has no
+// identity capable of signing a proof event.
+
+type JITTransferNewIdentityParam struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"`
+}
+
+type JITTransferParams struct {
+	IdentityType     string `json:"identity_type,omitempty"`
+	IdentityValue    string `json:"identity_value,omitempty"`
+	IdentityEvent    string `json:"identity_event,omitempty"`
+	AttestationEvent string `json:"attestation_event,omitempty"`
+	BearerSecret     string `json:"bearer_secret,omitempty"`
+
+	NewIdentity JITTransferNewIdentityParam `json:"new_identity"`
+}
+
+type JITTransferResult struct {
+	AmountMloki   uint64 `json:"amount_mloki"`
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	BearerSecret  string `json:"bearer_secret,omitempty"`
+}
+
 // --- list_recipients ---
 
 type RecipientStatus struct {

@@ -494,6 +494,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodJITRedeem:
 		controller.
 			HandleClaimFundsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
+	case constants.NIP47MethodJITTransfer:
+		controller.
+			HandleJITTransferEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
 	case constants.NIP47MethodListRecipients:
 		controller.
 			HandleListRecipientsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)

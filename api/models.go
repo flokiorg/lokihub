@@ -359,6 +359,10 @@ type JITWalletRecipient struct {
 type CreateJITWalletRequest struct {
 	Recipients []JITWalletRecipient `json:"recipients"`
 	ExpirySecs int                  `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// MaxTransfers caps how many times each identity-bound slice MAY be
+	// transferred via jit_transfer before it can only be redeemed. 0 or
+	// omitted means unlimited.
+	MaxTransfers int `json:"max_transfers,omitempty"`
 }
 
 type CreateJITWalletResponse struct {

@@ -126,7 +126,15 @@ type JITWalletClaim struct {
 	IAPubkey    string
 	AmountMloki int64 `gorm:"not null"`
 	ClaimedAt   *time.Time
-	CreatedAt   time.Time
+	// MaxTransfers is the wallet's own cap (set once at creation, the same
+	// value on every slice of the same wallet) on how many times this slice
+	// MAY be reassigned via jit_transfer — 0 or negative means unlimited,
+	// same convention as JITHubConfig.PerWalletMaxMloki/MaxExpSecs.
+	MaxTransfers int
+	// TransferCount is incremented atomically by jit_transfer, checked
+	// against MaxTransfers before each transfer.
+	TransferCount int
+	CreatedAt     time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +

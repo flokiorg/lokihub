@@ -83,15 +83,15 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	assert.Len(t, childApps, 1)
 	assert.Equal(t, db.ParentKindJIT, childApps[0].ParentKind)
 
-	// Hardened scope surface: exactly jit_claim_funds + get_balance, never
-	// pay_invoice/lookup_invoice/list_transactions.
+	// Hardened scope surface: exactly jit_claim_funds + jit_transfer +
+	// get_balance, never pay_invoice/lookup_invoice/list_transactions.
 	var perms []db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ?", childApps[0].ID).Find(&perms).Error)
 	scopes := make([]string, len(perms))
 	for i, p := range perms {
 		scopes[i] = p.Scope
 	}
-	assert.ElementsMatch(t, []string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
+	assert.ElementsMatch(t, []string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.JIT_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
 
 	var claims []db.JITWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims).Error)

@@ -4,6 +4,8 @@ package integration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +38,27 @@ const (
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()
 	tags := nostr.Tags{{"d", walletPubkey}, {"bolt11_hash", bolt11Hash}}
+	tags = append(tags, extraTags...)
+	ev := &nostr.Event{
+		Kind:      nostrKindClaimProof,
+		CreatedAt: nostr.Timestamp(createdAt.Unix()),
+		Tags:      tags,
+	}
+	require.NoError(t, ev.Sign(signerPrivkey))
+	return ev
+}
+
+// buildTransferProofEvent builds and signs a kind-35521 transfer proof bound
+// to walletPubkey and the target (newIdentityType, newIdentityValue) — the
+// binding that stops an intercepted proof from being redirected to a
+// different new_identity than the one it was actually signed for. Mirrors
+// buildClaimProofEvent, but bound via new_identity_hash instead of
+// bolt11_hash (nip47/controllers/jit_transfer_controller.go's
+// newIdentityHash). newIdentityValue is "" for a bearer target.
+func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
+	t.Helper()
+	sum := sha256.Sum256([]byte(newIdentityType + ":" + newIdentityValue))
+	tags := nostr.Tags{{"d", walletPubkey}, {"new_identity_hash", hex.EncodeToString(sum[:])}}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
 		Kind:      nostrKindClaimProof,
