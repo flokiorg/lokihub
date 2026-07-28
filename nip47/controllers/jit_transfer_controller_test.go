@@ -711,3 +711,62 @@ func TestHandleJITTransferEvent_ConcurrentTransfers_OnlyOneSucceeds(t *testing.T
 	}
 	assert.Equal(t, 1, successes, "exactly one of two concurrent transfers of the same slice must succeed")
 }
+
+// TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected is a
+// regression test for an independent-audit finding (2026-07-28b): a bearer
+// slice is safe only when no other party has ever held the wallet's shared
+// NWC connection, because a bearer redeem transmits the raw secret in the
+// request body — decryptable by every party that ever received the (single,
+// shared) pairing secret, whether or not they've since claimed their own
+// slice and moved on. TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_Rejected
+// above only covers two still-unclaimed slices; this covers the gap where
+// one of them has already been claimed but its former holder still has the
+// connection.
+func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 2000)
+
+	// Two original recipients of the SAME shared connection: the attacker and
+	// the victim. Both hold the wallet's one pairing secret.
+	attackerPrivkey := nostr.GeneratePrivateKey()
+	attackerPubkey, _ := nostr.GetPublicKey(attackerPrivkey)
+	victimPrivkey := nostr.GeneratePrivateKey()
+	victimPubkey, _ := nostr.GetPublicKey(victimPrivkey)
+
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: attackerPubkey, AmountMloki: 1000},
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: victimPubkey, AmountMloki: 1000},
+	}))
+
+	// The attacker has already redeemed their own slice. It is now claimed,
+	// but the attacker STILL holds the shared connection and can decrypt
+	// every future request/response on it.
+	_, err = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, attackerPubkey)
+	require.NoError(t, err)
+
+	// The victim now tries to transfer their still-unclaimed slice into a
+	// bearer note to hand it off as cash. Only the victim's slice is
+	// unclaimed, but the attacker — a claimed co-tenant — is still on this
+	// connection, so this MUST still be rejected.
+	_, newSecretHash := bearerSecretAndHash(t)
+	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
+
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: victimPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
+	})
+
+	require.NotNil(t, response.Error, "transfer into bearer must be rejected when the wallet ever had co-recipients who still hold the shared connection")
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+
+	// The victim's slice must be untouched by the rejected transfer.
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, victimPubkey)
+	require.NoError(t, err)
+	assert.NotNil(t, claim, "a rejected transfer must not have reassigned the slice to bearer")
+}

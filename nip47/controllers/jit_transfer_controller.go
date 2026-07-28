@@ -222,25 +222,27 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 	switch newIdentityType {
 	case db.JITAllocIdentityBearer:
 		// A bearer slice never shares a wallet with another recipient
-		// (NIP-JW §Bearer Slices) — transferring INTO bearer is only legal
-		// when this is already the wallet's only unclaimed slice, so it
-		// stays that way rather than picking up a bearer sibling next to
-		// this now-anonymous one.
+		// (NIP-JW §Bearer Slices). The check is against every recipient the
+		// wallet EVER had, not just currently-unclaimed ones: a recipient who
+		// already redeemed their own slice still holds the same shared
+		// connection secret indefinitely (nothing rotates or revokes it per
+		// recipient), and a bearer redemption transmits its raw secret in the
+		// request body — decryptable by anyone on that connection, claimed or
+		// not. Transferring the last unclaimed slice into bearer while a
+		// former co-recipient is still listening would hand that co-recipient
+		// everything they need to steal it. Mirrors create_jit_wallet's own
+		// invariant (jitwallet.Resolve: a bearer recipient must be the
+		// request's only recipient), just evaluated against this wallet's
+		// full recipient history instead of a single request.
 		allClaims, err := controller.appsService.ListClaimsForWallet(app.ID)
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list JIT wallet claims")
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list claims")
 			return
 		}
-		unclaimedCount := 0
-		for _, c := range allClaims {
-			if c.ClaimedAt == nil {
-				unclaimedCount++
-			}
-		}
-		if unclaimedCount != 1 {
+		if len(allClaims) != 1 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"a bearer slice cannot share a wallet with other recipients; this wallet has more than one unclaimed slice")
+				"a bearer slice cannot share a wallet with other recipients; this wallet has ever had more than one")
 			return
 		}
 		// The bearer secret itself MUST be caller-supplied (as a commitment,
