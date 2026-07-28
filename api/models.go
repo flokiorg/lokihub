@@ -357,10 +357,11 @@ type CreateJITWalletRequest struct {
 }
 
 type CreateJITWalletResponse struct {
-	AppID      uint                 `json:"app_id"`
-	PairingURI string               `json:"pairing_uri"`
-	ExpiresAt  int64                `json:"expires_at"`
-	Recipients []JITWalletRecipient `json:"recipients"`
+	AppID         uint                 `json:"app_id"`
+	PairingURI    string               `json:"pairing_uri"`
+	LokicashToken string               `json:"lokicash_token"`
+	ExpiresAt     int64                `json:"expires_at"`
+	Recipients    []JITWalletRecipient `json:"recipients"`
 }
 
 // ListJITWalletClaimsResponse is the paginated response for
@@ -409,7 +410,8 @@ type JITWalletClaimResponse struct {
 }
 
 type JITWalletConnectionResponse struct {
-	PairingURI string `json:"pairing_uri"`
+	PairingURI    string `json:"pairing_uri"`
+	LokicashToken string `json:"lokicash_token"`
 }
 
 // Identity Authority registry types.

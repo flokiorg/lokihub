@@ -34,15 +34,16 @@ import (
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
 
+	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/utils"
-	"github.com/flokiorg/lokihub/appversion"
 )
 
 const (
@@ -3169,15 +3170,27 @@ func (api *api) GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse
 		return nil, fmt.Errorf("failed to derive JIT pairing key: %w", err)
 	}
 
+	relayUrls := api.cfg.GetRelayUrls()
+
 	var b strings.Builder
 	b.WriteString("nostr+walletconnect://")
 	b.WriteString(*app.WalletPubkey)
 	b.WriteString("?relay=")
-	b.WriteString(strings.Join(api.cfg.GetRelayUrls(), "&relay="))
+	b.WriteString(strings.Join(relayUrls, "&relay="))
 	b.WriteString("&secret=")
 	b.WriteString(pairingSecretKey)
 
-	return &JITWalletConnectionResponse{PairingURI: b.String()}, nil
+	lokicashToken, err := lokicash.Encode(lokicash.Token{
+		HRP:          lokicash.HRP,
+		WalletPubkey: *app.WalletPubkey,
+		Secret:       pairingSecretKey,
+		RelayURLs:    relayUrls,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode lokicash token: %w", err)
+	}
+
+	return &JITWalletConnectionResponse{PairingURI: b.String(), LokicashToken: lokicashToken}, nil
 }
 
 // GetJITWalletRecipients returns every recipient slice of a single
@@ -3289,10 +3302,11 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 	}
 
 	return &CreateJITWalletResponse{
-		AppID:      result.WalletApp.ID,
-		PairingURI: result.PairingURI,
-		ExpiresAt:  result.ExpiresAt.Unix(),
-		Recipients: recipientResults,
+		AppID:         result.WalletApp.ID,
+		PairingURI:    result.PairingURI,
+		LokicashToken: result.LokicashToken,
+		ExpiresAt:     result.ExpiresAt.Unix(),
+		Recipients:    recipientResults,
 	}, nil
 }
 

@@ -38,10 +38,11 @@ type createJITWalletRecipientResult struct {
 }
 
 type createJITWalletResponse struct {
-	WalletPubkey string                           `json:"wallet_pubkey"`
-	PairingURI   string                           `json:"pairing_uri"`
-	ExpiresAt    int64                            `json:"expires_at"`
-	Recipients   []createJITWalletRecipientResult `json:"recipients"`
+	WalletPubkey  string                           `json:"wallet_pubkey"`
+	PairingURI    string                           `json:"pairing_uri"`
+	LokicashToken string                           `json:"lokicash_token"`
+	ExpiresAt     int64                            `json:"expires_at"`
+	Recipients    []createJITWalletRecipientResult `json:"recipients"`
 }
 
 // mapJITWalletErrorCode maps an error returned by jitwallet.Create to a NIP-47
@@ -160,10 +161,11 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: createJITWalletResponse{
-			WalletPubkey: *result.WalletApp.WalletPubkey,
-			PairingURI:   result.PairingURI,
-			ExpiresAt:    result.ExpiresAt.Unix(),
-			Recipients:   recipientResults,
+			WalletPubkey:  *result.WalletApp.WalletPubkey,
+			PairingURI:    result.PairingURI,
+			LokicashToken: result.LokicashToken,
+			ExpiresAt:     result.ExpiresAt.Unix(),
+			Recipients:    recipientResults,
 		},
 	}, nostr.Tags{})
 }

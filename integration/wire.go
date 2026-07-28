@@ -36,10 +36,11 @@ type JITWalletRecipientResult struct {
 }
 
 type CreateJITWalletResult struct {
-	WalletPubkey string                     `json:"wallet_pubkey"`
-	PairingURI   string                     `json:"pairing_uri"`
-	ExpiresAt    int64                      `json:"expires_at"`
-	Recipients   []JITWalletRecipientResult `json:"recipients"`
+	WalletPubkey  string                     `json:"wallet_pubkey"`
+	PairingURI    string                     `json:"pairing_uri"`
+	LokicashToken string                     `json:"lokicash_token"`
+	ExpiresAt     int64                      `json:"expires_at"`
+	Recipients    []JITWalletRecipientResult `json:"recipients"`
 }
 
 // --- claim_funds ---
