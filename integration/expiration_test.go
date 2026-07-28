@@ -168,7 +168,7 @@ func TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *tes
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, childAmountMloki, "integration parent-expiry test (child survives)")
 		proof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var result ClaimFundsResult
-		err := child.Call(ctxT(t), constants.NIP47MethodClaimFunds, ClaimFundsParams{
+		err := child.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,

@@ -772,7 +772,7 @@ func TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T
 	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
 	require.NoError(t, err)
 
-	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodClaimFunds)
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodJITRedeem)
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
 }

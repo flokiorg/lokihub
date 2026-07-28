@@ -491,7 +491,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodCreateJITWallet:
 		controller.
 			HandleCreateJITWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
-	case constants.NIP47MethodClaimFunds:
+	case constants.NIP47MethodJITRedeem:
 		controller.
 			HandleClaimFundsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
 	case constants.NIP47MethodListRecipients:

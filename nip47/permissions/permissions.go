@@ -82,7 +82,7 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 		if requestMethod == models.CREATE_CONNECTION_METHOD ||
 			requestMethod == constants.NIP47MethodCreateJITWallet ||
 			requestMethod == constants.NIP47MethodCreateCircleWallet ||
-			requestMethod == constants.NIP47MethodClaimFunds ||
+			requestMethod == constants.NIP47MethodJITRedeem ||
 			requestMethod == constants.NIP47MethodListRecipients {
 			return true
 		}
@@ -136,7 +136,7 @@ func scopeToRequestMethods(scope string) []string {
 	case constants.CIRCLE_WALLET_SCOPE:
 		return []string{constants.NIP47MethodCreateCircleWallet}
 	case constants.JIT_CLAIM_FUNDS_SCOPE:
-		return []string{constants.NIP47MethodClaimFunds, constants.NIP47MethodListRecipients}
+		return []string{constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients}
 	}
 	return []string{}
 }
@@ -182,7 +182,7 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.JIT_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodClaimFunds, constants.NIP47MethodListRecipients:
+	case constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients:
 		return constants.JIT_CLAIM_FUNDS_SCOPE, nil
 	}
 	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")

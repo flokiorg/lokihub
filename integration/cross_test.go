@@ -105,7 +105,7 @@ func claimFullSlice(t *testing.T, fixture jitChildFixture, invoice MakeInvoiceRe
 	proof := buildClaimProofEvent(t, fixture.BeneficiaryPrivkey, fixture.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 
 	var result ClaimFundsResult
-	require.NoError(t, fixture.Client.Call(ctxT(t), constants.NIP47MethodClaimFunds, ClaimFundsParams{
+	require.NoError(t, fixture.Client.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 		Invoice:       invoice.Invoice,
 		IdentityType:  "pubkey",
 		IdentityValue: fixture.BeneficiaryPubkey,
@@ -181,7 +181,7 @@ func TestCrossHub_ClaimFunds_AmountMismatch_Rejected(t *testing.T) {
 
 	proof := buildClaimProofEvent(t, jitChild.BeneficiaryPrivkey, jitChild.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 	var payResult ClaimFundsResult
-	err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodClaimFunds, ClaimFundsParams{
+	err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 		Invoice:       invoice.Invoice,
 		IdentityType:  "pubkey",
 		IdentityValue: jitChild.BeneficiaryPubkey,
