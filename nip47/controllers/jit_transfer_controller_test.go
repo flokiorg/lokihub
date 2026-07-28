@@ -770,3 +770,81 @@ func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected(t *t
 	require.NoError(t, err)
 	assert.NotNil(t, claim, "a rejected transfer must not have reassigned the slice to bearer")
 }
+
+// TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed is a
+// regression test for an independent dynamic (live black-box) audit finding
+// (2026-07-28): ClaimJITWalletSlice's committing UPDATE used to be guarded
+// only by "id = ? AND claimed_at IS NULL" — it never re-checked
+// identity_type/identity_value. A concurrent jit_transfer can reassign a
+// row's identity without ever setting claimed_at, so a jit_redeem racing it
+// could still match on id alone and pay out the PRE-transfer identity even
+// after jit_transfer had already reported success to the NEW owner — a
+// "phantom transfer": the transfer API call succeeds, but the funds it
+// promised are already gone.
+//
+// Fixed in apps/jit_hub_service.go (ClaimJITWalletSlice's update now
+// re-checks identity_type/identity_value, so a slice reassigned out from
+// under a racing redeem correctly fails that redeem with "not found" instead
+// of paying out the superseded identity). "Not both succeed" is now a
+// structural guarantee from the atomic, identity-checked update — not a
+// probabilistic outcome that needs many iterations to hit — so a single race
+// is enough to prove it; the audit's own many-iteration live-node run was
+// about *reliably observing the pre-fix bug*, not something this regression
+// test needs to repeat.
+func TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	controller := NewTestNip47Controller(svc)
+
+	secret1Hex, secret1Hash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secret1Hash, AmountMloki: 1000},
+	}))
+	_, secret2Hash := bearerSecretAndHash(t)
+
+	var redeemResp, transferResp *models.Response
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		redeemResp = handleClaimFundsFor(t, svc, controller, wallet, claimFundsParams{
+			Invoice:      tests.MockZeroAmountInvoice,
+			Amount:       ptrUint64(1000),
+			BearerSecret: secret1Hex,
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		transferResp = handleJITTransferFor(t, svc, controller, wallet, jitTransferParams{
+			BearerSecret: secret1Hex,
+			NewIdentity:  jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secret2Hash},
+		})
+	}()
+	wg.Wait()
+
+	redeemWon := redeemResp.Error == nil
+	transferWon := transferResp.Error == nil
+	require.False(t, redeemWon && transferWon,
+		"jit_redeem and jit_transfer both reported success for the same slice — phantom transfer")
+	require.True(t, redeemWon || transferWon,
+		"neither op succeeded against an unclaimed slice (redeem=%v transfer=%v)", redeemResp.Error, transferResp.Error)
+
+	if transferWon {
+		// A genuinely successful transfer must be durable: the new secret
+		// must actually redeem, using a DIFFERENT mock invoice than the
+		// racing redeem attempted — payment-hash idempotency is checked
+		// instance-wide, matching a real Lightning node, so reusing the same
+		// invoice here would spuriously fail as "already paid" even though
+		// no payment for it ever went through.
+		oldRedeemResp := handleClaimFundsFor(t, svc, controller, wallet, claimFundsParams{
+			Invoice:      tests.MockInvoice,
+			Amount:       ptrUint64(1000),
+			BearerSecret: secret1Hex,
+		})
+		require.NotNil(t, oldRedeemResp.Error, "the pre-transfer secret must no longer redeem")
+	}
+}

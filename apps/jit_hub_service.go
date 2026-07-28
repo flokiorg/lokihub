@@ -157,14 +157,29 @@ func (svc *appsService) ClaimJITWalletSlice(walletAppID uint, identityType, iden
 		return 0, err
 	}
 	now := time.Now()
+	// The identity re-check here (not just id + claimed_at IS NULL) closes a
+	// TOCTOU race against a concurrent jit_transfer of this same row:
+	// TransferJITWalletSlice can reassign identity_type/identity_value on an
+	// unclaimed row without ever setting claimed_at, so between the lookup
+	// above and this update, this slice's registered identity may no longer
+	// be the one that was just verified. Without re-checking it here, this
+	// update would still match on id alone and pay out the PRE-transfer
+	// caller — a phantom transfer: jit_transfer reports success to the new
+	// owner for funds a concurrent jit_redeem already paid out to the old
+	// one. Re-checking identity means a caller who lost that race gets the
+	// same "no unclaimed slice for this identity" error a legitimately
+	// superseded identity would, which is correct: it no longer is one.
 	result := svc.db.Model(&db.JITWalletClaim{}).
-		Where("id = ? AND claimed_at IS NULL", claim.ID).
+		Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL",
+			claim.ID, identityType, identityValue).
 		Update("claimed_at", now)
 	if result.Error != nil {
 		return 0, result.Error
 	}
 	if result.RowsAffected == 0 {
-		// Lost a race against a concurrent claim between the lookup above and this update.
+		// Lost a race against a concurrent claim, or a concurrent transfer
+		// that reassigned this slice's identity, between the lookup above
+		// and this update.
 		return 0, fmt.Errorf("%w: no unclaimed slice for this identity", constants.ErrInvalidParams)
 	}
 	return claim.AmountMloki, nil

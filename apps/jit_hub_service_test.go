@@ -463,6 +463,77 @@ func TestClaimAndDeleteJITWalletClaim_ConcurrentRace_NeverBothSucceed(t *testing
 	}
 }
 
+// TestClaimAndTransferJITWalletSlice_ConcurrentRace_NeverBothSucceed is a
+// regression test for an independent dynamic (live black-box) audit finding
+// (2026-07-28): ClaimJITWalletSlice's committing UPDATE used to be guarded
+// only by "id = ? AND claimed_at IS NULL" — it never re-checked
+// identity_type/identity_value. TransferJITWalletSlice can reassign a row's
+// identity without ever setting claimed_at, so a claim racing it could still
+// match on id alone and pay out the PRE-transfer identity — a "phantom
+// transfer": TransferJITWalletSlice reports success to the new owner for a
+// slice a concurrent claim has already paid out to the old one.
+//
+// This lives at the apps-service layer, not the controller layer
+// (TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed in
+// nip47/controllers), specifically so it can run many cheap trials: racing
+// through the real payment/invoice layer only allows one or two iterations
+// before running out of distinct mock invoices, and — as the live audit
+// found — this race's window is narrow enough that a single trial routinely
+// doesn't hit it even pre-fix. Racing the two DB operations directly sees the
+// same window far more often, since it isn't gated on Lightning payment mock
+// bookkeeping at all.
+func TestClaimAndTransferJITWalletSlice_ConcurrentRace_NeverBothSucceed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 1_000_000, 3600)
+
+	const trials = 200
+	for trial := 0; trial < trials; trial++ {
+		wallet := newJITWallet(t, svc, hub)
+		pubkey := randomHex32()
+		newPubkey := randomHex32()
+		require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+		}))
+
+		ready := make(chan struct{})
+		var wg sync.WaitGroup
+		var claimErr, transferErr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, claimErr = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+		}()
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, transferErr = svc.AppsService.TransferJITWalletSlice(wallet.ID,
+				db.JITAllocIdentityPubkey, pubkey, db.JITAllocIdentityPubkey, newPubkey, "")
+		}()
+		close(ready)
+		wg.Wait()
+
+		claimSucceeded := claimErr == nil
+		transferSucceeded := transferErr == nil
+		require.Falsef(t, claimSucceeded && transferSucceeded,
+			"trial %d: claim and transfer both reported success for the same slice — phantom transfer", trial)
+		require.Truef(t, claimSucceeded || transferSucceeded,
+			"trial %d: neither claim nor transfer succeeded (claimErr=%v, transferErr=%v)", trial, claimErr, transferErr)
+
+		if transferSucceeded {
+			// A genuinely successful transfer must be durable: the OLD
+			// identity must no longer be able to claim what the transfer
+			// already reassigned away.
+			claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+			require.NoError(t, err)
+			require.Nil(t, claim, "trial %d: the pre-transfer identity must no longer have a claimable slice", trial)
+		}
+	}
+}
+
 // --- ListClaimsForWallet ---
 
 func TestListClaimsForWallet_ReturnsClaimedAndUnclaimed(t *testing.T) {
