@@ -3180,11 +3180,35 @@ func (api *api) GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse
 	b.WriteString("&secret=")
 	b.WriteString(pairingSecretKey)
 
+	// Unlike Commit/SpinOff (which know a just-created wallet's identity
+	// requirement and transfer cap directly from the params they were just
+	// given), this endpoint can be called at any later time — after the
+	// wallet's sole recipient may have moved into or out of bearer status via
+	// jit_transfer — so it re-derives both hints from the wallet's CURRENT
+	// claim rows rather than trusting anything cached at creation time. A
+	// wallet with no claims left (every recipient individually removed) has
+	// no well-defined identity requirement or transfer cap to report; both
+	// stay nil in that case, exactly like a token predating these fields.
+	var identityRequired *bool
+	var maxTransfers *int
+	claims, err := api.appsSvc.ListClaimsForWallet(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list jit wallet claims: %w", err)
+	}
+	if len(claims) > 0 {
+		required := claims[0].IdentityType != db.JITAllocIdentityBearer
+		identityRequired = &required
+		transferCap := claims[0].MaxTransfers
+		maxTransfers = &transferCap
+	}
+
 	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:          lokicash.HRP,
-		WalletPubkey: *app.WalletPubkey,
-		Secret:       pairingSecretKey,
-		RelayURLs:    relayUrls,
+		HRP:              lokicash.HRP,
+		WalletPubkey:     *app.WalletPubkey,
+		Secret:           pairingSecretKey,
+		RelayURLs:        relayUrls,
+		IdentityRequired: identityRequired,
+		MaxTransfers:     maxTransfers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode lokicash token: %w", err)

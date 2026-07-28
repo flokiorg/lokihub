@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "Nostr Pubkey",
-    "connectionKey": "Connection Key"
+    "connectionKey": "Connection Key",
+    "bearer": "Bearer"
   },
   "avatarStack": {
     "more": "+{{count}} more"
@@ -214,7 +215,9 @@
       "removeRecipient": "Failed to remove JIT wallet recipient",
       "removeWallet": "Failed to remove JIT wallet",
       "removeSelected": "Failed to remove selected recipients"
-    }
+    },
+    "bearerHelper": "A bearer slice has no registered identity — whoever presents its secret can redeem it. The wallet generates the secret; it's shown once, right after creation.",
+    "bearerRequiresSoleRecipient": "A bearer recipient must be the only recipient in this wallet"
   },
   "newCircleHub": {
     "title": "New Circle Wallet Hub",

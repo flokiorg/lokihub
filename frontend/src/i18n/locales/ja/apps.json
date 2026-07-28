@@ -198,6 +198,9 @@
     "continueAnyway": "このまま続ける",
     "appConnected": "アプリが接続されました",
     "revealQR": "QRコードを表示",
-    "copySecret": "接続シークレットをコピー"
+    "copySecret": "接続シークレットをコピー",
+    "copyLokicashToken": "Lokicashトークンをコピー",
+    "copyBearerSecret": "ベアラーシークレットをコピー",
+    "bearerSecretHelper": "これはベアラーシークレットです。これを持つ人は他に証明なしでこのウォレットの資金を引き換えられます。これは一度だけ表示されます。上記の接続情報と一緒に、想定する受取人にオフラインで渡してください。"
   }
 }

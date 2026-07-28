@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "المفتاح العام لـ Nostr",
-    "connectionKey": "مفتاح الاتصال"
+    "connectionKey": "مفتاح الاتصال",
+    "bearer": "حامل"
   },
   "avatarStack": {
     "more_zero": "+{{count}}",
@@ -293,7 +294,9 @@
       "removeRecipient": "فشلت إزالة مستلم محفظة JIT",
       "removeWallet": "فشلت إزالة محفظة JIT",
       "removeSelected": "فشلت إزالة المستلمين المحددين"
-    }
+    },
+    "bearerHelper": "شريحة الحامل ليس لها هوية مسجلة — يمكن لأي شخص يقدم سرها استرداده. تُنشئ المحفظة السر، ويُعرض مرة واحدة فقط مباشرة بعد الإنشاء.",
+    "bearerRequiresSoleRecipient": "يجب أن يكون مستلم الحامل هو المستلم الوحيد في هذه المحفظة"
   },
   "newCircleHub": {
     "title": "مركز محفظة دائرة جديد",

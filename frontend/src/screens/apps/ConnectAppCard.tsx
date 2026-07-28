@@ -21,12 +21,23 @@ import { App } from "src/types";
 export function ConnectAppCard({
   app,
   pairingUri,
+  lokicashToken,
+  bearerSecret,
   appStoreApp,
   variant = "create",
   showConnectionStatus = variant === "create",
 }: {
   app: App;
   pairingUri: string;
+  // lokicashToken: the same connection as pairingUri, packaged as a single
+  // lokicash1... string (NIP-JW §The Lokicash Token) — shown as a second,
+  // separate copy action only when the caller has one to offer.
+  lokicashToken?: string;
+  // bearerSecret: a JIT wallet's bearer redemption secret, present only
+  // right after creating a bearer-mode wallet — the wallet mints it once
+  // and never returns it again (NIP-JW §Bearer Slices), so it has to be
+  // shown here, not just left to a later "reveal".
+  bearerSecret?: string;
   appStoreApp?: AppStoreApp;
   // "create": full Card with header, used on standalone pairing pages.
   // "reveal": bare content (no Card wrapper) for showing a secret inside a
@@ -106,7 +117,7 @@ export function ConnectAppCard({
           ) : null}
         </div>
       ) : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap justify-center gap-2">
         <Button onClick={copy} variant="outline">
           <CopyIcon />
           {t("connectAppCard.copySecret", "Copy Connection Secret")}
@@ -116,7 +127,33 @@ export function ConnectAppCard({
           <ExternalLinkIcon />
           Open In App
         </ExternalLinkButton> */}
+        {lokicashToken ? (
+          <Button
+            onClick={() => copyToClipboard(lokicashToken)}
+            variant="outline"
+          >
+            <CopyIcon />
+            {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
+          </Button>
+        ) : null}
+        {bearerSecret ? (
+          <Button
+            onClick={() => copyToClipboard(bearerSecret)}
+            variant="outline"
+          >
+            <CopyIcon />
+            {t("connectAppCard.copyBearerSecret", "Copy Bearer Secret")}
+          </Button>
+        ) : null}
       </div>
+      {bearerSecret ? (
+        <p className="text-sm text-muted-foreground text-center max-w-sm">
+          {t(
+            "connectAppCard.bearerSecretHelper",
+            "This is a bearer secret — anyone who has it can redeem this wallet's funds, with no other proof required. It's shown only this once; hand both this and the connection above to the intended recipient, out of band."
+          )}
+        </p>
+      ) : null}
     </>
   );
 

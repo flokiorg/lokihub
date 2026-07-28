@@ -137,6 +137,104 @@ func TestCreate_LokicashTokenMatchesPairingURI(t *testing.T) {
 	assert.Equal(t, wantRelays, decoded.RelayURLs)
 }
 
+// TestCreate_LokicashTokenIdentityRequiredHint verifies Commit populates the
+// lokicash token's IdentityRequired hint correctly for both a plain
+// identity-bound wallet and a solo bearer one, and MaxTransfers from the
+// request's own cap. Split into two independent services (rather than two
+// Create calls against one): the mock LN client's payment-hash idempotency
+// is instance-wide, and both calls would otherwise reuse the same default
+// mock invoice, making the second spuriously fail as "already paid".
+func TestCreate_LokicashTokenIdentityRequiredHint(t *testing.T) {
+	t.Run("identity-bound", func(t *testing.T) {
+		svc, err := tests.CreateTestService(t)
+		require.NoError(t, err)
+		defer svc.Remove()
+
+		hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+		tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+		result, err := Create(context.TODO(), newTestDeps(svc), Params{
+			HubApp:       hub,
+			Recipients:   onePubkeyRecipient(1000),
+			ExpirySecs:   1800,
+			MaxTransfers: 3,
+		})
+		require.NoError(t, err)
+		decoded, err := lokicash.Decode(result.LokicashToken)
+		require.NoError(t, err)
+		require.NotNil(t, decoded.IdentityRequired)
+		assert.True(t, *decoded.IdentityRequired)
+		require.NotNil(t, decoded.MaxTransfers)
+		assert.Equal(t, 3, *decoded.MaxTransfers)
+	})
+
+	t.Run("bearer", func(t *testing.T) {
+		svc, err := tests.CreateTestService(t)
+		require.NoError(t, err)
+		defer svc.Remove()
+
+		hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+		tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+		result, err := Create(context.TODO(), newTestDeps(svc), Params{
+			HubApp:     hub,
+			Recipients: oneBearerRecipient(1000),
+			ExpirySecs: 1800,
+		})
+		require.NoError(t, err)
+		decoded, err := lokicash.Decode(result.LokicashToken)
+		require.NoError(t, err)
+		require.NotNil(t, decoded.IdentityRequired)
+		assert.False(t, *decoded.IdentityRequired)
+		require.NotNil(t, decoded.MaxTransfers)
+		assert.Equal(t, 0, *decoded.MaxTransfers)
+	})
+}
+
+// TestSpinOff_LokicashTokenHints verifies SpinOff's new wallet always
+// reports IdentityRequired: false (a spun-off wallet is always a single
+// bearer slice, by construction) and MaxTransfers inherited from
+// SpinOffParams, mirroring what jit_transfer_controller.go's
+// handleJITTransferSpinOff actually passes.
+func TestSpinOff_LokicashTokenHints(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	sourceWallet, _, err := svc.AppsService.CreateApp(
+		"source-wallet", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.JIT_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindJITWallet, &hub.ID, db.ParentKindJIT, nil,
+	)
+	require.NoError(t, err)
+	tests.FundApp(svc, sourceWallet.ID, 200_000, "sourcefundtxhash")
+
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-spinoff-test", Amount: 1000},
+	}
+
+	commitment := strings.Repeat("ef", 32)
+	result, err := SpinOff(context.TODO(), newTestDeps(svc), SpinOffParams{
+		HubApp:           hub,
+		SourceWalletApp:  sourceWallet,
+		AmountMloki:      1000,
+		BearerCommitment: commitment,
+		MaxTransfers:     5,
+		ExpiresAt:        time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	decoded, err := lokicash.Decode(result.LokicashToken)
+	require.NoError(t, err)
+	require.NotNil(t, decoded.IdentityRequired)
+	assert.False(t, *decoded.IdentityRequired)
+	require.NotNil(t, decoded.MaxTransfers)
+	assert.Equal(t, 5, *decoded.MaxTransfers)
+}
+
 func TestCreate_MultipleRecipients_OneSharedWallet_CustomAmounts_SharedExpiry(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

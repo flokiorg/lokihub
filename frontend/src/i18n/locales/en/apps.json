@@ -222,6 +222,9 @@
     "continueAnyway": "Continue anyway",
     "appConnected": "App connected",
     "revealQR": "Reveal QR",
-    "copySecret": "Copy Connection Secret"
+    "copySecret": "Copy Connection Secret",
+    "copyLokicashToken": "Copy Lokicash Token",
+    "copyBearerSecret": "Copy Bearer Secret",
+    "bearerSecretHelper": "This is a bearer secret — anyone who has it can redeem this wallet's funds, with no other proof required. It's shown only this once; hand both this and the connection above to the intended recipient, out of band."
   }
 }

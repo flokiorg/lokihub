@@ -1,4 +1,5 @@
 import {
+  BanknoteIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   KeyRound,
@@ -57,6 +58,7 @@ import {
   JITAllocationStatus,
   JITWalletClaim,
   JITWalletClaimCounts,
+  JITWalletConnectionResponse,
   ListJITWalletClaimsResponse,
 } from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
@@ -93,7 +95,7 @@ function newRecipientRow(amountLoki: number): RecipientRow {
 
 type RecipientRow = {
   key: string;
-  identityType: "pubkey" | "connection_key";
+  identityType: "pubkey" | "connection_key" | "bearer";
   pubkeyValue: string;
   resolvedPubkeyHex?: string;
   connectionKeyValue: string;
@@ -101,7 +103,12 @@ type RecipientRow = {
   amountLoki: number;
 };
 
+// A bearer row has no identity at all — the wallet mints the secret itself
+// (NIP-JW §Bearer Slices) — so there is no identity_value to send for it.
 function recipientIdentityValue(row: RecipientRow): string | undefined {
+  if (row.identityType === "bearer") {
+    return undefined;
+  }
   const value =
     row.identityType === "pubkey"
       ? row.resolvedPubkeyHex
@@ -221,6 +228,16 @@ export const JITHubAllocations = React.forwardRef<
   const [revealUri, setRevealUri] = React.useState<string | undefined>(
     undefined
   );
+  // Companion strings for the same connection — lokicashToken is always
+  // derivable alongside pairing_uri (both endpoints return it); bearerSecret
+  // is populated only right after creating a bearer-mode wallet, and only
+  // that once (NIP-JW §Bearer Slices: it is never retrievable again).
+  const [revealLokicashToken, setRevealLokicashToken] = React.useState<
+    string | undefined
+  >(undefined);
+  const [revealBearerSecret, setRevealBearerSecret] = React.useState<
+    string | undefined
+  >(undefined);
   // "create" for a wallet just created (not yet connected — shows the
   // waiting-for-connection UX); "reveal" for re-showing an existing wallet's
   // secret.
@@ -236,13 +253,15 @@ export const JITHubAllocations = React.forwardRef<
     try {
       const [revealedApp, connection] = await Promise.all([
         request<App>(`/api/apps/${walletAppId}`),
-        request<{ pairing_uri: string }>(
+        request<JITWalletConnectionResponse>(
           `/api/apps/${walletAppId}/jit-connection`
         ),
       ]);
       if (revealedApp && connection) {
         setRevealApp(revealedApp);
         setRevealUri(connection.pairing_uri);
+        setRevealLokicashToken(connection.lokicash_token);
+        setRevealBearerSecret(undefined);
         setRevealMode("reveal");
       }
     } catch (error) {
@@ -395,11 +414,39 @@ export const JITHubAllocations = React.forwardRef<
     setRecipients((rows) => [...rows, newRecipientRow(0)]);
   };
 
+  // A bearer recipient has no identity, and MUST be the wallet's only
+  // recipient (NIP-JW §Bearer Slices — a bearer slice never shares a wallet
+  // with another recipient, since redeeming one transmits its raw secret in
+  // the request body, decryptable by anyone still holding the shared
+  // connection). Switching a row to bearer collapses the form down to just
+  // that row, rather than leaving now-invalid sibling rows for the admin to
+  // notice and remove manually.
+  const setRowIdentityType = (
+    key: string,
+    identityType: RecipientRow["identityType"]
+  ) => {
+    setRecipients((rows) => {
+      if (identityType === "bearer") {
+        const row = rows.find((r) => r.key === key);
+        return row ? [{ ...row, identityType }] : rows;
+      }
+      return rows.map((r) => (r.key === key ? { ...r, identityType } : r));
+    });
+  };
+  const hasBearerRow = recipients.some((r) => r.identityType === "bearer");
+
   const allRowsValid =
     recipients.length > 0 &&
+    !(hasBearerRow && recipients.length > 1) &&
     recipients.every((r) => {
+      if (r.amountLoki <= 0) {
+        return false;
+      }
+      if (r.identityType === "bearer") {
+        return true;
+      }
       const identityValue = recipientIdentityValue(r);
-      if (!identityValue || r.amountLoki <= 0) {
+      if (!identityValue) {
         return false;
       }
       if (r.identityType === "connection_key" && !r.iaPubkeyValue.trim()) {
@@ -527,6 +574,8 @@ export const JITHubAllocations = React.forwardRef<
         if (createdApp) {
           setRevealApp(createdApp);
           setRevealUri(result.pairing_uri);
+          setRevealLokicashToken(result.lokicash_token);
+          setRevealBearerSecret(result.recipients[0]?.bearer_secret);
           setRevealMode("create");
         }
       }
@@ -694,9 +743,10 @@ export const JITHubAllocations = React.forwardRef<
         <Tabs
           value={row.identityType}
           onValueChange={(v) =>
-            updateRow(row.key, {
-              identityType: v as "pubkey" | "connection_key",
-            })
+            setRowIdentityType(
+              row.key,
+              v as "pubkey" | "connection_key" | "bearer"
+            )
           }
         >
           <TabsList>
@@ -705,6 +755,17 @@ export const JITHubAllocations = React.forwardRef<
             </TabsTrigger>
             <TabsTrigger value="connection_key">
               {t("identityType.connectionKey")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="bearer"
+              disabled={recipients.length > 1}
+              title={
+                recipients.length > 1
+                  ? t("jitHubAllocations.bearerRequiresSoleRecipient")
+                  : undefined
+              }
+            >
+              {t("identityType.bearer")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -731,7 +792,7 @@ export const JITHubAllocations = React.forwardRef<
           label={t("jitHubAllocations.pubkeyLabel")}
           helperText={t("jitHubAllocations.pubkeyHelper")}
         />
-      ) : (
+      ) : row.identityType === "connection_key" ? (
         <>
           <div className="grid gap-1.5">
             <Label htmlFor={`identityValue-${row.key}`}>
@@ -769,6 +830,13 @@ export const JITHubAllocations = React.forwardRef<
             </p>
           </div>
         </>
+      ) : (
+        // Bearer: no identity to collect at all — the wallet mints the
+        // secret itself, shown exactly once after creation (NIP-JW §Bearer
+        // Slices).
+        <p className="text-sm text-muted-foreground">
+          {t("jitHubAllocations.bearerHelper")}
+        </p>
       )}
       {isDuplicateRow(row) && (
         <p className="text-sm text-destructive">
@@ -851,14 +919,16 @@ export const JITHubAllocations = React.forwardRef<
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-fit"
-          onClick={addRow}
-        >
-          <PlusCircleIcon /> {t("jitHubAllocations.addRecipient")}
-        </Button>
+        {!hasBearerRow && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            onClick={addRow}
+          >
+            <PlusCircleIcon /> {t("jitHubAllocations.addRecipient")}
+          </Button>
+        )}
         {!hasDeadline && (
           <Button
             type="button"
@@ -1020,6 +1090,29 @@ export const JITHubAllocations = React.forwardRef<
                             avatarClassName="h-9 w-9"
                             showCopy={false}
                           />
+                        ) : c.identity_type === "bearer" ? (
+                          // A bearer slice is always this wallet's only
+                          // recipient (NIP-JW §Bearer Slices), so this only
+                          // ever renders here (the single-recipient row) —
+                          // never in the multi-recipient group views below.
+                          // identity_value here is a one-way commitment, not
+                          // an actual identity — safe to show, but must be
+                          // labeled distinctly from a real connection_key.
+                          <>
+                            <Avatar className="h-9 w-9 shrink-0">
+                              <AvatarFallback>
+                                <BanknoteIcon className="h-4 w-4 text-muted-foreground" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-mono text-xs text-muted-foreground">
+                                {shortenMiddle(c.identity_value)}
+                              </span>
+                              <Badge variant="outline" className="mt-1">
+                                {t("identityType.bearer")}
+                              </Badge>
+                            </span>
+                          </>
                         ) : (
                           <>
                             <Avatar className="h-9 w-9 shrink-0">
@@ -1427,10 +1520,14 @@ export const JITHubAllocations = React.forwardRef<
         <RevealConnectionDialog
           app={revealApp}
           pairingUri={revealUri}
+          lokicashToken={revealLokicashToken}
+          bearerSecret={revealBearerSecret}
           mode={revealMode}
           onClose={() => {
             setRevealUri(undefined);
             setRevealApp(undefined);
+            setRevealLokicashToken(undefined);
+            setRevealBearerSecret(undefined);
           }}
         />
       )}

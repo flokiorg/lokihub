@@ -22,11 +22,21 @@ import { App } from "src/types";
 export function RevealConnectionDialog({
   app,
   pairingUri,
+  lokicashToken,
+  bearerSecret,
   mode = "reveal",
   onClose,
 }: {
   app: App;
   pairingUri: string;
+  // lokicashToken: the same connection as pairingUri, packaged as a
+  // single lokicash1... string (NIP-JW §The Lokicash Token) — optional
+  // since not every app kind this dialog is reused for has one.
+  lokicashToken?: string;
+  // bearerSecret: only ever present right after creating a bearer-mode JIT
+  // wallet (mode === "create") — the wallet mints it once and never returns
+  // it again (NIP-JW §Bearer Slices), so there is no "reveal" path for it.
+  bearerSecret?: string;
   mode?: "reveal" | "create";
   onClose: () => void;
 }) {
@@ -44,6 +54,8 @@ export function RevealConnectionDialog({
         <ConnectAppCard
           app={mode === "create" ? (polledApp ?? app) : app}
           pairingUri={pairingUri}
+          lokicashToken={lokicashToken}
+          bearerSecret={bearerSecret}
           variant="reveal"
           showConnectionStatus={mode === "create"}
         />
