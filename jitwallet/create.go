@@ -113,6 +113,12 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
+	// MaxTransfers caps how many times each identity-bound slice MAY be
+	// transferred via jit_transfer before it can only be redeemed (NIP-JW
+	// §Creating a JIT Wallet). 0 or negative means unlimited. Applied
+	// uniformly to every recipient of this wallet — it's a property of the
+	// wallet, not any one slice.
+	MaxTransfers int
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
@@ -151,8 +157,9 @@ type Resolved struct {
 	// from the caller's input for pubkey/connection_key recipients; for a
 	// bearer recipient, IdentityValue and BearerSecret were just generated
 	// by Resolve (the caller supplied neither).
-	Recipients []RecipientInput
-	ExpiresAt  time.Time
+	Recipients   []RecipientInput
+	ExpiresAt    time.Time
+	MaxTransfers int
 }
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
@@ -226,7 +233,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 				return nil, fmt.Errorf("%w: recipient %d: bearer mode must not carry identity_value or ia_pubkey",
 					constants.ErrInvalidParams, i)
 			}
-			secretHex, secretHash, genErr := generateBearerSecret()
+			secretHex, secretHash, genErr := GenerateBearerSecret()
 			if genErr != nil {
 				return nil, fmt.Errorf("failed to generate bearer secret: %w", genErr)
 			}
@@ -237,9 +244,8 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 			// is already guaranteed to be the only one in this request by
 			// the mixing check above.
 		} else {
-			if decoded, decErr := hex.DecodeString(r.IdentityValue); decErr != nil || len(decoded) != 32 {
-				return nil, fmt.Errorf("%w: recipient %d: identity_value must be a 64-character lowercase hex string",
-					constants.ErrInvalidParams, i)
+			if err := ValidateIdentityShape(deps, r.IdentityType, r.IdentityValue, r.IAPubkey); err != nil {
+				return nil, fmt.Errorf("recipient %d: %w", i, err)
 			}
 			dedupeKey := r.IdentityType + ":" + r.IdentityValue
 			if seen[dedupeKey] {
@@ -273,25 +279,6 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 			return nil, fmt.Errorf("%w: recipient %d: combined recipient amounts overflow", constants.ErrInvalidParams, i)
 		}
 
-		if connKeyMode {
-			if r.IAPubkey == "" {
-				return nil, fmt.Errorf("%w: recipient %d: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams, i)
-			}
-			if decoded, decErr := hex.DecodeString(r.IAPubkey); decErr != nil || len(decoded) != 32 {
-				return nil, fmt.Errorf("%w: recipient %d: ia_pubkey must be a valid 32-byte hex nostr pubkey", constants.ErrInvalidParams, i)
-			}
-			if deps.IAChecker == nil {
-				return nil, fmt.Errorf("%w: no Identity Authority trust checker configured", constants.ErrInvalidParams)
-			}
-			trusted, trustErr := deps.IAChecker.IsTrusted(r.IAPubkey)
-			if trustErr != nil {
-				return nil, fmt.Errorf("failed to check Identity Authority trust: %w", trustErr)
-			}
-			if !trusted {
-				return nil, fmt.Errorf("%w: recipient %d: ia_pubkey is not a trusted Identity Authority", constants.ErrInvalidParams, i)
-			}
-		}
-
 		sum += r.AmountMloki
 		resolvedRecipients[i] = r
 	}
@@ -311,10 +298,53 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	}
 
 	return &Resolved{
-		HubApp:     params.HubApp,
-		Recipients: resolvedRecipients,
-		ExpiresAt:  expiresAt,
+		HubApp:       params.HubApp,
+		Recipients:   resolvedRecipients,
+		ExpiresAt:    expiresAt,
+		MaxTransfers: params.MaxTransfers,
 	}, nil
+}
+
+// ValidateIdentityShape checks identity_type/identity_value/ia_pubkey for a
+// pubkey or connection_key identity — hex shape, and, for connection_key,
+// that ia_pubkey is present, hex-valid, and a currently-trusted Identity
+// Authority. Shared by Resolve's per-recipient validation and jit_transfer's
+// new_identity validation — the only two places this codebase accepts a
+// caller-supplied (identity_type, identity_value, ia_pubkey) triple that
+// isn't a bearer secret. Does not accept db.JITAllocIdentityBearer: a bearer
+// target has no caller-supplied shape to validate — see GenerateBearerSecret.
+func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey string) error {
+	switch identityType {
+	case db.JITAllocIdentityPubkey:
+		if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
+			return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
+		}
+		return nil
+	case db.JITAllocIdentityConnectionKey:
+		if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
+			return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
+		}
+		if iaPubkey == "" {
+			return fmt.Errorf("%w: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams)
+		}
+		if decoded, decErr := hex.DecodeString(iaPubkey); decErr != nil || len(decoded) != 32 {
+			return fmt.Errorf("%w: ia_pubkey must be a valid 32-byte hex nostr pubkey", constants.ErrInvalidParams)
+		}
+		if deps.IAChecker == nil {
+			return fmt.Errorf("%w: no Identity Authority trust checker configured", constants.ErrInvalidParams)
+		}
+		trusted, trustErr := deps.IAChecker.IsTrusted(iaPubkey)
+		if trustErr != nil {
+			return fmt.Errorf("failed to check Identity Authority trust: %w", trustErr)
+		}
+		if !trusted {
+			return fmt.Errorf("%w: ia_pubkey is not a trusted Identity Authority", constants.ErrInvalidParams)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
+			db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey)
+	}
 }
 
 // bearerSecretLen is 32 bytes — same size as every other Nostr key/secret in
@@ -322,11 +352,12 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // secret is infeasible (NIP-JW §Bearer Slices).
 const bearerSecretLen = 32
 
-// generateBearerSecret returns a fresh, high-entropy bearer secret (hex) and
+// GenerateBearerSecret returns a fresh, high-entropy bearer secret (hex) and
 // the hex-encoded SHA-256 hash that gets persisted in its place — the raw
 // secret itself is never written to storage, only ever handed back once, in
-// the response that generated it.
-func generateBearerSecret() (secretHex, secretHash string, err error) {
+// the response that generated it. Shared by Resolve (create_jit_wallet) and
+// jit_transfer, whenever either mints a new bearer slice.
+func GenerateBearerSecret() (secretHex, secretHash string, err error) {
 	var secret [bearerSecretLen]byte
 	if _, err := rand.Read(secret[:]); err != nil {
 		return "", "", err
@@ -348,6 +379,7 @@ func generateBearerSecret() (secretHex, secretHash string, err error) {
 // recipient with no proof required.
 var jitWalletScopes = []string{
 	constants.JIT_CLAIM_FUNDS_SCOPE,
+	constants.JIT_TRANSFER_SCOPE,
 	constants.GET_BALANCE_SCOPE,
 }
 
@@ -419,6 +451,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			IdentityValue: r.IdentityValue,
 			IAPubkey:      r.IAPubkey,
 			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
+			MaxTransfers:  resolved.MaxTransfers,
 		}
 	}
 	if err := deps.AppsService.CreateJITWalletClaims(newApp.ID, claimRows); err != nil {

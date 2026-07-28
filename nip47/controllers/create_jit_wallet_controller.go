@@ -29,6 +29,11 @@ type createJITWalletRecipientParam struct {
 type createJITWalletParams struct {
 	Recipients []createJITWalletRecipientParam `json:"recipients"`
 	ExpirySecs int                             `json:"expiry,omitempty"`
+	// MaxTransfers caps how many times each identity-bound slice MAY be
+	// transferred via jit_transfer before it can only be redeemed. 0 or
+	// omitted means unlimited. Meaningless for a bearer recipient, which
+	// jit_transfer doesn't apply to.
+	MaxTransfers int `json:"max_transfers,omitempty"`
 }
 
 type createJITWalletRecipientResult struct {
@@ -123,9 +128,10 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 	// fail never burns rate-limit quota (mirrors create_circle_wallet_controller.go,
 	// where the same ordering applies).
 	resolved, err := jitwallet.Resolve(ctx, deps, jitwallet.Params{
-		HubApp:     app,
-		Recipients: recipients,
-		ExpirySecs: params.ExpirySecs,
+		HubApp:       app,
+		Recipients:   recipients,
+		ExpirySecs:   params.ExpirySecs,
+		MaxTransfers: params.MaxTransfers,
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapJITWalletErrorCode(err), err.Error())

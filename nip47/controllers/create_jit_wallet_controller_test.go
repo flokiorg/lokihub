@@ -279,14 +279,14 @@ func TestHandleCreateJITWalletEvent_HappyPath_SingleRecipient(t *testing.T) {
 	require.Equal(t, 1, len(childApps))
 	assert.Equal(t, db.ParentKindJIT, childApps[0].ParentKind)
 
-	// Hardened scope surface: exactly jit_claim_funds + get_balance.
+	// Hardened scope surface: exactly jit_claim_funds + jit_transfer + get_balance.
 	var perms []db.AppPermission
 	svc.DB.Where("app_id = ?", childApps[0].ID).Find(&perms)
 	scopes := make([]string, len(perms))
 	for i, p := range perms {
 		scopes[i] = p.Scope
 	}
-	assert.ElementsMatch(t, []string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
+	assert.ElementsMatch(t, []string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.JIT_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
 }
 
 func TestHandleCreateJITWalletEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *testing.T) {

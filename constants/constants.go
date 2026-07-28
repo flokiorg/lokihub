@@ -116,6 +116,15 @@ const (
 	// a jit_wallet's connection may be widely shared, so its method surface is
 	// a narrow, explicit allowlist rather than a normal wallet's scope set.
 	JIT_CLAIM_FUNDS_SCOPE = "jit_claim_funds"
+	// JIT_TRANSFER_SCOPE is granted on jit_wallet children only, alongside
+	// JIT_CLAIM_FUNDS_SCOPE — every jit_wallet connection gets both, always
+	// (jitwallet.jitWalletScopes is a fixed, non-configurable list; there is
+	// no way to grant one without the other today). Kept as its own scope
+	// rather than folded into JIT_CLAIM_FUNDS_SCOPE because jit_transfer
+	// never moves funds — it doesn't belong in PayCapableScopes the way
+	// jit_redeem does, and lumping them together would make jit_transfer
+	// inherit budget-consuming semantics it shouldn't have.
+	JIT_TRANSFER_SCOPE = "jit_transfer"
 )
 
 // NIP-47 method names for JIT and Circle Wallet operations.
@@ -129,6 +138,9 @@ const (
 	// this is a breaking wire-protocol rename for any client already
 	// integrated against the old "claim_funds" method name.
 	NIP47MethodJITRedeem = "jit_redeem"
+	// NIP47MethodJITTransfer reassigns an unclaimed slice's registered
+	// identity (NIP-JW §Transferring a Slice) without redeeming it.
+	NIP47MethodJITTransfer = "jit_transfer"
 	// NIP47MethodListRecipients is a read-only roster of a shared jit_wallet's
 	// recipients (identity, entitled amount, claimed status) — no invoice or
 	// preimage detail, since a jit_wallet has no list_transactions grant.

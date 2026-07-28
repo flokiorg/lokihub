@@ -126,6 +126,17 @@ type AppsService interface {
 	// undo the exact claim it's asked to. Used to roll back a slice claim when
 	// the invoice-amount check or the payment itself subsequently fails.
 	UnclaimJITWalletSlice(walletAppID uint, identityType, identityValue string) error
+	// TransferJITWalletSlice atomically reassigns one unclaimed slice's
+	// registered identity from (currentIdentityType, currentIdentityValue) to
+	// (newIdentityType, newIdentityValue, newIAPubkey), guarded by
+	// "claimed_at IS NULL" and an optimistic lock on the slice's current
+	// TransferCount — so two concurrent transfers of the same slice can never
+	// both succeed, and a slice that reached its MaxTransfers cap (checked
+	// against the just-read row, 0 meaning unlimited) is rejected before the
+	// guarded update is even attempted. Returns the slice's unchanged
+	// AmountMloki on success.
+	TransferJITWalletSlice(walletAppID uint, currentIdentityType, currentIdentityValue,
+		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
 	// DeleteJITWalletClaim removes an unclaimed slice from a jit_wallet. Returns
 	// an error if the claim is not found, belongs to a different wallet, or has
 	// already been claimed. The caller is responsible for sweeping the slice's

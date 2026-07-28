@@ -3284,9 +3284,10 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 		RelayURLs:           api.cfg.GetRelayUrls(),
 		IAChecker:           api.iaManager,
 	}, jitwallet.Params{
-		HubApp:     &hub,
-		Recipients: recipients,
-		ExpirySecs: req.ExpirySecs,
+		HubApp:       &hub,
+		Recipients:   recipients,
+		ExpirySecs:   req.ExpirySecs,
+		MaxTransfers: req.MaxTransfers,
 	})
 	if err != nil {
 		return nil, err

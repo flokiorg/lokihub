@@ -83,6 +83,7 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 			requestMethod == constants.NIP47MethodCreateJITWallet ||
 			requestMethod == constants.NIP47MethodCreateCircleWallet ||
 			requestMethod == constants.NIP47MethodJITRedeem ||
+			requestMethod == constants.NIP47MethodJITTransfer ||
 			requestMethod == constants.NIP47MethodListRecipients {
 			return true
 		}
@@ -137,6 +138,8 @@ func scopeToRequestMethods(scope string) []string {
 		return []string{constants.NIP47MethodCreateCircleWallet}
 	case constants.JIT_CLAIM_FUNDS_SCOPE:
 		return []string{constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients}
+	case constants.JIT_TRANSFER_SCOPE:
+		return []string{constants.NIP47MethodJITTransfer}
 	}
 	return []string{}
 }
@@ -184,6 +187,8 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CIRCLE_WALLET_SCOPE, nil
 	case constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients:
 		return constants.JIT_CLAIM_FUNDS_SCOPE, nil
+	case constants.NIP47MethodJITTransfer:
+		return constants.JIT_TRANSFER_SCOPE, nil
 	}
 	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")
 	return "", fmt.Errorf("unsupported request method: %s", requestMethod)
@@ -203,6 +208,7 @@ func AllScopes() []string {
 		constants.JIT_HUB_SCOPE,
 		constants.CIRCLE_WALLET_SCOPE,
 		constants.JIT_CLAIM_FUNDS_SCOPE,
+		constants.JIT_TRANSFER_SCOPE,
 	}
 }
 

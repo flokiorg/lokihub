@@ -181,6 +181,46 @@ func (svc *appsService) UnclaimJITWalletSlice(walletAppID uint, identityType, id
 		Update("claimed_at", nil).Error
 }
 
+// TransferJITWalletSlice atomically reassigns one unclaimed slice's
+// registered identity. The cap check reads TransferCount once, then the
+// update's own WHERE clause re-checks that exact value (an optimistic lock)
+// so two concurrent transfers of the same slice — each having read the same
+// pre-transfer count — can't both succeed: the loser's update matches zero
+// rows because the winner already advanced TransferCount out from under it.
+// Mirrors ClaimJITWalletSlice's identical two-step shape and its "no such
+// slice" reporting for a lost race.
+func (svc *appsService) TransferJITWalletSlice(walletAppID uint, currentIdentityType, currentIdentityValue,
+	newIdentityType, newIdentityValue, newIAPubkey string) (int64, error) {
+	var claim db.JITWalletClaim
+	if err := svc.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL",
+		walletAppID, currentIdentityType, currentIdentityValue).First(&claim).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, fmt.Errorf("%w: no unclaimed slice for this identity", constants.ErrInvalidParams)
+		}
+		return 0, err
+	}
+	if claim.MaxTransfers > 0 && claim.TransferCount >= claim.MaxTransfers {
+		return 0, fmt.Errorf("%w: this slice has reached its transfer limit; it can only be redeemed now", constants.ErrInvalidParams)
+	}
+	result := svc.db.Model(&db.JITWalletClaim{}).
+		Where("id = ? AND claimed_at IS NULL AND transfer_count = ?", claim.ID, claim.TransferCount).
+		Updates(map[string]interface{}{
+			"identity_type":  newIdentityType,
+			"identity_value": newIdentityValue,
+			"ia_pubkey":      newIAPubkey,
+			"transfer_count": claim.TransferCount + 1,
+		})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		// Lost a race against a concurrent claim or transfer of the same
+		// slice between the lookup above and this update.
+		return 0, fmt.Errorf("%w: no unclaimed slice for this identity", constants.ErrInvalidParams)
+	}
+	return claim.AmountMloki, nil
+}
+
 // DeleteJITWalletClaim removes an unclaimed slice. The caller is responsible
 // for sweeping its AmountMloki back to the hub before calling this — the
 // returned row gives the caller the amount to sweep.
