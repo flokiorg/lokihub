@@ -104,8 +104,14 @@ const (
 	// Circle Wallet scope — grants create_circle_wallet on a circle_admin wallet
 	CIRCLE_WALLET_SCOPE = "circle_wallet"
 	// JIT Claim Funds scope — granted on jit_wallet children only. Covers
-	// claim_funds (pay out a recipient's proven slice) and list_recipients
-	// (read-only roster of a shared wallet's recipients/claim status).
+	// jit_redeem (pay out a recipient's proven slice) and list_recipients
+	// (read-only roster of a shared wallet's recipients/claim status). The
+	// constant's own name and string value are kept as the original
+	// "claim_funds"-era names rather than renamed to match jit_redeem: this
+	// value is persisted in every existing AppPermission row, and renaming it
+	// would silently strand every already-created jit_wallet's permissions
+	// without a migration. Only the wire-visible method name changed
+	// (NIP47MethodJITRedeem, below) — recipients never see this scope string.
 	// Deliberately does NOT cover pay_invoice/lookup_invoice/list_transactions:
 	// a jit_wallet's connection may be widely shared, so its method surface is
 	// a narrow, explicit allowlist rather than a normal wallet's scope set.
@@ -116,10 +122,13 @@ const (
 const (
 	NIP47MethodCreateJITWallet    = "create_jit_wallet"
 	NIP47MethodCreateCircleWallet = "create_circle_wallet"
-	// NIP47MethodClaimFunds pays out a proven recipient's slice of a shared
-	// jit_wallet in one shot. Replaces the old, per-recipient
-	// create_jit_wallet/claim_jit_wallet reveal flow entirely.
-	NIP47MethodClaimFunds = "claim_funds"
+	// NIP47MethodJITRedeem pays out a proven recipient's slice of a shared
+	// jit_wallet in one shot (NIP-JW §Redeeming Funds). Replaces the old,
+	// per-recipient create_jit_wallet/claim_jit_wallet reveal flow entirely.
+	// Named jit_redeem, not claim_funds, to match NIP-JW's terminology —
+	// this is a breaking wire-protocol rename for any client already
+	// integrated against the old "claim_funds" method name.
+	NIP47MethodJITRedeem = "jit_redeem"
 	// NIP47MethodListRecipients is a read-only roster of a shared jit_wallet's
 	// recipients (identity, entitled amount, claimed status) — no invoice or
 	// preimage detail, since a jit_wallet has no list_transactions grant.

@@ -98,7 +98,7 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.NotContains(t, info.Methods, "pay_invoice", "JIT wallets no longer carry the generic pay_invoice scope")
 		require.NotContains(t, info.Methods, "list_transactions", "list_transactions would leak other recipients' payout history on a shared connection")
 		require.NotContains(t, info.Methods, "lookup_invoice")
-		require.Contains(t, info.Methods, constants.NIP47MethodClaimFunds)
+		require.Contains(t, info.Methods, constants.NIP47MethodJITRedeem)
 		require.Contains(t, info.Methods, constants.NIP47MethodListRecipients)
 
 		// Behavioral check, not just advertised-methods: actually calling

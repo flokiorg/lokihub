@@ -183,11 +183,11 @@ func TestRequestMethodToScope_JITHub(t *testing.T) {
 // claim may reasonably see the roster first.
 func TestScopeToRequestMethods_JITClaimFunds(t *testing.T) {
 	methods := scopeToRequestMethods(constants.JIT_CLAIM_FUNDS_SCOPE)
-	assert.ElementsMatch(t, []string{constants.NIP47MethodClaimFunds, constants.NIP47MethodListRecipients}, methods)
+	assert.ElementsMatch(t, []string{constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients}, methods)
 }
 
 func TestRequestMethodToScope_ClaimFunds(t *testing.T) {
-	scope, err := RequestMethodToScope(constants.NIP47MethodClaimFunds)
+	scope, err := RequestMethodToScope(constants.NIP47MethodJITRedeem)
 	require.NoError(t, err)
 	assert.Equal(t, constants.JIT_CLAIM_FUNDS_SCOPE, scope)
 }
@@ -223,7 +223,7 @@ func TestGetPermittedMethods_JITClaimFundsScope(t *testing.T) {
 
 	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
 	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
-	assert.Contains(t, result, constants.NIP47MethodClaimFunds)
+	assert.Contains(t, result, constants.NIP47MethodJITRedeem)
 	assert.Contains(t, result, constants.NIP47MethodListRecipients)
 	assert.NotContains(t, result, models.PAY_INVOICE_METHOD)
 }

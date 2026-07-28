@@ -64,7 +64,7 @@ func testJITHubPayments(t *testing.T, hub JITHubConfig) {
 		// — the atomic claim guard prevents any double-payout, replay or not.
 		secondProof := buildClaimProofEvent(t, jitChild.BeneficiaryPrivkey, jitChild.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var secondResult ClaimFundsResult
-		err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodClaimFunds, ClaimFundsParams{
+		err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: jitChild.BeneficiaryPubkey,
@@ -82,7 +82,7 @@ func testJITHubPayments(t *testing.T, hub JITHubConfig) {
 
 		proof := buildClaimProofEvent(t, jitChild.BeneficiaryPrivkey, jitChild.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var payResult ClaimFundsResult
-		err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodClaimFunds, ClaimFundsParams{
+		err := jitChild.Client.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: jitChild.BeneficiaryPubkey,

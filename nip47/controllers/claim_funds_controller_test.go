@@ -96,7 +96,7 @@ func mustMarshal(t *testing.T, ev *nostr.Event) string {
 func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params claimFundsParams) *models.Response {
 	t.Helper()
 	content := map[string]interface{}{
-		"method": constants.NIP47MethodClaimFunds,
+		"method": constants.NIP47MethodJITRedeem,
 		"params": params,
 	}
 	reqBytes, _ := json.Marshal(content)
