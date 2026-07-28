@@ -19,6 +19,8 @@ package jitwallet
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -93,12 +95,17 @@ type Deps struct {
 
 // RecipientInput describes one recipient's requested slice of a shared JIT
 // wallet. IAPubkey is only meaningful when IdentityType is
-// db.JITAllocIdentityConnectionKey.
+// db.JITAllocIdentityConnectionKey. For db.JITAllocIdentityBearer, the caller
+// MUST leave IdentityValue and IAPubkey empty — Resolve generates the slice's
+// secret itself and fills in IdentityValue (as the secret's hash) and
+// BearerSecret (the plaintext, populated by Resolve for Commit/the caller to
+// return exactly once — never read back out of the caller's own input).
 type RecipientInput struct {
-	IdentityType  string // db.JITAllocIdentityPubkey | db.JITAllocIdentityConnectionKey
+	IdentityType  string // db.JITAllocIdentityPubkey | db.JITAllocIdentityConnectionKey | db.JITAllocIdentityBearer
 	IdentityValue string
 	IAPubkey      string
 	AmountMloki   uint64
+	BearerSecret  string
 }
 
 // Params describes the shared wallet to create.
@@ -109,10 +116,14 @@ type Params struct {
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
+// BearerSecret is populated only for a db.JITAllocIdentityBearer recipient,
+// and only this once — it is never retrievable again after this response
+// (NIP-JW §Bearer Slices).
 type RecipientResult struct {
 	IdentityType  string
 	IdentityValue string
 	AmountMloki   uint64
+	BearerSecret  string
 }
 
 // Result carries everything a caller needs to build its own protocol-specific
@@ -135,8 +146,12 @@ type Result struct {
 // request that was always going to fail validation never consumes rate-limit
 // quota (mirroring create_circle_wallet_controller.go).
 type Resolved struct {
-	HubApp     *db.App
-	Recipients []RecipientInput // amounts already validated, IdentityType/Value unchanged
+	HubApp *db.App
+	// Recipients: amounts already validated. IdentityType/Value are unchanged
+	// from the caller's input for pubkey/connection_key recipients; for a
+	// bearer recipient, IdentityValue and BearerSecret were just generated
+	// by Resolve (the caller supplied neither).
+	Recipients []RecipientInput
 	ExpiresAt  time.Time
 }
 
@@ -161,6 +176,19 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		return nil, fmt.Errorf("%w: at most %d recipients per wallet, got %d",
 			constants.ErrInvalidParams, maxRecipientsPerWallet, len(params.Recipients))
 	}
+	// A bearer note is meant to be a self-contained, freely-handed-off
+	// object, like cash — whoever it's given to needs nothing else to
+	// redeem it. Mixing a bearer slice into a wallet that also serves other,
+	// identity-bound recipients would break that: redeeming the bearer
+	// slice requires the wallet's connection too, so handing the note to
+	// someone would also hand them a live channel into a multi-recipient
+	// wallet that isn't theirs. A bearer wallet is always exactly one slice.
+	for i, r := range params.Recipients {
+		if r.IdentityType == db.JITAllocIdentityBearer && len(params.Recipients) != 1 {
+			return nil, fmt.Errorf("%w: recipient %d: a bearer recipient must be the only recipient in this wallet",
+				constants.ErrInvalidParams, i)
+		}
+	}
 
 	hubConfig, err := deps.AppsService.GetJITHubConfig(params.HubApp.ID)
 	if err != nil {
@@ -181,21 +209,44 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 
 	var sum uint64
 	seen := make(map[string]bool, len(params.Recipients))
+	resolvedRecipients := make([]RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
+		bearerMode := r.IdentityType == db.JITAllocIdentityBearer
 		connKeyMode := r.IdentityType == db.JITAllocIdentityConnectionKey
-		if !connKeyMode && r.IdentityType != db.JITAllocIdentityPubkey {
-			return nil, fmt.Errorf("%w: recipient %d: identity_type must be %q or %q", constants.ErrInvalidParams,
-				i, db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey)
+		if !bearerMode && !connKeyMode && r.IdentityType != db.JITAllocIdentityPubkey {
+			return nil, fmt.Errorf("%w: recipient %d: identity_type must be %q, %q, or %q", constants.ErrInvalidParams,
+				i, db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey, db.JITAllocIdentityBearer)
 		}
-		if decoded, decErr := hex.DecodeString(r.IdentityValue); decErr != nil || len(decoded) != 32 {
-			return nil, fmt.Errorf("%w: recipient %d: identity_value must be a 64-character lowercase hex string",
-				constants.ErrInvalidParams, i)
+
+		if bearerMode {
+			// The caller supplies no identity for a bearer recipient — the
+			// Hub is the only party that can vouch for its secret's entropy,
+			// so it generates (and hashes) that secret itself, here.
+			if r.IdentityValue != "" || r.IAPubkey != "" {
+				return nil, fmt.Errorf("%w: recipient %d: bearer mode must not carry identity_value or ia_pubkey",
+					constants.ErrInvalidParams, i)
+			}
+			secretHex, secretHash, genErr := generateBearerSecret()
+			if genErr != nil {
+				return nil, fmt.Errorf("failed to generate bearer secret: %w", genErr)
+			}
+			r.IdentityValue = secretHash
+			r.BearerSecret = secretHex
+			// No dedupe check: a fresh, independently-random secret can't
+			// collide with anything already `seen`, and a bearer recipient
+			// is already guaranteed to be the only one in this request by
+			// the mixing check above.
+		} else {
+			if decoded, decErr := hex.DecodeString(r.IdentityValue); decErr != nil || len(decoded) != 32 {
+				return nil, fmt.Errorf("%w: recipient %d: identity_value must be a 64-character lowercase hex string",
+					constants.ErrInvalidParams, i)
+			}
+			dedupeKey := r.IdentityType + ":" + r.IdentityValue
+			if seen[dedupeKey] {
+				return nil, fmt.Errorf("%w: recipient %d: duplicate identity in this request", constants.ErrInvalidParams, i)
+			}
+			seen[dedupeKey] = true
 		}
-		dedupeKey := r.IdentityType + ":" + r.IdentityValue
-		if seen[dedupeKey] {
-			return nil, fmt.Errorf("%w: recipient %d: duplicate identity in this request", constants.ErrInvalidParams, i)
-		}
-		seen[dedupeKey] = true
 
 		if r.AmountMloki == 0 {
 			return nil, fmt.Errorf("%w: recipient %d: amount_mloki must be positive", constants.ErrInvalidParams, i)
@@ -242,6 +293,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		}
 
 		sum += r.AmountMloki
+		resolvedRecipients[i] = r
 	}
 
 	// PerWalletMaxMloki now caps the wallet's TOTAL (sum across every
@@ -260,9 +312,27 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 
 	return &Resolved{
 		HubApp:     params.HubApp,
-		Recipients: params.Recipients,
+		Recipients: resolvedRecipients,
 		ExpiresAt:  expiresAt,
 	}, nil
+}
+
+// bearerSecretLen is 32 bytes — same size as every other Nostr key/secret in
+// this codebase, and comfortably enough entropy that guessing a bearer
+// secret is infeasible (NIP-JW §Bearer Slices).
+const bearerSecretLen = 32
+
+// generateBearerSecret returns a fresh, high-entropy bearer secret (hex) and
+// the hex-encoded SHA-256 hash that gets persisted in its place — the raw
+// secret itself is never written to storage, only ever handed back once, in
+// the response that generated it.
+func generateBearerSecret() (secretHex, secretHash string, err error) {
+	var secret [bearerSecretLen]byte
+	if _, err := rand.Read(secret[:]); err != nil {
+		return "", "", err
+	}
+	hash := sha256.Sum256(secret[:])
+	return hex.EncodeToString(secret[:]), hex.EncodeToString(hash[:]), nil
 }
 
 // jitWalletScopes are the ONLY scopes ever granted to a jit_wallet child.
@@ -381,11 +451,20 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 
 	recipientResults := make([]RecipientResult, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
-		recipientResults[i] = RecipientResult{
-			IdentityType:  r.IdentityType,
-			IdentityValue: r.IdentityValue,
-			AmountMloki:   r.AmountMloki,
+		result := RecipientResult{
+			IdentityType: r.IdentityType,
+			AmountMloki:  r.AmountMloki,
 		}
+		if r.IdentityType == db.JITAllocIdentityBearer {
+			// r.IdentityValue here is the secret's hash — an internal
+			// storage detail, never meant for the wire response. Only the
+			// plaintext secret is; the hash on its own is useless to a
+			// recipient and would just be a stray, meaningless-looking field.
+			result.BearerSecret = r.BearerSecret
+		} else {
+			result.IdentityValue = r.IdentityValue
+		}
+		recipientResults[i] = result
 	}
 
 	// walletPubkey and pairingSecretKey are both derived internally (never

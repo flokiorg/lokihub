@@ -128,6 +128,51 @@ func TestCreateJITWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing
 	require.Len(t, claims, 2)
 }
 
+func TestCreateJITWallet_Bearer_HappyPath(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
+		Recipients: []JITWalletRecipient{
+			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 1000},
+		},
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+
+	r := result.Recipients[0]
+	assert.Equal(t, db.JITAllocIdentityBearer, r.IdentityType)
+	assert.NotEmpty(t, r.BearerSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
+	assert.Empty(t, r.IdentityValue, "the admin HTTP API must not surface the internal secret hash either")
+}
+
+func TestCreateJITWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	theAPI := newTestAPIWithService(t, svc)
+	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
+		Recipients: []JITWalletRecipient{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk, AmountMloki: 500},
+			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
 func TestCreateJITWallet_ChildExcludedFromListApps(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

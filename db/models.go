@@ -91,22 +91,36 @@ type JITHubConfig struct {
 const (
 	JITAllocIdentityPubkey        = "pubkey"
 	JITAllocIdentityConnectionKey = "connection_key"
+	// JITAllocIdentityBearer marks a slice with no registered identity at
+	// all (NIP-JW §Bearer Slices) — redeemable by whoever presents its
+	// secret. A bearer-mode wallet is always single-recipient: the only
+	// slice a jit_wallet with this identity type may ever hold (enforced by
+	// jitwallet.Resolve at creation, and by jit_transfer whenever a transfer
+	// would introduce a bearer slice into an existing wallet), so it never
+	// shares a connection with an identity-bound slice.
+	JITAllocIdentityBearer = "bearer"
 )
 
 // JITWalletClaim records one recipient's slice within a specific (possibly
 // shared) jit_wallet app. A jit_wallet may serve several recipients from one
 // funded pool and one NWC connection — each recipient gets their own row
 // here (own identity, own AmountMloki), all sharing the wallet's single
-// ExpiresAt (a property of the App itself, not duplicated here). claim_funds
+// ExpiresAt (a property of the App itself, not duplicated here). jit_redeem
 // atomically flips ClaimedAt (guarded by "WHERE claimed_at IS NULL") to pay
 // out a slice exactly once. (wallet_app_id, identity_type, identity_value)
 // is unique: one slice per identity per wallet.
 type JITWalletClaim struct {
-	ID            uint   `gorm:"primaryKey"`
-	WalletAppID   uint   `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:1"`
-	App           App    `gorm:"foreignKey:WalletAppID;constraint:OnDelete:CASCADE"`
-	IdentityType  string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:2"` // "pubkey" | "connection_key"
-	IdentityValue string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:3"` // 64-char hex
+	ID          uint `gorm:"primaryKey"`
+	WalletAppID uint `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:1"`
+	App         App  `gorm:"foreignKey:WalletAppID;constraint:OnDelete:CASCADE"`
+	// IdentityType is "pubkey" | "connection_key" | "bearer".
+	IdentityType string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:2"`
+	// IdentityValue is 64-char hex. For pubkey/connection_key slices this is
+	// the identity itself (public, proof-gated at claim time). For a bearer
+	// slice it is instead a one-way SHA-256 commitment of the slice's
+	// secret — the raw secret is never persisted, only ever returned once,
+	// in the create_jit_wallet/jit_transfer response that generated it.
+	IdentityValue string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:3"`
 	// IAPubkey is set only for connection_key-mode slices — the Identity
 	// Authority that must attest the claimant's identity at claim time.
 	IAPubkey    string

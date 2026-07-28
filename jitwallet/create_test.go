@@ -2,6 +2,8 @@ package jitwallet
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"math"
 	"net/url"
@@ -46,6 +48,12 @@ func onePubkeyRecipient(amountMloki uint64) []RecipientInput {
 	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	return []RecipientInput{
 		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk, AmountMloki: amountMloki},
+	}
+}
+
+func oneBearerRecipient(amountMloki uint64) []RecipientInput {
+	return []RecipientInput{
+		{IdentityType: db.JITAllocIdentityBearer, AmountMloki: amountMloki},
 	}
 }
 
@@ -521,4 +529,164 @@ func TestCreate_ConcurrentCreation_BothIndependentlySucceed(t *testing.T) {
 	var childApps []db.App
 	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps).Error)
 	assert.Len(t, childApps, 2)
+	_ = childApps
+}
+
+func TestCreate_Bearer_HappyPath(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	result, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp:     hub,
+		Recipients: oneBearerRecipient(1000),
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+
+	r := result.Recipients[0]
+	assert.Equal(t, db.JITAllocIdentityBearer, r.IdentityType)
+	assert.Equal(t, uint64(1000), r.AmountMloki)
+	assert.NotEmpty(t, r.BearerSecret, "the plaintext secret must be returned exactly once")
+	assert.Empty(t, r.IdentityValue, "the response must never surface the internal secret hash as identity_value")
+
+	var childApps []db.App
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps).Error)
+	require.Len(t, childApps, 1)
+
+	var claims []db.JITWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims).Error)
+	require.Len(t, claims, 1)
+	assert.Equal(t, db.JITAllocIdentityBearer, claims[0].IdentityType)
+	assert.Equal(t, int64(1000), claims[0].AmountMloki)
+
+	// The critical fund-safety property: the DB row must never hold the raw
+	// secret, only its hash. A read of this table (backup leak, SQL
+	// injection, a careless log line) must not by itself be enough to steal
+	// every unclaimed bearer slice on the instance.
+	assert.NotEqual(t, r.BearerSecret, claims[0].IdentityValue,
+		"the stored identity_value must be a hash of the secret, never the secret itself")
+	rawSecret, hexErr := hex.DecodeString(r.BearerSecret)
+	require.NoError(t, hexErr)
+	wantHash := sha256.Sum256(rawSecret)
+	assert.Equal(t, hex.EncodeToString(wantHash[:]), claims[0].IdentityValue,
+		"stored identity_value must be exactly sha256(secret)")
+}
+
+func TestCreate_Bearer_SecretsAreUnique(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	// The mock LN client returns a fixed invoice/payment_hash regardless of
+	// amount unless explicitly queued — two Create calls in the same test
+	// need distinct queued invoices, or the second payment fails as an
+	// already-paid replay. Same workaround as the concurrent-creation test
+	// below.
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-a", Amount: 1000},
+		{Type: "incoming", Invoice: tests.MockZeroAmountInvoice, PaymentHash: tests.MockZeroAmountPaymentHash, Preimage: "preimage-b", Amount: 1000},
+	}
+
+	result1, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub, Recipients: oneBearerRecipient(1000), ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	result2, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub, Recipients: oneBearerRecipient(1000), ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+
+	assert.NotEqual(t, result1.Recipients[0].BearerSecret, result2.Recipients[0].BearerSecret)
+}
+
+func TestCreate_Bearer_RejectsMixedRecipients(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	pubkeyRecipient := onePubkeyRecipient(500)[0]
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub,
+		Recipients: []RecipientInput{
+			pubkeyRecipient,
+			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+
+	var childApps []db.App
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps).Error)
+	assert.Empty(t, childApps, "a rejected request must leave no partial wallet behind")
+}
+
+func TestCreate_Bearer_RejectsTwoBearerRecipients(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub,
+		Recipients: []RecipientInput{
+			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 500},
+			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestCreate_Bearer_RejectsCallerSuppliedIdentityValue(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub,
+		Recipients: []RecipientInput{
+			{IdentityType: db.JITAllocIdentityBearer, IdentityValue: tests.RandomHex32(), AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err, "the caller has no way to prove the entropy of a self-supplied secret; only the Hub may generate one")
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestCreate_Bearer_RejectsCallerSuppliedIAPubkey(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp: hub,
+		Recipients: []RecipientInput{
+			{IdentityType: db.JITAllocIdentityBearer, IAPubkey: tests.RandomHex32(), AmountMloki: 500},
+		},
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }

@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -653,6 +656,198 @@ func TestHandleClaimFundsEvent_NonJITWalletApp_Rejected(t *testing.T) {
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
+}
+
+// bearerSecretAndHash returns a fresh random bearer secret (hex) and the
+// hex-encoded sha256 hash of it — the value CreateJITWalletClaims stores as
+// IdentityValue for a bearer-mode slice.
+func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
+	t.Helper()
+	raw := make([]byte, 32)
+	_, err := rand.Read(raw)
+	require.NoError(t, err)
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(raw), hex.EncodeToString(hash[:])
+}
+
+func TestHandleClaimFundsEvent_Bearer_HappyPath(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	secretHex, secretHash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	}))
+
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: secretHex,
+	})
+
+	require.Nil(t, response.Error)
+	result := response.Result.(payResponse)
+	assert.NotEmpty(t, result.Preimage)
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	require.NoError(t, err)
+	assert.Nil(t, claim, "slice must show as claimed (no longer returned by the unclaimed-only lookup)")
+}
+
+func TestHandleClaimFundsEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	_, secretHash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	}))
+
+	wrongSecret, _ := bearerSecretAndHash(t)
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: wrongSecret,
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+
+	// The real slice must remain unclaimed — a wrong guess burned nothing.
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	require.NoError(t, err)
+	assert.NotNil(t, claim)
+}
+
+func TestHandleClaimFundsEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: "not-hex!!",
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+}
+
+func TestHandleClaimFundsEvent_Bearer_MixedParams_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	secretHex, secretHash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	}))
+
+	// A request carrying BOTH bearer_secret and identity_type/value must be
+	// rejected outright, not silently prefer one side.
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:       tests.MockZeroAmountInvoice,
+		Amount:        ptrUint64(1000),
+		BearerSecret:  secretHex,
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: tests.RandomHex32(),
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	require.NoError(t, err)
+	assert.NotNil(t, claim, "a rejected mixed request must not have claimed anything")
+}
+
+func TestHandleClaimFundsEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	secretHex, secretHash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	}))
+
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(500), // only half the entitled amount
+		BearerSecret: secretHex,
+	})
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	require.NoError(t, err)
+	require.NotNil(t, claim, "a bad invoice attempt must not burn the slice")
+}
+
+// TestHandleClaimFundsEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds is
+// the core fund-safety property for a bearer slice: first-redeem-wins is
+// intentional, but two concurrent redemptions against the same secret must
+// never both succeed (NIP-JW §Bearer Slices, Security Considerations).
+func TestHandleClaimFundsEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	secretHex, secretHash := bearerSecretAndHash(t)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	}))
+
+	params := claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: secretHex,
+	}
+	controller := NewTestNip47Controller(svc)
+
+	var wg sync.WaitGroup
+	responses := make([]*models.Response, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			responses[i] = handleClaimFundsFor(t, svc, controller, wallet, params)
+		}(i)
+	}
+	wg.Wait()
+
+	successes := 0
+	for _, r := range responses {
+		if r.Error == nil {
+			successes++
+		}
+	}
+	assert.Equal(t, 1, successes, "exactly one of two concurrent redemptions against the same bearer secret must succeed")
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	require.NoError(t, err)
+	assert.Nil(t, claim, "the slice must end up claimed exactly once")
 }
 
 func ptrUint64(v uint64) *uint64 { return &v }
