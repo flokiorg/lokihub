@@ -41,6 +41,25 @@ func onePubkeyRecipient(pubkey string, amountMloki uint64) []JITWalletRecipientP
 	}
 }
 
+// requireLokicashMatchesPairingURI asserts lokicashToken decodes to the
+// exact same wallet pubkey, secret, and relay set as pairingURI — either
+// string alone is a fully sufficient connection credential (NIP-JW §The
+// Lokicash Token), so any divergence between them would mean a recipient
+// using one instead of the other lands on a different wallet than intended.
+// Independent of recipient count or identity mode, since lokicash_token is
+// wallet-level pairing data, not per-recipient.
+func requireLokicashMatchesPairingURI(t *testing.T, pairingURI, lokicashToken string) {
+	t.Helper()
+	require.True(t, strings.HasPrefix(lokicashToken, lokicash.HRP+"1"))
+	parsedURI, err := url.Parse(pairingURI)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(lokicashToken)
+	require.NoError(t, err)
+	require.Equal(t, parsedURI.Host, decoded.WalletPubkey)
+	require.Equal(t, parsedURI.Query().Get("secret"), decoded.Secret)
+	require.Equal(t, parsedURI.Query()["relay"], decoded.RelayURLs)
+}
+
 func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 	t.Logf("connecting to jit hub %q", hub.Name)
 	hubClient := mustConnect(t, hub.Connection)
@@ -63,20 +82,7 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.Len(t, result.Recipients, 1)
 		require.EqualValues(t, happyPathAmountMloki, result.Recipients[0].AmountMloki)
 
-		// The lokicash1... token returned alongside pairing_uri must decode
-		// to the exact same wallet pubkey, secret, and relay set — either
-		// string alone is a fully sufficient connection credential (NIP-JW
-		// §The Lokicash Token), so any divergence between them would mean a
-		// recipient using one instead of the other lands on a different
-		// wallet than intended.
-		require.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
-		pairingURI, err := url.Parse(result.PairingURI)
-		require.NoError(t, err)
-		decodedToken, err := lokicash.Decode(result.LokicashToken)
-		require.NoError(t, err)
-		require.Equal(t, result.WalletPubkey, decodedToken.WalletPubkey)
-		require.Equal(t, pairingURI.Query().Get("secret"), decodedToken.Secret)
-		require.Equal(t, pairingURI.Query()["relay"], decodedToken.RelayURLs)
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
@@ -136,6 +142,11 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 			Expiry: happyPathExpirySecs,
 		}, &result))
 		require.Len(t, result.Recipients, 2)
+
+		// lokicash_token is wallet-level, not per-recipient — must still
+		// decode correctly (and to the same connection as pairing_uri) when
+		// the wallet backs more than one slice.
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
@@ -225,6 +236,11 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 			Expiry: happyPathExpirySecs,
 		}, &result))
 		require.NotEmpty(t, result.PairingURI, "connection_key mode also gets an immediate, shared connection now — no separate claim_jit_wallet reveal step")
+
+		// lokicash_token generation doesn't depend on recipient identity
+		// mode — it's derived purely from the wallet's own pairing data, not
+		// from any recipient's identity_type.
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
 	})
 
 	t.Run("CreateWallet_EmptyRecipients_Rejected", func(t *testing.T) {
