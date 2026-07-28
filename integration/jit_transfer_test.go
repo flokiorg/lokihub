@@ -90,22 +90,26 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		}, &created))
 		shared := mustConnect(t, created.PairingURI)
 
-		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", "", nil, time.Now())
+		// The caller generates their own bearer secret and submits only its
+		// commitment — the wallet never mints or returns one over this
+		// shared connection (NIP-JW §Bearer Slices).
+		newSecretHex, newSecretHash := bearerSecretAndHash(t)
+		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", newSecretHash, nil, time.Now())
 		var transferResult JITTransferResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer"},
+			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: newSecretHash},
 		}, &transferResult))
 		require.Equal(t, "bearer", transferResult.IdentityType)
-		require.NotEmpty(t, transferResult.BearerSecret)
+		require.Equal(t, newSecretHash, transferResult.IdentityValue)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer to bearer")
 		var claimResult ClaimFundsResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
 			Invoice:      invoice.Invoice,
-			BearerSecret: transferResult.BearerSecret,
+			BearerSecret: newSecretHex,
 		}, &claimResult))
 		require.NotEmpty(t, claimResult.Preimage)
 	})

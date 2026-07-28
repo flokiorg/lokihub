@@ -77,6 +77,13 @@ type ClaimFundsResult struct {
 // (bound to the wallet + the target new_identity, not an invoice); a bearer
 // caller instead presents BearerSecret, since a bearer slice has no
 // identity capable of signing a proof event.
+//
+// A bearer NewIdentity's IdentityValue is REQUIRED and caller-supplied — the
+// commitment (sha256) of a secret the caller generates and keeps locally.
+// The wallet never mints or returns a bearer secret here: this response
+// travels over the shared jit_wallet connection, decryptable by every
+// recipient who ever held it, so a server-generated secret returned in it
+// would leak to all of them (see NIP-JW.md's Security Considerations).
 
 type JITTransferNewIdentityParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
@@ -98,7 +105,6 @@ type JITTransferResult struct {
 	AmountMloki   uint64 `json:"amount_mloki"`
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	BearerSecret  string `json:"bearer_secret,omitempty"`
 }
 
 // --- list_recipients ---
