@@ -341,6 +341,39 @@ func TestUnclaimJITWalletSlice_MakesSliceClaimableAgain(t *testing.T) {
 	assert.Equal(t, int64(1000), amount)
 }
 
+// TestUnclaimJITWalletSlice_RollsBackSpinOffClaim verifies
+// UnclaimJITWalletSlice — reused as-is for spin-off rollback (see
+// ClaimJITWalletSliceForSpinOff's doc comment) — correctly restores a
+// spin-off-claimed slice to ordinary unclaimed status, including when
+// SpunOffToWalletAppID was never set (the rollback-before-funding-succeeded
+// case jit_transfer_controller.go actually exercises).
+func TestUnclaimJITWalletSlice_RollsBackSpinOffClaim(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+	_, err = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.AppsService.UnclaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey))
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	require.NotNil(t, claim, "slice must be claimable again after rollback")
+	assert.Nil(t, claim.SpunOffToWalletAppID)
+
+	// Re-claiming (this time for real) must also work.
+	amount2, err := svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5000), amount2)
+}
+
 // --- DeleteJITWalletClaim ---
 
 func TestDeleteJITWalletClaim_Unclaimed(t *testing.T) {
@@ -562,4 +595,253 @@ func TestListClaimsForWallet_ReturnsClaimedAndUnclaimed(t *testing.T) {
 			assert.Nil(t, c.ClaimedAt)
 		}
 	}
+}
+
+// --- ClaimJITWalletSliceForSpinOff ---
+
+func TestClaimJITWalletSliceForSpinOff_Success(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+
+	amount, err := svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5000), amount)
+
+	// The slice is now terminal — GetJITWalletClaim only ever returns
+	// unclaimed rows, so it must report nothing found.
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	assert.Nil(t, claim)
+}
+
+func TestClaimJITWalletSliceForSpinOff_AlreadyClaimed_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+	_, err = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+
+	_, err = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestClaimJITWalletSliceForSpinOff_TransferCapEnforced(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000, MaxTransfers: 1, TransferCount: 1},
+	}))
+
+	_, err = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+
+	// Untouched: still findable as an ordinary unclaimed slice.
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+}
+
+// TestClaimJITWalletSliceForSpinOff_ConcurrentRace_ExactlyOneWinner mirrors
+// TestClaimJITWalletSlice_ConcurrentRace_ExactlyOneWinner: two concurrent
+// spin-off claims of the same slice must never both succeed.
+func TestClaimJITWalletSliceForSpinOff_ConcurrentRace_ExactlyOneWinner(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+
+	const goroutines = 5
+	errs := make(chan error, goroutines)
+	ready := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, err := svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+			errs <- err
+		}()
+	}
+	close(ready)
+	wg.Wait()
+	close(errs)
+
+	var successes int
+	for e := range errs {
+		if e == nil {
+			successes++
+		} else {
+			assert.ErrorIs(t, e, constants.ErrInvalidParams)
+		}
+	}
+	assert.Equal(t, 1, successes, "exactly one goroutine must win the spin-off claim")
+}
+
+// TestClaimForSpinOffAndClaim_ConcurrentRace_NeverBothSucceed races
+// ClaimJITWalletSliceForSpinOff against the real redemption path,
+// ClaimJITWalletSlice, for the same slice — both are exclusive-consumption
+// operations on the same "claimed_at IS NULL" guard, so at most one may ever
+// win, exactly like two concurrent real redeems already can't both succeed.
+func TestClaimForSpinOffAndClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	const trials = 200
+	for trial := 0; trial < trials; trial++ {
+		hub := newJITHub(t, svc, 10_000, 3600)
+		wallet := newJITWallet(t, svc, hub)
+		pubkey := randomHex32()
+		require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+		}))
+
+		ready := make(chan struct{})
+		var wg sync.WaitGroup
+		var spinOffErr, claimErr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, spinOffErr = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+		}()
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, claimErr = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+		}()
+		close(ready)
+		wg.Wait()
+
+		spinOffWon := spinOffErr == nil
+		claimWon := claimErr == nil
+		require.Falsef(t, spinOffWon && claimWon, "trial %d: spin-off and redeem both reported success for the same slice", trial)
+		require.Truef(t, spinOffWon || claimWon, "trial %d: neither op succeeded (spinOffErr=%v claimErr=%v)", trial, spinOffErr, claimErr)
+	}
+}
+
+// TestClaimForSpinOffAndTransfer_ConcurrentRace_NeverBothSucceed mirrors
+// TestClaimAndTransferJITWalletSlice_ConcurrentRace_NeverBothSucceed, this
+// time racing the spin-off claim against an in-place jit_transfer.
+func TestClaimForSpinOffAndTransfer_ConcurrentRace_NeverBothSucceed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	const trials = 200
+	for trial := 0; trial < trials; trial++ {
+		hub := newJITHub(t, svc, 1_000_000, 3600)
+		wallet := newJITWallet(t, svc, hub)
+		pubkey := randomHex32()
+		newPubkey := randomHex32()
+		require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+		}))
+
+		ready := make(chan struct{})
+		var wg sync.WaitGroup
+		var spinOffErr, transferErr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, spinOffErr = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+		}()
+		go func() {
+			defer wg.Done()
+			<-ready
+			_, transferErr = svc.AppsService.TransferJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pubkey, db.JITAllocIdentityPubkey, newPubkey, "")
+		}()
+		close(ready)
+		wg.Wait()
+
+		spinOffWon := spinOffErr == nil
+		transferWon := transferErr == nil
+		require.Falsef(t, spinOffWon && transferWon, "trial %d: spin-off and transfer both reported success for the same slice", trial)
+		require.Truef(t, spinOffWon || transferWon, "trial %d: neither op succeeded (spinOffErr=%v transferErr=%v)", trial, spinOffErr, transferErr)
+		if transferWon {
+			claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, newPubkey)
+			require.NoError(t, err)
+			require.NotNil(t, claim, "trial %d: a winning transfer must leave its new identity claimable", trial)
+		}
+	}
+}
+
+// --- SetJITWalletSliceSpunOffTarget ---
+
+func TestSetJITWalletSliceSpunOffTarget_Success(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	newWallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+	_, err = svc.AppsService.ClaimJITWalletSliceForSpinOff(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.AppsService.SetJITWalletSliceSpunOffTarget(wallet.ID, db.JITAllocIdentityPubkey, pubkey, newWallet.ID))
+
+	var claim db.JITWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
+		wallet.ID, db.JITAllocIdentityPubkey, pubkey).First(&claim).Error)
+	require.NotNil(t, claim.SpunOffToWalletAppID)
+	assert.Equal(t, newWallet.ID, *claim.SpunOffToWalletAppID)
+}
+
+// TestSetJITWalletSliceSpunOffTarget_NoOpWhenNotClaimed verifies the guard is
+// real: calling it against a slice that was never claimed for spin-off must
+// not tag an otherwise-ordinary unclaimed slice as spun off.
+func TestSetJITWalletSliceSpunOffTarget_NoOpWhenNotClaimed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newJITHub(t, svc, 10_000, 3600)
+	wallet := newJITWallet(t, svc, hub)
+	newWallet := newJITWallet(t, svc, hub)
+	pubkey := randomHex32()
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
+	}))
+
+	require.NoError(t, svc.AppsService.SetJITWalletSliceSpunOffTarget(wallet.ID, db.JITAllocIdentityPubkey, pubkey, newWallet.ID))
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, pubkey)
+	require.NoError(t, err)
+	require.NotNil(t, claim, "an untouched slice must still be a normal unclaimed slice")
+	assert.Nil(t, claim.SpunOffToWalletAppID)
 }

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -487,13 +492,26 @@ func TestHandleJITTransferEvent_WrongSignature_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-func TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_Rejected(t *testing.T) {
+// TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet
+// covers a multi-recipient wallet where every OTHER slice is still
+// unclaimed — the mixing check used to reject this outright; now it spins
+// the slice off into its own dedicated wallet instead (see
+// TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet
+// for the full inner-encryption-exclusivity assertions this test doesn't
+// repeat). The one thing worth checking here specifically: the untouched
+// cotenant's own slice must be completely unaffected.
+func TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 2000)
+	wallet := newFundedJITWallet(t, svc, hub, 200_000)
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-spinoff", Amount: 1000},
+	}
 
 	currentPrivkey := nostr.GeneratePrivateKey()
 	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
@@ -503,20 +521,29 @@ func TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_Rejected(t *
 		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: otherPubkey, AmountMloki: 1000},
 	}))
 
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, "", nil, time.Now())
+	_, newSecretHash := bearerSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
 	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
 		IdentityType:  db.JITAllocIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer},
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
 	})
 
-	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	require.Nil(t, response.Error)
+	result, ok := response.Result.(jitTransferResponse)
+	require.True(t, ok, "unexpected result type %T", response.Result)
+	require.NotEmpty(t, result.NewWalletToken)
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
+	// The un-transferred cotenant's own slice is completely unaffected.
+	otherClaim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, otherPubkey)
 	require.NoError(t, err)
-	assert.NotNil(t, claim, "a rejected transfer must not have touched the slice")
+	require.NotNil(t, otherClaim)
+	assert.Equal(t, int64(1000), otherClaim.AmountMloki)
+
+	oldClaim := jitWalletClaimByIdentity(t, svc, wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
+	require.NotNil(t, oldClaim.ClaimedAt)
+	require.NotNil(t, oldClaim.SpunOffToWalletAppID)
 }
 
 func TestHandleJITTransferEvent_MaxTransfersCapEnforced(t *testing.T) {
@@ -712,23 +739,51 @@ func TestHandleJITTransferEvent_ConcurrentTransfers_OnlyOneSucceeds(t *testing.T
 	assert.Equal(t, 1, successes, "exactly one of two concurrent transfers of the same slice must succeed")
 }
 
-// TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected is a
-// regression test for an independent-audit finding (2026-07-28b): a bearer
-// slice is safe only when no other party has ever held the wallet's shared
-// NWC connection, because a bearer redeem transmits the raw secret in the
-// request body — decryptable by every party that ever received the (single,
-// shared) pairing secret, whether or not they've since claimed their own
-// slice and moved on. TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_Rejected
-// above only covers two still-unclaimed slices; this covers the gap where
-// one of them has already been claimed but its former holder still has the
-// connection.
-func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected(t *testing.T) {
+// TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet
+// is a regression test for an independent-audit finding (2026-07-28b): a
+// bearer slice used to be safe only when no other party had ever held the
+// wallet's shared NWC connection, because a bearer redeem transmits the raw
+// secret in the request body — decryptable by every party that ever received
+// the (single, shared) pairing secret, whether or not they've since claimed
+// their own slice and moved on.
+// TestHandleJITTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet
+// covers the still-unclaimed-cotenant case (also spun off, same as this one
+// — the mixing check no longer distinguishes claimed from unclaimed
+// cotenants, since spin-off leaves the shared connection entirely either
+// way); this test's own distinct value is specifically the CLAIMED-cotenant
+// case, since a former mixing check bug (fixed separately — see
+// TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed) also
+// touched claimed-cotenant accounting. Rather than reject outright,
+// jit_transfer moves the victim's slice into a brand-new dedicated wallet
+// whose connection is delivered nested-encrypted to the victim's own pubkey
+// — so the attacker, despite still holding the shared connection this
+// response itself travels over, gets nothing usable out of it.
+func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 2000)
+	// Funded well above MockInvoice's own fixed baked-in amount (123000
+	// mloki) — the mock LN client's default MakeInvoice response doesn't
+	// reflect whatever amount is actually requested (see
+	// jitwallet/create_test.go's TestCreate_ConcurrentCreation_BothIndependentlySucceed
+	// for the same accommodation), so the source wallet's balance has to
+	// absorb that fixed amount regardless of the 1000-mloki slice being
+	// spun off.
+	wallet := newFundedJITWallet(t, svc, hub, 200_000)
+	mockLN := svc.LNClient.(*tests.MockLn)
+	// Matches MockInvoice's own embedded Payee — without this, the mock LN
+	// client's self-payment interception (transactions_service.go's
+	// interceptSelfPayment, keyed on paymentRequest.Payee == lnClient.GetPubkey())
+	// never fires, and the internal transfer's incoming leg is left PENDING
+	// forever instead of settling. Same constant every other test that
+	// exercises a real internal transfer through this mock uses (e.g.
+	// transactions/self_payments_test.go).
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-spinoff", Amount: 1000},
+	}
 
 	// Two original recipients of the SAME shared connection: the attacker and
 	// the victim. Both hold the wallet's one pairing secret.
@@ -748,10 +803,11 @@ func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected(t *t
 	_, err = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, attackerPubkey)
 	require.NoError(t, err)
 
-	// The victim now tries to transfer their still-unclaimed slice into a
-	// bearer note to hand it off as cash. Only the victim's slice is
-	// unclaimed, but the attacker — a claimed co-tenant — is still on this
-	// connection, so this MUST still be rejected.
+	childrenBefore, err := svc.AppsService.ListJITHubWalletChildren(hub.ID)
+	require.NoError(t, err)
+
+	// The victim now transfers their still-unclaimed slice into a bearer
+	// note to hand it off as cash.
 	_, newSecretHash := bearerSecretAndHash(t)
 	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
 
@@ -762,13 +818,83 @@ func TestHandleJITTransferEvent_TransferIntoBearer_ClaimedCotenant_Rejected(t *t
 		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
 	})
 
-	require.NotNil(t, response.Error, "transfer into bearer must be rejected when the wallet ever had co-recipients who still hold the shared connection")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	require.Nil(t, response.Error, "a claimed co-tenant must no longer block spinning a slice off into its own wallet")
+	result, ok := response.Result.(jitTransferResponse)
+	require.True(t, ok, "unexpected result type %T", response.Result)
+	assert.Equal(t, uint64(1000), result.AmountMloki)
+	assert.Equal(t, db.JITAllocIdentityBearer, result.IdentityType)
+	assert.Equal(t, newSecretHash, result.IdentityValue)
+	require.NotEmpty(t, result.NewWalletToken, "spin-off must deliver the new wallet's connection")
 
-	// The victim's slice must be untouched by the rejected transfer.
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, victimPubkey)
+	// The victim's OLD slice is now terminal, distinct from a real
+	// redemption: claimed, and tagged with exactly which wallet it moved to.
+	oldClaim := jitWalletClaimByIdentity(t, svc, wallet.ID, db.JITAllocIdentityPubkey, victimPubkey)
+	require.NotNil(t, oldClaim.ClaimedAt, "the spun-off slice must be terminal so it can never be redeemed or transferred again")
+	require.NotNil(t, oldClaim.SpunOffToWalletAppID)
+
+	// Exactly one new jit_wallet child of the SAME hub appeared.
+	childrenAfter, err := svc.AppsService.ListJITHubWalletChildren(hub.ID)
 	require.NoError(t, err)
-	assert.NotNil(t, claim, "a rejected transfer must not have reassigned the slice to bearer")
+	require.Len(t, childrenAfter, len(childrenBefore)+1)
+	var newWallet *db.App
+	for i := range childrenAfter {
+		if childrenAfter[i].ID == *oldClaim.SpunOffToWalletAppID {
+			newWallet = &childrenAfter[i]
+		}
+	}
+	require.NotNil(t, newWallet, "spun-off target must be a real child of the hub")
+	assert.Equal(t, db.AppKindJITWallet, newWallet.Kind)
+	require.NotEmpty(t, result.NewWalletPubkey)
+	assert.Equal(t, *newWallet.WalletPubkey, result.NewWalletPubkey, "the plaintext pubkey the response hands the caller must be the real new wallet's own")
+
+	// The new wallet is funded with exactly the victim's slice amount and
+	// holds one unclaimed bearer slice for the caller-supplied commitment.
+	assert.Equal(t, int64(1000), queries.GetIsolatedBalance(svc.DB, newWallet.ID))
+	newClaim, err := svc.AppsService.GetJITWalletClaim(newWallet.ID, db.JITAllocIdentityBearer, newSecretHash)
+	require.NoError(t, err)
+	require.NotNil(t, newClaim)
+	assert.Equal(t, int64(1000), newClaim.AmountMloki)
+
+	// The inner token decrypts for the victim using ONLY what a real
+	// black-box caller would actually have: their own privkey plus
+	// result.NewWalletPubkey from the response itself (never looked up from
+	// the DB — a real caller has no DB access). ECDH is symmetric, so
+	// (NewWalletPubkey, victim privkey) derives the same conversation key as
+	// (victim pubkey, new wallet's own privkey), which is what the wallet
+	// actually encrypted with (mirrors create_circle_wallet_controller.go's
+	// identical WalletPubkey-in-the-clear delivery pattern)...
+	victimCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, result.NewWalletPubkey, victimPrivkey)
+	require.NoError(t, err)
+	decrypted, err := victimCipher.Decrypt(result.NewWalletToken)
+	require.NoError(t, err, "the intended recipient must be able to decrypt the inner token")
+	decodedToken, err := lokicash.Decode(decrypted)
+	require.NoError(t, err)
+	assert.Equal(t, *newWallet.WalletPubkey, decodedToken.WalletPubkey)
+
+	// ...but NOT for the attacker, despite the attacker still holding this
+	// wallet's own shared (outer) connection — and despite the attacker
+	// ALSO seeing the same plaintext result.NewWalletPubkey and result.NewWalletToken
+	// the victim does (this whole response is decryptable by every holder of
+	// the shared outer connection) — the whole point of the inner encryption
+	// layer is that a bare pubkey plus ciphertext is useless without the
+	// victim's own privkey, which the attacker never has.
+	attackerCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, result.NewWalletPubkey, attackerPrivkey)
+	require.NoError(t, err)
+	_, err = attackerCipher.Decrypt(result.NewWalletToken)
+	assert.Error(t, err, "a claimed co-tenant must not be able to decrypt the spun-off wallet's connection")
+}
+
+// jitWalletClaimByIdentity looks up a JITWalletClaim regardless of its
+// claimed_at state — unlike AppsService.GetJITWalletClaim (which only ever
+// returns unclaimed rows), tests that need to inspect a slice AFTER it's been
+// claimed or spun off need the raw row.
+func jitWalletClaimByIdentity(t *testing.T, svc *tests.TestService, walletAppID uint, identityType, identityValue string) *db.JITWalletClaim {
+	t.Helper()
+	var claim db.JITWalletClaim
+	err := svc.DB.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
+		walletAppID, identityType, identityValue).First(&claim).Error
+	require.NoError(t, err)
+	return &claim
 }
 
 // TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed is a
@@ -847,4 +973,111 @@ func TestHandleJITTransferEvent_RaceAgainstJITRedeem_NeverBothSucceed(t *testing
 		})
 		require.NotNil(t, oldRedeemResp.Error, "the pre-transfer secret must no longer redeem")
 	}
+}
+
+// TestHandleJITTransferEvent_SpinOff_FundingFailure_RollsBack verifies
+// handleJITTransferSpinOff's claim-then-fund-then-rollback-on-failure
+// ordering: if the new wallet's funding transfer fails after the source
+// slice has already been exclusively claimed, that claim must be undone
+// (UnclaimJITWalletSlice) rather than left stranded — a caller who hits this
+// error can safely retry the exact same request.
+func TestHandleJITTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 200_000)
+
+	// No self-payment pubkey override here, deliberately: this forces
+	// SendPaymentSync down its normal (non-intercepted) path, where a queued
+	// PayInvoiceError actually has somewhere to bite.
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
+	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	otherPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: otherPubkey, AmountMloki: 1000},
+	}))
+
+	childrenBefore, err := svc.AppsService.ListJITHubWalletChildren(hub.ID)
+	require.NoError(t, err)
+
+	_, newSecretHash := bearerSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_INTERNAL, response.Error.Code)
+
+	// The source slice must be rolled back to unclaimed, not stranded.
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
+	require.NoError(t, err)
+	require.NotNil(t, claim, "a failed spin-off must roll back the source slice's claim so the caller can retry")
+	assert.Nil(t, claim.SpunOffToWalletAppID)
+
+	// The half-created wallet must have been deleted, not left stranded.
+	childrenAfter, err := svc.AppsService.ListJITHubWalletChildren(hub.ID)
+	require.NoError(t, err)
+	assert.Len(t, childrenAfter, len(childrenBefore), "a failed spin-off must not leave a half-created wallet behind")
+
+	// A retry (this time with the payment succeeding) must now work.
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-retry", Amount: 1000},
+	}
+	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
+	retryResponse := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, retryProof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
+	})
+	require.Nil(t, retryResponse.Error, "a retry after a rolled-back spin-off must succeed")
+}
+
+// TestHandleJITTransferEvent_SpinOff_TransferCapEnforced verifies a spin-off
+// respects the wallet's own MaxTransfers cap the same way an in-place
+// transfer does — a spin-off is conceptually a transfer of the slice's
+// value, so it must not bypass a cap the wallet's creator configured.
+func TestHandleJITTransferEvent_SpinOff_TransferCapEnforced(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 200_000)
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	otherPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000, MaxTransfers: 1, TransferCount: 1},
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: otherPubkey, AmountMloki: 1000},
+	}))
+
+	_, newSecretHash := bearerSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
+	require.NoError(t, err)
+	require.NotNil(t, claim, "a slice rejected for exceeding its transfer cap must remain untouched")
 }

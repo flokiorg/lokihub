@@ -134,7 +134,16 @@ type JITWalletClaim struct {
 	// TransferCount is incremented atomically by jit_transfer, checked
 	// against MaxTransfers before each transfer.
 	TransferCount int
-	CreatedAt     time.Time
+	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
+	// value was moved into a brand-new dedicated jit_wallet rather than
+	// redeemed via a real Lightning payment — see
+	// AppsService.ClaimJITWalletSliceForSpinOff. Purely informational: every
+	// atomic guard elsewhere already treats ClaimedAt != nil as terminal
+	// regardless of which mechanism set it, so this column is never read by
+	// any guard, only by callers (e.g. list_recipients) that want to explain
+	// *why* a slice is claimed with no matching payment record.
+	SpunOffToWalletAppID *uint
+	CreatedAt            time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +

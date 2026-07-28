@@ -236,6 +236,63 @@ func (svc *appsService) TransferJITWalletSlice(walletAppID uint, currentIdentity
 	return claim.AmountMloki, nil
 }
 
+// ClaimJITWalletSliceForSpinOff atomically claims one unclaimed slice ahead of
+// moving its value into a brand-new dedicated jit_wallet (see
+// jitwallet.SpinOff / jit_transfer_controller.go's bearer-into-multi-recipient
+// path). It is deliberately its own atomic operation rather than a reuse of
+// ClaimJITWalletSlice: a spin-off is conceptually a transfer (the slice's
+// value leaves this wallet for a new one the caller now exclusively controls)
+// so it must respect the wallet's own MaxTransfers cap the same way
+// TransferJITWalletSlice does — ClaimJITWalletSlice (real redemption) never
+// checks that cap, since redeeming isn't a transfer.
+//
+// Identity fields are never modified by this call — only ClaimedAt — so on
+// failure after this succeeds (new wallet creation/funding failed), a plain
+// UnclaimJITWalletSlice(walletAppID, identityType, identityValue) correctly
+// rolls it back; no dedicated "undo" method is needed.
+func (svc *appsService) ClaimJITWalletSliceForSpinOff(walletAppID uint, identityType, identityValue string) (int64, error) {
+	var claim db.JITWalletClaim
+	if err := svc.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL",
+		walletAppID, identityType, identityValue).First(&claim).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, fmt.Errorf("%w: no unclaimed slice for this identity", constants.ErrInvalidParams)
+		}
+		return 0, err
+	}
+	if claim.MaxTransfers > 0 && claim.TransferCount >= claim.MaxTransfers {
+		return 0, fmt.Errorf("%w: this slice has reached its transfer limit; it can only be redeemed now", constants.ErrInvalidParams)
+	}
+	// Optimistic lock on transfer_count mirrors TransferJITWalletSlice: a
+	// concurrent transfer that advances transfer_count out from under this
+	// read makes this update match zero rows, so a spin-off can't slip past
+	// the cap on a stale read the way a bare "claimed_at IS NULL" guard would
+	// allow.
+	result := svc.db.Model(&db.JITWalletClaim{}).
+		Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ?",
+			claim.ID, identityType, identityValue, claim.TransferCount).
+		Update("claimed_at", time.Now())
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, fmt.Errorf("%w: no unclaimed slice for this identity", constants.ErrInvalidParams)
+	}
+	return claim.AmountMloki, nil
+}
+
+// SetJITWalletSliceSpunOffTarget records which new wallet a just-claimed
+// slice's value was spun off into — purely informational (see
+// db.JITWalletClaim.SpunOffToWalletAppID doc comment). Called only after the
+// new wallet has been successfully created and funded, so the guard here is
+// defensive rather than load-bearing: nothing else can be racing this exact
+// row once ClaimJITWalletSliceForSpinOff has claimed it.
+func (svc *appsService) SetJITWalletSliceSpunOffTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error {
+	return svc.db.Model(&db.JITWalletClaim{}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NULL",
+			walletAppID, identityType, identityValue).
+		Update("spun_off_to_wallet_app_id", newWalletAppID).Error
+}
+
 // DeleteJITWalletClaim removes an unclaimed slice. The caller is responsible
 // for sweeping its AmountMloki back to the hub before calling this — the
 // returned row gives the caller the amount to sweep.
