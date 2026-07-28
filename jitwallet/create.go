@@ -535,6 +535,172 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	}, nil
 }
 
+// SpinOffParams describes moving one bearer slice's value out of an existing
+// jit_wallet into a brand-new, dedicated one — see NIP-JW's "Spinning a slice
+// off into a dedicated wallet" section. Unlike Commit (which funds its new
+// child from HubApp), the funding source here is a jit_wallet, not the hub:
+// HubApp only supplies naming/lineage (the new wallet is a child of the SAME
+// hub the source wallet already belongs to), while SourceWalletApp is the
+// actual isolated-balance app the transfer pays from.
+type SpinOffParams struct {
+	HubApp          *db.App
+	SourceWalletApp *db.App
+	// AmountMloki is the exact value moved into the new wallet — the source
+	// slice's own AmountMloki, already known and validated by the caller
+	// (jit_transfer_controller.go) before this is called.
+	AmountMloki uint64
+	// BearerCommitment is the caller-supplied sha256(secret) hex commitment
+	// for the new wallet's sole slice — never a secret this package mints,
+	// for the same reason jit_transfer's in-place bearer path requires a
+	// caller-supplied commitment (see jit_transfer_controller.go's bearer
+	// branch doc comment: a server-minted secret would be readable by every
+	// co-recipient of the connection this response travels over before the
+	// caller could ever deliver it — SpinOff exists specifically to give
+	// those slices somewhere safe to go instead).
+	BearerCommitment string
+	// MaxTransfers is inherited from the source slice, preserving whatever
+	// transfer policy the wallet's creator originally configured rather than
+	// resetting it on spin-off.
+	MaxTransfers int
+	ExpiresAt    time.Time
+}
+
+// SpinOffResult carries what jit_transfer_controller.go needs to deliver the
+// new wallet's connection to its caller — deliberately narrower than Result:
+// a spun-off wallet's connection is never broadcast in the clear the way a
+// freshly create_jit_wallet-issued one is (Result.PairingURI). The caller
+// NIP-44 encrypts LokicashToken to the recipient's own pubkey before it ever
+// reaches a response, keyed on WalletApp's own wallet keypair (mirroring
+// create_circle_wallet_controller.go's identical encryptedURI/WalletPubkey
+// pattern — see that controller's doc comment) — this package deliberately
+// stays ignorant of NIP-47 encryption, same as it does everywhere else (see
+// the package doc comment), so that step happens in the caller, not here.
+type SpinOffResult struct {
+	WalletApp     *db.App
+	LokicashToken string
+}
+
+// SpinOff creates one spend-only, single-bearer-slice jit_wallet child of
+// params.HubApp and funds it via a single internal transfer from
+// params.SourceWalletApp's own isolated balance — structurally the same
+// create-then-fund-last, rollback-via-DeleteApp shape as Commit (see that
+// function's doc comment for the rationale), just with the parent and the
+// funding source split into two different apps instead of one.
+//
+// The caller is responsible for having already exclusively claimed the
+// source slice (AppsService.ClaimJITWalletSliceForSpinOff) before calling
+// this, and for rolling that claim back (UnclaimJITWalletSlice) if this
+// returns an error — SpinOff itself never touches the source wallet's
+// JITWalletClaim rows, only its balance.
+func SpinOff(ctx context.Context, deps Deps, params SpinOffParams) (*SpinOffResult, error) {
+	newApp, _, err := deps.AppsService.CreateApp(
+		apps.GenerateChildName(params.HubApp.Name, params.BearerCommitment),
+		"", // generate a temporary random keypair; overridden immediately below
+		params.AmountMloki/1000,
+		constants.BUDGET_RENEWAL_NEVER,
+		&params.ExpiresAt,
+		jitWalletScopes,
+		db.AppKindJITWallet,
+		&params.HubApp.ID,
+		db.ParentKindJIT,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create spun-off JIT wallet app: %w", err)
+	}
+
+	// Same reversible-until-funded shape as Commit: everything below is
+	// undone by deleting newApp unless the transfer at the very end succeeds.
+	fundsTransferred := false
+	defer func() {
+		if fundsTransferred {
+			return
+		}
+		_ = deps.AppsService.DeleteApp(newApp)
+	}()
+
+	pairingSecretKey, err := deps.Keys.GetJITPairingKey(newApp.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive JIT pairing key: %w", err)
+	}
+	deterministicPubKey, err := nostr.GetPublicKey(pairingSecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive JIT pairing pubkey: %w", err)
+	}
+	if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
+		Update("app_pubkey", deterministicPubKey).Error; err != nil {
+		return nil, fmt.Errorf("failed to register pairing key: %w", err)
+	}
+	newApp.AppPubkey = deterministicPubKey
+	walletPubkey := *newApp.WalletPubkey
+
+	if err := deps.AppsService.CreateJITWalletClaims(newApp.ID, []db.JITWalletClaim{{
+		IdentityType:  db.JITAllocIdentityBearer,
+		IdentityValue: params.BearerCommitment,
+		AmountMloki:   int64(params.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by the source slice's own AmountMloki, already validated when that slice was created/resolved
+		MaxTransfers:  params.MaxTransfers,
+	}}); err != nil {
+		return nil, fmt.Errorf("failed to store spun-off recipient claim: %w", err)
+	}
+
+	// The one irreversible step, done last for the same reason Commit does:
+	// once funds move, nothing after this can fail and leave the new wallet
+	// stranded or invisible. Pays from SourceWalletApp (an isolated-balance
+	// jit_wallet), not HubApp — validateCanPay's isolated-balance check and
+	// enforceJITFullDrain both key off the PAYING app, and internal_transfer
+	// metadata (stripped at every external NWC entry point) exempts this
+	// privileged, Go-level-only transfer from both the full-drain guard and
+	// the pay_invoice-scope requirement a jit_wallet's real NWC connection
+	// deliberately never has.
+	invoice, err := deps.TransactionsService.MakeInvoice(
+		ctx, params.AmountMloki, "jit spin-off", "", 0,
+		nil, deps.LNClient, &newApp.ID, nil, nil, nil, nil, nil, nil,
+		&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transfer invoice for spun-off JIT wallet: %w", err)
+	}
+
+	_, err = deps.TransactionsService.SendPaymentSync(
+		invoice.PaymentRequest, nil,
+		map[string]interface{}{"internal_transfer": true},
+		deps.LNClient, &params.SourceWalletApp.ID, nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fund spun-off JIT wallet via transfer: %w", err)
+	}
+	fundsTransferred = true
+
+	lokicashToken, err := lokicash.Encode(lokicash.Token{
+		HRP:          lokicash.HRP,
+		WalletPubkey: walletPubkey,
+		Secret:       pairingSecretKey,
+		RelayURLs:    deps.RelayURLs,
+	})
+	if err != nil {
+		// Same reasoning as Commit: funds already moved (fundsTransferred,
+		// above), so a defensive encode failure here must not become an
+		// error return — that would tell the caller the spin-off failed when
+		// it actually succeeded, leaving a funded wallet with no way to
+		// deliver its connection. Degrade to an empty token; the caller logs
+		// and the wallet remains recoverable via the admin API.
+		logger.Logger.Error().Err(err).Uint("jit_wallet_id", newApp.ID).
+			Msg("Failed to encode lokicash token for already-funded spun-off JIT wallet")
+	}
+
+	logger.Logger.Info().
+		Uint("jit_wallet_id", newApp.ID).
+		Uint("parent_app_id", params.HubApp.ID).
+		Uint("source_wallet_id", params.SourceWalletApp.ID).
+		Uint64("amount_mloki", params.AmountMloki).
+		Msg("Slice spun off into a new dedicated JIT wallet")
+
+	return &SpinOffResult{
+		WalletApp:     newApp,
+		LokicashToken: lokicashToken,
+	}, nil
+}
+
 // Create resolves every recipient, creates a spend-only jit_wallet child of
 // params.HubApp serving all of them, and funds it via one internal transfer.
 // It is exactly Resolve followed by Commit, for callers (e.g. the admin HTTP

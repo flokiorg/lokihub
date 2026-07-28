@@ -101,10 +101,21 @@ type JITTransferParams struct {
 	NewIdentity JITTransferNewIdentityParam `json:"new_identity"`
 }
 
+// NewWalletPubkey/NewWalletToken are populated only when the transfer spun
+// the slice off into a brand-new dedicated jit_wallet, rather than
+// reassigning identity in place — see NIP-JW "Spinning a slice off into a
+// dedicated wallet". NewWalletToken is a lokicash1... connection token,
+// itself NIP-44 encrypted to the caller's own pubkey (the one that signed
+// this call's IdentityEvent) using the new wallet's own keypair
+// (NewWalletPubkey plus its matching server-held privkey) — a second, inner
+// encryption layer nested inside this response's own normal per-connection
+// encryption.
 type JITTransferResult struct {
-	AmountMloki   uint64 `json:"amount_mloki"`
-	IdentityType  string `json:"identity_type"`
-	IdentityValue string `json:"identity_value,omitempty"`
+	AmountMloki     uint64 `json:"amount_mloki"`
+	IdentityType    string `json:"identity_type"`
+	IdentityValue   string `json:"identity_value,omitempty"`
+	NewWalletPubkey string `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken  string `json:"new_wallet_token,omitempty"`
 }
 
 // --- list_recipients ---

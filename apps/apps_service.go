@@ -137,6 +137,19 @@ type AppsService interface {
 	// AmountMloki on success.
 	TransferJITWalletSlice(walletAppID uint, currentIdentityType, currentIdentityValue,
 		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
+	// ClaimJITWalletSliceForSpinOff atomically claims one unclaimed slice
+	// ahead of spinning its value off into a brand-new dedicated
+	// jit_wallet, guarded the same way TransferJITWalletSlice is
+	// (claimed_at IS NULL plus an optimistic lock on TransferCount against
+	// MaxTransfers) since a spin-off is conceptually a transfer. Identity
+	// fields are left untouched, so a failure after this succeeds can be
+	// rolled back with a plain UnclaimJITWalletSlice call.
+	ClaimJITWalletSliceForSpinOff(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
+	// SetJITWalletSliceSpunOffTarget records which new wallet a
+	// just-claimed slice's value was spun off into. Purely informational
+	// (see db.JITWalletClaim.SpunOffToWalletAppID) — call only after the
+	// new wallet has been created and funded.
+	SetJITWalletSliceSpunOffTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error
 	// DeleteJITWalletClaim removes an unclaimed slice from a jit_wallet. Returns
 	// an error if the claim is not found, belongs to a different wallet, or has
 	// already been claimed. The caller is responsible for sweeping the slice's

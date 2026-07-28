@@ -50,6 +50,29 @@ type jitTransferResponse struct {
 	AmountMloki   uint64 `json:"amount_mloki"`
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
+	// NewWalletPubkey and NewWalletToken are populated only when this
+	// transfer spun the slice off into a brand-new dedicated jit_wallet (a
+	// bearer target on a wallet that has ever had more than one recipient)
+	// instead of reassigning identity in place.
+	//
+	// NewWalletPubkey is the new wallet's own WalletPubkey, in the clear —
+	// safe to return unencrypted since a bare pubkey with no secret grants
+	// nothing (same reasoning as create_circle_wallet_controller.go's own
+	// plaintext WalletPubkey field). It exists so the recipient can derive
+	// the correct decryption key for NewWalletToken: a fresh one-off keypair
+	// generated only for this response would never reach them any other way.
+	//
+	// NewWalletToken is that new wallet's lokicash1... connection token,
+	// NIP-44 encrypted to the pubkey that signed this call's identity_event
+	// using the new wallet's own keypair (NewWalletPubkey / the matching
+	// server-held privkey) — a second, inner encryption layer nested inside
+	// this response's own normal per-connection encryption. Every
+	// co-recipient of THIS wallet's shared connection can still decrypt the
+	// outer response same as always, but only the caller who just proved
+	// ownership of the slice being spun off can decrypt this field. See
+	// NIP-JW "Spinning a slice off into a dedicated wallet".
+	NewWalletPubkey string `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken  string `json:"new_wallet_token,omitempty"`
 }
 
 // newIdentityHash binds a transfer proof to a specific target identity —
@@ -167,6 +190,17 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 	}
 
 	// 6. Verify the caller is authorized to transfer this slice.
+	//
+	// callerProofPubkey is the pubkey that signed identity_event — the
+	// caller's own authenticated identity, captured here (rather than
+	// re-derived later) since it's only available while identityEvent is in
+	// scope. Used only by the bearer-into-multi-recipient spin-off path
+	// below, to encrypt that new wallet's connection to the caller and no
+	// one else. Stays empty when isBearerCurrent, which is fine: a bearer
+	// slice's wallet can never be multi-recipient (see the invariant note in
+	// the bearer branch below), so the spin-off path never needs it in that
+	// case.
+	var callerProofPubkey string
 	if !isBearerCurrent {
 		var identityEvent nostr.Event
 		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
@@ -190,6 +224,7 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 			return
 		}
+		callerProofPubkey = identityEvent.PubKey
 
 		// Same live IA re-check jit_redeem does — a compromised/retired
 		// Identity Authority must be cut off immediately, including for
@@ -219,6 +254,13 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 	// validation create_jit_wallet applies to a recipient entry — not
 	// duplicated), or the bearer-exclusivity rule for a bearer target.
 	var newIdentityValueToStore, newIAPubkeyToStore string
+	// spinOff is set true only for a bearer target on a wallet that has ever
+	// had more than one recipient: rather than reassigning identity in place
+	// (which the mixing check below still flatly rejects for every other
+	// case), that specific combination is handled by moving the slice's
+	// value into a brand-new dedicated wallet instead — see the spin-off
+	// branch after this switch and jitwallet.SpinOff's doc comment.
+	var spinOff bool
 	switch newIdentityType {
 	case db.JITAllocIdentityBearer:
 		// A bearer slice never shares a wallet with another recipient
@@ -228,21 +270,30 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 		// connection secret indefinitely (nothing rotates or revokes it per
 		// recipient), and a bearer redemption transmits its raw secret in the
 		// request body — decryptable by anyone on that connection, claimed or
-		// not. Transferring the last unclaimed slice into bearer while a
+		// not. Converting the last unclaimed slice to bearer IN PLACE while a
 		// former co-recipient is still listening would hand that co-recipient
-		// everything they need to steal it. Mirrors create_jit_wallet's own
-		// invariant (jitwallet.Resolve: a bearer recipient must be the
-		// request's only recipient), just evaluated against this wallet's
-		// full recipient history instead of a single request.
+		// everything they need to steal it — so in-place conversion stays
+		// restricted to a wallet that has only ever had one recipient, exactly
+		// like jitwallet.Resolve's own invariant for create_jit_wallet. A
+		// multi-recipient wallet's slice can still become a bearer note; it
+		// just has to leave this connection entirely to do it (spinOff,
+		// below), rather than reuse it.
 		allClaims, err := controller.appsService.ListClaimsForWallet(app.ID)
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list JIT wallet claims")
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list claims")
 			return
 		}
-		if len(allClaims) != 1 {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"a bearer slice cannot share a wallet with other recipients; this wallet has ever had more than one")
+		spinOff = len(allClaims) != 1
+		if spinOff && isBearerCurrent {
+			// Structurally unreachable: a bearer slice's wallet can never
+			// have more than one recipient (jitwallet.Resolve requires a
+			// bearer recipient to be the wallet's only one at creation, and
+			// no later operation ever adds a second claim row to an existing
+			// wallet), so isBearerCurrent implies allClaims is exactly 1.
+			// Rejected defensively rather than trusting that invariant blindly.
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED,
+				"a bearer slice's wallet can never have more than one recipient")
 			return
 		}
 		// The bearer secret itself MUST be caller-supplied (as a commitment,
@@ -280,7 +331,18 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 		newIAPubkeyToStore = params.NewIdentity.IAPubkey
 	}
 
-	// 8. Atomically transfer the slice — guards against races and enforces
+	// 8. A spin-off is a different, larger operation than every other
+	// jit_transfer outcome — it consumes the slice, creates and funds a new
+	// wallet, and delivers that wallet's connection through a nested
+	// encryption layer instead of reassigning identity_type/identity_value on
+	// this row. Handled entirely by its own method and returns either way.
+	if spinOff {
+		controller.handleJITTransferSpinOff(ctx, nip47Request, app, currentIdentityType, currentIdentityValue,
+			newIdentityValueToStore, callerProofPubkey, publishResponse, tags)
+		return
+	}
+
+	// 9. Atomically transfer the slice — guards against races and enforces
 	// the wallet's max_transfers cap.
 	amount, err := controller.appsService.TransferJITWalletSlice(app.ID,
 		currentIdentityType, currentIdentityValue,
@@ -305,6 +367,158 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 			AmountMloki:   uint64(amount), //nolint:gosec // AmountMloki is always non-negative
 			IdentityType:  newIdentityType,
 			IdentityValue: newIdentityValueToStore,
+		},
+	}, tags)
+}
+
+// handleJITTransferSpinOff moves an identity-bound slice's value out of a
+// multi-recipient jit_wallet and into a brand-new, dedicated, single-bearer
+// jit_wallet under the same hub — the only way a multi-recipient wallet's
+// slice can become a bearer note (see the spinOff branch in
+// HandleJITTransferEvent's step 7). newBearerCommitment is the caller's own
+// sha256(secret) commitment, already validated by the caller; recipientPubkey
+// is the pubkey that just proved ownership of the slice being spun off
+// (identity_event's signer) — the new wallet's connection is encrypted to
+// this pubkey and no one else, so it never touches the shared connection this
+// response itself travels over.
+//
+// Ordering mirrors claim_funds_controller.go's own claim-then-pay-then-
+// rollback-on-failure shape: the old slice is claimed FIRST (an exclusive,
+// atomic commit point — see ClaimJITWalletSliceForSpinOff), then the new
+// wallet is created and funded; any failure after the claim rolls it back via
+// UnclaimJITWalletSlice, so a caller who hits an error here can safely retry.
+func (controller *nip47Controller) handleJITTransferSpinOff(ctx context.Context, nip47Request *models.Request, app *db.App,
+	currentIdentityType, currentIdentityValue, newBearerCommitment, recipientPubkey string,
+	publishResponse publishFunc, tags nostr.Tags) {
+	amount, err := controller.appsService.ClaimJITWalletSliceForSpinOff(app.ID, currentIdentityType, currentIdentityValue)
+	if err != nil {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
+		return
+	}
+
+	rollback := func() {
+		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, currentIdentityType, currentIdentityValue); unclaimErr != nil {
+			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).
+				Msg("Failed to roll back a claimed slice after a failed jit_transfer spin-off")
+		}
+	}
+
+	if app.ParentAppID == nil {
+		rollback()
+		logger.Logger.Error().Uint("app_id", app.ID).Msg("jit_wallet has no parent hub; cannot spin off a slice")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to spin off slice")
+		return
+	}
+	hubApp := controller.appsService.GetAppById(*app.ParentAppID)
+	if hubApp == nil {
+		rollback()
+		logger.Logger.Error().Uint("app_id", app.ID).Uint("hub_app_id", *app.ParentAppID).Msg("jit_wallet's parent hub no longer exists")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to spin off slice")
+		return
+	}
+
+	// The new wallet inherits the source slice's own expiry and transfer
+	// policy — a real jit_wallet's ExpiresAt is always set at creation
+	// (Commit never leaves it nil), so the fallback below is defensive only.
+	// MaxTransfers is re-read from ListClaimsForWallet rather than the
+	// earlier read-only claim lookup (step 5) because that lookup ran before
+	// this slice was claimed and its result isn't in scope here; the row is
+	// still findable by identity since spin-off never changes identity_type/
+	// identity_value, only claimed_at.
+	expiresAt := time.Now().Add(24 * time.Hour)
+	if app.ExpiresAt != nil {
+		expiresAt = *app.ExpiresAt
+	}
+	maxTransfers := 0
+	if allClaims, rowErr := controller.appsService.ListClaimsForWallet(app.ID); rowErr == nil {
+		for _, r := range allClaims {
+			if r.IdentityType == currentIdentityType && r.IdentityValue == currentIdentityValue {
+				maxTransfers = r.MaxTransfers
+				break
+			}
+		}
+	}
+
+	result, err := jitwallet.SpinOff(ctx, jitwallet.Deps{
+		AppsService:         controller.appsService,
+		TransactionsService: controller.transactionsService,
+		LNClient:            controller.lnClient,
+		Keys:                controller.keys,
+		DB:                  controller.db,
+		RelayURLs:           controller.cfg.GetRelayUrls(),
+	}, jitwallet.SpinOffParams{
+		HubApp:           hubApp,
+		SourceWalletApp:  app,
+		AmountMloki:      uint64(amount), //nolint:gosec // AmountMloki is always non-negative
+		BearerCommitment: newBearerCommitment,
+		MaxTransfers:     maxTransfers,
+		ExpiresAt:        expiresAt,
+	})
+	if err != nil {
+		rollback()
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to spin off JIT wallet slice")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to spin off slice")
+		return
+	}
+
+	if setErr := controller.appsService.SetJITWalletSliceSpunOffTarget(app.ID, currentIdentityType, currentIdentityValue, result.WalletApp.ID); setErr != nil {
+		// Purely informational (db.JITWalletClaim.SpunOffToWalletAppID doc
+		// comment) — the funds have already moved and the new wallet is
+		// already live, so this must not fail the request.
+		logger.Logger.Error().Err(setErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.WalletApp.ID).
+			Msg("Failed to record spin-off target on the source slice")
+	}
+
+	// Encrypted to recipientPubkey using the NEW wallet's OWN wallet keypair
+	// — never a freshly generated one-off key — for the exact reason
+	// create_circle_wallet_controller.go's identical encryptedURI construction
+	// uses circleWalletPrivKey (see that controller): the recipient has to be
+	// able to derive the SAME ECDH conversation key using only their own
+	// privkey plus a pubkey this response also hands them, and a one-off key
+	// invented here would never reach them any other way. newWalletPubkey is
+	// safe to return in the clear alongside the ciphertext — same reasoning
+	// as create_circle_wallet_controller.go's own plaintext WalletPubkey
+	// field: a bare pubkey with no secret grants nothing.
+	newWalletPubkey := ""
+	if result.WalletApp.WalletPubkey != nil {
+		newWalletPubkey = *result.WalletApp.WalletPubkey
+	}
+	newWalletPrivKey, err := controller.keys.GetAppWalletKey(result.WalletApp.ID)
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Uint("new_wallet_id", result.WalletApp.ID).
+			Msg("Failed to derive spun-off wallet's own key; funds moved but could not be delivered over this connection")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+			"slice was spun off but its connection could not be delivered; contact the wallet operator")
+		return
+	}
+	encryptedToken, err := encryptPairingURI(recipientPubkey, newWalletPrivKey, result.LokicashToken)
+	if err != nil {
+		// Unlike Commit's own degrade-to-empty-token fallback, there is no
+		// plaintext fallback here — putting the token in the outer response
+		// unencrypted would defeat the entire reason spin-off exists. The new
+		// wallet is funded and otherwise fine; it just can't be delivered
+		// over this channel. Logged at Error so an admin can locate
+		// new_wallet_id and hand its connection to the recipient another way.
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Uint("new_wallet_id", result.WalletApp.ID).
+			Msg("Failed to encrypt spun-off wallet token; funds moved but could not be delivered over this connection")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+			"slice was spun off but its connection could not be delivered; contact the wallet operator")
+		return
+	}
+
+	logger.Logger.Info().
+		Uint("app_id", app.ID).
+		Uint("new_wallet_id", result.WalletApp.ID).
+		Msg("JIT wallet slice spun off into a new dedicated wallet")
+
+	publishResponse(&models.Response{
+		ResultType: nip47Request.Method,
+		Result: jitTransferResponse{
+			AmountMloki:     uint64(amount), //nolint:gosec // AmountMloki is always non-negative
+			IdentityType:    db.JITAllocIdentityBearer,
+			IdentityValue:   newBearerCommitment,
+			NewWalletPubkey: newWalletPubkey,
+			NewWalletToken:  encryptedToken,
 		},
 	}, tags)
 }
