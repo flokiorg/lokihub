@@ -508,11 +508,18 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// leaving a funded wallet the caller doesn't know exists. Degrade to an
 	// empty token instead; PairingURI alone is still a fully functional
 	// connection string.
+	// Uniform across every recipient by construction (Resolve requires a
+	// bearer recipient to be this request's only one), so the first
+	// recipient's identity type speaks for the whole wallet.
+	identityRequired := resolved.Recipients[0].IdentityType != db.JITAllocIdentityBearer
+	maxTransfers := resolved.MaxTransfers
 	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:          lokicash.HRP,
-		WalletPubkey: walletPubkey,
-		Secret:       pairingSecretKey,
-		RelayURLs:    deps.RelayURLs,
+		HRP:              lokicash.HRP,
+		WalletPubkey:     walletPubkey,
+		Secret:           pairingSecretKey,
+		RelayURLs:        deps.RelayURLs,
+		IdentityRequired: &identityRequired,
+		MaxTransfers:     &maxTransfers,
 	})
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("jit_wallet_id", newApp.ID).
@@ -671,11 +678,17 @@ func SpinOff(ctx context.Context, deps Deps, params SpinOffParams) (*SpinOffResu
 	}
 	fundsTransferred = true
 
+	// A spun-off wallet is always a single bearer slice, by construction
+	// (SpinOff never creates anything else) — no need to inspect the just-
+	// created claim to know identityRequired is false.
+	identityRequired := false
 	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:          lokicash.HRP,
-		WalletPubkey: walletPubkey,
-		Secret:       pairingSecretKey,
-		RelayURLs:    deps.RelayURLs,
+		HRP:              lokicash.HRP,
+		WalletPubkey:     walletPubkey,
+		Secret:           pairingSecretKey,
+		RelayURLs:        deps.RelayURLs,
+		IdentityRequired: &identityRequired,
+		MaxTransfers:     &params.MaxTransfers,
 	})
 	if err != nil {
 		// Same reasoning as Commit: funds already moved (fundsTransferred,

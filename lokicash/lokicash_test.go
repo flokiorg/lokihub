@@ -72,6 +72,113 @@ func TestEncodeDecode_DifferentHRP(t *testing.T) {
 	assert.Equal(t, in.Secret, out.Secret)
 }
 
+func boolPtr(b bool) *bool { return &b }
+func intPtr(i int) *int    { return &i }
+
+func TestEncodeDecode_RoundTrip_IdentityRequiredAndMaxTransfers(t *testing.T) {
+	cases := []struct {
+		name             string
+		identityRequired *bool
+		maxTransfers     *int
+	}{
+		{"neither set (old-token-shaped)", nil, nil},
+		{"bearer, unlimited transfers", boolPtr(false), intPtr(0)},
+		{"identity-bound, capped transfers", boolPtr(true), intPtr(3)},
+		{"identity-bound set, transfers unset", boolPtr(true), nil},
+		{"transfers set, identity unset", nil, intPtr(5)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := Token{
+				HRP:              HRP,
+				WalletPubkey:     testPubkey(),
+				Secret:           testSecret(),
+				IdentityRequired: tc.identityRequired,
+				MaxTransfers:     tc.maxTransfers,
+			}
+			encoded, err := Encode(in)
+			require.NoError(t, err)
+			out, err := Decode(encoded)
+			require.NoError(t, err)
+			if tc.identityRequired == nil {
+				assert.Nil(t, out.IdentityRequired)
+			} else {
+				require.NotNil(t, out.IdentityRequired)
+				assert.Equal(t, *tc.identityRequired, *out.IdentityRequired)
+			}
+			if tc.maxTransfers == nil {
+				assert.Nil(t, out.MaxTransfers)
+			} else {
+				require.NotNil(t, out.MaxTransfers)
+				assert.Equal(t, *tc.maxTransfers, *out.MaxTransfers)
+			}
+		})
+	}
+}
+
+func TestEncode_RejectsNegativeMaxTransfers(t *testing.T) {
+	_, err := Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), MaxTransfers: intPtr(-1)})
+	assert.Error(t, err)
+}
+
+func TestDecode_RejectsMalformedIdentityRequired(t *testing.T) {
+	t.Run("wrong length", func(t *testing.T) {
+		raw := rawTLV(t, []rawEntry{
+			{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+			{typ: tlvSecret, value: mustHex(t, testSecret())},
+			{typ: tlvIdentityRequired, value: []byte{0, 0}},
+		})
+		_, err := Decode(encodeRaw(t, HRP, raw))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "identity_required must be 1 byte")
+	})
+	t.Run("out of range value", func(t *testing.T) {
+		raw := rawTLV(t, []rawEntry{
+			{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+			{typ: tlvSecret, value: mustHex(t, testSecret())},
+			{typ: tlvIdentityRequired, value: []byte{2}},
+		})
+		_, err := Decode(encodeRaw(t, HRP, raw))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be 0 or 1")
+	})
+	t.Run("duplicate", func(t *testing.T) {
+		raw := rawTLV(t, []rawEntry{
+			{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+			{typ: tlvSecret, value: mustHex(t, testSecret())},
+			{typ: tlvIdentityRequired, value: []byte{1}},
+			{typ: tlvIdentityRequired, value: []byte{0}},
+		})
+		_, err := Decode(encodeRaw(t, HRP, raw))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate identity_required")
+	})
+}
+
+func TestDecode_RejectsMalformedMaxTransfers(t *testing.T) {
+	t.Run("wrong length", func(t *testing.T) {
+		raw := rawTLV(t, []rawEntry{
+			{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+			{typ: tlvSecret, value: mustHex(t, testSecret())},
+			{typ: tlvMaxTransfers, value: []byte{0, 0, 0}},
+		})
+		_, err := Decode(encodeRaw(t, HRP, raw))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "max_transfers must be 4 bytes")
+	})
+	t.Run("duplicate", func(t *testing.T) {
+		raw := rawTLV(t, []rawEntry{
+			{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+			{typ: tlvSecret, value: mustHex(t, testSecret())},
+			{typ: tlvMaxTransfers, value: []byte{0, 0, 0, 1}},
+			{typ: tlvMaxTransfers, value: []byte{0, 0, 0, 2}},
+		})
+		_, err := Decode(encodeRaw(t, HRP, raw))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate max_transfers")
+	})
+}
+
 func TestEncode_RejectsBadWalletPubkey(t *testing.T) {
 	cases := []struct {
 		name   string

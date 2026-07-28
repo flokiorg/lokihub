@@ -198,6 +198,9 @@
     "continueAnyway": "Continuar de todos modos",
     "appConnected": "Aplicación conectada",
     "revealQR": "Mostrar código QR",
-    "copySecret": "Copiar secreto de conexión"
+    "copySecret": "Copiar secreto de conexión",
+    "copyLokicashToken": "Copiar token Lokicash",
+    "copyBearerSecret": "Copiar secreto al portador",
+    "bearerSecretHelper": "Esto es un secreto al portador: quien lo tenga puede canjear los fondos de esta wallet sin ninguna otra prueba. Se muestra solo esta vez; entrega esto junto con la conexión de arriba al destinatario previsto, fuera de banda."
   }
 }

@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "Nostr 公開鍵",
-    "connectionKey": "接続キー"
+    "connectionKey": "接続キー",
+    "bearer": "ベアラー"
   },
   "avatarStack": {
     "more": "他 {{count}} 人"
@@ -214,7 +215,9 @@
       "removeRecipient": "JIT ウォレットの受取人の削除に失敗しました",
       "removeWallet": "JIT ウォレットの削除に失敗しました",
       "removeSelected": "選択した受取人の削除に失敗しました"
-    }
+    },
+    "bearerHelper": "ベアラースライスには登録された識別情報がありません。シークレットを提示した人が引き換えできます。シークレットはウォレットが生成し、作成直後に一度だけ表示されます。",
+    "bearerRequiresSoleRecipient": "ベアラー受取人はこのウォレットの唯一の受取人である必要があります"
   },
   "newCircleHub": {
     "title": "新しいサークルウォレットハブ",

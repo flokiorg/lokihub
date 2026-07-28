@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "Nostr 公钥",
-    "connectionKey": "连接密钥"
+    "connectionKey": "连接密钥",
+    "bearer": "无记名"
   },
   "avatarStack": {
     "more": "还有 {{count}} 位"
@@ -214,7 +215,9 @@
       "removeRecipient": "移除 JIT 钱包接收人失败",
       "removeWallet": "移除 JIT 钱包失败",
       "removeSelected": "移除所选接收人失败"
-    }
+    },
+    "bearerHelper": "无记名份额没有已注册的身份——任何出示其密钥的人都可以兑换它。密钥由钱包生成，仅在创建后显示一次。",
+    "bearerRequiresSoleRecipient": "无记名收款人必须是此钱包的唯一收款人"
   },
   "newCircleHub": {
     "title": "新建圈子钱包中心",

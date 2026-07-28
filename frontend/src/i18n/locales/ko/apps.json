@@ -198,6 +198,9 @@
     "continueAnyway": "그래도 계속",
     "appConnected": "앱이 연결되었습니다",
     "revealQR": "QR 코드 표시",
-    "copySecret": "연결 시크릿 복사"
+    "copySecret": "연결 시크릿 복사",
+    "copyLokicashToken": "Lokicash 토큰 복사",
+    "copyBearerSecret": "무기명 비밀 값 복사",
+    "bearerSecretHelper": "이것은 무기명 비밀 값입니다. 이를 가진 사람은 다른 증명 없이 이 지갑의 자금을 청구할 수 있습니다. 이는 한 번만 표시됩니다. 위의 연결 정보와 함께 대역 외 채널로 의도한 수신자에게 전달하세요."
   }
 }

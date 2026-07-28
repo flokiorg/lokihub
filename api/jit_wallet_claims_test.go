@@ -385,6 +385,70 @@ func TestGetJITWalletConnection_HappyPath(t *testing.T) {
 	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 }
 
+// TestGetJITWalletConnection_LokicashHintsReflectCurrentClaims verifies the
+// lokicash token's identity-required/max-transfers hints are re-derived from
+// the wallet's CURRENT claim rows on every call, not cached from creation —
+// necessary because a solo wallet's sole recipient can move into or out of
+// bearer status via jit_transfer well after the wallet (and its first-ever
+// token) was created.
+func TestGetJITWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 10_000, 3600)
+	wallet := newBareJITWallet(t, svc, hub, 0)
+	pubkey := strings.Repeat("ab", 32)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000, MaxTransfers: 2},
+	}))
+
+	theAPI := newTestAPI(svc)
+	conn, err := theAPI.GetJITWalletConnection(wallet.ID)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(conn.LokicashToken)
+	require.NoError(t, err)
+	require.NotNil(t, decoded.IdentityRequired)
+	assert.True(t, *decoded.IdentityRequired)
+	require.NotNil(t, decoded.MaxTransfers)
+	assert.Equal(t, 2, *decoded.MaxTransfers)
+
+	// Flip the sole recipient into bearer status via TransferJITWalletSlice
+	// directly (the DB-service layer jit_transfer itself calls) — re-deriving
+	// the connection afterward must reflect the change, not the stale
+	// creation-time value.
+	_, err = svc.AppsService.TransferJITWalletSlice(wallet.ID,
+		db.JITAllocIdentityPubkey, pubkey, db.JITAllocIdentityBearer, strings.Repeat("cd", 32), "")
+	require.NoError(t, err)
+
+	connAfter, err := theAPI.GetJITWalletConnection(wallet.ID)
+	require.NoError(t, err)
+	decodedAfter, err := lokicash.Decode(connAfter.LokicashToken)
+	require.NoError(t, err)
+	require.NotNil(t, decodedAfter.IdentityRequired)
+	assert.False(t, *decodedAfter.IdentityRequired, "the token must reflect the wallet's current bearer status, not its status at creation")
+}
+
+// TestGetJITWalletConnection_NoClaims_HintsOmitted verifies a wallet with no
+// claim rows left (e.g. every recipient individually removed) produces a
+// token with neither hint set, rather than guessing.
+func TestGetJITWalletConnection_NoClaims_HintsOmitted(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 10_000, 3600)
+	wallet := newBareJITWallet(t, svc, hub, 0)
+
+	theAPI := newTestAPI(svc)
+	conn, err := theAPI.GetJITWalletConnection(wallet.ID)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(conn.LokicashToken)
+	require.NoError(t, err)
+	assert.Nil(t, decoded.IdentityRequired)
+	assert.Nil(t, decoded.MaxTransfers)
+}
+
 func TestGetJITWalletConnection_NotJITWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

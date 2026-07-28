@@ -198,6 +198,9 @@
     "continueAnyway": "仍然继续",
     "appConnected": "应用程序已连接",
     "revealQR": "显示二维码",
-    "copySecret": "复制连接密钥"
+    "copySecret": "复制连接密钥",
+    "copyLokicashToken": "复制 Lokicash 令牌",
+    "copyBearerSecret": "复制无记名密钥",
+    "bearerSecretHelper": "这是一个无记名密钥——持有它的任何人都可以兑换此钱包的资金，无需其他证明。它仅显示这一次；请将其与上面的连接信息一起，通过带外方式交给预期的接收者。"
   }
 }

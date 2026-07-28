@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "Nostr 공개 키",
-    "connectionKey": "연결 키"
+    "connectionKey": "연결 키",
+    "bearer": "무기명"
   },
   "avatarStack": {
     "more": "외 {{count}}명"
@@ -214,7 +215,9 @@
       "removeRecipient": "JIT 지갑 수령인을 제거하지 못했습니다",
       "removeWallet": "JIT 지갑을 제거하지 못했습니다",
       "removeSelected": "선택한 수령인을 제거하지 못했습니다"
-    }
+    },
+    "bearerHelper": "무기명 슬라이스에는 등록된 신원이 없습니다. 비밀 값을 제시하는 사람이 누구든 이를 청구할 수 있습니다. 지갑이 비밀 값을 생성하며, 생성 직후 단 한 번만 표시됩니다.",
+    "bearerRequiresSoleRecipient": "무기명 수신자는 이 지갑의 유일한 수신자여야 합니다"
   },
   "newCircleHub": {
     "title": "새 서클 지갑 허브",

@@ -33,7 +33,8 @@
   },
   "identityType": {
     "pubkey": "Clave pública de Nostr",
-    "connectionKey": "Clave de conexión"
+    "connectionKey": "Clave de conexión",
+    "bearer": "Portador"
   },
   "avatarStack": {
     "more": "+{{count}} más"
@@ -214,7 +215,9 @@
       "removeRecipient": "Error al eliminar el destinatario de la billetera JIT",
       "removeWallet": "Error al eliminar la billetera JIT",
       "removeSelected": "Error al eliminar los destinatarios seleccionados"
-    }
+    },
+    "bearerHelper": "Un slice al portador no tiene identidad registrada: quien presente su secreto puede canjearlo. La wallet genera el secreto; se muestra una sola vez, justo después de la creación.",
+    "bearerRequiresSoleRecipient": "Un destinatario al portador debe ser el único destinatario de esta wallet"
   },
   "newCircleHub": {
     "title": "Nuevo Hub de Billetera de Círculo",

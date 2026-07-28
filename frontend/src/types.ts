@@ -878,7 +878,12 @@ export interface LSPS2BuyResponse {
 export interface JITWalletClaim {
   id: number;
   wallet_app_id: number;
-  identity_type: "pubkey" | "connection_key";
+  // "bearer" has no identity at all — identity_value is a one-way
+  // commitment (sha256 of a secret only the recipient holds), never an
+  // actual identity, and there is always exactly one claim row per wallet
+  // when this is "bearer" (NIP-JW §Bearer Slices: a bearer slice never
+  // shares a wallet with another recipient).
+  identity_type: "pubkey" | "connection_key" | "bearer";
   identity_value: string;
   amount_mloki: number;
   expires_at?: number;
@@ -903,19 +908,35 @@ export interface ListJITWalletClaimsResponse {
 }
 
 // JITWalletRecipient describes one recipient's requested slice when creating
-// a (possibly shared) JIT wallet.
+// a (possibly shared) JIT wallet. For identity_type === "bearer", the caller
+// MUST NOT set identity_value or ia_pubkey — the wallet mints the bearer
+// secret itself, and a bearer recipient MUST be the request's only one
+// (NIP-JW §Bearer Slices).
 export interface JITWalletRecipient {
-  identity_type: "pubkey" | "connection_key";
-  identity_value: string;
+  identity_type: "pubkey" | "connection_key" | "bearer";
+  identity_value?: string;
   ia_pubkey?: string; // required iff identity_type === "connection_key"
   amount_mloki: number;
+  // bearer_secret is response-only: populated when identity_type ===
+  // "bearer", and only in the create_jit_wallet response — it is never
+  // retrievable again afterward (NIP-JW §Bearer Slices).
+  bearer_secret?: string;
 }
 
 export interface CreateJITWalletResponse {
   app_id: number;
   pairing_uri: string;
+  lokicash_token: string;
   expires_at: number;
   recipients: JITWalletRecipient[];
+}
+
+// JITWalletConnectionResponse is GET /api/apps/{id}/jit-connection's
+// response — the same connection data CreateJITWalletResponse carries,
+// re-derivable at any later time (NIP-JW §The Pairing Connection).
+export interface JITWalletConnectionResponse {
+  pairing_uri: string;
+  lokicash_token: string;
 }
 
 export interface IdentityAuthority {
