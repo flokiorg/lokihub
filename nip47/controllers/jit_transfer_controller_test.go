@@ -113,24 +113,37 @@ func TestHandleJITTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *te
 		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
 	}))
 
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, "", nil, time.Now())
+	// The CALLER generates their own secret and submits only its commitment —
+	// the wallet never mints or returns a bearer secret over the shared
+	// connection (Finding 1, 2026-07-28 audit: a server-generated secret
+	// returned here would be decryptable by every other holder of this
+	// shared jit_wallet connection).
+	newSecretHex, newSecretHash := bearerSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
 
 	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
 		IdentityType:  db.JITAllocIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer},
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result := response.Result.(jitTransferResponse)
 	assert.Equal(t, db.JITAllocIdentityBearer, result.IdentityType)
-	assert.NotEmpty(t, result.BearerSecret)
-	assert.Empty(t, result.IdentityValue, "the internal secret hash must never be surfaced")
+	assert.Equal(t, newSecretHash, result.IdentityValue, "echoing the caller's own commitment back is safe — it's not a secret")
 
 	oldClaim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
 	require.NoError(t, err)
 	assert.Nil(t, oldClaim)
+
+	// End-to-end: the secret the caller chose actually redeems the slice.
+	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: newSecretHex,
+	})
+	require.Nil(t, redeemResponse.Error)
 }
 
 func TestHandleJITTransferEvent_HappyPath_BearerToPubkey(t *testing.T) {
@@ -163,7 +176,7 @@ func TestHandleJITTransferEvent_HappyPath_BearerToPubkey(t *testing.T) {
 	assert.Nil(t, oldClaim)
 }
 
-func TestHandleJITTransferEvent_HappyPath_BearerToBearer_SecretRotation(t *testing.T) {
+func TestHandleJITTransferEvent_HappyPath_BearerToBearer_CallerSuppliedNewSecret(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -176,21 +189,122 @@ func TestHandleJITTransferEvent_HappyPath_BearerToBearer_SecretRotation(t *testi
 		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
+	// Rotating to a new bearer secret still requires the CALLER to generate
+	// and submit the new commitment — the wallet has no secret to mint and
+	// hand back over this shared connection.
+	newSecretHex, newSecretHash := bearerSecretAndHash(t)
 	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
 		BearerSecret: secretHex,
-		NewIdentity:  jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer},
+		NewIdentity:  jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result := response.Result.(jitTransferResponse)
 	assert.Equal(t, db.JITAllocIdentityBearer, result.IdentityType)
-	assert.NotEmpty(t, result.BearerSecret)
-	assert.NotEqual(t, secretHex, result.BearerSecret, "rotation must mint a genuinely new secret")
+	assert.Equal(t, newSecretHash, result.IdentityValue)
 
 	// The old secret must be dead.
 	oldClaim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, oldClaim)
+
+	// The new secret must actually redeem the slice.
+	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+		Invoice:      tests.MockZeroAmountInvoice,
+		Amount:       ptrUint64(1000),
+		BearerSecret: newSecretHex,
+	})
+	require.Nil(t, redeemResponse.Error)
+}
+
+func TestHandleJITTransferEvent_ToBearer_MissingIdentityValue_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
+	}))
+
+	// No identity_value supplied for the bearer target — MUST be rejected,
+	// not silently minted server-side (that's the exact vulnerability this
+	// design was changed to close).
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, "", nil, time.Now())
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer},
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+
+	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, currentPubkey)
+	require.NoError(t, err)
+	assert.NotNil(t, claim, "a rejected transfer must not have touched the slice")
+}
+
+func TestHandleJITTransferEvent_ToBearer_MalformedIdentityValue_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
+	}))
+
+	const malformed = "not-a-valid-hex-commitment"
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, malformed, nil, time.Now())
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   jitTransferNewIdentityParam{IdentityType: db.JITAllocIdentityBearer, IdentityValue: malformed},
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+}
+
+func TestHandleJITTransferEvent_ToBearer_IAPubkeySupplied_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	wallet := newFundedJITWallet(t, svc, hub, 1000)
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
+	}))
+
+	_, newSecretHash := bearerSecretAndHash(t)
+	stray, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.JITAllocIdentityBearer, newSecretHash, nil, time.Now())
+	response := handleJITTransferFor(t, svc, NewTestNip47Controller(svc), wallet, jitTransferParams{
+		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity: jitTransferNewIdentityParam{
+			IdentityType: db.JITAllocIdentityBearer, IdentityValue: newSecretHash, IAPubkey: stray,
+		},
+	})
+
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
 func TestHandleJITTransferEvent_ConnectionKeyMode_HappyPath(t *testing.T) {

@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,20 @@ import (
 
 	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
+
+// bearerSecretAndHash returns a fresh random bearer secret (hex) and the
+// hex-encoded sha256 commitment of it — the value a caller submits as a
+// bearer new_identity's identity_value in jit_transfer (NIP-JW §Bearer
+// Slices): the wallet never mints or returns a bearer secret over the
+// shared jit_wallet connection, so the caller always generates their own.
+func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
+	t.Helper()
+	raw := make([]byte, 32)
+	_, err := rand.Read(raw)
+	require.NoError(t, err)
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(raw), hex.EncodeToString(hash[:])
+}
 
 // Mirrors the unexported kind constants in
 // nip47/controllers/claim_funds_controller.go (Kind 35521: per-claim proof of

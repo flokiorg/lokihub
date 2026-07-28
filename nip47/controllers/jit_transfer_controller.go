@@ -40,14 +40,16 @@ type jitTransferParams struct {
 	NewIdentity jitTransferNewIdentityParam `json:"new_identity"`
 }
 
+// jitTransferResponse never carries a secret of any kind — IdentityValue is
+// always either a public identity (pubkey/connection_key) or a one-way
+// commitment the caller already supplied for a bearer target, deliberately
+// never a value the wallet itself generated (see the bearer branch of
+// HandleJITTransferEvent for why: this response travels over the shared
+// jit_wallet connection, decryptable by every recipient who ever held it).
 type jitTransferResponse struct {
 	AmountMloki   uint64 `json:"amount_mloki"`
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	// BearerSecret is populated only when new_identity.identity_type ==
-	// "bearer", and only in this one response — it is never retrievable
-	// again (NIP-JW §Bearer Slices).
-	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
 // newIdentityHash binds a transfer proof to a specific target identity —
@@ -141,11 +143,12 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 				db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey, db.JITAllocIdentityBearer))
 		return
 	}
-	if newIdentityType == db.JITAllocIdentityBearer && (params.NewIdentity.IdentityValue != "" || params.NewIdentity.IAPubkey != "") {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			"new_identity must not carry identity_value or ia_pubkey when identity_type is bearer")
-		return
-	}
+	// Unlike create_jit_wallet's bearer recipient (identity_value forbidden —
+	// the Hub generates it), a bearer new_identity here MUST carry a
+	// caller-supplied identity_value: see the bearer branch below for why.
+	// Shape is validated there, after the proof; this hash binds the proof to
+	// whatever the caller submitted, valid or not, exactly as it does for
+	// every other target type.
 	targetHash := newIdentityHash(newIdentityType, params.NewIdentity.IdentityValue)
 
 	// 5. Read-only lookup of the slice being transferred BEFORE touching the
@@ -215,7 +218,7 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 	// pubkey/connection_key shape + live IA trust (reuses exactly the
 	// validation create_jit_wallet applies to a recipient entry — not
 	// duplicated), or the bearer-exclusivity rule for a bearer target.
-	var newIdentityValueToStore, newIAPubkeyToStore, bearerSecretForResponse string
+	var newIdentityValueToStore, newIAPubkeyToStore string
 	switch newIdentityType {
 	case db.JITAllocIdentityBearer:
 		// A bearer slice never shares a wallet with another recipient
@@ -240,14 +243,31 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 				"a bearer slice cannot share a wallet with other recipients; this wallet has more than one unclaimed slice")
 			return
 		}
-		secretHex, secretHash, genErr := jitwallet.GenerateBearerSecret()
-		if genErr != nil {
-			logger.Logger.Error().Err(genErr).Uint("app_id", app.ID).Msg("Failed to generate bearer secret for jit_transfer")
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to generate bearer secret")
+		// The bearer secret itself MUST be caller-supplied (as a commitment,
+		// never the raw secret) rather than generated here and returned in
+		// this response. Unlike create_jit_wallet's bearer response — which
+		// travels over the Hub's own single-owner connection — this response
+		// travels over the SHARED jit_wallet connection, decryptable by every
+		// recipient who ever held it (NIP-47 response encryption derives its
+		// key from (clientPubkey, walletPrivkey), and every recipient shares
+		// the same client keypair). A server-minted secret handed back here
+		// would be readable by any co-recipient before the caller could ever
+		// deliver it. The caller generates their own secret locally and keeps
+		// it; the wallet only ever sees and stores its hash — mirroring how a
+		// connection_key target is already caller-chosen, not server-issued.
+		if params.NewIdentity.IAPubkey != "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"new_identity must not carry ia_pubkey when identity_type is bearer")
 			return
 		}
-		newIdentityValueToStore = secretHash
-		bearerSecretForResponse = secretHex
+		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"new_identity.identity_value is required for a bearer target and must be a 64-character lowercase "+
+					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
+					"or returns a bearer secret over the shared connection")
+			return
+		}
+		newIdentityValueToStore = params.NewIdentity.IdentityValue
 	default:
 		if err := jitwallet.ValidateIdentityShape(jitwallet.Deps{IAChecker: controller.iaChecker},
 			newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
@@ -273,19 +293,17 @@ func (controller *nip47Controller) HandleJITTransferEvent(ctx context.Context, n
 		Str("new_identity_type", newIdentityType).
 		Msg("JIT wallet slice transferred")
 
-	result := jitTransferResponse{
-		AmountMloki:  uint64(amount), //nolint:gosec // AmountMloki is always non-negative
-		IdentityType: newIdentityType,
-	}
-	if newIdentityType == db.JITAllocIdentityBearer {
-		result.BearerSecret = bearerSecretForResponse
-	} else {
-		result.IdentityValue = newIdentityValueToStore
-	}
-
+	// IdentityValue is safe to echo back for every mode, including bearer: it
+	// is always either a public identity (pubkey/connection_key) or a one-way
+	// commitment the caller already supplied — never a secret the wallet
+	// itself generated.
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result:     result,
+		Result: jitTransferResponse{
+			AmountMloki:   uint64(amount), //nolint:gosec // AmountMloki is always non-negative
+			IdentityType:  newIdentityType,
+			IdentityValue: newIdentityValueToStore,
+		},
 	}, tags)
 }
 
