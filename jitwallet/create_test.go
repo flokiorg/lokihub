@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/transactions"
 )
@@ -87,6 +90,43 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	require.Len(t, claims, 1)
 	assert.Equal(t, int64(1000), claims[0].AmountMloki)
 	assert.Nil(t, claims[0].ClaimedAt)
+}
+
+// TestCreate_LokicashTokenMatchesPairingURI is the fund-safety property that
+// matters most for the lokicash token: it must decode to *exactly* the same
+// wallet pubkey, secret, and relay set as PairingURI, since either string
+// alone is a fully sufficient connection credential (NIP-JW §The Lokicash
+// Token). If the two ever diverged, a recipient using one but not the other
+// could end up connected to a different wallet than intended.
+func TestCreate_LokicashTokenMatchesPairingURI(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	result, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp:     hub,
+		Recipients: onePubkeyRecipient(1000),
+		ExpirySecs: 1800,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.LokicashToken)
+	assert.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
+
+	pairingURI, err := url.Parse(result.PairingURI)
+	require.NoError(t, err)
+	wantPubkey := pairingURI.Host
+	wantSecret := pairingURI.Query().Get("secret")
+	wantRelays := pairingURI.Query()["relay"]
+
+	decoded, err := lokicash.Decode(result.LokicashToken)
+	require.NoError(t, err)
+	assert.Equal(t, lokicash.HRP, decoded.HRP)
+	assert.Equal(t, wantPubkey, decoded.WalletPubkey)
+	assert.Equal(t, wantSecret, decoded.Secret)
+	assert.Equal(t, wantRelays, decoded.RelayURLs)
 }
 
 func TestCreate_MultipleRecipients_OneSharedWallet_CustomAmounts_SharedExpiry(t *testing.T) {

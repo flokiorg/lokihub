@@ -33,6 +33,7 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
@@ -120,10 +121,11 @@ type RecipientResult struct {
 // connection is meant to be distributed to the whole recipient group by
 // whoever created it.
 type Result struct {
-	WalletApp  *db.App
-	PairingURI string
-	ExpiresAt  time.Time
-	Recipients []RecipientResult
+	WalletApp     *db.App
+	PairingURI    string
+	LokicashToken string
+	ExpiresAt     time.Time
+	Recipients    []RecipientResult
 }
 
 // Resolved is the outcome of Resolve: every read-only check (identity shape,
@@ -386,6 +388,25 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		}
 	}
 
+	// walletPubkey and pairingSecretKey are both derived internally (never
+	// user input), so lokicash.Encode can't fail on them in practice. Funds
+	// have already moved (fundsTransferred, above) by this point, so even a
+	// defensive failure here must not turn into an error return — that would
+	// tell the caller wallet creation failed when it actually succeeded,
+	// leaving a funded wallet the caller doesn't know exists. Degrade to an
+	// empty token instead; PairingURI alone is still a fully functional
+	// connection string.
+	lokicashToken, err := lokicash.Encode(lokicash.Token{
+		HRP:          lokicash.HRP,
+		WalletPubkey: walletPubkey,
+		Secret:       pairingSecretKey,
+		RelayURLs:    deps.RelayURLs,
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("jit_wallet_id", newApp.ID).
+			Msg("Failed to encode lokicash token for already-funded JIT wallet")
+	}
+
 	logger.Logger.Info().
 		Uint("jit_wallet_id", newApp.ID).
 		Uint("parent_app_id", resolved.HubApp.ID).
@@ -394,10 +415,11 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		Msg("Shared JIT wallet created and funded")
 
 	return &Result{
-		WalletApp:  newApp,
-		PairingURI: buildNWCPairingURI(walletPubkey, deps.RelayURLs, pairingSecretKey),
-		ExpiresAt:  resolved.ExpiresAt,
-		Recipients: recipientResults,
+		WalletApp:     newApp,
+		PairingURI:    buildNWCPairingURI(walletPubkey, deps.RelayURLs, pairingSecretKey),
+		LokicashToken: lokicashToken,
+		ExpiresAt:     resolved.ExpiresAt,
+		Recipients:    recipientResults,
 	}, nil
 }
 

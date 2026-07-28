@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -12,6 +14,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/flokiorg/lokihub/transactions"
@@ -61,6 +64,7 @@ func TestCreateJITWallet_HappyPath_SingleRecipient(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
+	assert.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
 	assert.NotZero(t, result.AppID)
 	require.Len(t, result.Recipients, 1)
 
@@ -73,10 +77,24 @@ func TestCreateJITWallet_HappyPath_SingleRecipient(t *testing.T) {
 	require.NoError(t, svc.DB.Model(&db.JITWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
 	assert.EqualValues(t, 1, claimCount)
 
-	// GET jit-connection for the new wallet must return the identical URI (determinism).
+	// GET jit-connection for the new wallet must return the identical URI and
+	// lokicash token (determinism) — a recipient re-fetching later must land
+	// on the exact same wallet, never a different one.
 	conn, err := theAPI.GetJITWalletConnection(result.AppID)
 	require.NoError(t, err)
 	assert.Equal(t, result.PairingURI, conn.PairingURI)
+	assert.Equal(t, result.LokicashToken, conn.LokicashToken)
+
+	// The lokicash token and the pairing URI must describe the exact same
+	// wallet — the fund-safety property that matters most here, since either
+	// string alone is a sufficient connection credential.
+	pairingURI, err := url.Parse(result.PairingURI)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(result.LokicashToken)
+	require.NoError(t, err)
+	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
+	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
+	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 }
 
 func TestCreateJITWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing.T) {

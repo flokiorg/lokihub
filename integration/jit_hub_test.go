@@ -3,6 +3,8 @@
 package integration
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/lokicash"
 )
 
 // clearlyTooLargeAmountMloki is chosen to reliably exceed any sane real
@@ -59,6 +62,21 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.NotEmpty(t, result.PairingURI, "the connection is shared/known upfront now — no more encrypted reveal")
 		require.Len(t, result.Recipients, 1)
 		require.EqualValues(t, happyPathAmountMloki, result.Recipients[0].AmountMloki)
+
+		// The lokicash1... token returned alongside pairing_uri must decode
+		// to the exact same wallet pubkey, secret, and relay set — either
+		// string alone is a fully sufficient connection credential (NIP-JW
+		// §The Lokicash Token), so any divergence between them would mean a
+		// recipient using one instead of the other lands on a different
+		// wallet than intended.
+		require.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
+		pairingURI, err := url.Parse(result.PairingURI)
+		require.NoError(t, err)
+		decodedToken, err := lokicash.Decode(result.LokicashToken)
+		require.NoError(t, err)
+		require.Equal(t, result.WalletPubkey, decodedToken.WalletPubkey)
+		require.Equal(t, pairingURI.Query().Get("secret"), decodedToken.Secret)
+		require.Equal(t, pairingURI.Query()["relay"], decodedToken.RelayURLs)
 
 		child := mustConnect(t, result.PairingURI)
 

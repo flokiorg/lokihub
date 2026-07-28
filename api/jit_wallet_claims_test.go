@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
 )
 
@@ -361,11 +364,25 @@ func TestGetJITWalletConnection_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, conn.PairingURI, "nostr+walletconnect://")
 	assert.Contains(t, conn.PairingURI, "&secret=")
+	assert.True(t, strings.HasPrefix(conn.LokicashToken, lokicash.HRP+"1"))
 
-	// Deterministic: re-deriving must return the exact same URI every time.
+	// Deterministic: re-deriving must return the exact same URI and token
+	// every time — a stale lokicash1... token handed out earlier must still
+	// resolve to the same wallet as a freshly re-derived one.
 	again, err := theAPI.GetJITWalletConnection(wallet.ID)
 	require.NoError(t, err)
 	assert.Equal(t, conn.PairingURI, again.PairingURI)
+	assert.Equal(t, conn.LokicashToken, again.LokicashToken)
+
+	// And the two must actually agree with each other, not just each be
+	// internally deterministic.
+	pairingURI, err := url.Parse(conn.PairingURI)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(conn.LokicashToken)
+	require.NoError(t, err)
+	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
+	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
+	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 }
 
 func TestGetJITWalletConnection_NotJITWallet(t *testing.T) {

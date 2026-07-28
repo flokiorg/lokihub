@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -256,6 +259,19 @@ func TestHandleCreateJITWalletEvent_HappyPath_SingleRecipient(t *testing.T) {
 	assert.Greater(t, result.ExpiresAt, time.Now().Unix())
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
+
+	// The wire response's lokicash_token must decode to the exact same
+	// wallet pubkey and secret as pairing_uri — the fund-safety property
+	// that matters most, since either string alone is a sufficient
+	// connection credential (NIP-JW §The Lokicash Token).
+	assert.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
+	pairingURI, err := url.Parse(result.PairingURI)
+	require.NoError(t, err)
+	decoded, err := lokicash.Decode(result.LokicashToken)
+	require.NoError(t, err)
+	assert.Equal(t, result.WalletPubkey, decoded.WalletPubkey)
+	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
+	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 
 	// Verify the JIT wallet sub-app was created with correct kind and parent.
 	var childApps []db.App
