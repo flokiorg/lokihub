@@ -18,8 +18,8 @@ import "github.com/flokiorg/lokihub/nip47/models"
 // channel the hub itself is using.
 
 type JITWalletRecipientParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key"
-	IdentityValue string `json:"identity_value"`
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   uint64 `json:"amount_mloki"`
 }
@@ -31,8 +31,9 @@ type CreateJITWalletParams struct {
 
 type JITWalletRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
-	IdentityValue string `json:"identity_value"`
+	IdentityValue string `json:"identity_value,omitempty"`
 	AmountMloki   uint64 `json:"amount_mloki"`
+	BearerSecret  string `json:"bearer_secret,omitempty"`
 }
 
 type CreateJITWalletResult struct {
@@ -54,10 +55,13 @@ type CreateJITWalletResult struct {
 type ClaimFundsParams struct {
 	Invoice          string  `json:"invoice"`
 	Amount           *uint64 `json:"amount,omitempty"`
-	IdentityType     string  `json:"identity_type"`
-	IdentityValue    string  `json:"identity_value"`
-	IdentityEvent    string  `json:"identity_event"`
+	IdentityType     string  `json:"identity_type,omitempty"`
+	IdentityValue    string  `json:"identity_value,omitempty"`
+	IdentityEvent    string  `json:"identity_event,omitempty"`
 	AttestationEvent string  `json:"attestation_event,omitempty"`
+	// BearerSecret redeems a bearer slice in place of every other field
+	// above (NIP-JW §Bearer Slices).
+	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
 type ClaimFundsResult struct {

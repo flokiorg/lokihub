@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -44,15 +46,22 @@ const (
 
 type claimFundsParams struct {
 	Invoice       string  `json:"invoice"`
-	Amount        *uint64 `json:"amount,omitempty"` // override for amountless invoices, mirrors pay_invoice
-	IdentityType  string  `json:"identity_type"`    // "pubkey" | "connection_key"
-	IdentityValue string  `json:"identity_value"`
+	Amount        *uint64 `json:"amount,omitempty"`         // override for amountless invoices, mirrors pay_invoice
+	IdentityType  string  `json:"identity_type,omitempty"`  // "pubkey" | "connection_key" — omit entirely for a bearer slice
+	IdentityValue string  `json:"identity_value,omitempty"` // omit entirely for a bearer slice
 	// IdentityEvent is the JSON-encoded kind-35521 claim proof, signed fresh
-	// for this call and bound to this wallet + this invoice.
-	IdentityEvent string `json:"identity_event"`
+	// for this call and bound to this wallet + this invoice. Omit entirely
+	// for a bearer slice, which has no identity to sign with.
+	IdentityEvent string `json:"identity_event,omitempty"`
 	// AttestationEvent is the JSON-encoded kind-35522 IA attestation, required
 	// only when identity_type == connection_key.
 	AttestationEvent string `json:"attestation_event,omitempty"`
+	// BearerSecret redeems a bearer slice (NIP-JW §Bearer Slices) in place of
+	// identity_type/identity_value/identity_event/attestation_event, all of
+	// which MUST be empty when this is set. Presenting the correct secret is
+	// the entire proof — there is no signature to verify, since a bearer
+	// slice has no identity capable of signing one.
+	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
 func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
@@ -63,9 +72,12 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		return
 	}
 
+	isBearer := params.BearerSecret != ""
+
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Str("identity_type", params.IdentityType).
+		Bool("bearer", isBearer).
 		Msg("Handling claim_funds request")
 
 	// 1. claim_funds only ever makes sense against a jit_wallet — reject
@@ -78,27 +90,55 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// 2. Rate limit per connection. Since this connection may be shared by
 	// several recipients, this throttles the wallet as a whole, not any one
 	// caller specifically — intentional, given the connection itself may be
-	// widely held.
+	// widely held. This is also the ONLY throttle standing between a bearer
+	// slice and an attacker who's guessing at its secret, since a bearer
+	// redemption has no signature to forge — only a secret to guess.
 	if !controller.jitClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().JITWalletClaimRateLimitPerHour) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for claim_funds")
 		return
 	}
 
-	// 3. Basic param validation.
-	if params.Invoice == "" || params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			"invoice, identity_type, identity_value, and identity_event are all required")
-		return
-	}
-	if params.IdentityType != db.JITAllocIdentityPubkey && params.IdentityType != db.JITAllocIdentityConnectionKey {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("identity_type must be %q or %q", db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey))
-		return
-	}
-	if params.IdentityType == db.JITAllocIdentityConnectionKey && params.AttestationEvent == "" {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			"attestation_event is required when identity_type is connection_key")
-		return
+	// 3. Basic param validation. A bearer redemption and an identity-bound
+	// one are mutually exclusive param shapes, not two optional variants of
+	// the same one — mixing them is rejected rather than picking one side to
+	// honor.
+	var identityType, identityValue string
+	if isBearer {
+		if params.IdentityType != "" || params.IdentityValue != "" || params.IdentityEvent != "" || params.AttestationEvent != "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"bearer_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
+			return
+		}
+		if params.Invoice == "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "invoice is required")
+			return
+		}
+		secretBytes, hexErr := hex.DecodeString(params.BearerSecret)
+		if hexErr != nil {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "bearer_secret must be hex")
+			return
+		}
+		hash := sha256.Sum256(secretBytes)
+		identityType = db.JITAllocIdentityBearer
+		identityValue = hex.EncodeToString(hash[:])
+	} else {
+		if params.Invoice == "" || params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"invoice, identity_type, identity_value, and identity_event are all required")
+			return
+		}
+		if params.IdentityType != db.JITAllocIdentityPubkey && params.IdentityType != db.JITAllocIdentityConnectionKey {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				fmt.Sprintf("identity_type must be %q or %q", db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey))
+			return
+		}
+		if params.IdentityType == db.JITAllocIdentityConnectionKey && params.AttestationEvent == "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"attestation_event is required when identity_type is connection_key")
+			return
+		}
+		identityType = params.IdentityType
+		identityValue = params.IdentityValue
 	}
 
 	// 4. Decode the invoice up front — the identity proof must bind to it.
@@ -113,7 +153,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// 5. Read-only lookup of the claimed slice BEFORE touching the atomic
 	// claim guard, so a proof that fails verification never briefly occupies
 	// (and can never grief) the slot a legitimate concurrent claimer needs.
-	claim, err := controller.appsService.GetJITWalletClaim(app.ID, params.IdentityType, params.IdentityValue)
+	claim, err := controller.appsService.GetJITWalletClaim(app.ID, identityType, identityValue)
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up JIT wallet claim")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to look up claim")
@@ -124,28 +164,33 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		return
 	}
 
-	// 6. Parse and verify the kind-35521 claim proof.
+	// 6. Parse and verify the kind-35521 claim proof — identity-bound slices
+	// only. A bearer slice's entire proof is the hash-matched lookup in step
+	// 5 above: presenting the correct secret is necessary and sufficient, so
+	// there is nothing further to verify here.
 	var identityEvent nostr.Event
-	if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
-		return
-	}
-	walletPubkey := ""
-	if app.WalletPubkey != nil {
-		walletPubkey = *app.WalletPubkey
-	}
 	var attestationEvent nostr.Event
-	attestationEventID := ""
-	if params.IdentityType == db.JITAllocIdentityConnectionKey {
-		if err := json.Unmarshal([]byte(params.AttestationEvent), &attestationEvent); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON")
+	if !isBearer {
+		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
 			return
 		}
-		attestationEventID = attestationEvent.ID
-	}
-	if err := verifyClaimIdentityEvent(&identityEvent, params.IdentityType, params.IdentityValue, walletPubkey, paymentRequest.PaymentHash, attestationEventID); err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
-		return
+		walletPubkey := ""
+		if app.WalletPubkey != nil {
+			walletPubkey = *app.WalletPubkey
+		}
+		attestationEventID := ""
+		if identityType == db.JITAllocIdentityConnectionKey {
+			if err := json.Unmarshal([]byte(params.AttestationEvent), &attestationEvent); err != nil {
+				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON")
+				return
+			}
+			attestationEventID = attestationEvent.ID
+		}
+		if err := verifyClaimIdentityEvent(&identityEvent, identityType, identityValue, walletPubkey, paymentRequest.PaymentHash, attestationEventID); err != nil {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
+			return
+		}
 	}
 
 	// 7. For connection_key mode, first re-check that the IA recorded on this
@@ -153,7 +198,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// checked live, here, rather than only ever at creation time, so revoking
 	// a compromised IA immediately blocks future claims it attested instead
 	// of leaving them honorable until their own attestation expiry lapses.
-	if params.IdentityType == db.JITAllocIdentityConnectionKey {
+	if identityType == db.JITAllocIdentityConnectionKey {
 		trusted, err := controller.iaChecker.IsTrusted(claim.IAPubkey)
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check Identity Authority trust")
@@ -166,7 +211,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		}
 		// Also verify the IA attestation itself: signature, connection_key/
 		// claimant tag binding, and its own expiration.
-		if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, params.IdentityValue); err != nil {
+		if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 			return
 		}
@@ -175,7 +220,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// 8. Atomically claim the slice — guards the actual payout against races
 	// and replays. RowsAffected==0 here (a concurrent claim won since step 5)
 	// is reported identically to "not found" for the same reason step 5 is.
-	claimedAmount, err := controller.appsService.ClaimJITWalletSlice(app.ID, params.IdentityType, params.IdentityValue)
+	claimedAmount, err := controller.appsService.ClaimJITWalletSlice(app.ID, identityType, identityValue)
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no unclaimed slice for this identity")
 		return
@@ -190,7 +235,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		resolvedAmount = *params.Amount
 	}
 	if resolvedAmount != uint64(claimedAmount) { //nolint:gosec // internally-computed slice amount, always non-negative
-		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, params.IdentityType, params.IdentityValue); unclaimErr != nil {
+		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, identityType, identityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back JIT wallet slice claim after amount mismatch")
 		}
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
@@ -216,7 +261,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 
 	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, params.Amount, metadata, controller.lnClient, &app.ID, &requestEventId)
 	if err != nil {
-		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, params.IdentityType, params.IdentityValue); unclaimErr != nil {
+		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, identityType, identityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back JIT wallet slice claim after payment failure")
 		}
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to pay claim_funds invoice")
@@ -235,7 +280,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
-		Str("identity_type", params.IdentityType).
+		Str("identity_type", identityType).
 		Uint64("amount_mloki", resolvedAmount).
 		Msg("JIT wallet slice claimed")
 

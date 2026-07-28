@@ -3298,6 +3298,7 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // msat amounts are always far below int64 range
+			BearerSecret:  r.BearerSecret,
 		}
 	}
 

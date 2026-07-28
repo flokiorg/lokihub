@@ -345,10 +345,15 @@ type CreateLightningAddressRequest struct {
 // a (possibly shared) JIT wallet — a wallet may serve several recipients at
 // once, each with their own amount, all sharing the wallet's one expiry.
 type JITWalletRecipient struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key"
-	IdentityValue string `json:"identity_value"`
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   int64  `json:"amount_mloki"`
+	// BearerSecret is response-only: populated when identity_type == "bearer",
+	// and only in the create_jit_wallet response — it is never retrievable
+	// again afterward (NIP-JW §Bearer Slices). A caller MUST NOT set it on a
+	// request; there is nothing for it to mean there.
+	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
 type CreateJITWalletRequest struct {

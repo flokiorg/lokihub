@@ -20,8 +20,8 @@ import (
 const jitRateLimitPerHour = 10
 
 type createJITWalletRecipientParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key"
-	IdentityValue string `json:"identity_value"`
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   uint64 `json:"amount_mloki"`
 }
@@ -33,8 +33,12 @@ type createJITWalletParams struct {
 
 type createJITWalletRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
-	IdentityValue string `json:"identity_value"`
+	IdentityValue string `json:"identity_value,omitempty"`
 	AmountMloki   uint64 `json:"amount_mloki"`
+	// BearerSecret is populated only for identity_type == "bearer", and only
+	// in this one response — it is never retrievable again (NIP-JW §Bearer
+	// Slices).
+	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
 type createJITWalletResponse struct {
@@ -149,6 +153,7 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMloki:   r.AmountMloki,
+			BearerSecret:  r.BearerSecret,
 		}
 	}
 
