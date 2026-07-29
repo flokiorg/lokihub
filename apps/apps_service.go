@@ -158,10 +158,13 @@ type AppsService interface {
 }
 
 // JITWalletClaimRow is one row of ListJITWalletClaims' result — a
-// JITWalletClaim joined with its wallet's ExpiresAt.
+// JITWalletClaim joined with its wallet's ExpiresAt and WalletPubkey (the
+// latter lets the caller derive/encode a lokicash token for the page it
+// actually renders, without a second per-wallet query).
 type JITWalletClaimRow struct {
 	db.JITWalletClaim
 	WalletExpiresAt *time.Time
+	WalletPubkey    *string
 }
 
 type appsService struct {

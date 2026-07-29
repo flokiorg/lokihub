@@ -3056,6 +3056,61 @@ func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, sta
 	if limit > 0 {
 		result = paginateSlice(result, limit, offset)
 	}
+
+	// Derive each wallet's lokicash token only for the page actually being
+	// returned, and only once per unique wallet (every claim sharing a
+	// WalletAppID gets the identical value) — deriving it for every claim
+	// across the whole hub, unpaginated, would be wasted work for rows the
+	// caller never sees. Includes the same identity-required/max-transfers
+	// hints GetJITWalletConnection encodes, read off any one claim for that
+	// wallet — both are uniform across every claim of the same wallet (see
+	// db.JITWalletClaim's own field docs), so which one doesn't matter.
+	walletPubkeyByID := make(map[uint]string, len(rows))
+	representativeClaimByWallet := make(map[uint]apps.JITWalletClaimRow, len(rows))
+	for _, row := range rows {
+		if row.WalletPubkey != nil {
+			walletPubkeyByID[row.WalletAppID] = *row.WalletPubkey
+		}
+		if _, ok := representativeClaimByWallet[row.WalletAppID]; !ok {
+			representativeClaimByWallet[row.WalletAppID] = row
+		}
+	}
+	tokenByWallet := make(map[uint]string, len(result))
+	relayUrls := api.cfg.GetRelayUrls()
+	for i := range result {
+		walletAppID := result[i].WalletAppID
+		token, ok := tokenByWallet[walletAppID]
+		if !ok {
+			walletPubkey, havePubkey := walletPubkeyByID[walletAppID]
+			pairingSecretKey, keyErr := api.keys.GetJITPairingKey(walletAppID)
+			if havePubkey && keyErr == nil {
+				var identityRequired *bool
+				var maxTransfers *int
+				if claim, haveClaim := representativeClaimByWallet[walletAppID]; haveClaim {
+					required := claim.IdentityType != db.JITAllocIdentityBearer
+					identityRequired = &required
+					transferCap := claim.MaxTransfers
+					maxTransfers = &transferCap
+				}
+				token, keyErr = lokicash.Encode(lokicash.Token{
+					HRP:              lokicash.HRP,
+					WalletPubkey:     walletPubkey,
+					Secret:           pairingSecretKey,
+					RelayURLs:        relayUrls,
+					IdentityRequired: identityRequired,
+					MaxTransfers:     maxTransfers,
+				})
+			}
+			if !havePubkey || keyErr != nil {
+				logger.Logger.Error().Err(keyErr).Uint("wallet_app_id", walletAppID).
+					Msg("Failed to derive lokicash token for JIT wallet claims list")
+				token = ""
+			}
+			tokenByWallet[walletAppID] = token
+		}
+		result[i].LokicashToken = token
+	}
+
 	return result, totalCount, counts, nil
 }
 

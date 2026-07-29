@@ -123,7 +123,7 @@ func (svc *appsService) ListJITWalletClaims(hubID uint) ([]JITWalletClaimRow, er
 		Joins("JOIN apps ON apps.id = jit_wallet_claims.wallet_app_id").
 		Where("apps.parent_app_id = ? AND apps.parent_kind = ? AND apps.kind = ?",
 			hubID, db.ParentKindJIT, db.AppKindJITWallet).
-		Select("jit_wallet_claims.*, apps.expires_at AS wallet_expires_at").
+		Select("jit_wallet_claims.*, apps.expires_at AS wallet_expires_at, apps.wallet_pubkey AS wallet_pubkey").
 		Order("jit_wallet_claims.created_at desc").
 		Scan(&rows).Error
 	return rows, err

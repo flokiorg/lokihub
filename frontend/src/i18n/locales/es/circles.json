@@ -156,8 +156,6 @@
     }
   },
   "jitHubAllocations": {
-    "participantsPair": "{{first}} y {{second}}",
-    "participantsOthers": "{{first}} y {{count}} más",
     "durationDays_one": "{{count}} día",
     "durationDays_other": "{{count}} días",
     "durationHours_one": "{{count}} hora",

@@ -416,6 +416,13 @@ type JITWalletClaimResponse struct {
 	Claimed       bool   `json:"claimed"`
 	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
 	CreatedAt     int64  `json:"created_at"`
+	// LokicashToken is the wallet's own connection, packaged as a
+	// lokicash1... string (NIP-JW §The Lokicash Token) — identical for every
+	// claim sharing the same WalletAppID. Only ever populated for the page
+	// of results actually being returned (ListJITWalletClaims derives it
+	// after pagination, once per unique wallet on that page, not for every
+	// claim across the whole hub).
+	LokicashToken string `json:"lokicash_token,omitempty"`
 }
 
 type JITWalletConnectionResponse struct {
