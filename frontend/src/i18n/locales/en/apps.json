@@ -138,13 +138,13 @@
     "permissionsManagedNote": "Permissions for this connection are managed automatically and can't be changed here.",
     "budgetManagedNote": "This connection's requested permissions are managed automatically, but its budget and expiry can still be changed below.",
     "hubSettingsTitle": "Hub Settings",
-    "jitHubSettingsDescription": "Changes only apply to JIT wallets issued from now on and won't affect wallets already issued.",
+    "jitHubSettingsDescription": "Changes only apply to Lokicash issued from now on and won't affect ones already issued.",
     "circleHubSettingsDescription": "Changes only apply to circle wallets created from now on and won't affect wallets already created.",
     "maxWalletBudgetLabel": "Max Wallet Budget",
-    "jitMaxWalletBudgetHelper": "Maximum budget that can be allocated to each JIT wallet issued from this hub (default: 1,000 loki)",
+    "jitMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Lokicash issued from this hub (default: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet (default: 1,000 loki)",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
-    "jitMaxExpiryHelper": "Maximum lifetime for issued JIT wallets (default: 1 day)",
+    "jitMaxExpiryHelper": "Maximum lifetime for issued Lokicash (default: 1 day)",
     "circleMaxExpiryHelper": "Maximum lifetime for issued circle wallets (default: 30 days)",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget (default: monthly)",
@@ -153,10 +153,10 @@
     "allowlistTitle": "Allowlist",
     "addMember": "Add member",
     "circleWalletsTitle": "Circle Wallets",
-    "jitWalletsTitle": "JIT Wallets",
-    "addJitWallet": "Add JIT wallet",
+    "jitWalletsTitle": "Lokicash Tokens",
+    "addJitWallet": "Mint Lokicash",
     "errors": {
-      "loadJitConnection": "Failed to load JIT wallet connection"
+      "loadJitConnection": "Failed to load Lokicash connection"
     }
   },
   "newApp": {
@@ -218,6 +218,7 @@
     "title": "Connect App",
     "description": "Use Nostr Wallet Connect to link apps to your wallet.",
     "connectionSecret": "Connection Secret",
+    "lokicashTitle": "Lokicash",
     "takingLonger": "Connecting is taking longer than usual.",
     "continueAnyway": "Continue anyway",
     "appConnected": "App connected",
@@ -225,6 +226,6 @@
     "copySecret": "Copy Connection Secret",
     "copyLokicashToken": "Copy Lokicash Token",
     "copyBearerSecret": "Copy Bearer Secret",
-    "bearerSecretHelper": "This is a bearer secret — anyone who has it can redeem this wallet's funds, with no other proof required. It's shown only this once; hand both this and the connection above to the intended recipient, out of band."
+    "bearerSecretHelper": "Anyone with this secret can redeem these funds — no other proof needed. Shown once; share it with the recipient, out of band."
   }
 }

@@ -114,13 +114,13 @@
     "permissionsManagedNote": "이 연결의 권한은 자동으로 관리되며 여기서 변경할 수 없습니다.",
     "budgetManagedNote": "이 연결이 요청한 권한은 자동으로 관리되지만, 예산과 만료일은 아래에서 변경할 수 있습니다.",
     "hubSettingsTitle": "허브 설정",
-    "jitHubSettingsDescription": "변경 사항은 이후 발급되는 JIT 지갑에만 적용되며, 이미 발급된 지갑에는 영향을 주지 않습니다.",
+    "jitHubSettingsDescription": "변경 사항은 이후 발급되는 Lokicash에만 적용되며, 이미 발급된 것에는 영향을 주지 않습니다.",
     "circleHubSettingsDescription": "변경 사항은 이후 생성되는 서클 지갑에만 적용되며, 이미 생성된 지갑에는 영향을 주지 않습니다.",
     "maxWalletBudgetLabel": "최대 지갑 예산",
-    "jitMaxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산 (기본값: 1,000 loki)",
+    "jitMaxWalletBudgetHelper": "이 허브에서 발급되는 각 Lokicash에 할당할 수 있는 최대 예산 (기본값: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산 (기본값: 1,000 loki)",
     "maxWalletExpiryLabel": "최대 지갑 만료 기간",
-    "jitMaxExpiryHelper": "발급된 JIT 지갑의 최대 유효 기간 (기본값: 1일)",
+    "jitMaxExpiryHelper": "발급된 Lokicash의 최대 유효 기간 (기본값: 1일)",
     "circleMaxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간 (기본값: 30일)",
     "minRenewalLabel": "최소 갱신 주기",
     "minRenewalHelper": "멤버가 자신의 서클 지갑 예산에 대해 요청할 수 있는 가장 짧은 갱신 주기 (기본값: 매월)",
@@ -129,10 +129,10 @@
     "allowlistTitle": "허용 목록",
     "addMember": "멤버 추가",
     "circleWalletsTitle": "서클 지갑",
-    "jitWalletsTitle": "JIT 지갑",
-    "addJitWallet": "JIT 지갑 추가",
+    "jitWalletsTitle": "Lokicash 토큰",
+    "addJitWallet": "Lokicash 발행",
     "errors": {
-      "loadJitConnection": "JIT 지갑 연결을 불러오지 못했습니다"
+      "loadJitConnection": "Lokicash 연결을 불러오지 못했습니다"
     }
   },
   "newApp": {
@@ -201,6 +201,7 @@
     "copySecret": "연결 시크릿 복사",
     "copyLokicashToken": "Lokicash 토큰 복사",
     "copyBearerSecret": "무기명 비밀 값 복사",
-    "bearerSecretHelper": "이것은 무기명 비밀 값입니다. 이를 가진 사람은 다른 증명 없이 이 지갑의 자금을 청구할 수 있습니다. 이는 한 번만 표시됩니다. 위의 연결 정보와 함께 대역 외 채널로 의도한 수신자에게 전달하세요."
+    "bearerSecretHelper": "이 비밀 값을 가진 사람은 다른 증명 없이 이 자금을 교환할 수 있습니다. 이는 한 번만 표시됩니다. 대역 외 채널로 수령인에게 전달하세요.",
+    "lokicashTitle": "Lokicash"
   }
 }

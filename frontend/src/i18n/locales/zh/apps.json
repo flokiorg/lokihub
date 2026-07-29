@@ -114,13 +114,13 @@
     "permissionsManagedNote": "此连接的权限由系统自动管理，无法在此处更改。",
     "budgetManagedNote": "此连接请求的权限由系统自动管理，但其预算和有效期仍可在下方更改。",
     "hubSettingsTitle": "中心设置",
-    "jitHubSettingsDescription": "更改仅适用于此后发放的 JIT 钱包，不会影响已发放的钱包。",
+    "jitHubSettingsDescription": "更改仅适用于此后发放的 Lokicash，不会影响已发放的。",
     "circleHubSettingsDescription": "更改仅适用于此后创建的圈子钱包，不会影响已创建的钱包。",
     "maxWalletBudgetLabel": "最大钱包预算",
-    "jitMaxWalletBudgetHelper": "此中心发放的每个 JIT 钱包可分配的最大预算（默认：1,000 loki）",
+    "jitMaxWalletBudgetHelper": "此中心发放的每个 Lokicash 可分配的最大预算（默认：1,000 loki）",
     "circleMaxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算（默认：1,000 loki）",
     "maxWalletExpiryLabel": "最长钱包有效期",
-    "jitMaxExpiryHelper": "已发放 JIT 钱包的最长有效期（默认：1 天）",
+    "jitMaxExpiryHelper": "已发放 Lokicash 的最长有效期（默认：1 天）",
     "circleMaxExpiryHelper": "已发放圈子钱包的最长有效期（默认：30 天）",
     "minRenewalLabel": "最短续期周期",
     "minRenewalHelper": "成员为其圈子钱包预算可申请的最短续期周期（默认：每月）",
@@ -129,10 +129,10 @@
     "allowlistTitle": "允许列表",
     "addMember": "添加成员",
     "circleWalletsTitle": "圈子钱包",
-    "jitWalletsTitle": "JIT 钱包",
-    "addJitWallet": "添加 JIT 钱包",
+    "jitWalletsTitle": "Lokicash 代币",
+    "addJitWallet": "铸造 Lokicash",
     "errors": {
-      "loadJitConnection": "加载 JIT 钱包连接失败"
+      "loadJitConnection": "加载 Lokicash 连接失败"
     }
   },
   "newApp": {
@@ -201,6 +201,7 @@
     "copySecret": "复制连接密钥",
     "copyLokicashToken": "复制 Lokicash 令牌",
     "copyBearerSecret": "复制无记名密钥",
-    "bearerSecretHelper": "这是一个无记名密钥——持有它的任何人都可以兑换此钱包的资金，无需其他证明。它仅显示这一次；请将其与上面的连接信息一起，通过带外方式交给预期的接收者。"
+    "bearerSecretHelper": "持有此密钥的任何人都可以兑换这些资金，无需其他证明。仅显示一次；请通过带外方式将其交给接收人。",
+    "lokicashTitle": "Lokicash"
   }
 }

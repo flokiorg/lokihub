@@ -2,6 +2,8 @@ import {
   BanknoteIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CoinsIcon,
+  CopyIcon,
   KeyRound,
   PlusCircleIcon,
   PlusIcon,
@@ -49,6 +51,7 @@ import { LIST_JIT_ALLOCATIONS_LIMIT } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { formatClaimDeadline } from "src/utils/jitWallet";
 import { shortenMiddle } from "src/utils/nostr";
@@ -268,6 +271,29 @@ export const JITHubAllocations = React.forwardRef<
       handleRequestError(t("jitHubAllocations.errors.loadConnection"), error);
     }
     setRevealingWalletId(null);
+  };
+
+  // Quick "just give me the string" action, separate from
+  // handleRevealConnection's dialog — minting a Lokicash is pointless if
+  // handing it out takes two clicks (open the dialog, then find the copy
+  // button inside it). Fetches the same re-derivable connection and copies
+  // its lokicash_token directly.
+  const [copyingWalletId, setCopyingWalletId] = React.useState<number | null>(
+    null
+  );
+  const handleCopyLokicash = async (walletAppId: number) => {
+    setCopyingWalletId(walletAppId);
+    try {
+      const connection = await request<JITWalletConnectionResponse>(
+        `/api/apps/${walletAppId}/jit-connection`
+      );
+      if (connection) {
+        copyToClipboard(connection.lokicash_token);
+      }
+    } catch (error) {
+      handleRequestError(t("jitHubAllocations.errors.loadConnection"), error);
+    }
+    setCopyingWalletId(null);
   };
 
   // Only unclaimed rows can be individually removed/bulk-selected (removing
@@ -783,6 +809,13 @@ export const JITHubAllocations = React.forwardRef<
           </Button>
         )}
       </div>
+      <p className="text-sm text-muted-foreground">
+        {row.identityType === "pubkey"
+          ? t("jitHubAllocations.pubkeyModeHelper")
+          : row.identityType === "connection_key"
+            ? t("jitHubAllocations.connectionKeyModeHelper")
+            : t("jitHubAllocations.bearerHelper")}
+      </p>
       {row.identityType === "pubkey" ? (
         <NostrPubkeyInput
           id={`identityValue-${row.key}`}
@@ -1083,6 +1116,12 @@ export const JITHubAllocations = React.forwardRef<
                     />
                     <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                          title={t("jitHubAllocations.lokicashBadge")}
+                        >
+                          <CoinsIcon className="h-3.5 w-3.5" />
+                        </div>
                         {c.identity_type === "pubkey" ? (
                           <NostrProfileRow
                             pubkey={c.identity_value}
@@ -1147,6 +1186,20 @@ export const JITHubAllocations = React.forwardRef<
                             {deadline?.label ?? t("claimDeadline.none")}
                           </div>
                         </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("jitHubAllocations.copyLokicash")}
+                          aria-label={t("jitHubAllocations.copyLokicash")}
+                          disabled={copyingWalletId === group.walletAppId}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyLokicash(group.walletAppId);
+                          }}
+                        >
+                          <CopyIcon className="size-4" />
+                        </Button>
 
                         <Button
                           variant="ghost"
@@ -1244,6 +1297,12 @@ export const JITHubAllocations = React.forwardRef<
                     />
                     <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                          title={t("jitHubAllocations.lokicashBadge")}
+                        >
+                          <CoinsIcon className="h-3.5 w-3.5" />
+                        </div>
                         <div className="flex -space-x-3 shrink-0">
                           {group.claims.slice(0, maxVisibleAvatars).map((c) =>
                             c.identity_type === "pubkey" ? (
@@ -1271,14 +1330,21 @@ export const JITHubAllocations = React.forwardRef<
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
+                          {/* Token status leads (this is a Lokicash first,
+                              a recipient list second); participant names
+                              follow as the secondary line. */}
                           <div className="truncate text-sm font-medium">
-                            {summarizeParticipants(group.claims, profiles, t)}
+                            {claimedCount === 0
+                              ? t("jitHubAllocations.tokenStatusUnredeemed")
+                              : claimedCount === group.claims.length
+                                ? t("jitHubAllocations.tokenStatusFullyRedeemed")
+                                : t("jitHubAllocations.tokenStatusPartiallyRedeemed", {
+                                    claimed: claimedCount,
+                                    count: group.claims.length,
+                                  })}
                           </div>
                           <div className="truncate text-xs text-muted-foreground">
-                            {t("jitHubAllocations.groupSummary", {
-                              count: group.claims.length,
-                              claimed: claimedCount,
-                            })}
+                            {summarizeParticipants(group.claims, profiles, t)}
                           </div>
                         </div>
                       </div>
@@ -1317,6 +1383,19 @@ export const JITHubAllocations = React.forwardRef<
                           )}
                         </Button>
 
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("jitHubAllocations.copyLokicash")}
+                          aria-label={t("jitHubAllocations.copyLokicash")}
+                          disabled={copyingWalletId === group.walletAppId}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyLokicash(group.walletAppId);
+                          }}
+                        >
+                          <CopyIcon className="size-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1523,6 +1602,7 @@ export const JITHubAllocations = React.forwardRef<
           lokicashToken={revealLokicashToken}
           bearerSecret={revealBearerSecret}
           mode={revealMode}
+          primaryFormat="lokicash"
           onClose={() => {
             setRevealUri(undefined);
             setRevealApp(undefined);

@@ -25,6 +25,7 @@ export function RevealConnectionDialog({
   lokicashToken,
   bearerSecret,
   mode = "reveal",
+  primaryFormat = "nwc",
   onClose,
 }: {
   app: App;
@@ -38,6 +39,10 @@ export function RevealConnectionDialog({
   // it again (NIP-JW §Bearer Slices), so there is no "reveal" path for it.
   bearerSecret?: string;
   mode?: "reveal" | "create";
+  // "lokicash": JIT wallets — the dialog title and ConnectAppCard both drop
+  // pairingUri entirely, showing only the lokicash1... token (see
+  // ConnectAppCard's own primaryFormat doc comment). Requires lokicashToken.
+  primaryFormat?: "nwc" | "lokicash";
   onClose: () => void;
 }) {
   const { t } = useTranslation("apps");
@@ -48,7 +53,9 @@ export function RevealConnectionDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="mb-2">
-            {t("connectAppCard.connectionSecret", "Connection Secret")}
+            {primaryFormat === "lokicash"
+              ? t("connectAppCard.lokicashTitle", "Lokicash")
+              : t("connectAppCard.connectionSecret", "Connection Secret")}
           </DialogTitle>
         </DialogHeader>
         <ConnectAppCard
@@ -58,6 +65,7 @@ export function RevealConnectionDialog({
           bearerSecret={bearerSecret}
           variant="reveal"
           showConnectionStatus={mode === "create"}
+          primaryFormat={primaryFormat}
         />
       </DialogContent>
     </Dialog>
