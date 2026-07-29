@@ -10,6 +10,11 @@
 
 set shell := ["bash", "-c"]
 set positional-arguments
+# Makes .env visible to both `just` recipes (via env_var_or_default below,
+# and directly in bash recipe bodies) and docker compose's own interpolation
+# (which already reads .env from the compose file's directory natively) —
+# one file, one place to set DEV_DATA_DIR (see DATA_DIR below) per checkout.
+set dotenv-load := true
 
 VERSION := shell('cat VERSION 2>/dev/null || echo "v0.0.1"')
 DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
@@ -18,6 +23,15 @@ DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
 # is named to match — so it looks in .../mainnet/ and never finds the
 # macaroon there. All authenticated flncli calls need this explicit path.
 FLND_MACAROON_PATH := "/root/.flnd/data/chain/flokicoin/main/admin.macaroon"
+# Where flnd's chain/wallet state and the hub's own data live. Defaults to
+# ./data (this checkout's own, gitignored, uninitialized in a fresh clone or
+# worktree). Set DEV_DATA_DIR in .env to an absolute path — e.g. another
+# checkout's own data/ — to reuse its already-synced flnd wallet and hub DB
+# instead of syncing/setting up a second one from scratch. Only one dev
+# stack should ever be pointed at a given data dir at a time (see `just dev
+# down`/`up` — container names are fixed, so only one stack runs at once
+# anyway).
+DATA_DIR := env_var_or_default("DEV_DATA_DIR", "data")
 
 default:
     @just --list
@@ -29,14 +43,14 @@ dev subcommand="" *args:
     set -euo pipefail
     case "$1" in
         setup)
-            mkdir -p data/flnd data/hub
-            [ -f data/flnd/flnd.conf ] || cp data/flnd/flnd.conf.sample data/flnd/flnd.conf
-            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' data/flnd/flnd.conf
-            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' data/flnd/flnd.conf
+            mkdir -p "{{DATA_DIR}}/flnd" "{{DATA_DIR}}/hub"
+            [ -f "{{DATA_DIR}}/flnd/flnd.conf" ] || cp "{{DATA_DIR}}/flnd/flnd.conf.sample" "{{DATA_DIR}}/flnd/flnd.conf"
+            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' "{{DATA_DIR}}/flnd/flnd.conf"
+            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' "{{DATA_DIR}}/flnd/flnd.conf"
             [ -f .env ] || cp .env.example .env
             ;;
         setup-wallet)
-            if [ -f "data/flnd/data/chain/flokicoin/main/wallet.db" ]; then
+            if [ -f "{{DATA_DIR}}/flnd/data/chain/flokicoin/main/wallet.db" ]; then
                 echo "✅ Existing wallet detected. Skipping creation."
             else
                 echo "🔐 Setting up FLND Wallet..."
@@ -67,16 +81,16 @@ dev subcommand="" *args:
                 echo "✅ Wallet is already unlocked."
                 exit 0
             fi
-            if [ ! -f "data/flnd/wallet-password.txt" ]; then
-                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("data/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("data/flnd/wallet-password.txt", 0o600)'
-                if grep -q "^wallet-unlock-password-file=" data/flnd/flnd.conf; then
-                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" data/flnd/flnd.conf
+            if [ ! -f "{{DATA_DIR}}/flnd/wallet-password.txt" ]; then
+                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("{{DATA_DIR}}/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("{{DATA_DIR}}/flnd/wallet-password.txt", 0o600)'
+                if grep -q "^wallet-unlock-password-file=" "{{DATA_DIR}}/flnd/flnd.conf"; then
+                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" "{{DATA_DIR}}/flnd/flnd.conf"
                 else
-                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' data/flnd/flnd.conf > data/flnd/flnd.conf.tmp && mv data/flnd/flnd.conf.tmp data/flnd/flnd.conf
+                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' "{{DATA_DIR}}/flnd/flnd.conf" > "{{DATA_DIR}}/flnd/flnd.conf.tmp" && mv "{{DATA_DIR}}/flnd/flnd.conf.tmp" "{{DATA_DIR}}/flnd/flnd.conf"
                 fi
                 {{DOCKER_COMPOSE_DEV}} restart flnd
             else
-                echo "🔐 Auto-unlock is configured but wallet is still locked. Check data/flnd/wallet-password.txt."
+                echo "🔐 Auto-unlock is configured but wallet is still locked. Check {{DATA_DIR}}/flnd/wallet-password.txt."
             fi
             ;;
         up)
@@ -113,6 +127,13 @@ dev subcommand="" *args:
       status                show status of the docker dev environment
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
       wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
+
+    set DEV_DATA_DIR in .env to an absolute path to point this stack's
+    flnd/hub data at another checkout's already-synced data/ (e.g. from a
+    worktree, to reuse the main checkout's wallet instead of syncing a
+    second one from scratch) — defaults to ./data. Only one dev stack can
+    be up at a time regardless (container names are fixed), so switching
+    checkouts is `just dev down` then `up` from the other one.
     USAGE
             ;;
         *)

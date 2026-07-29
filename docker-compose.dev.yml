@@ -1,19 +1,27 @@
 services:
   flnd:
     build:
-      context: ../flnd
+      # ../flnd etc. only resolve from the main checkout — a worktree lives
+      # several directories deeper (.claude/worktrees/<name>/), so the same
+      # relative path no longer reaches the real sibling repos. Override
+      # DEV_FLND_DIR/DEV_WALLETD_DIR/DEV_FLOKICOIN_NEUTRINO_DIR (absolute
+      # paths) in a worktree's .env — same pattern as DEV_DATA_DIR below.
+      context: ${DEV_FLND_DIR:-../flnd}
       dockerfile: dev.Dockerfile
       additional_contexts:
         # flnd, walletd, and flokicoin-neutrino evolve in lockstep on this
         # fork; this builds flnd against whatever's on disk in these sibling
         # checkouts instead of their go.mod/go.sum-pinned versions (see
         # flnd/dev.Dockerfile).
-        walletd: ../walletd
-        flokicoin-neutrino: ../flokicoin-neutrino
+        walletd: ${DEV_WALLETD_DIR:-../walletd}
+        flokicoin-neutrino: ${DEV_FLOKICOIN_NEUTRINO_DIR:-../flokicoin-neutrino}
     container_name: lokihub-dev-flnd
     restart: unless-stopped
     volumes:
-      - ./data/flnd:/root/.flnd
+      # DEV_DATA_DIR (set in .env) points this at another checkout's
+      # already-synced data/ instead of this one's own — see Justfile's
+      # `just dev help`.
+      - ${DEV_DATA_DIR:-./data}/flnd:/root/.flnd
     # dev.Dockerfile's ENTRYPOINT is already ["flnd"] -- only pass flags here.
     command: --configfile=/root/.flnd/flnd.conf
     healthcheck:
@@ -49,8 +57,8 @@ services:
       - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
     volumes:
       - .:/app
-      - ./data/hub:/data
-      - ./data/flnd:/flnd-data:ro
+      - ${DEV_DATA_DIR:-./data}/hub:/data
+      - ${DEV_DATA_DIR:-./data}/flnd:/flnd-data:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
     depends_on:
