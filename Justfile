@@ -99,6 +99,10 @@ dev subcommand="" *args:
         down)
             {{DOCKER_COMPOSE_DEV}} down
             ;;
+        restart)
+            shift
+            {{DOCKER_COMPOSE_DEV}} restart "$@"
+            ;;
         logs)
             shift
             {{DOCKER_COMPOSE_DEV}} logs -f "${1:-}"
@@ -123,6 +127,7 @@ dev subcommand="" *args:
       unlock                ensure the FLND wallet is unlocked (sets up auto-unlock if needed)
       up                    start the docker dev environment (flnd, backend, frontend w/ hot-reload)
       down                  stop the docker dev environment
+      restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
       logs [service]        follow logs for the docker dev environment or a specific service
       status                show status of the docker dev environment
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
@@ -134,6 +139,12 @@ dev subcommand="" *args:
     second one from scratch) — defaults to ./data. Only one dev stack can
     be up at a time regardless (container names are fixed), so switching
     checkouts is `just dev down` then `up` from the other one.
+
+    `restart` just restarts the existing container(s) in place - it won't
+    fix a service whose own container state is broken (e.g. an anonymous
+    volume like frontend's node_modules gone missing mid-run). For that,
+    force a clean recreation instead:
+        docker compose -f docker-compose.dev.yml up -d --force-recreate --renew-anon-volumes <service>
     USAGE
             ;;
         *)
