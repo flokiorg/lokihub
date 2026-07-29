@@ -94,6 +94,17 @@ dev subcommand="" *args:
             fi
             ;;
         up)
+            # frontend.go does //go:embed dist, so `air` can't compile the
+            # backend at all unless frontend/dist has at least one file —
+            # even though dev mode never actually serves from it (the
+            # frontend container's own Vite server does, via FRONTEND_URL).
+            # frontend/dist is git- and docker-ignored (it's a build
+            # artifact), so a fresh clone, or one where it's been deleted,
+            # has none. This placeholder exists purely to satisfy the embed;
+            # a real `frontend && yarn build:http` output overwrites it
+            # harmlessly if one's ever produced in this tree.
+            mkdir -p frontend/dist
+            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
             {{DOCKER_COMPOSE_DEV}} up -d --build
             ;;
         down)
@@ -101,6 +112,12 @@ dev subcommand="" *args:
             ;;
         restart)
             shift
+            # Same frontend/dist placeholder as `up` above — the backend
+            # container bind-mounts the live host tree, so restarting it
+            # re-runs air's build against whatever's on disk right now, not
+            # whatever existed at image-build time.
+            mkdir -p frontend/dist
+            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
             {{DOCKER_COMPOSE_DEV}} restart "$@"
             ;;
         logs)
