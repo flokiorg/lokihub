@@ -110,7 +110,6 @@
     "isolatedApp": "격리된 앱"
   },
   "circleHub": {
-    "revealConnection": "연결 표시",
     "permissionsManagedNote": "이 연결의 권한은 자동으로 관리되며 여기서 변경할 수 없습니다.",
     "budgetManagedNote": "이 연결이 요청한 권한은 자동으로 관리되지만, 예산과 만료일은 아래에서 변경할 수 있습니다.",
     "hubSettingsTitle": "허브 설정",
@@ -130,10 +129,7 @@
     "addMember": "멤버 추가",
     "circleWalletsTitle": "서클 지갑",
     "jitWalletsTitle": "Lokicash 토큰",
-    "addJitWallet": "Lokicash 발행",
-    "errors": {
-      "loadJitConnection": "Lokicash 연결을 불러오지 못했습니다"
-    }
+    "addJitWallet": "Lokicash 발행"
   },
   "newApp": {
     "unsupportedApp": "지원되지 않는 앱",

@@ -18,7 +18,6 @@ import {
   EllipsisIcon,
   InfoIcon,
   PlusIcon,
-  QrCodeIcon,
   SquarePenIcon,
   UnplugIcon,
 } from "lucide-react";
@@ -42,7 +41,6 @@ import {
 import { ChildIdentityCard } from "src/components/circles/ChildIdentityCard";
 import { CircleIdentityCard } from "src/components/circles/CircleIdentityCard";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
-import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DisconnectApp } from "src/components/connections/DisconnectApp";
 import { DisconnectCircleHub } from "src/components/connections/DisconnectCircleHub";
@@ -134,30 +132,6 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     React.useState(false);
   const [showDisconnectAppDialog, setShowDisconnectAppDialog] =
     React.useState(false);
-  // A JIT wallet's pairing key is deterministically re-derivable server-side
-  // (unlike a normal app's, which is random and discarded after creation), so
-  // its connection string can be shown again at any time — see
-  // GetJITWalletConnection on the backend.
-  const [jitConnectionUri, setJitConnectionUri] = React.useState<
-    string | undefined
-  >(undefined);
-  const [isLoadingJitConnection, setLoadingJitConnection] =
-    React.useState(false);
-
-  const handleShowJitConnection = async () => {
-    setLoadingJitConnection(true);
-    try {
-      const result = await request<{ pairing_uri: string }>(
-        `/api/apps/${app.id}/jit-connection`
-      );
-      if (result) {
-        setJitConnectionUri(result.pairing_uri);
-      }
-    } catch (error) {
-      handleRequestError(t("circleHub.errors.loadJitConnection"), error);
-    }
-    setLoadingJitConnection(false);
-  };
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
 
@@ -436,24 +410,6 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                               )}
                             </div>
                           </DropdownMenuItem>
-                          {app.kind === "jit_wallet" && (
-                            <DropdownMenuItem
-                              asChild
-                              disabled={isLoadingJitConnection}
-                            >
-                              <div
-                                className="flex items-center gap-2"
-                                onClick={handleShowJitConnection}
-                              >
-                                {isLoadingJitConnection ? (
-                                  <Loading className="size-4" />
-                                ) : (
-                                  <QrCodeIcon className="size-4" />
-                                )}{" "}
-                                {t("circleHub.revealConnection")}
-                              </div>
-                            </DropdownMenuItem>
-                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem variant="destructive" asChild>
                             <div
@@ -776,13 +732,6 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 <ConnectionDetailsModal
                   app={app}
                   onClose={() => setShowConnectionDetails(false)}
-                />
-              )}
-              {app.kind === "jit_wallet" && jitConnectionUri && (
-                <RevealConnectionDialog
-                  app={app}
-                  pairingUri={jitConnectionUri}
-                  onClose={() => setJitConnectionUri(undefined)}
                 />
               )}
               {showDisconnectAppDialog &&

@@ -96,7 +96,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "Кошелёк круга",
-    "jitWallet": "JIT-кошелёк",
+    "jitWallet": "Токен Lokicash",
     "claimedCount": "Получено {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "Не удалось загрузить получателей JIT-кошелька"

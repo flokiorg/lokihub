@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "Billetera de círculo",
-    "jitWallet": "Billetera JIT",
+    "jitWallet": "Token Lokicash",
     "claimedCount": "{{claimed}}/{{total}} reclamados",
     "errors": {
       "loadRecipients": "Error al cargar los destinatarios de la billetera JIT"

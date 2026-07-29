@@ -1,11 +1,13 @@
 import React from "react";
-import { Copy, KeyRound } from "lucide-react";
+import { Copy, CoinsIcon, KeyRound, QrCodeIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ClaimStateBadge } from "src/components/circles/ClaimStateBadge";
 import { NostrIdentityHeader } from "src/components/circles/NostrIdentityHeader";
+import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
 import { Avatar, AvatarFallback } from "src/components/ui/avatar";
 import { Badge } from "src/components/ui/badge";
+import { Button } from "src/components/ui/button";
 import {
   Card,
   CardContent,
@@ -16,7 +18,12 @@ import { Skeleton } from "src/components/ui/skeleton";
 import { useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { cn } from "src/lib/utils";
 import { copyToClipboard } from "src/lib/clipboard";
-import { App, JITWalletClaim, ListJITWalletClaimsResponse } from "src/types";
+import {
+  App,
+  JITWalletClaim,
+  JITWalletConnectionResponse,
+  ListJITWalletClaimsResponse,
+} from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { formatClaimDeadline } from "src/utils/jitWallet";
 import { shortenMiddle } from "src/utils/nostr";
@@ -129,6 +136,10 @@ function JITWalletRecipientsCard({ app }: { app: App }) {
   const [recipients, setRecipients] = React.useState<
     JITWalletClaim[] | undefined
   >(undefined);
+  const [connection, setConnection] = React.useState<
+    JITWalletConnectionResponse | undefined
+  >(undefined);
+  const [showReveal, setShowReveal] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -155,6 +166,32 @@ function JITWalletRecipientsCard({ app }: { app: App }) {
     };
   }, [app.id, t]);
 
+  // The wallet's own connection is deterministically re-derivable at any
+  // time (NIP-JW §The Pairing Connection) and doesn't need to be kept
+  // secret (NIP-JW §The Lokicash Token) — fetched eagerly, same as the
+  // recipient roster above, so the token is already on screen instead of
+  // gated behind a separate reveal click.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await request<JITWalletConnectionResponse>(
+          `/api/apps/${app.id}/jit-connection`
+        );
+        if (!cancelled && data) {
+          setConnection(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          handleRequestError(t("jitHubAllocations.errors.loadConnection"), error);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [app.id, t]);
+
   const pubkeyIdentities = React.useMemo(
     () =>
       (recipients ?? [])
@@ -172,9 +209,9 @@ function JITWalletRecipientsCard({ app }: { app: App }) {
       <Card>
         <CardHeader className="gap-3">
           <CardTitle>{t("childIdentityCard.jitWallet")}</CardTitle>
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-12 w-12 rounded-full" />
-            <Skeleton className="h-5 w-40" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+            <Skeleton className="h-5 w-48" />
           </div>
         </CardHeader>
       </Card>
@@ -185,37 +222,78 @@ function JITWalletRecipientsCard({ app }: { app: App }) {
     return null;
   }
 
-  if (recipients.length === 1) {
-    return (
-      <Card>
-        <CardHeader className="gap-3">
-          <CardTitle>{t("childIdentityCard.jitWallet")}</CardTitle>
-          <BeneficiaryProfile claim={recipients[0]} />
-        </CardHeader>
-      </Card>
-    );
-  }
-
   const claimedCount = recipients.filter((r) => r.claimed).length;
 
+  // Same "lead with the token" template the JIT hub's own allocations table
+  // uses (NIP-JW §The Lokicash Token) — a single recipient just renders its
+  // one full identity below the token instead of a scrollable list.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          {t("childIdentityCard.jitWallet")}
-          <Badge variant="secondary" className="tabular-nums font-normal">
-            {t("childIdentityCard.claimedCount", {
-              claimed: claimedCount,
-              total: recipients.length,
-            })}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {recipients.map((r) => (
-          <BeneficiaryProfile key={r.id} claim={r} bordered />
-        ))}
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardHeader className="gap-3">
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            {t("childIdentityCard.jitWallet")}
+            {recipients.length > 1 && (
+              <Badge variant="secondary" className="tabular-nums font-normal">
+                {t("childIdentityCard.claimedCount", {
+                  claimed: claimedCount,
+                  total: recipients.length,
+                })}
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+              title={t("jitHubAllocations.lokicashBadge")}
+            >
+              <CoinsIcon className="h-3.5 w-3.5" />
+            </div>
+            {connection ? (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(connection.lokicash_token)}
+                title={t("jitHubAllocations.copyLokicash")}
+                className="min-w-0 flex-1 truncate text-start font-mono text-sm font-medium hover:underline"
+              >
+                {shortenMiddle(connection.lokicash_token, 14, 6)}
+              </button>
+            ) : (
+              <Skeleton className="h-5 w-48" />
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              title={t("jitHubAllocations.revealConnection")}
+              aria-label={t("jitHubAllocations.revealConnection")}
+              disabled={!connection}
+              onClick={() => setShowReveal(true)}
+            >
+              <QrCodeIcon className="size-4" />
+            </Button>
+          </div>
+          {recipients.length === 1 && (
+            <BeneficiaryProfile claim={recipients[0]} />
+          )}
+        </CardHeader>
+        {recipients.length > 1 && (
+          <CardContent className="grid gap-3">
+            {recipients.map((r) => (
+              <BeneficiaryProfile key={r.id} claim={r} bordered />
+            ))}
+          </CardContent>
+        )}
+      </Card>
+      {showReveal && connection && (
+        <RevealConnectionDialog
+          app={app}
+          pairingUri={connection.pairing_uri}
+          lokicashToken={connection.lokicash_token}
+          primaryFormat="lokicash"
+          onClose={() => setShowReveal(false)}
+        />
+      )}
+    </>
   );
 }

@@ -110,7 +110,6 @@
     "isolatedApp": "Изолированное приложение"
   },
   "circleHub": {
-    "revealConnection": "Показать подключение",
     "permissionsManagedNote": "Разрешения этого подключения управляются автоматически, и их нельзя изменить здесь.",
     "budgetManagedNote": "Запрошенные разрешения этого подключения управляются автоматически, но его бюджет и срок действия ещё можно изменить ниже.",
     "hubSettingsTitle": "Настройки хаба",
@@ -130,10 +129,7 @@
     "addMember": "Добавить участника",
     "circleWalletsTitle": "Кошельки круга",
     "jitWalletsTitle": "Токены Lokicash",
-    "addJitWallet": "Отчеканить Lokicash",
-    "errors": {
-      "loadJitConnection": "Не удалось загрузить подключение Lokicash"
-    }
+    "addJitWallet": "Отчеканить Lokicash"
   },
   "newApp": {
     "title": "Подключить новое приложение",

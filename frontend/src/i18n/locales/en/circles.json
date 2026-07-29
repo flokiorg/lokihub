@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "Circle Wallet",
-    "jitWallet": "JIT Wallet",
+    "jitWallet": "Lokicash Token",
     "claimedCount": "{{claimed}}/{{total}} claimed",
     "errors": {
       "loadRecipients": "Failed to load JIT wallet recipients"

@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "圈子钱包",
-    "jitWallet": "JIT 钱包",
+    "jitWallet": "Lokicash 代币",
     "claimedCount": "已领取 {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "加载 JIT 钱包接收人失败"

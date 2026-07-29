@@ -110,7 +110,6 @@
     "isolatedApp": "اپلیکیشن جداسازی‌شده"
   },
   "circleHub": {
-    "revealConnection": "نمایش اتصال",
     "permissionsManagedNote": "دسترسی‌های این اتصال به‌طور خودکار مدیریت می‌شوند و اینجا قابل تغییر نیستند.",
     "budgetManagedNote": "دسترسی‌های درخواستی این اتصال به‌طور خودکار مدیریت می‌شوند، اما بودجه و تاریخ انقضای آن هنوز در پایین قابل تغییر است.",
     "hubSettingsTitle": "تنظیمات هاب",
@@ -130,10 +129,7 @@
     "addMember": "افزودن عضو",
     "circleWalletsTitle": "کیف‌پول‌های حلقه",
     "jitWalletsTitle": "توکن‌های Lokicash",
-    "addJitWallet": "ضرب Lokicash",
-    "errors": {
-      "loadJitConnection": "بارگذاری اتصال Lokicash ناموفق بود"
-    }
+    "addJitWallet": "ضرب Lokicash"
   },
   "newApp": {
     "unsupportedApp": "اپلیکیشن پشتیبانی‌نشده",
