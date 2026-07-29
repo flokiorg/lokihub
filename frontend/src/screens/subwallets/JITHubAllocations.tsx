@@ -48,12 +48,15 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LIST_JIT_ALLOCATIONS_LIMIT } from "src/constants";
 import { useApp } from "src/hooks/useApp";
-import { useNostrProfiles } from "src/hooks/useNostrProfiles";
+import { useNip05Verification } from "src/hooks/useNip05Verification";
+import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
+import { getAuthToken } from "src/lib/auth";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { formatClaimDeadline } from "src/utils/jitWallet";
-import { shortenMiddle } from "src/utils/nostr";
+import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
+import { validateHTTPURL } from "src/utils/validation";
 import {
   App,
   CreateJITWalletResponse,
@@ -117,6 +120,52 @@ function recipientIdentityValue(row: RecipientRow): string | undefined {
   return value || undefined;
 }
 
+// A pubkey pill's leading glyph: the recipient's own profile picture when
+// they have one (proxied through our backend, same as NostrAvatar, so the
+// browser never connects straight to an arbitrary Nostr media host), or the
+// generic identity icon otherwise — deliberately never initials. A pill is
+// meant to read as "an icon plus a short identifier," and initials read as
+// a half-resolved name, which contradicts the whole point of not showing
+// names here.
+function PillIdentityGlyph({ profile }: { profile: NostrProfile | undefined }) {
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const authToken = getAuthToken();
+  const pictureUrl =
+    profile?.picture &&
+    validateHTTPURL(profile.picture, "profile picture") === null &&
+    authToken
+      ? `/api/circle/avatar-proxy?url=${encodeURIComponent(profile.picture)}&token=${encodeURIComponent(authToken)}`
+      : undefined;
+
+  if (!pictureUrl || imageFailed) {
+    return <UserRoundIcon className="h-3 w-3 shrink-0" />;
+  }
+  return (
+    <img
+      src={pictureUrl}
+      alt=""
+      onError={() => setImageFailed(true)}
+      className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+    />
+  );
+}
+
+// A pubkey pill's text: a verified nip05 reads far better than a hex
+// fragment, but an unverified one is just an unchecked claim from the
+// profile's own kind:0 event — falls back to a short npub (never raw hex)
+// whenever nip05 is absent or hasn't been confirmed to resolve back to this
+// pubkey yet.
+function pillIdentityLabel(
+  pubkey: string,
+  profile: NostrProfile | undefined,
+  isVerifiedNip05: boolean
+): string {
+  if (isVerifiedNip05 && profile?.nip05) {
+    return profile.nip05;
+  }
+  return shortenMiddle(safeNpubEncode(pubkey) ?? pubkey, 8, 4);
+}
+
 function formatDurationLabel(
   seconds: number | undefined,
   t: TFunction<"circles">
@@ -167,6 +216,10 @@ export const JITHubAllocations = React.forwardRef<
     [claims]
   );
   const { profiles } = useNostrProfiles(pubkeyIdentities);
+  // Verifies each pubkey recipient's claimed nip05 actually resolves back to
+  // them (DNS .well-known lookup) before the pill trusts it over a short
+  // npub — an unverified nip05 string in a kind:0 event is just a claim.
+  const { verified: verifiedNip05 } = useNip05Verification(profiles);
 
   // A JIT wallet's connection is deterministically re-derivable (see
   // GetJITWalletConnection on the backend), so it can be revealed inline
@@ -1119,13 +1172,17 @@ export const JITHubAllocations = React.forwardRef<
                             lokicash1…
                           </span>
                         )}
-                        {/* Identity pills — icon plus a short identifier,
-                            deliberately no name/avatar here (NIP-JW: a
-                            recipient's real identity is proof-gated detail,
-                            not something this summary needs to resolve).
-                            Expand (multi) or click through (single) for
-                            that. Same pill shape for one recipient or many —
-                            a single-recipient row just renders exactly one. */}
+                        {/* Identity pills — a small icon (or, for a pubkey
+                            with a set profile picture, the recipient's own
+                            avatar) plus a short identifier, deliberately no
+                            display name here (NIP-JW: a recipient's real
+                            identity is proof-gated detail, not something
+                            this summary needs to resolve — a verified nip05
+                            or npub is a stable identifier, not a mutable
+                            display name). Expand (multi) or click through
+                            (single) for full detail. Same pill shape for one
+                            recipient or many — a single-recipient row just
+                            renders exactly one. */}
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           {group.claims
                             .slice(0, maxVisiblePills)
@@ -1133,18 +1190,28 @@ export const JITHubAllocations = React.forwardRef<
                               <Badge
                                 key={c.id}
                                 variant="outline"
-                                className="gap-1 px-1.5 py-0 font-mono text-[11px] font-normal text-muted-foreground"
+                                className="max-w-[10rem] gap-1 px-1.5 py-0 font-mono text-[11px] font-normal text-muted-foreground"
                               >
                                 {c.identity_type === "pubkey" ? (
-                                  <UserRoundIcon className="h-3 w-3" />
+                                  <PillIdentityGlyph
+                                    profile={profiles.get(c.identity_value)}
+                                  />
                                 ) : c.identity_type === "bearer" ? (
-                                  <BanknoteIcon className="h-3 w-3" />
+                                  <BanknoteIcon className="h-3 w-3 shrink-0" />
                                 ) : (
-                                  <KeyRound className="h-3 w-3" />
+                                  <KeyRound className="h-3 w-3 shrink-0" />
                                 )}
-                                {c.identity_type === "bearer"
-                                  ? t("identityType.bearer")
-                                  : shortenMiddle(c.identity_value, 6, 4)}
+                                <span className="truncate">
+                                  {c.identity_type === "bearer"
+                                    ? t("identityType.bearer")
+                                    : c.identity_type === "pubkey"
+                                      ? pillIdentityLabel(
+                                          c.identity_value,
+                                          profiles.get(c.identity_value),
+                                          verifiedNip05.has(c.identity_value)
+                                        )
+                                      : shortenMiddle(c.identity_value, 6, 4)}
+                                </span>
                               </Badge>
                             ))}
                           {group.claims.length > maxVisiblePills && (
