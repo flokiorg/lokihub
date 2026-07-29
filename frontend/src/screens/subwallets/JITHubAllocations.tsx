@@ -3,12 +3,12 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CoinsIcon,
-  CopyIcon,
   KeyRound,
   PlusCircleIcon,
   PlusIcon,
   QrCodeIcon,
   Trash2Icon,
+  UserRoundIcon,
   XIcon,
 } from "lucide-react";
 import { TFunction } from "i18next";
@@ -21,7 +21,6 @@ import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
-import { NostrAvatar } from "src/components/NostrAvatar";
 import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
 import {
   AlertDialog,
@@ -49,7 +48,7 @@ import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LIST_JIT_ALLOCATIONS_LIMIT } from "src/constants";
 import { useApp } from "src/hooks/useApp";
-import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
+import { useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
@@ -76,11 +75,10 @@ export type JITHubAllocationsHandle = {
   openAdd: () => void;
 };
 
-// How many recipient avatars a multi-recipient wallet's collapsed summary
-// row shows before collapsing the rest into a "+N" count — keeps the row a
-// single line regardless of how many beneficiaries (up to
-// maxRecipientsPerWallet) share the wallet.
-const maxVisibleAvatars = 5;
+// How many identity pills a row shows before collapsing the rest into a
+// "+N" badge — keeps the row a single line regardless of how many
+// beneficiaries (up to maxRecipientsPerWallet) share the wallet.
+const maxVisiblePills = 5;
 
 let recipientRowCounter = 0;
 function newRecipientRow(amountLoki: number): RecipientRow {
@@ -117,58 +115,6 @@ function recipientIdentityValue(row: RecipientRow): string | undefined {
       ? row.resolvedPubkeyHex
       : row.connectionKeyValue.trim();
   return value || undefined;
-}
-
-// Nostr display names are user-supplied and unbounded — a long one must not
-// be allowed to eat the whole summary line, or the "& N others" suffix that
-// makes the line meaningful gets silently clipped off by the container's
-// CSS truncate before a reader ever sees it.
-const maxNameLabelLen = 20;
-
-function truncateLabel(label: string, maxLen: number): string {
-  return label.length > maxLen ? `${label.slice(0, maxLen - 1)}…` : label;
-}
-
-// A short display label for one recipient — resolved profile name/nip05 for
-// a pubkey identity, a generic label for a bare connection key (it has no
-// profile to resolve). Used to give a multi-recipient wallet's collapsed
-// summary row a real name instead of just an avatar stack.
-function recipientLabel(
-  claim: JITWalletClaim,
-  profiles: Map<string, NostrProfile>,
-  t: TFunction<"circles">
-): string {
-  if (claim.identity_type !== "pubkey") {
-    return t("identityType.connectionKey");
-  }
-  const profile = profiles.get(claim.identity_value);
-  const name = profile?.displayName || profile?.name || t("common.anonymous");
-  return truncateLabel(name, maxNameLabelLen);
-}
-
-// Summarizes a wallet's recipients the way an email client lists thread
-// participants ("Alice & Bob", "Alice & 2 others") — gives the collapsed
-// summary row a name-shaped headline instead of leaving that slot empty,
-// which is what made it read as a different kind of row than a
-// single-recipient one. Each name is pre-truncated (see recipientLabel)
-// rather than relying solely on the container's CSS truncate, so the "& …"
-// suffix stays visible instead of being swallowed by one long first name.
-function summarizeParticipants(
-  claims: JITWalletClaim[],
-  profiles: Map<string, NostrProfile>,
-  t: TFunction<"circles">
-): string {
-  const first = recipientLabel(claims[0], profiles, t);
-  if (claims.length === 2) {
-    return t("jitHubAllocations.participantsPair", {
-      first,
-      second: recipientLabel(claims[1], profiles, t),
-    });
-  }
-  return t("jitHubAllocations.participantsOthers", {
-    first,
-    count: claims.length - 1,
-  });
 }
 
 function formatDurationLabel(
@@ -271,29 +217,6 @@ export const JITHubAllocations = React.forwardRef<
       handleRequestError(t("jitHubAllocations.errors.loadConnection"), error);
     }
     setRevealingWalletId(null);
-  };
-
-  // Quick "just give me the string" action, separate from
-  // handleRevealConnection's dialog — minting a Lokicash is pointless if
-  // handing it out takes two clicks (open the dialog, then find the copy
-  // button inside it). Fetches the same re-derivable connection and copies
-  // its lokicash_token directly.
-  const [copyingWalletId, setCopyingWalletId] = React.useState<number | null>(
-    null
-  );
-  const handleCopyLokicash = async (walletAppId: number) => {
-    setCopyingWalletId(walletAppId);
-    try {
-      const connection = await request<JITWalletConnectionResponse>(
-        `/api/apps/${walletAppId}/jit-connection`
-      );
-      if (connection) {
-        copyToClipboard(connection.lokicash_token);
-      }
-    } catch (error) {
-      handleRequestError(t("jitHubAllocations.errors.loadConnection"), error);
-    }
-    setCopyingWalletId(null);
   };
 
   // Only unclaimed rows can be individually removed/bulk-selected (removing
@@ -1083,169 +1006,19 @@ export const JITHubAllocations = React.forwardRef<
           <div className="grid gap-2 p-1 min-w-0">
             {displayGroups.map((group) => {
               const isMulti = group.claims.length > 1;
-              // Deadline/expiry is one property of the wallet App itself,
-              // shared by every beneficiary in the group — safe to read off
-              // the first claim.
-              const deadline = group.claims[0].expires_at
-                ? formatClaimDeadline(group.claims[0].expires_at)
-                : undefined;
-
-              // A single-recipient wallet's one row already shows everything
-              // there is to manage for it — render it exactly like a plain
-              // recipient row, reveal action included, and skip the
-              // summary/expand machinery entirely.
-              if (!isMulti) {
-                const c = group.claims[0];
-                const canRemoveRow = removableIds.has(c.id);
-                return (
-                  <div
-                    key={group.claims[0].id}
-                    className={cn(
-                      "group flex min-w-0 cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors hover:bg-accent/50 sm:items-center sm:gap-3",
-                      selected.has(c.id) && "bg-accent/50"
-                    )}
-                    onClick={() => navigate(`/apps/${c.wallet_app_id}`)}
-                  >
-                    <Checkbox
-                      checked={selected.has(c.id)}
-                      onCheckedChange={() => toggleOne(c.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      disabled={!canRemoveRow}
-                      aria-label={t("jitHubAllocations.selectRecipient")}
-                      className="mt-1 shrink-0 sm:mt-0"
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-                          title={t("jitHubAllocations.lokicashBadge")}
-                        >
-                          <CoinsIcon className="h-3.5 w-3.5" />
-                        </div>
-                        {c.identity_type === "pubkey" ? (
-                          <NostrProfileRow
-                            pubkey={c.identity_value}
-                            profile={profiles.get(c.identity_value)}
-                            avatarClassName="h-9 w-9"
-                            showCopy={false}
-                          />
-                        ) : c.identity_type === "bearer" ? (
-                          // A bearer slice is always this wallet's only
-                          // recipient (NIP-JW §Bearer Slices), so this only
-                          // ever renders here (the single-recipient row) —
-                          // never in the multi-recipient group views below.
-                          // identity_value here is a one-way commitment, not
-                          // an actual identity — safe to show, but must be
-                          // labeled distinctly from a real connection_key.
-                          <>
-                            <Avatar className="h-9 w-9 shrink-0">
-                              <AvatarFallback>
-                                <BanknoteIcon className="h-4 w-4 text-muted-foreground" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate font-mono text-xs text-muted-foreground">
-                                {shortenMiddle(c.identity_value)}
-                              </span>
-                              <Badge variant="outline" className="mt-1">
-                                {t("identityType.bearer")}
-                              </Badge>
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <Avatar className="h-9 w-9 shrink-0">
-                              <AvatarFallback>
-                                <KeyRound className="h-4 w-4 text-muted-foreground" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate font-mono text-xs text-muted-foreground">
-                                {shortenMiddle(c.identity_value)}
-                              </span>
-                              <Badge variant="outline" className="mt-1">
-                                {t("identityType.connectionKey")}
-                              </Badge>
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
-                        <div
-                          className="text-end tabular-nums"
-                          title={deadline?.title}
-                        >
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="text-sm font-medium">
-                              {(c.amount_mloki / 1000).toLocaleString()} loki
-                            </span>
-                            <ClaimStateBadge claim={c} />
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {deadline?.label ?? t("claimDeadline.none")}
-                          </div>
-                        </div>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t("jitHubAllocations.copyLokicash")}
-                          aria-label={t("jitHubAllocations.copyLokicash")}
-                          disabled={copyingWalletId === group.walletAppId}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyLokicash(group.walletAppId);
-                          }}
-                        >
-                          <CopyIcon className="size-4" />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t("jitHubAllocations.revealConnection")}
-                          aria-label={t("jitHubAllocations.revealConnection")}
-                          disabled={revealingWalletId === group.walletAppId}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRevealConnection(group.walletAppId);
-                          }}
-                        >
-                          <QrCodeIcon className="size-4" />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t("common.remove")}
-                          aria-label={t("common.remove")}
-                          className={cn(
-                            "text-muted-foreground hover:text-destructive",
-                            !canRemoveRow && "invisible"
-                          )}
-                          disabled={!canRemoveRow}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmDeleteClaim(c);
-                          }}
-                        >
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Multi-recipient wallet: exactly one summary row, collapsed by
-              // default — per-beneficiary detail (and the ability to
-              // select/remove one of them) only appears once expanded.
+              const totalCount = group.claims.length;
+              const claimedCount = group.claims.filter((c) => c.claimed).length;
               const totalLoki = group.claims.reduce(
                 (sum, c) => sum + c.amount_mloki / 1000,
                 0
               );
-              const claimedCount = group.claims.filter((c) => c.claimed).length;
+              // Deadline/expiry and lokicash_token are both properties of the
+              // wallet App itself, shared by every beneficiary in the group —
+              // safe to read off the first claim.
+              const deadline = group.claims[0].expires_at
+                ? formatClaimDeadline(group.claims[0].expires_at)
+                : undefined;
+              const lokicashToken = group.claims[0].lokicash_token;
               const groupRemovableIds = group.claims
                 .filter((c) => removableIds.has(c.id))
                 .map((c) => c.id);
@@ -1271,81 +1044,117 @@ export const JITHubAllocations = React.forwardRef<
                 });
               };
               const isExpanded = expandedWallets.has(group.walletAppId);
+              const canRemoveSingle =
+                !isMulti && removableIds.has(group.claims[0].id);
 
               return (
                 <div
                   key={group.claims[0].id}
                   className="rounded-md border min-w-0"
                 >
+                  {/* One row shape for every token, whether it has one
+                      recipient or several — see the "same UI regardless of
+                      recipient count" redesign note above displayGroups.
+                      Only what a pill/expand genuinely needs (selecting a
+                      GROUP of claims at once, having something to expand)
+                      branches on isMulti; everything else renders once. */}
                   <div
                     className="flex min-w-0 cursor-pointer items-start gap-2 p-2 transition-colors hover:bg-accent/50 sm:items-center sm:gap-3"
                     onClick={() => navigate(`/apps/${group.walletAppId}`)}
                   >
                     <Checkbox
                       checked={
-                        groupAllSelected
-                          ? true
-                          : groupSomeSelected
-                            ? "indeterminate"
-                            : false
+                        isMulti
+                          ? groupAllSelected
+                            ? true
+                            : groupSomeSelected
+                              ? "indeterminate"
+                              : false
+                          : selected.has(group.claims[0].id)
                       }
-                      onCheckedChange={toggleGroupSelected}
+                      onCheckedChange={
+                        isMulti
+                          ? toggleGroupSelected
+                          : () => toggleOne(group.claims[0].id)
+                      }
                       onClick={(e) => e.stopPropagation()}
-                      disabled={groupRemovableIds.length === 0}
-                      aria-label={t("jitHubAllocations.selectAllInWallet")}
+                      disabled={
+                        isMulti ? groupRemovableIds.length === 0 : !canRemoveSingle
+                      }
+                      aria-label={
+                        isMulti
+                          ? t("jitHubAllocations.selectAllInWallet")
+                          : t("jitHubAllocations.selectRecipient")
+                      }
                       className="mt-1 shrink-0 sm:mt-0"
                     />
+
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                      title={t("jitHubAllocations.lokicashBadge")}
+                    >
+                      <CoinsIcon className="h-3.5 w-3.5" />
+                    </div>
+
                     <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-                          title={t("jitHubAllocations.lokicashBadge")}
-                        >
-                          <CoinsIcon className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="flex -space-x-3 shrink-0">
-                          {group.claims.slice(0, maxVisibleAvatars).map((c) =>
-                            c.identity_type === "pubkey" ? (
-                              <NostrAvatar
+                      <div className="min-w-0 flex-1">
+                        {/* The token's own string leads — this is a
+                            Lokicash first, a recipient list second. Click
+                            to copy directly; no separate copy button, which
+                            would just be the same action twice. */}
+                        {lokicashToken ? (
+                          <button
+                            type="button"
+                            className="block max-w-full truncate rounded font-mono text-sm font-medium hover:underline"
+                            title={t("jitHubAllocations.copyLokicash")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(lokicashToken);
+                            }}
+                          >
+                            {shortenMiddle(lokicashToken, 14, 6)}
+                          </button>
+                        ) : (
+                          <span className="block truncate font-mono text-sm text-muted-foreground">
+                            lokicash1…
+                          </span>
+                        )}
+                        {/* Identity pills — icon plus a short identifier,
+                            deliberately no name/avatar here (NIP-JW: a
+                            recipient's real identity is proof-gated detail,
+                            not something this summary needs to resolve).
+                            Expand (multi) or click through (single) for
+                            that. Same pill shape for one recipient or many —
+                            a single-recipient row just renders exactly one. */}
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {group.claims
+                            .slice(0, maxVisiblePills)
+                            .map((c) => (
+                              <Badge
                                 key={c.id}
-                                pubkey={c.identity_value}
-                                profile={profiles.get(c.identity_value)}
-                                className="h-9 w-9 border-2 border-background"
-                              />
-                            ) : (
-                              <Avatar
-                                key={c.id}
-                                className="h-9 w-9 border-2 border-background"
+                                variant="outline"
+                                className="gap-1 px-1.5 py-0 font-mono text-[11px] font-normal text-muted-foreground"
                               >
-                                <AvatarFallback>
-                                  <KeyRound className="h-4 w-4 text-muted-foreground" />
-                                </AvatarFallback>
-                              </Avatar>
-                            )
+                                {c.identity_type === "pubkey" ? (
+                                  <UserRoundIcon className="h-3 w-3" />
+                                ) : c.identity_type === "bearer" ? (
+                                  <BanknoteIcon className="h-3 w-3" />
+                                ) : (
+                                  <KeyRound className="h-3 w-3" />
+                                )}
+                                {c.identity_type === "bearer"
+                                  ? t("identityType.bearer")
+                                  : shortenMiddle(c.identity_value, 6, 4)}
+                              </Badge>
+                            ))}
+                          {group.claims.length > maxVisiblePills && (
+                            <Badge
+                              variant="outline"
+                              className="px-1.5 py-0 text-[11px] font-normal text-muted-foreground"
+                            >
+                              +{group.claims.length - maxVisiblePills}
+                            </Badge>
                           )}
-                          {group.claims.length > maxVisibleAvatars && (
-                            <span className="z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-background bg-muted text-xs text-muted-foreground">
-                              +{group.claims.length - maxVisibleAvatars}
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {/* Token status leads (this is a Lokicash first,
-                              a recipient list second); participant names
-                              follow as the secondary line. */}
-                          <div className="truncate text-sm font-medium">
-                            {claimedCount === 0
-                              ? t("jitHubAllocations.tokenStatusUnredeemed")
-                              : claimedCount === group.claims.length
-                                ? t("jitHubAllocations.tokenStatusFullyRedeemed")
-                                : t("jitHubAllocations.tokenStatusPartiallyRedeemed", {
-                                    claimed: claimedCount,
-                                    count: group.claims.length,
-                                  })}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {summarizeParticipants(group.claims, profiles, t)}
-                          </div>
                         </div>
                       </div>
 
@@ -1354,48 +1163,55 @@ export const JITHubAllocations = React.forwardRef<
                           className="text-end tabular-nums"
                           title={deadline?.title}
                         >
-                          <div className="text-sm font-medium">
-                            {totalLoki.toLocaleString()} loki
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-sm font-medium">
+                              {totalLoki.toLocaleString()} loki
+                            </span>
+                            {claimedCount === totalCount ? (
+                              <Badge variant="positive">
+                                {t("jitHubAllocations.tokenStatusFullyRedeemed")}
+                              </Badge>
+                            ) : claimedCount === 0 ? (
+                              <Badge variant="secondary">
+                                {t("jitHubAllocations.tokenStatusUnredeemed")}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">
+                                {t("jitHubAllocations.tokenStatusPartiallyRedeemed", {
+                                  claimed: claimedCount,
+                                  count: totalCount,
+                                })}
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {deadline?.label ?? t("claimDeadline.none")}
                           </div>
                         </div>
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExpanded(group.walletAppId);
-                          }}
-                          aria-expanded={isExpanded}
-                          aria-label={
-                            isExpanded
-                              ? t("jitHubAllocations.collapseRecipients")
-                              : t("jitHubAllocations.expandRecipients")
-                          }
-                        >
-                          {isExpanded ? (
-                            <ChevronDownIcon className="size-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRightIcon className="size-4 text-muted-foreground" />
-                          )}
-                        </Button>
+                        {isMulti && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpanded(group.walletAppId);
+                            }}
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded
+                                ? t("jitHubAllocations.collapseRecipients")
+                                : t("jitHubAllocations.expandRecipients")
+                            }
+                          >
+                            {isExpanded ? (
+                              <ChevronDownIcon className="size-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRightIcon className="size-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        )}
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t("jitHubAllocations.copyLokicash")}
-                          aria-label={t("jitHubAllocations.copyLokicash")}
-                          disabled={copyingWalletId === group.walletAppId}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyLokicash(group.walletAppId);
-                          }}
-                        >
-                          <CopyIcon className="size-4" />
-                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1409,15 +1225,32 @@ export const JITHubAllocations = React.forwardRef<
                         >
                           <QrCodeIcon className="size-4" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
-                          title={t("jitHubAllocations.removeWallet")}
-                          aria-label={t("jitHubAllocations.removeWallet")}
-                          className="text-muted-foreground hover:text-destructive"
+                          title={
+                            isMulti
+                              ? t("jitHubAllocations.removeWallet")
+                              : t("common.remove")
+                          }
+                          aria-label={
+                            isMulti
+                              ? t("jitHubAllocations.removeWallet")
+                              : t("common.remove")
+                          }
+                          className={cn(
+                            "text-muted-foreground hover:text-destructive",
+                            !isMulti && !canRemoveSingle && "invisible"
+                          )}
+                          disabled={!isMulti && !canRemoveSingle}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setConfirmDeleteWallet(group.claims[0]);
+                            if (isMulti) {
+                              setConfirmDeleteWallet(group.claims[0]);
+                            } else {
+                              setConfirmDeleteClaim(group.claims[0]);
+                            }
                           }}
                         >
                           <Trash2Icon className="size-4" />
@@ -1426,7 +1259,7 @@ export const JITHubAllocations = React.forwardRef<
                     </div>
                   </div>
 
-                  {isExpanded && (
+                  {isMulti && isExpanded && (
                     <div className="grid max-h-96 gap-1 overflow-y-auto overscroll-contain border-t p-1 min-w-0">
                       {group.claims.map((c) => {
                         const canRemoveRow = removableIds.has(c.id);

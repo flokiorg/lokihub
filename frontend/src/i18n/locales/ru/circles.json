@@ -178,8 +178,6 @@
     }
   },
   "jitHubAllocations": {
-    "participantsPair": "{{first}} и {{second}}",
-    "participantsOthers": "{{first}} и ещё {{count}}",
     "durationDays_one": "{{count}} день",
     "durationDays_few": "{{count}} дня",
     "durationDays_many": "{{count}} дней",

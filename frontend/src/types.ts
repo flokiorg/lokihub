@@ -890,6 +890,10 @@ export interface JITWalletClaim {
   claimed: boolean;
   claimed_at?: number;
   created_at: number;
+  // The wallet's own connection, packaged as a lokicash1... string —
+  // identical for every claim sharing the same wallet_app_id. Only
+  // populated for the page of results actually returned.
+  lokicash_token?: string;
 }
 
 export type JITAllocationStatus = "unclaimed" | "claimed" | "expired";

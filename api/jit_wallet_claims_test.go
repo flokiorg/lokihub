@@ -82,6 +82,59 @@ func TestListJITWalletClaims_HappyPath(t *testing.T) {
 	assert.True(t, ids[pk2])
 }
 
+// TestListJITWalletClaims_LokicashTokenPerWallet verifies every claim
+// belonging to the same wallet gets the identical, correctly-derived
+// lokicash token, and that a different wallet gets a different one — the
+// UI groups claims by wallet_app_id and reads the token off any one claim
+// in the group, so a mismatch here would show the wrong connection.
+func TestListJITWalletClaims_LokicashTokenPerWallet(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateJITHub(t, svc, 10_000, 3600)
+	walletA := newBareJITWallet(t, svc, hub, 10)
+	walletB := newBareJITWallet(t, svc, hub, 5)
+	pk1 := tests.RandomHex32()
+	pk2 := tests.RandomHex32()
+	pk3 := tests.RandomHex32()
+
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(walletA.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk1, AmountMloki: 3000},
+		{IdentityType: db.JITAllocIdentityConnectionKey, IdentityValue: pk2, AmountMloki: 7000},
+	}))
+	require.NoError(t, svc.AppsService.CreateJITWalletClaims(walletB.ID, []db.JITWalletClaim{
+		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk3, AmountMloki: 5000},
+	}))
+
+	theAPI := newTestAPI(svc)
+	result, _, _, err := theAPI.ListJITWalletClaims(hub.ID, 0, 0, "")
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+
+	tokenByWallet := map[uint]string{}
+	for _, r := range result {
+		require.NotEmpty(t, r.LokicashToken, "wallet %d claim missing a lokicash token", r.WalletAppID)
+		if existing, ok := tokenByWallet[r.WalletAppID]; ok {
+			assert.Equal(t, existing, r.LokicashToken, "claims sharing a wallet must get the identical token")
+		}
+		tokenByWallet[r.WalletAppID] = r.LokicashToken
+	}
+	require.Len(t, tokenByWallet, 2)
+	assert.NotEqual(t, tokenByWallet[walletA.ID], tokenByWallet[walletB.ID])
+
+	// The listed token must be the SAME connection GetJITWalletConnection
+	// would derive for that wallet directly — not just present, but correct.
+	conn, err := theAPI.GetJITWalletConnection(walletA.ID)
+	require.NoError(t, err)
+	assert.Equal(t, conn.LokicashToken, tokenByWallet[walletA.ID])
+
+	decoded, err := lokicash.Decode(tokenByWallet[walletA.ID])
+	require.NoError(t, err)
+	require.NotNil(t, walletA.WalletPubkey)
+	assert.Equal(t, *walletA.WalletPubkey, decoded.WalletPubkey)
+}
+
 func TestListJITWalletClaims_ShowsClaimedStatus(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

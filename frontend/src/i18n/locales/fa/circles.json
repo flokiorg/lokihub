@@ -156,8 +156,6 @@
     }
   },
   "jitHubAllocations": {
-    "participantsPair": "{{first}} و {{second}}",
-    "participantsOthers": "{{first}} و {{count}} نفر دیگر",
     "durationDays_one": "{{count}} روز",
     "durationDays_other": "{{count}} روز",
     "durationHours_one": "{{count}} ساعت",

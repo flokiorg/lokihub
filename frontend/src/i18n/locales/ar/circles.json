@@ -211,8 +211,6 @@
     }
   },
   "jitHubAllocations": {
-    "participantsPair": "{{first}} و{{second}}",
-    "participantsOthers": "{{first}} و{{count}} آخرين",
     "durationDays_zero": "أقل من يوم",
     "durationDays_one": "يوم واحد",
     "durationDays_two": "يومان",
