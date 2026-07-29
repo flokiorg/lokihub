@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "서클 지갑",
-    "jitWallet": "JIT 지갑",
+    "jitWallet": "Lokicash 토큰",
     "claimedCount": "{{claimed}}/{{total}} 수령됨",
     "errors": {
       "loadRecipients": "JIT 지갑 수령인을 불러오지 못했습니다"

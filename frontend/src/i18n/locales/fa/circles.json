@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "کیف‌پول حلقه",
-    "jitWallet": "کیف‌پول JIT",
+    "jitWallet": "توکن Lokicash",
     "claimedCount": "{{claimed}}/{{total}} دریافت شده",
     "errors": {
       "loadRecipients": "بارگذاری دریافت‌کنندگان کیف‌پول JIT ناموفق بود"

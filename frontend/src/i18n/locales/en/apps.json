@@ -134,7 +134,6 @@
     "isolatedApp": "Isolated App"
   },
   "circleHub": {
-    "revealConnection": "Reveal Connection",
     "permissionsManagedNote": "Permissions for this connection are managed automatically and can't be changed here.",
     "budgetManagedNote": "This connection's requested permissions are managed automatically, but its budget and expiry can still be changed below.",
     "hubSettingsTitle": "Hub Settings",
@@ -154,10 +153,7 @@
     "addMember": "Add member",
     "circleWalletsTitle": "Circle Wallets",
     "jitWalletsTitle": "Lokicash Tokens",
-    "addJitWallet": "Mint Lokicash",
-    "errors": {
-      "loadJitConnection": "Failed to load Lokicash connection"
-    }
+    "addJitWallet": "Mint Lokicash"
   },
   "newApp": {
     "title": "Connect a New App",

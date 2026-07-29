@@ -90,7 +90,7 @@
   },
   "childIdentityCard": {
     "circleWallet": "サークルウォレット",
-    "jitWallet": "JIT ウォレット",
+    "jitWallet": "Lokicash トークン",
     "claimedCount": "{{claimed}}/{{total}} 件受け取り済み",
     "errors": {
       "loadRecipients": "JIT ウォレットの受取人の読み込みに失敗しました"

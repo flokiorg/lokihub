@@ -110,7 +110,6 @@
     "isolatedApp": "隔离应用程序"
   },
   "circleHub": {
-    "revealConnection": "显示连接",
     "permissionsManagedNote": "此连接的权限由系统自动管理，无法在此处更改。",
     "budgetManagedNote": "此连接请求的权限由系统自动管理，但其预算和有效期仍可在下方更改。",
     "hubSettingsTitle": "中心设置",
@@ -130,10 +129,7 @@
     "addMember": "添加成员",
     "circleWalletsTitle": "圈子钱包",
     "jitWalletsTitle": "Lokicash 代币",
-    "addJitWallet": "铸造 Lokicash",
-    "errors": {
-      "loadJitConnection": "加载 Lokicash 连接失败"
-    }
+    "addJitWallet": "铸造 Lokicash"
   },
   "newApp": {
     "unsupportedApp": "不支持的应用程序",

@@ -131,7 +131,6 @@
     "isolatedApp": "تطبيق معزول"
   },
   "circleHub": {
-    "revealConnection": "إظهار الاتصال",
     "permissionsManagedNote": "تُدار أذونات هذا الاتصال تلقائيًا ولا يمكن تغييرها هنا.",
     "budgetManagedNote": "تُدار الأذونات المطلوبة لهذا الاتصال تلقائيًا، لكن لا يزال بإمكانك تغيير ميزانيته وتاريخ انتهائه أدناه.",
     "hubSettingsTitle": "إعدادات المركز",
@@ -151,10 +150,7 @@
     "addMember": "إضافة عضو",
     "circleWalletsTitle": "محافظ الدائرة",
     "jitWalletsTitle": "رموز Lokicash",
-    "addJitWallet": "سكّ Lokicash",
-    "errors": {
-      "loadJitConnection": "فشل تحميل اتصال Lokicash"
-    }
+    "addJitWallet": "سكّ Lokicash"
   },
   "newApp": {
     "unsupportedApp": "تطبيق غير مدعوم",

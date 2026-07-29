@@ -110,7 +110,6 @@
     "isolatedApp": "App aislada"
   },
   "circleHub": {
-    "revealConnection": "Revelar conexión",
     "permissionsManagedNote": "Los permisos de esta conexión se gestionan automáticamente y no se pueden cambiar aquí.",
     "budgetManagedNote": "Los permisos solicitados por esta conexión se gestionan automáticamente, pero su presupuesto y caducidad aún se pueden cambiar abajo.",
     "hubSettingsTitle": "Ajustes del hub",
@@ -130,10 +129,7 @@
     "addMember": "Añadir miembro",
     "circleWalletsTitle": "Billeteras de círculo",
     "jitWalletsTitle": "Tokens Lokicash",
-    "addJitWallet": "Acuñar Lokicash",
-    "errors": {
-      "loadJitConnection": "Error al cargar la conexión Lokicash"
-    }
+    "addJitWallet": "Acuñar Lokicash"
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",
