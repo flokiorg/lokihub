@@ -114,13 +114,13 @@
     "permissionsManagedNote": "この接続の権限は自動的に管理されており、ここでは変更できません。",
     "budgetManagedNote": "この接続がリクエストする権限は自動的に管理されていますが、予算と有効期限は以下で変更できます。",
     "hubSettingsTitle": "ハブ設定",
-    "jitHubSettingsDescription": "変更は今後発行される JIT ウォレットにのみ適用され、すでに発行されたウォレットには影響しません。",
+    "jitHubSettingsDescription": "変更は今後発行される Lokicash にのみ適用され、すでに発行されたものには影響しません。",
     "circleHubSettingsDescription": "変更は今後作成されるサークルウォレットにのみ適用され、すでに作成されたウォレットには影響しません。",
     "maxWalletBudgetLabel": "ウォレットの最大予算",
-    "jitMaxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算（デフォルト：1,000 loki）",
+    "jitMaxWalletBudgetHelper": "このハブから発行される各 Lokicash に割り当てられる最大予算（デフォルト：1,000 loki）",
     "circleMaxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算（デフォルト：1,000 loki）",
     "maxWalletExpiryLabel": "ウォレットの最長有効期限",
-    "jitMaxExpiryHelper": "発行された JIT ウォレットの最長有効期限（デフォルト：1日）",
+    "jitMaxExpiryHelper": "発行された Lokicash の最長有効期限（デフォルト：1日）",
     "circleMaxExpiryHelper": "発行されたサークルウォレットの最長有効期限（デフォルト：30日）",
     "minRenewalLabel": "最短更新間隔",
     "minRenewalHelper": "メンバーがサークルウォレットの予算に対してリクエストできる最短の更新間隔（デフォルト：毎月）",
@@ -129,10 +129,10 @@
     "allowlistTitle": "許可リスト",
     "addMember": "メンバーを追加",
     "circleWalletsTitle": "サークルウォレット",
-    "jitWalletsTitle": "JIT ウォレット",
-    "addJitWallet": "JIT ウォレットを追加",
+    "jitWalletsTitle": "Lokicash トークン",
+    "addJitWallet": "Lokicash を鋳造",
     "errors": {
-      "loadJitConnection": "JIT ウォレットの接続の読み込みに失敗しました"
+      "loadJitConnection": "Lokicash の接続の読み込みに失敗しました"
     }
   },
   "newApp": {
@@ -201,6 +201,7 @@
     "copySecret": "接続シークレットをコピー",
     "copyLokicashToken": "Lokicashトークンをコピー",
     "copyBearerSecret": "ベアラーシークレットをコピー",
-    "bearerSecretHelper": "これはベアラーシークレットです。これを持つ人は他に証明なしでこのウォレットの資金を引き換えられます。これは一度だけ表示されます。上記の接続情報と一緒に、想定する受取人にオフラインで渡してください。"
+    "bearerSecretHelper": "このシークレットを持つ人は、他に証明なしでこの資金を引き換えられます。これは一度だけ表示されます。上記の接続情報と一緒に、受取人にオフラインで渡してください。",
+    "lokicashTitle": "Lokicash"
   }
 }

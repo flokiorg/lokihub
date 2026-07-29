@@ -135,13 +135,13 @@
     "permissionsManagedNote": "تُدار أذونات هذا الاتصال تلقائيًا ولا يمكن تغييرها هنا.",
     "budgetManagedNote": "تُدار الأذونات المطلوبة لهذا الاتصال تلقائيًا، لكن لا يزال بإمكانك تغيير ميزانيته وتاريخ انتهائه أدناه.",
     "hubSettingsTitle": "إعدادات المركز",
-    "jitHubSettingsDescription": "تنطبق التغييرات فقط على محافظ JIT الصادرة من الآن فصاعدًا، ولن تؤثر على المحافظ الصادرة بالفعل.",
+    "jitHubSettingsDescription": "تنطبق التغييرات فقط على Lokicash الصادر من الآن فصاعدًا، ولن تؤثر على ما صدر بالفعل.",
     "circleHubSettingsDescription": "تنطبق التغييرات فقط على محافظ الدائرة المُنشأة من الآن فصاعدًا، ولن تؤثر على المحافظ المُنشأة بالفعل.",
     "maxWalletBudgetLabel": "الحد الأقصى لميزانية المحفظة",
-    "jitMaxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن تخصيصها لكل محفظة JIT صادرة من هذا المركز (الافتراضي: 1,000 loki)",
+    "jitMaxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن تخصيصها لكل Lokicash صادر من هذا المركز (الافتراضي: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن للعضو طلبها لمحفظة الدائرة الخاصة به (الافتراضي: 1,000 loki)",
     "maxWalletExpiryLabel": "الحد الأقصى لانتهاء صلاحية المحفظة",
-    "jitMaxExpiryHelper": "أقصى مدة صلاحية لمحافظ JIT الصادرة (الافتراضي: يوم واحد)",
+    "jitMaxExpiryHelper": "أقصى مدة صلاحية لـ Lokicash الصادر (الافتراضي: يوم واحد)",
     "circleMaxExpiryHelper": "أقصى مدة صلاحية لمحافظ الدائرة الصادرة (الافتراضي: 30 يومًا)",
     "minRenewalLabel": "أقل فترة تجديد",
     "minRenewalHelper": "أقصر فترة تجديد يمكن للعضو طلبها لميزانية محفظة الدائرة الخاصة به (الافتراضي: شهريًا)",
@@ -150,10 +150,10 @@
     "allowlistTitle": "القائمة المسموح بها",
     "addMember": "إضافة عضو",
     "circleWalletsTitle": "محافظ الدائرة",
-    "jitWalletsTitle": "محافظ JIT",
-    "addJitWallet": "إضافة محفظة JIT",
+    "jitWalletsTitle": "رموز Lokicash",
+    "addJitWallet": "سكّ Lokicash",
     "errors": {
-      "loadJitConnection": "فشل تحميل اتصال محفظة JIT"
+      "loadJitConnection": "فشل تحميل اتصال Lokicash"
     }
   },
   "newApp": {
@@ -222,6 +222,7 @@
     "copySecret": "نسخ رمز الاتصال السري",
     "copyLokicashToken": "نسخ رمز Lokicash",
     "copyBearerSecret": "نسخ سر الحامل",
-    "bearerSecretHelper": "هذا سر حامل — يمكن لأي شخص يملكه استرداد أموال هذه المحفظة دون أي إثبات آخر. يُعرض مرة واحدة فقط؛ سلّم هذا مع الاتصال أعلاه إلى المستلم المقصود خارج النطاق."
+    "bearerSecretHelper": "يمكن لأي شخص يملك هذا السر استرداد هذه الأموال — دون أي إثبات آخر. يُعرض مرة واحدة فقط؛ سلّمه إلى المستلم خارج النطاق.",
+    "lokicashTitle": "Lokicash"
   }
 }

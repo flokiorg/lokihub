@@ -26,12 +26,12 @@ export function ConnectAppCard({
   appStoreApp,
   variant = "create",
   showConnectionStatus = variant === "create",
+  primaryFormat = "nwc",
 }: {
   app: App;
   pairingUri: string;
   // lokicashToken: the same connection as pairingUri, packaged as a single
-  // lokicash1... string (NIP-JW §The Lokicash Token) — shown as a second,
-  // separate copy action only when the caller has one to offer.
+  // lokicash1... string (NIP-JW §The Lokicash Token).
   lokicashToken?: string;
   // bearerSecret: a JIT wallet's bearer redemption secret, present only
   // right after creating a bearer-mode wallet — the wallet mints it once
@@ -48,14 +48,22 @@ export function ConnectAppCard({
   // independently — e.g. a Dialog-hosted "reveal" layout for a brand-new,
   // not-yet-connected wallet still wants this status shown.
   showConnectionStatus?: boolean;
+  // "nwc" (default): QR + primary copy button both use pairingUri, exactly
+  // as every other app connection (regular apps, circle wallets) works.
+  // "lokicash": for JIT wallets specifically, where the product surface is
+  // the lokicash1... token, not the raw NWC pairing URI — the QR encodes
+  // lokicashToken instead, and pairingUri is never shown or copied at all.
+  // REQUIRES lokicashToken to be set.
+  primaryFormat?: "nwc" | "lokicash";
 }) {
   const [timeout, setTimeout] = useState(false);
   const [isQRCodeVisible, setIsQRCodeVisible] = useState(false);
   const logoSrc = useAppLogo(appStoreApp?.id);
   const { t } = useTranslation("apps");
 
+  const qrValue = primaryFormat === "lokicash" ? (lokicashToken ?? "") : pairingUri;
   const copy = () => {
-    copyToClipboard(pairingUri);
+    copyToClipboard(primaryFormat === "lokicash" ? (lokicashToken ?? "") : pairingUri);
   };
 
   useEffect(() => {
@@ -96,7 +104,7 @@ export function ConnectAppCard({
             className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
             onClick={() => setIsQRCodeVisible(true)}
           >
-            <QRCode value={pairingUri} withIcon={!logoSrc} />
+            <QRCode value={qrValue} withIcon={!logoSrc} />
             {logoSrc ? (
               <img
                 src={logoSrc}
@@ -118,24 +126,33 @@ export function ConnectAppCard({
         </div>
       ) : null}
       <div className="flex flex-wrap justify-center gap-2">
-        <Button onClick={copy} variant="outline">
-          <CopyIcon />
-          {t("connectAppCard.copySecret", "Copy Connection Secret")}
-        </Button>
-        {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
-        {/* <ExternalLinkButton to={pairingUri} variant="outline">
-          <ExternalLinkIcon />
-          Open In App
-        </ExternalLinkButton> */}
-        {lokicashToken ? (
-          <Button
-            onClick={() => copyToClipboard(lokicashToken)}
-            variant="outline"
-          >
+        {primaryFormat === "lokicash" ? (
+          <Button onClick={copy} variant="outline">
             <CopyIcon />
             {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
           </Button>
-        ) : null}
+        ) : (
+          <>
+            <Button onClick={copy} variant="outline">
+              <CopyIcon />
+              {t("connectAppCard.copySecret", "Copy Connection Secret")}
+            </Button>
+            {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
+            {/* <ExternalLinkButton to={pairingUri} variant="outline">
+              <ExternalLinkIcon />
+              Open In App
+            </ExternalLinkButton> */}
+            {lokicashToken ? (
+              <Button
+                onClick={() => copyToClipboard(lokicashToken)}
+                variant="outline"
+              >
+                <CopyIcon />
+                {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
+              </Button>
+            ) : null}
+          </>
+        )}
         {bearerSecret ? (
           <Button
             onClick={() => copyToClipboard(bearerSecret)}
