@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Identidad Nostr",
     "connectionKey": "Identidad Web",
-    "bearer": "Efectivo"
+    "bearer": "Portador"
   },
   "avatarStack": {
     "more": "+{{count}} más"
@@ -77,12 +77,12 @@
     "unclaimed": "Sin canjear"
   },
   "claimDeadline": {
-    "expired": "Plazo de reclamo vencido",
-    "withinMinutes_one": "Reclamar en {{count}} min",
-    "withinMinutes_other": "Reclamar en {{count}} min",
-    "withinHours": "Reclamar en {{count}}h",
-    "byDate": "Reclamar antes del {{date}}",
-    "none": "Sin plazo de reclamo"
+    "expired": "Plazo de canje vencido",
+    "withinMinutes_one": "Canjear en {{count}} min",
+    "withinMinutes_other": "Canjear en {{count}} min",
+    "withinHours": "Canjear en {{count}}h",
+    "byDate": "Canjear antes del {{date}}",
+    "none": "Sin plazo de canje"
   },
   "circleCard": {
     "member_one": "{{count}} miembro",
@@ -90,8 +90,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "Billetera de círculo",
-    "jitWallet": "Token Lokicash",
-    "claimedCount": "{{claimed}}/{{total}} reclamados",
+    "cashWallet": "Billetera de Efectivo",
+    "claimedCount": "{{claimed}}/{{total}} canjeados",
     "errors": {
       "loadRecipients": "Error al cargar los destinatarios de la billetera JIT"
     }
@@ -155,7 +155,7 @@
       "removeSelected": "Error al eliminar las billeteras de círculo seleccionadas"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} día",
     "durationDays_other": "{{count}} días",
     "durationHours_one": "{{count}} hora",
@@ -167,6 +167,10 @@
     "connectionKeyLabel": "Clave de conexión (hex)",
     "iaPubkeyLabel": "Clave pública de la Autoridad de Identidad (hex)",
     "iaPubkeyHelper": "Debe ser una Autoridad de Identidad de confianza (Ajustes → Autoridades de Identidad)",
+    "selectIAPlaceholder": "Selecciona una Autoridad de Identidad",
+    "savedIAsLabel": "Declaradas en Ajustes",
+    "enterIAManually": "Introducir una clave pública manualmente",
+    "chooseSavedIAInstead": "Elegir desde Ajustes en su lugar",
     "duplicateIdentity": "Esta identidad ya la usa otro destinatario.",
     "walletBudgetLabel": "Importe",
     "requestedSummary": "{{total}} loki solicitados",
@@ -212,8 +216,8 @@
       "removeWallet": "Error al eliminar Lokicash",
       "removeSelected": "Error al eliminar los destinatarios seleccionados"
     },
-    "bearerHelper": "Quien tenga el secreto puede canjearlo — se muestra una sola vez, justo después de la creación.",
-    "bearerRequiresSoleRecipient": "El efectivo debe ser el único destinatario",
+    "bearerHelper": "Portador: quien tenga el secreto puede canjearlo — no hay verificación de identidad ni forma de recuperarlo si se pierde o es interceptado.",
+    "bearerRequiresSoleRecipient": "El portador debe ser el único destinatario",
     "pubkeyModeHelper": "Solo esta identidad Nostr puede canjearlo.",
     "connectionKeyModeHelper": "Solo una identidad verificada puede canjearlo.",
     "copyLokicash": "Copiar Lokicash",
@@ -257,7 +261,7 @@
       "create": "Error al crear el Hub de Billetera de Círculo"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "Nuevo Hub de Billetera JIT",
     "description": "Crea un hub prefinanciado que emite billeteras JIT de solo gasto a los beneficiarios",
     "maxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada billetera JIT emitida desde este hub",
@@ -291,7 +295,7 @@
       "delete": "Error al eliminar el círculo"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "¿Seguro que quieres eliminar este Hub de Billetera JIT?",
     "checking": "Comprobando las billeteras JIT emitidas…",
     "hasOutstanding_one": "Este hub todavía tiene {{count}} parte de destinatario pendiente en sus billeteras JIT emitidas. Elimínala de la lista de Billeteras JIT de abajo (o espera a que caduque) antes de eliminar el hub.",

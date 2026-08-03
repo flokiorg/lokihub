@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr アイデンティティ",
     "connectionKey": "ウェブアイデンティティ",
-    "bearer": "現金"
+    "bearer": "ベアラー"
   },
   "avatarStack": {
     "more": "他 {{count}} 人"
@@ -77,12 +77,12 @@
     "unclaimed": "未引き換え"
   },
   "claimDeadline": {
-    "expired": "受け取り期限が切れました",
-    "withinMinutes_one": "{{count}} 分以内に受け取り",
-    "withinMinutes_other": "{{count}} 分以内に受け取り",
-    "withinHours": "{{count}} 時間以内に受け取り",
-    "byDate": "{{date}} までに受け取り",
-    "none": "受け取り期限なし"
+    "expired": "引き換え期限が切れました",
+    "withinMinutes_one": "{{count}} 分以内に引き換え",
+    "withinMinutes_other": "{{count}} 分以内に引き換え",
+    "withinHours": "{{count}} 時間以内に引き換え",
+    "byDate": "{{date}} までに引き換え",
+    "none": "引き換え期限なし"
   },
   "circleCard": {
     "member_one": "メンバー {{count}} 人",
@@ -90,8 +90,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "サークルウォレット",
-    "jitWallet": "Lokicash トークン",
-    "claimedCount": "{{claimed}}/{{total}} 件受け取り済み",
+    "cashWallet": "キャッシュウォレット",
+    "claimedCount": "{{claimed}}/{{total}} 件引き換え済み",
     "errors": {
       "loadRecipients": "JIT ウォレットの受取人の読み込みに失敗しました"
     }
@@ -155,7 +155,7 @@
       "removeSelected": "選択したサークルウォレットの削除に失敗しました"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} 日",
     "durationDays_other": "{{count}} 日",
     "durationHours_one": "{{count}} 時間",
@@ -167,6 +167,10 @@
     "connectionKeyLabel": "接続キー（16進数）",
     "iaPubkeyLabel": "アイデンティティ機関の公開鍵（16進数）",
     "iaPubkeyHelper": "信頼できるアイデンティティ機関である必要があります（設定 → アイデンティティ機関）",
+    "selectIAPlaceholder": "アイデンティティ機関を選択",
+    "savedIAsLabel": "設定で登録済み",
+    "enterIAManually": "公開鍵を手動で入力",
+    "chooseSavedIAInstead": "代わりに設定から選択",
     "duplicateIdentity": "このアイデンティティはすでに別の受取人が使用しています。",
     "walletBudgetLabel": "金額",
     "requestedSummary": "{{total}} loki をリクエスト",
@@ -212,8 +216,8 @@
       "removeWallet": "Lokicash の削除に失敗しました",
       "removeSelected": "選択した受取人の削除に失敗しました"
     },
-    "bearerHelper": "シークレットを持つ人が引き換えできます — 作成直後に一度だけ表示されます。",
-    "bearerRequiresSoleRecipient": "現金は唯一の受取人である必要があります",
+    "bearerHelper": "ベアラー: シークレットを持つ人なら誰でも引き換えできます — 本人確認はなく、紛失または盗まれても復旧できません。",
+    "bearerRequiresSoleRecipient": "ベアラーは唯一の受取人である必要があります",
     "pubkeyModeHelper": "この Nostr アイデンティティのみが引き換え可能です。",
     "connectionKeyModeHelper": "検証済みのアイデンティティのみが引き換え可能です。",
     "copyLokicash": "Lokicash をコピー",
@@ -257,7 +261,7 @@
       "create": "サークルウォレットハブの作成に失敗しました"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "新しい JIT ウォレットハブ",
     "description": "受取人に支出専用の JIT ウォレットを発行する、事前に資金提供されたハブを作成します",
     "maxWalletBudgetHelper": "このハブから発行される各 JIT ウォレットに割り当てられる最大予算",
@@ -291,7 +295,7 @@
       "delete": "サークルの削除に失敗しました"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "この JIT ウォレットハブを削除してもよろしいですか？",
     "checking": "発行済みの JIT ウォレットを確認しています…",
     "hasOutstanding_one": "このハブが発行した JIT ウォレットには、まだ {{count}} 件の受取人分の割り当てが残っています。ハブを削除する前に、下の JIT ウォレット一覧から削除するか、期限切れになるまでお待ちください。",

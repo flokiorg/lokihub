@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "src/components/ui/badge";
-import { JITWalletClaim } from "src/types";
+import { CashWalletClaim } from "src/types";
 
-export function ClaimStateBadge({ claim }: { claim: JITWalletClaim }) {
+export function ClaimStateBadge({ claim }: { claim: CashWalletClaim }) {
   const { t } = useTranslation("circles");
   if (claim.claimed) {
     return <Badge variant="positive">{t("claimBadge.claimed")}</Badge>;

@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Личность Nostr",
     "connectionKey": "Веб-личность",
-    "bearer": "Наличные"
+    "bearer": "Предъявитель"
   },
   "avatarStack": {
     "more": "+{{count}}"
@@ -79,14 +79,14 @@
     "unclaimed": "Не обменяно"
   },
   "claimDeadline": {
-    "expired": "Срок получения истёк",
-    "withinMinutes_one": "Получить в течение {{count}} мин",
-    "withinMinutes_few": "Получить в течение {{count}} мин",
-    "withinMinutes_many": "Получить в течение {{count}} мин",
-    "withinMinutes_other": "Получить в течение {{count}} мин",
-    "withinHours": "Получить в течение {{count}} ч",
-    "byDate": "Получить до {{date}}",
-    "none": "Без срока получения"
+    "expired": "Срок обмена истёк",
+    "withinMinutes_one": "Обменять в течение {{count}} мин",
+    "withinMinutes_few": "Обменять в течение {{count}} мин",
+    "withinMinutes_many": "Обменять в течение {{count}} мин",
+    "withinMinutes_other": "Обменять в течение {{count}} мин",
+    "withinHours": "Обменять в течение {{count}} ч",
+    "byDate": "Обменять до {{date}}",
+    "none": "Без срока обмена"
   },
   "circleCard": {
     "member_one": "{{count}} участник",
@@ -96,8 +96,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "Кошелёк круга",
-    "jitWallet": "Токен Lokicash",
-    "claimedCount": "Получено {{claimed}}/{{total}}",
+    "cashWallet": "Кэш-кошелёк",
+    "claimedCount": "Обменяно {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "Не удалось загрузить получателей JIT-кошелька"
     }
@@ -177,7 +177,7 @@
       "removeSelected": "Не удалось удалить выбранные кошельки круга"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} день",
     "durationDays_few": "{{count}} дня",
     "durationDays_many": "{{count}} дней",
@@ -193,6 +193,10 @@
     "connectionKeyLabel": "Ключ подключения (hex)",
     "iaPubkeyLabel": "Публичный ключ Центра идентификации (hex)",
     "iaPubkeyHelper": "Должен быть доверенным Центром идентификации (Настройки → Центры идентификации)",
+    "selectIAPlaceholder": "Выберите Центр идентификации",
+    "savedIAsLabel": "Указаны в настройках",
+    "enterIAManually": "Ввести публичный ключ вручную",
+    "chooseSavedIAInstead": "Выбрать из настроек",
     "duplicateIdentity": "Эта личность уже используется другим получателем.",
     "walletBudgetLabel": "Сумма",
     "requestedSummary": "Запрошено {{total}} loki",
@@ -246,8 +250,8 @@
       "removeWallet": "Не удалось удалить Lokicash",
       "removeSelected": "Не удалось удалить выбранных получателей"
     },
-    "bearerHelper": "Обменять может любой, у кого есть секрет — показывается один раз, сразу после создания.",
-    "bearerRequiresSoleRecipient": "Наличные должны быть единственным получателем",
+    "bearerHelper": "Предъявитель: обменять может любой, у кого есть секрет — проверка личности не проводится, и восстановить доступ невозможно в случае потери или перехвата.",
+    "bearerRequiresSoleRecipient": "Предъявитель должен быть единственным получателем",
     "pubkeyModeHelper": "Обменять может только эта личность Nostr.",
     "connectionKeyModeHelper": "Обменять может только подтверждённая личность.",
     "copyLokicash": "Скопировать Lokicash",
@@ -291,7 +295,7 @@
       "create": "Не удалось создать Хаб кошельков круга"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "Новый Хаб JIT-кошельков",
     "description": "Создайте предварительно профинансированный хаб, который выдаёт получателям кошельки только для расходования (JIT)",
     "maxWalletBudgetHelper": "Максимальный бюджет, который можно выделить каждому JIT-кошельку, выданному этим хабом",
@@ -333,7 +337,7 @@
       "delete": "Не удалось удалить круг"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "Вы уверены, что хотите удалить этот Хаб JIT-кошельков?",
     "checking": "Проверка выданных JIT-кошельков…",
     "hasOutstanding_one": "У этого хаба всё ещё есть {{count}} доля получателя среди выданных JIT-кошельков. Удалите её из списка JIT-кошельков ниже (или дождитесь истечения срока), прежде чем удалять хаб.",

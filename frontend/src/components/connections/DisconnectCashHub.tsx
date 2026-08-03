@@ -14,18 +14,18 @@ import {
 } from "src/components/ui/alert-dialog";
 import { SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useDeleteApp } from "src/hooks/useDeleteApp";
-import { App, ListJITWalletClaimsResponse } from "src/types";
+import { App, ListCashWalletClaimsResponse } from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 
-// Unlike a circle_hub (DisconnectCircleHub), a jit_hub has no partial-delete
-// mode — apps.DeleteApp refuses outright if any jit_wallet child still
+// Unlike a circle_hub (DisconnectCircleHub), a cash_hub has no partial-delete
+// mode — apps.DeleteApp refuses outright if any cash_wallet child still
 // exists (orphaning them would leave their parent_app_id dangling and their
 // periodic reclaim job hitting an FK violation forever). So this component
 // only needs a pre-flight count, not a delete-mode choice: if the hub still
 // has outstanding recipients, block with an explanation instead of letting
 // the user hit a raw error toast after confirming.
-export function DisconnectJITHub({
+export function DisconnectCashHub({
   app,
   onClose,
 }: {
@@ -42,12 +42,12 @@ export function DisconnectJITHub({
   React.useEffect(() => {
     (async () => {
       try {
-        const data = await request<ListJITWalletClaimsResponse>(
-          `/api/apps/${app.id}/jit-wallets?limit=1`
+        const data = await request<ListCashWalletClaimsResponse>(
+          `/api/apps/${app.id}/cash-wallets?limit=1`
         );
         setOutstandingCount(data?.counts?.all ?? 0);
       } catch (error) {
-        handleRequestError(t("disconnectJitHub.errors.check"), error);
+        handleRequestError(t("disconnectCashHub.errors.check"), error);
         // Fail open to the pre-existing behavior (attempt the delete, let
         // the backend guard reject it) rather than blocking deletion of an
         // otherwise-empty hub just because this check failed.
@@ -61,7 +61,7 @@ export function DisconnectJITHub({
     navigate(
       app.metadata?.app_store_app_id !== SUBWALLET_APPSTORE_APP_ID
         ? "/apps?tab=connected-apps"
-        : "/sub-wallets"
+        : "/cash-hub"
     );
   });
 
@@ -72,25 +72,25 @@ export function DisconnectJITHub({
     <AlertDialog open>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("disconnectJitHub.title")}</AlertDialogTitle>
+          <AlertDialogTitle>{t("disconnectCashHub.title")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             {isLoading ? (
-              <p>{t("disconnectJitHub.checking")}</p>
+              <p>{t("disconnectCashHub.checking")}</p>
             ) : hasOutstanding ? (
               <p>
-                {t("disconnectJitHub.hasOutstanding", {
+                {t("disconnectCashHub.hasOutstanding", {
                   count: outstandingCount,
                 })}
               </p>
             ) : (
-              <>{t("disconnectJitHub.safeToDelete")}</>
+              <>{t("disconnectCashHub.safeToDelete")}</>
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onClose} disabled={isDeleting}>
             {hasOutstanding
-              ? t("disconnectJitHub.close")
+              ? t("disconnectCashHub.close")
               : tc("actions.cancel")}
           </AlertDialogCancel>
           {!isLoading && !hasOutstanding && (
