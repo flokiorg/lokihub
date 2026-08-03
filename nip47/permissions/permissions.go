@@ -80,10 +80,10 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
 		// TODO: better way to exclude methods unrelated to the lnclient
 		if requestMethod == models.CREATE_CONNECTION_METHOD ||
-			requestMethod == constants.NIP47MethodCreateJITWallet ||
+			requestMethod == constants.NIP47MethodMintCash ||
 			requestMethod == constants.NIP47MethodCreateCircleWallet ||
-			requestMethod == constants.NIP47MethodJITRedeem ||
-			requestMethod == constants.NIP47MethodJITTransfer ||
+			requestMethod == constants.NIP47MethodCashRedeem ||
+			requestMethod == constants.NIP47MethodCashTransfer ||
 			requestMethod == constants.NIP47MethodListRecipients {
 			return true
 		}
@@ -132,14 +132,14 @@ func scopeToRequestMethods(scope string) []string {
 		return []string{models.SIGN_MESSAGE_METHOD}
 	case constants.SUPERUSER_SCOPE:
 		return []string{models.CREATE_CONNECTION_METHOD}
-	case constants.JIT_HUB_SCOPE:
-		return []string{constants.NIP47MethodCreateJITWallet}
+	case constants.CASH_HUB_SCOPE:
+		return []string{constants.NIP47MethodMintCash}
 	case constants.CIRCLE_WALLET_SCOPE:
 		return []string{constants.NIP47MethodCreateCircleWallet}
-	case constants.JIT_CLAIM_FUNDS_SCOPE:
-		return []string{constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients}
-	case constants.JIT_TRANSFER_SCOPE:
-		return []string{constants.NIP47MethodJITTransfer}
+	case constants.CASH_REDEEM_SCOPE:
+		return []string{constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients}
+	case constants.CASH_TRANSFER_SCOPE:
+		return []string{constants.NIP47MethodCashTransfer}
 	}
 	return []string{}
 }
@@ -181,14 +181,14 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.MAKE_INVOICE_SCOPE, nil
 	case models.CREATE_CONNECTION_METHOD:
 		return constants.SUPERUSER_SCOPE, nil
-	case constants.NIP47MethodCreateJITWallet:
-		return constants.JIT_HUB_SCOPE, nil
+	case constants.NIP47MethodMintCash:
+		return constants.CASH_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodJITRedeem, constants.NIP47MethodListRecipients:
-		return constants.JIT_CLAIM_FUNDS_SCOPE, nil
-	case constants.NIP47MethodJITTransfer:
-		return constants.JIT_TRANSFER_SCOPE, nil
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients:
+		return constants.CASH_REDEEM_SCOPE, nil
+	case constants.NIP47MethodCashTransfer:
+		return constants.CASH_TRANSFER_SCOPE, nil
 	}
 	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")
 	return "", fmt.Errorf("unsupported request method: %s", requestMethod)
@@ -205,10 +205,10 @@ func AllScopes() []string {
 		constants.SIGN_MESSAGE_SCOPE,
 		constants.NOTIFICATIONS_SCOPE,
 		constants.SUPERUSER_SCOPE,
-		constants.JIT_HUB_SCOPE,
+		constants.CASH_HUB_SCOPE,
 		constants.CIRCLE_WALLET_SCOPE,
-		constants.JIT_CLAIM_FUNDS_SCOPE,
-		constants.JIT_TRANSFER_SCOPE,
+		constants.CASH_REDEEM_SCOPE,
+		constants.CASH_TRANSFER_SCOPE,
 	}
 }
 

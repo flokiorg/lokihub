@@ -1,14 +1,14 @@
 //go:build integration
 
-// claim_funds_test.go covers the shared-wallet, proof-gated claim model this
-// suite's create_jit_wallet scenarios (jit_hub_test.go) create wallets for:
+// cash_redeem_test.go covers the shared-wallet, proof-gated claim model this
+// suite's mint_cash scenarios (cash_hub_test.go) create wallets for:
 // multiple independent recipients sharing one connection, each proving their
 // own identity to claim their own slice, and the security properties that
-// make sharing that connection safe (see nip47/controllers/claim_funds_controller.go's
+// make sharing that connection safe (see nip47/controllers/cash_redeem_controller.go's
 // own doc comments for the design rationale this exercises end to end).
 //
 // Multi-recipient wallet creation is itself already covered by
-// jit_hub_test.go's CreateWallet_MultipleRecipients_OneSharedWallet — this
+// cash_hub_test.go's CreateWallet_MultipleRecipients_OneSharedWallet — this
 // file focuses on the claim side.
 package integration
 
@@ -25,11 +25,11 @@ import (
 
 func TestClaimFunds(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "claim-funds-jit-hub", nil)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "claim-funds-cash-hub", nil)
 	testClaimFunds(t, cfg, hub)
 }
 
-func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
+func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 	hubClient := mustConnect(t, hub.Connection)
 
 	t.Run("MultiRecipient_EachClaimsOwnSliceIndependently", func(t *testing.T) {
@@ -39,18 +39,18 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			amount  uint64
 		}
 		recipients := make([]recipient, 3)
-		params := make([]JITWalletRecipientParam, 3)
+		params := make([]CashWalletRecipientParam, 3)
 		for i := range recipients {
 			priv := newTestPrivkey(t)
 			pub, err := nostr.GetPublicKey(priv)
 			require.NoError(t, err)
 			amount := happyPathAmountMloki * uint64(i+1) // distinct amounts per recipient
 			recipients[i] = recipient{privkey: priv, pubkey: pub, amount: amount}
-			params[i] = JITWalletRecipientParam{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: amount}
+			params[i] = CashWalletRecipientParam{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: amount}
 		}
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: params,
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -73,7 +73,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		invoice0 := mintInvoiceFromSimpleWallet(t, cfg, recipients[0].amount, "integration multi-recipient claim 0")
 		proof0 := buildClaimProofEvent(t, recipients[0].privkey, created.WalletPubkey, invoice0.PaymentHash, nil, time.Now())
 		var result0 ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice0.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: recipients[0].pubkey,
@@ -97,7 +97,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		invoice1 := mintInvoiceFromSimpleWallet(t, cfg, recipients[1].amount, "integration multi-recipient claim 1")
 		proof1 := buildClaimProofEvent(t, recipients[1].privkey, created.WalletPubkey, invoice1.PaymentHash, nil, time.Now())
 		var result1 ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice1.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: recipients[1].pubkey,
@@ -120,8 +120,8 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		realPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(realPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -136,7 +136,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration wrong-identity test")
 		proof := buildClaimProofEvent(t, outsiderPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var result ClaimFundsResult
-		err = shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: outsiderPub,
@@ -147,15 +147,15 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 
 	t.Run("ProofBoundToWrongInvoice_Rejected", func(t *testing.T) {
 		// The core audit-finding scenario: since the connection may be
-		// shared/public, anyone holding it can decrypt every claim_funds
+		// shared/public, anyone holding it can decrypt every cash_redeem
 		// request sent on it — an attacker who intercepts a valid proof
 		// must not be able to redirect the payout to a different invoice.
 		beneficiaryPriv := newTestPrivkey(t)
 		beneficiaryPub, err := nostr.GetPublicKey(beneficiaryPriv)
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -169,7 +169,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 
 		// ...but submitted against a DIFFERENT invoice.
 		var result ClaimFundsResult
-		err = shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       attackerInvoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -180,7 +180,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// The legitimate, correctly-bound claim must still succeed afterward.
 		correctResult := ClaimFundsResult{}
 		proof2 := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, boundInvoice.PaymentHash, nil, time.Now())
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       boundInvoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -195,12 +195,12 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.NoError(t, err)
 
 		// The same identity happens to have a slice on two different wallets.
-		var walletA, walletB CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var walletA, walletB MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &walletA))
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &walletB))
@@ -213,7 +213,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 
 		// ...but submitted against wallet B.
 		var result ClaimFundsResult
-		err = sharedB.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err = sharedB.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -226,8 +226,8 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -245,8 +245,8 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -268,9 +268,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		unclaimedPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "pubkey", IdentityValue: claimedPub, AmountMloki: happyPathAmountMloki},
 				{IdentityType: "pubkey", IdentityValue: unclaimedPub, AmountMloki: happyPathAmountMloki},
 			},
@@ -281,7 +281,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration list_recipients status test")
 		proof := buildClaimProofEvent(t, claimedPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var claimResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: claimedPub,
@@ -308,9 +308,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		claimantPriv := newTestPrivkey(t)
 		claimantPub := mustPubkey(t, claimantPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -323,7 +323,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
 		var result ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -346,9 +346,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		realClaimantPriv := newTestPrivkey(t)
 		realClaimantPub := mustPubkey(t, realClaimantPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -363,7 +363,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
 		var attackerResult ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -377,7 +377,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		realProof := buildClaimProofEvent(t, realClaimantPriv, created.WalletPubkey, realInvoice.PaymentHash,
 			nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 		var realResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          realInvoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -397,9 +397,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		claimantPriv := newTestPrivkey(t)
 		claimantPub := mustPubkey(t, claimantPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -414,7 +414,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", expiredAttestation.ID}}, time.Now())
 
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -428,7 +428,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		freshProof := buildClaimProofEvent(t, claimantPriv, created.WalletPubkey, invoice.PaymentHash,
 			nostr.Tags{{"connection_key", connectionKey}, {"e", freshAttestation.ID}}, time.Now())
 		var retryResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -451,9 +451,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		claimantPriv := newTestPrivkey(t)
 		claimantPub := mustPubkey(t, claimantPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -472,7 +472,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", noExpiryAttestation.ID}}, time.Now())
 
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -497,9 +497,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		claimantPub := mustPubkey(t, claimantPriv)
 		imposterIAPriv := newTestPrivkey(t) // a real keypair, but not this slice's recorded IA
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -513,7 +513,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", imposterAttestation.ID}}, time.Now())
 
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -536,9 +536,9 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		claimantPriv := newTestPrivkey(t)
 		claimantPub := mustPubkey(t, claimantPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -555,7 +555,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 			nostr.Tags{{"connection_key", connectionKey}, {"e", forged.ID}}, time.Now())
 
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:          invoice.Invoice,
 			IdentityType:     "connection_key",
 			IdentityValue:    connectionKey,
@@ -569,8 +569,8 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPriv := newTestPrivkey(t)
 		beneficiaryPub := mustPubkey(t, beneficiaryPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -578,12 +578,12 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration stale-proof test")
 
-		// Signed well outside jitClaimIdentityFreshnessWindow (5 minutes) —
+		// Signed well outside cashRedeemIdentityFreshnessWindow (5 minutes) —
 		// defense-in-depth on top of the invoice/wallet binding, so even a
 		// correctly-bound proof must be rejected once it's stale.
 		staleProof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now().Add(-10*time.Minute))
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -595,7 +595,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// invoice afterward.
 		freshProof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var retryResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -609,21 +609,21 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
 		shared := mustConnect(t, created.PairingURI)
 
-		// claim_funds' rate limiter (per calling connection) is checked
-		// before any param validation — see claim_funds_controller.go step
+		// cash_redeem' rate limiter (per calling connection) is checked
+		// before any param validation — see cash_redeem_controller.go step
 		// 2 — so deliberately empty/invalid calls are enough to exhaust it
 		// without minting a real invoice for every attempt.
 		var lastErr error
 		for i := 0; i < 21; i++ {
 			var result ClaimFundsResult
-			lastErr = shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{}, &result)
+			lastErr = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{}, &result)
 			if lastErr != nil {
 				t.Logf("claim #%d/21: error: %v", i+1, lastErr)
 			}
@@ -635,16 +635,16 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// A wallet's own ExpiresAt (distinct from a claim proof's own 5-minute
 		// freshness window, see StaleClaimProof_Rejected above) is enforced via
 		// the generic scope-permission gate in nip47/event_handler.go, not by
-		// claim_funds_controller.go itself. A short-lived real wallet proves
+		// cash_redeem_controller.go itself. A short-lived real wallet proves
 		// that gate actually fires end to end, well before the 5-minute
-		// background cleanup ticker (service/jit_cleanup_service.go) would ever
+		// background cleanup ticker (service/cash_cleanup_service.go) would ever
 		// sweep it — so this is genuinely exercising the permission check, not
 		// racing wallet deletion.
 		beneficiaryPriv := newTestPrivkey(t)
 		beneficiaryPub := mustPubkey(t, beneficiaryPriv)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     2, // seconds - deliberately short so the wallet expires mid-test
 		}, &created))
@@ -655,7 +655,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub JITHubConfig) {
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration wallet-expired claim test")
 		proof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var result ClaimFundsResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,

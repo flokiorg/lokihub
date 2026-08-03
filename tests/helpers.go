@@ -31,14 +31,14 @@ func FundApp(svc *TestService, appID uint, amountMloki uint64, paymentHash strin
 	})
 }
 
-// CreateJITHub creates a jit_hub app with the given per-wallet limits.
-func CreateJITHub(t *testing.T, svc *TestService, perWalletMaxMloki, maxExpSecs int) *db.App {
+// CreateCashHub creates a cash_hub app with the given per-wallet limits.
+func CreateCashHub(t *testing.T, svc *TestService, perWalletMaxMloki, maxExpSecs int) *db.App {
 	t.Helper()
-	hub, _, err := svc.AppsService.CreateJITHub(
+	hub, _, err := svc.AppsService.CreateCashHub(
 		"test-hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.JIT_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
+		[]string{constants.CASH_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
 		nil,
-		db.JITHubConfig{PerWalletMaxMloki: perWalletMaxMloki, MaxExpSecs: maxExpSecs},
+		db.CashHubConfig{PerWalletMaxMloki: perWalletMaxMloki, MaxExpSecs: maxExpSecs},
 	)
 	require.NoError(t, err)
 	return hub

@@ -23,9 +23,9 @@ var (
 )
 
 // IdentityAuthority is a Nostr identity the hub owner trusts to attest
-// connection_key ownership claims (Kind 35522 events) during a JIT wallet's
-// claim_funds flow. The registry is global/instance-wide, not scoped
-// per jit_hub, mirroring the LSP registry's scope.
+// connection_key ownership claims (Kind 35522 events) during a Cash wallet's
+// cash_redeem flow. The registry is global/instance-wide, not scoped
+// per cash_hub, mirroring the LSP registry's scope.
 type IdentityAuthority struct {
 	Pubkey    string    `gorm:"primaryKey" json:"pubkey"`
 	Name      string    `json:"name"`
@@ -100,7 +100,7 @@ func (m *IdentityAuthorityManager) Delete(pubkey string) error {
 }
 
 // IsTrusted reports whether pubkey is a registered Identity Authority. This is
-// the enforcement primitive: create_jit_wallet_controller.go calls this before
+// the enforcement primitive: mint_cash_controller.go calls this before
 // accepting an ia_pubkey for a connection_key-mode wallet.
 func (m *IdentityAuthorityManager) IsTrusted(pubkey string) (bool, error) {
 	var count int64

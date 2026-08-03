@@ -15,15 +15,15 @@ import (
 	"gorm.io/gorm"
 )
 
-const jitCleanupInterval = 5 * time.Minute
+const cashCleanupInterval = 5 * time.Minute
 
-// StartJITCleanupService runs a background goroutine that periodically reclaims
-// funds from expired JIT and circle_child sub-wallets back to their parent app.
+// StartCashCleanupService runs a background goroutine that periodically reclaims
+// funds from expired Cash and circle_child sub-wallets back to their parent app.
 // getLNClient is called each tick so the service works even when the client
 // starts after the goroutine is launched.
-func StartJITCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient) {
+func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient) {
 	go func() {
-		ticker := time.NewTicker(jitCleanupInterval)
+		ticker := time.NewTicker(cashCleanupInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -34,9 +34,10 @@ func StartJITCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSv
 				if lnClient == nil {
 					continue
 				}
-				runJITCleanup(ctx, gormDB, transactionsSvc, lnClient)
+				runCashCleanup(ctx, gormDB, transactionsSvc, lnClient)
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
+				pruneStaleCashTransferProofs(gormDB)
 			}
 		}
 	}()
@@ -55,7 +56,7 @@ const cleanupBatchSize = 200
 // this loop forever within a single tick.
 const maxBatchesPerTick = 10
 
-func runJITCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient) {
+func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient) {
 	for batchNum := 0; batchNum < maxBatchesPerTick; batchNum++ {
 		var batch []db.App
 		err := gormDB.Where(
@@ -63,7 +64,7 @@ func runJITCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transac
 			time.Now(), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
-			logger.Logger.Error().Err(err).Msg("JIT cleanup: failed to query expired sub-wallets")
+			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")
 			return
 		}
 		if len(batch) == 0 {
@@ -75,9 +76,9 @@ func runJITCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transac
 					// Expected, transient deferral (pending incoming settlement, or
 					// already claimed by a concurrent tick/manual delete) — the next
 					// tick retries, so this isn't worth an error-level log.
-					logger.Logger.Debug().Err(err).Uint("app_id", app.ID).Msg("JIT cleanup: deferring sub-wallet reclaim")
+					logger.Logger.Debug().Err(err).Uint("app_id", app.ID).Msg("Cash cleanup: deferring sub-wallet reclaim")
 				} else {
-					logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("JIT cleanup: failed to reclaim expired sub-wallet")
+					logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Cash cleanup: failed to reclaim expired sub-wallet")
 				}
 			}
 		}
@@ -87,7 +88,7 @@ func runJITCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transac
 		if batchNum == maxBatchesPerTick-1 {
 			logger.Logger.Warn().
 				Int("batches_processed", maxBatchesPerTick).
-				Msg("JIT cleanup: per-tick batch cap reached, remaining backlog will continue on the next tick")
+				Msg("Cash cleanup: per-tick batch cap reached, remaining backlog will continue on the next tick")
 		}
 	}
 }
@@ -101,20 +102,36 @@ const circleWalletIdentityProofRetention = time.Hour
 
 // pruneStaleCircleWalletIdentityProofs deletes replay-guard rows old enough
 // that their proofs could no longer pass the freshness check anyway, keeping
-// the table from growing unbounded. Piggybacks on the existing JIT cleanup
+// the table from growing unbounded. Piggybacks on the existing Cash cleanup
 // ticker rather than running its own goroutine.
 func pruneStaleCircleWalletIdentityProofs(gormDB *gorm.DB) {
 	if err := gormDB.Where("created_at < ?", time.Now().Add(-circleWalletIdentityProofRetention)).
 		Delete(&db.CircleWalletIdentityProof{}).Error; err != nil {
-		logger.Logger.Error().Err(err).Msg("JIT cleanup: failed to prune stale circle wallet identity proofs")
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale circle wallet identity proofs")
+	}
+}
+
+// cashTransferProofRetention mirrors circleWalletIdentityProofRetention —
+// well beyond cash_transfer's own 5-minute proof freshness window
+// (cashRedeemIdentityFreshnessWindow, nip47/controllers/cash_redeem_controller.go),
+// so a proof can never become replayable again before its row is pruned.
+const cashTransferProofRetention = time.Hour
+
+// pruneStaleCashTransferProofs deletes cash_transfer replay-guard rows old
+// enough that their proofs could no longer pass the freshness check anyway.
+// See db.CashTransferProof's doc comment for what this table protects.
+func pruneStaleCashTransferProofs(gormDB *gorm.DB) {
+	if err := gormDB.Where("created_at < ?", time.Now().Add(-cashTransferProofRetention)).
+		Delete(&db.CashTransferProof{}).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale cash transfer proofs")
 	}
 }
 
 // ReclaimAndDeleteSubWallet reclaims any remaining isolated balance of a
-// jit_wallet/circle_wallet child back to its parent app via an internal
+// cash_wallet/circle_wallet child back to its parent app via an internal
 // transfer, then deletes the child app. Shared by the periodic expiry-cleanup
-// ticker (runJITCleanup) and manual "delete this wallet" admin actions
-// (api.DeleteJITHubAllocation, api.DeleteCircleWalletChild) — in both cases
+// ticker (runCashCleanup) and manual "delete this wallet" admin actions
+// (api.DeleteCashHubAllocation, api.DeleteCircleWalletChild) — in both cases
 // funds must never be silently destroyed or stranded, and the two callers
 // must not be able to double-process the same wallet concurrently.
 //
@@ -151,7 +168,7 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 	balance := queries.GetIsolatedBalance(gormDB, app.ID)
 	writtenOff := false
 	if balance > 0 {
-		// The parent may itself have been deleted (e.g. a jit_hub/circle_hub
+		// The parent may itself have been deleted (e.g. a cash_hub/circle_hub
 		// removed via a path that predates the child-count guard in
 		// apps.DeleteApp, or a manually edited DB). Inserting a reclaim
 		// transaction against a nonexistent parent_app_id would violate the
@@ -167,10 +184,10 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 			writtenOff = true
 			logger.Logger.Error().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).
 				Uint64("balance_mloki", uint64(balance)). //nolint:gosec // guarded by the balance > 0 check above
-				Msg("JIT cleanup: parent app no longer exists, sub-wallet balance cannot be reclaimed and is being written off")
+				Msg("Cash cleanup: parent app no longer exists, sub-wallet balance cannot be reclaimed and is being written off")
 		} else {
 			invoice, err := transactionsSvc.MakeInvoice(
-				ctx, uint64(balance), "jit cleanup", "", 0, //nolint:gosec // guarded by the balance > 0 check above
+				ctx, uint64(balance), "cash cleanup", "", 0, //nolint:gosec // guarded by the balance > 0 check above
 				nil, lnClient, app.ParentAppID, nil, nil, nil, nil, nil, nil,
 				&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
 			)

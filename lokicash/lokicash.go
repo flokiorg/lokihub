@@ -1,5 +1,5 @@
 // Package lokicash implements the lokicash1... bech32 token that packages a
-// JIT Wallet's NWC pairing data (NIP-JW §The Lokicash Token) as one
+// Cash wallet's NWC pairing data (NIP-JW §The Lokicash Token) as one
 // shareable string, NIP-19-style. The TLV layout is shared by any
 // energy-backed coin's variant of this token — only the bech32
 // human-readable prefix changes (lokicash for flokicoin, satscash for a
@@ -9,10 +9,8 @@ package lokicash
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math"
 
 	"github.com/btcsuite/btcd/btcutil/bech32"
 )
@@ -24,16 +22,17 @@ const HRP = "lokicash"
 // TLV type numbers within a lokicash-family token. 0 and 1 follow the same
 // convention NIP-19 uses for nprofile/nevent/naddr (0 is the token's
 // primary identifier, 1 is a relay hint); 2 is specific to this token
-// family. 3 and 4 are optional metadata hints, added after the format's
-// initial release — decoders written before they existed still parse
-// everything else correctly (the "unknown TLV type: ignore" rule below is
-// exactly what makes that safe).
+// family. 3 is an optional metadata hint, added after the format's initial
+// release — decoders written before it existed still parse everything else
+// correctly (the "unknown TLV type: ignore" rule below is exactly what makes
+// that safe). 4 (tlvMaxTransfers) was retired along with the max_transfers
+// feature itself and MUST NOT be reused for a new meaning — an old token
+// still carrying it decodes fine (ignored as an unknown type).
 const (
 	tlvWalletPubkey     uint8 = 0
 	tlvRelay            uint8 = 1
 	tlvSecret           uint8 = 2
 	tlvIdentityRequired uint8 = 3
-	tlvMaxTransfers     uint8 = 4
 )
 
 // keyLen is the byte length of both a wallet pubkey and a pairing secret —
@@ -47,39 +46,33 @@ const keyLen = 32
 const maxTLVValueLen = 255
 
 // Token is the decoded content of a lokicash-family bech32 string: the
-// pieces of NIP-47 pairing data a JIT Wallet connection needs (NIP-JW §The
-// Pairing Connection), plus two optional metadata hints (NIP-JW §The
-// Lokicash Token → Redemption Metadata).
+// pieces of NIP-47 pairing data a Cash wallet connection needs (NIP-JW §The
+// Pairing Connection), plus one optional metadata hint (NIP-JW §The Lokicash
+// Token → Redemption Metadata).
 //
-// IdentityRequired and MaxTransfers are both pointers specifically so a
-// caller can tell "this token doesn't carry this hint" (nil — true of any
-// token minted before these fields existed, or one an encoder chose not to
-// populate) apart from a real, meaningful zero value. Treat both as
-// best-effort hints only, snapshotted at whatever moment the token was
-// minted or last re-derived — NOT a live guarantee: the wallet's actual
-// identity requirement or transfer cap can change afterward via
-// jit_transfer, same as everything else about a JIT Wallet connection.
-// Every jit_redeem/jit_transfer call is still authoritatively checked
+// IdentityRequired is a pointer specifically so a caller can tell "this
+// token doesn't carry this hint" (nil — true of any token minted before this
+// field existed, or one an encoder chose not to populate) apart from a real,
+// meaningful zero value. Treat it as a best-effort hint only, snapshotted at
+// whatever moment the token was minted or last re-derived — NOT a live
+// guarantee: the wallet's actual identity requirement can change afterward
+// via cash_transfer, same as everything else about a Cash wallet connection.
+// Every cash_redeem/cash_transfer call is still authoritatively checked
 // server-side regardless of what a token implies; a client MUST NOT treat
-// either field as a substitute for that check, only as a hint for deciding
-// how to attempt one.
+// this field as a substitute for that check, only as a hint for deciding how
+// to attempt one.
 type Token struct {
 	HRP          string   // e.g. "lokicash", "satscash"
 	WalletPubkey string   // hex, 32 bytes
 	Secret       string   // hex, 32 bytes — the NWC connection secret
 	RelayURLs    []string // in encoded order
 	// IdentityRequired: true means every slice this wallet currently serves
-	// is identity-bound (jit_redeem/jit_transfer need a signed proof); false
+	// is identity-bound (cash_redeem/cash_transfer need a signed proof); false
 	// means the wallet is a single bearer slice (only its secret is needed —
 	// no proof, no Nostr identity at all). Always uniform across a wallet's
 	// whole recipient set (NIP-JW: a bearer slice is always the wallet's
 	// only one), so this is well-defined per wallet, not per slice.
 	IdentityRequired *bool
-	// MaxTransfers mirrors the wallet's own jit_transfer cap: 0 means
-	// unlimited, N means each slice may be transferred at most N times
-	// before it can only be redeemed. Also uniform across the wallet's
-	// recipient set.
-	MaxTransfers *int
 }
 
 // Encode packages t into a lokicash-family bech32 token under t.HRP.
@@ -98,9 +91,6 @@ func Encode(t Token) (string, error) {
 			return "", fmt.Errorf("lokicash: relay url exceeds %d bytes: %q", maxTLVValueLen, url)
 		}
 	}
-	if t.MaxTransfers != nil && (*t.MaxTransfers < 0 || uint(*t.MaxTransfers) > math.MaxUint32) {
-		return "", fmt.Errorf("lokicash: max_transfers %d does not fit in the token's 4-byte field", *t.MaxTransfers)
-	}
 
 	buf := &bytes.Buffer{}
 	writeTLV(buf, tlvWalletPubkey, pubkey)
@@ -114,11 +104,6 @@ func Encode(t Token) (string, error) {
 			b = 1
 		}
 		writeTLV(buf, tlvIdentityRequired, []byte{b})
-	}
-	if t.MaxTransfers != nil {
-		var v [4]byte
-		binary.BigEndian.PutUint32(v[:], uint32(*t.MaxTransfers)) //nolint:gosec // range-checked above
-		writeTLV(buf, tlvMaxTransfers, v[:])
 	}
 
 	bits5, err := bech32.ConvertBits(buf.Bytes(), 8, 5, true)
@@ -148,7 +133,6 @@ func Decode(token string) (Token, error) {
 	haveWalletPubkey := false
 	haveSecret := false
 	haveIdentityRequired := false
-	haveMaxTransfers := false
 	curr := 0
 	for curr < len(data) {
 		typ, value, ok := readTLV(data[curr:])
@@ -189,16 +173,6 @@ func Decode(token string) (Token, error) {
 			identityRequired := value[0] == 1
 			result.IdentityRequired = &identityRequired
 			haveIdentityRequired = true
-		case tlvMaxTransfers:
-			if len(value) != 4 {
-				return Token{}, fmt.Errorf("lokicash: max_transfers must be 4 bytes, got %d", len(value))
-			}
-			if haveMaxTransfers {
-				return Token{}, fmt.Errorf("lokicash: duplicate max_transfers entry")
-			}
-			maxTransfers := int(binary.BigEndian.Uint32(value)) //nolint:gosec // a 4-byte TLV field is always far below int's range on any supported platform
-			result.MaxTransfers = &maxTransfers
-			haveMaxTransfers = true
 		default:
 			// Unknown TLV type: ignore, same as NIP-19's own decoders, so a
 			// future field can be added without breaking older decoders.
@@ -228,7 +202,7 @@ func decodeKeyHex(s, field string) ([]byte, error) {
 
 func writeTLV(buf *bytes.Buffer, typ uint8, value []byte) {
 	buf.WriteByte(typ)
-	buf.WriteByte(uint8(len(value)))
+	buf.WriteByte(uint8(len(value))) //nolint:gosec // every Encode call site pre-validates len(value) <= maxTLVValueLen before calling writeTLV
 	buf.Write(value)
 }
 

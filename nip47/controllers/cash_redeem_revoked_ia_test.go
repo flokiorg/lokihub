@@ -14,24 +14,24 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected is a
-// regression test for HandleClaimFundsEvent's step 7: an Identity Authority
-// that was trusted when a jit_wallet was created (honestly, or having
+// TestHandleCashRedeemEvent_ConnectionKeyMode_RevokedIA_Rejected is a
+// regression test for HandleCashRedeemEvent's step 7: an Identity Authority
+// that was trusted when a cash_wallet was created (honestly, or having
 // colluded with an attacker to attest a false connection_key->pubkey
 // binding) and is later revoked by the operator must have that revocation
 // take effect immediately, even though the attestation it already issued
 // remains cryptographically valid and unexpired. Before the fix,
 // apps.IdentityAuthorityManager.IsTrusted was only ever consulted once, at
-// wallet-creation time (jitwallet.Resolve) - never re-checked at claim time -
+// wallet-creation time (cashwallet.Resolve) - never re-checked at claim time -
 // so a revoked IA's still-unexpired attestation kept authorizing payouts
 // until the attestation's own expiration lapsed.
-func TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	iaManager := apps.NewIdentityAuthorityManager(svc.DB)
 	iaPrivkey := nostr.GeneratePrivateKey()
@@ -43,8 +43,8 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 1000},
 	}))
 
 	attestation := buildIAAttestationEvent(t, iaPrivkey, connectionKey, claimantPubkey, oneHourFromNow())
@@ -52,7 +52,7 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
 	// The operator discovers the IA is compromised/malicious and revokes it -
-	// this must immediately block any future claim_funds call relying on its
+	// this must immediately block any future cash_redeem call relying on its
 	// attestations, regardless of the attestation's own (still valid)
 	// expiration.
 	require.NoError(t, iaManager.Delete(iaPubkey))
@@ -60,10 +60,10 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 	require.NoError(t, err)
 	require.False(t, trusted, "sanity check: the IA is in fact no longer trusted")
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
-		IdentityType:     db.JITAllocIdentityConnectionKey,
+		IdentityType:     db.CashIdentityConnectionKey,
 		IdentityValue:    connectionKey,
 		IdentityEvent:    mustMarshal(t, proof),
 		AttestationEvent: mustMarshal(t, attestation),
@@ -75,7 +75,7 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 	// A rejected claim due to IA revocation must not burn the recipient's
 	// underlying entitlement - the slice must remain claimable (e.g. once the
 	// operator re-registers a corrected IA and re-attests it).
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityConnectionKey, connectionKey)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityConnectionKey, connectionKey)
 	require.NoError(t, err)
 	require.NotNil(t, claim, "a revoked-IA rejection must not consume the slice")
 }

@@ -9,7 +9,7 @@ import (
 
 // circleWalletIdentityFreshnessWindow bounds how old (or how far in the
 // future) a circle wallet identity proof's own timestamp may be. Mirrors
-// jitClaimIdentityFreshnessWindow (claim_funds_controller.go) — defense in
+// cashRedeemIdentityFreshnessWindow (cash_redeem_controller.go) — defense in
 // depth on top of the per-hub d-tag binding and the single-use replay guard,
 // not the primary protection.
 const circleWalletIdentityFreshnessWindow = 5 * time.Minute
@@ -20,7 +20,7 @@ const circleWalletIdentityFreshnessWindow = 5 * time.Minute
 // (every prospective member uses the same connection string), so without
 // this, anyone holding it could claim to be any pubkey they know — enabling
 // rate-limit DoS against the real holder, an allowlist-membership oracle, and
-// commitment/balance griefing. Unlike claim_funds' kind-35521 proof, there is
+// commitment/balance griefing. Unlike cash_redeem' kind-35521 proof, there is
 // no invoice to bind to (this call creates a wallet, it doesn't pay against
 // one); the d-tag binds the proof to this specific hub instead, and the
 // caller is responsible for also enforcing single-use via the event ID
@@ -46,7 +46,7 @@ func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubAppPub
 	}
 	// The event's own signer IS the proof of ownership — circle identities
 	// are always raw pubkeys, there is no connection_key/IA-attestation mode
-	// like JIT's claim_funds has.
+	// like Cash's cash_redeem has.
 	if ev.PubKey != requesterPubkey {
 		return fmt.Errorf("identity_event must be signed by the requester pubkey")
 	}

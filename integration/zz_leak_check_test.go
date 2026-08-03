@@ -22,8 +22,8 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 		t.Skip("skipping: admin_api not configured - see integration/README.md")
 	}
 
-	// jit_wallet children are excluded from this listing entirely (see
-	// listJITWalletClaims's own doc comment on api.ListApps) - this only
+	// cash_wallet children are excluded from this listing entirely (see
+	// listCashWalletClaims's own doc comment on api.ListApps) - this only
 	// catches leaked hubs/circle_wallet/isolated apps, but a leaked hub is
 	// the visible symptom: every child under it was necessarily leaked too.
 	apps, err := admin.listAppsByNamePrefix(ephemeralFixtureNamePrefix)

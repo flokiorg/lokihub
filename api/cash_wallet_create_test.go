@@ -28,7 +28,7 @@ func newTestAPI(svc *tests.TestService) *api {
 // newTestAPIWithService returns an api wired to the test service's real DB,
 // AppsService, and a mock service.Service that forwards GetTransactionsService
 // and GetLNClient to the test service's real instances — everything
-// jitwallet.Create needs beyond what newTestAPI already provides.
+// cashwallet.Create needs beyond what newTestAPI already provides.
 func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
 	mockSvc := mocks.NewMockService(t)
 	txSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
@@ -45,74 +45,74 @@ func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
 	}
 }
 
-func TestCreateJITWallet_HappyPath_SingleRecipient(t *testing.T) {
+func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	result, err := theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
 		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
-	assert.True(t, strings.HasPrefix(result.LokicashToken, lokicash.HRP+"1"))
+	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
 	assert.NotZero(t, result.AppID)
 	require.Len(t, result.Recipients, 1)
 
 	var childApp db.App
 	require.NoError(t, svc.DB.First(&childApp, result.AppID).Error)
-	assert.Equal(t, db.AppKindJITWallet, childApp.Kind)
+	assert.Equal(t, db.AppKindCashWallet, childApp.Kind)
 	assert.Equal(t, hub.ID, *childApp.ParentAppID)
 
 	var claimCount int64
-	require.NoError(t, svc.DB.Model(&db.JITWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
+	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
 	assert.EqualValues(t, 1, claimCount)
 
-	// GET jit-connection for the new wallet must return the identical URI and
+	// GET cash-connection for the new wallet must return the identical URI and
 	// lokicash token (determinism) — a recipient re-fetching later must land
 	// on the exact same wallet, never a different one.
-	conn, err := theAPI.GetJITWalletConnection(result.AppID)
+	conn, err := theAPI.GetCashWalletConnection(result.AppID)
 	require.NoError(t, err)
 	assert.Equal(t, result.PairingURI, conn.PairingURI)
-	assert.Equal(t, result.LokicashToken, conn.LokicashToken)
+	assert.Equal(t, result.CashToken, conn.CashToken)
 
 	// The lokicash token and the pairing URI must describe the exact same
 	// wallet — the fund-safety property that matters most here, since either
 	// string alone is a sufficient connection credential.
 	pairingURI, err := url.Parse(result.PairingURI)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(result.LokicashToken)
+	decoded, err := lokicash.Decode(result.CashToken)
 	require.NoError(t, err)
 	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
 	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
 	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 }
 
-func TestCreateJITWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing.T) {
+func TestCreateCashWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	pk2, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	result, err := theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk1, AmountMloki: 1000},
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk2, AmountMloki: 2000},
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk1, AmountMloki: 1000},
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk2, AmountMloki: 2000},
 		},
 		ExpirySecs: 1800,
 	})
@@ -120,26 +120,26 @@ func TestCreateJITWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing
 	require.Len(t, result.Recipients, 2)
 
 	var childApps []db.App
-	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps).Error)
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps).Error)
 	require.Len(t, childApps, 1, "both recipients must share exactly one wallet app")
 
-	var claims []db.JITWalletClaim
+	var claims []db.CashWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims).Error)
 	require.Len(t, claims, 2)
 }
 
-func TestCreateJITWallet_Bearer_HappyPath(t *testing.T) {
+func TestCreateCashWallet_Bearer_HappyPath(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	theAPI := newTestAPIWithService(t, svc)
-	result, err := theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 1000},
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityBearer, AmountMloki: 1000},
 		},
 		ExpirySecs: 1800,
 	})
@@ -147,25 +147,25 @@ func TestCreateJITWallet_Bearer_HappyPath(t *testing.T) {
 	require.Len(t, result.Recipients, 1)
 
 	r := result.Recipients[0]
-	assert.Equal(t, db.JITAllocIdentityBearer, r.IdentityType)
+	assert.Equal(t, db.CashIdentityBearer, r.IdentityType)
 	assert.NotEmpty(t, r.BearerSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
 	assert.Empty(t, r.IdentityValue, "the admin HTTP API must not surface the internal secret hash either")
 }
 
-func TestCreateJITWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
+func TestCreateCashWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	theAPI := newTestAPIWithService(t, svc)
-	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pk, AmountMloki: 500},
-			{IdentityType: db.JITAllocIdentityBearer, AmountMloki: 500},
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 500},
+			{IdentityType: db.CashIdentityBearer, AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})
@@ -173,50 +173,50 @@ func TestCreateJITWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
-func TestCreateJITWallet_ChildExcludedFromListApps(t *testing.T) {
+func TestCreateCashWallet_ChildExcludedFromListApps(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	result, err := theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
 		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 
-	// jit_wallet children are ephemeral, spend-only wallets managed via their
+	// cash_wallet children are ephemeral, spend-only wallets managed via their
 	// hub's claims list — they must never show up in the general Connections
 	// page listing.
 	listResp, err := theAPI.ListApps(100, 0, ListAppsFilters{}, "")
 	require.NoError(t, err)
 	for _, a := range listResp.Apps {
-		assert.NotEqual(t, result.AppID, a.ID, "jit_wallet child app must not appear in ListApps")
-		assert.NotEqual(t, db.AppKindJITWallet, a.Kind, "no jit_wallet app should ever appear in ListApps")
+		assert.NotEqual(t, result.AppID, a.ID, "cash_wallet child app must not appear in ListApps")
+		assert.NotEqual(t, db.AppKindCashWallet, a.Kind, "no cash_wallet app should ever appear in ListApps")
 	}
 }
 
-func TestCreateJITWallet_InsufficientBalance(t *testing.T) {
+func TestCreateCashWallet_InsufficientBalance(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	// hub has 0 balance — do NOT fund it.
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 5000},
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 5000},
 		},
 		ExpirySecs: 1800,
 	})
@@ -224,30 +224,30 @@ func TestCreateJITWallet_InsufficientBalance(t *testing.T) {
 	assert.True(t, errors.Is(err, transactions.NewInsufficientBalanceError()))
 
 	var childApps []db.App
-	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps)
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
 	assert.Empty(t, childApps)
 }
 
-// TestCreateJITWallet_NegativeAmountRejected guards against a
+// TestCreateCashWallet_NegativeAmountRejected guards against a
 // uint64(int64) wraparound: AmountMloki on the request is int64 (unlike
-// the NWC create_jit_wallet controller's own uint64-typed field, which
+// the NWC mint_cash controller's own uint64-typed field, which
 // gets this rejection for free from JSON unmarshaling), so a negative
 // value must be explicitly rejected before it silently becomes a huge
-// uint64 in jitwallet.RecipientInput.
-func TestCreateJITWallet_NegativeAmountRejected(t *testing.T) {
+// uint64 in cashwallet.RecipientInput.
+func TestCreateCashWallet_NegativeAmountRejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: -1},
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: -1},
 		},
 		ExpirySecs: 1800,
 	})
@@ -255,11 +255,11 @@ func TestCreateJITWallet_NegativeAmountRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "must not be negative")
 
 	var childApps []db.App
-	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps)
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
 	assert.Empty(t, childApps)
 }
 
-func TestCreateJITWallet_NotJITHub(t *testing.T) {
+func TestCreateCashWallet_NotCashHub(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -273,21 +273,21 @@ func TestCreateJITWallet_NotJITHub(t *testing.T) {
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	_, err = theAPI.CreateJITWallet(isolatedApp.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+	_, err = theAPI.CreateCashWallet(isolatedApp.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a jit_hub")
+	assert.Contains(t, err.Error(), "not a cash_hub")
 }
 
-func TestCreateJITWallet_TransferFailure_Rollback(t *testing.T) {
+func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	mockLN := svc.LNClient.(*tests.MockLn)
@@ -297,15 +297,15 @@ func TestCreateJITWallet_TransferFailure_Rollback(t *testing.T) {
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
 	theAPI := newTestAPIWithService(t, svc)
-	_, err = theAPI.CreateJITWallet(hub.ID, &CreateJITWalletRequest{
-		Recipients: []JITWalletRecipient{
-			{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
 		ExpirySecs: 1800,
 	})
 	require.Error(t, err)
 
 	var childApps []db.App
-	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps)
-	assert.Empty(t, childApps, "the child JIT wallet app must be rolled back after a funding failure")
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps, "the child Cash wallet app must be rolled back after a funding failure")
 }

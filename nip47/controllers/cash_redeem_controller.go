@@ -15,6 +15,7 @@ import (
 	decodepay "github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -22,11 +23,11 @@ const (
 	// nostrKindClaimProof is a recipient's per-claim proof of identity. Unlike
 	// the old kind-35521 "identity declaration" (a static, reusable
 	// declaration of connection_key ownership), this event is signed fresh for
-	// each claim_funds call and is bound to one specific wallet AND one
+	// each cash_redeem call and is bound to one specific wallet AND one
 	// specific invoice (see verifyClaimIdentityEvent) — a captured/intercepted
 	// copy of it is useless for any invoice other than the one it was signed
-	// for, which matters here because a jit_wallet's connection is meant to be
-	// shared/public, so anyone holding it can decrypt every claim_funds
+	// for, which matters here because a cash_wallet's connection is meant to be
+	// shared/public, so anyone holding it can decrypt every cash_redeem
 	// request sent on it, including other recipients'.
 	nostrKindClaimProof = 35521
 	// nostrKindIAAttestation is unchanged from the old design: an Identity
@@ -34,17 +35,17 @@ const (
 	// connection_key. Only used for identity_type == connection_key.
 	nostrKindIAAttestation = 35522
 
-	// jitClaimIdentityFreshnessWindow bounds how old (or how far in the
+	// cashRedeemIdentityFreshnessWindow bounds how old (or how far in the
 	// future) a claim proof's own timestamp may be. Defense-in-depth on top
 	// of the invoice/wallet binding above — not the primary protection.
-	jitClaimIdentityFreshnessWindow = 5 * time.Minute
+	cashRedeemIdentityFreshnessWindow = 5 * time.Minute
 
-	// jitClaimRateLimitPerHour is the fallback used by tests, which build a
+	// cashRedeemRateLimitPerHour is the fallback used by tests, which build a
 	// config.AppConfig literal directly rather than through envconfig.Process.
-	jitClaimRateLimitPerHour = 20
+	cashRedeemRateLimitPerHour = 20
 )
 
-type claimFundsParams struct {
+type cashRedeemParams struct {
 	Invoice       string  `json:"invoice"`
 	Amount        *uint64 `json:"amount,omitempty"`         // override for amountless invoices, mirrors pay_invoice
 	IdentityType  string  `json:"identity_type,omitempty"`  // "pubkey" | "connection_key" — omit entirely for a bearer slice
@@ -64,8 +65,8 @@ type claimFundsParams struct {
 	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
-func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
-	params := &claimFundsParams{}
+func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
+	params := &cashRedeemParams{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)
@@ -78,12 +79,12 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		Uint("app_id", app.ID).
 		Str("identity_type", params.IdentityType).
 		Bool("bearer", isBearer).
-		Msg("Handling claim_funds request")
+		Msg("Handling cash_redeem request")
 
-	// 1. claim_funds only ever makes sense against a jit_wallet — reject
+	// 1. cash_redeem only ever makes sense against a cash_wallet — reject
 	// outright rather than relying solely on scope absence elsewhere.
-	if app.Kind != db.AppKindJITWallet {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "claim_funds requires a jit_wallet app")
+	if app.Kind != db.AppKindCashWallet {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_redeem requires a cash_wallet app")
 		return
 	}
 
@@ -93,8 +94,8 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// widely held. This is also the ONLY throttle standing between a bearer
 	// slice and an attacker who's guessing at its secret, since a bearer
 	// redemption has no signature to forge — only a secret to guess.
-	if !controller.jitClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().JITWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for claim_funds")
+	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_redeem")
 		return
 	}
 
@@ -119,7 +120,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 			return
 		}
 		hash := sha256.Sum256(secretBytes)
-		identityType = db.JITAllocIdentityBearer
+		identityType = db.CashIdentityBearer
 		identityValue = hex.EncodeToString(hash[:])
 	} else {
 		if params.Invoice == "" || params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
@@ -127,12 +128,12 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 				"invoice, identity_type, identity_value, and identity_event are all required")
 			return
 		}
-		if params.IdentityType != db.JITAllocIdentityPubkey && params.IdentityType != db.JITAllocIdentityConnectionKey {
+		if params.IdentityType != db.CashIdentityPubkey && params.IdentityType != db.CashIdentityConnectionKey {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("identity_type must be %q or %q", db.JITAllocIdentityPubkey, db.JITAllocIdentityConnectionKey))
+				fmt.Sprintf("identity_type must be %q or %q", db.CashIdentityPubkey, db.CashIdentityConnectionKey))
 			return
 		}
-		if params.IdentityType == db.JITAllocIdentityConnectionKey && params.AttestationEvent == "" {
+		if params.IdentityType == db.CashIdentityConnectionKey && params.AttestationEvent == "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 				"attestation_event is required when identity_type is connection_key")
 			return
@@ -153,14 +154,14 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// 5. Read-only lookup of the claimed slice BEFORE touching the atomic
 	// claim guard, so a proof that fails verification never briefly occupies
 	// (and can never grief) the slot a legitimate concurrent claimer needs.
-	claim, err := controller.appsService.GetJITWalletClaim(app.ID, identityType, identityValue)
+	claim, err := controller.appsService.GetCashWalletClaim(app.ID, identityType, identityValue)
 	if err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up JIT wallet claim")
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up Cash wallet claim")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to look up claim")
 		return
 	}
 	if claim == nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no unclaimed slice for this identity")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice registered for this identity")
 		return
 	}
 
@@ -180,7 +181,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 			walletPubkey = *app.WalletPubkey
 		}
 		attestationEventID := ""
-		if identityType == db.JITAllocIdentityConnectionKey {
+		if identityType == db.CashIdentityConnectionKey {
 			if err := json.Unmarshal([]byte(params.AttestationEvent), &attestationEvent); err != nil {
 				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON")
 				return
@@ -198,7 +199,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	// checked live, here, rather than only ever at creation time, so revoking
 	// a compromised IA immediately blocks future claims it attested instead
 	// of leaving them honorable until their own attestation expiry lapses.
-	if identityType == db.JITAllocIdentityConnectionKey {
+	if identityType == db.CashIdentityConnectionKey {
 		trusted, err := controller.iaChecker.IsTrusted(claim.IAPubkey)
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check Identity Authority trust")
@@ -218,53 +219,90 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	}
 
 	// 8. Atomically claim the slice — guards the actual payout against races
-	// and replays. RowsAffected==0 here (a concurrent claim won since step 5)
-	// is reported identically to "not found" for the same reason step 5 is.
-	claimedAmount, err := controller.appsService.ClaimJITWalletSlice(app.ID, identityType, identityValue)
+	// and replays. RowsAffected==0 here means a concurrent redeem/transfer won
+	// since step 5's lookup. Reported with a distinct message from step 5's
+	// "never existed" case — list_recipients already discloses claimed/
+	// claimed_at to any holder of this shared connection, so naming "already
+	// redeemed" here protects nothing that isn't already visible one method
+	// over, while sparing a legitimate recipient who was in fact paid from
+	// seeing a message that reads as "you were never owed anything."
+	claimedAmount, err := controller.appsService.ClaimCashSlice(app.ID, identityType, identityValue)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no unclaimed slice for this identity")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "this slice has already been redeemed")
 		return
 	}
 
 	// 9. The "not partially, in one shot" rule as an explicit, direct check:
-	// the invoice's resolved amount must equal the slice exactly. Mirrors
-	// SendPaymentSync's own amount resolution (invoice's own MSat, or the
-	// caller's override only for a zero-amount invoice).
-	resolvedAmount := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int64/uint64 range
+	// the invoice's resolved amount must equal the slice's own net
+	// redeemable amount exactly — the full slice for a redemption that will
+	// resolve to a same-node payment (no fee applies), or the slice minus
+	// this claim's own RedeemFeePpm cut for a genuine external one. Peeking
+	// at transactions.IsSelfPayment here — the SAME predicate
+	// SendPaymentSync itself evaluates moments later — lets the recipient's
+	// invoice be checked against the RIGHT expected amount before payment is
+	// even attempted, rather than discovering after the fact that they built
+	// it for the wrong one. See list_recipients (redeem_fee_mloki/
+	// net_redeemable_mloki) for the quote a client should build this invoice
+	// from in the first place.
+	resolvedAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
 	if resolvedAmount == 0 && params.Amount != nil {
 		resolvedAmount = *params.Amount
 	}
-	if resolvedAmount != uint64(claimedAmount) { //nolint:gosec // internally-computed slice amount, always non-negative
-		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back JIT wallet slice claim after amount mismatch")
+	willBeSelfPayment := transactions.IsSelfPayment(controller.db, paymentRequest, controller.lnClient)
+	hubFeeMloki := uint64(0)
+	if !willBeSelfPayment {
+		hubFeeMloki = transactions.CalculateFeeSkimMloki(uint64(claimedAmount), claim.RedeemFeePpm) //nolint:gosec // claimedAmount is always non-negative
+	}
+	expectedAmount := uint64(claimedAmount) - hubFeeMloki //nolint:gosec // claimedAmount is always non-negative and >= hubFeeMloki (a <=100% cut of it)
+	if resolvedAmount != expectedAmount {
+		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
+			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after amount mismatch")
 		}
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("invoice amount %d does not exactly match your allocated share of %d mloki", resolvedAmount, claimedAmount))
+		// The generic message below is correct on its own, but a recipient
+		// who followed list_recipients' own advice (build the invoice for
+		// net_redeemable_mloki, the WORST-CASE quote) and presented exactly
+		// that fee-reduced amount, only to have this specific redemption
+		// resolve same-node (fee-free, full amount required), would read
+		// "net redeemable amount of X" as agreeing with the very value that
+		// just got rejected — same phrase, different number, no indication
+		// why. Name the mechanism explicitly for that specific case.
+		message := fmt.Sprintf("invoice amount %d does not exactly match your net redeemable amount of %d mloki (allocated share %d minus redeem fee %d)",
+			resolvedAmount, expectedAmount, claimedAmount, hubFeeMloki)
+		if willBeSelfPayment && resolvedAmount < uint64(claimedAmount) { //nolint:gosec // claimedAmount is always non-negative
+			message = fmt.Sprintf("invoice amount %d does not match: this redemption resolves to a same-node payment, which is always fee-free — present an invoice for the full %d instead of a fee-reduced quote",
+				resolvedAmount, claimedAmount)
+		}
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, message)
 		return
 	}
 
 	// 10. Pay. Build outgoing metadata from caller input, stripping any
-	// caller-supplied internal_transfer/jit_claim_slice keys (spoofing
-	// prevention — mirrors pay_invoice_controller.go's internal_transfer
-	// stripping) before setting jit_claim_slice ourselves, which bypasses
-	// enforceJITFullDrain's whole-wallet-balance check: that check is wrong
-	// for a shared wallet (it would reject a recipient's payout whenever
-	// other recipients' unclaimed slices are still sitting in the same
-	// balance), and step 9 above already enforces the correct, per-slice
-	// exact-amount rule in its place.
+	// caller-supplied internal_transfer/cash_claim_slice/cash_redeem_fee_mloki
+	// keys (spoofing prevention — mirrors pay_invoice_controller.go's
+	// internal_transfer stripping) before setting cash_claim_slice ourselves,
+	// which bypasses enforceCashFullDrain's whole-wallet-balance check: that
+	// check is wrong for a shared wallet (it would reject a recipient's
+	// payout whenever other recipients' unclaimed slices are still sitting
+	// in the same balance), and step 9 above already enforces the correct,
+	// per-slice exact-amount rule in its place. cash_redeem_fee_mloki is the
+	// quoted hub fee, computed above from this claim's own RedeemFeePpm —
+	// threaded through so markTransactionSettled can reconcile it against
+	// the real routing fee at settlement (transactions.reconcileCashRedeemFee).
 	metadata := map[string]interface{}{}
-	// (claim_funds has no metadata param of its own in the wire format above;
+	// (cash_redeem has no metadata param of its own in the wire format above;
 	// reserved for parity with pay_invoice's shape/future extension.)
 	delete(metadata, "internal_transfer")
-	delete(metadata, "jit_claim_slice")
-	metadata["jit_claim_slice"] = true
+	delete(metadata, "cash_claim_slice")
+	delete(metadata, "cash_redeem_fee_mloki")
+	metadata["cash_claim_slice"] = true
+	metadata["cash_redeem_fee_mloki"] = hubFeeMloki
 
 	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, params.Amount, metadata, controller.lnClient, &app.ID, &requestEventId)
 	if err != nil {
-		if unclaimErr := controller.appsService.UnclaimJITWalletSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back JIT wallet slice claim after payment failure")
+		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
+			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after payment failure")
 		}
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to pay claim_funds invoice")
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to pay cash_redeem invoice")
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      mapNip47Error(err),
@@ -273,7 +311,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 	}
 
 	if transaction == nil || transaction.Preimage == nil {
-		logger.Logger.Error().Uint("app_id", app.ID).Msg("claim_funds payment succeeded but transaction or preimage is nil")
+		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_redeem payment succeeded but transaction or preimage is nil")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "payment completed but preimage unavailable")
 		return
 	}
@@ -282,13 +320,18 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 		Uint("app_id", app.ID).
 		Str("identity_type", identityType).
 		Uint64("amount_mloki", resolvedAmount).
-		Msg("JIT wallet slice claimed")
+		Msg("Cash wallet slice claimed")
 
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: payResponse{
 			Preimage: *transaction.Preimage,
-			FeesPaid: transaction.FeeMloki,
+			// FeesPaid is the hub's own redeem fee (what the recipient
+			// actually bore, already deducted from their invoice amount in
+			// step 9) — NOT transaction.FeeMloki, the real Lightning routing
+			// fee, which under this design is never charged to the
+			// recipient (see transactions.reconcileCashRedeemFee).
+			FeesPaid: hubFeeMloki,
 		},
 	}, tags)
 }
@@ -297,7 +340,7 @@ func (controller *nip47Controller) HandleClaimFundsEvent(ctx context.Context, ni
 // bound to this exact wallet (d-tag) and this exact invoice (bolt11_hash
 // tag) — the binding that makes an intercepted proof unusable for any
 // invoice other than the one it was created for, which matters on a shared/
-// public connection where anyone holding it can decrypt every claim_funds
+// public connection where anyone holding it can decrypt every cash_redeem
 // request; a recency window as defense-in-depth; and, depending on mode,
 // either self-proof (pubkey) or a reference to the accompanying IA
 // attestation (connection_key).
@@ -313,7 +356,7 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 	// the event's own fields — it does not check that the client-supplied
 	// evt.ID matches that hash (only CheckID does). Nothing here currently
 	// trusts identityEvent.ID as a security-relevant key (this claim's
-	// single-use guarantee comes from ClaimJITWalletSlice's atomic claim, and
+	// single-use guarantee comes from ClaimCashSlice's atomic claim, and
 	// replay is bound to a specific invoice via bolt11_hash below, not the
 	// event ID) — this check is defense in depth / NIP-01 correctness, kept
 	// consistent with the sibling verifyCircleWalletIdentityEvent, which does
@@ -331,11 +374,11 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 	}
 	now := time.Now()
 	evTime := ev.CreatedAt.Time()
-	if evTime.Before(now.Add(-jitClaimIdentityFreshnessWindow)) || evTime.After(now.Add(time.Minute)) {
+	if evTime.Before(now.Add(-cashRedeemIdentityFreshnessWindow)) || evTime.After(now.Add(time.Minute)) {
 		return fmt.Errorf("identity_event is stale or has a future timestamp")
 	}
 
-	if identityType == db.JITAllocIdentityConnectionKey {
+	if identityType == db.CashIdentityConnectionKey {
 		connKeyTag := ev.Tags.Find("connection_key")
 		if len(connKeyTag) < 2 || connKeyTag[1] != identityValue {
 			return fmt.Errorf("identity_event connection_key tag does not match identity_value")
@@ -363,7 +406,7 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // The expiration tag is mandatory here, not merely checked-if-present: this
 // codebase's trust model only supports revoking an Identity Authority as a
 // whole (apps.IdentityAuthorityManager.IsTrusted — called by
-// HandleClaimFundsEvent, step 7, right before this function runs, so a
+// HandleCashRedeemEvent, step 7, right before this function runs, so a
 // revoked IA is rejected before its attestation's own tags are even
 // examined) — unlike the wider IA attestation protocol this event shape
 // is drawn from, there is no per-attestation revocation (no NIP-09 kind-5

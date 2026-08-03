@@ -4,39 +4,34 @@ import (
 	"context"
 	"errors"
 
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/jitwallet"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// jitRateLimitPerHour is the fallback used by tests, which build a
+// cashRateLimitPerHour is the fallback used by tests, which build a
 // config.AppConfig literal directly rather than through envconfig.Process
 // (so its struct-tag default never applies). Runtime callers always go
-// through controller.cfg.GetEnv().JITWalletRateLimitPerHour instead.
-const jitRateLimitPerHour = 10
+// through controller.cfg.GetEnv().CashWalletRateLimitPerHour instead.
+const cashRateLimitPerHour = 10
 
-type createJITWalletRecipientParam struct {
+type mintCashRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   uint64 `json:"amount_mloki"`
 }
 
-type createJITWalletParams struct {
-	Recipients []createJITWalletRecipientParam `json:"recipients"`
-	ExpirySecs int                             `json:"expiry,omitempty"`
-	// MaxTransfers caps how many times each identity-bound slice MAY be
-	// transferred via jit_transfer before it can only be redeemed. 0 or
-	// omitted means unlimited. Meaningless for a bearer recipient, which
-	// jit_transfer doesn't apply to.
-	MaxTransfers int `json:"max_transfers,omitempty"`
+type mintCashParams struct {
+	Recipients []mintCashRecipientParam `json:"recipients"`
+	ExpirySecs int                      `json:"expiry,omitempty"`
 }
 
-type createJITWalletRecipientResult struct {
+type mintCashRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
 	AmountMloki   uint64 `json:"amount_mloki"`
@@ -46,18 +41,18 @@ type createJITWalletRecipientResult struct {
 	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
-type createJITWalletResponse struct {
-	WalletPubkey  string                           `json:"wallet_pubkey"`
-	PairingURI    string                           `json:"pairing_uri"`
-	LokicashToken string                           `json:"lokicash_token"`
-	ExpiresAt     int64                            `json:"expires_at"`
-	Recipients    []createJITWalletRecipientResult `json:"recipients"`
+type mintCashResponse struct {
+	WalletPubkey string                    `json:"wallet_pubkey"`
+	PairingURI   string                    `json:"pairing_uri"`
+	CashToken    string                    `json:"cash_token"`
+	ExpiresAt    int64                     `json:"expires_at"`
+	Recipients   []mintCashRecipientResult `json:"recipients"`
 }
 
-// mapJITWalletErrorCode maps an error returned by jitwallet.Create to a NIP-47
-// error code. jitwallet.Create is protocol-agnostic, so it returns plain wrapped
+// mapCashWalletErrorCode maps an error returned by cashwallet.Create to a NIP-47
+// error code. cashwallet.Create is protocol-agnostic, so it returns plain wrapped
 // errors rather than NIP-47 codes directly — this is the NWC-specific translation.
-func mapJITWalletErrorCode(err error) string {
+func mapCashWalletErrorCode(err error) string {
 	switch {
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
 		return constants.ERROR_INSUFFICIENT_BALANCE
@@ -70,8 +65,8 @@ func mapJITWalletErrorCode(err error) string {
 	}
 }
 
-func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
-	params := &createJITWalletParams{}
+func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
+	params := &mintCashParams{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, nostr.Tags{})
@@ -82,30 +77,30 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 		Uint("app_id", app.ID).
 		Int("recipient_count", len(params.Recipients)).
 		Int("expiry", params.ExpirySecs).
-		Msg("Handling create_jit_wallet request")
+		Msg("Handling mint_cash request")
 
-	// 1. App must be jit_hub kind.
-	if app.Kind != db.AppKindJITHub {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "create_jit_wallet requires a jit_hub app")
+	// 1. App must be cash_hub kind.
+	if app.Kind != db.AppKindCashHub {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "mint_cash requires a cash_hub app")
 		return
 	}
 
-	// 1b. Serialize concurrent create_jit_wallet attempts against this hub
-	// (across this NWC path and the admin HTTP path, api.CreateJITWallet) so
+	// 1b. Serialize concurrent mint_cash attempts against this hub
+	// (across this NWC path and the admin HTTP path, api.CreateCashWallet) so
 	// two racing requests can't both pass Resolve's balance pre-check against
 	// the same stale balance before either one's Commit actually transfers
 	// funds out. Mirrors create_circle_wallet_controller.go's
 	// activeCircleInvoices guard.
-	release, ok := jitwallet.LockHub(app.ID)
+	release, ok := cashwallet.LockHub(app.ID)
 	if !ok {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "wallet creation already in progress for this hub")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "wallet creation already in progress for this hub, please retry shortly")
 		return
 	}
 	defer release()
 
-	recipients := make([]jitwallet.RecipientInput, len(params.Recipients))
+	recipients := make([]cashwallet.RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
-		recipients[i] = jitwallet.RecipientInput{
+		recipients[i] = cashwallet.RecipientInput{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			IAPubkey:      r.IAPubkey,
@@ -113,7 +108,7 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 		}
 	}
 
-	deps := jitwallet.Deps{
+	deps := cashwallet.Deps{
 		AppsService:         controller.appsService,
 		TransactionsService: controller.transactionsService,
 		LNClient:            controller.lnClient,
@@ -127,14 +122,13 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 	// balance are all read-only checks, so a request that was always going to
 	// fail never burns rate-limit quota (mirrors create_circle_wallet_controller.go,
 	// where the same ordering applies).
-	resolved, err := jitwallet.Resolve(ctx, deps, jitwallet.Params{
-		HubApp:       app,
-		Recipients:   recipients,
-		ExpirySecs:   params.ExpirySecs,
-		MaxTransfers: params.MaxTransfers,
+	resolved, err := cashwallet.Resolve(ctx, deps, cashwallet.Params{
+		HubApp:     app,
+		Recipients: recipients,
+		ExpirySecs: params.ExpirySecs,
 	})
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, mapJITWalletErrorCode(err), err.Error())
+		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
 		return
 	}
 
@@ -142,20 +136,20 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 	// equivalent caller-facing rate limit since it's already gated by hub ownership).
 	// Only requests that passed validation above reach here, so quota is spent
 	// only on requests that would otherwise actually create and fund a wallet.
-	if !controller.jitRateLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().JITWalletRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for create_jit_wallet")
+	if !controller.cashRateLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletRateLimitPerHour) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for mint_cash")
 		return
 	}
 
-	result, err := jitwallet.Commit(ctx, deps, resolved)
+	result, err := cashwallet.Commit(ctx, deps, resolved)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, mapJITWalletErrorCode(err), err.Error())
+		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
 		return
 	}
 
-	recipientResults := make([]createJITWalletRecipientResult, len(result.Recipients))
+	recipientResults := make([]mintCashRecipientResult, len(result.Recipients))
 	for i, r := range result.Recipients {
-		recipientResults[i] = createJITWalletRecipientResult{
+		recipientResults[i] = mintCashRecipientResult{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMloki:   r.AmountMloki,
@@ -164,19 +158,19 @@ func (controller *nip47Controller) HandleCreateJITWalletEvent(ctx context.Contex
 	}
 
 	logger.Logger.Info().
-		Uint("jit_wallet_id", result.WalletApp.ID).
+		Uint("cash_wallet_id", result.WalletApp.ID).
 		Uint("parent_app_id", app.ID).
 		Int("recipient_count", len(result.Recipients)).
-		Msg("JIT wallet created and funded")
+		Msg("Cash wallet created and funded")
 
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result: createJITWalletResponse{
-			WalletPubkey:  *result.WalletApp.WalletPubkey,
-			PairingURI:    result.PairingURI,
-			LokicashToken: result.LokicashToken,
-			ExpiresAt:     result.ExpiresAt.Unix(),
-			Recipients:    recipientResults,
+		Result: mintCashResponse{
+			WalletPubkey: *result.WalletApp.WalletPubkey,
+			PairingURI:   result.PairingURI,
+			CashToken:    result.CashToken,
+			ExpiresAt:    result.ExpiresAt.Unix(),
+			Recipients:   recipientResults,
 		},
 	}, nostr.Tags{})
 }

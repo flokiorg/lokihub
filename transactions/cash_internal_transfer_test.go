@@ -1,8 +1,8 @@
 package transactions
 
-// F2 — Transfer API passes nil metadata to SendPaymentSync, so the JIT
+// F2 — Transfer API passes nil metadata to SendPaymentSync, so the Cash
 // full-drain guard sees isInternalTransfer=false and rejects any partial drain
-// from a JIT wallet even when the payment originates from the hub's internal
+// from a Cash wallet even when the payment originates from the hub's internal
 // Transfer API.
 //
 // The fix is at the caller level (api/transactions.go): Transfer now passes
@@ -10,9 +10,9 @@ package transactions
 // The SendPaymentSync function itself correctly rejects partial drains when
 // metadata is nil — that guard is working as intended.
 //
-// TestSendPaymentSync_JITWallet_NilMetadata_PartialDrain_IsBlocked verifies
+// TestSendPaymentSync_CashWallet_NilMetadata_PartialDrain_IsBlocked verifies
 // the guard works (nil metadata → rejected).
-// TestSendPaymentSync_JITWallet_ExplicitInternalTransfer_PartialDrain_Succeeds
+// TestSendPaymentSync_CashWallet_ExplicitInternalTransfer_PartialDrain_Succeeds
 // verifies the fixed path (explicit flag → accepted).
 
 import (
@@ -26,21 +26,21 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-func TestSendPaymentSync_JITWallet_NilMetadata_PartialDrain_IsBlocked(t *testing.T) {
+func TestSendPaymentSync_CashWallet_NilMetadata_PartialDrain_IsBlocked(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	// Create a parent hub app so parent_kind is populated on the child wallet.
-	hub := &db.App{Name: "hub", Kind: db.AppKindJITHub}
+	hub := &db.App{Name: "hub", Kind: db.AppKindCashHub}
 	require.NoError(t, svc.DB.Create(hub).Error)
 
-	// Create a JIT wallet child app with PAY_INVOICE scope.
+	// Create a Cash wallet child app with PAY_INVOICE scope.
 	wallet := &db.App{
-		Name:        "jit-wallet",
-		Kind:        db.AppKindJITWallet,
+		Name:        "cash-wallet",
+		Kind:        db.AppKindCashWallet,
 		ParentAppID: &hub.ID,
-		ParentKind:  db.ParentKindJIT,
+		ParentKind:  db.ParentKindCash,
 	}
 	require.NoError(t, svc.DB.Create(wallet).Error)
 
@@ -76,26 +76,26 @@ func TestSendPaymentSync_JITWallet_NilMetadata_PartialDrain_IsBlocked(t *testing
 	// Nil metadata correctly triggers the partial-drain guard — this is expected.
 	// The fix (F2) is that api.Transfer now passes {"internal_transfer": true},
 	// not that nil metadata should bypass the guard.
-	assert.Error(t, err, "nil metadata must be blocked by the JIT partial-drain guard; "+
+	assert.Error(t, err, "nil metadata must be blocked by the Cash partial-drain guard; "+
 		"the fix is the Transfer API caller passing the flag, not bypassing the guard for nil")
 }
 
-// TestSendPaymentSync_JITWallet_ExplicitInternalTransfer_PartialDrain_Succeeds
+// TestSendPaymentSync_CashWallet_ExplicitInternalTransfer_PartialDrain_Succeeds
 // shows the *current* workaround: passing metadata with "internal_transfer"=true.
 // When F2 is fixed (Transfer passes the flag), this behaviour must still hold.
-func TestSendPaymentSync_JITWallet_ExplicitInternalTransfer_PartialDrain_Succeeds(t *testing.T) {
+func TestSendPaymentSync_CashWallet_ExplicitInternalTransfer_PartialDrain_Succeeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := &db.App{Name: "hub", Kind: db.AppKindJITHub}
+	hub := &db.App{Name: "hub", Kind: db.AppKindCashHub}
 	require.NoError(t, svc.DB.Create(hub).Error)
 
 	wallet := &db.App{
-		Name:        "jit-wallet",
-		Kind:        db.AppKindJITWallet,
+		Name:        "cash-wallet",
+		Kind:        db.AppKindCashWallet,
 		ParentAppID: &hub.ID,
-		ParentKind:  db.ParentKindJIT,
+		ParentKind:  db.ParentKindCash,
 	}
 	require.NoError(t, svc.DB.Create(wallet).Error)
 
@@ -125,5 +125,5 @@ func TestSendPaymentSync_JITWallet_ExplicitInternalTransfer_PartialDrain_Succeed
 		svc.LNClient, &wallet.ID, &dbRequestEvent.ID,
 	)
 
-	assert.NoError(t, err, "explicit internal_transfer=true must bypass the JIT partial-drain guard")
+	assert.NoError(t, err, "explicit internal_transfer=true must bypass the Cash partial-drain guard")
 }

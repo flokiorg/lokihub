@@ -1,7 +1,7 @@
 package api
 
 // Covers RemoveCircleAllowedPubkey, ListCircleAllowlist, and RefreshCircleAllowlist's
-// validation paths — all had 0% test coverage per the Circle/JIT audit even though
+// validation paths — all had 0% test coverage per the Circle/Cash audit even though
 // ReplaceCircleAllowlist (the sibling endpoint) was already tested.
 
 import (

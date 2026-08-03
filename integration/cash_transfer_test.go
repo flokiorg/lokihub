@@ -1,9 +1,9 @@
 //go:build integration
 
-// jit_transfer_test.go covers reassigning an unclaimed slice's registered
+// cash_transfer_test.go covers reassigning an unclaimed slice's registered
 // identity without redeeming it (NIP-JW §Transferring a Slice), end to end
 // over a real Nostr relay against a real running instance — the black-box
-// counterpart to nip47/controllers/jit_transfer_controller_test.go's unit
+// counterpart to nip47/controllers/cash_transfer_controller_test.go's unit
 // coverage.
 package integration
 
@@ -17,13 +17,13 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 )
 
-func TestJITTransfer(t *testing.T) {
+func TestCashTransfer(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "jit-transfer-jit-hub", nil)
-	testJITTransfer(t, cfg, hub)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "cash-transfer-cash-hub", nil)
+	testCashTransfer(t, cfg, hub)
 }
 
-func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
+func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 	hubClient := mustConnect(t, hub.Connection)
 
 	t.Run("PubkeyToPubkey_ThenRedeemableByNewIdentity", func(t *testing.T) {
@@ -31,8 +31,8 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		currentPub, err := nostr.GetPublicKey(currentPriv)
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -42,13 +42,13 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		newPub, err := nostr.GetPublicKey(newPriv)
 		require.NoError(t, err)
 
-		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "pubkey", newPub, nil, time.Now())
-		var transferResult JITTransferResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "pubkey", newPub, "", happyPathAmountMloki, nil, time.Now())
+		var transferResult CashTransferResult
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &transferResult))
 		require.Equal(t, "pubkey", transferResult.IdentityType)
 		require.Equal(t, newPub, transferResult.IdentityValue)
@@ -57,7 +57,7 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		oldInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer old identity")
 		oldProof := buildClaimProofEvent(t, currentPriv, created.WalletPubkey, oldInvoice.PaymentHash, nil, time.Now())
 		var oldClaimResult ClaimFundsResult
-		err = shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       oldInvoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
@@ -69,7 +69,7 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		newInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer new identity")
 		newProof := buildClaimProofEvent(t, newPriv, created.WalletPubkey, newInvoice.PaymentHash, nil, time.Now())
 		var newClaimResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       newInvoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: newPub,
@@ -83,8 +83,8 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		currentPub, err := nostr.GetPublicKey(currentPriv)
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -94,20 +94,20 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// commitment — the wallet never mints or returns one over this
 		// shared connection (NIP-JW §Bearer Slices).
 		newSecretHex, newSecretHash := bearerSecretAndHash(t)
-		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", newSecretHash, nil, time.Now())
-		var transferResult JITTransferResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
+		var transferResult CashTransferResult
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: newSecretHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: newSecretHash},
 		}, &transferResult))
 		require.Equal(t, "bearer", transferResult.IdentityType)
 		require.Equal(t, newSecretHash, transferResult.IdentityValue)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer to bearer")
 		var claimResult ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:      invoice.Invoice,
 			BearerSecret: newSecretHex,
 		}, &claimResult))
@@ -119,8 +119,8 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		currentPub, err := nostr.GetPublicKey(currentPriv)
 		require.NoError(t, err)
 
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -129,17 +129,17 @@ func testJITTransfer(t *testing.T, cfg *Config, hub JITHubConfig) {
 		intendedPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 		// Proof is bound to intendedPub...
-		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "pubkey", intendedPub, nil, time.Now())
+		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "pubkey", intendedPub, "", happyPathAmountMloki, nil, time.Now())
 
 		// ...but the request targets a different (attacker) pubkey.
 		attackerPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
-		var transferResult JITTransferResult
-		err = shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		var transferResult CashTransferResult
+		err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerPub},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerPub},
 		}, &transferResult)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})

@@ -1,11 +1,11 @@
 //go:build integration
 
 // Package integration holds a black-box NWC test suite that drives real,
-// already-running JIT/circle hub parent connections as an actual NWC client
+// already-running Cash/circle hub parent connections as an actual NWC client
 // would. It is excluded from normal builds/tests by the "integration" build
 // tag — run it explicitly with `go test -tags integration ./integration/...`.
 //
-// Every jit_hub/circle_hub/simple-wallet fixture a test needs is provisioned
+// Every cash_hub/circle_hub/simple-wallet fixture a test needs is provisioned
 // on demand via the admin API (see ephemeral_test.go) and torn down again in
 // its own t.Cleanup - config.local.yaml names nothing but that admin API
 // itself, so there's no pre-provisioned hub/identity to hand-set-up before
@@ -26,9 +26,9 @@ type CircleMembers struct {
 	AuthorizedPrivkeys []string
 }
 
-// JITHubConfig is a ready-to-use jit_hub connection - returned by
-// createEphemeralJITHub, never read from config.local.yaml.
-type JITHubConfig struct {
+// CashHubConfig is a ready-to-use cash_hub connection - returned by
+// createEphemeralCashHub, never read from config.local.yaml.
+type CashHubConfig struct {
 	Name       string
 	Connection string
 }
@@ -42,13 +42,13 @@ type CircleHubConfig struct {
 	Members    CircleMembers
 }
 
-// SimpleWalletConfig is a ready-to-use plain NWC connection (not a jit_hub or
+// SimpleWalletConfig is a ready-to-use plain NWC connection (not a cash_hub or
 // circle_hub) granted make_invoice+pay_invoice - returned by
 // createEphemeralSimpleWallet, never read from config.local.yaml. Used as an
 // external invoice source/payer independent of any specific hub's own
-// grants - e.g. draining a JIT child down to exactly zero (rather than a
+// grants - e.g. draining a Cash child down to exactly zero (rather than a
 // partial payment) is what flips its admin/frontend "claimed" state from
-// spend-based Active to fully Claimed (see JITHubAllocations.tsx's
+// spend-based Active to fully Claimed (see CashHubAllocations.tsx's
 // ClaimStateBadge), which needs an invoice for the child's *entire*
 // remaining balance.
 type SimpleWalletConfig struct {
@@ -58,7 +58,7 @@ type SimpleWalletConfig struct {
 // AdminAPIConfig names the lokihub instance's own admin HTTP API (the same
 // one the frontend calls, e.g. POST /api/apps, DELETE /apps/:id/circle/
 // children/:childId) - the ONLY thing config.local.yaml needs to name. Every
-// jit_hub/circle_hub/simple-wallet fixture is provisioned through it at test
+// cash_hub/circle_hub/simple-wallet fixture is provisioned through it at test
 // time (see ephemeral_test.go) rather than hand-set-up beforehand.
 //
 // Token is a bearer JWT, not a long-lived static API key: mint one by

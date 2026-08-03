@@ -10,7 +10,7 @@ import (
 )
 
 // respondError builds and publishes a NIP-47 error response for method. Shared
-// by the JIT/circle wallet controllers, which otherwise each repeat this same
+// by the Cash/circle wallet controllers, which otherwise each repeat this same
 // five-line block for every one of their many validation branches.
 func respondError(publishResponse publishFunc, method, code, message string) {
 	publishResponse(&models.Response{

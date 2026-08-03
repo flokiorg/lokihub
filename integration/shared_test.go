@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,9 +24,9 @@ import (
 
 // bearerSecretAndHash returns a fresh random bearer secret (hex) and the
 // hex-encoded sha256 commitment of it — the value a caller submits as a
-// bearer new_identity's identity_value in jit_transfer (NIP-JW §Bearer
+// bearer new_identity's identity_value in cash_transfer (NIP-JW §Bearer
 // Slices): the wallet never mints or returns a bearer secret over the
-// shared jit_wallet connection, so the caller always generates their own.
+// shared cash_wallet connection, so the caller always generates their own.
 func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	t.Helper()
 	raw := make([]byte, 32)
@@ -36,7 +37,7 @@ func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 }
 
 // Mirrors the unexported kind constants in
-// nip47/controllers/claim_funds_controller.go (Kind 35521: per-claim proof of
+// nip47/controllers/cash_redeem_controller.go (Kind 35521: per-claim proof of
 // identity, bound to one wallet + one invoice; Kind 35522: Identity Authority
 // attestation, connection_key mode only).
 const (
@@ -47,7 +48,7 @@ const (
 // buildClaimProofEvent builds and signs a kind-35521 claim proof bound to
 // walletPubkey and bolt11Hash — the binding that makes an intercepted proof
 // unusable for any invoice other than the one it was signed for, which
-// matters because a jit_wallet's connection is meant to be shared/public.
+// matters because a cash_wallet's connection is meant to be shared/public.
 // extraTags carries the connection_key-mode-only tags (connection_key + an
 // e-tag referencing the attestation event).
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
@@ -64,16 +65,30 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 }
 
 // buildTransferProofEvent builds and signs a kind-35521 transfer proof bound
-// to walletPubkey and the target (newIdentityType, newIdentityValue) — the
+// to walletPubkey, the target (newIdentityType, newIdentityValue,
+// newIAPubkey), AND the exact amountMloki this proof authorizes — the
 // binding that stops an intercepted proof from being redirected to a
-// different new_identity than the one it was actually signed for. Mirrors
-// buildClaimProofEvent, but bound via new_identity_hash instead of
-// bolt11_hash (nip47/controllers/jit_transfer_controller.go's
-// newIdentityHash). newIdentityValue is "" for a bearer target.
-func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
+// different new_identity (including a different Identity Authority for a
+// connection_key target — a captured proof used to be replayable with a
+// swapped, still-trusted IA even with identity_value unchanged, fixed
+// 2026-07-30), or replayed for a different amount_mloki, than what it was
+// actually signed for (NIP-CASH §Transferring and Splitting a Slice). For a
+// full transfer, pass the slice's exact current amount (never a
+// sentinel/omitted value — the server resolves an omitted request
+// amount_mloki to the slice's live full amount and requires the proof to
+// match that exact number). Mirrors buildClaimProofEvent, but bound via
+// new_identity_hash/amount_mloki instead of bolt11_hash
+// (nip47/controllers/cash_transfer_controller.go's newIdentityHash).
+// newIdentityValue is "" for a bearer target; newIAPubkey is "" for
+// non-connection_key targets.
+func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue, newIAPubkey string, amountMloki uint64, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()
-	sum := sha256.Sum256([]byte(newIdentityType + ":" + newIdentityValue))
-	tags := nostr.Tags{{"d", walletPubkey}, {"new_identity_hash", hex.EncodeToString(sum[:])}}
+	sum := sha256.Sum256([]byte(newIdentityType + ":" + newIdentityValue + ":" + newIAPubkey))
+	tags := nostr.Tags{
+		{"d", walletPubkey},
+		{"new_identity_hash", hex.EncodeToString(sum[:])},
+		{"amount_mloki", strconv.FormatUint(amountMloki, 10)},
+	}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
 		Kind:      nostrKindClaimProof,
@@ -205,7 +220,7 @@ func mustConnect(t *testing.T, pairingURI string) *nwcclient.Client {
 }
 
 // newTestPrivkey generates a fresh random nostr private key, e.g. to act as
-// a one-off JIT wallet beneficiary.
+// a one-off Cash wallet beneficiary.
 func newTestPrivkey(t *testing.T) string {
 	t.Helper()
 	return nostr.GeneratePrivateKey()
@@ -258,7 +273,7 @@ func newTestConnectionKey(t *testing.T) string {
 
 // mintInvoiceFromSimpleWallet mints a real invoice from a fresh, throwaway
 // simple wallet (see createEphemeralSimpleWallet) - a plain isolated app kept
-// independent of any jit_hub/circle_hub, used to fund invoices for full-drain
+// independent of any cash_hub/circle_hub, used to fund invoices for full-drain
 // payment scenarios. Every call gets its own ephemeral wallet: nothing in
 // this suite ever checks a simple wallet's own balance/history afterward, so
 // there's no need to share one across calls (see createEphemeralSimpleWallet

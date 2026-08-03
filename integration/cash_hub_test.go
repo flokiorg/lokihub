@@ -24,19 +24,19 @@ const clearlyTooLargeAmountMloki = 10_000_000_000
 // MaxExpSecs.
 const clearlyTooLargeExpirySecs = 100 * 365 * 24 * 3600
 
-// happyPathAmountMloki is a small amount every provisioned JIT hub is
+// happyPathAmountMloki is a small amount every provisioned Cash hub is
 // expected to be funded well above (see integration/README.md).
 const happyPathAmountMloki = 5_000
 const happyPathExpirySecs = 3600
 
-func TestJITHubs(t *testing.T) {
+func TestCashHubs(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "jit-hub", nil)
-	testJITHub(t, cfg, hub)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "cash-hub", nil)
+	testCashHub(t, cfg, hub)
 }
 
-func onePubkeyRecipient(pubkey string, amountMloki uint64) []JITWalletRecipientParam {
-	return []JITWalletRecipientParam{
+func onePubkeyRecipient(pubkey string, amountMloki uint64) []CashWalletRecipientParam {
+	return []CashWalletRecipientParam{
 		{IdentityType: "pubkey", IdentityValue: pubkey, AmountMloki: amountMloki},
 	}
 }
@@ -46,7 +46,7 @@ func onePubkeyRecipient(pubkey string, amountMloki uint64) []JITWalletRecipientP
 // string alone is a fully sufficient connection credential (NIP-JW §The
 // Lokicash Token), so any divergence between them would mean a recipient
 // using one instead of the other lands on a different wallet than intended.
-// Independent of recipient count or identity mode, since lokicash_token is
+// Independent of recipient count or identity mode, since cash_token is
 // wallet-level pairing data, not per-recipient.
 func requireLokicashMatchesPairingURI(t *testing.T, pairingURI, lokicashToken string) {
 	t.Helper()
@@ -60,8 +60,8 @@ func requireLokicashMatchesPairingURI(t *testing.T, pairingURI, lokicashToken st
 	require.Equal(t, parsedURI.Query()["relay"], decoded.RelayURLs)
 }
 
-func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
-	t.Logf("connecting to jit hub %q", hub.Name)
+func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
+	t.Logf("connecting to cash hub %q", hub.Name)
 	hubClient := mustConnect(t, hub.Connection)
 
 	t.Run("CreateWallet_SingleRecipient_HappyPath", func(t *testing.T) {
@@ -70,39 +70,39 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.NoError(t, err)
 		t.Logf("beneficiary pubkey: %s", beneficiaryPub)
 
-		var result CreateJITWalletResult
-		err = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var result MintCashResult
+		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &result)
 		require.NoError(t, err)
-		t.Logf("created jit wallet: pubkey=%s", result.WalletPubkey)
+		t.Logf("created cash wallet: pubkey=%s", result.WalletPubkey)
 		require.NotEmpty(t, result.WalletPubkey)
 		require.NotEmpty(t, result.PairingURI, "the connection is shared/known upfront now — no more encrypted reveal")
 		require.Len(t, result.Recipients, 1)
 		require.EqualValues(t, happyPathAmountMloki, result.Recipients[0].AmountMloki)
 
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
 		var balance GetBalanceResult
 		require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
 		t.Logf("child balance: %d mloki", balance.Balance)
-		require.EqualValues(t, happyPathAmountMloki, balance.Balance, "child JIT wallet should be pre-funded with exactly the requested amount")
+		require.EqualValues(t, happyPathAmountMloki, balance.Balance, "child Cash wallet should be pre-funded with exactly the requested amount")
 
 		var info GetInfoResult
 		require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &info))
 		t.Logf("child methods: %v", info.Methods)
-		require.NotContains(t, info.Methods, "make_invoice", "JIT wallets must be spend-only")
-		require.NotContains(t, info.Methods, "pay_invoice", "JIT wallets no longer carry the generic pay_invoice scope")
+		require.NotContains(t, info.Methods, "make_invoice", "Cash wallets must be spend-only")
+		require.NotContains(t, info.Methods, "pay_invoice", "Cash wallets no longer carry the generic pay_invoice scope")
 		require.NotContains(t, info.Methods, "list_transactions", "list_transactions would leak other recipients' payout history on a shared connection")
 		require.NotContains(t, info.Methods, "lookup_invoice")
-		require.Contains(t, info.Methods, constants.NIP47MethodJITRedeem)
+		require.Contains(t, info.Methods, constants.NIP47MethodCashRedeem)
 		require.Contains(t, info.Methods, constants.NIP47MethodListRecipients)
 
 		// Behavioral check, not just advertised-methods: actually calling
-		// make_invoice/pay_invoice against a jit_wallet must be rejected, not
+		// make_invoice/pay_invoice against a cash_wallet must be rejected, not
 		// merely absent from get_info's method list.
 		var invoice MakeInvoiceResult
 		err = child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: 1000}, &invoice)
@@ -117,9 +117,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var result CreateJITWalletResult
-		err = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "email", IdentityValue: beneficiaryPub, AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -133,9 +133,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		pub2, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var result CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "pubkey", IdentityValue: pub1, AmountMloki: happyPathAmountMloki},
 				{IdentityType: "pubkey", IdentityValue: pub2, AmountMloki: happyPathAmountMloki * 2},
 			},
@@ -143,10 +143,10 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		}, &result))
 		require.Len(t, result.Recipients, 2)
 
-		// lokicash_token is wallet-level, not per-recipient — must still
+		// cash_token is wallet-level, not per-recipient — must still
 		// decode correctly (and to the same connection as pairing_uri) when
 		// the wallet backs more than one slice.
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
@@ -164,8 +164,8 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.NoError(t, err)
 		t.Logf("beneficiary pubkey: %s, requesting amount=%d (expect rejection)", beneficiaryPub, clearlyTooLargeAmountMloki)
 
-		var result CreateJITWalletResult
-		err = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var result MintCashResult
+		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, clearlyTooLargeAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &result)
@@ -176,8 +176,8 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var result CreateJITWalletResult
-		err = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var result MintCashResult
+		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     clearlyTooLargeExpirySecs,
 		}, &result)
@@ -185,9 +185,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 	})
 
 	t.Run("CreateWallet_ConnectionKeyMode_MissingIAPubkey_Rejected", func(t *testing.T) {
-		var result CreateJITWalletResult
-		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		err := hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: newTestConnectionKey(t), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -198,9 +198,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 	t.Run("CreateWallet_ConnectionKeyMode_InvalidConnectionKeyHex_Rejected", func(t *testing.T) {
 		iaPub := mustPubkey(t, newTestPrivkey(t))
 
-		var result CreateJITWalletResult
-		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		err := hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: "not-valid-hex", IAPubkey: iaPub, AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -214,9 +214,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// API, so no config dependency is needed for this negative case.
 		iaPub := mustPubkey(t, newTestPrivkey(t))
 
-		var result CreateJITWalletResult
-		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		err := hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: newTestConnectionKey(t), IAPubkey: iaPub, AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -228,25 +228,25 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		iaPriv := createEphemeralTrustedIA(t, cfg)
 		connectionKey := newTestConnectionKey(t)
 
-		var result CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result))
-		require.NotEmpty(t, result.PairingURI, "connection_key mode also gets an immediate, shared connection now — no separate claim_jit_wallet reveal step")
+		require.NotEmpty(t, result.PairingURI, "connection_key mode also gets an immediate, shared connection now — no separate claim_cash_wallet reveal step")
 
-		// lokicash_token generation doesn't depend on recipient identity
+		// cash_token generation doesn't depend on recipient identity
 		// mode — it's derived purely from the wallet's own pairing data, not
 		// from any recipient's identity_type.
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 	})
 
 	t.Run("CreateWallet_Bearer_HappyPath_RedeemWithSecret", func(t *testing.T) {
-		var result CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "bearer", AmountMloki: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
@@ -254,13 +254,13 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		require.Len(t, result.Recipients, 1)
 		require.NotEmpty(t, result.Recipients[0].BearerSecret, "the plaintext secret must come back exactly once, here")
 		require.Empty(t, result.Recipients[0].IdentityValue, "the internal secret hash must never be surfaced on the wire")
-		requireLokicashMatchesPairingURI(t, result.PairingURI, result.LokicashToken)
+		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration bearer redemption")
 		var claimResult ClaimFundsResult
-		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:      invoice.Invoice,
 			BearerSecret: result.Recipients[0].BearerSecret,
 		}, &claimResult))
@@ -270,7 +270,7 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		// first-redeem-wins, not repeatable.
 		invoice2 := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration bearer redemption replay")
 		var replayResult ClaimFundsResult
-		err := child.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:      invoice2.Invoice,
 			BearerSecret: result.Recipients[0].BearerSecret,
 		}, &replayResult)
@@ -281,9 +281,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var result CreateJITWalletResult
-		err = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{
+		var result MintCashResult
+		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "pubkey", IdentityValue: beneficiaryPub, AmountMloki: happyPathAmountMloki},
 				{IdentityType: "bearer", AmountMloki: happyPathAmountMloki},
 			},
@@ -293,9 +293,9 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 	})
 
 	t.Run("CreateWallet_EmptyRecipients_Rejected", func(t *testing.T) {
-		var result CreateJITWalletResult
-		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-			Recipients: []JITWalletRecipientParam{},
+		var result MintCashResult
+		err := hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+			Recipients: []CashWalletRecipientParam{},
 			Expiry:     happyPathExpirySecs,
 		}, &result)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
@@ -305,12 +305,12 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var first, second CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var first, second MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &first))
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &second))
@@ -323,8 +323,8 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
-		var result CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var result MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			// Expiry deliberately omitted (zero value).
 		}, &result))
@@ -340,8 +340,8 @@ func testJITHub(t *testing.T, cfg *Config, hub JITHubConfig) {
 			beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 			require.NoError(t, err)
 
-			var result CreateJITWalletResult
-			lastErr = hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+			var result MintCashResult
+			lastErr = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 				Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 				Expiry:     happyPathExpirySecs,
 			}, &result)

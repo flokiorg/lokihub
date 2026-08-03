@@ -205,8 +205,8 @@ test subcommand="unit" *args:
             # with limits on.
             restore() {
                 sed -i \
-                    -e 's/^JIT_WALLET_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_RATE_LIMIT_PER_HOUR=0/' \
-                    -e 's/^JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0/' \
+                    -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=0/' \
+                    -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0/' \
                     -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=0/' \
                     .env
                 {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
@@ -215,8 +215,8 @@ test subcommand="unit" *args:
             trap restore EXIT
 
             sed -i \
-                -e 's/^JIT_WALLET_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_RATE_LIMIT_PER_HOUR=10/' \
-                -e 's/^JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
+                -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=10/' \
+                -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
                 -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=3/' \
                 .env
             {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null

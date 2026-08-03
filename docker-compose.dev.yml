@@ -1,4 +1,23 @@
 services:
+  relay:
+    image: ghcr.io/ohstr/ncli:latest
+    container_name: lokihub-dev-relay
+    hostname: relay
+    restart: unless-stopped
+    command: ["relay", "--config", "/config/relay.yaml"]
+    volumes:
+      - ${DEV_DATA_DIR:-./data}/relay/relay.yaml:/config/relay.yaml:ro
+      - ${DEV_DATA_DIR:-./data}/relay:/data
+    ports:
+      # Published to the host too so `go test -tags integration` (which runs
+      # outside the compose network) can reach the same relay the backend
+      # container talks to over Docker DNS as `relay:5500`. Requires a host
+      # /etc/hosts entry "127.0.0.1 relay" so both sides resolve the same
+      # hostname to this one relay.
+      - "${RELAY_PORT:-5500}:5500"
+    networks:
+      - lokihub-dev
+
   flnd:
     build:
       # ../flnd etc. only resolve from the main checkout — a worktree lives
@@ -55,6 +74,7 @@ services:
       # InsecureSkipVerify when it's unset, so we don't need to distribute
       # tls.cert into this container at all.
       - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
+      - RELAY=${RELAY:-ws://relay:5500}
     volumes:
       - .:/app
       - ${DEV_DATA_DIR:-./data}/hub:/data
@@ -64,6 +84,8 @@ services:
     depends_on:
       flnd:
         condition: service_healthy
+      relay:
+        condition: service_started
     networks:
       - lokihub-dev
 

@@ -149,7 +149,7 @@ func deleteCircleChildPath(hubAppID, childAppID uint) string {
 //
 // Retries on "a payment is still settling into this wallet" - a real,
 // expected-transient guard in ReclaimAndDeleteSubWallet (service/
-// jit_cleanup_service.go) against deleting a wallet out from under a
+// cash_cleanup_service.go) against deleting a wallet out from under a
 // payment that hasn't finished settling yet, whose own doc comment says
 // "the caller retries". Immediately re-running this test suite right after
 // a prior run's last real payment can race that settlement, so a bare,
@@ -167,39 +167,39 @@ func (c *adminClient) deleteCircleChild(hubAppID, childAppID uint) error {
 	return err
 }
 
-type adminJITWalletClaim struct {
+type adminCashWalletClaim struct {
 	ID            uint   `json:"id"`
 	WalletAppID   uint   `json:"wallet_app_id"`
 	IdentityValue string `json:"identity_value"`
 	Claimed       bool   `json:"claimed"`
 }
 
-type adminListJITWalletClaimsResponse struct {
-	Claims []adminJITWalletClaim `json:"claims"`
+type adminListCashWalletClaimsResponse struct {
+	Claims []adminCashWalletClaim `json:"claims"`
 }
 
-// listJITWalletClaims returns every recipient-slice claim row under
-// hubAppID - jit_wallet children are deliberately excluded from the general
+// listCashWalletClaims returns every recipient-slice claim row under
+// hubAppID - cash_wallet children are deliberately excluded from the general
 // /api/apps listing (see api.ListApps's own comment), so this, not
-// findAppIDByWalletPubkey, is how a test resolves a jit_wallet child's admin
-// app id (the claim row's WalletAppID) for deleteJITWallet.
-func (c *adminClient) listJITWalletClaims(hubAppID uint) ([]adminJITWalletClaim, error) {
-	var resp adminListJITWalletClaimsResponse
-	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d/jit-wallets?limit=0", hubAppID), &resp); err != nil {
+// findAppIDByWalletPubkey, is how a test resolves a cash_wallet child's admin
+// app id (the claim row's WalletAppID) for deleteCashWallet.
+func (c *adminClient) listCashWalletClaims(hubAppID uint) ([]adminCashWalletClaim, error) {
+	var resp adminListCashWalletClaimsResponse
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d/cash-wallets?limit=0", hubAppID), &resp); err != nil {
 		return nil, err
 	}
 	return resp.Claims, nil
 }
 
-// deleteJITWallet reclaims walletAppID's remaining balance to hubAppID and
-// hard-deletes it (api.DeleteJITWallet / service.ReclaimAndDeleteSubWallet) -
-// the jit_wallet mirror of deleteCircleChild above, including the same
+// deleteCashWallet reclaims walletAppID's remaining balance to hubAppID and
+// hard-deletes it (api.DeleteCashWallet / service.ReclaimAndDeleteSubWallet) -
+// the cash_wallet mirror of deleteCircleChild above, including the same
 // "still settling" retry.
-func (c *adminClient) deleteJITWallet(hubAppID, walletAppID uint) error {
+func (c *adminClient) deleteCashWallet(hubAppID, walletAppID uint) error {
 	const maxAttempts = 5
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err = c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/jit-wallets/%d", hubAppID, walletAppID), nil)
+		err = c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/cash-wallets/%d", hubAppID, walletAppID), nil)
 		if err == nil || !strings.Contains(err.Error(), "still settling") {
 			return err
 		}
@@ -208,32 +208,32 @@ func (c *adminClient) deleteJITWallet(hubAppID, walletAppID uint) error {
 	return err
 }
 
-// deleteJITWalletClaim removes one recipient's unclaimed slice from an
-// otherwise-live shared jit_wallet (api.DeleteJITWalletClaim), sweeping its
-// AmountMloki back to hubAppID first - the jit_wallet mirror of
+// deleteCashWalletClaim removes one recipient's unclaimed slice from an
+// otherwise-live shared cash_wallet (api.DeleteCashClaim), sweeping its
+// AmountMloki back to hubAppID first - the cash_wallet mirror of
 // deleteCircleChild's "one child at a time" granularity, but one level
 // deeper (one recipient within a wallet, not the whole wallet). If this was
-// the wallet's last remaining claim, api.DeleteJITWalletClaim now also
+// the wallet's last remaining claim, api.DeleteCashClaim now also
 // reclaims/deletes the wallet itself (see its own doc comment) - the fix
 // for the bug where a claims-less wallet could survive forever, invisible
-// to listJITWalletClaims (an inner join starting from the claims table)
+// to listCashWalletClaims (an inner join starting from the claims table)
 // yet still blocking its hub's deletion.
-func (c *adminClient) deleteJITWalletClaim(hubAppID, walletAppID, claimID uint) error {
-	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/jit-wallets/%d/claims/%d", hubAppID, walletAppID, claimID), nil)
+func (c *adminClient) deleteCashWalletClaim(hubAppID, walletAppID, claimID uint) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/cash-wallets/%d/claims/%d", hubAppID, walletAppID, claimID), nil)
 }
 
 // deleteApp hard-deletes appID outright (api.DeleteApp) - only valid for an
-// app with no children of its own (a bare jit_hub/circle_hub with none
-// minted yet, or one already emptied via deleteJITWallet/deleteCircleChild
+// app with no children of its own (a bare cash_hub/circle_hub with none
+// minted yet, or one already emptied via deleteCashWallet/deleteCircleChild
 // above); apps.DeleteApp refuses otherwise. Used to tear down the ephemeral
-// hubs createEphemeralJITHub mints for parent-expiry scenarios.
+// hubs createEphemeralCashHub mints for parent-expiry scenarios.
 func (c *adminClient) deleteApp(appID uint) error {
 	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d", appID), nil)
 }
 
 // adminCreateAppRequest mirrors api.CreateAppRequest, kept to just the fields
-// this suite's fixtures need: a throwaway, self-funded jit_hub (see
-// createEphemeralJITHub) or circle_hub of either policy (see
+// this suite's fixtures need: a throwaway, self-funded cash_hub (see
+// createEphemeralCashHub) or circle_hub of either policy (see
 // createEphemeralCircleHub), each with a controllable expiry.
 type adminCreateAppRequest struct {
 	Name          string   `json:"name"`
@@ -242,11 +242,16 @@ type adminCreateAppRequest struct {
 	ExpiresAt     string   `json:"expiresAt,omitempty"` // RFC3339, empty = never
 	Scopes        []string `json:"scopes"`
 	Kind          string   `json:"kind"`
-	// JITPerWalletMaxMloki/JITMaxExpSecs configure the new jit_hub's own JIT
-	// wallet policy - required (must be positive) whenever Kind is jit_hub,
-	// see apps.CreateJITHub.
-	JITPerWalletMaxMloki int `json:"jitPerWalletMaxMloki,omitempty"`
-	JITMaxExpSecs        int `json:"jitMaxExpSecs,omitempty"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs configure the new cash_hub's own Cash
+	// wallet policy - required (must be positive) whenever Kind is cash_hub,
+	// see apps.CreateCashHub. CashMinTransferMloki is optional (0 = no floor -
+	// also its zero-value default when omitted here).
+	CashPerWalletMaxMloki int   `json:"cashPerWalletMaxMloki,omitempty"`
+	CashMaxExpSecs        int   `json:"cashMaxExpSecs,omitempty"`
+	CashMinTransferMloki  int64 `json:"cashMinTransferMloki,omitempty"`
+	// CashRedeemFeePpm is optional (0 = free - also its zero-value default
+	// when omitted here) - see apps.CreateCashHub, NIP-CASH.md §The Redeem Fee.
+	CashRedeemFeePpm int `json:"cashRedeemFeePpm,omitempty"`
 	// The remaining fields configure a new circle_hub (Kind == "circle_hub")
 	// and its brand-new CircleIdentity - see apps.CreateCircleHub and
 	// apps.CircleIdentityRef. CircleIdentityName/CirclePolicy/ProviderPubkey
@@ -345,9 +350,9 @@ func (c *adminClient) removeCircleAllowlistMember(hubAppID uint, pubkey string) 
 // (api.ListApps's own name filter: "searching for 'Damus' will return
 // 'Damus' and 'Damus (1)'" - case-insensitive LIKE prefix%). Used by
 // TestZZZ_NoLeakedEphemeralFixtures to catch any ephemeralFixtureNamePrefix
-// app a missing t.Cleanup left behind. Note this can't see jit_wallet
+// app a missing t.Cleanup left behind. Note this can't see cash_wallet
 // children (api.ListApps excludes that kind unconditionally - see
-// listJITWalletClaims's own doc comment) - only hubs and circle_wallet/
+// listCashWalletClaims's own doc comment) - only hubs and circle_wallet/
 // isolated apps, which is everything this suite creates directly by name.
 func (c *adminClient) listAppsByNamePrefix(prefix string) ([]adminApp, error) {
 	filtersJSON, err := json.Marshal(map[string]string{"name": prefix})

@@ -27,7 +27,7 @@ import (
 
 // feeReserveHeadroomMloki covers CalculateFeeReserveMloki's floor
 // (max(1% of amount, 10_000 mloki) — see transactions_service.go) for a
-// non-self-payment. claim_funds's own "invoice amount must exactly equal the
+// non-self-payment. cash_redeem's own "invoice amount must exactly equal the
 // claimed slice" rule is what these tests exercise; the wallet's real
 // isolated balance (and budget cap) separately need this much headroom above
 // the exact slice total so a genuine external-payee payout doesn't spuriously
@@ -35,19 +35,19 @@ import (
 // floor trap documented for this codebase's other full-drain tests.
 const feeReserveHeadroomMloki = 50_000
 
-// newFundedJITWallet creates a jit_wallet child directly (bypassing
-// jitwallet.Create, whose mocked funding-transfer amount fidelity isn't
+// newFundedCashWallet creates a cash_wallet child directly (bypassing
+// cashwallet.Create, whose mocked funding-transfer amount fidelity isn't
 // reliable for these tests — see tests.FundApp's doc comment) and seeds its
 // ledger balance (and budget cap) at totalMloki plus fee-reserve headroom, so
-// a real claim_funds payout of exactly totalMloki doesn't spuriously fail the
+// a real cash_redeem payout of exactly totalMloki doesn't spuriously fail the
 // balance/quota pre-checks on top of the exact slice amount.
-func newFundedJITWallet(t *testing.T, svc *tests.TestService, hub *db.App, totalMloki int64) *db.App {
+func newFundedCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, totalMloki int64) *db.App {
 	t.Helper()
 	funded := uint64(totalMloki) + feeReserveHeadroomMloki //nolint:gosec // totalMloki is a small test-supplied literal amount
 	wallet, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", "", funded/1000, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, &hub.ID, db.ParentKindJIT, nil,
+		"cash-wallet", "", funded/1000, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
 	)
 	require.NoError(t, err)
 	tests.FundApp(svc, wallet.ID, funded, tests.RandomHex32())
@@ -92,14 +92,14 @@ func mustMarshal(t *testing.T, ev *nostr.Event) string {
 	return string(b)
 }
 
-// handleClaimFundsFor dispatches HandleClaimFundsEvent against app and
+// handleClaimFundsFor dispatches HandleCashRedeemEvent against app and
 // returns the decoded response. Creates a fresh RequestEvent row each call —
 // SendPaymentSync's Transaction row has a real FK to request_events, so a
 // literal placeholder ID fails once a call actually reaches the payment path.
-func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params claimFundsParams) *models.Response {
+func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params cashRedeemParams) *models.Response {
 	t.Helper()
 	content := map[string]interface{}{
-		"method": constants.NIP47MethodJITRedeem,
+		"method": constants.NIP47MethodCashRedeem,
 		"params": params,
 	}
 	reqBytes, _ := json.Marshal(content)
@@ -110,32 +110,32 @@ func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47
 	require.NoError(t, svc.DB.Create(dbRequestEvent).Error)
 
 	var response *models.Response
-	controller.HandleClaimFundsEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
+	controller.HandleCashRedeemEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	}, nostr.Tags{})
 	return response
 }
 
-func TestHandleClaimFundsEvent_HappyPath_PubkeyMode(t *testing.T) {
+func TestHandleCashRedeemEvent_HappyPath_PubkeyMode(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -144,18 +144,18 @@ func TestHandleClaimFundsEvent_HappyPath_PubkeyMode(t *testing.T) {
 	result := response.Result.(payResponse)
 	assert.NotEmpty(t, result.Preimage)
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, claimantPubkey)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "slice must show as claimed (no longer returned by the unclaimed-only lookup)")
 }
 
-func TestHandleClaimFundsEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
+func TestHandleCashRedeemEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 2000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 2000)
 
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
@@ -164,18 +164,18 @@ func TestHandleClaimFundsEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 2000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 2000},
 	}))
 
 	attestation := buildIAAttestationEvent(t, iaPrivkey, connectionKey, claimantPubkey, oneHourFromNow())
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(2000),
-		IdentityType:     db.JITAllocIdentityConnectionKey,
+		IdentityType:     db.CashIdentityConnectionKey,
 		IdentityValue:    connectionKey,
 		IdentityEvent:    mustMarshal(t, proof),
 		AttestationEvent: mustMarshal(t, attestation),
@@ -184,33 +184,33 @@ func TestHandleClaimFundsEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	require.Nil(t, response.Error)
 }
 
-// TestHandleClaimFundsEvent_ProofBoundToDifferentInvoice_Rejected is the core
+// TestHandleCashRedeemEvent_ProofBoundToDifferentInvoice_Rejected is the core
 // audit-finding coverage: since the wallet's connection may be shared/public,
-// anyone holding it can decrypt every claim_funds request sent on it — an
+// anyone holding it can decrypt every cash_redeem request sent on it — an
 // attacker who intercepts a valid proof must not be able to redirect the
 // payout to a different invoice by resubmitting it with their own.
-func TestHandleClaimFundsEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 123_000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 123_000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 123_000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 123_000},
 	}))
 
 	// Proof is bound to MockPaymentHash (i.e. tests.MockInvoice)...
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockPaymentHash, nil, time.Now())
 
 	// ...but the attacker submits it against a DIFFERENT invoice (MockZeroAmountInvoice).
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(123_000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -219,30 +219,30 @@ func TestHandleClaimFundsEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
 	// The slice must remain unclaimed — the attacker gained nothing.
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, claimantPubkey)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 }
 
-func TestHandleClaimFundsEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	params := claimFundsParams{
+	params := cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	}
@@ -258,38 +258,38 @@ func TestHandleClaimFundsEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(
 	assert.Equal(t, constants.ERROR_NOT_FOUND, second.Error.Code)
 }
 
-// TestHandleClaimFundsEvent_SettleRacesFailure_NotDoubleClaimable is the
-// claim_funds-level regression test for the settle-vs-fail fund-drain path
+// TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable is the
+// cash_redeem-level regression test for the settle-vs-fail fund-drain path
 // (see transactions.TestSendPaymentSync_SettleRacesFailure_ReturnsSettled for
 // the lower-level version of the same race): the payout's underlying
 // SendPaymentSync call is delayed and configured to ultimately error, while
 // an async "nwc_lnclient_payment_sent" event (the same kind a real node
 // subscription would emit) settles the same payment hash first. Before the
-// fix, this made claim_funds_controller's error branch call
-// UnclaimJITWalletSlice on a slice whose payout had actually already
+// fix, this made cash_redeem_controller's error branch call
+// UnclaimCashSlice on a slice whose payout had actually already
 // succeeded, reopening it for a second, real payout - a double-spend of the
-// JIT hub's funds. With the fix, SendPaymentSync returns the settled
+// Cash hub's funds. With the fix, SendPaymentSync returns the settled
 // transaction instead of the stale RPC error, so the controller's error
 // branch (and the unclaim it would have triggered) is never reached.
-func TestHandleClaimFundsEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.T) {
+func TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	params := claimFundsParams{
+	params := cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	}
@@ -340,15 +340,15 @@ func TestHandleClaimFundsEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.
 
 	wg.Wait()
 
-	require.Nil(t, response.Error, "the payout actually settled - claim_funds must not surface the stale RPC error")
+	require.Nil(t, response.Error, "the payout actually settled - cash_redeem must not surface the stale RPC error")
 	result := response.Result.(payResponse)
 	assert.NotEmpty(t, result.Preimage)
 
 	// The bug this guards against: the slice must NOT have been reopened by
-	// an incorrect UnclaimJITWalletSlice call, so a second claim attempt for
+	// an incorrect UnclaimCashSlice call, so a second claim attempt for
 	// the same identity must be rejected exactly like the ordinary
 	// already-claimed replay case, not paid out a second time.
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, claimantPubkey)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "slice must show as claimed, not reopened by the settle race")
 
@@ -357,19 +357,19 @@ func TestHandleClaimFundsEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.
 	assert.Equal(t, constants.ERROR_NOT_FOUND, replay.Error.Code)
 }
 
-func TestHandleClaimFundsEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	// A real recipient exists on the wallet...
 	realPrivkey := nostr.GeneratePrivateKey()
 	realPubkey, _ := nostr.GetPublicKey(realPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: realPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: realPubkey, AmountMloki: 1000},
 	}))
 
 	// ...but an outsider (who genuinely owns their own key — the signature is
@@ -379,10 +379,10 @@ func TestHandleClaimFundsEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testin
 	outsiderPubkey, _ := nostr.GetPublicKey(outsiderPrivkey)
 	proof := buildClaimProofEvent(t, outsiderPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: outsiderPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -391,33 +391,33 @@ func TestHandleClaimFundsEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testin
 	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
 }
 
-func TestHandleClaimFundsEvent_IdentityEventReplayedAcrossWallets_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_IdentityEventReplayedAcrossWallets_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	walletA := newFundedJITWallet(t, svc, hub, 1000)
-	walletB := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	walletA := newFundedCashWallet(t, svc, hub, 1000)
+	walletB := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 	// Same identity happens to have a slice on both wallets.
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(walletA.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(walletA.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(walletB.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(walletB.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	// Proof is bound (d-tag) to wallet A's pubkey...
 	proof := buildClaimProofEvent(t, claimantPrivkey, *walletA.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
 	// ...but submitted against wallet B.
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), walletB, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), walletB, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -426,23 +426,23 @@ func TestHandleClaimFundsEvent_IdentityEventReplayedAcrossWallets_Rejected(t *te
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
 	// Wallet A's own slice must remain untouched/claimable — this wasn't a valid claim there either.
-	claimOnA, err := svc.AppsService.GetJITWalletClaim(walletA.ID, db.JITAllocIdentityPubkey, claimantPubkey)
+	claimOnA, err := svc.AppsService.GetCashWalletClaim(walletA.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	require.NotNil(t, claimOnA)
 }
 
-func TestHandleClaimFundsEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
+func TestHandleCashRedeemEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
@@ -450,10 +450,10 @@ func TestHandleClaimFundsEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t
 
 	// Request only half the entitled amount — must be rejected outright, not
 	// accepted as a valid partial claim.
-	response := handleClaimFundsFor(t, svc, controller, wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(500),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -461,42 +461,42 @@ func TestHandleClaimFundsEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
 	// The slice must be claimable again — a bad invoice attempt didn't burn it.
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityPubkey, claimantPubkey)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	require.NotNil(t, claim, "an amount-mismatch attempt must roll back the claim, not consume it")
 
 	// A fresh, correctly-amounted attempt (bound to the same invoice) must succeed.
-	retryResponse := handleClaimFundsFor(t, svc, controller, wallet, claimFundsParams{
+	retryResponse := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
 	require.Nil(t, retryResponse.Error)
 }
 
-func TestHandleClaimFundsEvent_StaleIdentityEvent_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_StaleIdentityEvent_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	staleProof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil,
 		time.Now().Add(-1*time.Hour))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, staleProof),
 	})
@@ -505,13 +505,13 @@ func TestHandleClaimFundsEvent_StaleIdentityEvent_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-func TestHandleClaimFundsEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	realIAPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	registerTrustedIA(t, svc, realIAPubkey)
@@ -520,18 +520,18 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: realIAPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: realIAPubkey, AmountMloki: 1000},
 	}))
 
 	attestation := buildIAAttestationEvent(t, imposterIAPrivkey, connectionKey, claimantPubkey, oneHourFromNow())
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
-		IdentityType:     db.JITAllocIdentityConnectionKey,
+		IdentityType:     db.CashIdentityConnectionKey,
 		IdentityValue:    connectionKey,
 		IdentityEvent:    mustMarshal(t, proof),
 		AttestationEvent: mustMarshal(t, attestation),
@@ -541,7 +541,7 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-// TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected
+// TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected
 // covers a distinct attack from the UntrustedIA case above: here the
 // attestation is genuine — signed by the correct, trusted IA recorded for
 // this exact slice, for the exact connection_key on this wallet — but it was
@@ -552,13 +552,13 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 // to themselves by reusing the real claimant's attestation. Must be rejected
 // on the attestation's p-tag (claimant binding), and the slice must remain
 // claimable by the real claimant afterward.
-func TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
@@ -568,8 +568,8 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	realClaimantPrivkey := nostr.GeneratePrivateKey()
 	realClaimantPubkey, _ := nostr.GetPublicKey(realClaimantPrivkey)
 
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: connectionKey, IAPubkey: iaPubkey, AmountMloki: 1000},
 	}))
 
 	// A genuine attestation, correctly signed by the correct IA, for the real claimant.
@@ -581,10 +581,10 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	attackerProof := buildClaimProofEvent(t, attackerPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
-		IdentityType:     db.JITAllocIdentityConnectionKey,
+		IdentityType:     db.CashIdentityConnectionKey,
 		IdentityValue:    connectionKey,
 		IdentityEvent:    mustMarshal(t, attackerProof),
 		AttestationEvent: mustMarshal(t, attestation),
@@ -596,10 +596,10 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	// The slice must remain intact and claimable by the real claimant.
 	realProof := buildClaimProofEvent(t, realClaimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
-	retryResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	retryResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
-		IdentityType:     db.JITAllocIdentityConnectionKey,
+		IdentityType:     db.CashIdentityConnectionKey,
 		IdentityValue:    connectionKey,
 		IdentityEvent:    mustMarshal(t, realProof),
 		AttestationEvent: mustMarshal(t, attestation),
@@ -607,30 +607,30 @@ func TestHandleClaimFundsEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	require.Nil(t, retryResponse.Error, "the real claimant's own claim must still succeed after the attacker's attempt was rejected")
 }
 
-func TestHandleClaimFundsEvent_RateLimited(t *testing.T) {
+func TestHandleCashRedeemEvent_RateLimited(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
 	controller := NewTestNip47Controller(svc)
-	for i := 0; i < jitClaimRateLimitPerHour; i++ {
-		controller.jitClaimLimiter.Allow(wallet.AppPubkey, jitClaimRateLimitPerHour)
+	for i := 0; i < cashRedeemRateLimitPerHour; i++ {
+		controller.cashClaimLimiter.Allow(wallet.AppPubkey, cashRedeemRateLimitPerHour)
 	}
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	response := handleClaimFundsFor(t, svc, controller, wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
@@ -639,17 +639,17 @@ func TestHandleClaimFundsEvent_RateLimited(t *testing.T) {
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, response.Error.Code)
 }
 
-func TestHandleClaimFundsEvent_NonJITWalletApp_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), hub, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), hub, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: tests.RandomHex32(),
 		IdentityEvent: "{}",
 	})
@@ -659,7 +659,7 @@ func TestHandleClaimFundsEvent_NonJITWalletApp_Rejected(t *testing.T) {
 }
 
 // bearerSecretAndHash returns a fresh random bearer secret (hex) and the
-// hex-encoded sha256 hash of it — the value CreateJITWalletClaims stores as
+// hex-encoded sha256 hash of it — the value CreateCashWalletClaims stores as
 // IdentityValue for a bearer-mode slice.
 func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	t.Helper()
@@ -670,20 +670,20 @@ func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	return hex.EncodeToString(raw), hex.EncodeToString(hash[:])
 }
 
-func TestHandleClaimFundsEvent_Bearer_HappyPath(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_HappyPath(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	secretHex, secretHash := bearerSecretAndHash(t)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: secretHex,
@@ -693,26 +693,26 @@ func TestHandleClaimFundsEvent_Bearer_HappyPath(t *testing.T) {
 	result := response.Result.(payResponse)
 	assert.NotEmpty(t, result.Preimage)
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "slice must show as claimed (no longer returned by the unclaimed-only lookup)")
 }
 
-func TestHandleClaimFundsEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	_, secretHash := bearerSecretAndHash(t)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	wrongSecret, _ := bearerSecretAndHash(t)
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: wrongSecret,
@@ -722,20 +722,20 @@ func TestHandleClaimFundsEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
 
 	// The real slice must remain unclaimed — a wrong guess burned nothing.
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NoError(t, err)
 	assert.NotNil(t, claim)
 }
 
-func TestHandleClaimFundsEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: "not-hex!!",
@@ -745,51 +745,51 @@ func TestHandleClaimFundsEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-func TestHandleClaimFundsEvent_Bearer_MixedParams_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_MixedParams_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	secretHex, secretHash := bearerSecretAndHash(t)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	// A request carrying BOTH bearer_secret and identity_type/value must be
 	// rejected outright, not silently prefer one side.
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		BearerSecret:  secretHex,
-		IdentityType:  db.JITAllocIdentityPubkey,
+		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: tests.RandomHex32(),
 	})
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NoError(t, err)
 	assert.NotNil(t, claim, "a rejected mixed request must not have claimed anything")
 }
 
-func TestHandleClaimFundsEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	secretHex, secretHash := bearerSecretAndHash(t)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, claimFundsParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(500), // only half the entitled amount
 		BearerSecret: secretHex,
@@ -797,29 +797,29 @@ func TestHandleClaimFundsEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClai
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NoError(t, err)
 	require.NotNil(t, claim, "a bad invoice attempt must not burn the slice")
 }
 
-// TestHandleClaimFundsEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds is
+// TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds is
 // the core fund-safety property for a bearer slice: first-redeem-wins is
 // intentional, but two concurrent redemptions against the same secret must
 // never both succeed (NIP-JW §Bearer Slices, Security Considerations).
-func TestHandleClaimFundsEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
+func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	secretHex, secretHash := bearerSecretAndHash(t)
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	params := claimFundsParams{
+	params := cashRedeemParams{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: secretHex,
@@ -845,7 +845,7 @@ func TestHandleClaimFundsEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *t
 	}
 	assert.Equal(t, 1, successes, "exactly one of two concurrent redemptions against the same bearer secret must succeed")
 
-	claim, err := svc.AppsService.GetJITWalletClaim(wallet.ID, db.JITAllocIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "the slice must end up claimed exactly once")
 }

@@ -698,15 +698,15 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 	inboundCapacity := balances.Lightning.TotalReceivable
 	// We ensure we compare apples to apples (mloki).
 
-	inboundCapacityMsat := uint64(inboundCapacity) * 1000 //nolint:gosec // LN-node-reported receivable capacity is always non-negative
-	if inboundCapacityMsat >= amountMloki {
+	inboundCapacityMloki := uint64(inboundCapacity) * 1000 //nolint:gosec // LN-node-reported receivable capacity is always non-negative
+	if inboundCapacityMloki >= amountMloki {
 		// Sufficient liquidity
 		return nil, nil
 	}
 
 	logger.Logger.Info().
 		Uint64("amount_mloki", amountMloki).
-		Uint64("inbound_mloki", inboundCapacityMsat).
+		Uint64("inbound_mloki", inboundCapacityMloki).
 		Msg("Insufficient inbound liquidity, attempting JIT channel buy")
 
 	// 2. Get Active LSP

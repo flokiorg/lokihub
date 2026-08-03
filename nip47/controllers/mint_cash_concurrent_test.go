@@ -17,11 +17,11 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds is a
-// regression test for jitwallet.LockHub: create_jit_wallet previously had no
+// TestHandleMintCashEvent_ConcurrentCreation_ExactlyOneSucceeds is a
+// regression test for cashwallet.LockHub: mint_cash previously had no
 // concurrency guard at all (unlike create_circle_wallet's
-// activeCircleInvoices), so two concurrent requests against the same jit_hub
-// could both pass jitwallet.Resolve's balance pre-check against the same
+// activeCircleInvoices), so two concurrent requests against the same cash_hub
+// could both pass cashwallet.Resolve's balance pre-check against the same
 // stale balance before either one's Commit actually transferred funds out -
 // a real TOCTOU gap between the pre-check and the transfer, only
 // incidentally prevented today by DB-level serialization (Postgres advisory
@@ -31,13 +31,13 @@ import (
 // Resolve/Commit.
 //
 // mockLn.PaymentDelay stalls the winning goroutine's SendPaymentSync call
-// just long enough for the losing goroutine's HandleCreateJITWalletEvent
-// call to reach jitwallet.LockHub while the winner still holds it -
+// just long enough for the losing goroutine's HandleMintCashEvent
+// call to reach cashwallet.LockHub while the winner still holds it -
 // otherwise, on a fast in-memory test DB, the two calls tend to complete
 // fully sequentially (lock acquired-and-released before the second even
 // starts), which would exercise the same DB-level serialization this test
 // is specifically meant to route around, not the new in-process guard.
-func TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds(t *testing.T) {
+func TestHandleMintCashEvent_ConcurrentCreation_ExactlyOneSucceeds(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds(t *tes
 
 	// Ample balance for one 50_000-mloki wallet plus fee-reserve headroom
 	// (not exercising fee/balance math here, just the lock).
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 200_000, "fundtxhash")
 
 	delay := 100 * time.Millisecond
@@ -57,7 +57,7 @@ func TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds(t *tes
 		beneficiaryKey := nostr.GeneratePrivateKey()
 		beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
 		req := &models.Request{}
-		require.NoError(t, json.Unmarshal([]byte(makeJITWalletRequest(beneficiaryPubkey, 50_000, 1800)), req))
+		require.NoError(t, json.Unmarshal([]byte(makeCashWalletRequest(beneficiaryPubkey, 50_000, 1800)), req))
 		return req
 	}
 	newEvent := func() uint {
@@ -86,7 +86,7 @@ func TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds(t *tes
 		go func() {
 			defer wg.Done()
 			<-ready
-			controller.HandleCreateJITWalletEvent(ctx, a.req, a.eventID, hub,
+			controller.HandleMintCashEvent(ctx, a.req, a.eventID, hub,
 				func(r *models.Response, _ nostr.Tags) { responses <- r })
 		}()
 	}
@@ -99,15 +99,15 @@ func TestHandleCreateJITWalletEvent_ConcurrentCreation_ExactlyOneSucceeds(t *tes
 		if r.Error == nil {
 			successes++
 		} else {
-			assert.Equal(t, constants.ERROR_INTERNAL, r.Error.Code)
+			assert.Equal(t, constants.ERROR_NOT_READY, r.Error.Code)
 			assert.Contains(t, r.Error.Message, "already in progress")
 			lockRejections++
 		}
 	}
-	assert.Equal(t, 1, successes, "exactly one concurrent create_jit_wallet should succeed")
+	assert.Equal(t, 1, successes, "exactly one concurrent mint_cash should succeed")
 	assert.Equal(t, 1, lockRejections, "the other must be rejected by the hub creation lock while the winner is still in flight")
 
 	var childApps []db.App
-	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindJITWallet).Find(&childApps)
-	assert.Len(t, childApps, 1, "exactly one jit_wallet child must exist after the race")
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Len(t, childApps, 1, "exactly one cash_wallet child must exist after the race")
 }

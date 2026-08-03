@@ -31,7 +31,7 @@ func makeFutureTime() *time.Time {
 	return &t
 }
 
-// createSubWallet creates a jit_wallet or circle_child with the given parent and expiry.
+// createSubWallet creates a cash_wallet or circle_child with the given parent and expiry.
 func createSubWallet(t *testing.T, svc *tests.TestService, kind string, parentID uint, parentKind string, expiresAt *time.Time) *db.App {
 	t.Helper()
 	parent := uint(parentID)
@@ -51,40 +51,40 @@ func createSubWallet(t *testing.T, svc *tests.TestService, kind string, parentID
 	return child
 }
 
-func TestRunJITCleanup_NotExpired_AppNotCleaned(t *testing.T) {
+func TestRunCashCleanup_NotExpired_AppNotCleaned(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeFutureTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeFutureTime())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
 	assert.NoError(t, err, "non-expired app must not be deleted")
 }
 
-func TestRunJITCleanup_ZeroBalance_AppDeleted(t *testing.T) {
+func TestRunCashCleanup_ZeroBalance_AppDeleted(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
@@ -95,23 +95,23 @@ func TestRunJITCleanup_ZeroBalance_AppDeleted(t *testing.T) {
 	assert.Equal(t, int64(0), parentBalance)
 }
 
-func TestRunJITCleanup_CleanupInProgress_Skipped(t *testing.T) {
+func TestRunCashCleanup_CleanupInProgress_Skipped(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 
 	// Mark cleanup already in progress — simulates a concurrent cleanup run.
 	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Update("cleanup_in_progress", true)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	// App must still exist because cleanup_in_progress = true excluded it from the query.
 	var found db.App
@@ -120,7 +120,7 @@ func TestRunJITCleanup_CleanupInProgress_Skipped(t *testing.T) {
 	assert.True(t, found.CleanupInProgress)
 }
 
-func TestRunJITCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
+func TestRunCashCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -131,10 +131,10 @@ func TestRunJITCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	svc.LNClient.(*tests.MockLn).Pubkey = selfPaymentPubkey
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 
 	// MockInvoice encodes 123_000 mloki; fund well above that so validateCanPay passes.
 	const fundedMloki = uint64(200_000)
@@ -143,7 +143,7 @@ func TestRunJITCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	assert.Equal(t, int64(fundedMloki), queries.GetIsolatedBalance(svc.DB, child.ID))
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	// Child must be deleted.
 	var found db.App
@@ -155,7 +155,7 @@ func TestRunJITCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	assert.Greater(t, parentBalance, int64(0), "parent must gain balance after cleanup transfer")
 }
 
-func TestRunJITCleanup_CircleChild_NoMakeInvoice(t *testing.T) {
+func TestRunCashCleanup_CircleChild_NoMakeInvoice(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -169,18 +169,18 @@ func TestRunJITCleanup_CircleChild_NoMakeInvoice(t *testing.T) {
 
 	// Zero balance — cleanup must delete without calling Transfer.
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
 	assert.Error(t, err, "expired zero-balance circle_child must be deleted")
 }
 
-// TestRunJITCleanup_CircleChild_PendingIncoming_DeferredNotDeleted verifies that a
+// TestRunCashCleanup_CircleChild_PendingIncoming_DeferredNotDeleted verifies that a
 // wallet with a payment still settling in is not torn down: deleting it would
 // cascade-delete the pending transaction row (App.OnDelete:CASCADE), and the
 // settlement would then have nowhere to credit, silently losing the funds.
-func TestRunJITCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testing.T) {
+func TestRunCashCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestRunJITCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testing
 	require.NoError(t, svc.DB.Create(&pendingTx).Error)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	var found db.App
 	require.NoError(t, svc.DB.First(&found, child.ID).Error, "wallet with a pending incoming payment must not be deleted")
@@ -213,9 +213,9 @@ func TestRunJITCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testing
 	require.NoError(t, svc.DB.Where("payment_hash = ?", "pending-incoming-hash").First(&stillPending).Error)
 }
 
-// TestRunJITCleanup_ParentDeleted_BalanceWrittenOffNoFKError reproduces a
-// production incident: a jit_hub was deleted while it still had an expired
-// jit_wallet child with balance. On every 5-minute tick, cleanup tried to
+// TestRunCashCleanup_ParentDeleted_BalanceWrittenOffNoFKError reproduces a
+// production incident: a cash_hub was deleted while it still had an expired
+// cash_wallet child with balance. On every 5-minute tick, cleanup tried to
 // insert a reclaim transaction crediting the (now nonexistent) parent app,
 // which violated the apps table's FOREIGN KEY constraint and retried forever,
 // stranding the sub-wallet and spamming error logs. Since apps.DeleteApp now
@@ -223,17 +223,17 @@ func TestRunJITCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testing
 // can only happen via a pre-existing orphaned row (e.g. from before that
 // guard existed) — simulated here with a direct DB delete of the parent.
 // Cleanup must write off the balance and delete the child instead of erroring.
-func TestRunJITCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
+func TestRunCashCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 	tests.FundApp(svc, child.ID, 200_000, "orphan-parent-fund-hash")
 	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, child.ID))
 
@@ -242,7 +242,7 @@ func TestRunJITCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 	require.NoError(t, svc.DB.Delete(&db.App{}, parent.ID).Error)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	// Child must be deleted despite the missing parent — no infinite retry, no FK error.
 	var found db.App
@@ -252,7 +252,7 @@ func TestRunJITCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 
 // E7: when the transfer-back payment fails, cleanup_in_progress must be reset so the
 // next cleanup tick can retry rather than leaving the sub-wallet permanently stuck.
-func TestRunJITCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
+func TestRunCashCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -263,10 +263,10 @@ func TestRunJITCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	mockLN := svc.LNClient.(*tests.MockLn)
 
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindJITHub, nil, "", nil)
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
 
-	child := createSubWallet(t, svc, db.AppKindJITWallet, parent.ID, db.ParentKindJIT, makeExpiredTime())
+	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 	tests.FundApp(svc, child.ID, 200_000, "e7-fund-hash")
 	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, child.ID))
 
@@ -275,7 +275,7 @@ func TestRunJITCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	mockLN.PayInvoiceErrors = []error{errors.New("lightning payment failed")}
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runJITCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
 
 	// App must still exist (not deleted because transfer failed).
 	var found db.App
