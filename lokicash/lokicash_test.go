@@ -243,7 +243,7 @@ func TestDecode_SingleCharMutationAlwaysFails(t *testing.T) {
 	for i := sepIdx + 1; i < len(valid); i++ {
 		original := valid[i]
 		for _, c := range charset {
-			if byte(c) == original {
+			if c == rune(original) {
 				continue
 			}
 			mutated := valid[:i] + string(c) + valid[i+1:]

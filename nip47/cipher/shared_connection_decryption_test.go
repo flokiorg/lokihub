@@ -58,7 +58,7 @@ func TestSharedConnectionSecret_AnyHolderCanDecryptAnyResponse(t *testing.T) {
 	// Stand-in for any hypothetical secret a response might carry — this
 	// codebase no longer puts one here (see cash_transfer_controller.go), but
 	// the point of this test is that if it ever did, it would leak.
-	const hypotheticalSecret = "b8f2c1a09d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f10"
+	const hypotheticalSecret = "b8f2c1a09d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f10" //nolint:gosec // test fixture string, not a real credential
 	responseJSON, err := json.Marshal(map[string]any{
 		"amount_mloki":  100000,
 		"identity_type": "bearer",
