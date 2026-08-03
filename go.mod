@@ -33,7 +33,7 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/flokiorg/flnd v0.2.1-beta
+	github.com/flokiorg/flnd v0.2.2-beta
 	github.com/flokiorg/flndecodepay v1.0.3
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
