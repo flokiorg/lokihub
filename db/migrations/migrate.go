@@ -52,6 +52,18 @@ func Migrate(gormDB *gorm.DB) error {
 		return err
 	}
 
+	// Rename the JIT Wallet feature to Cash Hub / cash_wallet: renames
+	// jit_hub_configs/jit_wallet_claims, adds min_transfer_mloki + the new
+	// split lineage column, rewrites stored kind/scope string values.
+	if err := MigrateRenameJITToCash(gormDB); err != nil {
+		return err
+	}
+
+	// Drop the max_transfers cap feature — removed from NIP-CASH entirely.
+	if err := MigrateDropCashMaxTransfers(gormDB); err != nil {
+		return err
+	}
+
 	// AutoMigrate all core models (adds new columns declared in structs)
 	// Note: LSP model is migrated separately in LSPManager (via manager_db.go)
 	if err := gormDB.AutoMigrate(
@@ -65,11 +77,12 @@ func Migrate(gormDB *gorm.DB) error {
 		&db.Forward{},
 		&db.CircleIdentity{},
 		&db.CircleIdentityAllowedPubkey{},
-		&db.JITHubConfig{},
+		&db.CashHubConfig{},
 		&db.CircleHubConfig{},
-		&db.JITWalletClaim{},
+		&db.CashWalletClaim{},
 		&db.CircleWalletIdentityProof{},
 		&db.CircleWalletMembership{},
+		&db.CashTransferProof{},
 	); err != nil {
 		return err
 	}
