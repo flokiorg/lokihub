@@ -228,7 +228,7 @@ func decodeKeyHex(s, field string) ([]byte, error) {
 
 func writeTLV(buf *bytes.Buffer, typ uint8, value []byte) {
 	buf.WriteByte(typ)
-	buf.WriteByte(uint8(len(value)))
+	buf.WriteByte(uint8(len(value))) //nolint:gosec // every Encode call site pre-validates len(value) <= maxTLVValueLen before calling writeTLV
 	buf.Write(value)
 }
 
