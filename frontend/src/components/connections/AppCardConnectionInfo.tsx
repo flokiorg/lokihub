@@ -20,7 +20,7 @@ type AppCardConnectionInfoProps = {
   readonly?: boolean;
 };
 
-// Isolated apps span several distinct kinds now (plain sub-wallets, JIT
+// Isolated apps span several distinct kinds now (plain sub-wallets, Cash
 // Hubs/Wallets, Circle Hubs/Wallets) — label and icon must reflect the
 // actual kind rather than collapsing everything into "Sub-wallet".
 const isolatedKindDisplay: Record<
@@ -28,14 +28,14 @@ const isolatedKindDisplay: Record<
   {
     Icon: typeof BrickWallIcon;
     labelKey:
-      | "isolatedKind.jit_hub"
-      | "isolatedKind.jit_wallet"
+      | "isolatedKind.cash_hub"
+      | "isolatedKind.cash_wallet"
       | "isolatedKind.circle_hub"
       | "isolatedKind.circle_wallet";
   }
 > = {
-  jit_hub: { Icon: NetworkIcon, labelKey: "isolatedKind.jit_hub" },
-  jit_wallet: { Icon: NetworkIcon, labelKey: "isolatedKind.jit_wallet" },
+  cash_hub: { Icon: NetworkIcon, labelKey: "isolatedKind.cash_hub" },
+  cash_wallet: { Icon: NetworkIcon, labelKey: "isolatedKind.cash_wallet" },
   circle_hub: { Icon: UsersIcon, labelKey: "isolatedKind.circle_hub" },
   circle_wallet: { Icon: UsersIcon, labelKey: "isolatedKind.circle_wallet" },
 };

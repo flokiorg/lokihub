@@ -384,7 +384,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 
 				var info GetInfoResult
 				require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &info))
-				require.Contains(t, info.Methods, "make_invoice", "circle wallets, unlike JIT wallets, must be able to receive funds")
+				require.Contains(t, info.Methods, "make_invoice", "circle wallets, unlike Cash wallets, must be able to receive funds")
 				require.Contains(t, info.Methods, "pay_invoice")
 				require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet, "a circle_wallet child must not be able to issue its own sub-wallets")
 			})

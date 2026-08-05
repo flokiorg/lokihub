@@ -19,15 +19,15 @@ type UserConfig struct {
 const (
 	AppKindStandard     = "standard"      // regular NWC connection, no own balance
 	AppKindIsolated     = "isolated"      // sandboxed sub-wallet, own balance, no sub-issuance
-	AppKindJITHub       = "jit_hub"       // JIT Hub: issues pre-funded ephemeral jit_wallet children
-	AppKindJITWallet    = "jit_wallet"    // ephemeral spend-only wallet issued by a JIT Hub
+	AppKindCashHub      = "cash_hub"      // Cash Hub: issues pre-funded ephemeral cash_wallet children
+	AppKindCashWallet   = "cash_wallet"   // ephemeral spend-only wallet issued by a Cash Hub
 	AppKindCircleHub    = "circle_hub"    // Circle Hub: issues circle_wallet children to members
 	AppKindCircleWallet = "circle_wallet" // sub-wallet issued to a circle member, starts with 0 balance
 )
 
-// Parent kinds — disambiguates JIT vs circle lineage in queries.
+// Parent kinds — disambiguates Cash vs circle lineage in queries.
 const (
-	ParentKindJIT    = "jit"
+	ParentKindCash   = "cash"
 	ParentKindCircle = "circle"
 )
 
@@ -65,7 +65,7 @@ type App struct {
 	Kind         string `gorm:"not null;default:'standard'"`
 	Metadata     datatypes.JSON
 
-	// Sub-wallet lineage (JIT and circle children)
+	// Sub-wallet lineage (Cash and circle children)
 	ParentAppID *uint  `gorm:"index:idx_apps_parent,priority:1"`
 	ParentKind  string `gorm:"index:idx_apps_parent,priority:2"`
 
@@ -75,73 +75,114 @@ type App struct {
 
 	// Cleanup state — set atomically before expiry sweep to prevent double-cleanup.
 	CleanupInProgress bool
+
+	// SplitFromWalletAppID is set once, right after funding succeeds, when
+	// this cash_wallet was created by splitting a partial or full amount off
+	// an existing cash_wallet's slice (cashwallet.Split) rather than minted
+	// directly by a Cash Hub. Purely informational — the reverse of
+	// CashWalletClaim.SpunOffToWalletAppID (that column records, on the
+	// SOURCE slice, which new wallet its value moved to; this one records,
+	// on the NEW wallet, which wallet it came from). Never read by any
+	// atomic guard, only by callers wanting to show lineage.
+	SplitFromWalletAppID *uint
 }
 
-// JITHubConfig holds the per-JIT-Hub parameters that constrain what wallets may be issued.
-// One row per jit_hub app; loaded on demand when create_jit_wallet is called.
-type JITHubConfig struct {
+// CashHubConfig holds the per-Cash-Hub parameters that constrain what
+// wallets may be issued. One row per cash_hub app; loaded on demand when
+// mint_cash is called.
+type CashHubConfig struct {
 	ID                uint `gorm:"primaryKey"`
 	AppID             uint `gorm:"uniqueIndex;not null"`
 	App               App  `gorm:"constraint:OnDelete:CASCADE;"`
 	PerWalletMaxMloki int
 	MaxExpSecs        int
+	// MinTransferMloki is the default floor (0 = no floor) applied to every
+	// recipient's slice when a Cash Hub freshly mints a wallet — see
+	// CashWalletClaim.MinTransferMloki for how it's inherited from there on.
+	MinTransferMloki int64
+	// RedeemFeePpm is the default per-million fee (0 = free) applied to every
+	// recipient's slice when a Cash Hub freshly mints a wallet, charged only
+	// on a genuine external cash_redeem (never on a same-node redemption, and
+	// never on cash_transfer) — see CashWalletClaim.RedeemFeePpm for how it's
+	// inherited from there on. Same validation/semantics as
+	// CircleHubConfig.FeesPpm (0 <= x <= constants.MAX_FEES_PPM).
+	RedeemFeePpm int
 }
 
-// JIT allocation identity types.
+// Cash allocation identity types.
 const (
-	JITAllocIdentityPubkey        = "pubkey"
-	JITAllocIdentityConnectionKey = "connection_key"
-	// JITAllocIdentityBearer marks a slice with no registered identity at
-	// all (NIP-JW §Bearer Slices) — redeemable by whoever presents its
-	// secret. A bearer-mode wallet is always single-recipient: the only
-	// slice a jit_wallet with this identity type may ever hold (enforced by
-	// jitwallet.Resolve at creation, and by jit_transfer whenever a transfer
-	// would introduce a bearer slice into an existing wallet), so it never
-	// shares a connection with an identity-bound slice.
-	JITAllocIdentityBearer = "bearer"
+	CashIdentityPubkey        = "pubkey"
+	CashIdentityConnectionKey = "connection_key"
+	// CashIdentityBearer marks a slice with no registered identity at all
+	// (NIP-CASH §Bearer Slices) — redeemable by whoever presents its secret.
+	CashIdentityBearer = "bearer"
 )
 
-// JITWalletClaim records one recipient's slice within a specific (possibly
-// shared) jit_wallet app. A jit_wallet may serve several recipients from one
-// funded pool and one NWC connection — each recipient gets their own row
+// CashWalletClaim records one recipient's slice within a specific (possibly
+// shared) cash_wallet app. A cash_wallet may serve several recipients from
+// one funded pool and one NWC connection — each recipient gets their own row
 // here (own identity, own AmountMloki), all sharing the wallet's single
-// ExpiresAt (a property of the App itself, not duplicated here). jit_redeem
+// ExpiresAt (a property of the App itself, not duplicated here). cash_redeem
 // atomically flips ClaimedAt (guarded by "WHERE claimed_at IS NULL") to pay
 // out a slice exactly once. (wallet_app_id, identity_type, identity_value)
 // is unique: one slice per identity per wallet.
-type JITWalletClaim struct {
+type CashWalletClaim struct {
 	ID          uint `gorm:"primaryKey"`
-	WalletAppID uint `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:1"`
+	WalletAppID uint `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:1"`
 	App         App  `gorm:"foreignKey:WalletAppID;constraint:OnDelete:CASCADE"`
 	// IdentityType is "pubkey" | "connection_key" | "bearer".
-	IdentityType string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:2"`
+	IdentityType string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:2"`
 	// IdentityValue is 64-char hex. For pubkey/connection_key slices this is
 	// the identity itself (public, proof-gated at claim time). For a bearer
 	// slice it is instead a one-way SHA-256 commitment of the slice's
 	// secret — the raw secret is never persisted, only ever returned once,
-	// in the create_jit_wallet/jit_transfer response that generated it.
-	IdentityValue string `gorm:"not null;uniqueIndex:idx_jit_claim_wallet_identity,priority:3"`
+	// in the mint_cash/cash_transfer response that generated it.
+	IdentityValue string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:3"`
 	// IAPubkey is set only for connection_key-mode slices — the Identity
 	// Authority that must attest the claimant's identity at claim time.
-	IAPubkey    string
-	AmountMloki int64 `gorm:"not null"`
+	// Indexed so ListIdentityAuthorities' unredeemed-slice-count query (grouped
+	// on this column, filtered to claimed_at IS NULL) doesn't full-scan.
+	IAPubkey    string `gorm:"index"`
+	AmountMloki int64  `gorm:"not null"`
 	ClaimedAt   *time.Time
-	// MaxTransfers is the wallet's own cap (set once at creation, the same
-	// value on every slice of the same wallet) on how many times this slice
-	// MAY be reassigned via jit_transfer — 0 or negative means unlimited,
-	// same convention as JITHubConfig.PerWalletMaxMloki/MaxExpSecs.
-	MaxTransfers int
-	// TransferCount is incremented atomically by jit_transfer, checked
-	// against MaxTransfers before each transfer.
+	// TransferCount is an internal optimistic-concurrency version number,
+	// incremented atomically by every cash_transfer (reassignment or split)
+	// against this row — pinned in each atomic update's WHERE clause so two
+	// concurrent transfers of the same slice can never both succeed (see
+	// AppsService.ReassignCashSliceIdentity/SplitCashSliceAmount). It is not
+	// a user-facing cap (there is no transfer limit): a wallet created by
+	// splitting starts its own TransferCount at 0, since it's a fresh row
+	// with its own concurrency history, not a continuation of the source
+	// slice's.
 	TransferCount int
+	// MinTransferMloki floors how small an amount this slice may be split
+	// into (the carved-off piece) or leave behind (the remainder) via
+	// cash_transfer — 0 means no floor. Set once: from the hub's config for
+	// a freshly-minted wallet, or inherited from the source slice for a
+	// split-off wallet.
+	MinTransferMloki int64
+	// RedeemFeePpm is this slice's own per-million cash_redeem fee (0 =
+	// free), snapshotted once at the moment the slice was created — from the
+	// hub's current RedeemFeePpm default for a freshly-minted wallet, or
+	// inherited unchanged from the source slice for a split-off wallet —
+	// exactly like MinTransferMloki above. Deliberately immutable
+	// thereafter, including across an in-place identity reassignment
+	// (ReassignCashSliceIdentity never touches this column): a later change
+	// to the hub's own config must never retroactively change the rate for
+	// an already-issued lokicash, and the rate must stay identical for every
+	// future owner the slice passes through via cash_transfer. Charged only
+	// on a genuine external cash_redeem (see
+	// transactions.reconcileCashRedeemFee) — a same-node redemption always
+	// pays out the slice's full AmountMloki with no fee.
+	RedeemFeePpm int
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
-	// value was moved into a brand-new dedicated jit_wallet rather than
-	// redeemed via a real Lightning payment — see
-	// AppsService.ClaimJITWalletSliceForSpinOff. Purely informational: every
-	// atomic guard elsewhere already treats ClaimedAt != nil as terminal
-	// regardless of which mechanism set it, so this column is never read by
-	// any guard, only by callers (e.g. list_recipients) that want to explain
-	// *why* a slice is claimed with no matching payment record.
+	// entire value was moved into a brand-new dedicated cash_wallet rather
+	// than redeemed via a real Lightning payment — see
+	// AppsService.SplitCashSliceAmount. Purely informational: every atomic
+	// guard elsewhere already treats ClaimedAt != nil as terminal regardless
+	// of which mechanism set it, so this column is never read by any guard,
+	// only by callers (e.g. list_recipients) that want to explain *why* a
+	// slice is claimed with no matching payment record.
 	SpunOffToWalletAppID *uint
 	CreatedAt            time.Time
 }
@@ -189,7 +230,7 @@ type CircleHubConfig struct {
 	MaxExpSecs     int
 	FeesPpm        int
 	// PerWalletMaxMloki caps a caller's requested max_amount per issued wallet
-	// (required positive — mirrors JITHubConfig.PerWalletMaxMloki).
+	// (required positive — mirrors CashHubConfig.PerWalletMaxMloki).
 	PerWalletMaxMloki int
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
@@ -214,6 +255,25 @@ type CircleWalletIdentityProof struct {
 	CreatedAt time.Time
 }
 
+// CashTransferProof records the nostr event ID of every consumed
+// cash_transfer identity proof, so a captured proof (a multi-recipient
+// cash_wallet connection is shared — every co-recipient can decrypt every
+// request sent over it, including this one) can't be resubmitted to
+// authorize a repeat transfer/split, or one for a different amount_mloki
+// than it was signed for, within its own freshness window. A partial split
+// doesn't change the source slice's registered identity the way an in-place
+// reassignment does, so — unlike a full transfer — state alone doesn't
+// naturally invalidate a replayed proof for the split case; this table is
+// what does. EventID is globally unique (content-addressed hash), so no
+// additional scoping key is needed for correctness. See
+// verifyTransferIdentityEvent's doc comment (cash_transfer_controller.go).
+type CashTransferProof struct {
+	ID        uint   `gorm:"primaryKey"`
+	AppID     uint   `gorm:"not null;index"` // the cash_wallet, for observability only
+	EventID   string `gorm:"not null;uniqueIndex"`
+	CreatedAt time.Time
+}
+
 // CircleWalletMembership enforces at most one *active* circle_wallet per
 // (circle_hub, identity) at a time. Cascade-deletes when the child Wallet App
 // row is deleted — expiry sweep, manual per-child delete, or hub teardown —
@@ -233,8 +293,8 @@ type CircleWalletMembership struct {
 // IsIsolated returns true for all app kinds that maintain their own balance.
 func (app *App) IsIsolated() bool {
 	return app.Kind == AppKindIsolated ||
-		app.Kind == AppKindJITHub ||
-		app.Kind == AppKindJITWallet ||
+		app.Kind == AppKindCashHub ||
+		app.Kind == AppKindCashWallet ||
 		app.Kind == AppKindCircleHub ||
 		app.Kind == AppKindCircleWallet
 }
@@ -242,8 +302,8 @@ func (app *App) IsIsolated() bool {
 // IsIsolatedKind is a package-level helper for code paths that only have the kind string.
 func IsIsolatedKind(kind string) bool {
 	return kind == AppKindIsolated ||
-		kind == AppKindJITHub ||
-		kind == AppKindJITWallet ||
+		kind == AppKindCashHub ||
+		kind == AppKindCashWallet ||
 		kind == AppKindCircleHub ||
 		kind == AppKindCircleWallet
 }
@@ -251,8 +311,8 @@ func IsIsolatedKind(kind string) bool {
 // IsPrivilegedKind reports whether a kind is system-managed and must not have its
 // scopes modified after creation via the generic UpdateApp path.
 func IsPrivilegedKind(kind string) bool {
-	return kind == AppKindJITHub ||
-		kind == AppKindJITWallet ||
+	return kind == AppKindCashHub ||
+		kind == AppKindCashWallet ||
 		kind == AppKindCircleHub ||
 		kind == AppKindCircleWallet
 }
@@ -260,12 +320,12 @@ func IsPrivilegedKind(kind string) bool {
 // IsBudgetImmutableKind reports whether a kind's budget and expiry are
 // system-managed and must not be changed via the generic UpdateApp path.
 // Unlike IsPrivilegedKind, the hub kinds (AppKindCircleHub,
-// AppKindJITHub) are excluded here: a hub's own budget/expiry are
+// AppKindCashHub) are excluded here: a hub's own budget/expiry are
 // user-configurable like a regular app, it's only the wallets it issues that
 // have limits coming from a dedicated flow (per-member allocation, per-wallet
-// JIT config).
+// Cash config).
 func IsBudgetImmutableKind(kind string) bool {
-	return kind == AppKindJITWallet ||
+	return kind == AppKindCashWallet ||
 		kind == AppKindCircleWallet
 }
 
@@ -275,7 +335,7 @@ func IsBudgetImmutableKind(kind string) bool {
 // what lets the UI resolve a Nostr profile name for display, so allowing a
 // free-form rename would silently break that.
 func IsNameImmutableKind(kind string) bool {
-	return kind == AppKindJITWallet ||
+	return kind == AppKindCashWallet ||
 		kind == AppKindCircleWallet
 }
 
@@ -331,22 +391,39 @@ type Transaction struct {
 	// never reset to 0 — it's a real, permanent charge, not transient headroom)
 	// and included alongside FeeMloki/FeeReserveMloki in every isolated-balance
 	// and budget-usage calculation. Zero for every other transaction.
-	FeeSkimMloki    uint64
-	PaymentRequest  string
-	PaymentHash     string `gorm:"index"`
-	Description     string
-	DescriptionHash string
-	Preimage        *string
-	CreatedAt       time.Time
-	ExpiresAt       *time.Time
-	UpdatedAt       time.Time
-	SettledAt       *time.Time
-	Metadata        datatypes.JSON
-	SelfPayment     bool
-	Boostagram      datatypes.JSON
-	FailureReason   string
-	Hold            bool
-	SettleDeadline  *uint32 // block number for accepted hold invoices
+	FeeSkimMloki uint64
+	// CashRedeemFeeMloki is set only on a cash_wallet's own outgoing payout
+	// row for a cash_redeem call — the redeem fee quoted to (and deducted
+	// from) the recipient's payout, computed by the controller from the
+	// slice's own CashWalletClaim.RedeemFeePpm before the payment is even
+	// attempted (0 for a same-node redemption). Deliberately NOT read by
+	// db/queries.GetIsolatedBalance — unlike FeeSkimMloki, it must never be
+	// double-counted against the wallet's balance, since it's already priced
+	// into AmountMloki (a fee-reduced net payout, not an addition on top).
+	// Nil means "not a cash_redeem payout, nothing to reconcile"; a non-nil
+	// pointer (including a nil-vs-zero-value pointer, so an explicit 0 fee
+	// still triggers reconciliation) is what
+	// transactions.reconcileCashRedeemFee gates on at settlement time to
+	// move the delta between this fee and the real routing fee between the
+	// wallet and its parent Cash Hub — see that function's doc comment for
+	// why the shared wallet's balance is never affected by either fee once
+	// this reconciliation lands.
+	CashRedeemFeeMloki *uint64
+	PaymentRequest     string
+	PaymentHash        string `gorm:"index"`
+	Description        string
+	DescriptionHash    string
+	Preimage           *string
+	CreatedAt          time.Time
+	ExpiresAt          *time.Time
+	UpdatedAt          time.Time
+	SettledAt          *time.Time
+	Metadata           datatypes.JSON
+	SelfPayment        bool
+	Boostagram         datatypes.JSON
+	FailureReason      string
+	Hold               bool
+	SettleDeadline     *uint32 // block number for accepted hold invoices
 }
 
 type Swap struct {

@@ -31,11 +31,11 @@ export function ConnectAppCard({
   app: App;
   pairingUri: string;
   // lokicashToken: the same connection as pairingUri, packaged as a single
-  // lokicash1... string (NIP-JW §The Lokicash Token).
+  // lokicash1... string (NIP-CASH §The Lokicash Token).
   lokicashToken?: string;
-  // bearerSecret: a JIT wallet's bearer redemption secret, present only
+  // bearerSecret: a Cash wallet's bearer redemption secret, present only
   // right after creating a bearer-mode wallet — the wallet mints it once
-  // and never returns it again (NIP-JW §Bearer Slices), so it has to be
+  // and never returns it again (NIP-CASH §Bearer Slices), so it has to be
   // shown here, not just left to a later "reveal".
   bearerSecret?: string;
   appStoreApp?: AppStoreApp;
@@ -50,7 +50,7 @@ export function ConnectAppCard({
   showConnectionStatus?: boolean;
   // "nwc" (default): QR + primary copy button both use pairingUri, exactly
   // as every other app connection (regular apps, circle wallets) works.
-  // "lokicash": for JIT wallets specifically, where the product surface is
+  // "lokicash": for Cash wallets specifically, where the product surface is
   // the lokicash1... token, not the raw NWC pairing URI — the QR encodes
   // lokicashToken instead, and pairingUri is never shown or copied at all.
   // REQUIRES lokicashToken to be set.

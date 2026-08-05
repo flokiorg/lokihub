@@ -35,18 +35,18 @@ import {
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
 import {
-  JITHubAllocations,
-  JITHubAllocationsHandle,
-} from "src/screens/subwallets/JITHubAllocations";
+  CashHubAllocations,
+  CashHubAllocationsHandle,
+} from "src/screens/subwallets/CashHubAllocations";
 import { ChildIdentityCard } from "src/components/circles/ChildIdentityCard";
 import { CircleIdentityCard } from "src/components/circles/CircleIdentityCard";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DisconnectApp } from "src/components/connections/DisconnectApp";
 import { DisconnectCircleHub } from "src/components/connections/DisconnectCircleHub";
-import { DisconnectJITHub } from "src/components/connections/DisconnectJITHub";
+import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
 import { DurationInput } from "src/components/DurationInput";
-import { JITHubConfigCard } from "src/components/JITHubConfigCard";
+import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import { useAppStore } from "src/hooks/useAppStore";
 import Loading from "src/components/Loading";
@@ -81,9 +81,19 @@ import {
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
-import { LOKI_ACCOUNT_APP_NAME, WEEK_SCALE_PRESETS } from "src/constants";
+import {
+  LOKI_ACCOUNT_APP_NAME,
+  SUBWALLET_APPSTORE_APP_ID,
+  SUBWALLET_HUB_CHILD_KINDS,
+  SUBWALLET_HUB_KINDS,
+  WEEK_SCALE_PRESETS,
+} from "src/constants";
 import { useApp } from "src/hooks/useApp";
-import { useAppsForAppStoreApp } from "src/hooks/useApps";
+import {
+  useAppsForAppStoreApp,
+  useHubChildren,
+  useSiblingHubs,
+} from "src/hooks/useApps";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { primaryProfileLabel } from "src/utils/nostrProfileLabel";
 import { useCapabilities } from "src/hooks/useCapabilities";
@@ -124,8 +134,8 @@ type AppInternalProps = {
 function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   const location = useLocation();
   const circleAllowlistRef = React.useRef<CircleAllowlistHandle>(null);
-  const jitHubAllocationsRef = React.useRef<JITHubAllocationsHandle>(null);
-  const [isJitFormOpen, setJitFormOpen] = React.useState(false);
+  const cashHubAllocationsRef = React.useRef<CashHubAllocationsHandle>(null);
+  const [isCashFormOpen, setCashFormOpen] = React.useState(false);
   const [isAllowlistFormOpen, setAllowlistFormOpen] = React.useState(false);
   const [isEditingPermissions, setIsEditingPermissions] = React.useState(false);
   const [showConnectionDetails, setShowConnectionDetails] =
@@ -152,24 +162,30 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   const [savedPermissions, setSavedPermissions] =
     React.useState<AppPermissions>(permissions);
 
-  // Hub-level defaults (jit_hub, circle_hub) — set at creation time but
+  // Hub-level defaults (cash_hub, circle_hub) — set at creation time but
   // otherwise not exposed anywhere, so Edit Connection is the only place to
   // change them after the fact.
   const { scaleInputAmount, parseInputAmount } = useUnit();
   const hubPerWalletMaxLoki =
-    app.kind === "jit_hub"
-      ? app.jitPerWalletMaxMloki
-        ? app.jitPerWalletMaxMloki / 1000
+    app.kind === "cash_hub"
+      ? app.cashPerWalletMaxMloki
+        ? app.cashPerWalletMaxMloki / 1000
         : 0
       : app.circlePerWalletMaxMloki
         ? app.circlePerWalletMaxMloki / 1000
         : 0;
   const [inputUnit, setInputUnit] = useInputUnit(hubPerWalletMaxLoki);
-  const [jitPerWalletMaxLoki, setJitPerWalletMaxLoki] = React.useState(
-    app.jitPerWalletMaxMloki ? app.jitPerWalletMaxMloki / 1000 : 0
+  const [cashPerWalletMaxLoki, setCashPerWalletMaxLoki] = React.useState(
+    app.cashPerWalletMaxMloki ? app.cashPerWalletMaxMloki / 1000 : 0
   );
-  const [jitMaxExpSecs, setJitMaxExpSecs] = React.useState(
-    app.jitMaxExpSecs ?? 0
+  const [cashMaxExpSecs, setCashMaxExpSecs] = React.useState(
+    app.cashMaxExpSecs ?? 0
+  );
+  const [cashMinTransferLoki, setCashMinTransferLoki] = React.useState(
+    app.cashMinTransferMloki ? app.cashMinTransferMloki / 1000 : 0
+  );
+  const [cashRedeemFeePpm, setCashRedeemFeePpm] = React.useState(
+    app.cashRedeemFeePpm ?? 0
   );
   const [circleMaxExpSecs, setCircleMaxExpSecs] = React.useState(
     app.circleMaxExpSecs ?? 0
@@ -186,25 +202,25 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   // These kinds are system-managed — the backend rejects any scope change to
   // them via this generic update path (see IsPrivilegedKind in db/models.go),
   // since their permission set comes from a dedicated flow (circle allowlist
-  // policy, JIT allocation config) instead. Submitting scopes here would
+  // policy, Cash allocation config) instead. Submitting scopes here would
   // always fail server-side.
   const scopesReadOnly = [
     "circle_hub",
     "circle_wallet",
-    "jit_hub",
-    "jit_wallet",
+    "cash_hub",
+    "cash_wallet",
   ].includes(app.kind ?? "");
   // A hub's own budget/expiry are user-configurable like a regular app (see
   // IsBudgetImmutableKind in db/models.go) — it's only the wallets it issues
-  // (circle wallets, JIT wallets) whose limits are system-managed.
+  // (circle wallets, Cash wallets) whose limits are system-managed.
   const budgetReadOnly =
-    scopesReadOnly && app.kind !== "circle_hub" && app.kind !== "jit_hub";
-  // JIT/circle wallet names are system-generated (hub · identity · random) and
+    scopesReadOnly && app.kind !== "circle_hub" && app.kind !== "cash_hub";
+  // Cash/circle wallet names are system-generated (hub · identity · random) and
   // carry the identity used to resolve a Nostr profile for display — the
   // backend rejects a rename for these kinds (db.IsNameImmutableKind), so
   // don't offer the control here either.
   const nameReadOnly =
-    app.kind === "jit_wallet" || app.kind === "circle_wallet";
+    app.kind === "cash_wallet" || app.kind === "circle_wallet";
 
   const handleSave = async () => {
     try {
@@ -220,9 +236,11 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
           updateExpiresAt: true,
           maxAmount: permissions.maxAmount,
         }),
-        ...(app.kind === "jit_hub" && {
-          jitPerWalletMaxMloki: jitPerWalletMaxLoki * 1000,
-          jitMaxExpSecs,
+        ...(app.kind === "cash_hub" && {
+          cashPerWalletMaxMloki: cashPerWalletMaxLoki * 1000,
+          cashMaxExpSecs,
+          cashMinTransferMloki: cashMinTransferLoki * 1000,
+          cashRedeemFeePpm,
         }),
         ...(app.kind === "circle_hub" && {
           circleMaxExpSecs,
@@ -254,7 +272,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     }
   };
 
-  // JIT/circle wallet names are baked in server-side as "<hub> · <npub prefix> · <random>"
+  // Cash/circle wallet names are baked in server-side as "<hub> · <npub prefix> · <random>"
   // (see apps.GenerateChildName). When the full identity pubkey is known, swap that
   // truncated npub segment for a resolved Nostr profile name where available.
   const identityPubkey =
@@ -298,7 +316,42 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
       }
     );
   }, [appStoreAppId, appStoreApps, app.name]);
-  const connectedApps = useAppsForAppStoreApp(appStoreApp);
+
+  // Every subwallet kind shares the same app_store_app_id sentinel
+  // (SUBWALLET_APPSTORE_APP_ID, "lokies" — see constants.ts), so grouping by
+  // it would lump every Cash Hub, Circle Hub, Simple Subwallet, and their
+  // children together. Group hubs/standalone subwallets with their siblings
+  // of the same kind instead (useSiblingHubs), and a hub's children with
+  // their siblings under that same specific hub (useHubChildren). Real
+  // external apps (kind "standard") keep the original app-store grouping.
+  //
+  // isManagedSubwallet is load-bearing here: cash_hub and isolated are not
+  // exclusive to the dedicated hub/subwallet wizards — a regular external app
+  // connection can be granted the same kind through the generic New
+  // Connection flow's "Cash Hub"/"isolated" toggles (see NewApp.tsx). Without
+  // this check, e.g. a real "Zapf" connection given an isolated balance would
+  // be treated as one of the user's own Simple Subwallets and offered as a
+  // switch target alongside them (and vice versa) purely because they share a
+  // kind, even though they're unrelated connections.
+  const isManagedSubwallet =
+    app.metadata?.app_store_app_id === SUBWALLET_APPSTORE_APP_ID;
+  const isSubwalletHub =
+    isManagedSubwallet && SUBWALLET_HUB_KINDS.includes(app.kind ?? "");
+  const isSubwalletHubChild = SUBWALLET_HUB_CHILD_KINDS.includes(
+    app.kind ?? ""
+  );
+  const siblingHubs = useSiblingHubs(isSubwalletHub ? app.kind : undefined);
+  const hubChildren = useHubChildren(
+    isSubwalletHubChild ? app.parentAppId : undefined
+  );
+  const appStoreConnectedApps = useAppsForAppStoreApp(
+    isSubwalletHub || isSubwalletHubChild ? undefined : appStoreApp
+  );
+  const connectedApps = isSubwalletHub
+    ? siblingHubs
+    : isSubwalletHubChild
+      ? hubChildren
+      : appStoreConnectedApps;
 
   const addAnotherUrl = React.useMemo(() => {
     const params = new URLSearchParams();
@@ -549,7 +602,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   identity={app.circleIdentity}
                 />
               )}
-              {(app.kind === "jit_wallet" || app.kind === "circle_wallet") && (
+              {(app.kind === "cash_wallet" || app.kind === "circle_wallet") && (
                 <ChildIdentityCard app={app} />
               )}
               {appStoreApp && (
@@ -620,6 +673,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 showBudgetUsage={isEditingPermissions}
                 showBudgetSection={
                   permissions.scopes.includes("pay_invoice") ||
+                  permissions.scopes.includes("cash_redeem") ||
                   app.kind === "circle_hub"
                 }
                 budgetCaption={
@@ -632,18 +686,22 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
               />
             </CardContent>
           </Card>
-          {isEditingPermissions && app.kind === "jit_hub" && (
-            <JITHubConfigCard
+          {isEditingPermissions && app.kind === "cash_hub" && (
+            <CashHubConfigCard
               title={t("circleHub.hubSettingsTitle")}
-              description={t("circleHub.jitHubSettingsDescription")}
+              description={t("circleHub.cashHubSettingsDescription")}
               budgetLabel={t("circleHub.maxWalletBudgetLabel")}
-              budgetHelper={t("circleHub.jitMaxWalletBudgetHelper")}
+              budgetHelper={t("circleHub.cashMaxWalletBudgetHelper")}
               expiryLabel={t("circleHub.maxWalletExpiryLabel")}
-              expiryHelper={t("circleHub.jitMaxExpiryHelper")}
-              perWalletMaxLoki={jitPerWalletMaxLoki}
-              onPerWalletMaxLokiChange={setJitPerWalletMaxLoki}
-              maxExpSecs={jitMaxExpSecs}
-              onMaxExpSecsChange={setJitMaxExpSecs}
+              expiryHelper={t("circleHub.cashMaxExpiryHelper")}
+              perWalletMaxLoki={cashPerWalletMaxLoki}
+              onPerWalletMaxLokiChange={setCashPerWalletMaxLoki}
+              maxExpSecs={cashMaxExpSecs}
+              onMaxExpSecsChange={setCashMaxExpSecs}
+              minTransferLoki={cashMinTransferLoki}
+              onMinTransferLokiChange={setCashMinTransferLoki}
+              redeemFeePpm={cashRedeemFeePpm}
+              onRedeemFeePpmChange={setCashRedeemFeePpm}
             />
           )}
           {isEditingPermissions && app.kind === "circle_hub" && (
@@ -740,8 +798,8 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     app={app}
                     onClose={() => setShowDisconnectAppDialog(false)}
                   />
-                ) : app.kind === "jit_hub" ? (
-                  <DisconnectJITHub
+                ) : app.kind === "cash_hub" ? (
+                  <DisconnectCashHub
                     app={app}
                     onClose={() => setShowDisconnectAppDialog(false)}
                   />
@@ -788,28 +846,28 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   </CardContent>
                 </Card>
               )}
-              {app.kind === "jit_hub" && (
+              {app.kind === "cash_hub" && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>{t("circleHub.jitWalletsTitle")}</CardTitle>
-                    {!isJitFormOpen && (
+                    <CardTitle>{t("circleHub.cashWalletsTitle")}</CardTitle>
+                    {!isCashFormOpen && (
                       <CardAction>
                         <ResponsiveButton
                           size="sm"
                           onClick={() =>
-                            jitHubAllocationsRef.current?.openAdd()
+                            cashHubAllocationsRef.current?.openAdd()
                           }
                           icon={PlusIcon}
-                          text={t("circleHub.addJitWallet")}
+                          text={t("circleHub.addCashWallet")}
                         />
                       </CardAction>
                     )}
                   </CardHeader>
                   <CardContent>
-                    <JITHubAllocations
+                    <CashHubAllocations
                       appId={app.id}
-                      ref={jitHubAllocationsRef}
-                      onFormOpenChange={setJitFormOpen}
+                      ref={cashHubAllocationsRef}
+                      onFormOpenChange={setCashFormOpen}
                     />
                   </CardContent>
                 </Card>

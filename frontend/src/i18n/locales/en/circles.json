@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr Identity",
     "connectionKey": "Web Identity",
-    "bearer": "Cash"
+    "bearer": "Bearer"
   },
   "avatarStack": {
     "more": "+{{count}} more"
@@ -77,12 +77,12 @@
     "unclaimed": "Unredeemed"
   },
   "claimDeadline": {
-    "expired": "Claim window expired",
-    "withinMinutes_one": "Claim within {{count}} min",
-    "withinMinutes_other": "Claim within {{count}} min",
-    "withinHours": "Claim within {{count}}h",
-    "byDate": "Claim by {{date}}",
-    "none": "No claim deadline"
+    "expired": "Redeem window expired",
+    "withinMinutes_one": "Redeem within {{count}} min",
+    "withinMinutes_other": "Redeem within {{count}} min",
+    "withinHours": "Redeem within {{count}}h",
+    "byDate": "Redeem by {{date}}",
+    "none": "No redeem deadline"
   },
   "circleCard": {
     "member_one": "{{count}} member",
@@ -90,10 +90,10 @@
   },
   "childIdentityCard": {
     "circleWallet": "Circle Wallet",
-    "jitWallet": "Lokicash Token",
-    "claimedCount": "{{claimed}}/{{total}} claimed",
+    "cashWallet": "Cash Wallet",
+    "claimedCount": "{{claimed}}/{{total}} redeemed",
     "errors": {
-      "loadRecipients": "Failed to load JIT wallet recipients"
+      "loadRecipients": "Failed to load Cash wallet recipients"
     }
   },
   "manageIdentities": {
@@ -155,7 +155,7 @@
       "removeSelected": "Failed to remove selected circle wallets"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} day",
     "durationDays_other": "{{count}} days",
     "durationHours_one": "{{count}} hour",
@@ -167,6 +167,10 @@
     "connectionKeyLabel": "Connection Key (hex)",
     "iaPubkeyLabel": "Identity Authority Pubkey (hex)",
     "iaPubkeyHelper": "Must be a trusted Identity Authority (Settings → Identity Authorities)",
+    "selectIAPlaceholder": "Select an Identity Authority",
+    "savedIAsLabel": "Declared in Settings",
+    "enterIAManually": "Enter a pubkey manually",
+    "chooseSavedIAInstead": "Choose from Settings instead",
     "duplicateIdentity": "This identity is already used by another recipient.",
     "walletBudgetLabel": "Amount",
     "requestedSummary": "{{total}} loki requested",
@@ -212,8 +216,8 @@
       "removeWallet": "Failed to remove Lokicash",
       "removeSelected": "Failed to remove selected recipients"
     },
-    "bearerHelper": "Whoever holds the secret can redeem it — shown once, right after creation.",
-    "bearerRequiresSoleRecipient": "Cash must be the only recipient",
+    "bearerHelper": "Bearer: whoever holds the secret can redeem it — there is no identity check and no recovery if it's lost or intercepted.",
+    "bearerRequiresSoleRecipient": "Bearer must be the only recipient",
     "pubkeyModeHelper": "Only this Nostr identity can redeem it.",
     "connectionKeyModeHelper": "Only a verified identity can redeem it.",
     "copyLokicash": "Copy Lokicash",
@@ -257,15 +261,15 @@
       "create": "Failed to create Circle Wallet Hub"
     }
   },
-  "newJitHub": {
-    "title": "New JIT Wallet Hub",
-    "description": "Create a pre-funded hub that issues spend-only JIT wallets to beneficiaries",
-    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each JIT wallet issued from this hub",
-    "maxExpiryHelper": "Maximum lifetime for issued JIT wallets",
-    "submit": "Create JIT Wallet Hub",
-    "createdToast": "JIT Wallet Hub \"{{name}}\" created",
+  "newCashHub": {
+    "title": "New Cash Hub",
+    "description": "Create a pre-funded hub that issues spend-only Cash wallets to beneficiaries",
+    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash wallet issued from this hub",
+    "maxExpiryHelper": "Maximum lifetime for issued Cash wallets",
+    "submit": "Create Cash Hub",
+    "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
-      "create": "Failed to create JIT Wallet Hub"
+      "create": "Failed to create Cash Hub"
     }
   },
   "disconnectCircleHub": {
@@ -291,15 +295,15 @@
       "delete": "Failed to delete circle"
     }
   },
-  "disconnectJitHub": {
-    "title": "Are you sure you want to delete this JIT Wallet Hub?",
-    "checking": "Checking issued JIT wallets…",
-    "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued JIT wallets. Remove them from the JIT Wallets list below (or wait for them to expire) before deleting the hub.",
-    "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued JIT wallets. Remove them from the JIT Wallets list below (or wait for them to expire) before deleting the hub.",
+  "disconnectCashHub": {
+    "title": "Are you sure you want to delete this Cash Hub?",
+    "checking": "Checking issued Cash wallets…",
+    "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
+    "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
     "safeToDelete": "Connected apps will no longer be able to use this connection. No funds will be lost during this process, the balance will remain in your wallet.",
     "close": "Close",
     "errors": {
-      "check": "Failed to check issued JIT wallets"
+      "check": "Failed to check issued Cash wallets"
     }
   }
 }

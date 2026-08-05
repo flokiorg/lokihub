@@ -363,8 +363,8 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		Interface("params", nip47Request.Params).
 		Msg("Handling NIP-47 request")
 
-	// jit_wallet apps carve out get_budget from the system-wide always-granted
-	// list: a jit_wallet's connection may be widely shared among its
+	// cash_wallet apps carve out get_budget from the system-wide always-granted
+	// list: a cash_wallet's connection may be widely shared among its
 	// recipients, and get_budget would otherwise reveal the wallet's total
 	// funded amount across every recipient to any holder of the connection
 	// with no proof required. get_info stays exempted — it's harmless
@@ -380,12 +380,12 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	// "match nothing" — so it would match any permission row the app has and
 	// incorrectly grant get_budget anyway. Blocking it must happen before
 	// that pipeline is reached at all.
-	if app.Kind == db.AppKindJITWallet && nip47Request.Method == models.GET_BUDGET_METHOD {
+	if app.Kind == db.AppKindCashWallet && nip47Request.Method == models.GET_BUDGET_METHOD {
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{
 				Code:    constants.ERROR_RESTRICTED,
-				Message: "get_budget is not available on a jit_wallet",
+				Message: "get_budget is not available on a cash_wallet",
 			},
 		}, nostr.Tags{})
 		return
@@ -449,7 +449,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		}
 	}
 
-	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.jitRateLimiter, svc.jitClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr)
+	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr)
 
 	switch nip47Request.Method {
 	case models.MULTI_PAY_INVOICE_METHOD:
@@ -488,15 +488,15 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case models.CREATE_CONNECTION_METHOD:
 		controller.
 			HandleCreateConnectionEvent(ctx, nip47Request, requestEvent.ID, publishResponse)
-	case constants.NIP47MethodCreateJITWallet:
+	case constants.NIP47MethodMintCash:
 		controller.
-			HandleCreateJITWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
-	case constants.NIP47MethodJITRedeem:
+			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+	case constants.NIP47MethodCashRedeem:
 		controller.
-			HandleClaimFundsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
-	case constants.NIP47MethodJITTransfer:
+			HandleCashRedeemEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
+	case constants.NIP47MethodCashTransfer:
 		controller.
-			HandleJITTransferEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
+			HandleCashTransferEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
 	case constants.NIP47MethodListRecipients:
 		controller.
 			HandleListRecipientsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)

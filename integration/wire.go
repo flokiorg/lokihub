@@ -9,47 +9,47 @@ import "github.com/flokiorg/lokihub/nip47/models"
 // external black-box test package) — kept intentionally minimal, matching
 // only the JSON wire format actual NWC clients rely on.
 
-// --- create_jit_wallet ---
+// --- mint_cash ---
 //
-// A jit_wallet's connection is now shared by every recipient named in one
-// create_jit_wallet call — there is no more per-recipient encrypted reveal or
-// separate claim_jit_wallet step. The plaintext pairing_uri comes back
+// A cash_wallet's connection is now shared by every recipient named in one
+// mint_cash call — there is no more per-recipient encrypted reveal or
+// separate claim_cash_wallet step. The plaintext pairing_uri comes back
 // directly in the response, over the already end-to-end-encrypted NIP-47
 // channel the hub itself is using.
 
-type JITWalletRecipientParam struct {
+type CashWalletRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   uint64 `json:"amount_mloki"`
 }
 
-type CreateJITWalletParams struct {
-	Recipients []JITWalletRecipientParam `json:"recipients"`
-	Expiry     int                       `json:"expiry,omitempty"`
+type MintCashParams struct {
+	Recipients []CashWalletRecipientParam `json:"recipients"`
+	Expiry     int                        `json:"expiry,omitempty"`
 }
 
-type JITWalletRecipientResult struct {
+type CashWalletRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
 	AmountMloki   uint64 `json:"amount_mloki"`
 	BearerSecret  string `json:"bearer_secret,omitempty"`
 }
 
-type CreateJITWalletResult struct {
-	WalletPubkey  string                     `json:"wallet_pubkey"`
-	PairingURI    string                     `json:"pairing_uri"`
-	LokicashToken string                     `json:"lokicash_token"`
-	ExpiresAt     int64                      `json:"expires_at"`
-	Recipients    []JITWalletRecipientResult `json:"recipients"`
+type MintCashResult struct {
+	WalletPubkey string                      `json:"wallet_pubkey"`
+	PairingURI   string                      `json:"pairing_uri"`
+	CashToken    string                      `json:"cash_token"`
+	ExpiresAt    int64                       `json:"expires_at"`
+	Recipients   []CashWalletRecipientResult `json:"recipients"`
 }
 
-// --- claim_funds ---
+// --- cash_redeem ---
 //
-// Replaces the old create_jit_wallet/claim_jit_wallet two-step reveal flow:
+// Replaces the old mint_cash/claim_cash_wallet two-step reveal flow:
 // since the connection is already shared/known, a recipient just proves who
 // they are (identity_event, bound to this wallet + this invoice — see
-// nip47/controllers/claim_funds_controller.go) and pays out their own slice
+// nip47/controllers/cash_redeem_controller.go) and pays out their own slice
 // in one call.
 
 type ClaimFundsParams struct {
@@ -69,10 +69,10 @@ type ClaimFundsResult struct {
 	FeesPaid uint64 `json:"fees_paid"`
 }
 
-// --- jit_transfer ---
+// --- cash_transfer ---
 //
 // Reassigns an unclaimed slice's registered identity without redeeming it
-// (NIP-JW §Transferring a Slice). Proof scheme mirrors claim_funds: an
+// (NIP-JW §Transferring a Slice). Proof scheme mirrors cash_redeem: an
 // identity-bound caller proves who they currently are via IdentityEvent
 // (bound to the wallet + the target new_identity, not an invoice); a bearer
 // caller instead presents BearerSecret, since a bearer slice has no
@@ -81,28 +81,35 @@ type ClaimFundsResult struct {
 // A bearer NewIdentity's IdentityValue is REQUIRED and caller-supplied — the
 // commitment (sha256) of a secret the caller generates and keeps locally.
 // The wallet never mints or returns a bearer secret here: this response
-// travels over the shared jit_wallet connection, decryptable by every
+// travels over the shared cash_wallet connection, decryptable by every
 // recipient who ever held it, so a server-generated secret returned in it
 // would leak to all of them (see NIP-JW.md's Security Considerations).
 
-type JITTransferNewIdentityParam struct {
+type CashTransferNewIdentityParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"`
 }
 
-type JITTransferParams struct {
+type CashTransferParams struct {
 	IdentityType     string `json:"identity_type,omitempty"`
 	IdentityValue    string `json:"identity_value,omitempty"`
 	IdentityEvent    string `json:"identity_event,omitempty"`
 	AttestationEvent string `json:"attestation_event,omitempty"`
 	BearerSecret     string `json:"bearer_secret,omitempty"`
 
-	NewIdentity JITTransferNewIdentityParam `json:"new_identity"`
+	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
+
+	// AmountMloki is OPTIONAL — omitted, or equal to the slice's current full
+	// amount, means "transfer it all". A value less than the slice's current
+	// amount splits off exactly that much into a brand-new dedicated
+	// cash_wallet, leaving the remainder behind under the SAME current
+	// identity — see NIP-CASH §Splitting a Slice.
+	AmountMloki *uint64 `json:"amount_mloki,omitempty"`
 }
 
 // NewWalletPubkey/NewWalletToken are populated only when the transfer spun
-// the slice off into a brand-new dedicated jit_wallet, rather than
+// the slice off into a brand-new dedicated cash_wallet, rather than
 // reassigning identity in place — see NIP-JW "Spinning a slice off into a
 // dedicated wallet". NewWalletToken is a lokicash1... connection token,
 // itself NIP-44 encrypted to the caller's own pubkey (the one that signed
@@ -110,12 +117,16 @@ type JITTransferParams struct {
 // (NewWalletPubkey plus its matching server-held privkey) — a second, inner
 // encryption layer nested inside this response's own normal per-connection
 // encryption.
-type JITTransferResult struct {
-	AmountMloki     uint64 `json:"amount_mloki"`
-	IdentityType    string `json:"identity_type"`
-	IdentityValue   string `json:"identity_value,omitempty"`
-	NewWalletPubkey string `json:"new_wallet_pubkey,omitempty"`
-	NewWalletToken  string `json:"new_wallet_token,omitempty"`
+type CashTransferResult struct {
+	AmountMloki   uint64 `json:"amount_mloki"`
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	// RemainingAmountMloki is populated only when this call went through the
+	// split path: 0 for a full split, >0 for a partial one. Never populated
+	// for an in-place reassignment.
+	RemainingAmountMloki *uint64 `json:"remaining_amount_mloki,omitempty"`
+	NewWalletPubkey      string  `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken       string  `json:"new_wallet_token,omitempty"`
 }
 
 // --- list_recipients ---
@@ -126,6 +137,11 @@ type RecipientStatus struct {
 	AmountMloki   int64  `json:"amount_mloki"`
 	Claimed       bool   `json:"claimed"`
 	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
+	// RedeemFeeMloki/NetRedeemableMloki are this slice's cash_redeem quote —
+	// the worst-case (external) fee and net payout, see NIP-CASH.md §Listing
+	// Recipients.
+	RedeemFeeMloki     int64 `json:"redeem_fee_mloki"`
+	NetRedeemableMloki int64 `json:"net_redeemable_mloki"`
 }
 
 type ListRecipientsResult struct {

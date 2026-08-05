@@ -38,8 +38,8 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 		// Explicit, since this literal bypasses envconfig.Process's struct-tag
 		// defaults (0 means "no limit" for these two fields, so leaving them
 		// zero-value here would silently disable rate-limit tests).
-		JITWalletRateLimitPerHour:      10,
-		JITWalletClaimRateLimitPerHour: 20,
+		CashWalletRateLimitPerHour:      10,
+		CashWalletClaimRateLimitPerHour: 20,
 		CircleWalletRateLimitPerHour:   3,
 	}
 

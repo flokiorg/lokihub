@@ -8,7 +8,7 @@ import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
 
 // Shared avatar + name + NIP-05 + npub (with copy buttons) row for a single
 // Nostr identity — used by CircleIdentityCard (a circle_hub's own identity)
-// and ChildIdentityCard (a JIT/circle wallet child's resolved pubkey) so
+// and ChildIdentityCard (a Cash/circle wallet child's resolved pubkey) so
 // both render identically instead of drifting apart.
 export function NostrIdentityHeader({ pubkey }: { pubkey: string }) {
   const { profile, isLoading } = useNostrProfile(pubkey);

@@ -58,7 +58,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	// Anchored so it only matches the bare "/api/apps/:id" resource and not
 	// nested child routes like "/api/apps/:id/circle/allowlist" or
-	// "/api/apps/:id/jit-wallets" — those are matched by their own more
+	// "/api/apps/:id/cash-wallets" — those are matched by their own more
 	// specific regexes below. An unanchored match here would shadow those
 	// routes (e.g. a DELETE on a circle allowlist pubkey would delete the
 	// whole app instead).
@@ -287,14 +287,14 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: map[string][]api.CircleIdentitySummary{"identities": identities}, Error: ""}
 	}
 
-	// Anchored, and checked before jitWalletDeleteRegex below (that one is
+	// Anchored, and checked before cashWalletDeleteRegex below (that one is
 	// also strictly `$`-anchored so it can't accidentally shadow this longer
 	// path anyway, but ordering the more specific route first matches this
 	// file's existing convention).
-	jitWalletClaimDeleteRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/jit-wallets/([0-9]+)/claims/([0-9]+)$`,
+	cashWalletClaimDeleteRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/cash-wallets/([0-9]+)/claims/([0-9]+)$`,
 	)
-	if m := jitWalletClaimDeleteRegex.FindStringSubmatch(route); len(m) == 4 && method == "DELETE" {
+	if m := cashWalletClaimDeleteRegex.FindStringSubmatch(route); len(m) == 4 && method == "DELETE" {
 		hubId, err := strconv.ParseUint(m[1], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
@@ -307,16 +307,16 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		if err := app.api.DeleteJITWalletClaim(uint(hubId), uint(walletId), uint(claimId)); err != nil {
+		if err := app.api.DeleteCashClaim(uint(hubId), uint(walletId), uint(claimId)); err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
-	jitWalletDeleteRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/jit-wallets/([0-9]+)$`,
+	cashWalletDeleteRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/cash-wallets/([0-9]+)$`,
 	)
-	if m := jitWalletDeleteRegex.FindStringSubmatch(route); len(m) == 3 && method == "DELETE" {
+	if m := cashWalletDeleteRegex.FindStringSubmatch(route); len(m) == 3 && method == "DELETE" {
 		hubId, err := strconv.ParseUint(m[1], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
@@ -325,16 +325,16 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		if err := app.api.DeleteJITWallet(uint(hubId), uint(walletId)); err != nil {
+		if err := app.api.DeleteCashWallet(uint(hubId), uint(walletId)); err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
-	jitWalletsRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/jit-wallets(?:\?.*)?$`,
+	cashWalletsRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/cash-wallets(?:\?.*)?$`,
 	)
-	if m := jitWalletsRegex.FindStringSubmatch(route); len(m) == 2 {
+	if m := cashWalletsRegex.FindStringSubmatch(route); len(m) == 2 {
 		appId, err := strconv.ParseUint(m[1], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
@@ -360,17 +360,17 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 				}
 			}
 
-			claims, totalCount, counts, err := app.api.ListJITWalletClaims(uint(appId), limit, offset, status)
+			claims, totalCount, counts, err := app.api.ListCashWalletClaims(uint(appId), limit, offset, status)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			return WailsRequestRouterResponse{Body: api.ListJITWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts}, Error: ""}
+			return WailsRequestRouterResponse{Body: api.ListCashWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts}, Error: ""}
 		case "POST":
-			req := &api.CreateJITWalletRequest{}
+			req := &api.CreateCashWalletRequest{}
 			if err := json.Unmarshal([]byte(body), req); err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			result, err := app.api.CreateJITWallet(uint(appId), req)
+			result, err := app.api.CreateCashWallet(uint(appId), req)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -378,35 +378,35 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 	}
 
-	jitConnectionRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/jit-connection$`,
+	cashConnectionRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/cash-connection$`,
 	)
-	if m := jitConnectionRegex.FindStringSubmatch(route); len(m) == 2 {
+	if m := cashConnectionRegex.FindStringSubmatch(route); len(m) == 2 {
 		appId, err := strconv.ParseUint(m[1], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		connection, err := app.api.GetJITWalletConnection(uint(appId))
+		connection, err := app.api.GetCashWalletConnection(uint(appId))
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: connection, Error: ""}
 	}
 
-	jitWalletRecipientsRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/jit-wallet-recipients$`,
+	cashWalletRecipientsRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/cash-wallet-recipients$`,
 	)
-	if m := jitWalletRecipientsRegex.FindStringSubmatch(route); len(m) == 2 {
+	if m := cashWalletRecipientsRegex.FindStringSubmatch(route); len(m) == 2 {
 		appId, err := strconv.ParseUint(m[1], 10, 64)
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
-		recipients, err := app.api.GetJITWalletRecipients(uint(appId))
+		recipients, err := app.api.GetCashWalletRecipients(uint(appId))
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{
-			Body: api.ListJITWalletClaimsResponse{
+			Body: api.ListCashWalletClaimsResponse{
 				Claims:     recipients,
 				TotalCount: uint64(len(recipients)),
 			},

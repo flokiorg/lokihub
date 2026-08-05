@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "هویت Nostr",
     "connectionKey": "هویت وب",
-    "bearer": "نقد"
+    "bearer": "حامل"
   },
   "avatarStack": {
     "more": "+{{count}} نفر دیگر"
@@ -77,12 +77,12 @@
     "unclaimed": "بازخرید‌نشده"
   },
   "claimDeadline": {
-    "expired": "مهلت دریافت به پایان رسیده است",
-    "withinMinutes_one": "دریافت ظرف {{count}} دقیقه",
-    "withinMinutes_other": "دریافت ظرف {{count}} دقیقه",
-    "withinHours": "دریافت ظرف {{count}} ساعت",
-    "byDate": "دریافت تا {{date}}",
-    "none": "بدون مهلت دریافت"
+    "expired": "مهلت بازخرید به پایان رسیده است",
+    "withinMinutes_one": "بازخرید ظرف {{count}} دقیقه",
+    "withinMinutes_other": "بازخرید ظرف {{count}} دقیقه",
+    "withinHours": "بازخرید ظرف {{count}} ساعت",
+    "byDate": "بازخرید تا {{date}}",
+    "none": "بدون مهلت بازخرید"
   },
   "circleCard": {
     "member_one": "{{count}} عضو",
@@ -90,8 +90,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "کیف‌پول حلقه",
-    "jitWallet": "توکن Lokicash",
-    "claimedCount": "{{claimed}}/{{total}} دریافت شده",
+    "cashWallet": "کیف‌پول نقدی",
+    "claimedCount": "{{claimed}}/{{total}} بازخرید شده",
     "errors": {
       "loadRecipients": "بارگذاری دریافت‌کنندگان کیف‌پول JIT ناموفق بود"
     }
@@ -155,7 +155,7 @@
       "removeSelected": "حذف کیف‌پول‌های حلقه انتخاب‌شده ناموفق بود"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} روز",
     "durationDays_other": "{{count}} روز",
     "durationHours_one": "{{count}} ساعت",
@@ -167,6 +167,10 @@
     "connectionKeyLabel": "کلید اتصال (هگزادسیمال)",
     "iaPubkeyLabel": "کلید عمومی مرجع هویت (هگزادسیمال)",
     "iaPubkeyHelper": "باید یک مرجع هویت مورد اعتماد باشد (تنظیمات ← مراجع هویت)",
+    "selectIAPlaceholder": "یک مرجع هویت انتخاب کنید",
+    "savedIAsLabel": "ثبت‌شده در تنظیمات",
+    "enterIAManually": "کلید عمومی را به‌صورت دستی وارد کنید",
+    "chooseSavedIAInstead": "در عوض از تنظیمات انتخاب کنید",
     "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری استفاده می‌شود.",
     "walletBudgetLabel": "مبلغ",
     "requestedSummary": "{{total}} loki درخواست شد",
@@ -212,8 +216,8 @@
       "removeWallet": "حذف Lokicash ناموفق بود",
       "removeSelected": "حذف دریافت‌کنندگان انتخاب‌شده ناموفق بود"
     },
-    "bearerHelper": "هر کس رمز را داشته باشد می‌تواند آن را بازخرید کند — فقط یک‌بار، بلافاصله پس از ایجاد، نمایش داده می‌شود.",
-    "bearerRequiresSoleRecipient": "نقد باید تنها گیرنده باشد",
+    "bearerHelper": "حامل: هر کس رمز را داشته باشد می‌تواند آن را بازخرید کند — هیچ بررسی هویتی وجود ندارد و در صورت گم شدن یا دزدیده شدن، امکان بازیابی نیست.",
+    "bearerRequiresSoleRecipient": "حامل باید تنها گیرنده باشد",
     "pubkeyModeHelper": "فقط این هویت Nostr می‌تواند آن را بازخرید کند.",
     "connectionKeyModeHelper": "فقط یک هویت تأییدشده می‌تواند آن را بازخرید کند.",
     "copyLokicash": "کپی Lokicash",
@@ -257,7 +261,7 @@
       "create": "ایجاد هاب کیف‌پول حلقه ناموفق بود"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "هاب کیف‌پول JIT جدید",
     "description": "یک هاب از پیش تأمین‌مالی‌شده ایجاد کنید که کیف‌پول‌های JIT مخصوص خرج کردن را برای ذی‌نفعان صادر می‌کند",
     "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر کیف‌پول JIT صادرشده از این هاب تخصیص داد",
@@ -291,7 +295,7 @@
       "delete": "حذف حلقه ناموفق بود"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "آیا مطمئن هستید که می‌خواهید این هاب کیف‌پول JIT را حذف کنید؟",
     "checking": "در حال بررسی کیف‌پول‌های JIT صادرشده…",
     "hasOutstanding_one": "این هاب هنوز {{count}} سهم دریافت‌کننده معلق در کیف‌پول‌های JIT صادرشده خود دارد. پیش از حذف هاب، آن را از فهرست کیف‌پول‌های JIT در پایین حذف کنید (یا منتظر انقضای آن بمانید).",

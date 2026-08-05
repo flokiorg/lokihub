@@ -1,14 +1,14 @@
 //go:build integration
 
 // expiration_test.go exercises what actually happens once a real wallet's
-// own expiry lapses - both for a circle_wallet/jit_wallet child (jit_wallet's
+// own expiry lapses - both for a circle_wallet/cash_wallet child (cash_wallet's
 // own claim-time expiry is additionally covered end to end by
-// claim_funds_test.go's WalletExpired_ClaimRejected) and for a hub's own
+// cash_redeem_test.go's WalletExpired_ClaimRejected) and for a hub's own
 // parent-level permission, answering two questions the rest of the suite
 // doesn't: (1) is expiry enforced uniformly across every method on a child,
 // or only some of them, and (2) does a hub's own expiry cascade to wallets
 // it already minted, or is each child's validity fully independent once
-// created. Both questions are answered identically for jit_hub and
+// created. Both questions are answered identically for cash_hub and
 // circle_hub, since both go through the exact same generic
 // AppPermission-based expiry check (nip47/permissions/permissions.go) - this
 // file exercises both hub types to prove that's actually true, not just
@@ -25,14 +25,14 @@ import (
 	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
-// shortLivedExpirySecs mirrors claim_funds_test.go's WalletExpired_ClaimRejected:
+// shortLivedExpirySecs mirrors cash_redeem_test.go's WalletExpired_ClaimRejected:
 // short enough to expire mid-test, long enough that the create/connect setup
 // above it can't itself race past it.
 const shortLivedExpirySecs = 2
 
 // waitPastExpiry sleeps past a shortLivedExpirySecs wallet's own expiry -
-// same margin claim_funds_test.go uses, well before the 5-minute background
-// cleanup ticker (service/jit_cleanup_service.go) would ever sweep it, so
+// same margin cash_redeem_test.go uses, well before the 5-minute background
+// cleanup ticker (service/cash_cleanup_service.go) would ever sweep it, so
 // this is genuinely exercising the live permission check, not racing
 // deletion.
 func waitPastExpiry() { time.Sleep(3 * time.Second) }
@@ -121,33 +121,33 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 	})
 }
 
-// TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking asks
-// the "parent" half of the same question: once a jit_hub's OWN permission
-// (the "jit_hub" scope letting it call create_jit_wallet) expires, does that
+// TestCashHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking asks
+// the "parent" half of the same question: once a cash_hub's OWN permission
+// (the "cash_hub" scope letting it call mint_cash) expires, does that
 // cascade to wallets it already minted, or is each child independent? Every
 // AppPermission row (nip47/permissions/permissions.go's HasPermission) is
 // keyed and expiry-checked purely by its own app id - there is no join back
 // to a parent app anywhere in that check - so the prediction going in is
-// independence: the hub's own create_jit_wallet call should start failing,
+// independence: the hub's own mint_cash call should start failing,
 // while a child it minted before that point keeps working for the rest of
 // its own, separately-tracked expiry.
-func TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *testing.T) {
+func TestCashHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *testing.T) {
 	cfg := requireConfig(t)
 
 	hubExpiresAt := time.Now().Add(shortLivedExpirySecs * time.Second)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "jit-parent-expiry-hub", &hubExpiresAt)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "cash-parent-expiry-hub", &hubExpiresAt)
 	hubClient := mustConnect(t, hub.Connection)
 
 	// Minted BEFORE the hub's own expiry, with its own much-longer expiry -
 	// isolates "does the parent's expiry cascade" from "did the child's own
-	// expiry also just happen to lapse". createEphemeralJITHub's own
+	// expiry also just happen to lapse". createEphemeralCashHub's own
 	// t.Cleanup sweeps every child this hub ever mints, so no extra cleanup
 	// is needed here even though the claim below fully drains it.
 	const childAmountMloki = 5000
 	beneficiaryPriv := newTestPrivkey(t)
 	beneficiaryPub := mustPubkey(t, beneficiaryPriv)
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: onePubkeyRecipient(beneficiaryPub, childAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
@@ -155,9 +155,9 @@ func TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *tes
 
 	waitPastExpiry()
 
-	t.Run("Hub_CreateJITWallet_RejectedOnceHubExpired", func(t *testing.T) {
-		var result CreateJITWalletResult
-		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+	t.Run("Hub_MintCash_RejectedOnceHubExpired", func(t *testing.T) {
+		var result MintCashResult
+		err := hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(mustPubkey(t, newTestPrivkey(t)), childAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &result)
@@ -168,7 +168,7 @@ func TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *tes
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, childAmountMloki, "integration parent-expiry test (child survives)")
 		proof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var result ClaimFundsResult
-		err := child.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+		err := child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       invoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: beneficiaryPub,
@@ -180,9 +180,9 @@ func TestJITHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *tes
 }
 
 // TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking is
-// TestJITHub_ParentExpiry_...'s circle_hub mirror - both hub kinds share the
+// TestCashHub_ParentExpiry_...'s circle_hub mirror - both hub kinds share the
 // exact same generic AppPermission-based expiry check, so this proves the
-// independence finding isn't specific to jit_hub's own request path.
+// independence finding isn't specific to cash_hub's own request path.
 func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *testing.T) {
 	cfg := requireConfig(t)
 

@@ -74,8 +74,10 @@
     "sign_message": "Sign messages",
     "notifications": "Receive wallet notifications",
     "superuser": "Create other app connections",
-    "jit_hub": "Issue JIT Wallets",
-    "circle_wallet": "Issue Circle Wallets"
+    "cash_hub": "Issue Cash Wallets",
+    "circle_wallet": "Issue Circle Wallets",
+    "cash_redeem": "Redeem funds",
+    "cash_transfer": "Transfer or split ownership"
   },
   "disconnectApp": {
     "cancel": "Cancel"
@@ -126,8 +128,8 @@
     "budgetRenewal": "Budget renewal"
   },
   "isolatedKind": {
-    "jit_hub": "JIT Wallets",
-    "jit_wallet": "JIT Wallet",
+    "cash_hub": "Cash Wallets",
+    "cash_wallet": "Cash Wallet",
     "circle_hub": "Circle Wallets",
     "circle_wallet": "Circle Wallet",
     "subwallet": "Sub-wallet",
@@ -137,13 +139,13 @@
     "permissionsManagedNote": "Permissions for this connection are managed automatically and can't be changed here.",
     "budgetManagedNote": "This connection's requested permissions are managed automatically, but its budget and expiry can still be changed below.",
     "hubSettingsTitle": "Hub Settings",
-    "jitHubSettingsDescription": "Changes only apply to Lokicash issued from now on and won't affect ones already issued.",
+    "cashHubSettingsDescription": "Changes only apply to Cash Wallets issued from now on and won't affect ones already issued.",
     "circleHubSettingsDescription": "Changes only apply to circle wallets created from now on and won't affect wallets already created.",
     "maxWalletBudgetLabel": "Max Wallet Budget",
-    "jitMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Lokicash issued from this hub (default: 1,000 loki)",
+    "cashMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash Wallet issued from this hub (default: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet (default: 1,000 loki)",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
-    "jitMaxExpiryHelper": "Maximum lifetime for issued Lokicash (default: 1 day)",
+    "cashMaxExpiryHelper": "Maximum lifetime for issued Cash Wallets (default: 1 day)",
     "circleMaxExpiryHelper": "Maximum lifetime for issued circle wallets (default: 30 days)",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget (default: monthly)",
@@ -152,8 +154,8 @@
     "allowlistTitle": "Allowlist",
     "addMember": "Add member",
     "circleWalletsTitle": "Circle Wallets",
-    "jitWalletsTitle": "Lokicash Tokens",
-    "addJitWallet": "Mint Lokicash"
+    "cashWalletsTitle": "Cash Wallets",
+    "addCashWallet": "Mint Lokicash"
   },
   "newApp": {
     "title": "Connect a New App",
@@ -188,11 +190,11 @@
     "confirmNewConnection": "Confirm New Connection",
     "lokiGoPermission": "Loki Go will be given permission to create other app connections which can spend your balance.",
     "warningLokiGo": "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.",
-    "warningJitHub": "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.",
+    "warningCashHub": "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.",
     "enterUnlockPassword": "Please enter your unlock password to continue.",
     "unlockPassword": "Unlock Password",
     "specifyWalletPermissions": "Please specify wallet permissions.",
-    "specifyJitHubLimits": "Please specify JIT wallet budget and expiry limits.",
+    "specifyCashHubLimits": "Please specify Cash wallet budget and expiry limits.",
     "appCreated": "App created",
     "failedToCreate": "Failed to create app",
     "configure": "Configure",
@@ -222,6 +224,10 @@
     "copySecret": "Copy Connection Secret",
     "copyLokicashToken": "Copy Lokicash Token",
     "copyBearerSecret": "Copy Bearer Secret",
-    "bearerSecretHelper": "Anyone with this secret can redeem these funds — no other proof needed. Shown once; share it with the recipient, out of band."
+    "bearerSecretHelper": "Anyone with this secret can redeem these funds — no other proof needed. Shown once; share it with the recipient, out of band.",
+    "amountLabel": "Amount",
+    "statusLabel": "Status",
+    "expiresLabel": "Expires",
+    "recipientsLabel": "Recipients"
   }
 }

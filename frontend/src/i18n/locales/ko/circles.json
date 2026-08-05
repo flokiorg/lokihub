@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr 아이덴티티",
     "connectionKey": "웹 아이덴티티",
-    "bearer": "현금"
+    "bearer": "베어러"
   },
   "avatarStack": {
     "more": "외 {{count}}명"
@@ -77,12 +77,12 @@
     "unclaimed": "미교환"
   },
   "claimDeadline": {
-    "expired": "수령 기한이 만료되었습니다",
-    "withinMinutes_one": "{{count}}분 이내 수령",
-    "withinMinutes_other": "{{count}}분 이내 수령",
-    "withinHours": "{{count}}시간 이내 수령",
-    "byDate": "{{date}}까지 수령",
-    "none": "수령 기한 없음"
+    "expired": "교환 기한이 만료되었습니다",
+    "withinMinutes_one": "{{count}}분 이내 교환",
+    "withinMinutes_other": "{{count}}분 이내 교환",
+    "withinHours": "{{count}}시간 이내 교환",
+    "byDate": "{{date}}까지 교환",
+    "none": "교환 기한 없음"
   },
   "circleCard": {
     "member_one": "멤버 {{count}}명",
@@ -90,8 +90,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "서클 지갑",
-    "jitWallet": "Lokicash 토큰",
-    "claimedCount": "{{claimed}}/{{total}} 수령됨",
+    "cashWallet": "캐시 지갑",
+    "claimedCount": "{{claimed}}/{{total}} 교환됨",
     "errors": {
       "loadRecipients": "JIT 지갑 수령인을 불러오지 못했습니다"
     }
@@ -155,7 +155,7 @@
       "removeSelected": "선택한 서클 지갑을 제거하지 못했습니다"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_one": "{{count}}일",
     "durationDays_other": "{{count}}일",
     "durationHours_one": "{{count}}시간",
@@ -167,6 +167,10 @@
     "connectionKeyLabel": "연결 키 (16진수)",
     "iaPubkeyLabel": "신원 인증 기관 공개 키 (16진수)",
     "iaPubkeyHelper": "신뢰할 수 있는 신원 인증 기관이어야 합니다 (설정 → 신원 인증 기관)",
+    "selectIAPlaceholder": "신원 인증 기관 선택",
+    "savedIAsLabel": "설정에 등록됨",
+    "enterIAManually": "공개 키를 직접 입력",
+    "chooseSavedIAInstead": "대신 설정에서 선택",
     "duplicateIdentity": "이 아이덴티티는 이미 다른 수령인이 사용 중입니다.",
     "walletBudgetLabel": "금액",
     "requestedSummary": "{{total}} loki 요청됨",
@@ -212,8 +216,8 @@
       "removeWallet": "Lokicash를 제거하지 못했습니다",
       "removeSelected": "선택한 수령인을 제거하지 못했습니다"
     },
-    "bearerHelper": "비밀 값을 가진 사람이 교환할 수 있습니다 — 생성 직후 단 한 번만 표시됩니다.",
-    "bearerRequiresSoleRecipient": "현금은 유일한 수신자여야 합니다",
+    "bearerHelper": "베어러: 비밀 값을 가진 사람은 누구나 교환할 수 있습니다 — 신원 확인이 없으며, 분실하거나 탈취당해도 복구할 수 없습니다.",
+    "bearerRequiresSoleRecipient": "베어러는 유일한 수신자여야 합니다",
     "pubkeyModeHelper": "이 Nostr 아이덴티티만 교환할 수 있습니다.",
     "connectionKeyModeHelper": "검증된 아이덴티티만 교환할 수 있습니다.",
     "copyLokicash": "Lokicash 복사",
@@ -257,7 +261,7 @@
       "create": "서클 지갑 허브를 생성하지 못했습니다"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "새 JIT 지갑 허브",
     "description": "수령인에게 지출 전용 JIT 지갑을 발급하는 사전 자금 지원 허브를 생성합니다",
     "maxWalletBudgetHelper": "이 허브에서 발급되는 각 JIT 지갑에 할당할 수 있는 최대 예산",
@@ -291,7 +295,7 @@
       "delete": "서클을 삭제하지 못했습니다"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "정말로 이 JIT 지갑 허브를 삭제하시겠습니까?",
     "checking": "발급된 JIT 지갑을 확인하는 중…",
     "hasOutstanding_one": "이 허브가 발급한 JIT 지갑에는 아직 {{count}}건의 수령인 몫이 남아 있습니다. 허브를 삭제하기 전에 아래 JIT 지갑 목록에서 제거하거나 만료될 때까지 기다리세요.",

@@ -244,12 +244,12 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
-	fullAccessApiGroup.GET("/apps/:id/jit-wallets", httpSvc.jitWalletClaimsListHandler)
-	fullAccessApiGroup.POST("/apps/:id/jit-wallets", httpSvc.jitWalletsCreateHandler)
-	fullAccessApiGroup.DELETE("/apps/:id/jit-wallets/:walletId", httpSvc.jitWalletDeleteHandler)
-	fullAccessApiGroup.DELETE("/apps/:id/jit-wallets/:walletId/claims/:claimId", httpSvc.jitWalletClaimDeleteHandler)
-	fullAccessApiGroup.GET("/apps/:id/jit-connection", httpSvc.jitWalletConnectionHandler)
-	fullAccessApiGroup.GET("/apps/:id/jit-wallet-recipients", httpSvc.jitWalletRecipientsHandler)
+	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
+	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
+	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId/claims/:claimId", httpSvc.cashWalletClaimDeleteHandler)
+	fullAccessApiGroup.GET("/apps/:id/cash-connection", httpSvc.cashWalletConnectionHandler)
+	fullAccessApiGroup.GET("/apps/:id/cash-wallet-recipients", httpSvc.cashWalletRecipientsHandler)
 	fullAccessApiGroup.GET("/identity-authorities", httpSvc.identityAuthoritiesListHandler)
 	fullAccessApiGroup.POST("/identity-authorities", httpSvc.identityAuthoritiesCreateHandler)
 	fullAccessApiGroup.DELETE("/identity-authorities/:pubkey", httpSvc.identityAuthoritiesDeleteHandler)
@@ -1209,10 +1209,10 @@ func (httpSvc *HttpService) appsDeleteHandler(c echo.Context) error {
 	}
 
 	if err := httpSvc.api.DeleteApp(dbApp); err != nil {
-		// apps.DeleteApp's own child-count guard (a jit_hub/circle_hub still
+		// apps.DeleteApp's own child-count guard (a cash_hub/circle_hub still
 		// has live children attached) returns a constants.ErrInvalidParams-
 		// wrapped, human-readable reason - surface it as a 400 like every
-		// other admin delete handler in this file (see mapJITAllocError/
+		// other admin delete handler in this file (see mapCashAllocError/
 		// mapCircleAllowlistError) instead of flattening every error into an
 		// opaque 500, which left a caller unable to tell "refused, fix your
 		// request" from "something broke server-side".
@@ -1873,7 +1873,7 @@ func (httpSvc *HttpService) estimateInvoiceFeeHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]uint64{"estimatedFeeMloki": fee})
 }
 
-// mapCircleAllowlistError mirrors mapJITAllocError's pattern: our own validation
+// mapCircleAllowlistError mirrors mapCashAllocError's pattern: our own validation
 // errors are human-readable and safe to surface as 400s, everything else is a 500.
 func mapCircleAllowlistError(err error) (int, string) {
 	if errors.Is(err, constants.ErrInvalidParams) {
@@ -2113,10 +2113,10 @@ func (httpSvc *HttpService) getAppByIDParam(c echo.Context, param string) (*loki
 	return dbApp, nil
 }
 
-// mapJITAllocError maps a JIT allocation/wallet/Identity-Authority service error
+// mapCashAllocError maps a Cash allocation/wallet/Identity-Authority service error
 // to an HTTP status code and a client-safe message. Raw DB/GORM details are
 // never forwarded to callers.
-func mapJITAllocError(err error) (int, string) {
+func mapCashAllocError(err error) (int, string) {
 	switch {
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
 		return http.StatusBadRequest, err.Error()
@@ -2138,17 +2138,17 @@ func mapJITAllocError(err error) (int, string) {
 	}
 }
 
-// jitWalletClaimsListHandler lists a hub's recipient slices — one row per
-// JITWalletClaim, across every jit_wallet child.
-func (httpSvc *HttpService) jitWalletClaimsListHandler(c echo.Context) error {
+// cashWalletClaimsListHandler lists a hub's recipient slices — one row per
+// CashWalletClaim, across every cash_wallet child.
+func (httpSvc *HttpService) cashWalletClaimsListHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
 	// Pre-flight kind check using the already-fetched app — avoids a wasted service call
 	// and keeps the error path symmetric with create/delete handlers.
-	if dbApp.Kind != lokidb.AppKindJITHub {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
 	}
 
 	limit := uint64(20)
@@ -2165,51 +2165,51 @@ func (httpSvc *HttpService) jitWalletClaimsListHandler(c echo.Context) error {
 	}
 	status := c.QueryParam("status")
 
-	claims, totalCount, counts, listErr := httpSvc.api.ListJITWalletClaims(dbApp.ID, limit, offset, status)
+	claims, totalCount, counts, listErr := httpSvc.api.ListCashWalletClaims(dbApp.ID, limit, offset, status)
 	if listErr != nil {
 		httpSvc.logger.Error().Err(listErr).Uint("hub_id", dbApp.ID).
-			Msg("Failed to list JIT wallet claims")
-		code, msg := mapJITAllocError(listErr)
+			Msg("Failed to list Cash wallet claims")
+		code, msg := mapCashAllocError(listErr)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
-	return c.JSON(http.StatusOK, api.ListJITWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts})
+	return c.JSON(http.StatusOK, api.ListCashWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts})
 }
 
-// jitWalletsCreateHandler creates, funds, and reveals a shared JIT wallet
+// cashWalletsCreateHandler creates, funds, and reveals a shared Cash wallet
 // serving every recipient in the request in one shot.
-func (httpSvc *HttpService) jitWalletsCreateHandler(c echo.Context) error {
+func (httpSvc *HttpService) cashWalletsCreateHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
-	if dbApp.Kind != lokidb.AppKindJITHub {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
 	}
-	var req api.CreateJITWalletRequest
+	var req api.CreateCashWalletRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest,
 			ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
 	}
-	result, createErr := httpSvc.api.CreateJITWallet(dbApp.ID, &req)
+	result, createErr := httpSvc.api.CreateCashWallet(dbApp.ID, &req)
 	if createErr != nil {
 		httpSvc.logger.Error().Err(createErr).Uint("hub_id", dbApp.ID).
-			Msg("Failed to create JIT wallet")
-		code, msg := mapJITAllocError(createErr)
+			Msg("Failed to create Cash wallet")
+		code, msg := mapCashAllocError(createErr)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusCreated, result)
 }
 
-// jitWalletClaimDeleteHandler removes a single unclaimed recipient slice,
+// cashWalletClaimDeleteHandler removes a single unclaimed recipient slice,
 // sweeping its amount back to the hub. To remove the whole wallet (every
-// slice), use jitWalletDeleteHandler instead.
-func (httpSvc *HttpService) jitWalletClaimDeleteHandler(c echo.Context) error {
+// slice), use cashWalletDeleteHandler instead.
+func (httpSvc *HttpService) cashWalletClaimDeleteHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
-	if dbApp.Kind != lokidb.AppKindJITHub {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
 	}
 	walletId, parseErr := strconv.ParseUint(c.Param("walletId"), 10, 64)
 	if parseErr != nil || walletId == 0 {
@@ -2219,78 +2219,78 @@ func (httpSvc *HttpService) jitWalletClaimDeleteHandler(c echo.Context) error {
 	if parseErr != nil || claimId == 0 {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid claim ID"})
 	}
-	if deleteErr := httpSvc.api.DeleteJITWalletClaim(dbApp.ID, uint(walletId), uint(claimId)); deleteErr != nil {
+	if deleteErr := httpSvc.api.DeleteCashClaim(dbApp.ID, uint(walletId), uint(claimId)); deleteErr != nil {
 		httpSvc.logger.Error().Err(deleteErr).
 			Uint("hub_id", dbApp.ID).Uint64("wallet_id", walletId).Uint64("claim_id", claimId).
-			Msg("Failed to delete JIT wallet claim")
-		code, msg := mapJITAllocError(deleteErr)
+			Msg("Failed to delete Cash wallet claim")
+		code, msg := mapCashAllocError(deleteErr)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-// jitWalletDeleteHandler removes a single jit_wallet child (every recipient
+// cashWalletDeleteHandler removes a single cash_wallet child (every recipient
 // slice it serves), in any claim state — reclaiming any remaining balance
 // back to the hub first. To remove just one recipient's unclaimed slice from
-// an otherwise-live shared wallet, use jitWalletClaimDeleteHandler instead.
-func (httpSvc *HttpService) jitWalletDeleteHandler(c echo.Context) error {
+// an otherwise-live shared wallet, use cashWalletClaimDeleteHandler instead.
+func (httpSvc *HttpService) cashWalletDeleteHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
-	if dbApp.Kind != lokidb.AppKindJITHub {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_hub"})
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
 	}
 	walletId, parseErr := strconv.ParseUint(c.Param("walletId"), 10, 64)
 	if parseErr != nil || walletId == 0 {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid wallet app ID"})
 	}
-	if deleteErr := httpSvc.api.DeleteJITWallet(dbApp.ID, uint(walletId)); deleteErr != nil {
+	if deleteErr := httpSvc.api.DeleteCashWallet(dbApp.ID, uint(walletId)); deleteErr != nil {
 		httpSvc.logger.Error().Err(deleteErr).
 			Uint("hub_id", dbApp.ID).Uint64("wallet_id", walletId).
-			Msg("Failed to delete JIT wallet")
-		code, msg := mapJITAllocError(deleteErr)
+			Msg("Failed to delete Cash wallet")
+		code, msg := mapCashAllocError(deleteErr)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (httpSvc *HttpService) jitWalletConnectionHandler(c echo.Context) error {
+func (httpSvc *HttpService) cashWalletConnectionHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
-	if dbApp.Kind != lokidb.AppKindJITWallet {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_wallet"})
+	if dbApp.Kind != lokidb.AppKindCashWallet {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_wallet"})
 	}
-	connection, connErr := httpSvc.api.GetJITWalletConnection(dbApp.ID)
+	connection, connErr := httpSvc.api.GetCashWalletConnection(dbApp.ID)
 	if connErr != nil {
 		httpSvc.logger.Error().Err(connErr).Uint("app_id", dbApp.ID).
-			Msg("Failed to derive JIT wallet connection")
+			Msg("Failed to derive Cash wallet connection")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "internal error"})
 	}
 	return c.JSON(http.StatusOK, connection)
 }
 
-// jitWalletRecipientsHandler lists a single jit_wallet's own recipient
-// slices — unlike jitWalletClaimsListHandler (paginated, scoped to a
-// jit_hub), this is scoped to the wallet's own app ID, for its own
+// cashWalletRecipientsHandler lists a single cash_wallet's own recipient
+// slices — unlike cashWalletClaimsListHandler (paginated, scoped to a
+// cash_hub), this is scoped to the wallet's own app ID, for its own
 // AppDetails page to show who it serves.
-func (httpSvc *HttpService) jitWalletRecipientsHandler(c echo.Context) error {
+func (httpSvc *HttpService) cashWalletRecipientsHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
-	if dbApp.Kind != lokidb.AppKindJITWallet {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a jit_wallet"})
+	if dbApp.Kind != lokidb.AppKindCashWallet {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_wallet"})
 	}
-	recipients, listErr := httpSvc.api.GetJITWalletRecipients(dbApp.ID)
+	recipients, listErr := httpSvc.api.GetCashWalletRecipients(dbApp.ID)
 	if listErr != nil {
 		httpSvc.logger.Error().Err(listErr).Uint("app_id", dbApp.ID).
-			Msg("Failed to list JIT wallet recipients")
+			Msg("Failed to list Cash wallet recipients")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "internal error"})
 	}
-	return c.JSON(http.StatusOK, api.ListJITWalletClaimsResponse{
+	return c.JSON(http.StatusOK, api.ListCashWalletClaimsResponse{
 		Claims:     recipients,
 		TotalCount: uint64(len(recipients)),
 	})
@@ -2314,7 +2314,7 @@ func (httpSvc *HttpService) identityAuthoritiesCreateHandler(c echo.Context) err
 	authority, err := httpSvc.api.AddIdentityAuthority(&req)
 	if err != nil {
 		httpSvc.logger.Error().Err(err).Msg("Failed to add identity authority")
-		code, msg := mapJITAllocError(err)
+		code, msg := mapCashAllocError(err)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusCreated, authority)
@@ -2325,7 +2325,7 @@ func (httpSvc *HttpService) identityAuthoritiesDeleteHandler(c echo.Context) err
 	if err := httpSvc.api.DeleteIdentityAuthority(pubkey); err != nil {
 		httpSvc.logger.Error().Err(err).Str("pubkey", pubkey).
 			Msg("Failed to delete identity authority")
-		code, msg := mapJITAllocError(err)
+		code, msg := mapCashAllocError(err)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.NoContent(http.StatusNoContent)

@@ -53,7 +53,7 @@ A plain run above always skips exactly 2 tests:
 `TestJITHubs/.../RateLimiting_EleventhCreateIsRateLimited` and
 `TestClaimFunds/.../RateLimiting_TwentyFirstClaimIsRateLimited`. That's not a
 suite limitation — it's because the dev stack's `.env` ships with
-`JIT_WALLET_RATE_LIMIT_PER_HOUR`/`JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR`/
+`CASH_WALLET_RATE_LIMIT_PER_HOUR`/`CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR`/
 `CIRCLE_WALLET_RATE_LIMIT_PER_HOUR` all set to `0` ("disabled", not "zero
 allowed" — see `rate_limiter.go`'s `Allow()`), so an operator can hammer
 `create_jit_wallet`/`claim_funds`/`create_circle_wallet` from the frontend

@@ -3,10 +3,10 @@
 // audit_dynamic_test.go holds NEW black-box scenarios written for the
 // 2026-07-28 dynamic-analysis security audit. They drive ONLY the real
 // NWC/HTTP surface (never Go internals), as a malicious or compromised holder
-// of a shared jit_wallet connection would, probing the jit_transfer / jit_redeem
+// of a shared cash_wallet connection would, probing the cash_transfer / cash_redeem
 // slice-accounting guards over real Nostr relay round-trips and real Lightning
 // self-payments. Everything here is intentionally adversarial and goes beyond
-// the happy-path coverage in jit_transfer_test.go / claim_funds_test.go.
+// the happy-path coverage in cash_transfer_test.go / cash_redeem_test.go.
 package integration
 
 import (
@@ -24,19 +24,19 @@ import (
 	"github.com/flokiorg/lokihub/nip47/cipher"
 )
 
-// oneBearerRecipient builds a single-bearer-recipient create_jit_wallet
+// oneBearerRecipient builds a single-bearer-recipient mint_cash
 // request. The Hub mints the bearer secret and returns it once in the create
 // response (over the Hub's own single-owner connection).
-func oneBearerRecipient(amountMloki uint64) []JITWalletRecipientParam {
-	return []JITWalletRecipientParam{{IdentityType: "bearer", AmountMloki: amountMloki}}
+func oneBearerRecipient(amountMloki uint64) []CashWalletRecipientParam {
+	return []CashWalletRecipientParam{{IdentityType: "bearer", AmountMloki: amountMloki}}
 }
 
-// createBearerWallet mints a fresh single-recipient bearer JIT wallet and
+// createBearerWallet mints a fresh single-recipient bearer Cash wallet and
 // returns its shared pairing URI plus the one-time bearer secret.
 func createBearerWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (pairingURI, walletPubkey, bearerSecret string) {
 	t.Helper()
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: oneBearerRecipient(amountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
@@ -58,40 +58,42 @@ func fireBarrier(a, b func()) {
 	wg.Wait()
 }
 
-// TestAudit_JITRedeemVsTransfer_PhantomTransfer races a real jit_redeem
-// against a real jit_transfer on the SAME bearer slice, over real relay
-// round-trips, until it observes the interleaving where BOTH return success —
-// then characterizes exactly what that means for the funds.
+// TestAudit_CashTransferVsRedeem_NeverBothSucceed races a real cash_redeem
+// against a real cash_transfer on the SAME bearer slice, over real relay
+// round-trips, and asserts exactly one of them ever wins.
 //
-// FINDING (atomicity violation): jit_transfer and jit_redeem can BOTH report
-// success for one slice. Root cause: ClaimJITWalletSlice's committing UPDATE
-// is guarded by "WHERE id = ? AND claimed_at IS NULL" only — it does NOT also
-// pin identity_value. So when a jit_transfer commits first (reassigning the
-// row's identity_value to the new owner, leaving claimed_at NULL and
-// incrementing transfer_count), a jit_redeem that read the row a moment
-// earlier still matches it on (id, claimed_at IS NULL) and marks it claimed,
-// paying the ORIGINAL caller — silently voiding the transfer the API just
-// told the new owner had succeeded.
+// REGRESSION GUARD for a fixed atomicity violation (fixed in e0d4559, see
+// data/docs/audits/consolidated-findings-2026-07-28.md "ClaimCashSlice's
+// commit didn't re-verify identity"): cash_transfer and cash_redeem used to be
+// able to BOTH report success for one slice. Root cause was
+// ClaimCashSlice's committing UPDATE being guarded by
+// "WHERE id = ? AND claimed_at IS NULL" only — it never re-checked
+// identity_type/identity_value. A cash_transfer that committed first
+// (reassigning the row's identity without touching claimed_at) let a racing
+// cash_redeem, which had read the row a moment earlier, still match on
+// (id, claimed_at IS NULL) and pay the ORIGINAL caller — silently voiding the
+// transfer the API had just told the new owner had succeeded.
 //
-// This test asserts the money-safety invariant that DOES still hold (at most
-// one real Lightning payout, no fund duplication) and hard-fails only if that
-// is ever violated; it records the serializability/phantom-success violation
-// as the finding.
+// This test previously asserted the OPPOSITE (that the race reproduced) as
+// the live characterization of that bug. Re-run against this branch on
+// 2026-07-29, it could no longer reproduce a single "both won" outcome across
+// 40 iterations — the fix holds under real network round-trips, not just in
+// the unit-level race test. It's inverted here into a permanent regression
+// guard: hard-fail immediately the moment both sides ever win again.
 //
 // Attacker model: the current holder A of a bearer slice "sells"/hands it to
-// buyer B via jit_transfer while concurrently firing jit_redeem to A's own
-// invoice. In the losing interleaving, B receives a "transfer succeeded,
-// amount=A" response for a slice A simultaneously drains — B's slice is
-// unredeemable yet the API confirmed the handoff.
-func TestAudit_JITRedeemVsTransfer_PhantomTransfer(t *testing.T) {
+// buyer B via cash_transfer while concurrently firing cash_redeem to A's own
+// invoice. If both won, B would receive a "transfer succeeded, amount=A"
+// response for a slice A simultaneously drained — B's slice unredeemable yet
+// the API confirming the handoff.
+func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "audit-redeem-vs-transfer", nil)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-redeem-vs-transfer", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
-	const maxIterations = 40
-	bothWonObserved := false
+	const iterations = 40
 
-	for i := 0; i < maxIterations && !bothWonObserved; i++ {
+	for i := 0; i < iterations; i++ {
 		pairingURI, _, secret1 := createBearerWallet(t, hubClient, happyPathAmountMloki)
 
 		// Two independent clients (each its own relay connection) so the two
@@ -104,19 +106,19 @@ func TestAudit_JITRedeemVsTransfer_PhantomTransfer(t *testing.T) {
 
 		var redeemErr, transferErr error
 		var redeemRes ClaimFundsResult
-		var transferRes JITTransferResult
+		var transferRes CashTransferResult
 
 		fireBarrier(
 			func() {
-				redeemErr = redeemClient.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+				redeemErr = redeemClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 					Invoice:      redeemInvoice.Invoice,
 					BearerSecret: secret1,
 				}, &redeemRes)
 			},
 			func() {
-				transferErr = transferClient.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+				transferErr = transferClient.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 					BearerSecret: secret1,
-					NewIdentity:  JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secret2Hash},
+					NewIdentity:  CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secret2Hash},
 				}, &transferRes)
 			},
 		)
@@ -127,45 +129,53 @@ func TestAudit_JITRedeemVsTransfer_PhantomTransfer(t *testing.T) {
 
 		require.True(t, redeemWon || transferWon,
 			"neither op succeeded on an unclaimed slice — unexpected (redeemErr=%v transferErr=%v)", redeemErr, transferErr)
+		require.False(t, redeemWon && transferWon,
+			"REGRESSION: cash_redeem AND cash_transfer both reported success for the same bearer slice "+
+				"(redeem preimage=%q, transfer new amount=%d) — the e0d4559 identity re-check fix has regressed",
+			redeemRes.Preimage, transferRes.AmountMloki)
 
-		if !(redeemWon && transferWon) {
-			continue // clean, serialized outcome this round — race not hit yet
+		// Whichever side lost must leave no redeemable path of its own:
+		if redeemWon {
+			// transfer lost — secret2 (the would-be new owner) must never have
+			// been registered, since the transfer never took effect.
+			probeInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit loser-probe-secret2")
+			var probeRes ClaimFundsResult
+			probeErr := redeemClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:      probeInvoice.Invoice,
+				BearerSecret: secret2Hex,
+			}, &probeRes)
+			require.Error(t, probeErr, "CRITICAL DOUBLE-SPEND: the losing transfer's target secret redeemed a slice already paid out")
+			requireNWCErrorCode(t, probeErr, constants.ERROR_NOT_FOUND)
+		} else {
+			// transfer won — the pre-transfer secret1 must never redeem again;
+			// only secret2 (the new registered identity) may.
+			probeInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit loser-probe-secret1")
+			var probeRes ClaimFundsResult
+			probeErr := redeemClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:      probeInvoice.Invoice,
+				BearerSecret: secret1,
+			}, &probeRes)
+			require.Error(t, probeErr, "CRITICAL DOUBLE-SPEND: the superseded pre-transfer secret redeemed a slice already transferred away")
+			requireNWCErrorCode(t, probeErr, constants.ERROR_NOT_FOUND)
+
+			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-probe-secret2")
+			var winRes ClaimFundsResult
+			require.NoError(t, redeemClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:      winInvoice.Invoice,
+				BearerSecret: secret2Hex,
+			}, &winRes), "the new owner's secret must be able to redeem the slice it was transferred")
+			require.NotEmpty(t, winRes.Preimage)
 		}
-
-		// ---- both succeeded: characterize the anomaly ----
-		bothWonObserved = true
-		t.Logf("ANOMALY: jit_redeem AND jit_transfer both reported success for the same slice")
-		require.NotEmpty(t, redeemRes.Preimage, "redeem reported success without a payout preimage")
-		require.EqualValues(t, happyPathAmountMloki, transferRes.AmountMloki,
-			"transfer reported success and echoed the full slice amount to the (now-defrauded) new owner")
-
-		// The money-safety invariant that MUST hold: the new bearer owner
-		// (secret2) must NOT also be able to redeem, or the slice would pay out
-		// TWICE (true fund duplication). Probe it.
-		probeInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit phantom-double-payout-probe")
-		var secondPayout ClaimFundsResult
-		secondErr := redeemClient.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
-			Invoice:      probeInvoice.Invoice,
-			BearerSecret: secret2Hex,
-		}, &secondPayout)
-		require.Error(t, secondErr,
-			"CRITICAL DOUBLE-SPEND: the phantom-transferred bearer secret ALSO redeemed — slice paid out twice")
-		requireNWCErrorCode(t, secondErr, constants.ERROR_NOT_FOUND)
-		t.Logf("characterized: phantom-success (transfer void, new owner cannot redeem) — funds paid once to the redeeming (original) caller; NOT a fund-duplicating double-spend")
 	}
-
-	require.True(t, bothWonObserved,
-		"the redeem/transfer race window was not observed in %d iterations this run; "+
-			"re-run to reproduce the phantom-success anomaly (it reproduced readily during the audit)", maxIterations)
 }
 
-// TestAudit_JITConcurrentTransfers_ExactlyOneWinner races two jit_transfer
+// TestAudit_CashConcurrentTransfers_ExactlyOneWinner races two cash_transfer
 // calls carrying the SAME current bearer secret but two DIFFERENT new bearer
 // commitments, over real relay round-trips. Only one may win; afterward only
 // the winning commitment's secret may redeem the slice — never both.
-func TestAudit_JITConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
+func TestAudit_CashConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "audit-concurrent-transfers", nil)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-concurrent-transfers", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	const iterations = 6
@@ -181,17 +191,17 @@ func TestAudit_JITConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 			var aErr, bErr error
 			fireBarrier(
 				func() {
-					var r JITTransferResult
-					aErr = clientA.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+					var r CashTransferResult
+					aErr = clientA.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 						BearerSecret: secret1,
-						NewIdentity:  JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: aHash},
+						NewIdentity:  CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: aHash},
 					}, &r)
 				},
 				func() {
-					var r JITTransferResult
-					bErr = clientB.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+					var r CashTransferResult
+					bErr = clientB.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 						BearerSecret: secret1,
-						NewIdentity:  JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bHash},
+						NewIdentity:  CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bHash},
 					}, &r)
 				},
 			)
@@ -210,7 +220,7 @@ func TestAudit_JITConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 			// Loser's secret must NOT redeem.
 			loseInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit loser-secret")
 			var loseRes ClaimFundsResult
-			err := clientA.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+			err := clientA.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 				Invoice:      loseInvoice.Invoice,
 				BearerSecret: loseHex,
 			}, &loseRes)
@@ -219,7 +229,7 @@ func TestAudit_JITConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 			// Winner's secret redeems exactly the full amount, once.
 			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-secret")
 			var winRes ClaimFundsResult
-			require.NoError(t, clientA.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+			require.NoError(t, clientA.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 				Invoice:      winInvoice.Invoice,
 				BearerSecret: winHex,
 			}, &winRes))
@@ -228,13 +238,13 @@ func TestAudit_JITConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 	}
 }
 
-// TestAudit_JITTransferBearerTarget_Boundaries exercises adversarial /
-// boundary new_identity payloads against the live jit_transfer handler,
+// TestAudit_CashTransferBearerTarget_Boundaries exercises adversarial /
+// boundary new_identity payloads against the live cash_transfer handler,
 // confirming the shared-connection secret-leak guards (last commit's fix)
 // and shape validation actually reject at the wire, not just in unit tests.
-func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
+func TestAudit_CashTransferBearerTarget_Boundaries(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "audit-transfer-boundaries", nil)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-transfer-boundaries", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	// helper: build a fresh pubkey-identity slice we can drive a transfer from
@@ -243,8 +253,8 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 		var err error
 		curPub, err = nostr.GetPublicKey(curPriv)
 		require.NoError(t, err)
-		var created CreateJITWalletResult
-		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+		var created MintCashResult
+		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(curPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
@@ -255,13 +265,13 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 		shared, curPriv, curPub, walletPubkey := newPubkeySlice(t)
 		// Proof bound to a bearer target with EMPTY value (what a client asking
 		// the server to mint a secret would send).
-		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", "", nil, time.Now())
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", "", "", happyPathAmountMloki, nil, time.Now())
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer"}, // no identity_value
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer"}, // no identity_value
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 		require.Empty(t, res.IdentityValue, "server must never mint/return a bearer secret over the shared connection")
@@ -270,13 +280,13 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerTarget_ShortCommitment_Rejected", func(t *testing.T) {
 		shared, curPriv, curPub, walletPubkey := newPubkeySlice(t)
 		badHash := strings.Repeat("ab", 31) // 62 hex chars = 31 bytes, not 32
-		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", badHash, nil, time.Now())
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", badHash, "", happyPathAmountMloki, nil, time.Now())
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: badHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: badHash},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -284,13 +294,13 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerTarget_NonHexCommitment_Rejected", func(t *testing.T) {
 		shared, curPriv, curPub, walletPubkey := newPubkeySlice(t)
 		badHash := strings.Repeat("zz", 32) // 64 chars but not hex
-		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", badHash, nil, time.Now())
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", badHash, "", happyPathAmountMloki, nil, time.Now())
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: badHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: badHash},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -298,26 +308,26 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerTarget_WithIAPubkey_Rejected", func(t *testing.T) {
 		shared, curPriv, curPub, walletPubkey := newPubkeySlice(t)
 		_, secretHash := bearerSecretAndHash(t)
-		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", secretHash, nil, time.Now())
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "bearer", secretHash, "", happyPathAmountMloki, nil, time.Now())
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash, IAPubkey: curPub},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash, IAPubkey: curPub},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 
 	t.Run("UnknownNewIdentityType_Rejected", func(t *testing.T) {
 		shared, curPriv, curPub, walletPubkey := newPubkeySlice(t)
-		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "totally_bogus", "x", nil, time.Now())
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		proof := buildTransferProofEvent(t, curPriv, walletPubkey, "totally_bogus", "x", "", happyPathAmountMloki, nil, time.Now())
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "totally_bogus", IdentityValue: "x"},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "totally_bogus", IdentityValue: "x"},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -325,12 +335,12 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerSecret_MixedWithIdentityFields_Rejected", func(t *testing.T) {
 		shared, _, curPub, _ := newPubkeySlice(t)
 		secretHex, secretHash := bearerSecretAndHash(t)
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			BearerSecret:  secretHex,
 			IdentityType:  "pubkey", // illegal alongside bearer_secret
 			IdentityValue: curPub,
-			NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -338,10 +348,10 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerSecret_NonHex_Rejected", func(t *testing.T) {
 		shared, _, _, _ := newPubkeySlice(t)
 		_, secretHash := bearerSecretAndHash(t)
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			BearerSecret: "nothexatall!!",
-			NewIdentity:  JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -349,16 +359,16 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 	t.Run("BearerSecret_WrongSecret_NotFound", func(t *testing.T) {
 		shared, _, _, _ := newPubkeySlice(t)
 		wrongHex, targetHash := bearerSecretAndHash(t) // random, unrelated secret
-		var res JITTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+		var res CashTransferResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			BearerSecret: wrongHex,
-			NewIdentity:  JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: targetHash},
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: targetHash},
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 	})
 }
 
-// TestAudit_JITTransferIntoBearer_SpinsOffOnSharedWallet confirms the
+// TestAudit_CashTransferIntoBearer_SpinsOffOnSharedWallet confirms the
 // "a bearer slice cannot share a wallet with other recipients" rule now holds
 // via spin-off rather than outright rejection at the wire: on a two-recipient
 // wallet, transferring one recipient's slice INTO a bearer identity moves that
@@ -366,12 +376,12 @@ func TestAudit_JITTransferBearerTarget_Boundaries(t *testing.T) {
 // off into a dedicated wallet") instead of converting it in place — a bearer
 // slice never ends up sitting anonymously next to a still-identified sibling,
 // but the recipient isn't stuck either. Full inner-encryption-exclusivity
-// coverage lives in jit_transfer_spinoff_test.go; this only re-confirms the
+// coverage lives in cash_transfer_spinoff_test.go; this only re-confirms the
 // wire-level outcome changed from a flat rejection to a real, redeemable new
 // connection, since this test used to assert the opposite.
-func TestAudit_JITTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
+func TestAudit_CashTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralJITHub(t, cfg, "audit-into-bearer-shared", nil)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-into-bearer-shared", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	aPriv := newTestPrivkey(t)
@@ -380,9 +390,9 @@ func TestAudit_JITTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
 	bPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 	require.NoError(t, err)
 
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-		Recipients: []JITWalletRecipientParam{
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+		Recipients: []CashWalletRecipientParam{
 			{IdentityType: "pubkey", IdentityValue: aPub, AmountMloki: happyPathAmountMloki},
 			{IdentityType: "pubkey", IdentityValue: bPub, AmountMloki: happyPathAmountMloki},
 		},
@@ -391,13 +401,13 @@ func TestAudit_JITTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
 	shared := mustConnect(t, created.PairingURI)
 
 	secretHex, secretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, aPriv, created.WalletPubkey, "bearer", secretHash, nil, time.Now())
-	var res JITTransferResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodJITTransfer, JITTransferParams{
+	proof := buildTransferProofEvent(t, aPriv, created.WalletPubkey, "bearer", secretHash, "", happyPathAmountMloki, nil, time.Now())
+	var res CashTransferResult
+	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 		IdentityType:  "pubkey",
 		IdentityValue: aPub,
 		IdentityEvent: eventJSON(t, proof),
-		NewIdentity:   JITTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
+		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: secretHash},
 	}, &res))
 	require.NotEmpty(t, res.NewWalletPubkey, "a bearer target on a shared wallet must spin off into a new wallet, not reject")
 	require.NotEmpty(t, res.NewWalletToken)
@@ -412,7 +422,7 @@ func TestAudit_JITTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
 	newWalletClient := mustConnect(t, nwcURIFromLokicash(newWalletToken))
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit spinoff redeem")
 	var claim ClaimFundsResult
-	require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodJITRedeem, ClaimFundsParams{
+	require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 		Invoice:      invoice.Invoice,
 		BearerSecret: secretHex,
 	}, &claim))

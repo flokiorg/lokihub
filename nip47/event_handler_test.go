@@ -657,13 +657,13 @@ func doTestHandleResponse_EncryptionTagDoesNotMatchPayload(t *testing.T, svc *te
 	assert.Contains(t, unmarshalledResponse.Error.Message, "failed to decrypt:")
 }
 
-// TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList
-// verifies the jit_wallet-specific carve-out from the system-wide
+// TestHandleEvent_CashWallet_GetBudget_Rejected_DespiteAlwaysGrantedList
+// verifies the cash_wallet-specific carve-out from the system-wide
 // always-granted method list: get_budget would otherwise reveal a shared
 // wallet's total funded amount (across every recipient) to anyone holding
 // the connection, with no proof required — this must be blocked even though
 // get_budget is unconditionally allowed for every other app kind.
-func TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList(t *testing.T) {
+func TestHandleEvent_CashWallet_GetBudget_Rejected_DespiteAlwaysGrantedList(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -675,9 +675,9 @@ func TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList(t *te
 	require.NoError(t, err)
 
 	app, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, nil, "", nil,
+		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, nil, "", nil,
 	)
 	require.NoError(t, err)
 
@@ -689,11 +689,11 @@ func TestHandleEvent_JITWallet_GetBudget_Rejected_DespiteAlwaysGrantedList(t *te
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
 }
 
-// TestHandleEvent_JITWallet_GetInfo_StillAllowed proves the carve-out is
+// TestHandleEvent_CashWallet_GetInfo_StillAllowed proves the carve-out is
 // correctly scoped: get_info (harmless capability/introspection metadata,
 // needed for standard NWC client handshake compatibility) must keep working
-// for a jit_wallet even though get_budget doesn't.
-func TestHandleEvent_JITWallet_GetInfo_StillAllowed(t *testing.T) {
+// for a cash_wallet even though get_budget doesn't.
+func TestHandleEvent_CashWallet_GetInfo_StillAllowed(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -705,9 +705,9 @@ func TestHandleEvent_JITWallet_GetInfo_StillAllowed(t *testing.T) {
 	require.NoError(t, err)
 
 	app, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, nil, "", nil,
+		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, nil, "", nil,
 	)
 	require.NoError(t, err)
 
@@ -719,10 +719,10 @@ func TestHandleEvent_JITWallet_GetInfo_StillAllowed(t *testing.T) {
 	assert.Equal(t, models.GET_INFO_METHOD, response.ResultType)
 }
 
-// TestHandleEvent_NonJITWallet_GetBudget_StillAllowed confirms the carve-out
-// is specific to AppKindJITWallet and doesn't regress get_budget for any
+// TestHandleEvent_NonCashWallet_GetBudget_StillAllowed confirms the carve-out
+// is specific to AppKindCashWallet and doesn't regress get_budget for any
 // other app kind.
-func TestHandleEvent_NonJITWallet_GetBudget_StillAllowed(t *testing.T) {
+func TestHandleEvent_NonCashWallet_GetBudget_StillAllowed(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -744,13 +744,13 @@ func TestHandleEvent_NonJITWallet_GetBudget_StillAllowed(t *testing.T) {
 	assert.Equal(t, models.GET_BUDGET_METHOD, response.ResultType)
 }
 
-// TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired verifies
-// that a jit_wallet's own ExpiresAt is enforced for claim_funds. Unlike
-// get_budget, claim_funds is not on the always-granted list, so it goes
+// TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired verifies
+// that a cash_wallet's own ExpiresAt is enforced for cash_redeem. Unlike
+// get_budget, cash_redeem is not on the always-granted list, so it goes
 // through the normal HasPermission(app, scope) path in HandleEvent — this
-// confirms that path's ExpiresAt check actually fires for a jit_wallet's
+// confirms that path's ExpiresAt check actually fires for a cash_wallet's
 // shared connection, before any claim proof is ever parsed.
-func TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T) {
+func TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -763,24 +763,24 @@ func TestHandleEvent_JITWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T
 
 	expiresAt := time.Now().Add(-time.Hour)
 	app, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, nil, "", nil,
+		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, nil, "", nil,
 	)
 	require.NoError(t, err)
 
 	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
 	require.NoError(t, err)
 
-	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodJITRedeem)
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodCashRedeem)
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
 }
 
-// TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired covers
-// the read-only sibling method under the same jit_claim_funds scope —
+// TestHandleEvent_CashWallet_ListRecipients_RejectedWhenWalletExpired covers
+// the read-only sibling method under the same cash_redeem scope —
 // expiry must block roster visibility too, not just the payout call.
-func TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired(t *testing.T) {
+func TestHandleEvent_CashWallet_ListRecipients_RejectedWhenWalletExpired(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -793,9 +793,9 @@ func TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired(t *testi
 
 	expiresAt := time.Now().Add(-time.Hour)
 	app, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, nil, "", nil,
+		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, nil, "", nil,
 	)
 	require.NoError(t, err)
 
@@ -807,16 +807,16 @@ func TestHandleEvent_JITWallet_ListRecipients_RejectedWhenWalletExpired(t *testi
 	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
 }
 
-// TestHandleEvent_JITWallet_CreateConnection_Rejected is a privilege-
+// TestHandleEvent_CashWallet_CreateConnection_Rejected is a privilege-
 // escalation probe: create_connection requires SUPERUSER_SCOPE, which a
-// jit_wallet is never granted (only jit_claim_funds + get_balance, see
-// jitwallet/create.go). If this method were ever reachable from a jit_wallet's
+// cash_wallet is never granted (only cash_redeem + get_balance, see
+// cashwallet/create.go). If this method were ever reachable from a cash_wallet's
 // shared connection, holding it would be enough to mint a brand new,
 // unrestricted sibling connection and drain the parent hub — this confirms
 // the generic scope gate actually blocks it, the same way it blocks every
 // other ungranted method, as a regression guard specifically for the
 // highest-value method to leave open by accident.
-func TestHandleEvent_JITWallet_CreateConnection_Rejected(t *testing.T) {
+func TestHandleEvent_CashWallet_CreateConnection_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -828,9 +828,9 @@ func TestHandleEvent_JITWallet_CreateConnection_Rejected(t *testing.T) {
 	require.NoError(t, err)
 
 	app, _, err := svc.AppsService.CreateApp(
-		"jit-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, nil, "", nil,
+		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, nil, "", nil,
 	)
 	require.NoError(t, err)
 

@@ -1,12 +1,12 @@
 //go:build integration
 
 // circle_fee_skim_test.go exercises a circle_hub's FeesPpm forwarding fee
-// against a real, already-running instance. It mints its own ephemeral JIT
+// against a real, already-running instance. It mints its own ephemeral Cash
 // hub + circle hub (the latter with a deliberately nonzero FeesPpm - see
 // feeSkimTestFeesPpm) purely as a funding source for the circle side — the
-// JIT hub itself isn't the thing under test — because a circle_wallet
+// Cash hub itself isn't the thing under test — because a circle_wallet
 // starts unfunded and can only receive real money via a real invoice paid
-// by another wallet (see the mintJITChild/claim_funds pattern cross_test.go
+// by another wallet (see the mintCashChild/cash_redeem pattern cross_test.go
 // also uses).
 package integration
 
@@ -49,7 +49,7 @@ const feeSkimTestPaymentAmountMloki = happyPathAmountMloki * 4
 // this test asserts must be absent.
 func TestCircleHub_FeeSkim_SelfPaymentIsNeverSkimmed(t *testing.T) {
 	cfg := requireConfig(t)
-	jitHub, _, _ := createEphemeralJITHub(t, cfg, "fee-skim-jit-hub", nil)
+	cashHub, _, _ := createEphemeralCashHub(t, cfg, "fee-skim-cash-hub", nil)
 	circleHub, _, _ := createEphemeralCircleHub(t, cfg, "fee-skim-circle-hub", circlePolicyAllowlist,
 		[]string{newTestPrivkey(t)}, ephemeralCircleHubOpts{FeesPpm: feeSkimTestFeesPpm, FundLoki: 100_000})
 	hubClient := mustConnect(t, circleHub.Connection)
@@ -73,19 +73,19 @@ func TestCircleHub_FeeSkim_SelfPaymentIsNeverSkimmed(t *testing.T) {
 
 	circleChild := mintCircleChild(t, circleHub)
 
-	// Fund circleChild via a real JIT-child claim against its own invoice —
-	// mirrors TestCrossHub_ClaimFunds_JITChildClaimsAgainstCircleChildInvoice.
-	// claim_funds requires the invoice amount to exactly equal the JIT
+	// Fund circleChild via a real Cash-child claim against its own invoice —
+	// mirrors TestCrossHub_ClaimFunds_CashChildClaimsAgainstCircleChildInvoice.
+	// cash_redeem requires the invoice amount to exactly equal the Cash
 	// child's declared slice, so both must be feeSkimTestPaymentAmountMloki
 	// exactly — there's no skim to additionally fund for since none should
 	// ever apply here.
-	jitChild := mintJITChild(t, jitHub, feeSkimTestPaymentAmountMloki)
+	cashChild := mintCashChild(t, cashHub, feeSkimTestPaymentAmountMloki)
 	var fundInvoice MakeInvoiceResult
 	require.NoError(t, circleChild.Call(ctxT(t), "make_invoice", MakeInvoiceParams{
 		Amount:      feeSkimTestPaymentAmountMloki,
 		Description: "integration fee-skim-exemption funding",
 	}, &fundInvoice))
-	claimFullSlice(t, jitChild, fundInvoice)
+	claimFullSlice(t, cashChild, fundInvoice)
 
 	var before GetBalanceResult
 	require.NoError(t, circleChild.Call(ctxT(t), "get_balance", struct{}{}, &before))

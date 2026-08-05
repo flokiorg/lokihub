@@ -111,7 +111,7 @@ func (c *Client) WalletPubkey() string {
 }
 
 // ClientPubkey returns this client's own nostr pubkey (used e.g. as the
-// requester_pubkey/pubkey param for create_circle_wallet/create_jit_wallet).
+// requester_pubkey/pubkey param for create_circle_wallet/mint_cash).
 func (c *Client) ClientPubkey() string {
 	return c.clientPub
 }
@@ -328,7 +328,7 @@ func short(s string) string {
 	return s[:n] + "…"
 }
 
-// DecryptPairingURI decrypts a create_jit_wallet/create_circle_wallet
+// DecryptPairingURI decrypts a mint_cash/create_circle_wallet
 // response's encrypted_pairing_uri (NIP-44 encrypted by the wallet to the
 // beneficiary/requester pubkey) into a connectable nostr+walletconnect://
 // URI, using the beneficiary/requester's own private key. This mirrors what

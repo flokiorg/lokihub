@@ -35,7 +35,7 @@ interface DurationInputProps {
   onChange: (seconds: number) => void;
   min?: number;
   // max disables presets/typed values above it — used where a caller
-  // enforces its own ceiling (e.g. a JIT Hub's max_exp_secs).
+  // enforces its own ceiling (e.g. a Cash Hub's max_exp_secs).
   max?: number;
   // presets overrides the default hour/day-scale preset buttons — used where
   // a caller operates on a longer timescale (e.g. a Circle Hub's
@@ -61,7 +61,7 @@ export function DurationInput({ id, seconds, onChange, min = 60, max, presets = 
     nextSeconds = Math.max(nextSeconds, nextSeconds ? min : 0);
     // Intentionally not clamped to max here — silently capping would submit
     // a different value than what's displayed. The caller shows an inline
-    // "exceeds max" error instead (see JITHubAllocations.tsx) and disables
+    // "exceeds max" error instead (see CashHubAllocations.tsx) and disables
     // submit until the value is fixed.
     onChange(nextSeconds);
   };

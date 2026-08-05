@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "هوية Nostr",
     "connectionKey": "هوية ويب",
-    "bearer": "نقد"
+    "bearer": "الحامل"
   },
   "avatarStack": {
     "more_zero": "+{{count}}",
@@ -86,22 +86,22 @@
     "unclaimed": "لم يُسترد"
   },
   "claimDeadline": {
-    "expired": "انتهت مهلة المطالبة",
-    "withinMinutes_zero": "المطالبة الآن",
-    "withinMinutes_one": "المطالبة خلال دقيقة واحدة",
-    "withinMinutes_two": "المطالبة خلال دقيقتين",
-    "withinMinutes_few": "المطالبة خلال {{count}} دقائق",
-    "withinMinutes_many": "المطالبة خلال {{count}} دقيقة",
-    "withinMinutes_other": "المطالبة خلال {{count}} دقيقة",
-    "withinHours_zero": "المطالبة الآن",
-    "withinHours_one": "المطالبة خلال ساعة واحدة",
-    "withinHours_two": "المطالبة خلال ساعتين",
-    "withinHours_few": "المطالبة خلال {{count}} ساعات",
-    "withinHours_many": "المطالبة خلال {{count}} ساعة",
-    "withinHours_other": "المطالبة خلال {{count}} ساعة",
-    "withinHours": "المطالبة خلال {{count}} ساعة",
-    "byDate": "المطالبة قبل {{date}}",
-    "none": "لا يوجد موعد نهائي للمطالبة"
+    "expired": "انتهت مهلة الاسترداد",
+    "withinMinutes_zero": "الاسترداد الآن",
+    "withinMinutes_one": "الاسترداد خلال دقيقة واحدة",
+    "withinMinutes_two": "الاسترداد خلال دقيقتين",
+    "withinMinutes_few": "الاسترداد خلال {{count}} دقائق",
+    "withinMinutes_many": "الاسترداد خلال {{count}} دقيقة",
+    "withinMinutes_other": "الاسترداد خلال {{count}} دقيقة",
+    "withinHours_zero": "الاسترداد الآن",
+    "withinHours_one": "الاسترداد خلال ساعة واحدة",
+    "withinHours_two": "الاسترداد خلال ساعتين",
+    "withinHours_few": "الاسترداد خلال {{count}} ساعات",
+    "withinHours_many": "الاسترداد خلال {{count}} ساعة",
+    "withinHours_other": "الاسترداد خلال {{count}} ساعة",
+    "withinHours": "الاسترداد خلال {{count}} ساعة",
+    "byDate": "الاسترداد قبل {{date}}",
+    "none": "لا يوجد موعد نهائي للاسترداد"
   },
   "circleCard": {
     "member_zero": "لا يوجد أعضاء",
@@ -113,8 +113,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "محفظة الدائرة",
-    "jitWallet": "رمز Lokicash",
-    "claimedCount": "تمت المطالبة بـ {{claimed}}/{{total}}",
+    "cashWallet": "محفظة نقدية",
+    "claimedCount": "تم استرداد {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "فشل تحميل مستلمي محفظة JIT"
     }
@@ -210,7 +210,7 @@
       "removeSelected": "فشلت إزالة محافظ الدائرة المحددة"
     }
   },
-  "jitHubAllocations": {
+  "cashHubAllocations": {
     "durationDays_zero": "أقل من يوم",
     "durationDays_one": "يوم واحد",
     "durationDays_two": "يومان",
@@ -230,6 +230,10 @@
     "connectionKeyLabel": "مفتاح الاتصال (سداسي عشري)",
     "iaPubkeyLabel": "المفتاح العام لجهة التحقق من الهوية (سداسي عشري)",
     "iaPubkeyHelper": "يجب أن تكون جهة تحقق من الهوية موثوقة (الإعدادات ← جهات التحقق من الهوية)",
+    "selectIAPlaceholder": "اختر جهة تحقق من الهوية",
+    "savedIAsLabel": "مُعلَنة في الإعدادات",
+    "enterIAManually": "إدخال مفتاح عام يدويًا",
+    "chooseSavedIAInstead": "الاختيار من الإعدادات بدلاً من ذلك",
     "duplicateIdentity": "هذه الهوية مستخدَمة بالفعل من قِبل مستلم آخر.",
     "walletBudgetLabel": "المبلغ",
     "requestedSummary": "تم طلب {{total}} loki",
@@ -291,8 +295,8 @@
       "removeWallet": "فشلت إزالة Lokicash",
       "removeSelected": "فشلت إزالة المستلمين المحددين"
     },
-    "bearerHelper": "يمكن لمن يملك السر استرداده — يُعرض مرة واحدة فقط، مباشرة بعد الإنشاء.",
-    "bearerRequiresSoleRecipient": "يجب أن يكون النقد هو المستلم الوحيد",
+    "bearerHelper": "الحامل: يمكن لمن يملك السر استرداده — لا يوجد تحقق من الهوية ولا إمكانية للاسترجاع في حال ضياعه أو اعتراضه.",
+    "bearerRequiresSoleRecipient": "يجب أن يكون الحامل هو المستلم الوحيد",
     "pubkeyModeHelper": "يمكن لهذه الهوية على Nostr فقط استرداده.",
     "connectionKeyModeHelper": "يمكن لهوية موثّقة فقط استرداده.",
     "copyLokicash": "نسخ Lokicash",
@@ -336,7 +340,7 @@
       "create": "فشل إنشاء مركز محفظة الدائرة"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "مركز محفظة JIT جديد",
     "description": "أنشئ مركزًا ممولاً مسبقًا يصدر محافظ JIT مخصصة للإنفاق فقط للمستفيدين",
     "maxWalletBudgetHelper": "الحد الأقصى للميزانية التي يمكن تخصيصها لكل محفظة JIT صادرة من هذا المركز",
@@ -386,7 +390,7 @@
       "delete": "فشل حذف الدائرة"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "هل أنت متأكد من رغبتك في حذف مركز محفظة JIT هذا؟",
     "checking": "جارٍ التحقق من محافظ JIT الصادرة…",
     "hasOutstanding_zero": "لا توجد حصص مستلمين معلّقة في هذا المركز.",
