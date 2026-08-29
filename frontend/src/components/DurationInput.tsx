@@ -14,7 +14,6 @@ const PRESETS: { label: string; seconds: number }[] = [
   { label: "1 hour", seconds: 3600 },
   { label: "6 hours", seconds: 6 * 3600 },
   { label: "1 day", seconds: 86400 },
-  { label: "3 days", seconds: 3 * 86400 },
   { label: "7 days", seconds: 7 * 86400 },
   { label: "30 days", seconds: 30 * 86400 },
 ];
@@ -41,15 +40,31 @@ interface DurationInputProps {
   // a caller operates on a longer timescale (e.g. a Circle Hub's
   // week/month/year-scale max wallet expiry).
   presets?: { label: string; seconds: number }[];
+  // allowNever adds a "Never" button (0 seconds) alongside the presets —
+  // used where 0 is a legitimate, meaningful value (e.g. a Cash Hub's
+  // max_exp_secs, where 0 means "no ceiling at all"), as opposed to `min`
+  // simply enforcing a floor on a real duration.
+  allowNever?: boolean;
+  neverLabel?: string;
 }
 
-export function DurationInput({ id, seconds, onChange, min = 60, max, presets = PRESETS }: DurationInputProps) {
+export function DurationInput({
+  id,
+  seconds,
+  onChange,
+  min = 60,
+  max,
+  presets = PRESETS,
+  allowNever = false,
+  neverLabel = "Never",
+}: DurationInputProps) {
+  const isNever = allowNever && seconds === 0;
   const [unit, setUnit] = React.useState<DurationUnit>(() => pickUnit(seconds));
   const [amount, setAmount] = React.useState<string>(() =>
     seconds ? String(seconds / UNIT_SECONDS[pickUnit(seconds)]) : ""
   );
   const [showCustom, setShowCustom] = React.useState(
-    () => !presets.some((preset) => preset.seconds === seconds)
+    () => !isNever && !presets.some((preset) => preset.seconds === seconds)
   );
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -95,6 +110,21 @@ export function DurationInput({ id, seconds, onChange, min = 60, max, presets = 
             </button>
           );
         })}
+        {allowNever && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowCustom(false);
+              onChange(0);
+            }}
+            className={cn(
+              "cursor-pointer rounded text-nowrap border-2 text-center p-2.5",
+              isNever ? "border-primary" : "border-muted"
+            )}
+          >
+            {neverLabel}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {

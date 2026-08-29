@@ -14,8 +14,14 @@ func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki 
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	config db.CashHubConfig) (*db.App, string, error) {
 
-	if config.PerWalletMaxMloki <= 0 || config.MaxExpSecs <= 0 {
-		return nil, "", fmt.Errorf("%w: per_wallet_max_mloki and max_exp_secs must be positive", constants.ErrInvalidParams)
+	// MaxExpSecs may be 0 ("never" — no ceiling on how long an issued wallet
+	// may remain unredeemed); PerWalletMaxMloki has no equivalent "unlimited"
+	// mode and must stay strictly positive. The upper bound guards against
+	// overflowing time.Duration's nanosecond range when this value is later
+	// converted (cashwallet.Resolve) — see constants.MAX_EXPIRY_SECS.
+	if config.PerWalletMaxMloki <= 0 || config.MaxExpSecs < 0 || config.MaxExpSecs > constants.MAX_EXPIRY_SECS {
+		return nil, "", fmt.Errorf("%w: per_wallet_max_mloki must be positive and max_exp_secs must be between 0 and %d",
+			constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
 	if config.RedeemFeePpm < 0 || config.RedeemFeePpm > constants.MAX_FEES_PPM {
 		return nil, "", fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
@@ -53,8 +59,13 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
 	}
 	if maxExpSecs != nil {
-		if *maxExpSecs <= 0 {
-			return fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
+		// Unlike per_wallet_max_mloki above, 0 is a valid, meaningful value
+		// here ("never" — no ceiling on how long an issued wallet may remain
+		// unredeemed) — reject a negative one, or one large enough to
+		// overflow time.Duration's nanosecond range when later converted
+		// (cashwallet.Resolve) — see constants.MAX_EXPIRY_SECS.
+		if *maxExpSecs < 0 || *maxExpSecs > constants.MAX_EXPIRY_SECS {
+			return fmt.Errorf("%w: max_exp_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 		}
 		updates["max_exp_secs"] = *maxExpSecs
 	}

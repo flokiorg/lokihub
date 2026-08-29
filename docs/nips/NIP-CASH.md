@@ -132,7 +132,9 @@ scope.
 A Cash Hub MUST maintain, for itself:
 
 - a ceiling on the total funding a single Cash Wallet issued from it may carry;
-- a ceiling on, and default value for, how long an issued Cash Wallet may remain unredeemed;
+- a ceiling on, and default value for, how long an issued Cash Wallet may remain unredeemed. This ceiling
+  MAY instead be "never" (no ceiling at all) — a Hub configured this way imposes no expiry on any wallet it
+  mints unless the `mint_cash` caller requests one of their own (§Minting a Cash Wallet);
 - a default value for `min_transfer_mloki` (§Splitting a Slice), applied to every slice a freshly-minted
   wallet carries. Zero (no floor) is a valid default;
 - a default value for `redeem_fee_ppm` (§The Redeem Fee), applied to every slice a freshly-minted wallet
@@ -217,7 +219,11 @@ single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second
   MUST carry neither `identity_value` nor `ia_pubkey` — the Hub generates its secret (§Bearer Slices). A
   `bearer` entry MUST be the request's only entry; a request mixing a `bearer` entry with any other entry
   MUST be rejected in its entirety, not just that one recipient.
-- `expiry` — OPTIONAL. If omitted or zero, it MUST default to the Hub's own expiry ceiling (§Data Model).
+- `expiry` — OPTIONAL. If omitted or zero, it MUST default to the Hub's own expiry ceiling (§Data Model) —
+  which itself MAY be "never," in which case an omitted/zero `expiry` here produces a Cash Wallet that
+  never expires, not an already-expired one. A caller MAY still request its own, finite `expiry` even when
+  the Hub's own ceiling is "never"; there is nothing to cap it against in that case, so it MUST be honored
+  exactly.
 
 `min_transfer_mloki` is deliberately NOT a request field here — it's a Hub-level setting (§Data Model),
 applied uniformly to every recipient of a freshly-minted wallet from the Hub's own current configuration,
@@ -231,7 +237,7 @@ separate Cash Hub with its own settings, rather than overriding it per call.
   "wallet_pubkey": "<hex>",
   "pairing_uri": "nostr+walletconnect://...",
   "cash_token": "lokicash1...",
-  "expires_at": 1720000000,
+  "expires_at": 1720000000, // omitted entirely if this wallet never expires — see §Data Model, §Minting a Cash Wallet
   "recipients": [
     {"identity_type": "pubkey", "identity_value": "...", "amount_mloki": 21000},
     {"identity_type": "connection_key", "identity_value": "abc123", "amount_mloki": 5000}
@@ -270,8 +276,11 @@ On receiving `mint_cash`, the Hub MUST, in order:
    just that recipient. For each `bearer`-mode recipient, generate its secret now, with enough entropy
    that guessing it is infeasible (§Bearer Slices). A caller-supplied `bearer_secret` at this step MUST be
    rejected — the Hub is the only party that can vouch for the entropy behind it.
-4. Resolve `expiry`. If omitted or zero, set it to the Hub's own expiry ceiling. Otherwise it MUST NOT
-   exceed that ceiling.
+4. Resolve `expiry`. If the Hub's own expiry ceiling is "never," an omitted/zero `expiry` here MUST produce
+   a Cash Wallet with no expiry at all — never a zero-duration, already-expired one — and any explicit,
+   positive `expiry` the caller does supply MUST be honored exactly, since there's no ceiling to check it
+   against. Otherwise (the Hub's own ceiling is a real, positive value): if omitted or zero, set it to the
+   Hub's own expiry ceiling; otherwise it MUST NOT exceed that ceiling.
 5. Verify the Hub's own available balance is at least the sum of all recipients' amounts.
 6. Create the Cash Wallet connection, record one slice per recipient — stamping each with the Hub's
    current `min_transfer_mloki` and `redeem_fee_ppm` defaults (§Data Model) and a one-way commitment of
@@ -739,9 +748,11 @@ follows, and the ECDH argument for why it holds.
 slice's own configuration (not freshly derived from the Hub's current config — the Hub's config only
 supplies the default for a wallet minted directly by `mint_cash`), and its expiry SHOULD be
 inherited from the old wallet's own — a split relocates an existing entitlement; it does not grant a fresh
-one. This inheritance chain holds across any number of splits: a cash token split from a cash token that was
-itself split from an original Hub-minted slice carries the SAME `min_transfer_mloki` its immediate parent
-had, however many hops back that traces to the original hub-set default.
+one. This holds even when the old wallet never expires: the new, dedicated wallet inherits that same
+"never" status rather than being given some arbitrary fallback duration. This inheritance chain holds
+across any number of splits: a cash token split from a cash token that was itself split from an original
+Hub-minted slice carries the SAME `min_transfer_mloki` its immediate parent had, however many hops back
+that traces to the original hub-set default.
 
 ## Bearer Slices
 

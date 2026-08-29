@@ -95,7 +95,14 @@ type CashHubConfig struct {
 	AppID             uint `gorm:"uniqueIndex;not null"`
 	App               App  `gorm:"constraint:OnDelete:CASCADE;"`
 	PerWalletMaxMloki int
-	MaxExpSecs        int
+	// MaxExpSecs is the ceiling on how long an issued Cash wallet may remain
+	// unredeemed, and the default a freshly-minted wallet gets when a
+	// mint_cash caller omits its own expiry. 0 means "never" — no ceiling at
+	// all, and a freshly-minted wallet with no caller-requested expiry never
+	// expires (App.ExpiresAt nil, matching how every other nil-expiry
+	// connection in this codebase is already treated). See
+	// cashwallet.Resolve's expiry-resolution comment for the full rule.
+	MaxExpSecs int
 	// MinTransferMloki is the default floor (0 = no floor) applied to every
 	// recipient's slice when a Cash Hub freshly mints a wallet — see
 	// CashWalletClaim.MinTransferMloki for how it's inherited from there on.

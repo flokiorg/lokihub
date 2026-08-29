@@ -454,10 +454,11 @@ export const CashHubAllocations = React.forwardRef<
     }
   }, [isInlineFormShown, recipients.length, resetForm]);
 
+  // cashMaxExpSecs === 0 means the hub itself has no ceiling ("never") — an
+  // explicit per-wallet deadline is honored exactly in that case, so there's
+  // nothing to exceed.
   const deadlineExceedsMax =
-    hasDeadline &&
-    cashMaxExpSecs !== undefined &&
-    claimDeadlineSecs > cashMaxExpSecs;
+    hasDeadline && !!cashMaxExpSecs && claimDeadlineSecs > cashMaxExpSecs;
 
   const totalRequestedLoki = recipients.reduce(
     (sum, r) => sum + r.amountLoki,
@@ -1025,7 +1026,16 @@ export const CashHubAllocations = React.forwardRef<
           <DurationInput
             seconds={claimDeadlineSecs}
             onChange={setClaimDeadlineSecs}
-            max={cashMaxExpSecs}
+            // 0 means the hub has no ceiling at all ("never") — pass
+            // undefined rather than 0, since DurationInput treats a 0 max as
+            // "nothing is allowed" instead of "no cap".
+            max={cashMaxExpSecs || undefined}
+            // allowNever: a 0 (never) request is never rejected regardless of
+            // the hub's own ceiling — it's sent as expiry_secs: 0, which the
+            // backend treats exactly like omitting it entirely, deferring to
+            // the hub's own default (itself "never" if the hub has no
+            // ceiling, or the hub's max otherwise) — never an error.
+            allowNever
           />
           <p
             className={cn(

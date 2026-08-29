@@ -230,7 +230,9 @@ type App struct {
 	// for cash_transfer splitting — see db.CashHubConfig.MinTransferMloki.
 	// CashRedeemFeePpm is the default per-million cash_redeem fee (0 = free)
 	// a freshly-minted wallet's slices inherit, charged only on a genuine
-	// external redemption — see db.CashHubConfig.RedeemFeePpm.
+	// external redemption — see db.CashHubConfig.RedeemFeePpm. CashMaxExpSecs
+	// of 0 means "never" — no ceiling on how long an issued wallet may
+	// remain unredeemed; see db.CashHubConfig.MaxExpSecs.
 	CashPerWalletMaxMloki *int   `json:"cashPerWalletMaxMloki,omitempty"`
 	CashMaxExpSecs        *int   `json:"cashMaxExpSecs,omitempty"`
 	CashMinTransferMloki  *int64 `json:"cashMinTransferMloki,omitempty"`
@@ -397,10 +399,13 @@ type CreateCashWalletRequest struct {
 }
 
 type CreateCashWalletResponse struct {
-	AppID      uint                  `json:"app_id"`
-	PairingURI string                `json:"pairing_uri"`
-	CashToken  string                `json:"cash_token"`
-	ExpiresAt  int64                 `json:"expires_at"`
+	AppID      uint   `json:"app_id"`
+	PairingURI string `json:"pairing_uri"`
+	CashToken  string `json:"cash_token"`
+	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
+	// own CashMaxExpSecs is 0 ("never") and the request didn't carry its
+	// own ExpirySecs.
+	ExpiresAt  *int64                `json:"expires_at,omitempty"`
 	Recipients []CashWalletRecipient `json:"recipients"`
 }
 

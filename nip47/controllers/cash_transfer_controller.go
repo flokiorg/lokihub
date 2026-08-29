@@ -583,17 +583,15 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		return
 	}
 
-	// The new wallet inherits the source slice's own expiry (a real
-	// cash_wallet's ExpiresAt is always set at creation, so the fallback
-	// below is defensive only) and MinTransferMloki — both read from
-	// splitResult (the same read SplitCashSliceAmount already did
-	// atomically, not re-fetched here) rather than reset to the hub's own
-	// current config, per NIP-CASH's inheritance rule.
-	expiresAt := time.Now().Add(24 * time.Hour)
-	if app.ExpiresAt != nil {
-		expiresAt = *app.ExpiresAt
-	}
-
+	// The new wallet inherits the source slice's own expiry exactly,
+	// including nil ("never") if the source wallet itself never expires —
+	// a cash_wallet's ExpiresAt is nil precisely when it was minted under a
+	// Cash Hub configured with MaxExpSecs == 0 (cashwallet.Resolve). A split
+	// relocates an existing entitlement; it must not silently shorten it to
+	// some arbitrary fallback duration. MinTransferMloki/RedeemFeePpm are
+	// likewise read from splitResult (the same read SplitCashSliceAmount
+	// already did atomically, not re-fetched here) rather than reset to the
+	// hub's own current config, per NIP-CASH's inheritance rule.
 	result, err := cashwallet.Split(ctx, cashwallet.Deps{
 		AppsService:         controller.appsService,
 		TransactionsService: controller.transactionsService,
@@ -610,7 +608,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		NewIAPubkey:      newIAPubkeyToStore,
 		MinTransferMloki: splitResult.MinTransferMloki,
 		RedeemFeePpm:     splitResult.RedeemFeePpm,
-		ExpiresAt:        expiresAt,
+		ExpiresAt:        app.ExpiresAt,
 	})
 	if err != nil {
 		rollback()

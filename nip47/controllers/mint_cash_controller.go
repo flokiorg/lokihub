@@ -42,11 +42,14 @@ type mintCashRecipientResult struct {
 }
 
 type mintCashResponse struct {
-	WalletPubkey string                    `json:"wallet_pubkey"`
-	PairingURI   string                    `json:"pairing_uri"`
-	CashToken    string                    `json:"cash_token"`
-	ExpiresAt    int64                     `json:"expires_at"`
-	Recipients   []mintCashRecipientResult `json:"recipients"`
+	WalletPubkey string `json:"wallet_pubkey"`
+	PairingURI   string `json:"pairing_uri"`
+	CashToken    string `json:"cash_token"`
+	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
+	// own MaxExpSecs is 0 ("never") and the caller didn't request its own
+	// expiry (see cashwallet.Resolve).
+	ExpiresAt  *int64                    `json:"expires_at,omitempty"`
+	Recipients []mintCashRecipientResult `json:"recipients"`
 }
 
 // mapCashWalletErrorCode maps an error returned by cashwallet.Create to a NIP-47
@@ -163,13 +166,19 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		Int("recipient_count", len(result.Recipients)).
 		Msg("Cash wallet created and funded")
 
+	var expiresAt *int64
+	if result.ExpiresAt != nil {
+		ts := result.ExpiresAt.Unix()
+		expiresAt = &ts
+	}
+
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: mintCashResponse{
 			WalletPubkey: *result.WalletApp.WalletPubkey,
 			PairingURI:   result.PairingURI,
 			CashToken:    result.CashToken,
-			ExpiresAt:    result.ExpiresAt.Unix(),
+			ExpiresAt:    expiresAt,
 			Recipients:   recipientResults,
 		},
 	}, nostr.Tags{})

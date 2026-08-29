@@ -166,6 +166,19 @@ const PPM_DIVISOR = 1_000_000
 // reject anything higher).
 const MAX_FEES_PPM = PPM_DIVISOR
 
+// MAX_EXPIRY_SECS is the upper bound accepted for any config or request field
+// expressed in raw expiry seconds that eventually feeds into
+// time.Duration(secs) * time.Second (e.g. db.CashHubConfig.MaxExpSecs and a
+// mint_cash caller's own ExpirySecs, cashwallet.Resolve). time.Duration is an
+// int64 count of NANOSECONDS, so it silently wraps once the equivalent
+// seconds value exceeds roughly 292 years — a value large enough to overflow
+// that conversion would produce an arbitrary, possibly-already-past
+// ExpiresAt instead of a validation error. 100 years is comfortably below
+// that wraparound point (leaving a ~3x margin) while still being far beyond
+// any wallet lifetime a real caller would ever need, so it never constrains
+// a legitimate "effectively never expires" request.
+const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
+
 // DefaultGeneralRelays seeds the "GeneralRelay" config key on first run.
 // These relays are used to fetch general Nostr social data — profiles,
 // notes, and events, including Circle contact lists (kind:0/kind:1/kind:3) —

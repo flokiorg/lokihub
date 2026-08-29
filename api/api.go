@@ -3404,11 +3404,17 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		}
 	}
 
+	var expiresAt *int64
+	if result.ExpiresAt != nil {
+		ts := result.ExpiresAt.Unix()
+		expiresAt = &ts
+	}
+
 	return &CreateCashWalletResponse{
 		AppID:      result.WalletApp.ID,
 		PairingURI: result.PairingURI,
 		CashToken:  result.CashToken,
-		ExpiresAt:  result.ExpiresAt.Unix(),
+		ExpiresAt:  expiresAt,
 		Recipients: recipientResults,
 	}, nil
 }

@@ -87,6 +87,7 @@ export function CashHubConfigCard({
           seconds={maxExpSecs}
           onChange={onMaxExpSecsChange}
           min={60}
+          allowNever
         />
         <p className="text-muted-foreground text-sm">{expiryHelper}</p>
       </div>

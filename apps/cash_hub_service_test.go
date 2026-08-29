@@ -73,8 +73,9 @@ func TestUpdateCashHubConfig_MinTransferMloki_SetAndRead(t *testing.T) {
 }
 
 // TestUpdateCashHubConfig_MinTransferMloki_ZeroIsValid verifies 0 ("no
-// floor") is accepted here, unlike PerWalletMaxMloki/MaxExpSecs which both
-// require a strictly positive value — a hub owner must be able to
+// floor") is accepted here, unlike PerWalletMaxMloki which still requires a
+// strictly positive value (MaxExpSecs also accepts 0, meaning "never" — see
+// TestUpdateCashHubConfig_MaxExpSecs_ZeroIsValid below) — a hub owner must be able to
 // explicitly remove a floor they set earlier, not just tighten it.
 func TestUpdateCashHubConfig_MinTransferMloki_ZeroIsValid(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -101,6 +102,90 @@ func TestUpdateCashHubConfig_MinTransferMloki_Negative_Rejected(t *testing.T) {
 	hub := newCashHub(t, svc, 10_000, 3600)
 	negative := int64(-1)
 	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &negative, nil)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+// TestCreateCashHub_MaxExpSecs_ZeroIsValid verifies a Cash Hub may be
+// created with MaxExpSecs == 0 ("never" — no ceiling on how long an issued
+// wallet may remain unredeemed), unlike PerWalletMaxMloki, which still
+// requires a strictly positive value.
+func TestCreateCashHub_MaxExpSecs_ZeroIsValid(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newCashHub(t, svc, 10_000, 0)
+	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.MaxExpSecs)
+}
+
+func TestCreateCashHub_MaxExpSecs_Negative_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	_, _, err = svc.AppsService.CreateCashHub(
+		"test hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_HUB_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
+		db.CashHubConfig{PerWalletMaxMloki: 10_000, MaxExpSecs: -1},
+	)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+// TestUpdateCashHubConfig_MaxExpSecs_ZeroIsValid verifies an existing hub can
+// be updated to remove its expiry ceiling entirely, so already-created hubs
+// aren't stuck with whatever positive ceiling they were created under.
+func TestUpdateCashHubConfig_MaxExpSecs_ZeroIsValid(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newCashHub(t, svc, 10_000, 3600)
+	zero := 0
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &zero, nil, nil))
+
+	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.MaxExpSecs)
+}
+
+func TestUpdateCashHubConfig_MaxExpSecs_Negative_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newCashHub(t, svc, 10_000, 3600)
+	negative := -1
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &negative, nil, nil)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+// TestCreateCashHub_MaxExpSecs_TooLarge_Rejected verifies a value large
+// enough to overflow time.Duration's nanosecond range on conversion
+// (cashwallet.Resolve) is rejected at hub-creation time rather than left to
+// silently wrap into a bogus ExpiresAt later.
+func TestCreateCashHub_MaxExpSecs_TooLarge_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	_, _, err = svc.AppsService.CreateCashHub(
+		"test hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_HUB_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
+		db.CashHubConfig{PerWalletMaxMloki: 10_000, MaxExpSecs: constants.MAX_EXPIRY_SECS + 1},
+	)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestUpdateCashHubConfig_MaxExpSecs_TooLarge_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newCashHub(t, svc, 10_000, 3600)
+	tooLarge := constants.MAX_EXPIRY_SECS + 1
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &tooLarge, nil, nil)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 

@@ -138,7 +138,10 @@ type Result struct {
 	WalletApp  *db.App
 	PairingURI string
 	CashToken  string
-	ExpiresAt  time.Time
+	// ExpiresAt is nil when this wallet never expires — the Cash Hub's own
+	// MaxExpSecs is 0 ("never") and the caller didn't request its own
+	// expiry. See Resolved.ExpiresAt.
+	ExpiresAt  *time.Time
 	Recipients []RecipientResult
 }
 
@@ -155,7 +158,15 @@ type Resolved struct {
 	// bearer recipient, IdentityValue and BearerSecret were just generated
 	// by Resolve (the caller supplied neither).
 	Recipients []RecipientInput
-	ExpiresAt  time.Time
+	// ExpiresAt is nil when the wallet being created will never expire —
+	// only possible when the Hub's own MaxExpSecs is 0 ("never") and the
+	// caller's own ExpirySecs was omitted/zero too. See Resolve's
+	// expiry-resolution comment for the full rule; Commit passes this
+	// straight through to db.App.ExpiresAt (already nilable, and already
+	// treated as "never swept"/"never expired" everywhere it's read —
+	// service.runCashCleanup's `expires_at < ?` query and
+	// api.cashClaimStatus both already skip a nil ExpiresAt correctly).
+	ExpiresAt *time.Time
 	// MinTransferMloki is the Cash Hub's own configured default floor (0 = no
 	// floor), applied uniformly to every recipient's claim row. A slice
 	// created by a later Split inherits its OWN MinTransferMloki from the
@@ -210,17 +221,46 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		return nil, fmt.Errorf("failed to load Cash Hub config: %w", err)
 	}
 
-	// Expiration: one shared value for the whole wallet — cap the caller's
-	// requested duration, or default to the hub's own max when omitted (an
-	// omitted/zero expiry used to produce an already-expired wallet — this
-	// closes that gap).
-	expirySecs := params.ExpirySecs
-	if expirySecs <= 0 {
-		expirySecs = hubConfig.MaxExpSecs
-	} else if hubConfig.MaxExpSecs > 0 && expirySecs > hubConfig.MaxExpSecs {
-		return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", constants.ErrInvalidParams, params.ExpirySecs, hubConfig.MaxExpSecs)
+	// Expiration: one shared value for the whole wallet.
+	//
+	// hubConfig.MaxExpSecs == 0 means the Hub itself imposes no ceiling
+	// ("never") — an omitted/zero caller expiry then produces a wallet that
+	// never expires (expiresAt stays nil) rather than the historical
+	// zero-duration bug this comment used to guard against (an omitted
+	// expiry defaulting straight to a zero MaxExpSecs used to produce an
+	// ALREADY-expired wallet). A caller may still request its own, shorter
+	// expiry even when the Hub itself has no ceiling — there's nothing to
+	// cap it against.
+	//
+	// hubConfig.MaxExpSecs > 0 ("never" is NOT the case at the Hub level):
+	// an omitted/zero caller expiry is downgraded to the Hub's own max
+	// exactly as before; an explicit request exceeding that ceiling is
+	// still rejected outright, per NIP-CASH's "Otherwise it MUST NOT exceed
+	// that ceiling."
+	var expiresAt *time.Time
+	if hubConfig.MaxExpSecs == 0 {
+		if params.ExpirySecs > 0 {
+			// Unlike the ceiling branch below, there's no hub-configured
+			// max to bound this against — it's checked directly here
+			// instead, guarding against overflowing time.Duration's
+			// nanosecond range on the conversion just below (see
+			// constants.MAX_EXPIRY_SECS).
+			if params.ExpirySecs > constants.MAX_EXPIRY_SECS {
+				return nil, fmt.Errorf("%w: expiry %d exceeds %d", constants.ErrInvalidParams, params.ExpirySecs, constants.MAX_EXPIRY_SECS)
+			}
+			t := time.Now().Add(time.Duration(params.ExpirySecs) * time.Second)
+			expiresAt = &t
+		}
+	} else {
+		expirySecs := params.ExpirySecs
+		if expirySecs <= 0 {
+			expirySecs = hubConfig.MaxExpSecs
+		} else if expirySecs > hubConfig.MaxExpSecs {
+			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", constants.ErrInvalidParams, params.ExpirySecs, hubConfig.MaxExpSecs)
+		}
+		t := time.Now().Add(time.Duration(expirySecs) * time.Second)
+		expiresAt = &t
 	}
-	expiresAt := time.Now().Add(time.Duration(expirySecs) * time.Second)
 
 	var sum uint64
 	seen := make(map[string]bool, len(params.Recipients))
@@ -409,7 +449,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		"", // generate a temporary random keypair; overridden immediately below
 		sum/1000,
 		constants.BUDGET_RENEWAL_NEVER,
-		&resolved.ExpiresAt,
+		resolved.ExpiresAt,
 		cashWalletScopes,
 		db.AppKindCashWallet,
 		&resolved.HubApp.ID,
@@ -592,7 +632,12 @@ type SplitParams struct {
 	// own config must never retroactively change the rate for an
 	// already-issued lokicash.
 	RedeemFeePpm int
-	ExpiresAt    time.Time
+	// ExpiresAt is inherited from the source slice's own wallet, unchanged —
+	// including nil (never expires) if the source wallet itself never
+	// expires. A split relocates an existing entitlement; it does not
+	// shorten or lengthen it (NIP-CASH "Spinning a Slice Off Into a
+	// Dedicated Wallet" → Eligibility and limits).
+	ExpiresAt *time.Time
 }
 
 // SplitResult carries what cash_transfer_controller.go needs to deliver the
@@ -629,7 +674,7 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 		"", // generate a temporary random keypair; overridden immediately below
 		params.AmountMloki/1000,
 		constants.BUDGET_RENEWAL_NEVER,
-		&params.ExpiresAt,
+		params.ExpiresAt,
 		cashWalletScopes,
 		db.AppKindCashWallet,
 		&params.HubApp.ID,

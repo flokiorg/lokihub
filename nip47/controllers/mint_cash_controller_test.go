@@ -161,7 +161,8 @@ func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(mintCashResponse)
-	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(result.ExpiresAt, 0), 5*time.Second,
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(*result.ExpiresAt, 0), 5*time.Second,
 		"wallet must default to the hub's max_exp_secs, not expire immediately")
 }
 
@@ -256,7 +257,8 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	result := publishedResponse.Result.(mintCashResponse)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
 	assert.NotEmpty(t, result.WalletPubkey)
-	assert.Greater(t, result.ExpiresAt, time.Now().Unix())
+	require.NotNil(t, result.ExpiresAt)
+	assert.Greater(t, *result.ExpiresAt, time.Now().Unix())
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
 

@@ -76,7 +76,8 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	assert.Contains(t, result.PairingURI, "?relay=wss://relay.test")
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
-	assert.WithinDuration(t, time.Now().Add(1800*time.Second), result.ExpiresAt, 5*time.Second)
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(1800*time.Second), *result.ExpiresAt, 5*time.Second)
 
 	var childApps []db.App
 	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
@@ -210,13 +211,14 @@ func TestSplit_BearerTarget_CashTokenHints(t *testing.T) {
 	}
 
 	commitment := strings.Repeat("ef", 32)
+	splitExpiresAt := time.Now().Add(time.Hour)
 	result, err := Split(context.TODO(), newTestDeps(svc), SplitParams{
 		HubApp:           hub,
 		SourceWalletApp:  sourceWallet,
 		AmountMloki:      1000,
 		NewIdentityType:  db.CashIdentityBearer,
 		NewIdentityValue: commitment,
-		ExpiresAt:        time.Now().Add(time.Hour),
+		ExpiresAt:        &splitExpiresAt,
 	})
 	require.NoError(t, err)
 
@@ -251,6 +253,7 @@ func TestSplit_PubkeyTarget_CashTokenHints(t *testing.T) {
 	}
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	splitExpiresAt := time.Now().Add(time.Hour)
 	result, err := Split(context.TODO(), newTestDeps(svc), SplitParams{
 		HubApp:           hub,
 		SourceWalletApp:  sourceWallet,
@@ -258,7 +261,7 @@ func TestSplit_PubkeyTarget_CashTokenHints(t *testing.T) {
 		NewIdentityType:  db.CashIdentityPubkey,
 		NewIdentityValue: newPubkey,
 		MinTransferMloki: 100,
-		ExpiresAt:        time.Now().Add(time.Hour),
+		ExpiresAt:        &splitExpiresAt,
 	})
 	require.NoError(t, err)
 
@@ -272,6 +275,46 @@ func TestSplit_PubkeyTarget_CashTokenHints(t *testing.T) {
 	assert.Equal(t, db.CashIdentityPubkey, claim.IdentityType)
 	assert.Equal(t, newPubkey, claim.IdentityValue)
 	assert.Equal(t, int64(100), claim.MinTransferMloki, "the new wallet must inherit MinTransferMloki from SplitParams")
+}
+
+// TestSplit_SourceNeverExpires_NewWalletNeverExpires verifies a split off a
+// source wallet that never expires (ExpiresAt nil, e.g. minted under a Cash
+// Hub configured with MaxExpSecs == 0) produces a new dedicated wallet that
+// also never expires — a split relocates an existing entitlement, including
+// its "never" status, it does not shorten it (NIP-CASH "Spinning a Slice Off
+// Into a Dedicated Wallet" -> Eligibility and limits).
+func TestSplit_SourceNeverExpires_NewWalletNeverExpires(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 0) // MaxExpSecs = 0 = never
+	sourceWallet, _, err := svc.AppsService.CreateApp(
+		"source-wallet", "", 0, constants.BUDGET_RENEWAL_NEVER, nil, // nil expiresAt = never
+		[]string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
+	)
+	require.NoError(t, err)
+	require.Nil(t, sourceWallet.ExpiresAt)
+	tests.FundApp(svc, sourceWallet.ID, 200_000, "sourcefundtxhash3")
+
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-split-never-test", Amount: 1000},
+	}
+
+	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	result, err := Split(context.TODO(), newTestDeps(svc), SplitParams{
+		HubApp:           hub,
+		SourceWalletApp:  sourceWallet,
+		AmountMloki:      1000,
+		NewIdentityType:  db.CashIdentityPubkey,
+		NewIdentityValue: newPubkey,
+		ExpiresAt:        sourceWallet.ExpiresAt, // nil — mirrors cash_transfer_controller.go's inheritance
+	})
+	require.NoError(t, err)
+	assert.Nil(t, result.WalletApp.ExpiresAt, "a split off a never-expiring source must also never expire")
 }
 
 func TestCreate_MultipleRecipients_OneSharedWallet_CustomAmounts_SharedExpiry(t *testing.T) {
@@ -593,8 +636,75 @@ func TestCreate_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 		// ExpirySecs omitted (zero value).
 	})
 	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now().Add(3600*time.Second), result.ExpiresAt, 5*time.Second,
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(3600*time.Second), *result.ExpiresAt, 5*time.Second,
 		"wallet must default to the hub's max_exp_secs, not expire immediately")
+}
+
+// TestCreate_HubNeverExpires_OmittedCallExpiry_NeverExpires covers a Cash Hub
+// configured with MaxExpSecs == 0 ("never" — no ceiling on how long an
+// issued wallet may remain unredeemed). Omitting the per-call expiry must
+// resolve to a wallet that never expires (nil ExpiresAt), not to the
+// zero-duration/already-expired bug this same code path used to guard
+// against before "never" was a legitimate hub setting.
+func TestCreate_HubNeverExpires_OmittedCallExpiry_NeverExpires(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 0) // MaxExpSecs = 0 = never
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	result, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp:     hub,
+		Recipients: onePubkeyRecipient(1000),
+		// ExpirySecs omitted (zero value).
+	})
+	require.NoError(t, err)
+	assert.Nil(t, result.ExpiresAt, "hub has no ceiling and the caller requested none, so the wallet must never expire")
+	assert.Nil(t, result.WalletApp.ExpiresAt, "the persisted App row must carry the same nil expiry")
+}
+
+// TestCreate_HubNeverExpires_ExplicitCallExpiry_Honored covers the same
+// never-ceiling hub, but a caller that DOES request its own, finite expiry —
+// there's no hub ceiling to cap it against, so it must be honored exactly.
+func TestCreate_HubNeverExpires_ExplicitCallExpiry_Honored(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 0) // MaxExpSecs = 0 = never
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	result, err := Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp:     hub,
+		Recipients: onePubkeyRecipient(1000),
+		ExpirySecs: 900,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(900*time.Second), *result.ExpiresAt, 5*time.Second)
+}
+
+// TestCreate_HubNeverExpires_ExplicitCallExpiry_TooLarge_Rejected verifies a
+// never-ceiling hub still rejects a per-call expiry large enough to overflow
+// time.Duration's nanosecond range, rather than silently wrapping into a
+// bogus (possibly already-past) ExpiresAt.
+func TestCreate_HubNeverExpires_ExplicitCallExpiry_TooLarge_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 0) // MaxExpSecs = 0 = never
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, err = Create(context.TODO(), newTestDeps(svc), Params{
+		HubApp:     hub,
+		Recipients: onePubkeyRecipient(1000),
+		ExpirySecs: constants.MAX_EXPIRY_SECS + 1,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, constants.ErrInvalidParams))
 }
 
 func TestCreate_TransferFailure_Rollback(t *testing.T) {
