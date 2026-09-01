@@ -304,6 +304,49 @@ func (c *adminClient) transfer(fromAppID *uint, toAppID uint, amountLoki uint64)
 	return c.doBody(http.MethodPost, "/api/transfers", body, nil)
 }
 
+// adminCashWalletRecipient mirrors api.CashWalletRecipient. BearerSecret is
+// response-only (populated when identity_type == "bearer", only in the
+// create-cash-wallet response, never retrievable again afterward) — a caller
+// building a request MUST NOT set it, mirroring the real type's own doc
+// comment, but this struct is reused for adminCreateCashWalletResponse's
+// Recipients field too, where a bearer identity_type needs it decoded.
+type adminCashWalletRecipient struct {
+	IdentityType  string `json:"identity_type"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	IAPubkey      string `json:"ia_pubkey,omitempty"`
+	AmountMloki   int64  `json:"amount_mloki"`
+	BearerSecret  string `json:"bearer_secret,omitempty"`
+}
+
+// adminCreateCashWalletRequest mirrors api.CreateCashWalletRequest.
+type adminCreateCashWalletRequest struct {
+	Recipients    []adminCashWalletRecipient `json:"recipients"`
+	ExpirySecs    int                        `json:"expiry_secs,omitempty"`
+	MintSignature bool                       `json:"mint_signature,omitempty"`
+}
+
+// adminCreateCashWalletResponse mirrors api.CreateCashWalletResponse.
+type adminCreateCashWalletResponse struct {
+	AppID      uint                       `json:"app_id"`
+	PairingURI string                     `json:"pairing_uri"`
+	CashToken  string                     `json:"cash_token"`
+	ExpiresAt  *int64                     `json:"expires_at,omitempty"`
+	Recipients []adminCashWalletRecipient `json:"recipients"`
+}
+
+// createCashWallet mints a Cash Wallet under hubAppID via the admin HTTP API
+// (POST /api/apps/:id/cash-wallets — api.CreateCashWallet), the Wails/HTTP
+// mint path a real operator's frontend uses, distinct from the NWC-facing
+// mint_cash method every other fixture in this suite mints through. Exists
+// specifically to give this path — which had unit coverage but zero
+// live-node coverage (security-audit-scope-2026-08-30.md §7, "known-open
+// item") — an integration-level entry point at all.
+func (c *adminClient) createCashWallet(hubAppID uint, req adminCreateCashWalletRequest) (adminCreateCashWalletResponse, error) {
+	var resp adminCreateCashWalletResponse
+	err := c.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/cash-wallets", hubAppID), req, &resp)
+	return resp, err
+}
+
 // registerIdentityAuthority registers pubkey as a trusted Identity Authority
 // (POST /api/identity-authorities) - the admin-API equivalent of Settings >
 // Identity Authorities, used to make a freshly-generated IA keypair trusted

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -1538,7 +1539,26 @@ func CalculateFeeSkimMloki(amountMloki uint64, feesPpm int) uint64 {
 	if feesPpm <= 0 {
 		return 0
 	}
-	return amountMloki * uint64(feesPpm) / constants.PPM_DIVISOR
+	// amountMloki*uint64(feesPpm) can overflow uint64 well before
+	// amountMloki reaches cashwallet.Resolve's own permitted per-recipient
+	// ceiling (~1.845e13 mloki at the maximum 100% rate) — a plain "*"
+	// silently wraps to an arbitrary, WRONG fee instead of erroring or
+	// saturating. bits.Mul64 computes the full 128-bit product so no
+	// precision is lost, then bits.Div64 divides that full-precision value
+	// by PPM_DIVISOR. The true quotient can only exceed uint64's range if
+	// feesPpm > PPM_DIVISOR (i.e. a >100% rate, never valid — feesPpm is
+	// clamped to constants.MAX_FEES_PPM == PPM_DIVISOR at config-validation
+	// time, but this function doesn't assume its caller enforced that), in
+	// which case bits.Div64 would panic on a quotient overflow — saturate at
+	// math.MaxUint64 instead, so a defensive/future caller passing an
+	// out-of-range rate fails safe (an unmistakably-wrong huge fee) rather
+	// than crashing or wrapping to a plausible-looking wrong number.
+	hi, lo := bits.Mul64(amountMloki, uint64(feesPpm)) //nolint:gosec // feesPpm > 0 already checked above
+	if hi >= constants.PPM_DIVISOR {
+		return math.MaxUint64
+	}
+	quotient, _ := bits.Div64(hi, lo, constants.PPM_DIVISOR)
+	return quotient
 }
 
 func makePreimageHex() ([]byte, error) {

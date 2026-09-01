@@ -74,7 +74,8 @@
   },
   "claimBadge": {
     "claimed": "引き換え済み",
-    "unclaimed": "未引き換え"
+    "unclaimed": "未引き換え",
+    "movedToNewWallet": "新しいウォレットへ移動"
   },
   "claimDeadline": {
     "expired": "引き換え期限が切れました",
@@ -181,6 +182,8 @@
     "deadlineHelpWithMax": "各受取人は作成からこの期間内に引き換える必要があります（デフォルトはこのハブの最大値：{{max}}）",
     "addRecipient": "受取人をさらに追加",
     "setClaimDeadline": "引き換え期限を設定",
+    "mintSignatureLabel": "発行証明に署名",
+    "mintSignatureHelp": "このLokicashの発行元と金額を証明するノード署名を添付します（任意、トークンの長さがおよそ2倍になります）",
     "statusAll": "すべて",
     "statusExpired": "期限切れ",
     "allocatedSummary": "このページで {{allocated}} loki が割り当て済み · 合計 {{total}} 件（{{status}}）",

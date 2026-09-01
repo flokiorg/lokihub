@@ -74,7 +74,8 @@
   },
   "claimBadge": {
     "claimed": "بازخرید شده",
-    "unclaimed": "بازخرید‌نشده"
+    "unclaimed": "بازخرید‌نشده",
+    "movedToNewWallet": "به کیف پول جدید منتقل شد"
   },
   "claimDeadline": {
     "expired": "مهلت بازخرید به پایان رسیده است",
@@ -181,6 +182,8 @@
     "deadlineHelpWithMax": "هر دریافت‌کننده باید ظرف این مدت از زمان ایجاد، بازخرید کند (پیش‌فرض: حداکثر این هاب، {{max}})",
     "addRecipient": "افزودن دریافت‌کننده دیگر",
     "setClaimDeadline": "تعیین مهلت بازخرید",
+    "mintSignatureLabel": "امضای منشأ ضرابخانه",
+    "mintSignatureHelp": "امضای گره‌ای که منشأ و مبلغ این لوکیکش را اثبات می‌کند اضافه کنید — اختیاری، طول توکن را تقریباً دو برابر می‌کند",
     "statusAll": "همه",
     "statusExpired": "منقضی‌شده",
     "allocatedSummary": "{{allocated}} loki در این صفحه تخصیص یافته · {{total}} {{status}}",

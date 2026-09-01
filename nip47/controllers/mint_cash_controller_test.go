@@ -288,7 +288,7 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	for i, p := range perms {
 		scopes[i] = p.Scope
 	}
-	assert.ElementsMatch(t, []string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
+	assert.ElementsMatch(t, []string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.CASH_CONSOLIDATE_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
 }
 
 func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *testing.T) {

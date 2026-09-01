@@ -25,14 +25,15 @@ import { useInfo } from "src/hooks/useInfo";
 dayjs.extend(relativeTime);
 
 // The entry point for the Cash Hub feature — a Cash Hub mints on-demand,
-// spend-only wallets ("lokicash") for beneficiaries. This list itself only
-// needs to fetch/display cash_hub apps; minting, viewing, and deleting the
-// lokicash tokens a given hub has issued happens on that hub's own
-// AppDetails page (CashHubConfigCard/CashHubAllocations/DisconnectCashHub),
-// reached by clicking into a row below.
+// spend-only lokicash for beneficiaries, held in a wallet created for that
+// purpose. This list itself only needs to fetch/display cash_hub apps;
+// minting, viewing, and deleting the lokicash tokens a given hub has minted
+// happens on that hub's own AppDetails page
+// (CashHubConfigCard/CashHubAllocations/DisconnectCashHub), reached by
+// clicking into a row below.
 //
 // Deliberately a table, not the AppCard grid Sub-wallets/Connections use —
-// a Cash Hub is an issuer you monitor (balance, activity), not a wallet you
+// a Cash Hub is a minter you monitor (balance, activity), not a wallet you
 // browse, so this reads as an operational list rather than another wallet
 // grid (matches the table pattern already used for Channels/Peers).
 export function CashHubList() {
@@ -75,16 +76,15 @@ export function CashHubList() {
       <div className="grid gap-4">
         <AppHeader
           title="Cash Hubs"
-          description="Mint spend-only Lokicash wallets for beneficiaries, paid out on demand from your own balance"
+          description="Mint spend-only Lokicash for beneficiaries, paid out on demand from your own balance"
         />
         <Card className="flex flex-col items-center gap-4 p-8 text-center">
           <BanknoteIcon className="size-10 text-muted-foreground" />
           <CardTitle className="text-lg">No Cash Hubs yet</CardTitle>
           <p className="max-w-md text-sm text-muted-foreground">
-            A Cash Hub lets you fund a shared, spend-only wallet ("lokicash")
-            for one or more recipients in one step — they redeem their own
-            share whenever they're ready, or transfer/split it on to someone
-            else.
+            A Cash Hub lets you mint spend-only Lokicash for one or more
+            recipients in one step — they redeem their own share whenever
+            they're ready, or transfer/split it on to someone else.
           </p>
           <ResponsiveLinkButton
             to="/cash-hub/new"
@@ -100,7 +100,7 @@ export function CashHubList() {
     <div className="grid gap-4">
       <AppHeader
         title="Cash Hubs"
-        description="Mint spend-only Lokicash wallets for beneficiaries, paid out on demand from your own balance"
+        description="Mint spend-only Lokicash for beneficiaries, paid out on demand from your own balance"
         contentRight={
           <ResponsiveLinkButton
             to="/cash-hub/new"

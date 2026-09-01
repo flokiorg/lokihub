@@ -35,7 +35,6 @@ import (
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
@@ -91,6 +90,16 @@ type Deps struct {
 	// db.CashIdentityConnectionKey, so callers that only ever create
 	// pubkey-mode wallets may leave it nil.
 	IAChecker IATrustChecker
+	// FundInternalOverride, when non-nil, replaces the real internal-transfer
+	// primitive (fundInternal) — test-only. Lets a test script an exact
+	// success/failure sequence across a saga's multiple internal transfers
+	// (Consolidate, SplitInTwo) without needing distinct real bolt11 invoices
+	// or working around the mock LN client's single-payee-per-test self-
+	// payment-interception limit (see consolidate_rollback_test.go's doc
+	// comment for why that's otherwise a real wall for some scenarios). nil
+	// in production — fundInternal runs its real MakeInvoice/SendPaymentSync
+	// logic as always.
+	FundInternalOverride func(ctx context.Context, fromAppID, toAppID uint, amountMloki uint64, memo string) error
 }
 
 // RecipientInput describes one recipient's requested slice of a shared Cash
@@ -116,6 +125,11 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
+	// SignMint requests optional mint provenance on the issued token (NIP-CASH
+	// §Mint Provenance): the node signs the token so a holder can verify its
+	// origin and denomination offline. Off by default — provenance roughly
+	// doubles a token's length and is never needed to spend it.
+	SignMint bool
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
@@ -179,6 +193,8 @@ type Resolved struct {
 	// Split inherits its OWN RedeemFeePpm from the specific slice it was
 	// split from, never freshly from this hub config.
 	RedeemFeePpm int
+	// SignMint carries Params.SignMint through to Commit (see Params.SignMint).
+	SignMint bool
 }
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
@@ -351,6 +367,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		ExpiresAt:        expiresAt,
 		MinTransferMloki: hubConfig.MinTransferMloki,
 		RedeemFeePpm:     hubConfig.RedeemFeePpm,
+		SignMint:         params.SignMint,
 	}, nil
 }
 
@@ -429,6 +446,7 @@ func GenerateBearerSecret() (secretHex, secretHash string, err error) {
 var cashWalletScopes = []string{
 	constants.CASH_REDEEM_SCOPE,
 	constants.CASH_TRANSFER_SCOPE,
+	constants.CASH_CONSOLIDATE_SCOPE,
 	constants.GET_BALANCE_SCOPE,
 }
 
@@ -513,21 +531,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// this point every other side effect is already durably committed, so
 	// nothing remains that could fail and leave the wallet stranded or
 	// invisible.
-	invoice, err := deps.TransactionsService.MakeInvoice(
-		ctx, sum, "cash transfer", "", 0,
-		nil, deps.LNClient, &newApp.ID, nil, nil, nil, nil, nil, nil,
-		&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transfer invoice for Cash wallet: %w", err)
-	}
-
-	_, err = deps.TransactionsService.SendPaymentSync(
-		invoice.PaymentRequest, nil,
-		map[string]interface{}{"internal_transfer": true},
-		deps.LNClient, &resolved.HubApp.ID, nil,
-	)
-	if err != nil {
+	if err := fundInternal(ctx, deps, resolved.HubApp.ID, newApp.ID, sum, "cash transfer"); err != nil {
 		return nil, fmt.Errorf("failed to fund Cash wallet via transfer: %w", err)
 	}
 	fundsTransferred = true
@@ -560,19 +564,11 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// connection string.
 	// Uniform across every recipient by construction (Resolve requires a
 	// bearer recipient to be this request's only one), so the first
-	// recipient's identity type speaks for the whole wallet.
+	// recipient's identity type speaks for the whole wallet. When SignMint is
+	// set, the token's provenance attests the wallet's total committed amount
+	// (sum), which is immutable for the wallet's life (§Mint Provenance).
 	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityBearer
-	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:              lokicash.HRP,
-		WalletPubkey:     walletPubkey,
-		Secret:           pairingSecretKey,
-		RelayURLs:        deps.RelayURLs,
-		IdentityRequired: &identityRequired,
-	})
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("cash_wallet_id", newApp.ID).
-			Msg("Failed to encode lokicash token for already-funded Cash wallet")
-	}
+	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, resolved.SignMint, sum)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).
@@ -638,6 +634,10 @@ type SplitParams struct {
 	// shorten or lengthen it (NIP-CASH "Spinning a Slice Off Into a
 	// Dedicated Wallet" → Eligibility and limits).
 	ExpiresAt *time.Time
+	// SignMint requests optional mint provenance on the split-off token (see
+	// Params.SignMint) — its own signature over its own pubkey and its own
+	// fixed AmountMloki, independent of whether the source wallet had one.
+	SignMint bool
 }
 
 // SplitResult carries what cash_transfer_controller.go needs to deliver the
@@ -730,46 +730,21 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	// privileged, Go-level-only transfer from both the full-drain guard and
 	// the pay_invoice-scope requirement a cash_wallet's real NWC connection
 	// deliberately never has.
-	invoice, err := deps.TransactionsService.MakeInvoice(
-		ctx, params.AmountMloki, "cash split", "", 0,
-		nil, deps.LNClient, &newApp.ID, nil, nil, nil, nil, nil, nil,
-		&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transfer invoice for split-off Cash wallet: %w", err)
-	}
-
-	_, err = deps.TransactionsService.SendPaymentSync(
-		invoice.PaymentRequest, nil,
-		map[string]interface{}{"internal_transfer": true},
-		deps.LNClient, &params.SourceWalletApp.ID, nil,
-	)
-	if err != nil {
+	if err := fundInternal(ctx, deps, params.SourceWalletApp.ID, newApp.ID, params.AmountMloki, "cash split"); err != nil {
 		return nil, fmt.Errorf("failed to fund split-off Cash wallet via transfer: %w", err)
 	}
 	fundsTransferred = true
 
 	// A split-off wallet is always a single slice, by construction (Split
 	// never creates anything else) — no need to inspect the just-created
-	// claim to know whether identity is required.
+	// claim to know whether identity is required. encodeCashToken already
+	// degrades gracefully on any encode/sign failure (funds have already
+	// moved, so a defensive failure here must never become an error return —
+	// that would tell the caller the split failed when it actually
+	// succeeded, leaving a funded wallet with no way to deliver its
+	// connection; the wallet remains recoverable via the admin API either way).
 	identityRequired := params.NewIdentityType != db.CashIdentityBearer
-	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:              lokicash.HRP,
-		WalletPubkey:     walletPubkey,
-		Secret:           pairingSecretKey,
-		RelayURLs:        deps.RelayURLs,
-		IdentityRequired: &identityRequired,
-	})
-	if err != nil {
-		// Same reasoning as Commit: funds already moved (fundsTransferred,
-		// above), so a defensive encode failure here must not become an
-		// error return — that would tell the caller the split failed when it
-		// actually succeeded, leaving a funded wallet with no way to deliver
-		// its connection. Degrade to an empty token; the caller logs and the
-		// wallet remains recoverable via the admin API.
-		logger.Logger.Error().Err(err).Uint("cash_wallet_id", newApp.ID).
-			Msg("Failed to encode lokicash token for already-funded split-off Cash wallet")
-	}
+	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.SignMint, params.AmountMloki)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).

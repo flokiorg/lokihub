@@ -83,7 +83,8 @@
   },
   "claimBadge": {
     "claimed": "تم الاسترداد",
-    "unclaimed": "لم يُسترد"
+    "unclaimed": "لم يُسترد",
+    "movedToNewWallet": "تم النقل إلى محفظة جديدة"
   },
   "claimDeadline": {
     "expired": "انتهت مهلة الاسترداد",
@@ -244,6 +245,8 @@
     "deadlineHelpWithMax": "يجب على كل مستلم الاسترداد خلال هذه المدة من وقت الإنشاء (الافتراضي: الحد الأقصى لهذا المركز، {{max}})",
     "addRecipient": "إضافة مستلم آخر",
     "setClaimDeadline": "تعيين موعد نهائي للاسترداد",
+    "mintSignatureLabel": "توقيع مصدر السك",
+    "mintSignatureHelp": "إرفاق توقيع العقدة الذي يثبت مصدر ومبلغ هذا اللوكيكاش — اختياري، يضاعف تقريبًا طول الرمز",
     "statusAll": "الكل",
     "statusExpired": "منتهية الصلاحية",
     "allocatedSummary": "تم تخصيص {{allocated}} loki في هذه الصفحة · {{total}} {{status}}",

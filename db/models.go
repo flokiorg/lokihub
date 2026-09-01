@@ -54,11 +54,18 @@ const (
 )
 
 type App struct {
-	ID           uint
-	Name         string `validate:"required"`
-	Description  string
-	AppPubkey    string `validate:"required" gorm:"not null"`
-	WalletPubkey *string
+	ID          uint
+	Name        string `validate:"required"`
+	Description string
+	// AppPubkey/WalletPubkey carry a composite index because every incoming
+	// NWC request resolves its target connection with
+	// `WHERE app_pubkey = ? [AND wallet_pubkey = ?]` (nip47/event_handler.go).
+	// Without it that lookup is a full apps-table scan on EVERY request — a cost
+	// that grows with the table, which cash_wallet churn (each split spins off
+	// two, each consolidate one) accelerates. app_pubkey leads the index so the
+	// app_pubkey-only case (no p-tag) uses it as a prefix too.
+	AppPubkey    string  `validate:"required" gorm:"not null;index:idx_apps_pubkey_lookup,priority:1"`
+	WalletPubkey *string `gorm:"index:idx_apps_pubkey_lookup,priority:2"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	LastUsedAt   *time.Time
@@ -279,6 +286,27 @@ type CashTransferProof struct {
 	AppID     uint   `gorm:"not null;index"` // the cash_wallet, for observability only
 	EventID   string `gorm:"not null;uniqueIndex"`
 	CreatedAt time.Time
+}
+
+// CashStrandedFund is a durable record of one compensating-saga reversal that
+// itself failed during cashwallet.Consolidate/SplitInTwo, so an operator can
+// find and resolve it by querying data instead of grepping logs.
+// SourceWalletAppID is the wallet whose contribution was debited but never
+// returned; RetainedWalletAppID is the wallet deliberately left un-deleted
+// (the merged wallet for a consolidate, the carved wallet for a split),
+// still holding those funds. No foreign key to either App row: this record's
+// own lifecycle is independent of whatever later happens to them (e.g. an
+// operator manually sweeping and deleting the retained wallet must not
+// silently erase the reconciliation history). ResolvedAt is set once an
+// operator has manually swept the funds back — nil means still outstanding.
+type CashStrandedFund struct {
+	ID                  uint   `gorm:"primaryKey"`
+	Operation           string `gorm:"not null"` // "consolidate" | "split"
+	SourceWalletAppID   uint   `gorm:"not null;index"`
+	RetainedWalletAppID uint   `gorm:"not null;index"`
+	AmountMloki         uint64 `gorm:"not null"`
+	CreatedAt           time.Time
+	ResolvedAt          *time.Time `gorm:"index"`
 }
 
 // CircleWalletMembership enforces at most one *active* circle_wallet per

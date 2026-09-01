@@ -89,21 +89,32 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.EqualValues(t, splitAmount, res.AmountMloki)
 	require.NotNil(t, res.RemainingAmountMloki)
 	require.EqualValues(t, fullAmount-splitAmount, *res.RemainingAmountMloki)
-	require.NotEmpty(t, res.NewWalletToken, "a connection_key partial split must spin off a dedicated wallet")
+	require.NotEmpty(t, res.NewWalletToken, "a connection_key partial split must spin off a carved wallet")
+	require.NotEmpty(t, res.RemainderWalletToken, "the remainder is now its own new wallet, not left on the source")
 
-	// Source real balance must equal exactly the remainder — no double-spend.
+	// The source slice was consumed: the source wallet is drained (its value
+	// moved into the carved + remainder wallets) — no double-spend.
 	var bal GetBalanceResult
 	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, fullAmount-splitAmount, bal.Balance)
+	require.EqualValues(t, 0, bal.Balance)
 
-	// The remainder is still redeemable under the SAME connection_key (fresh
-	// attestation + proof), for exactly the remainder amount.
+	// The remainder is redeemable under the SAME connection_key (fresh
+	// attestation + proof) — now from its OWN new wallet, for exactly the
+	// remainder amount. The remainder slice kept the caller's connection_key
+	// identity (and its IAPubkey), so the same IA vouches for it there.
+	remCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, res.RemainderWalletPubkey, claimantPriv)
+	require.NoError(t, err)
+	remDec, err := remCipher.Decrypt(res.RemainderWalletToken)
+	require.NoError(t, err)
+	remTok, err := lokicash.Decode(remDec)
+	require.NoError(t, err)
+	remClient := mustConnect(t, nwcURIFromLokicash(remTok))
 	remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit connkey remainder redeem")
 	remAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
-	remProof := buildClaimProofEvent(t, claimantPriv, walletPubkey, remInvoice.PaymentHash,
+	remProof := buildClaimProofEvent(t, claimantPriv, res.RemainderWalletPubkey, remInvoice.PaymentHash,
 		connKeyTransferProofTags(connectionKey, remAttestation.ID), time.Now())
 	var remClaim ClaimFundsResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+	require.NoError(t, remClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 		Invoice:          remInvoice.Invoice,
 		IdentityType:     "connection_key",
 		IdentityValue:    connectionKey,

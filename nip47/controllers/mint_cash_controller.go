@@ -29,6 +29,11 @@ type mintCashRecipientParam struct {
 type mintCashParams struct {
 	Recipients []mintCashRecipientParam `json:"recipients"`
 	ExpirySecs int                      `json:"expiry,omitempty"`
+	// MintSignature opts the issued token into mint provenance (NIP-CASH §Mint
+	// Provenance): the node signs it so a holder can verify origin and
+	// denomination offline. Off by default — provenance roughly doubles the
+	// token's length and is never needed to spend it.
+	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type mintCashRecipientResult struct {
@@ -129,6 +134,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		HubApp:     app,
 		Recipients: recipients,
 		ExpirySecs: params.ExpirySecs,
+		SignMint:   params.MintSignature,
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())

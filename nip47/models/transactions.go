@@ -52,6 +52,7 @@ func ToNip47Transaction(transaction *transactions.Transaction) *Transaction {
 		PaymentHash:     transaction.PaymentHash,
 		Amount:          int64(transaction.AmountMloki), //nolint:gosec // mloki amounts are always far below int64 range
 		FeesPaid:        int64(transaction.FeeMloki),    //nolint:gosec // mloki amounts are always far below int64 range
+		FeeSkimMloki:    transaction.FeeSkimMloki,
 		CreatedAt:       transaction.CreatedAt.Unix(),
 		ExpiresAt:       expiresAt,
 		SettledAt:       settledAt,

@@ -424,10 +424,17 @@ export const CashHubAllocations = React.forwardRef<
   const [hasDeadline, setHasDeadline] = React.useState(false);
   const [claimDeadlineSecs, setClaimDeadlineSecs] = React.useState(86400);
 
+  // Opts the issued Lokicash into mint provenance (NIP-CASH §Mint
+  // Provenance) — a node signature over the wallet's own pubkey and
+  // committed amount, verifiable offline. Optional, off by default (roughly
+  // doubles the token's length).
+  const [mintSignature, setMintSignature] = React.useState(false);
+
   const resetForm = React.useCallback(() => {
     setRecipients([newRecipientRow(maxAmountLoki ?? 0)]);
     setHasDeadline(false);
     setClaimDeadlineSecs(86400);
+    setMintSignature(false);
   }, [maxAmountLoki]);
 
   React.useImperativeHandle(ref, () => ({
@@ -622,6 +629,7 @@ export const CashHubAllocations = React.forwardRef<
           amount_mloki: r.amountLoki * 1000,
         })),
         ...(hasDeadline ? { expiry_secs: claimDeadlineSecs } : {}),
+        ...(mintSignature ? { mint_signature: true } : {}),
       };
       const result = await request<CreateCashWalletResponse>(
         `/api/apps/${id}/cash-wallets`,
@@ -1055,6 +1063,21 @@ export const CashHubAllocations = React.forwardRef<
           </p>
         </div>
       )}
+      <div className="grid gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="mint-signature"
+            checked={mintSignature}
+            onCheckedChange={(checked) => setMintSignature(checked === true)}
+          />
+          <Label htmlFor="mint-signature" className="text-sm font-normal">
+            {t("cashHubAllocations.mintSignatureLabel")}
+          </Label>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {t("cashHubAllocations.mintSignatureHelp")}
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         {!hasBearerRow && (
           <Button
@@ -1494,7 +1517,15 @@ export const CashHubAllocations = React.forwardRef<
                                 )}
                                 onClick={() =>
                                   c.claimed &&
-                                  navigate(`/apps/${c.wallet_app_id}`)
+                                  // A slice that was split off or consolidated
+                                  // away never got a Lightning payout on THIS
+                                  // wallet — its value lives on in the new
+                                  // wallet spun_off_to_wallet_app_id names, so
+                                  // that's the more useful place to land than
+                                  // this (now-drained) wallet's own page.
+                                  navigate(
+                                    `/apps/${c.spun_off_to_wallet_app_id ?? c.wallet_app_id}`
+                                  )
                                 }
                               >
                                 {c.identity_type === "pubkey" ? (

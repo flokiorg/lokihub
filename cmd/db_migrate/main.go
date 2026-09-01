@@ -37,6 +37,7 @@ var expectedTables = []string{
 	"circle_wallet_identity_proofs",
 	"circle_wallet_memberships",
 	"cash_transfer_proofs",
+	"cash_stranded_funds",
 }
 
 func main() {

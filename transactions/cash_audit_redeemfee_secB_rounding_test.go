@@ -82,30 +82,51 @@ import (
 // reuses for redeem-fee quoting on top of its pre-existing circle_hub
 // fee-skim use — see the task's own explicit callout of "CalculateFeeSkimMloki
 // reuse" as an audit angle.
-func TestCashAuditSecB_CalculateFeeSkimMloki_OverflowsAtExtremeAmounts(t *testing.T) {
+// FIXED same round (2026-08-31): CalculateFeeSkimMloki now computes the full
+// 128-bit product (math/bits.Mul64) before dividing, so no precision is lost
+// at any amountMloki/feesPpm this system can produce — it no longer silently
+// wraps to a wrong value at the old plain-multiplication overflow boundary.
+func TestCashAuditSecB_CalculateFeeSkimMloki_CorrectAtExtremeAmounts(t *testing.T) {
 	const maxClaimed = uint64(1<<63 - 1) // cashwallet.Resolve's own per-recipient ceiling (math.MaxInt64)
 
-	// Correct (non-overflowing) answer: a 100% fee on maxClaimed should be
-	// exactly maxClaimed itself.
+	// A 100% fee on maxClaimed must equal maxClaimed exactly — this is
+	// exactly the amount/rate combination that used to silently wrap to a
+	// wrong value under plain uint64 multiplication.
 	quotedFee := CalculateFeeSkimMloki(maxClaimed, constants.MAX_FEES_PPM)
-	assert.NotEqual(t, maxClaimed, quotedFee,
-		"FINDING: at cashwallet.Resolve's own permitted ceiling, CalculateFeeSkimMloki's internal "+
-			"amountMloki*feesPpm multiplication overflows uint64 and silently returns a WRONG, wrapped "+
-			"fee instead of the mathematically correct answer (which would equal maxClaimed exactly, "+
-			"for a 100% rate) or an error")
+	assert.Equal(t, maxClaimed, quotedFee,
+		"a 100% fee at cashwallet.Resolve's own permitted ceiling must equal the claimed amount exactly, "+
+			"not a value silently wrapped by an internal uint64 overflow")
 
-	// The overflow threshold itself: the smallest amountMloki (at the
-	// maximum 100% rate) where amountMloki*feesPpm first exceeds uint64's
-	// own range — confirms the boundary is exactly where the doc comment
-	// above says it is, not merely "some large number".
-	const overflowThreshold = math.MaxUint64/uint64(constants.MAX_FEES_PPM) + 1
-	require.Less(t, overflowThreshold, maxClaimed,
-		"the overflow boundary sits comfortably below cashwallet.Resolve's own per-recipient ceiling, "+
+	// The OLD plain-multiplication overflow threshold: the smallest
+	// amountMloki (at the maximum 100% rate) where amountMloki*feesPpm used
+	// to first exceed uint64's own range under naive multiplication. The fix
+	// must remain correct on both sides of this old boundary, confirming the
+	// 128-bit intermediate genuinely closes the gap rather than just moving it.
+	const oldOverflowThreshold = math.MaxUint64/uint64(constants.MAX_FEES_PPM) + 1
+	require.Less(t, oldOverflowThreshold, maxClaimed,
+		"the old overflow boundary sits comfortably below cashwallet.Resolve's own per-recipient ceiling, "+
 			"confirming this isn't merely a theoretical, unreachable-by-validation edge")
-	justBelow := CalculateFeeSkimMloki(overflowThreshold-1, constants.MAX_FEES_PPM)
-	justAt := CalculateFeeSkimMloki(overflowThreshold, constants.MAX_FEES_PPM)
-	assert.Equal(t, overflowThreshold-1, justBelow, "one mloki below the threshold: still correct")
-	assert.NotEqual(t, overflowThreshold, justAt, "at the threshold itself: wraps to a wrong value")
+	justBelow := CalculateFeeSkimMloki(oldOverflowThreshold-1, constants.MAX_FEES_PPM)
+	justAt := CalculateFeeSkimMloki(oldOverflowThreshold, constants.MAX_FEES_PPM)
+	justAbove := CalculateFeeSkimMloki(oldOverflowThreshold+1, constants.MAX_FEES_PPM)
+	assert.Equal(t, oldOverflowThreshold-1, justBelow, "one mloki below the old threshold: correct")
+	assert.Equal(t, oldOverflowThreshold, justAt, "AT the old threshold: must now be exact, not wrapped")
+	assert.Equal(t, oldOverflowThreshold+1, justAbove, "one mloki above the old threshold: must now be exact, not wrapped")
+}
+
+// TestCashAuditSecB_CalculateFeeSkimMloki_SaturatesOnOutOfRangeRate covers
+// the defensive-only branch: feesPpm > constants.PPM_DIVISOR (a >100% rate)
+// is never valid and never reachable via normal config validation (feesPpm
+// is clamped to constants.MAX_FEES_PPM == PPM_DIVISOR at hub-config
+// creation/update time), but CalculateFeeSkimMloki itself doesn't assume its
+// caller enforced that — a true quotient this large would overflow
+// bits.Div64 and panic, so the function saturates at math.MaxUint64 instead:
+// fails safe (an unmistakably-wrong huge fee any caller would reject
+// downstream) rather than crashing the process.
+func TestCashAuditSecB_CalculateFeeSkimMloki_SaturatesOnOutOfRangeRate(t *testing.T) {
+	const overRate = constants.MAX_FEES_PPM * 3 // 300% — never valid, defensive-only
+	got := CalculateFeeSkimMloki(uint64(1<<63-1), overRate)
+	assert.Equal(t, uint64(math.MaxUint64), got)
 }
 
 // TestCashAuditSecB_ReconcileDelta_RealisticBoundaryValuesNeverOverflow
