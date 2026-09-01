@@ -138,7 +138,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res))
-		require.EqualValues(t, happyPathAmountMloki*3, res.AmountMloki)
+		require.EqualValues(t, happyPathAmountMloki*3, res.AmountMillis)
 
 		// Both source connections drained (their slices were consumed).
 		for _, c := range []string{conn1, conn2} {

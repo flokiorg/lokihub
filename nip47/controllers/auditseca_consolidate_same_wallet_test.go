@@ -106,7 +106,7 @@ func TestAuditSecA_Consolidate_TwoDistinctSlicesOnSameWallet_Succeeds(t *testing
 	require.Nil(t, resp.Error, "a spec-conformant two-distinct-slices-one-wallet consolidate must now succeed")
 	result, ok := resp.Result.(cashConsolidateResponse)
 	require.True(t, ok)
-	assert.Equal(t, uint64(124_000), result.AmountMloki, "the merged wallet must carry the full sum of both slices")
+	assert.Equal(t, uint64(124_000), result.AmountMillis, "the merged wallet must carry the full sum of both slices")
 
 	// Both source slices are now claimed (spun off to the merged wallet), not
 	// left dangling.

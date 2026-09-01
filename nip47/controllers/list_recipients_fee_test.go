@@ -1,6 +1,6 @@
 package controllers
 
-// Test coverage for list_recipients' new redeem_fee_mloki/net_redeemable_mloki
+// Test coverage for list_recipients' new redeem_fee_millis/net_redeemable_millis
 // fields (NIP-CASH.md §Listing Recipients) — the quote a recipient uses to
 // know exactly what cash_redeem will pay out before calling it.
 
@@ -53,13 +53,13 @@ func TestHandleListRecipientsEvent_RedeemFeeQuoteFields(t *testing.T) {
 
 	r1, ok := byIdentity[pk1]
 	require.True(t, ok)
-	assert.Equal(t, int64(100), r1.RedeemFeeMloki)
-	assert.Equal(t, int64(900), r1.NetRedeemableMloki)
+	assert.Equal(t, int64(100), r1.RedeemFeeMillis)
+	assert.Equal(t, int64(900), r1.NetRedeemableMillis)
 
 	r2, ok := byIdentity[pk2]
 	require.True(t, ok)
-	assert.Zero(t, r2.RedeemFeeMloki)
-	assert.Equal(t, int64(3000), r2.NetRedeemableMloki)
+	assert.Zero(t, r2.RedeemFeeMillis)
+	assert.Equal(t, int64(3000), r2.NetRedeemableMillis)
 }
 
 // TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling proves the
@@ -90,6 +90,6 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.
 
 	result := response.Result.(listRecipientsResponse)
 	require.Len(t, result.Recipients, 1)
-	assert.Equal(t, int64(250), result.Recipients[0].RedeemFeeMloki)
-	assert.Equal(t, int64(750), result.Recipients[0].NetRedeemableMloki)
+	assert.Equal(t, int64(250), result.Recipients[0].RedeemFeeMillis)
+	assert.Equal(t, int64(750), result.Recipients[0].NetRedeemableMillis)
 }

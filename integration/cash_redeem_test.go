@@ -46,7 +46,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			require.NoError(t, err)
 			amount := happyPathAmountMloki * uint64(i+1) // distinct amounts per recipient
 			recipients[i] = recipient{privkey: priv, pubkey: pub, amount: amount}
-			params[i] = CashWalletRecipientParam{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: amount}
+			params[i] = CashWalletRecipientParam{IdentityType: "pubkey", IdentityValue: pub, AmountMillis: amount}
 		}
 
 		var created MintCashResult
@@ -111,7 +111,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		for _, r := range recipientsAfter1.Recipients {
 			if r.IdentityValue == recipients[2].pubkey {
 				require.False(t, r.Claimed)
-				require.EqualValues(t, recipients[2].amount, r.AmountMloki)
+				require.EqualValues(t, recipients[2].amount, r.AmountMillis)
 			}
 		}
 	})
@@ -271,8 +271,8 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "pubkey", IdentityValue: claimedPub, AmountMloki: happyPathAmountMloki},
-				{IdentityType: "pubkey", IdentityValue: unclaimedPub, AmountMloki: happyPathAmountMloki},
+				{IdentityType: "pubkey", IdentityValue: claimedPub, AmountMillis: happyPathAmountMloki},
+				{IdentityType: "pubkey", IdentityValue: unclaimedPub, AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -311,7 +311,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -349,7 +349,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -400,7 +400,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -454,7 +454,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -500,7 +500,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: mustPubkey(t, iaPriv), AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -539,7 +539,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMloki: happyPathAmountMloki},
+				{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))

@@ -261,7 +261,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 			wantMsg:  "same Cash Hub",
 		},
 		{
-			name: "sources disagree on min_transfer_mloki",
+			name: "sources disagree on min_transfer_millis",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)

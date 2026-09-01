@@ -242,8 +242,8 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	// SendPaymentSync itself evaluates moments later — lets the recipient's
 	// invoice be checked against the RIGHT expected amount before payment is
 	// even attempted, rather than discovering after the fact that they built
-	// it for the wrong one. See list_recipients (redeem_fee_mloki/
-	// net_redeemable_mloki) for the quote a client should build this invoice
+	// it for the wrong one. See list_recipients (redeem_fee_millis/
+	// net_redeemable_millis) for the quote a client should build this invoice
 	// from in the first place.
 	resolvedAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
 	if resolvedAmount == 0 && params.Amount != nil {
@@ -261,13 +261,13 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		}
 		// The generic message below is correct on its own, but a recipient
 		// who followed list_recipients' own advice (build the invoice for
-		// net_redeemable_mloki, the WORST-CASE quote) and presented exactly
+		// net_redeemable_millis, the WORST-CASE quote) and presented exactly
 		// that fee-reduced amount, only to have this specific redemption
 		// resolve same-node (fee-free, full amount required), would read
 		// "net redeemable amount of X" as agreeing with the very value that
 		// just got rejected — same phrase, different number, no indication
 		// why. Name the mechanism explicitly for that specific case.
-		message := fmt.Sprintf("invoice amount %d does not exactly match your net redeemable amount of %d mloki (allocated share %d minus redeem fee %d)",
+		message := fmt.Sprintf("invoice amount %d does not exactly match your net redeemable amount of %d millis (allocated share %d minus redeem fee %d)",
 			resolvedAmount, expectedAmount, claimedAmount, hubFeeMloki)
 		if willBeSelfPayment && resolvedAmount < uint64(claimedAmount) { //nolint:gosec // claimedAmount is always non-negative
 			message = fmt.Sprintf("invoice amount %d does not match: this redemption resolves to a same-node payment, which is always fee-free — present an invoice for the full %d instead of a fee-reduced quote",

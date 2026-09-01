@@ -42,7 +42,7 @@ type cashTransferParams struct {
 
 	NewIdentity cashTransferNewIdentityParam `json:"new_identity"`
 
-	// AmountMloki is OPTIONAL — omitted, or equal to the slice's current full
+	// AmountMillis is OPTIONAL — omitted, or equal to the slice's current full
 	// amount, means "transfer it all" (this method's only behavior before
 	// splitting existed). A value LESS than the slice's current amount
 	// splits off exactly that much into a brand-new dedicated cash_wallet,
@@ -52,7 +52,7 @@ type cashTransferParams struct {
 	// and any nonzero remainder left behind, must each be at least this
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
 	// AppsService.SplitCashSliceAmount.
-	AmountMloki *uint64 `json:"amount_mloki,omitempty"`
+	AmountMillis *uint64 `json:"amount_millis,omitempty"`
 
 	// MintSignature opts a spun-off wallet's token into mint provenance
 	// (NIP-CASH §Mint Provenance) — only meaningful when this call actually
@@ -69,17 +69,17 @@ type cashTransferParams struct {
 // HandleCashTransferEvent for why: this response travels over the shared
 // cash_wallet connection, decryptable by every recipient who ever held it).
 type cashTransferResponse struct {
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	// RemainingAmountMloki is populated only when this call went through the
+	// RemainingAmountMillis is populated only when this call went through the
 	// split path (see NewWalletPubkey/NewWalletToken below): 0 for a full
 	// split, >0 for a partial one — so the caller's own client can update
 	// its cached view of what's left on THIS connection without a separate
 	// list_recipients round-trip. Never populated for an in-place
 	// reassignment (nothing was carved off; the whole slice just changed
 	// hands, still for its original, unchanged amount).
-	RemainingAmountMloki *uint64 `json:"remaining_amount_mloki,omitempty"`
+	RemainingAmountMillis *uint64 `json:"remaining_amount_millis,omitempty"`
 	// NewWalletPubkey and NewWalletToken are populated only when this
 	// transfer split the slice's value — full or partial — off into a
 	// brand-new dedicated cash_wallet instead of reassigning identity in
@@ -273,17 +273,17 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// transfer.
 	requestedAmount := uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
 	isFullTransfer := true
-	if params.AmountMloki != nil {
-		if *params.AmountMloki == 0 {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "amount_mloki must be positive")
+	if params.AmountMillis != nil {
+		if *params.AmountMillis == 0 {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "amount_millis must be positive")
 			return
 		}
-		if *params.AmountMloki > requestedAmount {
+		if *params.AmountMillis > requestedAmount {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("amount_mloki %d exceeds this slice's own balance of %d", *params.AmountMloki, requestedAmount))
+				fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", *params.AmountMillis, requestedAmount))
 			return
 		}
-		requestedAmount = *params.AmountMloki
+		requestedAmount = *params.AmountMillis
 		isFullTransfer = requestedAmount == uint64(claim.AmountMloki) //nolint:gosec
 	}
 
@@ -478,7 +478,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 
 	if !split {
 		// In-place reassignment only ever applies to a full transfer —
-		// AmountMloki is unchanged by construction, so there's nothing to
+		// AmountMillis is unchanged by construction, so there's nothing to
 		// pass beyond the identities themselves.
 		amount, err := controller.appsService.ReassignCashSliceIdentity(app.ID,
 			currentIdentityType, currentIdentityValue,
@@ -536,7 +536,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Result: cashTransferResponse{
-				AmountMloki:   uint64(amount), //nolint:gosec // AmountMloki is always non-negative
+				AmountMillis:  uint64(amount), //nolint:gosec // AmountMloki is always non-negative
 				IdentityType:  newIdentityType,
 				IdentityValue: newIdentityValueToStore,
 			},
@@ -573,7 +573,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
 	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey, proofEventID string, mintSignature bool,
 	claim *db.CashWalletClaim, publishResponse publishFunc, tags nostr.Tags) {
-	// Enforce the slice's own min_transfer_mloki floor (0 = none) on BOTH the
+	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
 	// carve off, or leave behind, unmovable dust is rejected before anything is
 	// claimed (NIP-CASH §Splitting a Slice). The old decrement-based path
@@ -584,12 +584,12 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		remainder := uint64(claim.AmountMloki) - requestedAmount //nolint:gosec // requestedAmount <= claim.AmountMloki, bounded by step 6
 		if requestedAmount < floor {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("amount_mloki %d is below this slice's min_transfer_mloki floor of %d", requestedAmount, floor))
+				fmt.Sprintf("amount_millis %d is below this slice's min_transfer_millis floor of %d", requestedAmount, floor))
 			return
 		}
 		if remainder != 0 && remainder < floor {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("the %d remainder this split would leave behind is below this slice's min_transfer_mloki floor of %d", remainder, floor))
+				fmt.Sprintf("the %d remainder this split would leave behind is below this slice's min_transfer_millis floor of %d", remainder, floor))
 			return
 		}
 	}
@@ -756,7 +756,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	}
 
 	resp := cashTransferResponse{
-		AmountMloki:     requestedAmount,
+		AmountMillis:    requestedAmount,
 		IdentityType:    newIdentityType,
 		IdentityValue:   newIdentityValueToStore,
 		NewWalletPubkey: carvedPubkey,
@@ -773,7 +773,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 			logger.Logger.Error().Err(setSrcErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Remainder.WalletApp.ID).
 				Msg("Failed to record split source on the remainder wallet")
 		}
-		resp.RemainingAmountMloki = &remainderAmount
+		resp.RemainingAmountMillis = &remainderAmount
 		resp.RemainderWalletPubkey = remPubkey
 		resp.RemainderWalletToken = remToken
 	}
@@ -832,13 +832,13 @@ func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App)
 // event kind and most of the same checks as verifyClaimIdentityEvent
 // (cash_redeem_controller.go), except bound to the transfer's *target*
 // identity via a new_identity_hash tag instead of an invoice's bolt11_hash,
-// AND to the specific amount_mloki this request resolves to (NIP-CASH
+// AND to the specific amount_millis this request resolves to (NIP-CASH
 // §Transferring and Splitting a Slice: "a proof MUST NOT be replayable to
-// authorize a DIFFERENT amount_mloki than the one it was signed for" — an
-// omitted request amount_mloki, i.e. a full transfer, is bound to the exact
+// authorize a DIFFERENT amount_millis than the one it was signed for" — an
+// omitted request amount_millis, i.e. a full transfer, is bound to the exact
 // live amount resolved for it, never left unbound). Caller passes the
 // already-resolved requestedAmount (§Processing Algorithm step 1's
-// "treating an omitted amount_mloki as bound to the slice's full current
+// "treating an omitted amount_millis as bound to the slice's full current
 // amount" rule already applied) — this function only compares it against
 // what the proof itself commits to.
 //
@@ -875,9 +875,9 @@ func verifyTransferIdentityEvent(ev *nostr.Event, identityType, identityValue, w
 	if len(hashTag) < 2 || hashTag[1] != newIdentityHashTag {
 		return fmt.Errorf("identity_event is not bound to this new_identity")
 	}
-	amountTag := ev.Tags.Find("amount_mloki")
+	amountTag := ev.Tags.Find("amount_millis")
 	if len(amountTag) < 2 || amountTag[1] != strconv.FormatUint(requestedAmount, 10) {
-		return fmt.Errorf("identity_event is not bound to this amount_mloki")
+		return fmt.Errorf("identity_event is not bound to this amount_millis")
 	}
 	now := time.Now()
 	evTime := ev.CreatedAt.Time()

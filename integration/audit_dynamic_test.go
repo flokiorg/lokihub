@@ -28,7 +28,7 @@ import (
 // request. The Hub mints the bearer secret and returns it once in the create
 // response (over the Hub's own single-owner connection).
 func oneBearerRecipient(amountMloki uint64) []CashWalletRecipientParam {
-	return []CashWalletRecipientParam{{IdentityType: "bearer", AmountMloki: amountMloki}}
+	return []CashWalletRecipientParam{{IdentityType: "bearer", AmountMillis: amountMloki}}
 }
 
 // createBearerWallet mints a fresh single-recipient bearer Cash wallet and
@@ -132,7 +132,7 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 		require.False(t, redeemWon && transferWon,
 			"REGRESSION: cash_redeem AND cash_transfer both reported success for the same bearer slice "+
 				"(redeem preimage=%q, transfer new amount=%d) — the e0d4559 identity re-check fix has regressed",
-			redeemRes.Preimage, transferRes.AmountMloki)
+			redeemRes.Preimage, transferRes.AmountMillis)
 
 		// Whichever side lost must leave no redeemable path of its own:
 		if redeemWon {
@@ -393,8 +393,8 @@ func TestAudit_CashTransferIntoBearer_SpinsOffOnSharedWallet(t *testing.T) {
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: []CashWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: aPub, AmountMloki: happyPathAmountMloki},
-			{IdentityType: "pubkey", IdentityValue: bPub, AmountMloki: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: aPub, AmountMillis: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: bPub, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))

@@ -73,12 +73,16 @@ inputs, drawn from cash the same node already custodies.
   redeemable by whoever holds its secret.
 - **Identity Authority (IA)**: a third party the wallet owner trusts to attest that a `connection_key`
   belongs to a given Nostr pubkey, or to the Web Identity behind it.
-- **min_transfer_mloki**: a floor, in mloki, on how small a piece a split may carve off or leave behind
+- **min_transfer_millis**: a floor, in millis, on how small a piece a split may carve off or leave behind
   (zero = no floor). See §Splitting a Slice.
 - **redeem_fee_ppm**: a parts-per-million rate charged on a slice only when `cash_redeem` resolves to an
   external Lightning payment (zero = free). See §The Redeem Fee.
+- **millis**: this document's amount unit — one-thousandth of whatever base unit the connection's own coin
+  uses for Lightning-payable amounts (milli-satoshi for a Bitcoin-backed Cash Hub, milli-loki for a
+  flokicoin-backed one, and so on). Fixed per Cash Hub by which coin it mints for; never mixed within one
+  wallet or one call.
 
-Both `min_transfer_mloki` and `redeem_fee_ppm` are Hub-level defaults, stamped onto each slice at creation
+Both `min_transfer_millis` and `redeem_fee_ppm` are Hub-level defaults, stamped onto each slice at creation
 and thereafter fixed on that slice and inherited unchanged across splits (§The Redeem Fee).
 
 ## Methods
@@ -103,7 +107,7 @@ A Cash Hub MUST maintain, for itself:
 - a ceiling on, and default value for, how long a Cash Wallet's cash may remain unredeemed. This ceiling
   MAY instead be "never" (no ceiling at all) — a Hub configured this way imposes no expiry on any cash it
   mints unless the `mint_cash` caller requests one of their own (§Minting Cash);
-- a default value for `min_transfer_mloki` (§Splitting a Slice), applied to every slice a freshly-minted
+- a default value for `min_transfer_millis` (§Splitting a Slice), applied to every slice a freshly-minted
   wallet carries. Zero (no floor) is a valid default;
 - a default value for `redeem_fee_ppm` (§The Redeem Fee), applied to every slice a freshly-minted wallet
   carries. Zero (free) is a valid default;
@@ -118,7 +122,7 @@ For each recipient slice, an implementation MUST track:
 - the committed amount, fixed for the slice's whole life — a redemption, a split, or a consolidate
   consumes the slice entirely; nothing ever rewrites it to a smaller value in place (§Splitting a Slice);
 - whether, and when, the slice has been redeemed;
-- this slice's own `min_transfer_mloki` floor and `redeem_fee_ppm` rate — fixed when the slice was created,
+- this slice's own `min_transfer_millis` floor and `redeem_fee_ppm` rate — fixed when the slice was created,
   from the Hub's default or inherited from the source slice it was split from (§The Redeem Fee);
 - whether the slice's value was moved into a brand-new dedicated Cash Wallet, either in full or as part
   of a split, and if so, which one — purely informational (an implementation MAY surface this for an
@@ -160,8 +164,8 @@ sequenceDiagram
 ```jsonc
 {
   "recipients": [
-    {"identity_type": "pubkey", "identity_value": "<hex pubkey>", "amount_mloki": 21000},
-    {"identity_type": "connection_key", "identity_value": "abc123", "ia_pubkey": "<hex IA pubkey>", "amount_mloki": 5000}
+    {"identity_type": "pubkey", "identity_value": "<hex pubkey>", "amount_millis": 21000},
+    {"identity_type": "connection_key", "identity_value": "abc123", "ia_pubkey": "<hex IA pubkey>", "amount_millis": 5000}
   ],
   "expiry": 86400 // optional, seconds
 }
@@ -174,7 +178,7 @@ single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second
 ```jsonc
 {
   "recipients": [
-    {"identity_type": "bearer", "amount_mloki": 3000}
+    {"identity_type": "bearer", "amount_millis": 3000}
   ]
 }
 ```
@@ -194,7 +198,7 @@ single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second
   identity key, best-effort: a signing failure is never a reason to fail the mint, it just produces a token
   without the signature.
 
-`min_transfer_mloki` is deliberately NOT a request field here — it's a Hub-level setting (§Data Model),
+`min_transfer_millis` is deliberately NOT a request field here — it's a Hub-level setting (§Data Model),
 applied uniformly to every recipient of a freshly-minted wallet from the Hub's own current configuration,
 not supplied per call. A wallet owner who wants a different floor for one specific payout configures a
 separate Cash Hub with its own settings, rather than overriding it per call.
@@ -208,8 +212,8 @@ separate Cash Hub with its own settings, rather than overriding it per call.
   "cash_token": "lokicash1...",
   "expires_at": 1720000000, // omitted entirely if this wallet never expires — see §Data Model, §Minting Cash
   "recipients": [
-    {"identity_type": "pubkey", "identity_value": "...", "amount_mloki": 21000},
-    {"identity_type": "connection_key", "identity_value": "abc123", "amount_mloki": 5000}
+    {"identity_type": "pubkey", "identity_value": "...", "amount_millis": 21000},
+    {"identity_type": "connection_key", "identity_value": "abc123", "amount_millis": 5000}
   ]
 }
 ```
@@ -222,7 +226,7 @@ For the single-`bearer`-recipient request shape above, the response's `recipient
 the generated secret:
 
 ```jsonc
-{"identity_type": "bearer", "bearer_secret": "<opaque, high-entropy, shown once>", "amount_mloki": 3000}
+{"identity_type": "bearer", "bearer_secret": "<opaque, high-entropy, shown once>", "amount_millis": 3000}
 ```
 
 A `bearer` recipient's `bearer_secret` appears in this response and nowhere else, ever (§Bearer Slices).
@@ -235,7 +239,7 @@ On receiving `mint_cash`, the Hub MUST, in order:
    interfaces the implementation exposes for issuing this request. Two concurrent requests must never
    both proceed past a stale balance read. A request that can't be serialized MUST be rejected, not
    queued.
-2. Validate every recipient. `amount_mloki` MUST be strictly positive. The running sum of all recipients'
+2. Validate every recipient. `amount_millis` MUST be strictly positive. The running sum of all recipients'
    amounts MUST be computed with an explicit overflow check, rejecting before an unsigned wraparound can
    occur, and MUST NOT exceed the Hub's own per-wallet funding ceiling (§Data Model). If any recipient is
    `bearer`-mode, `recipients` MUST contain exactly that one entry and no other — reject the entire
@@ -252,7 +256,7 @@ On receiving `mint_cash`, the Hub MUST, in order:
    Hub's own expiry ceiling; otherwise it MUST NOT exceed that ceiling.
 5. Verify the Hub's own available balance is at least the sum of all recipients' amounts.
 6. Create the Cash Wallet connection, record one slice per recipient — stamping each with the Hub's
-   current `min_transfer_mloki` and `redeem_fee_ppm` defaults (§Data Model) and a one-way commitment of
+   current `min_transfer_millis` and `redeem_fee_ppm` defaults (§Data Model) and a one-way commitment of
    the secret for `bearer`-mode slices, never the secret itself — and perform a single internal transfer
    from the Hub to the new connection for the full sum. This MUST be atomic: a failure at any point after
    this step MUST leave no partial state.
@@ -348,7 +352,7 @@ An implementation MUST decide same-node-ness with the exact same predicate its o
 decide whether to skip real Lightning routing — not a second check that could drift from it and either
 overcharge a same-node redemption or undercharge a genuinely external one.
 
-A slice's `redeem_fee_ppm` and `min_transfer_mloki` (§Splitting a Slice) are both fixed the moment the
+A slice's `redeem_fee_ppm` and `min_transfer_millis` (§Splitting a Slice) are both fixed the moment the
 slice is created — from the Hub's current default (§Data Model) for a freshly-minted wallet, or inherited
 unchanged from the source slice for one produced by a split — and never change afterward, even if the Hub's
 default later changes or the slice changes hands via `cash_transfer`. A recipient's economics MUST NOT
@@ -407,22 +411,22 @@ sequenceDiagram
     {
       "identity_type": "pubkey",
       "identity_value": "<hex pubkey>",
-      "amount_mloki": 21000,
+      "amount_millis": 21000,
       "claimed": false,
-      "redeem_fee_mloki": 210,
-      "net_redeemable_mloki": 20790,
-      "min_transfer_mloki": 1000,
+      "redeem_fee_millis": 210,
+      "net_redeemable_millis": 20790,
+      "min_transfer_millis": 1000,
       "expires_at": 1720003600
     },
     {
       "identity_type": "connection_key",
       "identity_value": "abc123",
-      "amount_mloki": 5000,
+      "amount_millis": 5000,
       "claimed": true,
       "claimed_at": 1720000000,
-      "redeem_fee_mloki": 50,
-      "net_redeemable_mloki": 4950,
-      "min_transfer_mloki": 1000,
+      "redeem_fee_millis": 50,
+      "net_redeemable_millis": 4950,
+      "min_transfer_millis": 1000,
       "expires_at": 1720003600
     }
   ]
@@ -431,14 +435,14 @@ sequenceDiagram
 
 - `recipients` — every slice this wallet was ever created or split into, in no particular guaranteed
   order, including already-claimed ones (`claimed_at` distinguishes them).
-- `redeem_fee_mloki` / `net_redeemable_mloki` — this slice's own `redeem_fee_ppm` (§The Redeem Fee) applied
-  to `amount_mloki`, and what's left after it. This is necessarily the worst-case quote: `list_recipients`
+- `redeem_fee_millis` / `net_redeemable_millis` — this slice's own `redeem_fee_ppm` (§The Redeem Fee) applied
+  to `amount_millis`, and what's left after it. This is necessarily the worst-case quote: `list_recipients`
   has no invoice in hand to know in advance whether a given future `cash_redeem` call will resolve to a
   same-node payment, which stays fee-free regardless of the configured rate. A slice's eventual `cash_redeem`
-  MAY pay out more than `net_redeemable_mloki` here (the full `amount_mloki`, if same-node); it will never
-  pay out less. `redeem_fee_mloki` is `0` for a slice whose `redeem_fee_ppm` is `0`, for every recipient,
+  MAY pay out more than `net_redeemable_millis` here (the full `amount_millis`, if same-node); it will never
+  pay out less. `redeem_fee_millis` is `0` for a slice whose `redeem_fee_ppm` is `0`, for every recipient,
   same-node or not.
-- `min_transfer_mloki` — this slice's own split floor (§Splitting a Slice), fixed at creation. A recipient
+- `min_transfer_millis` — this slice's own split floor (§Splitting a Slice), fixed at creation. A recipient
   MUST be able to learn this value here, before attempting a `cash_transfer` split, rather than only from a
   rejected attempt's error text — which also costs a share of the shared `cash_transfer`/`cash_redeem` rate
   limit (§Security Considerations).
@@ -454,9 +458,9 @@ On receiving `list_recipients`, the wallet MUST, in order:
 
 1. Load every slice ever recorded for this wallet, claimed or not.
 2. Resolve the wallet's own `expires_at` once (§Data Model) — omitted if the wallet never expires.
-3. For each slice, compute `redeem_fee_mloki` from that slice's own `redeem_fee_ppm` (never the Hub's
-   current default — a slice's rate is fixed at creation, §The Redeem Fee) and `amount_mloki`, and
-   `net_redeemable_mloki` as the difference; include that slice's own `min_transfer_mloki` floor unchanged;
+3. For each slice, compute `redeem_fee_millis` from that slice's own `redeem_fee_ppm` (never the Hub's
+   current default — a slice's rate is fixed at creation, §The Redeem Fee) and `amount_millis`, and
+   `net_redeemable_millis` as the difference; include that slice's own `min_transfer_millis` floor unchanged;
    include the wallet's `expires_at` from step 2, identical on every row.
 4. Return the full roster. This method MUST NOT be scoped to only the caller's own slice — every recipient
    sees every other recipient's row, identity and amount included (§Privacy Considerations).
@@ -470,9 +474,9 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
   themselves under a different mode, e.g. converting into `bearer`). No funds move in the Lightning
   sense, and no value is created. Only one thing changes: which identity is authorized to redeem, or
   transfer/split again, that one slice, for the amount it was already funded with.
-- **Split off a piece** — like breaking a bill: carve `amount_mloki` (less than the slice's current
+- **Split off a piece** — like breaking a bill: carve `amount_millis` (less than the slice's current
   total) off for a target identity. The source slice is consumed whole, and its value re-emerges as **two
-  brand-new, dedicated Cash Wallets** — one holding the carved-off `amount_mloki` for the target, one
+  brand-new, dedicated Cash Wallets** — one holding the carved-off `amount_millis` for the target, one
   holding the remainder for the caller's own, unchanged identity. Unlike a full transfer, this genuinely
   moves value via internal transfers; unlike the old in-place model, the source slice keeps NO residual
   amount — it becomes terminal exactly like a redemption, and both pieces are reached only through their
@@ -485,13 +489,13 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
 
 An implementation MUST determine the outcome as follows, in this order:
 
-1. **`amount_mloki` is present and less than the slice's current committed amount** → this is a **split**.
+1. **`amount_millis` is present and less than the slice's current committed amount** → this is a **split**.
    The source slice is consumed whole and its value re-emerges as two brand-new, dedicated wallets
    (§Spinning a Slice Off Into a Dedicated Wallet), regardless of `new_identity`'s type or this wallet's
-   recipient history: one holds `amount_mloki` for `new_identity`, one holds the remainder for the caller's
+   recipient history: one holds `amount_millis` for `new_identity`, one holds the remainder for the caller's
    own unchanged identity. There is no in-place outcome for a split, and no residual amount left on the
    source slice.
-2. **`amount_mloki` is omitted, or equals the slice's current committed amount** → this is a **full
+2. **`amount_millis` is omitted, or equals the slice's current committed amount** → this is a **full
    transfer**. Its outcome depends on `new_identity`'s type:
    - `pubkey` or `connection_key` → reassigned **in place**: same wallet, same connection, only the
      registered identity changes. This is unconditional on the wallet's recipient history — redeeming or
@@ -510,7 +514,7 @@ sequenceDiagram
     participant Caller as Recipient (current registered identity)
     participant Wallet as Cash Wallet
 
-    Caller->>Wallet: cash_transfer {proof, new_identity, amount_mloki?}
+    Caller->>Wallet: cash_transfer {proof, new_identity, amount_millis?}
     Wallet->>Wallet: verify proof against current registered identity
     Wallet->>Wallet: validate new identity
     alt full transfer to pubkey/connection_key, or bearer on a lifetime-solo wallet
@@ -523,7 +527,7 @@ sequenceDiagram
     else partial split
         Wallet->>Wallet: claim the source slice terminal, atomically
         Wallet->>Wallet: create + fund two new dedicated wallets (carved + remainder)
-        Wallet-->>Caller: {new_wallet_token, remainder_wallet_token, remaining_amount_mloki}
+        Wallet-->>Caller: {new_wallet_token, remainder_wallet_token, remaining_amount_millis}
     end
 ```
 
@@ -541,7 +545,7 @@ sequenceDiagram
   // new_identity MAY instead be
   // {"identity_type": "bearer", "identity_value": "<hex sha256 commitment the caller generated>"}
   // — see §Bearer Slices for why identity_value is required, not server-minted, here.
-  "amount_mloki": 5000 // OPTIONAL — omit, or equal the slice's current amount, to transfer it
+  "amount_millis": 5000 // OPTIONAL — omit, or equal the slice's current amount, to transfer it
                         // all; a smaller value splits off exactly that much (§Splitting a
                         // Slice above), leaving the remainder behind on this slice
 }
@@ -549,11 +553,11 @@ sequenceDiagram
 
 - `proof` — REQUIRED unless the slice's current identity is `bearer`. A kind-35521 event, MUST authenticate
   the caller as the slice's *current* registered identity, and bind the proof to this specific
-  `new_identity` and this specific `amount_mloki` — the same anti-redirection requirement `cash_redeem`'s
+  `new_identity` and this specific `amount_millis` — the same anti-redirection requirement `cash_redeem`'s
   proof has toward its invoice (§Redeeming a Slice). A proof captured for one `new_identity` MUST NOT be
-  replayable against a different one, MUST NOT be replayable to authorize a different `amount_mloki` than
+  replayable against a different one, MUST NOT be replayable to authorize a different `amount_millis` than
   the one it was signed for, and MUST NOT be reused a second time for the identical
-  `new_identity`/`amount_mloki` — see §Security Considerations for why this matters more once splitting
+  `new_identity`/`amount_millis` — see §Security Considerations for why this matters more once splitting
   exists. Concretely, the event MUST carry:
   - a `d` tag whose value is the wallet's `WalletPubkey` (same as a claim proof);
   - a `new_identity_hash` tag:
@@ -564,13 +568,13 @@ sequenceDiagram
     for one `connection_key` target be replayed against the same `identity_value` under a different,
     still-trusted Identity Authority, redirecting who is authoritative to redeem the transferred slice even
     though the connection_key string itself never changed (§Security Considerations);
-  - an `amount_mloki` tag: the decimal string of the exact amount this request resolves to — an omitted
-    request `amount_mloki` (a full transfer) MUST still be bound to a concrete number: the slice's live
+  - an `amount_millis` tag: the decimal string of the exact amount this request resolves to — an omitted
+    request `amount_millis` (a full transfer) MUST still be bound to a concrete number: the slice's live
     full amount at signing time, never a wildcard/unbound value;
   - for `connection_key` mode only, a `connection_key` tag and an `e` tag referencing the accompanying
     `attestation_event`, same as elsewhere.
   The wallet consumes every successfully-verified proof exactly once (tracked by event ID, independent of
-  `new_identity`/`amount_mloki`) — a proof that failed verification, or whose subsequent operation failed
+  `new_identity`/`amount_millis`) — a proof that failed verification, or whose subsequent operation failed
   and rolled back, is never consumed, so a legitimate caller can always retry with the identical proof.
 - `bearer_secret` — REQUIRED in place of `proof`, if and only if the slice's current identity is
   `bearer`. A bearer slice has no identity capable of signing a proof; presenting its secret is the
@@ -579,7 +583,7 @@ sequenceDiagram
   `connection_key`, same shape as one `recipients[]` entry in `mint_cash` (§Minting Cash), with
   `ia_pubkey` required for `connection_key`. For `bearer`, `identity_value` is REQUIRED
   (a caller-generated `sha256` commitment — see §Bearer Slices) and `ia_pubkey` MUST NOT be present.
-- `amount_mloki` — OPTIONAL, as described above. When present, MUST be strictly positive and MUST NOT
+- `amount_millis` — OPTIONAL, as described above. When present, MUST be strictly positive and MUST NOT
   exceed the slice's current committed amount.
 - `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance),
   meaningful only when this call spins off a dedicated wallet (a split, or a full transfer to `bearer` on a
@@ -590,7 +594,7 @@ sequenceDiagram
 
 ```jsonc
 {
-  "amount_mloki": 5000,
+  "amount_millis": 5000,
   "identity_type": "pubkey",
   "identity_value": "..."
   // for an in-place outcome: nothing further — the response above is complete.
@@ -599,7 +603,7 @@ sequenceDiagram
   //   "new_wallet_pubkey": "<the new wallet's WalletPubkey, in the clear>",
   //   "new_wallet_token": "<lokicash1... token, NIP-44 encrypted — see below>"
   // for a PARTIAL split, which spins off TWO new wallets, additionally:
-  //   "remaining_amount_mloki": 15000,   // what the caller keeps, now in its own new wallet
+  //   "remaining_amount_millis": 15000,   // what the caller keeps, now in its own new wallet
   //   "new_wallet_pubkey":      "<clear>",  "new_wallet_token":      "<encrypted>", // the carved piece -> new_identity (same field names as the single-wallet spin-off above)
   //   "remainder_wallet_pubkey":"<clear>",  "remainder_wallet_token":"<encrypted>"  // the remainder -> caller
 }
@@ -617,8 +621,8 @@ despite traveling over this same shared connection. See also §Security Consider
 On receiving `cash_transfer` for a given slice, the wallet MUST, in order:
 
 1. Verify the caller is authorized to act on the slice: for an identity-bound current identity, verify
-   `proof` against it, against this specific `new_identity`, and against this specific `amount_mloki`
-   (treating an omitted `amount_mloki` as bound to "the slice's full current amount," not as unbound); for a
+   `proof` against it, against this specific `new_identity`, and against this specific `amount_millis`
+   (treating an omitted `amount_millis` as bound to "the slice's full current amount," not as unbound); for a
    `bearer` current identity, verify the presented `bearer_secret`. A redeemed slice has no registered
    identity left to act on; `cash_transfer` on a redeemed slice MUST be rejected.
 2. Validate `new_identity`: for `pubkey`/`connection_key`, the same rules `mint_cash` applies to
@@ -626,20 +630,20 @@ On receiving `cash_transfer` for a given slice, the wallet MUST, in order:
    `ia_pubkey` is on the wallet owner's trusted Identity Authority allowlist right now. For `bearer`,
    verify `identity_value` is present and is a well-formed commitment — the implementation MUST NOT
    generate a secret on the wallet's behalf here (§Bearer Slices, §Security Considerations).
-3. Resolve `amount_mloki` against the slice's current committed amount (read fresh, not from an earlier
-   lookup) and determine the outcome per §Which outcome a request produces above. If `amount_mloki` is
+3. Resolve `amount_millis` against the slice's current committed amount (read fresh, not from an earlier
+   lookup) and determine the outcome per §Which outcome a request produces above. If `amount_millis` is
    present and exceeds the slice's current amount, reject.
-4. If the outcome is a partial split, additionally verify `amount_mloki` is at least the slice's own
-   `min_transfer_mloki` (0 = no floor), and that the remainder it would leave behind (current amount
-   minus `amount_mloki`) is either exactly zero or itself at least `min_transfer_mloki` — a split that
+4. If the outcome is a partial split, additionally verify `amount_millis` is at least the slice's own
+   `min_transfer_millis` (0 = no floor), and that the remainder it would leave behind (current amount
+   minus `amount_millis`) is either exactly zero or itself at least `min_transfer_millis` — a split that
    would leave unmovable dust behind MUST be rejected rather than silently allowed (§Splitting a Slice).
 5. For an in-place reassignment: atomically transfer the slice. The old registered identity MUST stop
    authorizing `cash_redeem` or `cash_transfer` on this slice from the moment this step completes. The new
    identity becomes the slice's sole registered identity, for the same committed amount, unchanged.
 6. For a split: follow §Spinning a Slice Off Into a Dedicated Wallet's own algorithm instead. The source
    slice is claimed **terminal** (exactly like a redemption — its committed amount is never rewritten to a
-   smaller value), and its value re-emerges as new dedicated wallets: one wallet of `amount_mloki` for a
-   full transfer to `bearer`; two wallets (carved `amount_mloki` + remainder) for a partial split.
+   smaller value), and its value re-emerges as new dedicated wallets: one wallet of `amount_millis` for a
+   full transfer to `bearer`; two wallets (carved `amount_millis` + remainder) for a partial split.
 7. Return the slice's resulting amount together with its new registered identity (in-place), or the new
    wallet connection(s) — one for a full-transfer spin-off, two for a partial split — see the Response
    format above and §Spinning a Slice Off Into a Dedicated Wallet.
@@ -655,7 +659,7 @@ single-recipient Cash Wallets, whose connections are delivered to the caller alo
 
 - a **full transfer to `bearer`** on a wallet whose recipient history rules out an in-place reassignment
   produces **one** new wallet holding the whole amount, for `new_identity`;
-- a **partial split** produces **two** new wallets — one holding the carved `amount_mloki` for
+- a **partial split** produces **two** new wallets — one holding the carved `amount_millis` for
   `new_identity`, one holding the remainder for the caller's own identity.
 
 ```mermaid
@@ -664,7 +668,7 @@ sequenceDiagram
     participant Old as Old Cash Wallet (source)
     participant New as New Cash Wallet(s) (dedicated)
 
-    Caller->>Old: cash_transfer {proof, new_identity, amount_mloki?}
+    Caller->>Old: cash_transfer {proof, new_identity, amount_millis?}
     Old->>Old: verify proof; determine split applies
     Old->>Old: atomically claim the source slice TERMINAL
     Old->>New: create + fund via internal transfer(s):<br/>one wallet (full-to-bearer), or two (partial split)
@@ -755,7 +759,7 @@ one-off key, for this delivery step — see §Security Considerations for the ge
 follows, and the ECDH argument for why it holds.
 
 **Eligibility and limits.** Every new wallet a split produces — the carved piece and, for a partial split,
-the remainder alike — inherits its `min_transfer_mloki`, `redeem_fee_ppm`, and expiry from the source
+the remainder alike — inherits its `min_transfer_millis`, `redeem_fee_ppm`, and expiry from the source
 slice's own configuration, not from the Hub's current config (which only supplies the default for a wallet
 minted directly by `mint_cash`). A split relocates an existing entitlement; it does not grant a fresh one,
 shorten it, or lengthen it. This holds even when the old wallet never expires: each new wallet inherits
@@ -809,7 +813,7 @@ sequenceDiagram
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
-    Node-->>Caller: {new_wallet_pubkey (clear), new_wallet_token (encrypted), amount_mloki}
+    Node-->>Caller: {new_wallet_pubkey (clear), new_wallet_token (encrypted), amount_millis}
 ```
 
 ### Request
@@ -850,7 +854,7 @@ sequenceDiagram
 
 ```jsonc
 {
-  "amount_mloki": 25000,                       // the sum of every source
+  "amount_millis": 25000,                       // the sum of every source
   "new_wallet_pubkey": "<clear>",
   "new_wallet_token": "<lokicash1... , NIP-44 nested-encrypted to the caller — §Spinning a Slice Off>",
   "expires_at": 1720000000                      // earliest expiry among the sources; omitted if all never expire
@@ -873,9 +877,10 @@ On receiving `cash_consolidate`, the node MUST, in order:
 4. Validate `new_identity` exactly as `mint_cash`/`cash_transfer` do, including live IA trust for
    `connection_key`.
 5. Sum every source's committed amount with an explicit overflow check, and reject if the sum exceeds the
-   shared Hub's `PerWalletMaxMloki` — the consolidated wallet obeys its Hub's ceiling like any other.
+   shared Hub's own per-wallet ceiling (§Data Model) — the consolidated wallet obeys its Hub's ceiling like
+   any other.
 6. Resolve the merged terms: expiry is the **earliest** among the sources (never later — a consolidate can
-   only shorten, never extend, an entitlement, §Security Considerations); `min_transfer_mloki` and
+   only shorten, never extend, an entitlement, §Security Considerations); `min_transfer_millis` and
    `redeem_fee_ppm` MUST be identical across all sources — reject on any disagreement (this revision).
 7. Atomically: claim **every** source slice terminal, create one new `cash_wallet` for `new_identity` as a
    child of the shared Hub, and fund it via internal transfers summing the sources — a compensating saga,
@@ -995,7 +1000,7 @@ one-byte length field. The entries:
 | `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
 | `3` | identity required | 1 byte, `0` or `1` | zero or one, OPTIONAL |
 | `5` | mint signature | a recoverable minter signature (§Mint Provenance) | zero or one, OPTIONAL |
-| `6` | attested amount | 8 bytes, big-endian mloki — the value the mint signature commits to | zero or one, OPTIONAL |
+| `6` | attested amount | 8 bytes, big-endian millis — the value the mint signature commits to | zero or one, OPTIONAL |
 
 Type numbers `0` and `1` carry the same meaning NIP-19 already gives them for `nprofile`/`nevent`/`naddr`
 (`0` is the token's primary identifier, `1` is a relay hint); types `2`–`3` and `5`–`6` are specific to
@@ -1004,7 +1009,7 @@ token, so a future field can be added without breaking older decoders — again 
 `5`, and `6` are themselves examples of this: a token minted before they existed simply omits them, and a
 decoder written before they existed correctly ignores them if present. Type `4` is reserved and MUST NOT be
 assigned a new meaning — a decoder ignores it as an unrecognized type on any token that carries it, per the
-general rule above. (A future revision MAY add a `min_transfer_mloki` hint type following the same
+general rule above. (A future revision MAY add a `min_transfer_millis` hint type following the same
 convention; this document doesn't define one, since it's a best-effort hint an implementation MAY choose to
 surface via `list_recipients` instead.)
 
@@ -1049,7 +1054,7 @@ signature by the minting node's own Lightning identity key, proving offline whic
 and for how much. It lets a holder verify a token's origin and denomination, and refuse one from a minter
 they don't trust, without contacting anyone.
 
-- **What is signed.** The canonical ASCII string `lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_mloki>`
+- **What is signed.** The canonical ASCII string `lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_millis>`
   — the token's HRP, wallet pubkey, and committed amount. Binding the amount is only sound because a
   wallet's amount is immutable for its whole life: no operation ever changes it in place (a partial split
   consumes its source and mints fresh wallets rather than decrementing — §Splitting a Slice), so the value
@@ -1237,7 +1242,7 @@ undecryptable by anyone, including the intended recipient).
 
 **`cash_transfer`'s proof requirement is load-bearing, not incidental.** An implementation that lets
 `cash_transfer` succeed without authenticating the caller against the slice's *current* registered
-identity, and against the specific `amount_mloki` requested, reopens the exact race the rest of this
+identity, and against the specific `amount_millis` requested, reopens the exact race the rest of this
 document closes: anyone holding the shared connection, or a cash token, could transfer or split a
 slice that was never meant for them, or replay a captured proof against a different amount than it was
 signed for.
@@ -1256,7 +1261,7 @@ re-verification against a "live" value that can no longer change under it.
 the only operation that combines multiple slices, so it is the only place where differing source terms must
 be resolved. It MUST never let a caller pick the favorable one: the merged expiry is the **earliest** of
 the sources (taking the latest would let an about-to-expire bill ride a far-expiry bill's clock, defeating
-the operator's expiry sweep — §Consolidating Tokens), and `min_transfer_mloki`/`redeem_fee_ppm` MUST match
+the operator's expiry sweep — §Consolidating Tokens), and `min_transfer_millis`/`redeem_fee_ppm` MUST match
 across sources rather than silently adopting the loosest. Every future many-source operation MUST follow
 the same rule: resolve to the most restrictive bound, never the most permissive.
 
@@ -1306,7 +1311,7 @@ could spoof that flag and shave fee-reserve headroom off its own balance and bud
 full-drain rule.** The "spend fully or not at all" rule real Lightning payouts follow (§Redeeming a Slice)
 doesn't apply to the internal transfer that funds a spun-off wallet — a split, by definition, often moves
 less than the source wallet's whole balance. It MUST still be rejected if the source wallet's real balance
-can't actually cover the requested `amount_mloki`, exactly like any other payment; only the "must drain
+can't actually cover the requested `amount_millis`, exactly like any other payment; only the "must drain
 completely" constraint is waived, not ordinary solvency.
 
 **The redeem fee reconciliation MUST run atomically with payout settlement, not as a later, separate

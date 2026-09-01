@@ -26,10 +26,10 @@ import (
 // buildTransferProofEvent builds and signs a kind-35521 transfer proof bound
 // to walletPubkey, the target (newIdentityType, newIdentityValue, newIAPubkey),
 // AND the exact amountMloki this proof authorizes — mirrors
-// buildClaimProofEvent, but bound via new_identity_hash/amount_mloki instead
+// buildClaimProofEvent, but bound via new_identity_hash/amount_millis instead
 // of bolt11_hash. newIAPubkey is "" for non-connection_key targets. For a
 // full transfer, pass the slice's exact current amount (the server resolves
-// an omitted request amount_mloki to the slice's live full amount and
+// an omitted request amount_millis to the slice's live full amount and
 // requires the proof to match that exact number — see
 // verifyTransferIdentityEvent's doc comment).
 func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue, newIAPubkey string, amountMloki uint64, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
@@ -37,7 +37,7 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	tags := nostr.Tags{
 		{"d", walletPubkey},
 		{"new_identity_hash", newIdentityHash(newIdentityType, newIdentityValue, newIAPubkey)},
-		{"amount_mloki", strconv.FormatUint(amountMloki, 10)},
+		{"amount_millis", strconv.FormatUint(amountMloki, 10)},
 	}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
@@ -97,7 +97,7 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToPubkey(t *testing.T) {
 
 	require.Nil(t, response.Error)
 	result := response.Result.(cashTransferResponse)
-	assert.EqualValues(t, 1000, result.AmountMloki)
+	assert.EqualValues(t, 1000, result.AmountMillis)
 	assert.Equal(t, db.CashIdentityPubkey, result.IdentityType)
 	assert.Equal(t, newPubkey, result.IdentityValue)
 
@@ -595,7 +595,7 @@ func TestHandleCashTransferEvent_FullTransfer_PubkeyTarget_MultiRecipientWallet_
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 	assert.Empty(t, result.NewWalletToken, "a pubkey-target full transfer must stay in-place, never spin off a new wallet")
-	assert.Nil(t, result.RemainingAmountMloki, "in-place reassignment never populates remaining_amount_mloki")
+	assert.Nil(t, result.RemainingAmountMillis, "in-place reassignment never populates remaining_amount_millis")
 
 	// Reassigned in place: same wallet, new identity, same amount.
 	newClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, newPubkey)
@@ -653,15 +653,15 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 
 	require.Nil(t, response.Error)
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
-	assert.EqualValues(t, 2000, result.AmountMloki)
-	require.NotNil(t, result.RemainingAmountMloki)
-	assert.EqualValues(t, 3000, *result.RemainingAmountMloki)
+	assert.EqualValues(t, 2000, result.AmountMillis)
+	require.NotNil(t, result.RemainingAmountMillis)
+	assert.EqualValues(t, 3000, *result.RemainingAmountMillis)
 	require.NotEmpty(t, result.NewWalletToken, "the carved piece is delivered as a new dedicated wallet")
 	require.NotEmpty(t, result.RemainderWalletToken, "the remainder is now delivered as its OWN new dedicated wallet, not left on the source")
 
@@ -725,7 +725,7 @@ func TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeft
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 	require.NotNil(t, response.Error)
 
@@ -774,7 +774,7 @@ func TestHandleCashTransferEvent_PartialSplit_BelowMinTransferFloor_Rejected(t *
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 
 	require.NotNil(t, response.Error)
@@ -811,7 +811,7 @@ func TestHandleCashTransferEvent_PartialSplit_RemainderBelowFloor_Rejected(t *te
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 
 	require.NotNil(t, response.Error)
@@ -819,7 +819,7 @@ func TestHandleCashTransferEvent_PartialSplit_RemainderBelowFloor_Rejected(t *te
 }
 
 // TestHandleCashTransferEvent_PartialSplit_ExceedsSliceBalance_Rejected
-// verifies amount_mloki can't exceed the caller's own slice, regardless of
+// verifies amount_millis can't exceed the caller's own slice, regardless of
 // what the rest of a shared wallet might hold.
 func TestHandleCashTransferEvent_PartialSplit_ExceedsSliceBalance_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -843,7 +843,7 @@ func TestHandleCashTransferEvent_PartialSplit_ExceedsSliceBalance_Rejected(t *te
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 
 	require.NotNil(t, response.Error)
@@ -1185,7 +1185,7 @@ func TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNe
 	require.Nil(t, response.Error, "a claimed co-tenant must no longer block spinning a slice off into its own wallet")
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
-	assert.Equal(t, uint64(1000), result.AmountMloki)
+	assert.Equal(t, uint64(1000), result.AmountMillis)
 	assert.Equal(t, db.CashIdentityBearer, result.IdentityType)
 	assert.Equal(t, newSecretHash, result.IdentityValue)
 	require.NotEmpty(t, result.NewWalletToken, "spin-off must deliver the new wallet's connection")

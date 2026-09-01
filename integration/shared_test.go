@@ -71,13 +71,13 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 // different new_identity (including a different Identity Authority for a
 // connection_key target — a captured proof used to be replayable with a
 // swapped, still-trusted IA even with identity_value unchanged, fixed
-// 2026-07-30), or replayed for a different amount_mloki, than what it was
+// 2026-07-30), or replayed for a different amount_millis, than what it was
 // actually signed for (NIP-CASH §Transferring and Splitting a Slice). For a
 // full transfer, pass the slice's exact current amount (never a
 // sentinel/omitted value — the server resolves an omitted request
-// amount_mloki to the slice's live full amount and requires the proof to
+// amount_millis to the slice's live full amount and requires the proof to
 // match that exact number). Mirrors buildClaimProofEvent, but bound via
-// new_identity_hash/amount_mloki instead of bolt11_hash
+// new_identity_hash/amount_millis instead of bolt11_hash
 // (nip47/controllers/cash_transfer_controller.go's newIdentityHash).
 // newIdentityValue is "" for a bearer target; newIAPubkey is "" for
 // non-connection_key targets.
@@ -87,7 +87,7 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	tags := nostr.Tags{
 		{"d", walletPubkey},
 		{"new_identity_hash", hex.EncodeToString(sum[:])},
-		{"amount_mloki", strconv.FormatUint(amountMloki, 10)},
+		{"amount_millis", strconv.FormatUint(amountMloki, 10)},
 	}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{

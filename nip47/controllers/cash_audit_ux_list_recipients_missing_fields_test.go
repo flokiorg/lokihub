@@ -23,7 +23,7 @@ import (
 // connection — now surfaces both pieces of state NIP-CASH says a recipient
 // needs to act correctly, which it used to omit entirely:
 //
-//  1. min_transfer_mloki — the floor below which a cash_transfer split (or
+//  1. min_transfer_millis — the floor below which a cash_transfer split (or
 //     the remainder it would leave behind) is rejected. A recipient used to
 //     have no way to learn this value before attempting a split; they only
 //     learned it from the BAD_REQUEST error text after a failed attempt (see
@@ -58,7 +58,7 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 	wallet := newFundedCashWallet(t, svc, hub, 3000)
 
 	// Give the wallet a concrete, checkable expiry and give the claim a
-	// concrete, checkable min_transfer_mloki floor, so this test can assert
+	// concrete, checkable min_transfer_millis floor, so this test can assert
 	// on their actual VALUES being present and correct, not just coincidentally
 	// present.
 	expiresAt := time.Now().Add(2 * time.Hour).Truncate(time.Second)
@@ -82,7 +82,7 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 	require.Len(t, result.Recipients, 1)
 	recipient := result.Recipients[0]
 
-	assert.Equal(t, int64(500), recipient.MinTransferMloki,
+	assert.Equal(t, int64(500), recipient.MinTransferMillis,
 		"a recipient must be able to learn their split floor before attempting a cash_transfer, not only from a failed attempt's error text")
 	require.NotNil(t, recipient.ExpiresAt, "a recipient must be able to learn their wallet's redemption deadline via protocol")
 	assert.Equal(t, expiresAt.Unix(), *recipient.ExpiresAt)
@@ -92,7 +92,7 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 	raw, err := json.Marshal(response.Result)
 	require.NoError(t, err)
 	rawStr := string(raw)
-	assert.Contains(t, rawStr, `"min_transfer_mloki":500`)
+	assert.Contains(t, rawStr, `"min_transfer_millis":500`)
 	assert.Contains(t, rawStr, `"expires_at":`)
 
 	t.Logf("actual list_recipients wire response: %s", rawStr)

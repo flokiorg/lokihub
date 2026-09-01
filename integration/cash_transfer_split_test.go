@@ -65,8 +65,8 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "pubkey", IdentityValue: attackerPub, AmountMloki: happyPathAmountMloki},
-				{IdentityType: "pubkey", IdentityValue: victimPub, AmountMloki: happyPathAmountMloki},
+				{IdentityType: "pubkey", IdentityValue: attackerPub, AmountMillis: happyPathAmountMloki},
+				{IdentityType: "pubkey", IdentityValue: victimPub, AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
@@ -99,7 +99,7 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &transferResult))
 		require.Equal(t, "bearer", transferResult.IdentityType)
 		require.Equal(t, newSecretHash, transferResult.IdentityValue)
-		require.Equal(t, uint64(happyPathAmountMloki), transferResult.AmountMloki)
+		require.Equal(t, uint64(happyPathAmountMloki), transferResult.AmountMillis)
 		require.NotEmpty(t, transferResult.NewWalletPubkey)
 		require.NotEmpty(t, transferResult.NewWalletToken)
 

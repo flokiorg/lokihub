@@ -4,9 +4,9 @@ package controllers
 // (NIP-CASH.md §Listing Recipients, §The Redeem Fee), added under
 // data/docs/audits/cash-hub-redeem-fee-2026-08-02/. This is a follow-on to the
 // prior round's cash_audit_ux_list_recipients_missing_fields_test.go, which
-// proved min_transfer_mloki and expires_at are absent from the wire response
+// proved min_transfer_millis and expires_at are absent from the wire response
 // — this test proves the OPPOSITE for the redeem fee: the quote a recipient
-// needs (redeem_fee_mloki / net_redeemable_mloki) genuinely IS present on the
+// needs (redeem_fee_millis / net_redeemable_millis) genuinely IS present on the
 // wire, at the one place NIP-CASH says a recipient should look
 // ("list_recipients... reports the exact fee and net amount for every slice,
 // so a recipient always knows precisely what cash_redeem will pay out before
@@ -33,7 +33,7 @@ import (
 
 // TestHandleListRecipientsEvent_RedeemFeeQuote_PresentOnTheWire proves the
 // redeem-fee quote fields are genuinely reachable by a recipient, in contrast
-// to the prior round's C1/H1 findings about expires_at/min_transfer_mloki. It
+// to the prior round's C1/H1 findings about expires_at/min_transfer_millis. It
 // also documents the actual field names/shape a client author has to work
 // against, since NIP-CASH's own example response (§Listing Recipients) is
 // illustrative prose, not something guaranteed to match byte-for-byte.
@@ -68,21 +68,21 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T)
 	rawStr := string(raw)
 	t.Logf("actual list_recipients wire response: %s", rawStr)
 
-	assert.Contains(t, rawStr, `"redeem_fee_mloki":210`,
+	assert.Contains(t, rawStr, `"redeem_fee_millis":210`,
 		"a recipient's client can read the quoted fee directly off the wire, by this exact field name")
-	assert.Contains(t, rawStr, `"net_redeemable_mloki":20790`,
+	assert.Contains(t, rawStr, `"net_redeemable_millis":20790`,
 		"a recipient's client can read the quoted net payout directly off the wire, by this exact field name")
 
 	// Sanity: the fields sit on the SAME per-recipient row as identity_value/
-	// amount_mloki — a client doesn't need a second call or a join to build
+	// amount_millis — a client doesn't need a second call or a join to build
 	// its invoice amount from this response alone.
-	assert.Contains(t, rawStr, `"amount_mloki":21000`)
+	assert.Contains(t, rawStr, `"amount_millis":21000`)
 	assert.Contains(t, rawStr, pk)
 }
 
 // TestHandleListRecipientsEvent_RedeemFeeQuote_ZeroFee_StillExplicit proves
 // that even a free (0 ppm) slice still carries an explicit, non-omitted
-// redeem_fee_mloki:0 / net_redeemable_mloki==amount_mloki pair, rather than
+// redeem_fee_millis:0 / net_redeemable_millis==amount_millis pair, rather than
 // the fields disappearing from the JSON entirely for the common "no fee
 // configured" case (recipientStatus has no `,omitempty` on either field —
 // list_recipients_controller.go's recipientStatus struct). This matters for a
@@ -114,6 +114,6 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_ZeroFee_StillExplicit(t *testi
 	rawStr := string(raw)
 	t.Logf("actual list_recipients wire response (zero-fee slice): %s", rawStr)
 
-	assert.Contains(t, rawStr, `"redeem_fee_mloki":0`)
-	assert.Contains(t, rawStr, `"net_redeemable_mloki":5000`)
+	assert.Contains(t, rawStr, `"redeem_fee_millis":0`)
+	assert.Contains(t, rawStr, `"net_redeemable_millis":5000`)
 }

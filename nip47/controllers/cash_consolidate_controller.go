@@ -48,7 +48,7 @@ type cashConsolidateParams struct {
 }
 
 type cashConsolidateResponse struct {
-	AmountMloki uint64 `json:"amount_mloki"`
+	AmountMillis uint64 `json:"amount_millis"`
 	// NewWalletPubkey is the merged wallet's WalletPubkey in the clear; the
 	// recipient derives the decryption key for NewWalletToken from it plus their
 	// own privkey (same nested-encryption delivery as a split, §Spinning a Slice
@@ -236,7 +236,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		} else {
 			if rs.claim.MinTransferMloki != minTransfer || rs.claim.RedeemFeePpm != redeemFee {
 				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-					"sources disagree on min_transfer_mloki/redeem_fee_ppm; only same-terms slices may be consolidated")
+					"sources disagree on min_transfer_millis/redeem_fee_ppm; only same-terms slices may be consolidated")
 				return
 			}
 		}
@@ -413,7 +413,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: cashConsolidateResponse{
-			AmountMloki:     result.AmountMloki,
+			AmountMillis:    result.AmountMloki,
 			NewWalletPubkey: newWalletPubkey,
 			NewWalletToken:  encryptedToken,
 			ExpiresAt:       expiresAt,

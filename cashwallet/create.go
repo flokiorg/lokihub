@@ -319,14 +319,14 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		}
 
 		if r.AmountMloki == 0 {
-			return nil, fmt.Errorf("%w: recipient %d: amount_mloki must be positive", constants.ErrInvalidParams, i)
+			return nil, fmt.Errorf("%w: recipient %d: amount_millis must be positive", constants.ErrInvalidParams, i)
 		}
 		// Reject a single value large enough to overflow int64 on casts used
 		// downstream (balance/quota comparisons), mirroring
 		// create_circle_wallet_controller.go's identical guard on its own
 		// (single, unsummed) max_amount.
 		if r.AmountMloki > math.MaxInt64 {
-			return nil, fmt.Errorf("%w: recipient %d: amount_mloki %d is too large", constants.ErrInvalidParams, i, r.AmountMloki)
+			return nil, fmt.Errorf("%w: recipient %d: amount_millis %d is too large", constants.ErrInvalidParams, i, r.AmountMloki)
 		}
 		// Reject a sum that would exceed MaxInt64 — with N recipients each
 		// individually under MaxInt64, the running total could still overflow

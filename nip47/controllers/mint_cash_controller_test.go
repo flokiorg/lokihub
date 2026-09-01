@@ -24,7 +24,7 @@ import (
 )
 
 func onePubkeyRecipientJSON(pubkey string, amountMloki uint64) string {
-	return fmt.Sprintf(`{"identity_type":"pubkey","identity_value":"%s","amount_mloki":%d}`, pubkey, amountMloki)
+	return fmt.Sprintf(`{"identity_type":"pubkey","identity_value":"%s","amount_millis":%d}`, pubkey, amountMloki)
 }
 
 func makeCashWalletRequest(pubkey string, amountMloki uint64, expirationSecs int) string {
@@ -260,7 +260,7 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	require.NotNil(t, result.ExpiresAt)
 	assert.Greater(t, *result.ExpiresAt, time.Now().Unix())
 	require.Len(t, result.Recipients, 1)
-	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
+	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMillis)
 
 	// The wire response's cash_token must decode to the exact same
 	// wallet pubkey and secret as pairing_uri — the fund-safety property
@@ -310,8 +310,8 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 		"method": "mint_cash",
 		"params": {
 			"recipients": [
-				{"identity_type":"pubkey","identity_value":"%s","amount_mloki":1000},
-				{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_mloki":2000}
+				{"identity_type":"pubkey","identity_value":"%s","amount_millis":1000},
+				{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":2000}
 			],
 			"expiry": 1800
 		}
@@ -402,7 +402,7 @@ func TestHandleMintCashEvent_ConnectionKeyMode_UntrustedIARejected(t *testing.T)
 	err = json.Unmarshal([]byte(fmt.Sprintf(`{
 		"method": "mint_cash",
 		"params": {
-			"recipients": [{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_mloki":1000}],
+			"recipients": [{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":1000}],
 			"expiry": 1800
 		}
 	}`, connKey, iaPubkey)), nip47Request)
@@ -505,7 +505,7 @@ func TestHandleMintCashEvent_Bearer_HappyPath(t *testing.T) {
 	err = json.Unmarshal([]byte(`{
 		"method": "mint_cash",
 		"params": {
-			"recipients": [{"identity_type":"bearer","amount_mloki":1000}],
+			"recipients": [{"identity_type":"bearer","amount_millis":1000}],
 			"expiry": 1800
 		}
 	}`), nip47Request)
@@ -543,8 +543,8 @@ func TestHandleMintCashEvent_Bearer_RejectsMixedRecipients(t *testing.T) {
 		"method": "mint_cash",
 		"params": {
 			"recipients": [
-				{"identity_type":"pubkey","identity_value":"%s","amount_mloki":500},
-				{"identity_type":"bearer","amount_mloki":500}
+				{"identity_type":"pubkey","identity_value":"%s","amount_millis":500},
+				{"identity_type":"bearer","amount_millis":500}
 			],
 			"expiry": 1800
 		}
