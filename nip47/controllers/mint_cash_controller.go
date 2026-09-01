@@ -23,7 +23,7 @@ type mintCashRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 }
 
 type mintCashParams struct {
@@ -39,7 +39,7 @@ type mintCashParams struct {
 type mintCashRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 	// BearerSecret is populated only for identity_type == "bearer", and only
 	// in this one response — it is never retrievable again (NIP-JW §Bearer
 	// Slices).
@@ -112,7 +112,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			IAPubkey:      r.IAPubkey,
-			AmountMloki:   r.AmountMloki,
+			AmountMloki:   r.AmountMillis,
 		}
 	}
 
@@ -161,7 +161,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		recipientResults[i] = mintCashRecipientResult{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
-			AmountMloki:   r.AmountMloki,
+			AmountMillis:  r.AmountMloki,
 			BearerSecret:  r.BearerSecret,
 		}
 	}

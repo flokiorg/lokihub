@@ -63,10 +63,18 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 			IdentityValue: curPub,
 			IdentityEvent: proofJSON,
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &amt,
+			AmountMillis:  &amt,
 		}
-		go func() { defer wg.Done(); <-barrier; errA = clientA.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &resA) }()
-		go func() { defer wg.Done(); <-barrier; errB = clientB.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &resB) }()
+		go func() {
+			defer wg.Done()
+			<-barrier
+			errA = clientA.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &resA)
+		}()
+		go func() {
+			defer wg.Done()
+			<-barrier
+			errB = clientB.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &resB)
+		}()
 		close(barrier)
 		wg.Wait()
 
@@ -122,11 +130,11 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 		IdentityValue: curPub,
 		IdentityEvent: proofJSON,
 		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki:   &amt,
+		AmountMillis:  &amt,
 	}
 	var res1 CashTransferResult
 	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &res1))
-	require.EqualValues(t, splitAmount, res1.AmountMloki)
+	require.EqualValues(t, splitAmount, res1.AmountMillis)
 
 	// Exact same proof again — must be rejected. Under the two-wallet model the
 	// first split consumed the source slice, so the replay finds no slice to act
@@ -193,7 +201,7 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &amt,
+			AmountMillis:  &amt,
 		}, &res)
 		if err != nil {
 			t.Logf("attempt %d errored: %v", i, err)
@@ -226,6 +234,6 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 		IdentityValue: otherPub,
 		IdentityEvent: eventJSON(t, otherProof),
 		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: otherTargetPub},
-		AmountMloki:   &amt,
+		AmountMillis:  &amt,
 	}, &otherRes), "a different wallet must not be affected by another wallet's exhausted rate limit")
 }

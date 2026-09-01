@@ -351,8 +351,8 @@ func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: []CashWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: pub1, AmountMloki: happyPathAmountMloki},
-			{IdentityType: "pubkey", IdentityValue: pub2, AmountMloki: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: pub1, AmountMillis: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: pub2, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
@@ -422,7 +422,7 @@ func TestDeleteCashClaim_WrongHub_Rejected(t *testing.T) {
 	var created MintCashResult
 	require.NoError(t, hubBClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: []CashWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: pub, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))

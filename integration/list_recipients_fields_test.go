@@ -14,7 +14,7 @@ import (
 // TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt is the live-node
 // counterpart to the unit-level fix
 // (TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt):
-// list_recipients now carries both a slice's min_transfer_mloki floor and the
+// list_recipients now carries both a slice's min_transfer_millis floor and the
 // shared wallet's own expires_at deadline, over the real wire, not just in
 // the Go struct.
 func TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
@@ -74,7 +74,7 @@ func TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 	require.Len(t, recipients.Recipients, 1)
 	recipient := recipients.Recipients[0]
 
-	require.EqualValues(t, minTransferMloki, recipient.MinTransferMloki,
+	require.EqualValues(t, minTransferMloki, recipient.MinTransferMillis,
 		"a recipient must be able to learn the hub's inherited split floor without a failed cash_transfer attempt first")
 	require.NotNil(t, recipient.ExpiresAt, "a recipient must be able to learn the wallet's redemption deadline over the wire")
 	require.Greater(t, *recipient.ExpiresAt, int64(0))

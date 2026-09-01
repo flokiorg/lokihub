@@ -77,8 +77,8 @@ func TestCashRedeemFee_SameNodeExemptAndListRecipientsQuote(t *testing.T) {
 		r := recipients.Recipients[0]
 
 		wantFee := int64(happyPathAmountMloki) * redeemFeePpm / 1_000_000
-		require.EqualValues(t, wantFee, r.RedeemFeeMloki, "list_recipients must quote this slice's own redeem_fee_ppm cut")
-		require.EqualValues(t, happyPathAmountMloki-wantFee, r.NetRedeemableMloki)
+		require.EqualValues(t, wantFee, r.RedeemFeeMillis, "list_recipients must quote this slice's own redeem_fee_ppm cut")
+		require.EqualValues(t, happyPathAmountMloki-wantFee, r.NetRedeemableMillis)
 	})
 
 	t.Run("SameNodeRedemption_FeeWaived_FullAmountPaid", func(t *testing.T) {

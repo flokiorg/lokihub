@@ -11,7 +11,7 @@ import (
 
 // signMintProvenance produces the raw recoverable signature a lokicash token
 // carries as its optional mint-provenance (NIP-CASH §Mint Provenance): the node
-// signs lokicash.MintPayload(HRP, walletPubkey, amountMloki) with its Lightning
+// signs lokicash.MintPayload(HRP, walletPubkey, amountMillis) with its Lightning
 // identity key, and we return the raw compact bytes (LND hands back a zbase32
 // string, which we decode so the token stays compact).
 //
@@ -19,8 +19,8 @@ import (
 // ok=false and the caller MUST mint the token without provenance rather than
 // fail the whole mint — the token is fully spendable either way, and a missing
 // signature only costs the offline origin/denomination proof.
-func signMintProvenance(ctx context.Context, ln lnclient.LNClient, walletPubkey string, amountMloki uint64) (sig []byte, ok bool) {
-	payload := lokicash.MintPayload(lokicash.HRP, walletPubkey, amountMloki)
+func signMintProvenance(ctx context.Context, ln lnclient.LNClient, walletPubkey string, amountMillis uint64) (sig []byte, ok bool) {
+	payload := lokicash.MintPayload(lokicash.HRP, walletPubkey, amountMillis)
 	zsig, err := ln.SignMessage(ctx, payload)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Str("wallet_pubkey", walletPubkey).
@@ -51,9 +51,9 @@ const mintSigRawLen = 65
 // attaching mint provenance when signMint is set and signing succeeds. It never
 // returns an error: a token is best-effort metadata layered over PairingURI
 // (which is always sufficient on its own), so any encode/sign failure degrades
-// to the plainest token that still works, with the failure logged. amountMloki
+// to the plainest token that still works, with the failure logged. amountMillis
 // is the wallet's total committed amount (the value the signature attests).
-func encodeCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, signMint bool, amountMloki uint64) string {
+func encodeCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, signMint bool, amountMillis uint64) string {
 	tok := lokicash.Token{
 		HRP:              lokicash.HRP,
 		WalletPubkey:     walletPubkey,
@@ -62,8 +62,8 @@ func encodeCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, se
 		IdentityRequired: identityRequired,
 	}
 	if signMint {
-		if sig, ok := signMintProvenance(ctx, ln, walletPubkey, amountMloki); ok {
-			amt := amountMloki
+		if sig, ok := signMintProvenance(ctx, ln, walletPubkey, amountMillis); ok {
+			amt := amountMillis
 			tok.MintSignature = sig
 			tok.AttestedAmount = &amt
 		}

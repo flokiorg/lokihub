@@ -42,7 +42,7 @@ func createConnKeyCashWallet(t *testing.T, hubClient *nwcclient.Client, iaPub, c
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: []CashWalletRecipientParam{
-			{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMloki: amountMloki},
+			{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMillis: amountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
@@ -84,11 +84,11 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 		IdentityEvent:    eventJSON(t, proof),
 		AttestationEvent: eventJSON(t, attestation),
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki:      &amt,
+		AmountMillis:     &amt,
 	}, &res))
-	require.EqualValues(t, splitAmount, res.AmountMloki)
-	require.NotNil(t, res.RemainingAmountMloki)
-	require.EqualValues(t, fullAmount-splitAmount, *res.RemainingAmountMloki)
+	require.EqualValues(t, splitAmount, res.AmountMillis)
+	require.NotNil(t, res.RemainingAmountMillis)
+	require.EqualValues(t, fullAmount-splitAmount, *res.RemainingAmountMillis)
 	require.NotEmpty(t, res.NewWalletToken, "a connection_key partial split must spin off a carved wallet")
 	require.NotEmpty(t, res.RemainderWalletToken, "the remainder is now its own new wallet, not left on the source")
 
@@ -202,7 +202,7 @@ func TestAudit_CashTransferConnectionKey_RevokedIA_Rejected(t *testing.T) {
 		IdentityEvent:    eventJSON(t, splitProof),
 		AttestationEvent: eventJSON(t, attestation),
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki:      &half,
+		AmountMillis:     &half,
 	}, &splitRes)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
@@ -250,7 +250,7 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 		IdentityEvent:    eventJSON(t, proof),
 		AttestationEvent: eventJSON(t, attestation),
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "connection_key", IdentityValue: targetConnKey, IAPubkey: untrustedIAPub},
-		AmountMloki:      &half,
+		AmountMillis:     &half,
 	}, &res)
 	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 
@@ -295,7 +295,7 @@ func TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected(t 
 		IdentityEvent:    eventJSON(t, attackerProof),
 		AttestationEvent: eventJSON(t, attestation),
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerTargetPub},
-		AmountMloki:      &half,
+		AmountMillis:     &half,
 	}, &res)
 	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 
@@ -312,7 +312,7 @@ func TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected(t 
 		IdentityEvent:    eventJSON(t, realProof),
 		AttestationEvent: eventJSON(t, realAttestation),
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: realTargetPub},
-		AmountMloki:      &half,
+		AmountMillis:     &half,
 	}, &realRes))
-	require.EqualValues(t, half, realRes.AmountMloki)
+	require.EqualValues(t, half, realRes.AmountMillis)
 }

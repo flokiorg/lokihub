@@ -67,7 +67,7 @@ type cashChildFixture struct {
 	WalletPubkey       string
 	BeneficiaryPrivkey string
 	BeneficiaryPubkey  string
-	AmountMloki        uint64
+	AmountMillis       uint64
 }
 
 // mintCashChild creates a fresh cash_wallet child pre-funded with EXACTLY
@@ -91,13 +91,13 @@ func mintCashChild(t *testing.T, hub CashHubConfig, amountMloki uint64) cashChil
 		WalletPubkey:       result.WalletPubkey,
 		BeneficiaryPrivkey: beneficiaryPriv,
 		BeneficiaryPubkey:  beneficiaryPub,
-		AmountMloki:        amountMloki,
+		AmountMillis:       amountMloki,
 	}
 }
 
 // claimFullSlice signs a claim proof for fixture bound to invoice and calls
 // cash_redeem — the recipient's one-shot, full-slice payout. The invoice's
-// own amount must exactly equal fixture.AmountMloki (cash_redeem' own
+// own amount must exactly equal fixture.AmountMillis (cash_redeem' own
 // "not partially, in one shot" rule), so callers must mint invoice for
 // exactly that amount.
 func claimFullSlice(t *testing.T, fixture cashChildFixture, invoice MakeInvoiceResult) ClaimFundsResult {

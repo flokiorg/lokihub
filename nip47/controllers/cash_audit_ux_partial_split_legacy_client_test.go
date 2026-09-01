@@ -20,17 +20,17 @@ import (
 // the pre-rewrite contract split off the carved amount into a fresh wallet
 // (new_wallet_pubkey/new_wallet_token) but left the REMAINDER decremented in
 // place, on the SAME source connection, under the caller's own unchanged
-// identity — reported only via remaining_amount_mloki as a plain number. Such
+// identity — reported only via remaining_amount_millis as a plain number. Such
 // a client has no reason to expect (and, by construction here, does not
 // declare) a remainder_wallet_pubkey/remainder_wallet_token pair, since one
 // never existed in the contract it was written against.
 type legacyPartialSplitResult struct {
-	AmountMloki          uint64  `json:"amount_mloki"`
-	IdentityType         string  `json:"identity_type"`
-	IdentityValue        string  `json:"identity_value,omitempty"`
-	RemainingAmountMloki *uint64 `json:"remaining_amount_mloki,omitempty"`
-	NewWalletPubkey      string  `json:"new_wallet_pubkey,omitempty"`
-	NewWalletToken       string  `json:"new_wallet_token,omitempty"`
+	AmountMillis          uint64  `json:"amount_millis"`
+	IdentityType          string  `json:"identity_type"`
+	IdentityValue         string  `json:"identity_value,omitempty"`
+	RemainingAmountMillis *uint64 `json:"remaining_amount_millis,omitempty"`
+	NewWalletPubkey       string  `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken        string  `json:"new_wallet_token,omitempty"`
 	// Deliberately NO remainder_wallet_pubkey / remainder_wallet_token fields.
 }
 
@@ -45,7 +45,7 @@ type legacyPartialSplitResult struct {
 // Sequence this proves:
 //  1. A partial cash_transfer succeeds and returns a response that, decoded
 //     into the OLD/legacy result shape (above), decodes cleanly (no error) and
-//     reports remaining_amount_mloki > 0 — exactly what a legacy client would
+//     reports remaining_amount_millis > 0 — exactly what a legacy client would
 //     read as "I still have this much on the connection I already hold."
 //  2. The legacy struct has no field to carry remainder_wallet_token, so a
 //     client using it never learns a brand-new wallet now holds that value —
@@ -104,7 +104,7 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 	require.Nil(t, response.Error)
 
@@ -117,8 +117,8 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 	require.NoError(t, json.Unmarshal(wireBytes, &legacy),
 		"a legacy client's decode must not error -- unknown JSON members (remainder_wallet_token) are silently dropped, not rejected")
 
-	require.NotNil(t, legacy.RemainingAmountMloki, "the legacy client reads a nonzero remaining balance and has no reason to suspect anything is missing")
-	assert.EqualValues(t, 3000, *legacy.RemainingAmountMloki)
+	require.NotNil(t, legacy.RemainingAmountMillis, "the legacy client reads a nonzero remaining balance and has no reason to suspect anything is missing")
+	assert.EqualValues(t, 3000, *legacy.RemainingAmountMillis)
 
 	// Prove the raw wire JSON DOES carry the remainder token -- so what
 	// follows is a client-side blind spot, not a server-side omission.

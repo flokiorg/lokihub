@@ -5,7 +5,7 @@ package controllers
 // test plays out the exact scenario a well-behaved, spec-following recipient
 // client would follow:
 //
-//  1. Call list_recipients, read net_redeemable_mloki for your own slice —
+//  1. Call list_recipients, read net_redeemable_millis for your own slice —
 //     the value NIP-CASH explicitly tells a client to build its invoice from
 //     ("so a recipient always knows precisely what cash_redeem will pay out
 //     before they call it" — §The Redeem Fee).
@@ -14,7 +14,7 @@ package controllers
 //
 // Per NIP-CASH's own §Listing Recipients text, this is explicitly allowed to
 // underpay relative to what actually gets paid out ("A slice's eventual
-// cash_redeem MAY pay out more than net_redeemable_mloki here... it will
+// cash_redeem MAY pay out more than net_redeemable_millis here... it will
 // never pay out less") — but the wire behavior is not "pay out more than the
 // invoice asked for," it's outright REJECTION: cash_redeem's exact-match rule
 // (cash_redeem_controller.go step 9) requires the invoice to match whatever
@@ -48,7 +48,7 @@ import (
 // is the concrete "did the spec's documented ceiling behavior turn into a
 // footgun" test the audit asked for. A recipient who did everything the spec
 // tells them to do — quote via list_recipients, build the invoice for the
-// quoted net_redeemable_mloki — still gets a hard rejection when this
+// quoted net_redeemable_millis — still gets a hard rejection when this
 // specific redemption happens to resolve same-node; this confirms the
 // rejection message now explains why.
 func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSameNode(t *testing.T) {
@@ -77,14 +77,14 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	// 10% redeem fee: list_recipients will quote redeem_fee_mloki=100,
-	// net_redeemable_mloki=900 for this slice.
+	// 10% redeem fee: list_recipients will quote redeem_fee_millis=100,
+	// net_redeemable_millis=900 for this slice.
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000, RedeemFeePpm: 100_000},
 	}))
 
 	// Step 1: the recipient calls list_recipients, exactly as NIP-CASH's
-	// §The Redeem Fee tells them to, and reads their own net_redeemable_mloki.
+	// §The Redeem Fee tells them to, and reads their own net_redeemable_millis.
 	controller := NewTestNip47Controller(svc)
 	var listResp *models.Response
 	controller.HandleListRecipientsEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
@@ -92,22 +92,22 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	require.Nil(t, listResp.Error)
 	quoted := listResp.Result.(listRecipientsResponse).Recipients[0]
 	require.Equal(t, claimantPubkey, quoted.IdentityValue)
-	require.Equal(t, int64(900), quoted.NetRedeemableMloki, "sanity: this is the exact figure a spec-following client would build its invoice from")
+	require.Equal(t, int64(900), quoted.NetRedeemableMillis, "sanity: this is the exact figure a spec-following client would build its invoice from")
 
 	// Step 2 + 3: the recipient builds a real invoice for exactly the quoted
-	// net_redeemable_mloki (900) and calls cash_redeem — normally the right
+	// net_redeemable_millis (900) and calls cash_redeem — normally the right
 	// move, but THIS redemption resolves same-node (step above), so the
 	// wallet's actual required amount is the FULL 1000, fee-free, not 900.
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
 		Invoice:       tests.MockZeroAmountInvoice,
-		Amount:        ptrUint64(uint64(quoted.NetRedeemableMloki)), //nolint:gosec // test-controlled positive value — exactly what list_recipients quoted
+		Amount:        ptrUint64(uint64(quoted.NetRedeemableMillis)), //nolint:gosec // test-controlled positive value — exactly what list_recipients quoted
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 	})
 
-	require.NotNil(t, response.Error, "a spec-following recipient's invoice, built for the exact quoted net_redeemable_mloki, is REJECTED outright rather than paid out for more")
+	require.NotNil(t, response.Error, "a spec-following recipient's invoice, built for the exact quoted net_redeemable_millis, is REJECTED outright rather than paid out for more")
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 	t.Logf("actual cash_redeem rejection a recipient sees after following list_recipients' own quote: %q", response.Error.Message)
 

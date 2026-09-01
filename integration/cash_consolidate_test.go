@@ -134,7 +134,7 @@ func TestCashConsolidate(t *testing.T) {
 	callConn := mustConnect(t, sources[0].conn)
 	var result CashConsolidateResult
 	require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, params, &result))
-	assert.EqualValues(t, sum, result.AmountMloki)
+	assert.EqualValues(t, sum, result.AmountMillis)
 	require.NotEmpty(t, result.NewWalletPubkey)
 	require.NotEmpty(t, result.NewWalletToken)
 

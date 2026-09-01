@@ -41,7 +41,7 @@ func splitOffPartial(t *testing.T, shared *nwcclient.Client, curPriv, curPub, wa
 		IdentityValue: curPub,
 		IdentityEvent: eventJSON(t, proof),
 		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki:   &splitAmount,
+		AmountMillis:  &splitAmount,
 	}, &res)
 	return res, callErr
 }
@@ -58,7 +58,7 @@ func splitOffPartial(t *testing.T, shared *nwcclient.Client, curPriv, curPub, wa
 // leaves a wallet that only ever held 100k against a 100k source, i.e. the
 // source's real balance goes below the remainder its claim row still
 // promises. SplitCashSliceAmount's optimistic lock (pinning both
-// transfer_count AND amount_mloki) is supposed to make that impossible; this
+// transfer_count AND amount_millis) is supposed to make that impossible; this
 // proves it under real, racing network round-trips.
 //
 // Attacker model: a slice owner who fires two split requests at once (two
@@ -128,12 +128,12 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 
 		// The winner carved off exactly splitEach and reports a remainder of the
 		// rest — and those two sum to the original, no value created or destroyed.
-		require.EqualValues(t, splitEach, winner.AmountMloki, "the winning carve-off must be exactly the requested amount")
-		require.NotNil(t, winner.RemainingAmountMloki)
-		require.EqualValues(t, fullAmount-splitEach, *winner.RemainingAmountMloki)
+		require.EqualValues(t, splitEach, winner.AmountMillis, "the winning carve-off must be exactly the requested amount")
+		require.NotNil(t, winner.RemainingAmountMillis)
+		require.EqualValues(t, fullAmount-splitEach, *winner.RemainingAmountMillis)
 		require.NotEmpty(t, winner.NewWalletToken, "the carved piece is delivered as a new wallet")
 		require.NotEmpty(t, winner.RemainderWalletToken, "the remainder is delivered as its own new wallet")
-		require.EqualValues(t, fullAmount, winner.AmountMloki+*winner.RemainingAmountMloki,
+		require.EqualValues(t, fullAmount, winner.AmountMillis+*winner.RemainingAmountMillis,
 			"CONSERVATION: carved piece + remainder must equal the original slice exactly")
 
 		// The source wallet was consumed by the winning split: its real ledger
@@ -212,8 +212,8 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			<-barrier
 			splitErr = splitConn.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 				IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, splitProof),
-				NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: splitNewPub},
-				AmountMloki: &amt,
+				NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: splitNewPub},
+				AmountMillis: &amt,
 			}, &splitRes)
 		}()
 		close(barrier)
@@ -234,7 +234,7 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// paid out the whole slice AND carved a piece into a new wallet.
 			bothWon++
 			t.Errorf("CRITICAL DOUBLE-SPEND iter %d: cash_redeem paid full %d AND a partial split carved off %d from the same slice; "+
-				"wallet real balance now %d", i, fullAmount, splitRes.AmountMloki, bal.Balance)
+				"wallet real balance now %d", i, fullAmount, splitRes.AmountMillis, bal.Balance)
 		case redeemWon:
 			// Redeem took the whole slice: wallet drained, split must have lost.
 			require.EqualValues(t, 0, bal.Balance, "after a full redeem the wallet must hold nothing")
@@ -244,9 +244,9 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// drained (its value moved into the carved + remainder wallets), and
 			// the racing full redeem lost.
 			require.EqualValues(t, 0, bal.Balance, "after a split consumes the slice, the source wallet is drained")
-			require.EqualValues(t, splitAmount, splitRes.AmountMloki)
-			require.NotNil(t, splitRes.RemainingAmountMloki)
-			require.EqualValues(t, fullAmount-splitAmount, *splitRes.RemainingAmountMloki)
+			require.EqualValues(t, splitAmount, splitRes.AmountMillis)
+			require.NotNil(t, splitRes.RemainingAmountMillis)
+			require.EqualValues(t, fullAmount-splitAmount, *splitRes.RemainingAmountMillis)
 			// The remainder is redeemable — from its OWN new wallet, under the
 			// original identity — proving the value survived intact, just relocated.
 			require.NotEmpty(t, splitRes.RemainderWalletToken)
@@ -295,8 +295,8 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 		var res CashTransferResult
 		err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, proof),
-			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki: &zero,
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			AmountMillis: &zero,
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -310,11 +310,11 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 		var res CashTransferResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, proof),
-			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki: &full,
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			AmountMillis: &full,
 		}, &res))
 		require.Empty(t, res.NewWalletToken, "amount == full amount must reassign in place, never spin off a new wallet")
-		require.Nil(t, res.RemainingAmountMloki, "an in-place reassignment must not report a remainder")
+		require.Nil(t, res.RemainingAmountMillis, "an in-place reassignment must not report a remainder")
 	})
 
 	t.Run("OneBelowFull_NoFloor_PartialSplitLeaves1Remainder", func(t *testing.T) {
@@ -326,12 +326,12 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 		var res CashTransferResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, proof),
-			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki: &almost,
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			AmountMillis: &almost,
 		}, &res))
 		require.NotEmpty(t, res.NewWalletToken, "a sub-full amount must spin off a dedicated wallet")
-		require.NotNil(t, res.RemainingAmountMloki)
-		require.EqualValues(t, 1, *res.RemainingAmountMloki, "a no-floor hub must allow a 1-mloki remainder")
+		require.NotNil(t, res.RemainingAmountMillis)
+		require.EqualValues(t, 1, *res.RemainingAmountMillis, "a no-floor hub must allow a 1-mloki remainder")
 	})
 
 	t.Run("AboveBalance_Rejected", func(t *testing.T) {
@@ -343,21 +343,21 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 		var res CashTransferResult
 		err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, proof),
-			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki: &over,
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			AmountMillis: &over,
 		}, &res)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 }
 
 // TestAudit_CashSplitProofReplay_DifferentAmount confirms a captured transfer
-// proof (signed for one new_identity AND one amount_mloki) cannot be replayed
-// to authorize a DIFFERENT amount_mloki than intended — NIP-CASH §Security
+// proof (signed for one new_identity AND one amount_millis) cannot be replayed
+// to authorize a DIFFERENT amount_millis than intended — NIP-CASH §Security
 // Considerations: "a proof MUST NOT be replayable to authorize a DIFFERENT
-// amount_mloki than the one it was signed for."
+// amount_millis than the one it was signed for."
 //
 // Originally written (2026-07-30 dynamic audit) against a build where the
-// proof was NOT bound to amount_mloki at all and was NOT single-use — see
+// proof was NOT bound to amount_millis at all and was NOT single-use — see
 // nip47/controllers/cash_transfer_proof_amount_binding_test.go's
 // TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected and
 // TestCashTransfer_ProofSingleUse_ExactReplayRejected for the unit-level
@@ -395,10 +395,10 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	var res1 CashTransferResult
 	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 		IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: proofJSON,
-		NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki: &first,
+		NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+		AmountMillis: &first,
 	}, &res1))
-	require.EqualValues(t, first, res1.AmountMloki)
+	require.EqualValues(t, first, res1.AmountMillis)
 
 	// Under the two-wallet model the first split CONSUMED the source slice
 	// terminally — its value now lives in the carved (30k) and remainder (70k)
@@ -410,8 +410,8 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	var res2 CashTransferResult
 	err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 		IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: proofJSON,
-		NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki: &second,
+		NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+		AmountMillis: &second,
 	}, &res2)
 	requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 
@@ -419,8 +419,8 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	var bal GetBalanceResult
 	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
 	require.EqualValues(t, 0, bal.Balance, "source must be drained after its only slice was split away")
-	require.NotNil(t, res1.RemainingAmountMloki)
-	require.EqualValues(t, fullAmount-first, *res1.RemainingAmountMloki)
+	require.NotNil(t, res1.RemainingAmountMillis)
+	require.EqualValues(t, fullAmount-first, *res1.RemainingAmountMillis)
 
 	// Both spun-off wallets are genuinely funded, each redeemable exactly once:
 	// the carved 30k by newPub, the 70k remainder by curPub.

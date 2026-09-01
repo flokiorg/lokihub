@@ -56,7 +56,7 @@ const keyLen = 32
 const mintSigLen = 65
 
 // attestedAmountLen is the fixed width of the attested-amount TLV value: an
-// 8-byte big-endian mloki amount.
+// 8-byte big-endian millis amount.
 const attestedAmountLen = 8
 
 // mintPayloadScheme is the fixed, versioned tag prefixing every mint-signature
@@ -278,12 +278,12 @@ func Decode(token string) (Token, error) {
 }
 
 // MintPayload returns the canonical ASCII string a mint signature commits to
-// (NIP-CASH §Mint Provenance): "lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_mloki>".
+// (NIP-CASH §Mint Provenance): "lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_millis>".
 // The minter signs this at mint time and a verifier recomputes it from a
 // token's own fields — so both the signer (cashwallet) and VerifyMint MUST use
 // this one function, never hand-build the string, to stay byte-identical.
-func MintPayload(hrp, walletPubkeyHex string, amountMloki uint64) string {
-	return mintPayloadScheme + ":" + hrp + ":" + walletPubkeyHex + ":" + strconv.FormatUint(amountMloki, 10)
+func MintPayload(hrp, walletPubkeyHex string, amountMillis uint64) string {
+	return mintPayloadScheme + ":" + hrp + ":" + walletPubkeyHex + ":" + strconv.FormatUint(amountMillis, 10)
 }
 
 // VerifyMint recovers the minting node's Lightning pubkey (compressed, hex)

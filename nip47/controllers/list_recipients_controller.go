@@ -14,26 +14,26 @@ import (
 type recipientStatus struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value"`
-	AmountMloki   int64  `json:"amount_mloki"`
+	AmountMillis  int64  `json:"amount_millis"`
 	Claimed       bool   `json:"claimed"`
 	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
-	// RedeemFeeMloki/NetRedeemableMloki are this slice's cash_redeem quote —
+	// RedeemFeeMillis/NetRedeemableMillis are this slice's cash_redeem quote —
 	// the fee CalculateFeeSkimMloki(AmountMloki, this claim's own
 	// RedeemFeePpm) resolves to, and what's left after it. This is
 	// necessarily the WORST-CASE (external) quote: list_recipients has no
 	// invoice to check in advance whether a given redemption will actually
 	// resolve to a same-node payment, which stays fee-free regardless (see
 	// cash_redeem_controller.go). A redemption may end up paying out more
-	// than this NetRedeemableMloki figure (the full AmountMloki, if
+	// than this NetRedeemableMillis figure (the full AmountMillis, if
 	// same-node); it will never pay out less.
-	RedeemFeeMloki     int64 `json:"redeem_fee_mloki"`
-	NetRedeemableMloki int64 `json:"net_redeemable_mloki"`
-	// MinTransferMloki is this slice's own inherited split floor (0 = no
+	RedeemFeeMillis     int64 `json:"redeem_fee_millis"`
+	NetRedeemableMillis int64 `json:"net_redeemable_millis"`
+	// MinTransferMillis is this slice's own inherited split floor (0 = no
 	// floor) — surfaced so a recipient can learn it BEFORE attempting a
 	// cash_transfer split, rather than only from the BAD_REQUEST error text
 	// after a rejected attempt (which also burns a share of the shared
 	// cash_transfer/cash_redeem rate limit).
-	MinTransferMloki int64 `json:"min_transfer_mloki"`
+	MinTransferMillis int64 `json:"min_transfer_millis"`
 	// ExpiresAt is the shared wallet's own redemption deadline (unix
 	// seconds), omitted when the wallet never expires — the same nil-safe
 	// "omitted means never" convention every other cash_wallet-adjacent
@@ -77,14 +77,14 @@ func (controller *nip47Controller) HandleListRecipientsEvent(ctx context.Context
 	for i, c := range claims {
 		redeemFeeMloki := transactions.CalculateFeeSkimMloki(uint64(c.AmountMloki), c.RedeemFeePpm) //nolint:gosec // AmountMloki is always non-negative
 		status := recipientStatus{
-			IdentityType:       c.IdentityType,
-			IdentityValue:      c.IdentityValue,
-			AmountMloki:        c.AmountMloki,
-			Claimed:            c.ClaimedAt != nil,
-			RedeemFeeMloki:     int64(redeemFeeMloki),                 //nolint:gosec // a <=100% cut of an int64 amount, always fits
-			NetRedeemableMloki: c.AmountMloki - int64(redeemFeeMloki), //nolint:gosec // redeemFeeMloki <= AmountMloki by construction
-			MinTransferMloki:   c.MinTransferMloki,
-			ExpiresAt:          expiresAt,
+			IdentityType:        c.IdentityType,
+			IdentityValue:       c.IdentityValue,
+			AmountMillis:        c.AmountMloki,
+			Claimed:             c.ClaimedAt != nil,
+			RedeemFeeMillis:     int64(redeemFeeMloki),                 //nolint:gosec // a <=100% cut of an int64 amount, always fits
+			NetRedeemableMillis: c.AmountMloki - int64(redeemFeeMloki), //nolint:gosec // redeemFeeMloki <= AmountMloki by construction
+			MinTransferMillis:   c.MinTransferMloki,
+			ExpiresAt:           expiresAt,
 		}
 		if c.ClaimedAt != nil {
 			claimedAt := c.ClaimedAt.Unix()

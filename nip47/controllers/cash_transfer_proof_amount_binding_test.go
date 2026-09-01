@@ -17,9 +17,9 @@ import (
 // TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected is a
 // regression test for a critical fund-theft bug found during the 2026-07-30
 // Cash Hub security audit: a kind-35521 cash_transfer proof was not bound to
-// amount_mloki and was not single-use, contrary to NIP-CASH §Transferring
+// amount_millis and was not single-use, contrary to NIP-CASH §Transferring
 // and Splitting a Slice ("a proof MUST NOT be replayable to authorize a
-// DIFFERENT amount_mloki than the one it was signed for") and §Processing
+// DIFFERENT amount_millis than the one it was signed for") and §Processing
 // Algorithm step 1.
 //
 // Attacker model: any holder of the (deliberately-shared) cash_wallet
@@ -55,7 +55,7 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 	// The victim signs a proof bound to (wallet, attackerPubkey, 2000). An
 	// attacker who captured it tries to use it for a DIFFERENT amount (3000).
 	// The amount-binding in the proof (verifyTransferIdentityEvent checks the
-	// signed amount_mloki tag against the resolved amount) rejects it before any
+	// signed amount_millis tag against the resolved amount) rejects it before any
 	// slice is claimed or any funds move — no fund movement needed to exercise
 	// the guard.
 	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, attackerPubkey, "", 2000, nil, time.Now())
@@ -65,9 +65,9 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 		IdentityValue: victimPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
-		AmountMloki:   &mismatched,
+		AmountMillis:  &mismatched,
 	})
-	require.NotNil(t, resp.Error, "a proof signed for amount_mloki=2000 must not authorize a transfer of 3000")
+	require.NotNil(t, resp.Error, "a proof signed for amount_millis=2000 must not authorize a transfer of 3000")
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
 
 	// The victim's slice must be completely untouched: not claimed, still 5000.
@@ -79,7 +79,7 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 }
 
 // TestCashTransfer_ProofSingleUse_ExactReplayRejected is the companion
-// regression test: even a replay for the EXACT SAME amount_mloki the proof
+// regression test: even a replay for the EXACT SAME amount_millis the proof
 // was signed for must be rejected the second time. Amount-binding alone
 // doesn't stop this — a partial split leaves the source slice's registered
 // identity unchanged (unlike an in-place full reassignment, which
@@ -127,7 +127,7 @@ func TestCashTransfer_ProofSingleUse_ExactReplayRejected(t *testing.T) {
 		IdentityValue: victimPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 	require.Nil(t, resp1.Error)
 
@@ -142,7 +142,7 @@ func TestCashTransfer_ProofSingleUse_ExactReplayRejected(t *testing.T) {
 		IdentityValue: victimPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
-		AmountMloki:   &amount,
+		AmountMillis:  &amount,
 	})
 	require.NotNil(t, resp2.Error, "a replayed proof must not authorize a second carve-off")
 

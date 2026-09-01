@@ -3,7 +3,7 @@
 // cash_transfer_audit_split_chains_test.go is the 2026-07-30 dynamic Cash-Hub
 // audit's coverage of CHAINS of splits — split a slice, then split the
 // spun-off wallet's own slice again, several generations deep — which the
-// mandate flags for verification: does MinTransferMloki inheritance hold
+// mandate flags for verification: does MinTransferMillis inheritance hold
 // generations deep, and does money stay conserved across the whole lineage?
 // Every generation is driven over the real NWC surface against the real
 // backend, with the caller keeping each generation's target keypair so it can
@@ -24,7 +24,7 @@ import (
 )
 
 // createCashHubWithTransferPolicy provisions a throwaway cash_hub whose
-// min_transfer_mloki is set at creation (createEphemeralCashHub leaves it at
+// min_transfer_millis is set at creation (createEphemeralCashHub leaves it at
 // 0), root-funds it, and registers the same child-sweeping t.Cleanup
 // createEphemeralCashHub uses.
 func createCashHubWithTransferPolicy(t *testing.T, cfg *Config, name string, minTransferMloki int64) *nwcclient.Client {
@@ -103,23 +103,23 @@ func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPr
 		IdentityValue: curPub,
 		IdentityEvent: eventJSON(t, proof),
 		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMloki:   &amt,
+		AmountMillis:  &amt,
 	}, &res))
-	require.EqualValues(t, splitAmount, res.AmountMloki)
+	require.EqualValues(t, splitAmount, res.AmountMillis)
 	require.NotEmpty(t, res.NewWalletToken, "a partial split must always spin off a dedicated wallet")
-	require.NotNil(t, res.RemainingAmountMloki)
+	require.NotNil(t, res.RemainingAmountMillis)
 	require.NotEmpty(t, res.RemainderWalletToken, "a partial split delivers the remainder as its own new wallet")
 
 	newClient = decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, curPriv)
 	remainderClient = decryptSplitWallet(t, res.RemainderWalletPubkey, res.RemainderWalletToken, curPriv)
-	return newClient, newPriv, newPub, res.NewWalletPubkey, remainderClient, *res.RemainingAmountMloki
+	return newClient, newPriv, newPub, res.NewWalletPubkey, remainderClient, *res.RemainingAmountMillis
 }
 
 // TestAudit_CashSplitChain_InheritanceAndConservation splits the same value
 // forward six generations deep, each generation carving everything except a
 // one-floor remainder off into a fresh wallet, and asserts at every depth:
 //
-//   - the inherited min_transfer_mloki floor is still enforced (a below-floor
+//   - the inherited min_transfer_millis floor is still enforced (a below-floor
 //     split on the generation-N wallet is rejected), proving the floor rode the
 //     whole lineage down, not just the first hop; and
 //   - money is conserved: every left-behind remainder holds exactly the floor
@@ -168,10 +168,10 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 			IdentityValue: curPub,
 			IdentityEvent: eventJSON(t, rejProof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: rejTargetPub},
-			AmountMloki:   &belowFloor,
+			AmountMillis:  &belowFloor,
 		}, &rejRes)
 		requireNWCErrorCode(t, rejErr, constants.ERROR_BAD_REQUEST)
-		require.ErrorContains(t, rejErr, "min_transfer_mloki",
+		require.ErrorContains(t, rejErr, "min_transfer_millis",
 			"gen %d below-floor split must be rejected for the inherited floor, not another reason", gen)
 
 		// Move everything except exactly one floor forward into a new wallet.
@@ -221,4 +221,3 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 	}, &redeemRes))
 	require.NotEmpty(t, redeemRes.Preimage)
 }
-

@@ -21,7 +21,7 @@ type CashWalletRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 }
 
 type MintCashParams struct {
@@ -34,7 +34,7 @@ type MintCashParams struct {
 type CashWalletRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 	BearerSecret  string `json:"bearer_secret,omitempty"`
 }
 
@@ -102,12 +102,12 @@ type CashTransferParams struct {
 
 	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
 
-	// AmountMloki is OPTIONAL — omitted, or equal to the slice's current full
+	// AmountMillis is OPTIONAL — omitted, or equal to the slice's current full
 	// amount, means "transfer it all". A value less than the slice's current
 	// amount splits off exactly that much into a brand-new dedicated
 	// cash_wallet, leaving the remainder behind under the SAME current
 	// identity — see NIP-CASH §Splitting a Slice.
-	AmountMloki *uint64 `json:"amount_mloki,omitempty"`
+	AmountMillis *uint64 `json:"amount_millis,omitempty"`
 }
 
 // NewWalletPubkey/NewWalletToken are populated only when the transfer spun
@@ -120,15 +120,15 @@ type CashTransferParams struct {
 // encryption layer nested inside this response's own normal per-connection
 // encryption.
 type CashTransferResult struct {
-	AmountMloki   uint64 `json:"amount_mloki"`
+	AmountMillis  uint64 `json:"amount_millis"`
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
-	// RemainingAmountMloki is populated only when this call went through the
+	// RemainingAmountMillis is populated only when this call went through the
 	// split path: 0 for a full split, >0 for a partial one. Never populated
 	// for an in-place reassignment.
-	RemainingAmountMloki *uint64 `json:"remaining_amount_mloki,omitempty"`
-	NewWalletPubkey      string  `json:"new_wallet_pubkey,omitempty"`
-	NewWalletToken       string  `json:"new_wallet_token,omitempty"`
+	RemainingAmountMillis *uint64 `json:"remaining_amount_millis,omitempty"`
+	NewWalletPubkey       string  `json:"new_wallet_pubkey,omitempty"`
+	NewWalletToken        string  `json:"new_wallet_token,omitempty"`
 	// RemainderWalletPubkey/RemainderWalletToken carry the caller's own change,
 	// now in its own fresh dedicated wallet, for a PARTIAL split (NIP-CASH
 	// §Splitting a Slice — the remainder is no longer left on the source
@@ -162,7 +162,7 @@ type CashConsolidateParams struct {
 // (NewWalletPubkey + matching server-held privkey) — the same nested delivery a
 // split uses.
 type CashConsolidateResult struct {
-	AmountMloki     uint64 `json:"amount_mloki"`
+	AmountMillis    uint64 `json:"amount_millis"`
 	NewWalletPubkey string `json:"new_wallet_pubkey"`
 	NewWalletToken  string `json:"new_wallet_token"`
 	ExpiresAt       int64  `json:"expires_at,omitempty"`
@@ -173,16 +173,16 @@ type CashConsolidateResult struct {
 type RecipientStatus struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value"`
-	AmountMloki   int64  `json:"amount_mloki"`
+	AmountMillis  int64  `json:"amount_millis"`
 	Claimed       bool   `json:"claimed"`
 	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
-	// RedeemFeeMloki/NetRedeemableMloki are this slice's cash_redeem quote —
+	// RedeemFeeMillis/NetRedeemableMillis are this slice's cash_redeem quote —
 	// the worst-case (external) fee and net payout, see NIP-CASH.md §Listing
 	// Recipients.
-	RedeemFeeMloki     int64  `json:"redeem_fee_mloki"`
-	NetRedeemableMloki int64  `json:"net_redeemable_mloki"`
-	MinTransferMloki   int64  `json:"min_transfer_mloki"`
-	ExpiresAt          *int64 `json:"expires_at,omitempty"`
+	RedeemFeeMillis     int64  `json:"redeem_fee_millis"`
+	NetRedeemableMillis int64  `json:"net_redeemable_millis"`
+	MinTransferMillis   int64  `json:"min_transfer_millis"`
+	ExpiresAt           *int64 `json:"expires_at,omitempty"`
 }
 
 type ListRecipientsResult struct {

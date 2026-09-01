@@ -17,7 +17,7 @@ import (
 // TestCashTransferSplit_AmountAndFloorBoundaries tables every way a partial
 // split's requested amount can be rejected BEFORE any funds move: a
 // non-positive amount, an amount larger than the caller's own slice, and either
-// side of the split falling below the slice's inherited min_transfer_mloki
+// side of the split falling below the slice's inherited min_transfer_millis
 // floor. Each case both proves the guard fires AND that the source slice is left
 // completely untouched (not claimed, unchanged amount) — a rejected split must
 // never leak value or strand a slice.
@@ -31,9 +31,9 @@ func TestCashTransferSplit_AmountAndFloorBoundaries(t *testing.T) {
 	}{
 		{name: "zero amount", floor: 0, requested: 0, wantMsgPart: "positive"},
 		{name: "exceeds own slice", floor: 0, requested: sliceAmount + 1, wantMsgPart: "exceeds"},
-		{name: "carved below floor", floor: 1000, requested: 500, wantMsgPart: "min_transfer_mloki floor"},
+		{name: "carved below floor", floor: 1000, requested: 500, wantMsgPart: "min_transfer_millis floor"},
 		{name: "remainder below floor", floor: 1000, requested: 4500, wantMsgPart: "remainder"},
-		{name: "carved exactly one below floor", floor: 2000, requested: 1999, wantMsgPart: "min_transfer_mloki floor"},
+		{name: "carved exactly one below floor", floor: 2000, requested: 1999, wantMsgPart: "min_transfer_millis floor"},
 		{name: "remainder exactly one below floor", floor: 2000, requested: 3001, wantMsgPart: "remainder"},
 	}
 
@@ -59,7 +59,7 @@ func TestCashTransferSplit_AmountAndFloorBoundaries(t *testing.T) {
 				IdentityValue: curPub,
 				IdentityEvent: mustMarshal(t, proof),
 				NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
-				AmountMloki:   &amt,
+				AmountMillis:  &amt,
 			})
 			require.NotNil(t, resp.Error)
 			assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
@@ -113,13 +113,13 @@ func TestCashTransferSplit_ExactFloorBoundaries_Succeed(t *testing.T) {
 		IdentityValue: curPub,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
-		AmountMloki:   &amt,
+		AmountMillis:  &amt,
 	})
 	require.Nil(t, resp.Error)
 	result := resp.Result.(cashTransferResponse)
-	assert.EqualValues(t, 2000, result.AmountMloki)
-	require.NotNil(t, result.RemainingAmountMloki)
-	assert.EqualValues(t, 2000, *result.RemainingAmountMloki)
+	assert.EqualValues(t, 2000, result.AmountMillis)
+	require.NotNil(t, result.RemainingAmountMillis)
+	assert.EqualValues(t, 2000, *result.RemainingAmountMillis)
 	require.NotEmpty(t, result.NewWalletToken)
 	require.NotEmpty(t, result.RemainderWalletToken)
 

@@ -51,11 +51,11 @@ func TestCashTransferPartialSplit(t *testing.T) {
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &splitAmount,
+			AmountMillis:  &splitAmount,
 		}, &transferResult))
-		require.Equal(t, splitAmount, transferResult.AmountMloki)
-		require.NotNil(t, transferResult.RemainingAmountMloki)
-		require.EqualValues(t, fullAmount-int64(splitAmount), *transferResult.RemainingAmountMloki) //nolint:gosec
+		require.Equal(t, splitAmount, transferResult.AmountMillis)
+		require.NotNil(t, transferResult.RemainingAmountMillis)
+		require.EqualValues(t, fullAmount-int64(splitAmount), *transferResult.RemainingAmountMillis) //nolint:gosec
 		require.NotEmpty(t, transferResult.NewWalletPubkey)
 		require.NotEmpty(t, transferResult.NewWalletToken, "a partial split mints a new dedicated wallet for the carved piece")
 		require.NotEmpty(t, transferResult.RemainderWalletToken, "a partial split now mints the remainder into its OWN new wallet, not left on the source")
@@ -145,13 +145,13 @@ func TestCashTransferPartialSplit(t *testing.T) {
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &tooMuch,
+			AmountMillis:  &tooMuch,
 		}, &transferResult)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 }
 
-// TestCashTransferMinTransferFloor covers the new min_transfer_mloki floor —
+// TestCashTransferMinTransferFloor covers the new min_transfer_millis floor —
 // configured at the Cash Hub level, inherited by every slice a freshly
 // minted wallet carries (NIP-CASH "Splitting a Slice").
 func TestCashTransferMinTransferFloor(t *testing.T) {
@@ -217,7 +217,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &tooSmall,
+			AmountMillis:  &tooSmall,
 		}, &result)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -235,7 +235,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &almostAll,
+			AmountMillis:  &almostAll,
 		}, &result)
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
@@ -251,9 +251,9 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMloki:   &exactlyFloor,
+			AmountMillis:  &exactlyFloor,
 		}, &result))
-		require.Equal(t, exactlyFloor, result.AmountMloki)
+		require.Equal(t, exactlyFloor, result.AmountMillis)
 	})
 }
 
@@ -282,8 +282,8 @@ func TestCashTransferFullTransfer_IdentityBoundTarget_StaysInPlace(t *testing.T)
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: []CashWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: currentPub, AmountMloki: happyPathAmountMloki},
-			{IdentityType: "pubkey", IdentityValue: otherPub, AmountMloki: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: currentPub, AmountMillis: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: otherPub, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
@@ -301,7 +301,7 @@ func TestCashTransferFullTransfer_IdentityBoundTarget_StaysInPlace(t *testing.T)
 		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 	}, &transferResult))
 	require.Empty(t, transferResult.NewWalletToken, "a pubkey-target full transfer must stay in-place, never spin off a new wallet")
-	require.Nil(t, transferResult.RemainingAmountMloki, "in-place reassignment never populates remaining_amount_mloki")
+	require.Nil(t, transferResult.RemainingAmountMillis, "in-place reassignment never populates remaining_amount_millis")
 
 	// Reassigned in place: same wallet, new identity, redeemable there. The
 	// OTHER recipient's own slice must also be completely unaffected.

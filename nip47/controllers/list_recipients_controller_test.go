@@ -51,10 +51,10 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 	}
 	assert.True(t, byIdentity[pkClaimed].Claimed)
 	assert.NotNil(t, byIdentity[pkClaimed].ClaimedAt)
-	assert.Equal(t, int64(1000), byIdentity[pkClaimed].AmountMloki)
+	assert.Equal(t, int64(1000), byIdentity[pkClaimed].AmountMillis)
 	assert.False(t, byIdentity[pkUnclaimed].Claimed)
 	assert.Nil(t, byIdentity[pkUnclaimed].ClaimedAt)
-	assert.Equal(t, int64(2000), byIdentity[pkUnclaimed].AmountMloki)
+	assert.Equal(t, int64(2000), byIdentity[pkUnclaimed].AmountMillis)
 }
 
 func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {

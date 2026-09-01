@@ -57,7 +57,7 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		BearerSecret: secretHex,
 		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMloki:  &amount,
+		AmountMillis: &amount,
 	})
 
 	require.Nil(t, response.Error, "a bearer-current partial split must succeed and deliver its token, not strand funds")
@@ -77,8 +77,8 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 	remTok, err := lokicash.Decode(result.RemainderWalletToken)
 	require.NoError(t, err, "bearer-current remainder delivery must also be a plain token")
 	assert.Equal(t, result.RemainderWalletPubkey, remTok.WalletPubkey)
-	require.NotNil(t, result.RemainingAmountMloki)
-	assert.EqualValues(t, 3000, *result.RemainingAmountMloki)
+	require.NotNil(t, result.RemainingAmountMillis)
+	assert.EqualValues(t, 3000, *result.RemainingAmountMillis)
 
 	// The source bearer slice is consumed whole (terminal) — its value re-emerged
 	// as the two new bearer/pubkey wallets above, never decremented in place.
