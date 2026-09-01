@@ -227,7 +227,7 @@ test subcommand="unit" *args:
             done
 
             INTEGRATION_RUN_RATE_LIMIT_TESTS=1 go test -tags integration -count=1 -timeout 3m \
-                -run 'TestJITHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited' \
+                -run 'TestCashHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited' \
                 -v ./integration/...
             ;;
         integration-all)

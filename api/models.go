@@ -396,6 +396,12 @@ type CashWalletRecipient struct {
 type CreateCashWalletRequest struct {
 	Recipients []CashWalletRecipient `json:"recipients"`
 	ExpirySecs int                   `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// MintSignature opts the issued token into mint provenance (NIP-CASH
+	// §Mint Provenance) — same opt-in the NWC-facing mint_cash/cash_transfer/
+	// cash_consolidate methods already carry (mint_signature). Best-effort:
+	// a signing failure never fails the mint, it just produces a token
+	// without the signature.
+	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type CreateCashWalletResponse struct {

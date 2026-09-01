@@ -161,7 +161,8 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 	if claim == nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice registered for this identity")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND,
+			controller.noSliceRegisteredMessage(app.ID, identityType, identityValue))
 		return
 	}
 

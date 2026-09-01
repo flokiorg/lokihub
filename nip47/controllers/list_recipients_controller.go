@@ -28,6 +28,19 @@ type recipientStatus struct {
 	// same-node); it will never pay out less.
 	RedeemFeeMloki     int64 `json:"redeem_fee_mloki"`
 	NetRedeemableMloki int64 `json:"net_redeemable_mloki"`
+	// MinTransferMloki is this slice's own inherited split floor (0 = no
+	// floor) — surfaced so a recipient can learn it BEFORE attempting a
+	// cash_transfer split, rather than only from the BAD_REQUEST error text
+	// after a rejected attempt (which also burns a share of the shared
+	// cash_transfer/cash_redeem rate limit).
+	MinTransferMloki int64 `json:"min_transfer_mloki"`
+	// ExpiresAt is the shared wallet's own redemption deadline (unix
+	// seconds), omitted when the wallet never expires — the same nil-safe
+	// "omitted means never" convention every other cash_wallet-adjacent
+	// response already uses (see mint_cash_controller.go). Every recipient
+	// on a wallet shares one deadline, so this is wallet-level, not
+	// per-slice, unlike the other fields above.
+	ExpiresAt *int64 `json:"expires_at,omitempty"`
 }
 
 type listRecipientsResponse struct {
@@ -54,6 +67,12 @@ func (controller *nip47Controller) HandleListRecipientsEvent(ctx context.Context
 		return
 	}
 
+	var expiresAt *int64
+	if app.ExpiresAt != nil {
+		ts := app.ExpiresAt.Unix()
+		expiresAt = &ts
+	}
+
 	recipients := make([]recipientStatus, len(claims))
 	for i, c := range claims {
 		redeemFeeMloki := transactions.CalculateFeeSkimMloki(uint64(c.AmountMloki), c.RedeemFeePpm) //nolint:gosec // AmountMloki is always non-negative
@@ -64,6 +83,8 @@ func (controller *nip47Controller) HandleListRecipientsEvent(ctx context.Context
 			Claimed:            c.ClaimedAt != nil,
 			RedeemFeeMloki:     int64(redeemFeeMloki),                 //nolint:gosec // a <=100% cut of an int64 amount, always fits
 			NetRedeemableMloki: c.AmountMloki - int64(redeemFeeMloki), //nolint:gosec // redeemFeeMloki <= AmountMloki by construction
+			MinTransferMloki:   c.MinTransferMloki,
+			ExpiresAt:          expiresAt,
 		}
 		if c.ClaimedAt != nil {
 			claimedAt := c.ClaimedAt.Unix()

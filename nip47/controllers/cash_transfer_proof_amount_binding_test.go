@@ -42,11 +42,6 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 	)
 	require.NoError(t, err)
 	tests.FundApp(svc, wallet.ID, 500_000, tests.RandomHex32())
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-poc", Amount: 2000},
-	}
 
 	// Victim owns a 5000-mloki slice.
 	victimPrivkey := nostr.GeneratePrivateKey()
@@ -55,52 +50,32 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: victimPubkey, AmountMloki: 5000},
 	}))
 
-	// The attacker's own pubkey. The victim intends only to pay the attacker
-	// 2000 (e.g. buying a 2000-mloki item), keeping 3000 in change.
-	attackerPrivkey := nostr.GeneratePrivateKey()
-	attackerPubkey, _ := nostr.GetPublicKey(attackerPrivkey)
+	attackerPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
-	// The victim signs ONE proof, bound to (wallet, attackerPubkey, 2000).
+	// The victim signs a proof bound to (wallet, attackerPubkey, 2000). An
+	// attacker who captured it tries to use it for a DIFFERENT amount (3000).
+	// The amount-binding in the proof (verifyTransferIdentityEvent checks the
+	// signed amount_mloki tag against the resolved amount) rejects it before any
+	// slice is claimed or any funds move — no fund movement needed to exercise
+	// the guard.
 	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, attackerPubkey, "", 2000, nil, time.Now())
-
-	// Step 1 — the victim's own intended partial split of 2000. Succeeds, 3000
-	// remains under the victim's own identity.
-	amount := uint64(2000)
-	resp1 := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
+	mismatched := uint64(3000)
+	resp := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: victimPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
-		AmountMloki:   &amount,
+		AmountMloki:   &mismatched,
 	})
-	require.Nil(t, resp1.Error)
-	src := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, victimPubkey)
-	require.NotNil(t, src)
-	require.Equal(t, int64(3000), src.AmountMloki, "after the intended 2000 split, 3000 change remains for the victim")
+	require.NotNil(t, resp.Error, "a proof signed for amount_mloki=2000 must not authorize a transfer of 3000")
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
 
-	// Step 2 — the ATTACKER replays the SAME proof, this time as a FULL
-	// transfer (amount_mloki omitted, resolving to the live 3000 remainder).
-	// The proof was signed committing to amount_mloki=2000, not 3000: MUST be
-	// rejected.
-	resp2 := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		IdentityType:  db.CashIdentityPubkey,
-		IdentityValue: victimPubkey,
-		IdentityEvent: mustMarshal(t, proof), // identical captured proof
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
-		// AmountMloki nil => resolves to the live 3000 remainder, which the
-		// proof (bound to 2000) does not match.
-	})
-	require.NotNil(t, resp2.Error, "a proof signed for amount_mloki=2000 must not authorize a transfer of the live 3000 remainder")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp2.Error.Code)
-
-	// The victim's change slice must be untouched.
+	// The victim's slice must be completely untouched: not claimed, still 5000.
 	victimClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, victimPubkey)
 	require.NoError(t, err)
 	require.NotNil(t, victimClaim)
-	assert.Equal(t, int64(3000), victimClaim.AmountMloki, "victim's change slice must survive the rejected replay untouched")
-	attackerClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, attackerPubkey)
-	require.NoError(t, err)
-	assert.Nil(t, attackerClaim, "attacker must not receive the victim's change via the rejected replay")
+	assert.Nil(t, victimClaim.ClaimedAt)
+	assert.Equal(t, int64(5000), victimClaim.AmountMloki)
 }
 
 // TestCashTransfer_ProofSingleUse_ExactReplayRejected is the companion
@@ -126,6 +101,14 @@ func TestCashTransfer_ProofSingleUse_ExactReplayRejected(t *testing.T) {
 	)
 	require.NoError(t, err)
 	tests.FundApp(svc, wallet.ID, 500_000, tests.RandomHex32())
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	// The legitimate first split funds two internal transfers (carved +
+	// remainder), so two distinct-payment-hash invoices.
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-carved", Amount: 2000},
+		{Type: "incoming", Invoice: tests.MockLNClientHoldTransaction.Invoice, PaymentHash: tests.MockLNClientHoldTransaction.PaymentHash, Preimage: "preimage-remainder", Amount: 3000},
+	}
 
 	victimPrivkey := nostr.GeneratePrivateKey()
 	victimPubkey, _ := nostr.GetPublicKey(victimPrivkey)
@@ -148,8 +131,12 @@ func TestCashTransfer_ProofSingleUse_ExactReplayRejected(t *testing.T) {
 	})
 	require.Nil(t, resp1.Error)
 
-	// Replay the identical proof for the identical amount: must be rejected
-	// as already-used, not treated as a second legitimate 2000 carve-off.
+	// Replay the identical proof for the identical amount. Under the two-wallet
+	// model the first split consumed the victim's source slice terminally, so
+	// there is nothing left to carve off a second time — the replay finds no
+	// slice for the victim's identity and is rejected. (This is a STRONGER
+	// protection than the old single-use guard: the source is gone, not merely
+	// marked used.)
 	resp2 := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: victimPubkey,
@@ -157,10 +144,11 @@ func TestCashTransfer_ProofSingleUse_ExactReplayRejected(t *testing.T) {
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: attackerPubkey},
 		AmountMloki:   &amount,
 	})
-	require.NotNil(t, resp2.Error, "an already-consumed proof must not authorize a second, identical carve-off")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp2.Error.Code)
+	require.NotNil(t, resp2.Error, "a replayed proof must not authorize a second carve-off")
 
+	// The victim's source slice is terminal (consumed by the first split), not
+	// left with a re-splittable balance.
 	src := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, victimPubkey)
 	require.NotNil(t, src)
-	assert.Equal(t, int64(3000), src.AmountMloki, "only the first, legitimate 2000 carve-off must have taken effect")
+	require.NotNil(t, src.ClaimedAt, "the source slice must be consumed once, never re-splittable")
 }

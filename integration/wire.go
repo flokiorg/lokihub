@@ -27,6 +27,8 @@ type CashWalletRecipientParam struct {
 type MintCashParams struct {
 	Recipients []CashWalletRecipientParam `json:"recipients"`
 	Expiry     int                        `json:"expiry,omitempty"`
+	// MintSignature opts the issued token into mint provenance (§Mint Provenance).
+	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type CashWalletRecipientResult struct {
@@ -127,6 +129,43 @@ type CashTransferResult struct {
 	RemainingAmountMloki *uint64 `json:"remaining_amount_mloki,omitempty"`
 	NewWalletPubkey      string  `json:"new_wallet_pubkey,omitempty"`
 	NewWalletToken       string  `json:"new_wallet_token,omitempty"`
+	// RemainderWalletPubkey/RemainderWalletToken carry the caller's own change,
+	// now in its own fresh dedicated wallet, for a PARTIAL split (NIP-CASH
+	// §Splitting a Slice — the remainder is no longer left on the source
+	// connection). Delivered the same nested-encrypted way as NewWalletToken.
+	RemainderWalletPubkey string `json:"remainder_wallet_pubkey,omitempty"`
+	RemainderWalletToken  string `json:"remainder_wallet_token,omitempty"`
+}
+
+// --- cash_consolidate ---
+//
+// Combines several same-hub slices this node custodies into one new cash token
+// (NIP-CASH §Consolidating Tokens). Each source carries the same proof shapes
+// cash_transfer accepts. v1: pubkey/bearer sources, pubkey new_identity.
+
+type ConsolidateSourceParam struct {
+	WalletPubkey  string `json:"wallet_pubkey"`
+	IdentityType  string `json:"identity_type,omitempty"`
+	IdentityValue string `json:"identity_value,omitempty"`
+	IdentityEvent string `json:"identity_event,omitempty"`
+	BearerSecret  string `json:"bearer_secret,omitempty"`
+}
+
+type CashConsolidateParams struct {
+	Sources       []ConsolidateSourceParam     `json:"sources"`
+	NewIdentity   CashTransferNewIdentityParam `json:"new_identity"`
+	MintSignature bool                         `json:"mint_signature,omitempty"`
+}
+
+// CashConsolidateResult's NewWalletToken is the merged lokicash1... token,
+// NIP-44 encrypted to new_identity using the merged wallet's own keypair
+// (NewWalletPubkey + matching server-held privkey) — the same nested delivery a
+// split uses.
+type CashConsolidateResult struct {
+	AmountMloki     uint64 `json:"amount_mloki"`
+	NewWalletPubkey string `json:"new_wallet_pubkey"`
+	NewWalletToken  string `json:"new_wallet_token"`
+	ExpiresAt       int64  `json:"expires_at,omitempty"`
 }
 
 // --- list_recipients ---
@@ -140,8 +179,10 @@ type RecipientStatus struct {
 	// RedeemFeeMloki/NetRedeemableMloki are this slice's cash_redeem quote —
 	// the worst-case (external) fee and net payout, see NIP-CASH.md §Listing
 	// Recipients.
-	RedeemFeeMloki     int64 `json:"redeem_fee_mloki"`
-	NetRedeemableMloki int64 `json:"net_redeemable_mloki"`
+	RedeemFeeMloki     int64  `json:"redeem_fee_mloki"`
+	NetRedeemableMloki int64  `json:"net_redeemable_mloki"`
+	MinTransferMloki   int64  `json:"min_transfer_mloki"`
+	ExpiresAt          *int64 `json:"expires_at,omitempty"`
 }
 
 type ListRecipientsResult struct {

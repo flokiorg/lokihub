@@ -85,7 +85,7 @@ export function useAppsForAppStoreApp(appStoreApp: AppStoreApp | undefined) {
 // the generic New Connection flow's "Cash Hub"/"isolated" toggles — see
 // NewApp.tsx), so "same kind" alone would wrongly group an unrelated real app
 // (e.g. a "Zapf" connection granted cash_hub scope) in with the user's actual
-// managed Cash Hubs. Only apps minted by the dedicated
+// managed Cash Hubs. Only apps created by the dedicated
 // NewCashHub/NewCircleHub/NewSimpleSubwallet wizards carry this sentinel.
 export function useSiblingHubs(kind: string | undefined) {
   const isEnabled = !!kind;

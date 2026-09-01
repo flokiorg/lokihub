@@ -126,6 +126,12 @@ const (
 	// cash_redeem does, and lumping them together would make cash_transfer
 	// inherit budget-consuming semantics it shouldn't have.
 	CASH_TRANSFER_SCOPE = "cash_transfer"
+	// CASH_CONSOLIDATE_SCOPE is granted on cash_wallet children alongside
+	// CASH_REDEEM_SCOPE/CASH_TRANSFER_SCOPE (same fixed, non-configurable list).
+	// Like cash_transfer it never draws budget in the pay_invoice sense — it only
+	// combines slices this same node already custodies (NIP-CASH §Consolidating
+	// Tokens) — so it stays out of PayCapableScopes for the same reason.
+	CASH_CONSOLIDATE_SCOPE = "cash_consolidate"
 )
 
 // NIP-47 method names for Cash and Circle Wallet operations.
@@ -139,6 +145,9 @@ const (
 	// unclaimed slice's value (NIP-CASH §Transferring/Splitting a Slice)
 	// without redeeming it.
 	NIP47MethodCashTransfer = "cash_transfer"
+	// NIP47MethodCashConsolidate combines several same-hub slices this node
+	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
+	NIP47MethodCashConsolidate = "cash_consolidate"
 	// NIP47MethodListRecipients is a read-only roster of a shared cash_wallet's
 	// recipients (identity, entitled amount, claimed status) — no invoice or
 	// preimage detail, since a cash_wallet has no list_transactions grant.

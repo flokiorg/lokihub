@@ -80,12 +80,14 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 		t.Logf("iter %d: errA=%v errB=%v wins=%d", i, errA, errB, wins)
 		require.Equal(t, 1, wins, "identical-proof replay: exactly one of two duplicate proofs must win, got %d", wins)
 
-		// Exactly one 30k carve-off happened: source holds exactly 70k.
+		// Exactly one split happened and it consumed the source slice: the source
+		// wallet is now drained (its value moved into the winner's carved +
+		// remainder wallets). A replayed duplicate proof carved off nothing more.
 		conn := mustConnect(t, created.PairingURI)
 		var bal GetBalanceResult
 		require.NoError(t, conn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-		require.EqualValues(t, fullAmount-splitAmount, bal.Balance,
-			"a replayed duplicate proof must not carve off a second piece")
+		require.EqualValues(t, 0, bal.Balance,
+			"the source slice was consumed once; a replayed duplicate proof must not carve off a second piece")
 	}
 }
 
@@ -126,15 +128,18 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &res1))
 	require.EqualValues(t, splitAmount, res1.AmountMloki)
 
-	// Exact same proof again — must be rejected as already used.
+	// Exact same proof again — must be rejected. Under the two-wallet model the
+	// first split consumed the source slice, so the replay finds no slice to act
+	// on (an even stronger rejection than the single-use proof guard alone).
 	var res2 CashTransferResult
 	err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &res2)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+	requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 
-	// Only one 25k carve-off ever happened.
+	// The source wallet is drained — only one carve-off ever happened, and it
+	// took the whole slice into the two new wallets.
 	var bal GetBalanceResult
 	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, fullAmount-splitAmount, bal.Balance)
+	require.EqualValues(t, 0, bal.Balance)
 }
 
 // TestAudit_CashTransferRateLimit_PerWallet is an OPT-IN probe (it burns a

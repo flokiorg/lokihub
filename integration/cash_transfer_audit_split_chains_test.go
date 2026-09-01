@@ -73,7 +73,25 @@ func createCashHubWithTransferPolicy(t *testing.T, cfg *Config, name string, min
 // live client for it plus that wallet's own (priv, pub, walletPubkey). This is
 // what lets a test keep splitting the SAME value forward, generation after
 // generation.
-func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPriv, curPub, walletPubkey string, splitAmount uint64) (newClient *nwcclient.Client, newPriv, newPub, newWalletPubkey string, remaining uint64) {
+// decryptSplitWallet decrypts a nested-encrypted split token (delivered to the
+// caller keyed to their own privkey) and connects to the resulting wallet.
+func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv string) *nwcclient.Client {
+	t.Helper()
+	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, callerPriv)
+	require.NoError(t, err)
+	dec, err := c.Decrypt(encToken)
+	require.NoError(t, err)
+	tok, err := lokicash.Decode(dec)
+	require.NoError(t, err)
+	require.Equal(t, walletPubkey, tok.WalletPubkey)
+	return mustConnect(t, nwcURIFromLokicash(tok))
+}
+
+// splitToControlledTarget performs a partial split and returns BOTH resulting
+// wallets: the carved piece (newClient, for the new identity) and the caller's
+// own remainder (remainderClient) — which, under the two-wallet split model, is
+// its OWN fresh wallet, not the source connection.
+func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPriv, curPub, walletPubkey string, splitAmount uint64) (newClient *nwcclient.Client, newPriv, newPub, newWalletPubkey string, remainderClient *nwcclient.Client, remaining uint64) {
 	t.Helper()
 	newPriv = newTestPrivkey(t)
 	newPub = mustPubkey(t, newPriv)
@@ -90,15 +108,11 @@ func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPr
 	require.EqualValues(t, splitAmount, res.AmountMloki)
 	require.NotEmpty(t, res.NewWalletToken, "a partial split must always spin off a dedicated wallet")
 	require.NotNil(t, res.RemainingAmountMloki)
+	require.NotEmpty(t, res.RemainderWalletToken, "a partial split delivers the remainder as its own new wallet")
 
-	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, res.NewWalletPubkey, curPriv)
-	require.NoError(t, err)
-	dec, err := c.Decrypt(res.NewWalletToken)
-	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
-	require.NoError(t, err)
-	require.Equal(t, res.NewWalletPubkey, tok.WalletPubkey)
-	return mustConnect(t, nwcURIFromLokicash(tok)), newPriv, newPub, res.NewWalletPubkey, *res.RemainingAmountMloki
+	newClient = decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, curPriv)
+	remainderClient = decryptSplitWallet(t, res.RemainderWalletPubkey, res.RemainderWalletToken, curPriv)
+	return newClient, newPriv, newPub, res.NewWalletPubkey, remainderClient, *res.RemainingAmountMloki
 }
 
 // TestAudit_CashSplitChain_InheritanceAndConservation splits the same value
@@ -162,14 +176,15 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 
 		// Move everything except exactly one floor forward into a new wallet.
 		splitAmount := curAmount - uint64(floor)
-		newClient, newPriv, newPub, newWalletPubkey, remaining := splitToControlledTarget(t, curClient, curPriv, curPub, curWalletPubkey, splitAmount)
+		newClient, newPriv, newPub, newWalletPubkey, remainderClient, remaining := splitToControlledTarget(t, curClient, curPriv, curPub, curWalletPubkey, splitAmount)
 		require.EqualValues(t, uint64(floor), remaining, "each hop must leave exactly one floor behind")
 
-		// The source wallet is now a leaf holding exactly one floor.
+		// The remainder is now its OWN fresh dedicated wallet holding exactly one
+		// floor — the source wallet was consumed by the split, not left as a leaf.
 		var leafBal GetBalanceResult
-		require.NoError(t, curClient.Call(ctxT(t), "get_balance", struct{}{}, &leafBal))
-		require.EqualValues(t, floor, leafBal.Balance, "gen %d source wallet must hold exactly the floor remainder", gen)
-		leaves = append(leaves, leaf{client: curClient, amount: uint64(floor)})
+		require.NoError(t, remainderClient.Call(ctxT(t), "get_balance", struct{}{}, &leafBal))
+		require.EqualValues(t, floor, leafBal.Balance, "gen %d remainder wallet must hold exactly the floor", gen)
+		leaves = append(leaves, leaf{client: remainderClient, amount: uint64(floor)})
 
 		// Advance to the spun-off wallet for the next generation.
 		curClient, curPriv, curPub, curWalletPubkey = newClient, newPriv, newPub, newWalletPubkey

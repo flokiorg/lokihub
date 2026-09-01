@@ -630,8 +630,13 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
 	mockLN := svc.LNClient.(*tests.MockLn)
 	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	// A partial split now funds TWO internal transfers (carved + remainder), so
+	// the mock needs two distinct-payment-hash invoices — MakeInvoice/pay
+	// decodes each bolt11 for its hash, and two identical hashes would trip the
+	// duplicate-payment guard.
 	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-partial-split", Amount: 2000},
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-carved", Amount: 2000},
+		{Type: "incoming", Invoice: tests.MockLNClientHoldTransaction.Invoice, PaymentHash: tests.MockLNClientHoldTransaction.PaymentHash, Preimage: "preimage-remainder", Amount: 3000},
 	}
 
 	currentPrivkey := nostr.GeneratePrivateKey()
@@ -657,14 +662,92 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 	assert.EqualValues(t, 2000, result.AmountMloki)
 	require.NotNil(t, result.RemainingAmountMloki)
 	assert.EqualValues(t, 3000, *result.RemainingAmountMloki)
-	require.NotEmpty(t, result.NewWalletToken, "a partial split must always mint a new dedicated wallet")
+	require.NotEmpty(t, result.NewWalletToken, "the carved piece is delivered as a new dedicated wallet")
+	require.NotEmpty(t, result.RemainderWalletToken, "the remainder is now delivered as its OWN new dedicated wallet, not left on the source")
 
-	// The SOURCE slice survives, same identity, reduced amount, still
-	// unclaimed and usable again.
+	// The SOURCE slice is consumed whole (terminal) — a partial split no longer
+	// decrements it in place; its value re-emerged as the two new wallets above.
 	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, currentPubkey)
-	assert.Nil(t, sourceClaim.ClaimedAt)
-	assert.Equal(t, int64(3000), sourceClaim.AmountMloki)
-	assert.Equal(t, 1, sourceClaim.TransferCount)
+	require.NotNil(t, sourceClaim.ClaimedAt)
+	require.NotNil(t, sourceClaim.SpunOffToWalletAppID)
+}
+
+// TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeftInPlace
+// is the regression for independent Security Auditor B's finding 2:
+// SplitInTwo's own carved-wallet compensation was already correctly gated
+// (only deletes the carved wallet once its reverse transfer is confirmed), but
+// the CALLER — this controller's rollback() — was still restoring the source
+// slice to its full original amount unconditionally, even when that reverse
+// transfer failed and the carved amount is still sitting in the (deliberately
+// retained) carved wallet. Restoring the claim in that case would let the
+// caller believe they have the full original amount when the source's real
+// balance is short by exactly the carved piece.
+//
+// Reaches the failure with a REAL "already paid" collision, reusing
+// tests.MockInvoice's payment_hash across all three internal transfers
+// (carved funding, remainder funding, and the carved reversal) — the same
+// technique cashwallet/consolidate_rollback_test.go and
+// TestConsolidate_StrandedSource_ClaimLeftInPlace use, not a fault-injection
+// seam: the carved transfer settles first, so the remainder attempt and the
+// reversal attempt both genuinely collide with that same now-settled hash.
+func TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeftInPlace(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet, _, err := svc.AppsService.CreateApp(
+		"cash-wallet", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
+	)
+	require.NoError(t, err)
+	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p1", Amount: 2000}, // 1: fund carved from source — succeeds, settles MockInvoice's hash
+		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p2", Amount: 3000}, // 2: fund remainder from source — same hash: fails, starts compensation
+		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p3", Amount: 2000}, // 3: reverse the carved transfer — same hash: fails too
+	}
+
+	currentPrivkey := nostr.GeneratePrivateKey()
+	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 5000},
+	}))
+
+	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	amount := uint64(2000)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, newPubkey, "", 2000, nil, time.Now())
+	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
+		IdentityType:  db.CashIdentityPubkey,
+		IdentityValue: currentPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
+		AmountMloki:   &amount,
+	})
+	require.NotNil(t, response.Error)
+
+	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, currentPubkey)
+	require.NotNil(t, sourceClaim)
+	assert.NotNil(t, sourceClaim.ClaimedAt,
+		"the carved reversal failed — its funds are stranded in the retained carved wallet, so the source claim must NOT be restored to the full original amount")
+
+	// The carved wallet (funded, then NOT deleted since its reversal failed)
+	// must still exist as a child of the hub, alongside the source itself.
+	var children []db.App
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&children).Error)
+	assert.Len(t, children, 2, "source + the retained carved wallet holding the stranded funds")
+
+	// A durable reconciliation record must exist too.
+	records, err := svc.AppsService.ListCashStrandedFunds(true)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	assert.Equal(t, "split", records[0].Operation)
+	assert.Equal(t, wallet.ID, records[0].SourceWalletAppID)
+	assert.EqualValues(t, 2000, records[0].AmountMloki)
+	assert.Nil(t, records[0].ResolvedAt)
 }
 
 // TestHandleCashTransferEvent_PartialSplit_BelowMinTransferFloor_Rejected
@@ -1407,4 +1490,3 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 	})
 	require.Nil(t, retryResponse.Error, "a retry after a rolled-back spin-off must succeed")
 }
-

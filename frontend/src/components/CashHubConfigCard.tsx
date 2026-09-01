@@ -33,7 +33,7 @@ interface CashHubConfigCardProps {
 }
 
 // Shared per-wallet-cap / max-expiry / min-transfer fields for a Cash Hub —
-// the same limits govern every cash_wallet a hub can ever issue, whether the
+// the same limits govern every cash_wallet a hub can ever mint cash into, whether the
 // hub is being created from Sub-wallets (NewCashHub), edited afterward
 // (AppDetails' Hub Settings card), or created inline from the generic
 // connect flow (NewApp). One definition keeps the fields/validation

@@ -284,3 +284,50 @@ func TestRunCashCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	// cleanup_in_progress must be reset to false so the next tick can retry.
 	assert.False(t, found.CleanupInProgress, "cleanup_in_progress must be false after transfer failure so next tick retries")
 }
+
+// TestRunCashCleanup_ReclaimsStrandedWallet_ResolvesReconciliationRecord is the
+// regression for a full-review finding: a wallet retained after a failed
+// compensating-saga reversal (cashwallet.Consolidate/SplitInTwo — see
+// db.CashStrandedFund) is an ordinary cash_wallet child with a real ExpiresAt,
+// so the background expiry sweep eventually reclaims and deletes it exactly
+// like any other child — correctly recovering the funds — but without this
+// fix, the corresponding CashStrandedFund record would stay "unresolved"
+// forever, pointing at a now-deleted wallet whose funds were already
+// recovered: a permanent false positive an operator's query can't be trusted
+// against. Confirms the cleanup sweep now resolves it automatically.
+func TestRunCashCleanup_ReclaimsStrandedWallet_ResolvesReconciliationRecord(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
+	require.NoError(t, err)
+
+	retained := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
+
+	require.NoError(t, svc.AppsService.RecordCashStrandedFund("consolidate", 999, retained.ID, 123_000))
+	unresolvedBefore, err := svc.AppsService.ListCashStrandedFunds(true)
+	require.NoError(t, err)
+	require.Len(t, unresolvedBefore, 1)
+
+	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+
+	// The sweep deletes the zero-balance retained wallet exactly as it would
+	// any other expired child...
+	var found db.App
+	err = svc.DB.First(&found, retained.ID).Error
+	assert.Error(t, err, "the retained wallet must still be reclaimable by the ordinary expiry sweep")
+
+	// ...and must have auto-resolved the CashStrandedFund record pointing at it.
+	unresolvedAfter, err := svc.AppsService.ListCashStrandedFunds(true)
+	require.NoError(t, err)
+	assert.Empty(t, unresolvedAfter, "the reconciliation record must be auto-resolved once its wallet is reclaimed, not left permanently unresolved")
+
+	all, err := svc.AppsService.ListCashStrandedFunds(false)
+	require.NoError(t, err)
+	require.Len(t, all, 1, "resolving must not delete the record, only mark it")
+	assert.NotNil(t, all[0].ResolvedAt)
+}

@@ -194,6 +194,21 @@ type AppsService interface {
 	// already been claimed. The caller is responsible for sweeping the slice's
 	// AmountMloki back to the hub before calling this.
 	DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error)
+
+	// RecordCashStrandedFund durably logs one compensating-saga reversal that
+	// itself failed (cashwallet.Consolidate/SplitInTwo), so an operator sweep
+	// is driven by a query instead of grepping logs — see db.CashStrandedFund's
+	// own doc comment for the field semantics. Best-effort from the caller's
+	// perspective: a failure to record must never change saga control flow,
+	// only be logged alongside it.
+	RecordCashStrandedFund(operation string, sourceWalletAppID, retainedWalletAppID uint, amountMloki uint64) error
+	// ListCashStrandedFunds returns every CashStrandedFund record, newest
+	// first; onlyUnresolved filters to ResolvedAt IS NULL.
+	ListCashStrandedFunds(onlyUnresolved bool) ([]db.CashStrandedFund, error)
+	// ResolveCashStrandedFund sets ResolvedAt on one record once an operator
+	// has manually swept its funds back. Idempotent: a no-op (not an error) if
+	// already resolved.
+	ResolveCashStrandedFund(id uint) error
 }
 
 // CashSliceSplitResult is returned by AppsService.SplitCashSliceAmount.

@@ -84,6 +84,28 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 	})
 
+	// Fixed 2026-08-31: any max_amount below 1000 mloki (one whole loki) used
+	// to floor to a stored budget cap of exactly 0, which the payment layer
+	// treats as "no cap at all" - a silent, complete bypass of the member's
+	// own quoted spend cap. Every value in [0, 999] mloki must now be
+	// rejected outright, before a wallet is ever created.
+	t.Run("CreateWallet_SubLokiMaxAmount_Rejected", func(t *testing.T) {
+		for _, maxAmount := range []uint64{0, 1, 500, 999} {
+			t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
+				identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(),
+					fmt.Sprintf("SubLokiMaxAmount%d", maxAmount))
+				var result CreateCircleWalletResult
+				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
+					Pubkey:        member0Pub,
+					MaxAmount:     maxAmount,
+					Expiry:        happyPathExpirySecs,
+					IdentityEvent: eventJSON(t, identityEvent),
+				}, &result)
+				requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+			})
+		}
+	})
+
 	t.Run("CreateWallet_BudgetRenewalTighterThanFloor", func(t *testing.T) {
 		// "daily" is the tightest possible rank, so it is rejected against
 		// this hub's own min_budget_renewal floor (BUDGET_RENEWAL_MONTHLY,

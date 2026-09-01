@@ -41,8 +41,10 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
 	mockLN := svc.LNClient.(*tests.MockLn)
 	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	// A partial split funds two internal transfers (carved + remainder).
 	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-bearer-split", Amount: 2000},
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-carved", Amount: 2000},
+		{Type: "incoming", Invoice: tests.MockLNClientHoldTransaction.Invoice, PaymentHash: tests.MockLNClientHoldTransaction.PaymentHash, Preimage: "preimage-remainder", Amount: 3000},
 	}
 
 	secretHex, secretHash := bearerSecretAndHash(t)
@@ -63,17 +65,26 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 	require.True(t, ok, "unexpected result type %T", response.Result)
 	require.NotEmpty(t, result.NewWalletToken)
 
-	// The token must be the PLAIN lokicash1... string — decodable directly,
-	// no NIP-44 decryption involved (there is no co-holder to encrypt
-	// against for a bearer-current caller).
+	// Both tokens (carved + remainder) must be PLAIN lokicash1... strings —
+	// decodable directly, no NIP-44 decryption involved (there is no co-holder
+	// to encrypt against for a bearer-current caller, whose source wallet is
+	// structurally single-recipient).
 	tok, err := lokicash.Decode(result.NewWalletToken)
-	require.NoError(t, err, "bearer-current delivery must be a plain, directly-decodable lokicash token")
+	require.NoError(t, err, "bearer-current carved delivery must be a plain, directly-decodable lokicash token")
 	assert.Equal(t, result.NewWalletPubkey, tok.WalletPubkey)
 
-	// The source bearer slice survives with the correct remainder.
+	require.NotEmpty(t, result.RemainderWalletToken, "the remainder is now its own new dedicated wallet")
+	remTok, err := lokicash.Decode(result.RemainderWalletToken)
+	require.NoError(t, err, "bearer-current remainder delivery must also be a plain token")
+	assert.Equal(t, result.RemainderWalletPubkey, remTok.WalletPubkey)
+	require.NotNil(t, result.RemainingAmountMloki)
+	assert.EqualValues(t, 3000, *result.RemainingAmountMloki)
+
+	// The source bearer slice is consumed whole (terminal) — its value re-emerged
+	// as the two new bearer/pubkey wallets above, never decremented in place.
 	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityBearer, secretHash)
 	require.NotNil(t, sourceClaim)
-	assert.Equal(t, int64(3000), sourceClaim.AmountMloki)
+	require.NotNil(t, sourceClaim.ClaimedAt)
 }
 
 // TestHandleCashTransferEvent_InPlaceReassignment_LostRace_ReleasesProofGuard

@@ -57,20 +57,43 @@ func TestCashTransferPartialSplit(t *testing.T) {
 		require.NotNil(t, transferResult.RemainingAmountMloki)
 		require.EqualValues(t, fullAmount-int64(splitAmount), *transferResult.RemainingAmountMloki) //nolint:gosec
 		require.NotEmpty(t, transferResult.NewWalletPubkey)
-		require.NotEmpty(t, transferResult.NewWalletToken, "a partial split must always mint a new dedicated wallet")
+		require.NotEmpty(t, transferResult.NewWalletToken, "a partial split mints a new dedicated wallet for the carved piece")
+		require.NotEmpty(t, transferResult.RemainderWalletToken, "a partial split now mints the remainder into its OWN new wallet, not left on the source")
 
-		// The ORIGINAL identity must still be able to redeem the REMAINDER on
-		// the SAME connection — a partial split never reassigns the source.
+		// The REMAINDER is now its own fresh dedicated wallet, delivered
+		// encrypted to the caller (currentPriv), NOT left on the source
+		// connection — the source slice was consumed whole. Decrypt it, connect,
+		// and redeem it under the caller's own identity.
+		remCipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, transferResult.RemainderWalletPubkey, currentPriv)
+		require.NoError(t, err)
+		remDecrypted, err := remCipher.Decrypt(transferResult.RemainderWalletToken)
+		require.NoError(t, err)
+		remWalletToken, err := lokicash.Decode(remDecrypted)
+		require.NoError(t, err)
+		remWalletClient := mustConnect(t, nwcURIFromLokicash(remWalletToken))
 		remainderInvoice := mintInvoiceFromSimpleWallet(t, cfg, uint64(fullAmount)-splitAmount, "partial split remainder redeem")
-		remainderProof := buildClaimProofEvent(t, currentPriv, created.WalletPubkey, remainderInvoice.PaymentHash, nil, time.Now())
+		remainderProof := buildClaimProofEvent(t, currentPriv, remWalletToken.WalletPubkey, remainderInvoice.PaymentHash, nil, time.Now())
 		var remainderClaim ClaimFundsResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+		require.NoError(t, remWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:       remainderInvoice.Invoice,
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, remainderProof),
 		}, &remainderClaim))
 		require.NotEmpty(t, remainderClaim.Preimage)
+
+		// The source connection is now spent — redeeming the old identity there
+		// must fail, since its slice was consumed by the split.
+		staleInvoice := mintInvoiceFromSimpleWallet(t, cfg, uint64(fullAmount)-splitAmount, "partial split stale source redeem")
+		staleProof := buildClaimProofEvent(t, currentPriv, created.WalletPubkey, staleInvoice.PaymentHash, nil, time.Now())
+		var staleClaim ClaimFundsResult
+		staleErr := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			Invoice:       staleInvoice.Invoice,
+			IdentityType:  "pubkey",
+			IdentityValue: currentPub,
+			IdentityEvent: eventJSON(t, staleProof),
+		}, &staleClaim)
+		require.Error(t, staleErr, "the source slice was consumed by the split; redeeming it again must fail")
 
 		// The inner layer is keyed to the CALLER's own identity (currentPriv,
 		// the one who just proved ownership via identity_event) — not the

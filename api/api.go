@@ -3389,6 +3389,7 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		HubApp:     &hub,
 		Recipients: recipients,
 		ExpirySecs: req.ExpirySecs,
+		SignMint:   req.MintSignature,
 	})
 	if err != nil {
 		return nil, err

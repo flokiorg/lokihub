@@ -20,7 +20,7 @@ import (
 
 // buildCircleWalletIdentityEvent builds and signs a kind-35521 proof that the
 // caller controls requesterPrivkey, bound to this specific hub via the d-tag
-// — mirrors buildClaimProofEvent (claim_funds_controller_test.go) for the
+// — mirrors buildClaimProofEvent (cash_redeem_controller_test.go) for the
 // simpler circle case (always self-proof, no invoice/attestation binding).
 func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey string) *nostr.Event {
 	t.Helper()

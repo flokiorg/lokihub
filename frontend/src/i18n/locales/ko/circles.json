@@ -74,7 +74,8 @@
   },
   "claimBadge": {
     "claimed": "교환됨",
-    "unclaimed": "미교환"
+    "unclaimed": "미교환",
+    "movedToNewWallet": "새 지갑으로 이동됨"
   },
   "claimDeadline": {
     "expired": "교환 기한이 만료되었습니다",
@@ -181,6 +182,8 @@
     "deadlineHelpWithMax": "각 수령인은 생성 시점으로부터 이 기간 내에 교환해야 합니다 (기본값: 이 허브의 최댓값 {{max}})",
     "addRecipient": "수령인 추가",
     "setClaimDeadline": "교환 기한 설정",
+    "mintSignatureLabel": "발행 출처 서명",
+    "mintSignatureHelp": "이 Lokicash의 출처와 금액을 증명하는 노드 서명을 첨부합니다(선택 사항, 토큰 길이가 약 2배로 늘어남)",
     "statusAll": "전체",
     "statusExpired": "만료됨",
     "allocatedSummary": "이 페이지에서 {{allocated}} loki 할당됨 · 전체 {{total}}건 ({{status}})",

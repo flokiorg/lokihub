@@ -24,8 +24,6 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
-	"github.com/flokiorg/lokihub/nip47/cipher"
 )
 
 // splitOffPartial fires one partial cash_transfer split of splitAmount off the
@@ -109,59 +107,41 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 		close(barrier)
 		wg.Wait()
 
-		var splitOut uint64
-		newWallets := []CashTransferResult{}
+		t.Logf("iter %d: aWon=%v (err=%v) bWon=%v (err=%v)", i, errA == nil, errA, errB == nil, errB)
+
+		// Under the two-wallet split model a partial split CONSUMES the source
+		// slice terminally, so at most ONE of the two racing splits can win — the
+		// loser finds the slice already claimed. This is a strictly stronger
+		// no-double-spend guarantee than the old decrement model's optimistic
+		// lock: there is nothing left to split twice.
+		winners := 0
+		var winner CashTransferResult
 		if errA == nil {
-			splitOut += resA.AmountMloki
-			newWallets = append(newWallets, resA)
+			winners++
+			winner = resA
 		}
 		if errB == nil {
-			splitOut += resB.AmountMloki
-			newWallets = append(newWallets, resB)
+			winners++
+			winner = resB
 		}
-		t.Logf("iter %d: aWon=%v (err=%v) bWon=%v (err=%v) splitOut=%d", i, errA == nil, errA, errB == nil, errB, splitOut)
+		require.Equal(t, 1, winners, "exactly one concurrent split must win; the other must find the slice already consumed")
 
-		require.True(t, errA == nil || errB == nil, "at least one split should have succeeded")
+		// The winner carved off exactly splitEach and reports a remainder of the
+		// rest — and those two sum to the original, no value created or destroyed.
+		require.EqualValues(t, splitEach, winner.AmountMloki, "the winning carve-off must be exactly the requested amount")
+		require.NotNil(t, winner.RemainingAmountMloki)
+		require.EqualValues(t, fullAmount-splitEach, *winner.RemainingAmountMloki)
+		require.NotEmpty(t, winner.NewWalletToken, "the carved piece is delivered as a new wallet")
+		require.NotEmpty(t, winner.RemainderWalletToken, "the remainder is delivered as its own new wallet")
+		require.EqualValues(t, fullAmount, winner.AmountMloki+*winner.RemainingAmountMloki,
+			"CONSERVATION: carved piece + remainder must equal the original slice exactly")
 
-		// The source wallet's REAL ledger balance must equal exactly what's
-		// left after the successful carve-off(s): fullAmount - splitOut. If a
-		// double-spend occurred, the real balance would be LESS than the
-		// remainder the source slice still claims, or splitOut would exceed
-		// fullAmount.
-		require.LessOrEqual(t, splitOut, fullAmount, "MONEY CREATED: split off more than the slice ever held")
-		expectedRemainder := fullAmount - splitOut
-
+		// The source wallet was consumed by the winning split: its real ledger
+		// balance is now zero (its value moved into the two new wallets).
 		sharedConn := mustConnect(t, created.PairingURI)
 		var bal GetBalanceResult
 		require.NoError(t, sharedConn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-		require.EqualValues(t, expectedRemainder, bal.Balance,
-			"source wallet real balance must equal fullAmount minus everything split off (no double-spend)")
-
-		// Prove every unit is still exactly-once redeemable and no more: redeem
-		// the remainder from the source, and each spun-off wallet, then confirm
-		// the totals add up to fullAmount.
-		var totalRedeemed uint64
-		if expectedRemainder > 0 {
-			inv := mintInvoiceFromSimpleWallet(t, cfg, expectedRemainder, "audit split-race remainder")
-			cp := buildClaimProofEvent(t, curPriv, created.WalletPubkey, inv.PaymentHash, nil, time.Now())
-			var cr ClaimFundsResult
-			require.NoError(t, sharedConn.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-				Invoice: inv.Invoice, IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, cp),
-			}, &cr))
-			require.NotEmpty(t, cr.Preimage)
-			totalRedeemed += expectedRemainder
-		}
-		for wi, nw := range newWallets {
-			// The split target's privkey isn't recoverable here (splitOffPartial
-			// generated it internally), so we can't redeem the spun-off wallet
-			// with the target identity. Instead confirm the new wallet exists,
-			// is funded with exactly its carve-off, and count it toward the
-			// conservation total via its reported balance.
-			require.NotEmpty(t, nw.NewWalletPubkey, "split %d must mint a dedicated wallet", wi)
-			totalRedeemed += nw.AmountMloki
-		}
-		require.EqualValues(t, fullAmount, totalRedeemed,
-			"CONSERVATION VIOLATION: remainder + carve-offs must equal the original slice exactly")
+		require.EqualValues(t, 0, bal.Balance, "the source slice was consumed; its wallet must be drained (no double-spend)")
 	}
 }
 
@@ -260,15 +240,21 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			require.EqualValues(t, 0, bal.Balance, "after a full redeem the wallet must hold nothing")
 			require.NotEmpty(t, redeemRes.Preimage)
 		case splitWon:
-			// Split carved off splitAmount, leaving the remainder; redeem lost.
-			require.EqualValues(t, fullAmount-splitAmount, bal.Balance,
-				"after a partial split the wallet must hold exactly the remainder")
-			// The remainder must still be redeemable by the original identity,
-			// and the pre-split full invoice's amount must NOT be redeemable.
+			// The split consumed the source slice entirely: the source wallet is
+			// drained (its value moved into the carved + remainder wallets), and
+			// the racing full redeem lost.
+			require.EqualValues(t, 0, bal.Balance, "after a split consumes the slice, the source wallet is drained")
+			require.EqualValues(t, splitAmount, splitRes.AmountMloki)
+			require.NotNil(t, splitRes.RemainingAmountMloki)
+			require.EqualValues(t, fullAmount-splitAmount, *splitRes.RemainingAmountMloki)
+			// The remainder is redeemable — from its OWN new wallet, under the
+			// original identity — proving the value survived intact, just relocated.
+			require.NotEmpty(t, splitRes.RemainderWalletToken)
+			remWallet := decryptSplitWallet(t, splitRes.RemainderWalletPubkey, splitRes.RemainderWalletToken, curPriv)
 			remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit redeem-vs-split remainder")
-			remProof := buildClaimProofEvent(t, curPriv, created.WalletPubkey, remInvoice.PaymentHash, nil, time.Now())
+			remProof := buildClaimProofEvent(t, curPriv, splitRes.RemainderWalletPubkey, remInvoice.PaymentHash, nil, time.Now())
 			var remRes ClaimFundsResult
-			require.NoError(t, sharedConn.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			require.NoError(t, remWallet.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 				Invoice: remInvoice.Invoice, IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, remProof),
 			}, &remRes))
 			require.NotEmpty(t, remRes.Preimage)
@@ -414,44 +400,46 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	}, &res1))
 	require.EqualValues(t, first, res1.AmountMloki)
 
-	// Replay the SAME proof, same target, but a DIFFERENT amount. The source
-	// slice is still registered to curPub (a partial split doesn't reassign
-	// it), and the proof is still "fresh" and still bound to newPub — so the
-	// only thing standing between this replay and a second, unpaid-for
-	// carve-off is that the split re-reads the live slice. It succeeds here
-	// because a partial split legitimately leaves the source redeemable and
-	// re-splittable (this is NOT a replay bug — each split draws only from the
-	// live remaining balance). We assert the SECOND carve-off can never exceed
-	// what's actually left: a replay cannot conjure funds beyond the remainder.
-	second := uint64(80_000) // more than the 70k remainder
+	// Under the two-wallet model the first split CONSUMED the source slice
+	// terminally — its value now lives in the carved (30k) and remainder (70k)
+	// wallets. Replaying the SAME proof for ANY amount can no longer even find a
+	// slice registered to curPub on this connection, so the replay is rejected
+	// outright. This is a STRONGER guarantee than the old "each split re-reads
+	// the live balance": there is simply nothing left here to split again.
+	second := uint64(80_000)
 	var res2 CashTransferResult
 	err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 		IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: proofJSON,
 		NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		AmountMloki: &second,
 	}, &res2)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST) // 80k > 70k remainder
+	requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 
-	// Confirm books still balance: source holds exactly 70k, first carve-off
-	// took 30k, total 100k.
+	// The source wallet is drained; its value moved into the two new wallets.
 	var bal GetBalanceResult
 	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, fullAmount-first, bal.Balance, "source must hold exactly the remainder after one 30k carve-off")
+	require.EqualValues(t, 0, bal.Balance, "source must be drained after its only slice was split away")
+	require.NotNil(t, res1.RemainingAmountMloki)
+	require.EqualValues(t, fullAmount-first, *res1.RemainingAmountMloki)
 
-	// Decrypt + redeem the first spun-off wallet with the target's own key to
-	// prove it's genuinely funded (and only once).
-	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, res1.NewWalletPubkey, curPriv)
-	require.NoError(t, err)
-	dec, err := c.Decrypt(res1.NewWalletToken)
-	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
-	require.NoError(t, err)
-	nwClient := mustConnect(t, nwcURIFromLokicash(tok))
-	inv := mintInvoiceFromSimpleWallet(t, cfg, first, "audit replay first-wallet redeem")
+	// Both spun-off wallets are genuinely funded, each redeemable exactly once:
+	// the carved 30k by newPub, the 70k remainder by curPub.
+	carvedClient := decryptSplitWallet(t, res1.NewWalletPubkey, res1.NewWalletToken, curPriv)
+	inv := mintInvoiceFromSimpleWallet(t, cfg, first, "audit replay carved-wallet redeem")
 	cp := buildClaimProofEvent(t, newPriv, res1.NewWalletPubkey, inv.PaymentHash, nil, time.Now())
 	var cr ClaimFundsResult
-	require.NoError(t, nwClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+	require.NoError(t, carvedClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 		Invoice: inv.Invoice, IdentityType: "pubkey", IdentityValue: newPub, IdentityEvent: eventJSON(t, cp),
 	}, &cr))
 	require.NotEmpty(t, cr.Preimage)
+
+	require.NotEmpty(t, res1.RemainderWalletToken)
+	remClient := decryptSplitWallet(t, res1.RemainderWalletPubkey, res1.RemainderWalletToken, curPriv)
+	remInv := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-first, "audit replay remainder-wallet redeem")
+	remCp := buildClaimProofEvent(t, curPriv, res1.RemainderWalletPubkey, remInv.PaymentHash, nil, time.Now())
+	var remCr ClaimFundsResult
+	require.NoError(t, remClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+		Invoice: remInv.Invoice, IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: eventJSON(t, remCp),
+	}, &remCr))
+	require.NotEmpty(t, remCr.Preimage)
 }

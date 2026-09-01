@@ -76,7 +76,8 @@
   },
   "claimBadge": {
     "claimed": "Обменяно",
-    "unclaimed": "Не обменяно"
+    "unclaimed": "Не обменяно",
+    "movedToNewWallet": "Перемещено в новый кошелёк"
   },
   "claimDeadline": {
     "expired": "Срок обмена истёк",
@@ -207,6 +208,8 @@
     "deadlineHelpWithMax": "Каждый получатель должен обменять в течение этого времени с момента создания (по умолчанию — максимум этого хаба: {{max}})",
     "addRecipient": "Добавить ещё получателя",
     "setClaimDeadline": "Установить срок обмена",
+    "mintSignatureLabel": "Подписать происхождение выпуска",
+    "mintSignatureHelp": "Прикрепить подпись узла, подтверждающую происхождение и сумму этого Lokicash — необязательно, примерно удваивает длину токена",
     "statusAll": "Все",
     "statusExpired": "Просроченные",
     "allocatedSummary": "Выделено {{allocated}} loki на этой странице · {{total}} {{status}}",

@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/hex"
 	"errors"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,6 +97,51 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
 	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
 	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
+}
+
+// TestCreateCashWallet_WithMintSignature_ProducesSignedToken is the end-to-end
+// regression for admin-API mint-provenance reachability (see
+// TestCreateCashWalletRequest_MintProvenanceReachableFromAdminAPI for the
+// field-level guard): CreateCashWalletRequest.MintSignature must actually
+// thread through api.CreateCashWallet -> cashwallet.Params.SignMint and
+// produce a token whose provenance recovers to the node's own pubkey, not
+// just a request field that exists but goes nowhere.
+func TestCreateCashWallet_WithMintSignature_ProducesSignedToken(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	priv, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	minterPubkey := hex.EncodeToString(priv.PubKey().SerializeCompressed())
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.SigningKey = priv
+	mockLN.Pubkey = minterPubkey
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+
+	theAPI := newTestAPIWithService(t, svc)
+	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
+		},
+		ExpirySecs:    1800,
+		MintSignature: true,
+	})
+	require.NoError(t, err)
+
+	tok, err := lokicash.Decode(result.CashToken)
+	require.NoError(t, err)
+	require.NotNil(t, tok.MintSignature)
+	require.NotNil(t, tok.AttestedAmount)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmount)
+
+	recovered, ok := lokicash.VerifyMint(tok)
+	require.True(t, ok)
+	assert.Equal(t, minterPubkey, recovered)
 }
 
 func TestCreateCashWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testing.T) {

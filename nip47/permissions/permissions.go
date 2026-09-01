@@ -53,6 +53,18 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 			Str("pubkey", app.AppPubkey).
 			Msg("This pubkey is expired")
 
+		// A cash_wallet holder — someone who received a lokicash1... token,
+		// per NIP-CASH's own design intent, likely never "connected an app"
+		// to anything — gets a cash-specific message naming the actual
+		// deadline that passed, rather than NIP-47 connection-management
+		// jargon that names no mechanism they can act on. Every other app
+		// kind keeps the original generic message.
+		if app.Kind == db.AppKindCashWallet {
+			return false, constants.ERROR_EXPIRED, fmt.Sprintf(
+				"this cash wallet's redemption deadline (%s) has passed; contact the wallet operator",
+				expiresAt.UTC().Format(time.RFC3339))
+		}
+
 		return false, constants.ERROR_EXPIRED, "This app has expired"
 	}
 
@@ -84,6 +96,7 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 			requestMethod == constants.NIP47MethodCreateCircleWallet ||
 			requestMethod == constants.NIP47MethodCashRedeem ||
 			requestMethod == constants.NIP47MethodCashTransfer ||
+			requestMethod == constants.NIP47MethodCashConsolidate ||
 			requestMethod == constants.NIP47MethodListRecipients {
 			return true
 		}
@@ -140,6 +153,8 @@ func scopeToRequestMethods(scope string) []string {
 		return []string{constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients}
 	case constants.CASH_TRANSFER_SCOPE:
 		return []string{constants.NIP47MethodCashTransfer}
+	case constants.CASH_CONSOLIDATE_SCOPE:
+		return []string{constants.NIP47MethodCashConsolidate}
 	}
 	return []string{}
 }
@@ -189,6 +204,8 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CASH_REDEEM_SCOPE, nil
 	case constants.NIP47MethodCashTransfer:
 		return constants.CASH_TRANSFER_SCOPE, nil
+	case constants.NIP47MethodCashConsolidate:
+		return constants.CASH_CONSOLIDATE_SCOPE, nil
 	}
 	logger.Logger.Error().Str("request_method", requestMethod).Msg("Unsupported request method")
 	return "", fmt.Errorf("unsupported request method: %s", requestMethod)
@@ -209,6 +226,7 @@ func AllScopes() []string {
 		constants.CIRCLE_WALLET_SCOPE,
 		constants.CASH_REDEEM_SCOPE,
 		constants.CASH_TRANSFER_SCOPE,
+		constants.CASH_CONSOLIDATE_SCOPE,
 	}
 }
 

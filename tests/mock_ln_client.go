@@ -5,7 +5,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/tv42/zbase32"
 )
 
 // for the invoice:
@@ -92,6 +97,12 @@ type MockLn struct {
 	MockLookupInvoiceError error
 	// SendKeysendError, when non-nil, is returned by SendKeysend instead of a success response.
 	SendKeysendError error
+	// SigningKey, when set, makes SignMessage produce a real LND-style zbase32
+	// recoverable signature over the message (compact sig over its double-SHA256),
+	// so mint-provenance signing can be exercised end to end. Leave nil for the
+	// historical no-op behavior. Set Pubkey to this key's compressed hex when a
+	// test needs GetPubkey to match the signer.
+	SigningKey *btcec.PrivateKey
 }
 
 func NewMockLn() (*MockLn, error) {
@@ -216,7 +227,15 @@ func (mln *MockLn) GetLogOutput(ctx context.Context, maxLen int) ([]byte, error)
 	return []byte{}, nil
 }
 func (mln *MockLn) SignMessage(ctx context.Context, message string) (string, error) {
-	return "", nil
+	if mln.SigningKey == nil {
+		return "", nil
+	}
+	// Mirror flnd's node SignMessage: prepend its context prefix, then a compact
+	// recoverable signature over the double-SHA256 of the prefixed message,
+	// zbase32-encoded.
+	digest := chainhash.DoubleHashB([]byte(lokicash.LNSignedMessagePrefix + message))
+	sig := ecdsa.SignCompact(mln.SigningKey, digest, true)
+	return zbase32.EncodeToString(sig), nil
 }
 func (mln *MockLn) GetStorageDir() (string, error) {
 	return "", nil
