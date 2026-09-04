@@ -17,8 +17,20 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
+// cashTransferNewIdentityParam/cashTransferParams below are no longer used to
+// parse the real request (HandleCashTransferEvent decodes straight into
+// github.com/ohstr/nmilat/nipcash's own exported CashTransferRequest now -
+// nmilat migration, PR #90) - they're kept purely as this package's own test
+// fixtures. nipcash.CashTransferRequest's own NewIdentity field type is
+// unexported inside nipcash (nmilat's own internal wire-shape detail), so a
+// test can't build one as `nipcash.CashTransferRequest{NewIdentity:
+// SomeType{...}}` in a single literal; every existing test here instead
+// builds this local, structurally-identical type and marshals it to JSON
+// (see handleCashTransferFor), which is exactly how a real NWC client's
+// request arrives anyway - so nothing downstream needs to change.
 type cashTransferNewIdentityParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
 	IdentityValue string `json:"identity_value,omitempty"`
@@ -158,7 +170,7 @@ func newIdentityHash(identityType, identityValue, iaPubkey string) string {
 }
 
 func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
-	params := &cashTransferParams{}
+	params := &nipcash.CashTransferRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)

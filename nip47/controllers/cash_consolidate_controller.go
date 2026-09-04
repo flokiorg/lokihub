@@ -13,6 +13,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // consolidateSourceParam is one input slice to a consolidation: a signed
@@ -32,6 +33,13 @@ import (
 // cashClaimLimiter tick by however many sources are packed in.
 const maxConsolidateSources = 100
 
+// consolidateSourceParam is no longer used to parse the real request
+// (HandleCashConsolidateEvent decodes straight into github.com/ohstr/nmilat/
+// nipcash's own exported CashConsolidateRequest now - nmilat migration, PR
+// #90) - kept purely as this package's own test fixture, for the same reason
+// cash_transfer_controller.go keeps cashTransferNewIdentityParam: nipcash's
+// own Sources element type is unexported, so a test can't build one in a
+// single struct-literal expression the way this local type allows.
 type consolidateSourceParam struct {
 	WalletPubkey  string `json:"wallet_pubkey"`
 	IdentityType  string `json:"identity_type,omitempty"`
@@ -89,7 +97,7 @@ type resolvedConsolidateSource struct {
 // bearer note (independent security audit, Auditor A, finding 1 —
 // data/docs/audits/cash-consolidate-2026-08-29/).
 func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
-	params := &cashConsolidateParams{}
+	params := &nipcash.CashConsolidateRequest{}
 	if resp := decodeRequest(nip47Request, params); resp != nil {
 		publishResponse(resp, tags)
 		return
@@ -151,7 +159,11 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	// source this node holds, instead of a round-trip per source (the query hits
 	// idx_apps_pubkey_lookup). A pubkey absent from the map is simply not
 	// custodied here and rejected per-source below.
-	custodied, cErr := controller.loadCustodiedSources(params.Sources)
+	sourceWalletPubkeys := make([]string, len(params.Sources))
+	for i := range params.Sources {
+		sourceWalletPubkeys[i] = params.Sources[i].WalletPubkey
+	}
+	custodied, cErr := controller.loadCustodiedSources(sourceWalletPubkeys)
 	if cErr != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to load source wallets")
 		return
@@ -181,8 +193,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	proofEventIDs := make([]string, 0, len(params.Sources))
 
 	for i := range params.Sources {
-		src := &params.Sources[i]
-		rs, evID, code, msg := controller.resolveConsolidateSource(src, targetHash, custodied)
+		rs, evID, code, msg := controller.resolveConsolidateSource(params, i, targetHash, custodied)
 		if code != "" {
 			respondError(publishResponse, nip47Request.Method, code, fmt.Sprintf("source %d: %s", i, msg))
 			return
@@ -424,11 +435,11 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 // loadCustodiedSources resolves every source's wallet_pubkey to the cash_wallet
 // app this node holds, in a single query, returning a pubkey->app map. Bogus or
 // non-custodied pubkeys are simply absent (rejected per-source by the caller).
-func (controller *nip47Controller) loadCustodiedSources(sources []consolidateSourceParam) (map[string]*db.App, error) {
-	pubkeys := make([]string, 0, len(sources))
-	for i := range sources {
-		if sources[i].WalletPubkey != "" {
-			pubkeys = append(pubkeys, sources[i].WalletPubkey)
+func (controller *nip47Controller) loadCustodiedSources(sourceWalletPubkeys []string) (map[string]*db.App, error) {
+	pubkeys := make([]string, 0, len(sourceWalletPubkeys))
+	for _, pk := range sourceWalletPubkeys {
+		if pk != "" {
+			pubkeys = append(pubkeys, pk)
 		}
 	}
 	custodied := make(map[string]*db.App, len(pubkeys))
@@ -452,7 +463,8 @@ func (controller *nip47Controller) loadCustodiedSources(sources []consolidateSou
 // code == "" means success; otherwise (code, msg) is the error to surface.
 // evID is the proof's event id, to be replay-guarded by the caller once every
 // source has passed.
-func (controller *nip47Controller) resolveConsolidateSource(src *consolidateSourceParam, targetHash string, custodied map[string]*db.App) (rs *resolvedConsolidateSource, evID, code, msg string) {
+func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.CashConsolidateRequest, i int, targetHash string, custodied map[string]*db.App) (rs *resolvedConsolidateSource, evID, code, msg string) {
+	src := params.Sources[i]
 	if src.WalletPubkey == "" {
 		return nil, "", constants.ERROR_BAD_REQUEST, "wallet_pubkey is required"
 	}
