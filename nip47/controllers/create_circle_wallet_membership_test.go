@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -141,11 +142,11 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubAppPubkey, d
 	}
 	require.NoError(t, identityEvent.Sign(requesterPrivkey))
 
-	params := createCircleWalletParams{
-		RequesterPubkey: requesterPubkey,
-		MaxAmount:       maxAmountMloki,
-		Expiry:          expirationSecs,
-		IdentityEvent:   mustMarshal(t, identityEvent),
+	params := nipcw.CreateCircleWalletRequest{
+		Pubkey:        requesterPubkey,
+		MaxAmount:     maxAmountMloki,
+		Expiry:        expirationSecs,
+		IdentityEvent: mustMarshal(t, identityEvent),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)

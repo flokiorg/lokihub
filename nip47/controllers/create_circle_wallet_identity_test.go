@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,11 +40,11 @@ func callCreateCircleWallet(t *testing.T, svc *tests.TestService, provider *db.A
 // proofs that makeCircleWalletRequest can't express.
 func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs int, identityEventJSON string) string {
 	t.Helper()
-	params := createCircleWalletParams{
-		RequesterPubkey: requesterPubkey,
-		MaxAmount:       maxAmountMloki,
-		Expiry:          expirationSecs,
-		IdentityEvent:   identityEventJSON,
+	params := nipcw.CreateCircleWalletRequest{
+		Pubkey:        requesterPubkey,
+		MaxAmount:     maxAmountMloki,
+		Expiry:        expirationSecs,
+		IdentityEvent: identityEventJSON,
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)
