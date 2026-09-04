@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nipIC"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -16,7 +19,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/nbd-wtf/go-nostr"
 )
 
 const (
@@ -415,83 +417,83 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // expiration tag (NIP-40), and carries the platform/evidence tags NIP-IC's
 // own Attestation shape requires.
 //
-// The expiration tag is mandatory here, not merely checked-if-present: this
-// codebase's trust model only supports revoking an Identity Authority as a
-// whole (apps.IdentityAuthorityManager.IsTrusted — called by
-// HandleCashRedeemEvent, step 7, right before this function runs, so a
-// revoked IA is rejected before its attestation's own tags are even
-// examined) — unlike NIP-IC's own attestation model, this codebase has no
-// per-attestation revocation (no NIP-09 kind-5 deletion check against the
-// issuing relay). A single mistaken or compromised attestation can't be
-// individually revoked; between IA revocation and its own expiration,
-// expiration is what bounds how long a not-yet-revoked-but-later-to-be-
-// revoked attestation stays honorable. An attestation with no expiration at
-// all (or one that fails to parse) would never lapse, permanently
-// short-circuiting that safety net, so it's rejected rather than treated as
-// eternally valid. This is a deliberate divergence from NIP-IC's own
-// ParseAttestation, which treats expiration as optional precisely because it
-// has real per-attestation revocation to fall back on instead — see
-// NIP-CASH.md's own Security Considerations for the same reasoning written
-// down at the spec level.
+// Structural parsing (kind, signature, event-ID integrity, required tag
+// presence, evidence-JSON-object validity) is delegated to
+// nipIC.ParseAttestation — the canonical parser for NIP-IC's own event
+// shape, the same one nmilat's own nipcash.BySigningConnectionKey uses
+// client-side. This is part of the nmilat migration (PR #90); equivalence
+// with this codebase's previous hand-rolled check was verified first, in
+// nip47/controllers/nmilat_attestation_equivalence_test.go, before this
+// swap. Two previously-inert gaps are deliberately closed by adopting it,
+// for the same reason the other two proof-verification functions
+// (verifyClaimIdentityEvent, verifyCircleWalletIdentityEvent) already apply
+// them:
 //
-// platform/evidence presence (not content) is checked so a malformed or
-// non-NIP-IC-shaped attestation can't slip through just because this
-// function never previously looked at those two tags — a real
-// nipIC.NewAttestation-produced event always carries both. Their content
-// isn't interpreted for anything: this codebase doesn't need Username/
-// EvidenceURL/etc. for any decision, so it validates evidence is
-// syntactically well-formed JSON without adopting NIP-IC's full typed
-// evidence schema.
+//  1. Event ID integrity is now checked (nip01.Event.Verify(), inside
+//     ParseAttestation, recomputes the ID from content and compares it to
+//     the stored field). This function previously never checked that,
+//     unlike its two siblings, on the reasoning that the attestation's ID
+//     isn't used as a trust anchor anywhere in this codebase (the claim
+//     proof's e-tag reference to it is a citation, not a security
+//     binding) — that reasoning still holds, but the check is free (a hash
+//     comparison already computed while parsing), so there's no reason to
+//     keep depending on it by hand.
+//  2. The evidence tag must now be a JSON *object* matching NIP-IC's own
+//     evidence shape, not merely any syntactically valid JSON value — a
+//     bare JSON string/number/array previously passed this function's
+//     plain json.Valid check. Evidence content still isn't interpreted for
+//     any decision here, so this only rejects a wider set of malformed
+//     input, nothing behavioral.
 //
-// Like verifyClaimIdentityEvent's own ev.ID, this never calls ev.CheckID(): the
-// claim proof's e-tag (checked by the caller before this runs) only has to
-// match whatever string the caller also put in this event's client-supplied
-// ID field, which isn't independently tied to this event's real content hash.
-// That's fine — the ID isn't a trust anchor here, it's just a citation. Every
-// actual security property (IA signature over the recomputed content hash,
-// the d/p-tag binding to connectionKey and the claimant, and expiration) is
-// checked directly below against this event's real signed fields, so a
-// mismatched or fabricated ID can't be used to satisfy any of them.
+// The expiration tag stays mandatory-and-unexpired here even though
+// nipIC.ParseAttestation itself treats expiration as optional (it has real
+// per-attestation revocation, via a NIP-09 kind-5 deletion, to fall back on
+// instead): this codebase's trust model only supports revoking an Identity
+// Authority as a whole (apps.IdentityAuthorityManager.IsTrusted — checked by
+// HandleCashRedeemEvent, step 7, right before this function runs), so
+// expiration is the only bound on how long a not-yet-revoked-but-later-to-
+// be-revoked attestation stays honorable — see NIP-CASH.md's own Security
+// Considerations for the same reasoning at the spec level.
 func verifyClaimAttestationEvent(ev *nostr.Event, iaPubkey, nostrPubkey, connectionKey string) error {
-	if ev.Kind != nostrKindIAAttestation {
-		return fmt.Errorf("attestation_event must be kind %d, got %d", nostrKindIAAttestation, ev.Kind)
+	nip01Ev, err := toNip01Event(ev)
+	if err != nil {
+		return fmt.Errorf("attestation_event: %w", err)
 	}
-	if ev.PubKey != iaPubkey {
+	attestation, err := nipIC.ParseAttestation(nip01Ev)
+	if err != nil {
+		return fmt.Errorf("attestation_event: %w", err)
+	}
+	if attestation.PubKey != iaPubkey {
 		return fmt.Errorf("attestation_event must be signed by the trusted ia_pubkey recorded for this slice")
 	}
-	valid, err := ev.CheckSignature()
-	if err != nil || !valid {
-		return fmt.Errorf("attestation_event has invalid signature")
-	}
-	dTag := ev.Tags.Find("d")
-	if len(dTag) < 2 || dTag[1] != connectionKey {
+	if string(attestation.ConnectionKey) != connectionKey {
 		return fmt.Errorf("attestation_event d-tag does not match connection_key")
 	}
-	pTag := ev.Tags.Find("p")
-	if len(pTag) < 2 || pTag[1] != nostrPubkey {
+	if attestation.UserPubkey != nostrPubkey {
 		return fmt.Errorf("attestation_event p-tag does not match the claimant's nostr pubkey")
 	}
-	expTag := ev.Tags.Find("expiration")
-	if len(expTag) < 2 {
+	if attestation.ExpiresAt == nil {
 		return fmt.Errorf("attestation_event is missing a required expiration tag")
 	}
-	expUnix, parseErr := strconv.ParseInt(expTag[1], 10, 64)
-	if parseErr != nil {
-		return fmt.Errorf("attestation_event has a malformed expiration tag")
-	}
-	if time.Now().Unix() > expUnix {
+	if time.Now().After(*attestation.ExpiresAt) {
 		return fmt.Errorf("attestation_event has expired")
 	}
-	platformTag := ev.Tags.Find("platform")
-	if len(platformTag) < 2 || platformTag[1] == "" {
-		return fmt.Errorf("attestation_event is missing a required platform tag")
-	}
-	evidenceTag := ev.Tags.Find("evidence")
-	if len(evidenceTag) < 2 || evidenceTag[1] == "" {
-		return fmt.Errorf("attestation_event is missing a required evidence tag")
-	}
-	if !json.Valid([]byte(evidenceTag[1])) {
-		return fmt.Errorf("attestation_event evidence tag is not valid JSON")
-	}
 	return nil
+}
+
+// toNip01Event converts a go-nostr Event into nmilat's own nip01.Event via a
+// plain JSON round-trip. Both packages use the identical NIP-01 wire field
+// names (id/pubkey/created_at/kind/tags/content/sig), so this is a lossless
+// conversion between two representations of the same wire format, not a
+// reinterpretation of it.
+func toNip01Event(ev *nostr.Event) (*nip01.Event, error) {
+	raw, err := json.Marshal(ev)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event: %w", err)
+	}
+	var out nip01.Event
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal event: %w", err)
+	}
+	return &out, nil
 }

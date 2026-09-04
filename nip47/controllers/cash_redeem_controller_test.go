@@ -910,17 +910,17 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 		{
 			name:      "missing platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "missing a required platform tag",
+			wantError: "#platform tag is required",
 		},
 		{
 			name:      "empty platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "missing a required platform tag",
+			wantError: "#platform tag is required",
 		},
 		{
 			name:      "missing evidence tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}),
-			wantError: "missing a required evidence tag",
+			wantError: "#evidence tag is required",
 		},
 		{
 			name:      "malformed evidence tag rejected",
