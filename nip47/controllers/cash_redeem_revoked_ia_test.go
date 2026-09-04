@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +61,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 	require.NoError(t, err)
 	require.False(t, trusted, "sanity check: the IA is in fact no longer trusted")
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
 		IdentityType:     db.CashIdentityConnectionKey,

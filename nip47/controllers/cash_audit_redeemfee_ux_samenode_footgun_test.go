@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -99,7 +100,7 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	// move, but THIS redemption resolves same-node (step above), so the
 	// wallet's actual required amount is the FULL 1000, fee-free, not 900.
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(uint64(quoted.NetRedeemableMillis)), //nolint:gosec // test-controlled positive value — exactly what list_recipients quoted
 		IdentityType:  db.CashIdentityPubkey,

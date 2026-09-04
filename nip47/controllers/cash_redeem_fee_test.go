@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -44,7 +45,7 @@ func TestHandleCashRedeemEvent_ExternalRedemption_FeeDeductedFromPayout(t *testi
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(900), // the slice's net redeemable amount, not its full 1000
 		IdentityType:  db.CashIdentityPubkey,
@@ -79,7 +80,7 @@ func TestHandleCashRedeemEvent_ExternalRedemption_FullSliceAmount_RejectedWhenFe
 
 	// Presenting an invoice for the FULL slice, ignoring the fee, must be
 	// rejected — an external redemption never pays out more than the net.
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -112,7 +113,7 @@ func TestHandleCashRedeemEvent_ExternalRedemption_BelowQuote_Rejected(t *testing
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
 	// 800 is neither the full slice (1000) nor the correctly-quoted net (900).
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(800),
 		IdentityType:  db.CashIdentityPubkey,
@@ -162,7 +163,7 @@ func TestHandleCashRedeemEvent_SameNodeRedemption_FeeFree_FullAmountPaid(t *test
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000), // the FULL slice — must succeed, fee-free
 		IdentityType:  db.CashIdentityPubkey,
@@ -195,7 +196,7 @@ func TestHandleCashRedeemEvent_ZeroRedeemFeePpm_FullAmountEitherWay(t *testing.T
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,

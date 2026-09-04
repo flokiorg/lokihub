@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -153,7 +154,7 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *t
 	assert.Nil(t, oldClaim)
 
 	// End-to-end: the secret the caller chose actually redeems the slice.
-	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: newSecretHex,
@@ -224,7 +225,7 @@ func TestHandleCashTransferEvent_HappyPath_BearerToBearer_CallerSuppliedNewSecre
 	assert.Nil(t, oldClaim)
 
 	// The new secret must actually redeem the slice.
-	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: newSecretHex,
@@ -1301,7 +1302,7 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		redeemResp = handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+		redeemResp = handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 			Invoice:      tests.MockZeroAmountInvoice,
 			Amount:       ptrUint64(1000),
 			BearerSecret: secret1Hex,
@@ -1343,7 +1344,7 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 		// instance-wide, matching a real Lightning node, so reusing the same
 		// invoice here would spuriously fail as "already paid" even though
 		// no payment for it ever went through.
-		oldRedeemResp := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+		oldRedeemResp := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 			Invoice:      tests.MockInvoice,
 			Amount:       ptrUint64(1000),
 			BearerSecret: secret1Hex,
@@ -1387,7 +1388,7 @@ func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			redeemResp = handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+			redeemResp = handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 				Invoice:      tests.MockZeroAmountInvoice,
 				Amount:       ptrUint64(1000),
 				BearerSecret: secret1Hex,

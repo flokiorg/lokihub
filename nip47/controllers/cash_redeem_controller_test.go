@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -108,7 +109,7 @@ func mustMarshal(t *testing.T, ev *nostr.Event) string {
 // returns the decoded response. Creates a fresh RequestEvent row each call —
 // SendPaymentSync's Transaction row has a real FK to request_events, so a
 // literal placeholder ID fails once a call actually reaches the payment path.
-func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params cashRedeemParams) *models.Response {
+func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params nipcash.CashRedeemRequest) *models.Response {
 	t.Helper()
 	content := map[string]interface{}{
 		"method": constants.NIP47MethodCashRedeem,
@@ -144,7 +145,7 @@ func TestHandleCashRedeemEvent_HappyPath_PubkeyMode(t *testing.T) {
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -184,7 +185,7 @@ func TestHandleCashRedeemEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(2000),
 		IdentityType:     db.CashIdentityConnectionKey,
@@ -219,7 +220,7 @@ func TestHandleCashRedeemEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockPaymentHash, nil, time.Now())
 
 	// ...but the attacker submits it against a DIFFERENT invoice (MockZeroAmountInvoice).
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(123_000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -251,7 +252,7 @@ func TestHandleCashRedeemEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	params := cashRedeemParams{
+	params := nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -298,7 +299,7 @@ func TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.
 	}))
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	params := cashRedeemParams{
+	params := nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -391,7 +392,7 @@ func TestHandleCashRedeemEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testin
 	outsiderPubkey, _ := nostr.GetPublicKey(outsiderPrivkey)
 	proof := buildClaimProofEvent(t, outsiderPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -426,7 +427,7 @@ func TestHandleCashRedeemEvent_IdentityEventReplayedAcrossWallets_Rejected(t *te
 	proof := buildClaimProofEvent(t, claimantPrivkey, *walletA.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 
 	// ...but submitted against wallet B.
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), walletB, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), walletB, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -462,7 +463,7 @@ func TestHandleCashRedeemEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t
 
 	// Request only half the entitled amount — must be rejected outright, not
 	// accepted as a valid partial claim.
-	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(500),
 		IdentityType:  db.CashIdentityPubkey,
@@ -478,7 +479,7 @@ func TestHandleCashRedeemEvent_AmountMismatch_RejectedAndSliceRemainsClaimable(t
 	require.NotNil(t, claim, "an amount-mismatch attempt must roll back the claim, not consume it")
 
 	// A fresh, correctly-amounted attempt (bound to the same invoice) must succeed.
-	retryResponse := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+	retryResponse := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -505,7 +506,7 @@ func TestHandleCashRedeemEvent_StaleIdentityEvent_Rejected(t *testing.T) {
 	staleProof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil,
 		time.Now().Add(-1*time.Hour))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -540,7 +541,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
 		IdentityType:     db.CashIdentityConnectionKey,
@@ -593,7 +594,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	attackerProof := buildClaimProofEvent(t, attackerPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
 		IdentityType:     db.CashIdentityConnectionKey,
@@ -608,7 +609,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	// The slice must remain intact and claimable by the real claimant.
 	realProof := buildClaimProofEvent(t, realClaimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
 		nostr.Tags{{"connection_key", connectionKey}, {"e", attestation.ID}}, time.Now())
-	retryResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	retryResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:          tests.MockZeroAmountInvoice,
 		Amount:           ptrUint64(1000),
 		IdentityType:     db.CashIdentityConnectionKey,
@@ -639,7 +640,7 @@ func TestHandleCashRedeemEvent_RateLimited(t *testing.T) {
 	}
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
-	response := handleClaimFundsFor(t, svc, controller, wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -658,7 +659,7 @@ func TestHandleCashRedeemEvent_NonCashWalletApp_Rejected(t *testing.T) {
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), hub, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), hub, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		IdentityType:  db.CashIdentityPubkey,
@@ -695,7 +696,7 @@ func TestHandleCashRedeemEvent_Bearer_HappyPath(t *testing.T) {
 		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: secretHex,
@@ -724,7 +725,7 @@ func TestHandleCashRedeemEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
 	}))
 
 	wrongSecret, _ := bearerSecretAndHash(t)
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: wrongSecret,
@@ -747,7 +748,7 @@ func TestHandleCashRedeemEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: "not-hex!!",
@@ -772,7 +773,7 @@ func TestHandleCashRedeemEvent_Bearer_MixedParams_Rejected(t *testing.T) {
 
 	// A request carrying BOTH bearer_secret and identity_type/value must be
 	// rejected outright, not silently prefer one side.
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
 		BearerSecret:  secretHex,
@@ -801,7 +802,7 @@ func TestHandleCashRedeemEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClai
 		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, cashRedeemParams{
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(500), // only half the entitled amount
 		BearerSecret: secretHex,
@@ -831,7 +832,7 @@ func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *t
 		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	params := cashRedeemParams{
+	params := nipcash.CashRedeemRequest{
 		Invoice:      tests.MockZeroAmountInvoice,
 		Amount:       ptrUint64(1000),
 		BearerSecret: secretHex,

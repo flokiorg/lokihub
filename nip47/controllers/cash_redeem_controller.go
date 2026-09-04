@@ -12,6 +12,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipIC"
+	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -57,28 +58,16 @@ const (
 	cashRedeemRateLimitPerHour = 20
 )
 
-type cashRedeemParams struct {
-	Invoice       string  `json:"invoice"`
-	Amount        *uint64 `json:"amount,omitempty"`         // override for amountless invoices, mirrors pay_invoice
-	IdentityType  string  `json:"identity_type,omitempty"`  // "pubkey" | "connection_key" — omit entirely for a bearer slice
-	IdentityValue string  `json:"identity_value,omitempty"` // omit entirely for a bearer slice
-	// IdentityEvent is the JSON-encoded kind-23198 claim proof, signed fresh
-	// for this call and bound to this wallet + this invoice. Omit entirely
-	// for a bearer slice, which has no identity to sign with.
-	IdentityEvent string `json:"identity_event,omitempty"`
-	// AttestationEvent is the JSON-encoded kind-35522 IA attestation, required
-	// only when identity_type == connection_key.
-	AttestationEvent string `json:"attestation_event,omitempty"`
-	// BearerSecret redeems a bearer slice (NIP-JW §Bearer Slices) in place of
-	// identity_type/identity_value/identity_event/attestation_event, all of
-	// which MUST be empty when this is set. Presenting the correct secret is
-	// the entire proof — there is no signature to verify, since a bearer
-	// slice has no identity capable of signing one.
-	BearerSecret string `json:"bearer_secret,omitempty"`
-}
-
+// cash_redeem's request struct is github.com/ohstr/nmilat/nipcash's own
+// exported nipcash.CashRedeemRequest — same wire shape, field-for-field
+// identical to this controller's former local cashRedeemParams, adopted
+// directly instead of maintaining a parallel copy (nmilat migration, PR
+// #90). The response stays this package's own payResponse (models.go): it's
+// shared across pay_invoice/cash_redeem/other paying methods and carries a
+// fee_skim_mloki field nipcash.CashRedeemResult doesn't have, so it isn't a
+// clean swap candidate.
 func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
-	params := &cashRedeemParams{}
+	params := &nipcash.CashRedeemRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)
