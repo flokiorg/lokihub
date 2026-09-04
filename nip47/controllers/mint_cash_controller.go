@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
+
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/nbd-wtf/go-nostr"
 )
 
 // cashRateLimitPerHour is the fallback used by tests, which build a
@@ -19,43 +21,13 @@ import (
 // through controller.cfg.GetEnv().CashWalletRateLimitPerHour instead.
 const cashRateLimitPerHour = 10
 
-type mintCashRecipientParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
-	IdentityValue string `json:"identity_value,omitempty"`
-	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
-	AmountMillis  uint64 `json:"amount_millis"`
-}
-
-type mintCashParams struct {
-	Recipients []mintCashRecipientParam `json:"recipients"`
-	ExpirySecs int                      `json:"expiry,omitempty"`
-	// MintSignature opts the issued token into mint provenance (NIP-CASH §Mint
-	// Provenance): the node signs it so a holder can verify origin and
-	// denomination offline. Off by default — provenance roughly doubles the
-	// token's length and is never needed to spend it.
-	MintSignature bool `json:"mint_signature,omitempty"`
-}
-
-type mintCashRecipientResult struct {
-	IdentityType  string `json:"identity_type"`
-	IdentityValue string `json:"identity_value,omitempty"`
-	AmountMillis  uint64 `json:"amount_millis"`
-	// BearerSecret is populated only for identity_type == "bearer", and only
-	// in this one response — it is never retrievable again (NIP-JW §Bearer
-	// Slices).
-	BearerSecret string `json:"bearer_secret,omitempty"`
-}
-
-type mintCashResponse struct {
-	WalletPubkey string `json:"wallet_pubkey"`
-	PairingURI   string `json:"pairing_uri"`
-	CashToken    string `json:"cash_token"`
-	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
-	// own MaxExpSecs is 0 ("never") and the caller didn't request its own
-	// expiry (see cashwallet.Resolve).
-	ExpiresAt  *int64                    `json:"expires_at,omitempty"`
-	Recipients []mintCashRecipientResult `json:"recipients"`
-}
+// mint_cash's request/response wire structs are github.com/ohstr/nmilat/nipcash's
+// own exported types (nipcash.MintCashRequest/MintCashResult/RecipientParam/
+// RecipientResult) — same wire shape, adopted directly instead of maintaining
+// a parallel copy (nmilat migration, PR #90). One accepted, tested difference:
+// nipcash.MintCashResult.ExpiresAt is a plain int64 with `omitempty` (omitted
+// when zero) rather than this controller's former *int64 (omitted when nil) —
+// behaviorally identical for every real expiry timestamp, which is never 0.
 
 // mapCashWalletErrorCode maps an error returned by cashwallet.Create to a NIP-47
 // error code. cashwallet.Create is protocol-agnostic, so it returns plain wrapped
@@ -74,7 +46,7 @@ func mapCashWalletErrorCode(err error) string {
 }
 
 func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
-	params := &mintCashParams{}
+	params := &nipcash.MintCashRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, nostr.Tags{})
@@ -84,7 +56,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Int("recipient_count", len(params.Recipients)).
-		Int("expiry", params.ExpirySecs).
+		Int("expiry", params.Expiry).
 		Msg("Handling mint_cash request")
 
 	// 1. App must be cash_hub kind.
@@ -133,7 +105,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	resolved, err := cashwallet.Resolve(ctx, deps, cashwallet.Params{
 		HubApp:     app,
 		Recipients: recipients,
-		ExpirySecs: params.ExpirySecs,
+		ExpirySecs: params.Expiry,
 		SignMint:   params.MintSignature,
 	})
 	if err != nil {
@@ -156,9 +128,9 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		return
 	}
 
-	recipientResults := make([]mintCashRecipientResult, len(result.Recipients))
+	recipientResults := make([]nipcash.RecipientResult, len(result.Recipients))
 	for i, r := range result.Recipients {
-		recipientResults[i] = mintCashRecipientResult{
+		recipientResults[i] = nipcash.RecipientResult{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMillis:  r.AmountMloki,
@@ -172,15 +144,14 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		Int("recipient_count", len(result.Recipients)).
 		Msg("Cash wallet created and funded")
 
-	var expiresAt *int64
+	var expiresAt int64
 	if result.ExpiresAt != nil {
-		ts := result.ExpiresAt.Unix()
-		expiresAt = &ts
+		expiresAt = result.ExpiresAt.Unix()
 	}
 
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result: mintCashResponse{
+		Result: nipcash.MintCashResult{
 			WalletPubkey: *result.WalletApp.WalletPubkey,
 			PairingURI:   result.PairingURI,
 			CashToken:    result.CashToken,

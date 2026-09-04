@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -160,9 +161,9 @@ func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(mintCashResponse)
-	require.NotNil(t, result.ExpiresAt)
-	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(*result.ExpiresAt, 0), 5*time.Second,
+	result := publishedResponse.Result.(nipcash.MintCashResult)
+	require.NotZero(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(result.ExpiresAt, 0), 5*time.Second,
 		"wallet must default to the hub's max_exp_secs, not expire immediately")
 }
 
@@ -254,11 +255,11 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(mintCashResponse)
+	result := publishedResponse.Result.(nipcash.MintCashResult)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
 	assert.NotEmpty(t, result.WalletPubkey)
-	require.NotNil(t, result.ExpiresAt)
-	assert.Greater(t, *result.ExpiresAt, time.Now().Unix())
+	require.NotZero(t, result.ExpiresAt)
+	assert.Greater(t, result.ExpiresAt, time.Now().Unix())
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMillis)
 
@@ -327,7 +328,7 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(mintCashResponse)
+	result := publishedResponse.Result.(nipcash.MintCashResult)
 	require.Len(t, result.Recipients, 2)
 
 	// Exactly one shared wallet app.
@@ -520,7 +521,7 @@ func TestHandleMintCashEvent_Bearer_HappyPath(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(mintCashResponse)
+	result := publishedResponse.Result.(nipcash.MintCashResult)
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, db.CashIdentityBearer, result.Recipients[0].IdentityType)
 	assert.NotEmpty(t, result.Recipients[0].BearerSecret, "the plaintext secret must be returned exactly once")

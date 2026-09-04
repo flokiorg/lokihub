@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // nipCashDocSection extracts the substring of NIP-CASH.md's content starting
@@ -79,9 +81,9 @@ func TestNIPCashDoc_MintSignatureRequestFieldDocumented(t *testing.T) {
 
 	// Ground-truth: the parameter is real and reachable in the implementation,
 	// so the doc coverage above is describing a real field, not a stale one.
-	mintType := reflect.TypeOf(mintCashParams{})
+	mintType := reflect.TypeOf(nipcash.MintCashRequest{})
 	mintField, ok := mintType.FieldByName("MintSignature")
-	require.True(t, ok, "mintCashParams dropped MintSignature -- re-verify this finding")
+	require.True(t, ok, "nipcash.MintCashRequest dropped MintSignature -- re-verify this finding")
 	assert.Equal(t, "mint_signature,omitempty", mintField.Tag.Get("json"))
 
 	transferType := reflect.TypeOf(cashTransferParams{})
