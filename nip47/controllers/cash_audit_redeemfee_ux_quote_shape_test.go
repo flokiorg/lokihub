@@ -84,8 +84,8 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T)
 // that even a free (0 ppm) slice still carries an explicit, non-omitted
 // redeem_fee_millis:0 / net_redeemable_millis==amount_millis pair, rather than
 // the fields disappearing from the JSON entirely for the common "no fee
-// configured" case (recipientStatus has no `,omitempty` on either field —
-// list_recipients_controller.go's recipientStatus struct). This matters for a
+// configured" case (nipcash.RecipientStatus has no `,omitempty` on either field —
+// list_recipients_controller.go's nipcash.RecipientStatus struct). This matters for a
 // naive client that treats "field absent" and "field present with value 0"
 // differently, or that only tests its fee-parsing code path against a
 // nonzero-fee fixture during development.

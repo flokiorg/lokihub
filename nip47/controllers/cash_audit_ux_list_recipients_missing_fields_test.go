@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -77,12 +78,12 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(listRecipientsResponse)
+	result, ok := response.Result.(nipcash.ListRecipientsResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 1)
 	recipient := result.Recipients[0]
 
-	assert.Equal(t, int64(500), recipient.MinTransferMillis,
+	assert.Equal(t, uint64(500), recipient.MinTransferMillis,
 		"a recipient must be able to learn their split floor before attempting a cash_transfer, not only from a failed attempt's error text")
 	require.NotNil(t, recipient.ExpiresAt, "a recipient must be able to learn their wallet's redemption deadline via protocol")
 	assert.Equal(t, expiresAt.Unix(), *recipient.ExpiresAt)
@@ -124,7 +125,7 @@ func TestHandleListRecipientsEvent_ExpiresAtOmittedForNeverExpiringWallet(t *tes
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(listRecipientsResponse)
+	result, ok := response.Result.(nipcash.ListRecipientsResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 1)
 	assert.Nil(t, result.Recipients[0].ExpiresAt)

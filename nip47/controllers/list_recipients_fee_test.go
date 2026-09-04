@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,24 +43,24 @@ func TestHandleListRecipientsEvent_RedeemFeeQuoteFields(t *testing.T) {
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(listRecipientsResponse)
+	result, ok := response.Result.(nipcash.ListRecipientsResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 2)
 
-	byIdentity := map[string]recipientStatus{}
+	byIdentity := map[string]nipcash.RecipientStatus{}
 	for _, r := range result.Recipients {
 		byIdentity[r.IdentityValue] = r
 	}
 
 	r1, ok := byIdentity[pk1]
 	require.True(t, ok)
-	assert.Equal(t, int64(100), r1.RedeemFeeMillis)
-	assert.Equal(t, int64(900), r1.NetRedeemableMillis)
+	assert.Equal(t, uint64(100), r1.RedeemFeeMillis)
+	assert.Equal(t, uint64(900), r1.NetRedeemableMillis)
 
 	r2, ok := byIdentity[pk2]
 	require.True(t, ok)
 	assert.Zero(t, r2.RedeemFeeMillis)
-	assert.Equal(t, int64(3000), r2.NetRedeemableMillis)
+	assert.Equal(t, uint64(3000), r2.NetRedeemableMillis)
 }
 
 // TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling proves the
@@ -88,8 +89,8 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.
 	})
 	require.Nil(t, response.Error)
 
-	result := response.Result.(listRecipientsResponse)
+	result := response.Result.(nipcash.ListRecipientsResult)
 	require.Len(t, result.Recipients, 1)
-	assert.Equal(t, int64(250), result.Recipients[0].RedeemFeeMillis)
-	assert.Equal(t, int64(750), result.Recipients[0].NetRedeemableMillis)
+	assert.Equal(t, uint64(250), result.Recipients[0].RedeemFeeMillis)
+	assert.Equal(t, uint64(750), result.Recipients[0].NetRedeemableMillis)
 }

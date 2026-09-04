@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,19 +43,19 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(listRecipientsResponse)
+	result := response.Result.(nipcash.ListRecipientsResult)
 	require.Len(t, result.Recipients, 2)
 
-	byIdentity := map[string]recipientStatus{}
+	byIdentity := map[string]nipcash.RecipientStatus{}
 	for _, r := range result.Recipients {
 		byIdentity[r.IdentityValue] = r
 	}
 	assert.True(t, byIdentity[pkClaimed].Claimed)
 	assert.NotNil(t, byIdentity[pkClaimed].ClaimedAt)
-	assert.Equal(t, int64(1000), byIdentity[pkClaimed].AmountMillis)
+	assert.Equal(t, uint64(1000), byIdentity[pkClaimed].AmountMillis)
 	assert.False(t, byIdentity[pkUnclaimed].Claimed)
 	assert.Nil(t, byIdentity[pkUnclaimed].ClaimedAt)
-	assert.Equal(t, int64(2000), byIdentity[pkUnclaimed].AmountMillis)
+	assert.Equal(t, uint64(2000), byIdentity[pkUnclaimed].AmountMillis)
 }
 
 func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {
@@ -89,6 +90,6 @@ func TestHandleListRecipientsEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(listRecipientsResponse)
+	result := response.Result.(nipcash.ListRecipientsResult)
 	assert.Empty(t, result.Recipients)
 }

@@ -91,9 +91,9 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	controller.HandleListRecipientsEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
 		func(r *models.Response, _ nostr.Tags) { listResp = r })
 	require.Nil(t, listResp.Error)
-	quoted := listResp.Result.(listRecipientsResponse).Recipients[0]
+	quoted := listResp.Result.(nipcash.ListRecipientsResult).Recipients[0]
 	require.Equal(t, claimantPubkey, quoted.IdentityValue)
-	require.Equal(t, int64(900), quoted.NetRedeemableMillis, "sanity: this is the exact figure a spec-following client would build its invoice from")
+	require.Equal(t, uint64(900), quoted.NetRedeemableMillis, "sanity: this is the exact figure a spec-following client would build its invoice from")
 
 	// Step 2 + 3: the recipient builds a real invoice for exactly the quoted
 	// net_redeemable_millis (900) and calls cash_redeem — normally the right
