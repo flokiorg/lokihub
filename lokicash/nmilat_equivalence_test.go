@@ -1,12 +1,12 @@
 package lokicash
 
-// Phase 0 verification spike for the nmilat migration plan (see PR #90's
-// discussion): before any production code is swapped over to
-// github.com/ohstr/nmilat/nipcash's token codec / mint-provenance helpers,
-// this file proves lokihub's own implementation and nmilat's are
-// byte-for-byte/verdict-for-verdict equivalent, in both directions, across a
-// deliberately wide field matrix. Any assertion failure here is a real,
-// reportable finding — not something to loosen until it passes.
+// nmilat migration (PR #90): Encode/Decode/MintPayload/VerifyMint now
+// delegate to github.com/ohstr/nmilat/nipcash's token codec / mint-provenance
+// helpers (see lokicash.go's own doc comments). Equivalence was verified
+// first, as a Phase 0 spike, before that delegation landed; these tests now
+// serve as permanent regression coverage for it - toNipcashToken/
+// fromNipcashToken are lokicash.go's own production conversion helpers, not
+// reimplemented here.
 
 import (
 	"testing"
@@ -16,30 +16,6 @@ import (
 
 	"github.com/ohstr/nmilat/nipcash"
 )
-
-func toNipcashToken(t Token) nipcash.Token {
-	return nipcash.Token{
-		HRP:                  t.HRP,
-		WalletPubkey:         t.WalletPubkey,
-		Secret:               t.Secret,
-		RelayURLs:            t.RelayURLs,
-		IdentityRequired:     t.IdentityRequired,
-		MintSignature:        t.MintSignature,
-		AttestedAmountMillis: t.AttestedAmount,
-	}
-}
-
-func fromNipcashToken(nt nipcash.Token) Token {
-	return Token{
-		HRP:              nt.HRP,
-		WalletPubkey:     nt.WalletPubkey,
-		Secret:           nt.Secret,
-		RelayURLs:        nt.RelayURLs,
-		IdentityRequired: nt.IdentityRequired,
-		MintSignature:    nt.MintSignature,
-		AttestedAmount:   nt.AttestedAmountMillis,
-	}
-}
 
 func requireTokensEqual(t *testing.T, want Token, got Token) {
 	t.Helper()
