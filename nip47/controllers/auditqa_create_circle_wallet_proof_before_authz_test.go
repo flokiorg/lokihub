@@ -37,7 +37,7 @@ func (s *spyingSocialCache) IsAuthorized(ctx context.Context, requesterPubkey st
 // used to probe list membership."
 //
 // HandleCreateCircleWalletEvent (create_circle_wallet_controller.go) does
-// verify the kind-35521 proof (verifyCircleWalletIdentityEvent) strictly
+// verify the kind-23199 proof (verifyCircleWalletIdentityEvent) strictly
 // before calling controller.socialCache.IsAuthorized — confirmed by reading
 // the handler — but no existing test asserts this ordering as an observable
 // fact. Every existing "WrongSigner"/"WrongHub" test

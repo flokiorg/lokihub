@@ -196,7 +196,7 @@ type CreateCircleWalletParams struct {
 	MaxAmount     uint64 `json:"max_amount"`
 	Expiry        int    `json:"expiry"`
 	BudgetRenewal string `json:"budget_renewal,omitempty"`
-	// IdentityEvent is a JSON-encoded, freshly-signed kind-35521 proof that
+	// IdentityEvent is a JSON-encoded, freshly-signed kind-23199 proof that
 	// the caller controls Pubkey, bound to this specific hub via its d-tag
 	// (see nip47/controllers/create_circle_wallet_identity.go).
 	IdentityEvent string `json:"identity_event"`

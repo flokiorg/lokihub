@@ -16,7 +16,7 @@ import (
 
 // TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected is a
 // regression test for a critical fund-theft bug found during the 2026-07-30
-// Cash Hub security audit: a kind-35521 cash_transfer proof was not bound to
+// Cash Hub security audit: a kind-23198 cash_transfer proof was not bound to
 // amount_millis and was not single-use, contrary to NIP-CASH §Transferring
 // and Splitting a Slice ("a proof MUST NOT be replayable to authorize a
 // DIFFERENT amount_millis than the one it was signed for") and §Processing

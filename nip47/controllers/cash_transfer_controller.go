@@ -27,7 +27,7 @@ type cashTransferNewIdentityParam struct {
 
 type cashTransferParams struct {
 	// The caller's CURRENT registered identity — mutually exclusive with
-	// BearerSecret. IdentityEvent is the JSON-encoded kind-35521 transfer
+	// BearerSecret. IdentityEvent is the JSON-encoded kind-23198 transfer
 	// proof, signed fresh for this call and bound to this wallet + this
 	// specific new_identity (see verifyTransferIdentityEvent).
 	IdentityType     string `json:"identity_type,omitempty"`
@@ -339,7 +339,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		// operation itself (the live IA-trust re-check below, and step 8's
 		// new_identity validation) has also passed. A proof that fails one of
 		// those later checks never touched the slice, so burning it here
-		// would force a legitimate caller to sign an entirely new kind-35521
+		// would force a legitimate caller to sign an entirely new kind-23198
 		// event to retry even though nothing happened (2026-07-30 audit
 		// finding). callerProofPubkey/proofEventID are captured now, while
 		// identityEvent is in scope, but the actual insert happens right
@@ -828,7 +828,7 @@ func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App)
 	logger.Logger.Info().Uint("app_id", app.ID).Msg("Auto-deleted Cash wallet after its last slice was fully split away")
 }
 
-// verifyTransferIdentityEvent checks a kind-35521 transfer proof — the same
+// verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same
 // event kind and most of the same checks as verifyClaimIdentityEvent
 // (cash_redeem_controller.go), except bound to the transfer's *target*
 // identity via a new_identity_hash tag instead of an invoice's bolt11_hash,

@@ -135,7 +135,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubAppPubkey, d
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	identityEvent := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
 		Tags:      nostr.Tags{{"d", hubAppPubkey}, {"disambiguator", disambiguator}},
 	}

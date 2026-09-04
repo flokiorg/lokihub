@@ -169,7 +169,7 @@ sequenceDiagram
   "max_amount": 100000,
   "expiry": 2592000,
   "budget_renewal": "monthly",
-  "identity_event": "{...kind 35521 JSON...}"
+  "identity_event": "{...kind 23199 JSON...}"
 }
 ```
 
@@ -178,7 +178,7 @@ sequenceDiagram
 - `expiry` — OPTIONAL; if omitted or zero, it MUST default to the Hub's own expiry ceiling.
 - `budget_renewal` — OPTIONAL; if omitted, it MUST default to `never`. Whether omitted or explicit, the
   resolved value MUST satisfy the Hub's own renewal floor (§Budget Renewal Floor).
-- `identity_event` — REQUIRED, the JSON-encoded kind-35521 identity proof (§Identity Proof).
+- `identity_event` — REQUIRED, the JSON-encoded kind-23199 identity proof (§Identity Proof).
 
 ### Response
 
@@ -196,10 +196,15 @@ sequenceDiagram
 the shared Hub connection, including the wallet owner, is able to decrypt a Circle Wallet's connection
 string from the response alone.
 
-## Identity Proof (kind 35521)
+## Identity Proof (kind 23199)
+
+This document's own event kind, defined nowhere else — not NIP-CASH's `23198` (a structurally different
+per-call proof, for a different NIP), and not NIP-IC's `35521` (a long-lived, reusable Identity Connection
+claim, incompatible with this proof's single-use, per-request binding — see NIP-CASH.md's own Methods
+section for the general reasoning, which applies identically here).
 
 ```
-kind: 35521
+kind: 23199
 pubkey: <requester pubkey — MUST equal `pubkey` in the request>
 tags:
   d = <Circle Wallet Hub's own pubkey>   // binds proof to THIS Hub; no invoice to bind it to
@@ -217,7 +222,7 @@ response cannot be used to probe list membership.
 On receiving `create_circle_wallet`, the Hub MUST, in order:
 
 1. Validate `pubkey` is a well-formed 64-character lowercase-hex string.
-2. Verify the kind-35521 identity proof per §Identity Proof: signature, `d`-tag equal to the Hub's own
+2. Verify the kind-23199 identity proof per §Identity Proof: signature, `d`-tag equal to the Hub's own
    pubkey, signer equal to the requested `pubkey`, and freshness.
 3. Check the proof's event ID against the single-use replay guard. A previously-consumed event ID MUST
    be rejected, even if otherwise valid and still within its freshness window.

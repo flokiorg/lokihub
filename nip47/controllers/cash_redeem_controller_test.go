@@ -54,7 +54,7 @@ func newFundedCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, tota
 	return wallet
 }
 
-// buildClaimProofEvent builds and signs a kind-35521 claim proof bound to
+// buildClaimProofEvent builds and signs a kind-23198 claim proof bound to
 // walletPubkey and bolt11Hash. extraTags carries the connection_key-mode-only
 // tags (connection_key + e-tag referencing the attestation event).
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
@@ -70,9 +70,21 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 	return ev
 }
 
+// buildIAAttestationEvent builds a kind-35522 IA attestation carrying the
+// platform/evidence tags verifyClaimAttestationEvent now requires (matching a
+// real nipIC.NewAttestation-produced event's shape) alongside the usual d/p/
+// expiration bindings. platform/evidence content is fixed and not
+// test-parameterized since no test here needs to vary it — the tightened
+// validator only checks their presence and that evidence is valid JSON, not
+// their content.
 func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNostrPubkey string, expiration *int64) *nostr.Event {
 	t.Helper()
-	tags := nostr.Tags{{"d", connectionKey}, {"p", claimantNostrPubkey}}
+	tags := nostr.Tags{
+		{"d", connectionKey},
+		{"p", claimantNostrPubkey},
+		{"platform", "discord"},
+		{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
+	}
 	if expiration != nil {
 		tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(*expiration, 10)})
 	}
@@ -858,4 +870,80 @@ func ptrUint64(v uint64) *uint64 { return &v }
 func oneHourFromNow() *int64 {
 	exp := time.Now().Add(time.Hour).Unix()
 	return &exp
+}
+
+// TestVerifyClaimAttestationEvent_PlatformEvidenceTags covers the
+// platform/evidence tag requirements added to verifyClaimAttestationEvent to
+// match a real nipIC.NewAttestation-produced kind-35522 event's shape (see
+// the function's own doc comment, and NIP-CASH.md's Security Considerations).
+// Exercises verifyClaimAttestationEvent directly rather than through the full
+// HandleCashRedeemEvent flow — it's a pure function, so a direct table test
+// is more direct than round-tripping through a full redeem call for each case.
+func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
+	iaPrivkey := nostr.GeneratePrivateKey()
+	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
+	claimantPrivkey := nostr.GeneratePrivateKey()
+	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
+	connectionKey := tests.RandomHex32()
+	validExpiration := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
+
+	baseTags := func() nostr.Tags {
+		return nostr.Tags{
+			{"d", connectionKey},
+			{"p", claimantPubkey},
+			{"expiration", validExpiration},
+		}
+	}
+
+	buildWithTags := func(t *testing.T, tags nostr.Tags) *nostr.Event {
+		t.Helper()
+		ev := &nostr.Event{Kind: nostrKindIAAttestation, CreatedAt: nostr.Now(), Tags: tags}
+		require.NoError(t, ev.Sign(iaPrivkey))
+		return ev
+	}
+
+	cases := []struct {
+		name      string
+		tags      nostr.Tags
+		wantError string // substring, "" means expect success
+	}{
+		{
+			name:      "missing platform tag rejected",
+			tags:      append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
+			wantError: "missing a required platform tag",
+		},
+		{
+			name:      "empty platform tag rejected",
+			tags:      append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
+			wantError: "missing a required platform tag",
+		},
+		{
+			name:      "missing evidence tag rejected",
+			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}),
+			wantError: "missing a required evidence tag",
+		},
+		{
+			name:      "malformed evidence tag rejected",
+			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", "not valid json"}),
+			wantError: "evidence tag is not valid JSON",
+		},
+		{
+			name:      "platform and evidence present accepted",
+			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", `{"version":1,"platform":"discord"}`}),
+			wantError: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := buildWithTags(t, tc.tags)
+			err := verifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
+			if tc.wantError == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantError)
+			}
+		})
+	}
 }

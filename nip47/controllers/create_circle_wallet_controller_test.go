@@ -18,14 +18,14 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// buildCircleWalletIdentityEvent builds and signs a kind-35521 proof that the
+// buildCircleWalletIdentityEvent builds and signs a kind-23199 proof that the
 // caller controls requesterPrivkey, bound to this specific hub via the d-tag
 // — mirrors buildClaimProofEvent (cash_redeem_controller_test.go) for the
 // simpler circle case (always self-proof, no invoice/attestation binding).
 func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
 		Tags:      nostr.Tags{{"d", hubAppPubkey}},
 	}

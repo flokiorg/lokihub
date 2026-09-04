@@ -140,7 +140,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_Stale_Rejected(t *testing.T
 	requesterPubkey, _ := nostr.GetPublicKey(requesterKey)
 
 	staleEvent := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Timestamp(time.Now().Add(-10 * time.Minute).Unix()),
 		Tags:      nostr.Tags{{"d", provider.AppPubkey}},
 	}
@@ -163,7 +163,7 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_FutureTimestamp_Rejected(t 
 	requesterPubkey, _ := nostr.GetPublicKey(requesterKey)
 
 	futureEvent := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Timestamp(time.Now().Add(10 * time.Minute).Unix()),
 		Tags:      nostr.Tags{{"d", provider.AppPubkey}},
 	}

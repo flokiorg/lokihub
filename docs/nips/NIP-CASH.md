@@ -32,7 +32,7 @@ Ecash already means mint-once, transfer-before-redemption value: hand a note to 
 Lightning hop, redeemable whenever they're ready. Getting it today means adopting a separate mint protocol
 and a separate wallet, outside the tools people already use. NIP-47 already gives Nostr a standard way to
 hand out scoped spending access to a wallet — Cash Hub builds ecash's value directly on top of that instead
-of beside it, so anything that already speaks NIP-47 can mint, hold, and redeem a cash token.
+of beside it, so anything that already speaks NWC can mint, hold, and redeem a cash token.
 
 A bare secret has no address — no way to aim it at someone before they're reachable. §Data Model's identity
 binding adds that: mint cash for a named list of recipients today, and let each one redeem it, or move it
@@ -41,21 +41,16 @@ on to someone else, once they're online.
 ## Non-Goals
 
 This document doesn't define membership or eligibility policy. A Cash Hub has no concept of "who's
-allowed to be a recipient." Every recipient is named explicitly, at creation time, by the hub owner.
-
-And `cash_transfer` isn't a general-purpose payment or exchange primitive. It moves value between
-already-committed slices, never creating value beyond what `mint_cash` already committed, and never
-merging two slices back into one — combining is `cash_consolidate`'s job (§Consolidating Tokens), not
-`cash_transfer`'s. Neither ever creates value: `cash_consolidate`'s output is exactly the sum of its
-inputs, drawn from cash the same node already custodies.
+allowed to receive cash" — the `mint_cash` caller decides, per call, whether each recipient's share
+goes to a named identity (`pubkey` or `connection_key`) or to no one in particular (`bearer` mode,
+§Bearer Slices) — plain cash, redeemable by whoever holds it. Naming a recipient is never mandatory.
 
 ## Terminology
 
-- **cash token**: the NIP-19-style bech32 string a recipient actually holds and redeems — and, informally,
-  for a single-recipient wallet, the value it represents, the way "a bill" means both. (A multi-recipient
-  wallet's token instead represents shared *access* to a pool containing several recipients' independent
-  slices — see the next entry — so the bill analogy is exact only in the single-recipient case.) Its prefix
-  names the coin: `lokicash1...` (flokicoin), `satscash1...` (Bitcoin), and so on. See §The Cash Token.
+- **cash token**: a bech32 string like `lokicash1...` (flokicoin) or `satscash1...` (Bitcoin) — the
+  NIP-19-style credential a recipient holds and redeems. For a single-recipient wallet it doubles as "the
+  bill" itself, the way physical cash does; for a multi-recipient wallet it's shared access to a pool of
+  several recipients' independent shares instead (see the next entry). See §The Cash Token.
 - **Cash Wallet**: the NWC connection a cash token's pairing data decodes to — one connection string, shared
   by every recipient it was created for (or, after a transfer/split, by exactly one recipient — see
   §Splitting a Slice). This is the custody/transport mechanism a cash token rides on, not a separate
@@ -70,9 +65,13 @@ inputs, drawn from cash the same node already custodies.
   of the connection — a raw Nostr `pubkey`, or a `connection_key` (an opaque identifier an Identity
   Authority vouches for, standing in for a Web Identity — a Discord handle, an email, a domain — for a
   recipient not on Nostr yet). A slice left unbound is `bearer` mode (§Bearer Slices): ordinary ecash,
-  redeemable by whoever holds its secret.
-- **Identity Authority (IA)**: a third party the wallet owner trusts to attest that a `connection_key`
-  belongs to a given Nostr pubkey, or to the Web Identity behind it.
+  redeemable by whoever holds its secret. A `connection_key`'s `identity_value` MUST be computed as
+  `hex(SHA256(platform + ":" + externalID))` — the same deterministic formula NIP-IC's `ConnectionKey`
+  defines — so two independent implementations deriving a connection_key for the same (platform, externalID)
+  pair always agree, and a real NIP-IC-issued attestation's own `d`-tag matches without coordination.
+- **Identity Authority (IA)**: a third party the wallet owner trusts to attest, via a kind-35522 event
+  (NIP-IC's own Attestation kind — this document verifies it, it doesn't define it; see §Security
+  Considerations), that a `connection_key` belongs to a given Nostr pubkey, or to the Web Identity behind it.
 - **min_transfer_millis**: a floor, in millis, on how small a piece a split may carve off or leave behind
   (zero = no floor). See §Splitting a Slice.
 - **redeem_fee_ppm**: a parts-per-million rate charged on a slice only when `cash_redeem` resolves to an
@@ -94,6 +93,14 @@ and thereafter fixed on that slice and inherited unchanged across splits (§The 
 | `cash_transfer` | a recipient, proof-gated against their current registered identity | `cash_transfer` | Reassign an unredeemed slice's identity, or split part of its value off into a new cash token — see §Transferring and Splitting a Slice |
 | `cash_consolidate` | a recipient controlling every source slice, proof-gated against each | `cash_consolidate` | Combine several same-hub slices this node custodies into one new cash token — see §Consolidating Tokens |
 | `list_recipients` | any holder of the Cash Wallet connection | `cash_redeem` | Read-only roster of every recipient on this wallet, including each slice's redeem fee quote — see §Listing Recipients |
+
+`cash_redeem`, `cash_transfer`, and `cash_consolidate` each take a `proof` (or, for a `bearer` slice,
+`bearer_secret`) authenticating the caller against the slice they're acting on. That proof, when present,
+MUST be a **kind-23198** event — this document's own event kind, defined nowhere else. It is single-use,
+freshly signed for each call, and never independently published to a relay (it only ever travels embedded
+inside an already end-to-end-encrypted NIP-47 request body) — see each method's own Request section for
+exactly what it must bind to. Kind 23198 is deliberately not kind 35521: that number belongs to NIP-IC's
+own, structurally incompatible, long-lived Identity Connection claim.
 
 ## Data Model
 
@@ -551,7 +558,7 @@ sequenceDiagram
 }
 ```
 
-- `proof` — REQUIRED unless the slice's current identity is `bearer`. A kind-35521 event, MUST authenticate
+- `proof` — REQUIRED unless the slice's current identity is `bearer`. A kind-23198 event, MUST authenticate
   the caller as the slice's *current* registered identity, and bind the proof to this specific
   `new_identity` and this specific `amount_millis` — the same anti-redirection requirement `cash_redeem`'s
   proof has toward its invoice (§Redeeming a Slice). A proof captured for one `new_identity` MUST NOT be
@@ -809,7 +816,7 @@ sequenceDiagram
     Caller->>Node: cash_consolidate {sources[], proofs[], new_identity}
     Node->>Node: confirm this node custodies every source, all same hub
     Node->>Node: verify caller controls each source slice
-    Node->>Node: sum amounts (overflow-checked); check sum <= hub PerWalletMax
+    Node->>Node: sum amounts (overflow-checked); check sum does not exceed hub PerWalletMax
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
@@ -821,7 +828,7 @@ sequenceDiagram
 ```jsonc
 {
   "sources": [
-    {"wallet_pubkey": "<hex>", "proof": { /* kind-35521, bound to new_identity — §Transferring */ }},
+    {"wallet_pubkey": "<hex>", "proof": { /* kind-23198, bound to new_identity — §Transferring */ }},
     {"wallet_pubkey": "<hex>", "proof": { /* ditto */ }}
   ],
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"}
@@ -1296,6 +1303,15 @@ full mechanism.
 **IA revocation MUST be checked live at redemption time, not only at wallet-creation time.** A compromised or
 retired Identity Authority needs to be cut off immediately, for every wallet it ever attested for, not
 just wallets created after revocation. The same applies to `cash_transfer`'s `new_identity` validation.
+
+**A kind-35522 attestation's `expiration` tag is mandatory here, and this document deliberately diverges from
+NIP-IC on that point.** NIP-IC treats an attestation's expiration as optional and doesn't itself error on an
+expired one, because it supports revoking a single attestation directly (a NIP-09 kind-5 deletion of the
+kind-35522 event). This document doesn't specify a per-attestation revocation mechanism — only the
+whole-IA-revocation check above — so an implementation MUST reject an attestation carrying no `expiration`
+tag, or one that has already passed, as its only bound on how long a not-yet-revoked attestation stays
+honorable. A conformant attestation MUST also carry `platform` and `evidence` tags per NIP-IC's own shape,
+even though this document's own verification only checks their presence, not their content.
 
 **Recipient-sum overflow MUST be guarded explicitly**, with a per-recipient upper bound plus an
 overflow-safe running sum. Without this, two large recipient amounts could wrap the sum to a small value.

@@ -46,7 +46,7 @@ type createCircleWalletParams struct {
 	MaxAmount       uint64 `json:"max_amount"`
 	Expiry          int    `json:"expiry"`
 	BudgetRenewal   string `json:"budget_renewal,omitempty"`
-	// IdentityEvent is the JSON-encoded kind-35521 proof that the caller
+	// IdentityEvent is the JSON-encoded kind-23199 proof that the caller
 	// controls RequesterPubkey — see verifyCircleWalletIdentityEvent.
 	IdentityEvent string `json:"identity_event"`
 }
@@ -101,7 +101,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// 1b. Identity proof: the circle_hub connection is shared/public, so
 	// params.pubkey alone proves nothing — verify the caller actually
-	// controls it via a fresh, per-hub-bound, signed kind-35521 event before
+	// controls it via a fresh, per-hub-bound, signed kind-23199 event before
 	// it's used for anything (allowlist/following lookups, rate limiting).
 	// This also closes the allowlist-membership oracle as a side effect: an
 	// attacker without the target's private key can never reach step 2 below.

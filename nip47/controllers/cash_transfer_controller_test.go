@@ -23,7 +23,7 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// buildTransferProofEvent builds and signs a kind-35521 transfer proof bound
+// buildTransferProofEvent builds and signs a kind-23198 transfer proof bound
 // to walletPubkey, the target (newIdentityType, newIdentityValue, newIAPubkey),
 // AND the exact amountMloki this proof authorizes — mirrors
 // buildClaimProofEvent, but bound via new_identity_hash/amount_millis instead

@@ -37,15 +37,19 @@ func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 }
 
 // Mirrors the unexported kind constants in
-// nip47/controllers/cash_redeem_controller.go (Kind 35521: per-claim proof of
-// identity, bound to one wallet + one invoice; Kind 35522: Identity Authority
-// attestation, connection_key mode only).
+// nip47/controllers/cash_redeem_controller.go (Kind 23198: NIP-CASH's
+// per-claim proof of identity, bound to one wallet + one invoice; Kind
+// 35522: Identity Authority attestation, connection_key mode only — this one
+// is NIP-IC's own kind, genuinely reused rather than owned by NIP-CASH) and
+// nip47/controllers/create_circle_wallet_identity.go (Kind 23199: NIP-CW's
+// own, separate per-call identity proof).
 const (
-	nostrKindClaimProof    = 35521
-	nostrKindIAAttestation = 35522
+	nostrKindClaimProof          = 23198
+	nostrKindCircleIdentityProof = 23199
+	nostrKindIAAttestation       = 35522
 )
 
-// buildClaimProofEvent builds and signs a kind-35521 claim proof bound to
+// buildClaimProofEvent builds and signs a kind-23198 claim proof bound to
 // walletPubkey and bolt11Hash — the binding that makes an intercepted proof
 // unusable for any invoice other than the one it was signed for, which
 // matters because a cash_wallet's connection is meant to be shared/public.
@@ -64,7 +68,7 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 	return ev
 }
 
-// buildTransferProofEvent builds and signs a kind-35521 transfer proof bound
+// buildTransferProofEvent builds and signs a kind-23198 transfer proof bound
 // to walletPubkey, the target (newIdentityType, newIdentityValue,
 // newIAPubkey), AND the exact amountMloki this proof authorizes — the
 // binding that stops an intercepted proof from being redirected to a
@@ -99,7 +103,11 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	return ev
 }
 
-// buildIAAttestationEvent builds and signs a kind-35522 IA attestation.
+// buildIAAttestationEvent builds and signs a kind-35522 IA attestation,
+// carrying the platform/evidence tags verifyClaimAttestationEvent requires
+// (matching a real nipIC.NewAttestation-produced event's shape) alongside the
+// usual d/p/expiration bindings. platform/evidence content is fixed and not
+// test-parameterized since no test here needs to vary it.
 func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNostrPubkey string, expireOffset time.Duration) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
@@ -108,6 +116,8 @@ func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNos
 		Tags: nostr.Tags{
 			{"d", connectionKey},
 			{"p", claimantNostrPubkey},
+			{"platform", "discord"},
+			{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
 			{"expiration", fmt.Sprintf("%d", time.Now().Add(expireOffset).Unix())},
 		},
 	}
@@ -115,14 +125,14 @@ func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNos
 	return ev
 }
 
-// buildCircleWalletIdentityEvent builds and signs a kind-35521 proof that the
+// buildCircleWalletIdentityEvent builds and signs a kind-23199 proof that the
 // caller controls requesterPrivkey, bound to this specific circle hub via the
 // d-tag (nip47/controllers/create_circle_wallet_identity.go) — hubAppPubkey
 // is the hub connection's own ClientPubkey(), not its WalletPubkey().
 func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
 		Tags:      nostr.Tags{{"d", hubAppPubkey}},
 	}
@@ -137,7 +147,7 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey
 func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue string, createdAt time.Time) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Timestamp(createdAt.Unix()),
 		Tags:      nostr.Tags{{"d", dTagValue}},
 	}
@@ -158,7 +168,7 @@ func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue
 func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubAppPubkey, disambiguator string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
 		Tags:      nostr.Tags{{"d", hubAppPubkey}, {"disambiguator", disambiguator}},
 	}

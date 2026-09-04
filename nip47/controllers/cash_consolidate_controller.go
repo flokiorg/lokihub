@@ -16,7 +16,7 @@ import (
 )
 
 // consolidateSourceParam is one input slice to a consolidation: a signed
-// kind-35521 identity_event proof against the source slice's current
+// kind-23198 identity_event proof against the source slice's current
 // registered pubkey identity, plus the wallet_pubkey identifying which
 // cash_wallet the slice lives in. connection_key and bearer sources are both
 // deferred (see the handler) — bearer specifically because its secret would

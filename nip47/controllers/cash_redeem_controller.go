@@ -22,14 +22,24 @@ import (
 const (
 	// nostrKindClaimProof is a recipient's per-claim proof of identity. Unlike
 	// the old kind-35521 "identity declaration" (a static, reusable
-	// declaration of connection_key ownership), this event is signed fresh for
-	// each cash_redeem call and is bound to one specific wallet AND one
-	// specific invoice (see verifyClaimIdentityEvent) — a captured/intercepted
-	// copy of it is useless for any invoice other than the one it was signed
-	// for, which matters here because a cash_wallet's connection is meant to be
+	// declaration of connection_key ownership) — and unlike NIP-IC's own
+	// kind 35521 (Identity Connection), a genuinely different, similarly
+	// long-lived claim this event was never compatible with despite sharing
+	// its number — this event is signed fresh for each cash_redeem call and
+	// is bound to one specific wallet AND one specific invoice (see
+	// verifyClaimIdentityEvent) — a captured/intercepted copy of it is
+	// useless for any invoice other than the one it was signed for, which
+	// matters here because a cash_wallet's connection is meant to be
 	// shared/public, so anyone holding it can decrypt every cash_redeem
-	// request sent on it, including other recipients'.
-	nostrKindClaimProof = 35521
+	// request sent on it, including other recipients'. Kind 23198 (not
+	// 35521): this proof is never independently published to a relay — it
+	// only ever travels embedded inside an already end-to-end-encrypted
+	// NIP-47 request body — so it belongs in the ephemeral range
+	// (20000-29999), not the addressable/parameterized-replaceable range
+	// (30000-39999) NIP-IC's long-lived claim correctly uses. 23198 sits
+	// directly adjacent to NIP-47's own 23194-23197 block, since this NIP
+	// depends on NIP-47.
+	nostrKindClaimProof = 23198
 	// nostrKindIAAttestation is unchanged from the old design: an Identity
 	// Authority's signed attestation that a given nostr pubkey owns a given
 	// connection_key. Only used for identity_type == connection_key.
@@ -50,7 +60,7 @@ type cashRedeemParams struct {
 	Amount        *uint64 `json:"amount,omitempty"`         // override for amountless invoices, mirrors pay_invoice
 	IdentityType  string  `json:"identity_type,omitempty"`  // "pubkey" | "connection_key" — omit entirely for a bearer slice
 	IdentityValue string  `json:"identity_value,omitempty"` // omit entirely for a bearer slice
-	// IdentityEvent is the JSON-encoded kind-35521 claim proof, signed fresh
+	// IdentityEvent is the JSON-encoded kind-23198 claim proof, signed fresh
 	// for this call and bound to this wallet + this invoice. Omit entirely
 	// for a bearer slice, which has no identity to sign with.
 	IdentityEvent string `json:"identity_event,omitempty"`
@@ -166,7 +176,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 
-	// 6. Parse and verify the kind-35521 claim proof — identity-bound slices
+	// 6. Parse and verify the kind-23198 claim proof — identity-bound slices
 	// only. A bearer slice's entire proof is the hash-matched lookup in step
 	// 5 above: presenting the correct secret is necessary and sufficient, so
 	// there is nothing further to verify here.
@@ -337,7 +347,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	}, tags)
 }
 
-// verifyClaimIdentityEvent checks a kind-35521 claim proof: valid signature;
+// verifyClaimIdentityEvent checks a kind-23198 claim proof: valid signature;
 // bound to this exact wallet (d-tag) and this exact invoice (bolt11_hash
 // tag) — the binding that makes an intercepted proof unusable for any
 // invoice other than the one it was created for, which matters on a shared/
@@ -401,23 +411,37 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // verifyClaimAttestationEvent checks a kind-35522 event is validly signed by
 // iaPubkey (the IA recorded on this slice at wallet-creation time), has the
 // correct d-tag (connectionKey) and p-tag (the claimant's real nostr
-// pubkey — identity_event's own signer), and carries a valid, unexpired
-// expiration tag (NIP-40).
+// pubkey — identity_event's own signer), carries a valid, unexpired
+// expiration tag (NIP-40), and carries the platform/evidence tags NIP-IC's
+// own Attestation shape requires.
 //
 // The expiration tag is mandatory here, not merely checked-if-present: this
 // codebase's trust model only supports revoking an Identity Authority as a
 // whole (apps.IdentityAuthorityManager.IsTrusted — called by
 // HandleCashRedeemEvent, step 7, right before this function runs, so a
 // revoked IA is rejected before its attestation's own tags are even
-// examined) — unlike the wider IA attestation protocol this event shape
-// is drawn from, there is no per-attestation revocation (no NIP-09 kind-5
-// deletion check against the issuing relay). A single mistaken or
-// compromised attestation can't be individually revoked; between IA
-// revocation and its own expiration, expiration is what bounds how long a
-// not-yet-revoked-but-later-to-be-revoked attestation stays honorable. An
-// attestation with no expiration at all (or one that fails to parse)
-// would never lapse, permanently short-circuiting that safety net, so
-// it's rejected rather than treated as eternally valid.
+// examined) — unlike NIP-IC's own attestation model, this codebase has no
+// per-attestation revocation (no NIP-09 kind-5 deletion check against the
+// issuing relay). A single mistaken or compromised attestation can't be
+// individually revoked; between IA revocation and its own expiration,
+// expiration is what bounds how long a not-yet-revoked-but-later-to-be-
+// revoked attestation stays honorable. An attestation with no expiration at
+// all (or one that fails to parse) would never lapse, permanently
+// short-circuiting that safety net, so it's rejected rather than treated as
+// eternally valid. This is a deliberate divergence from NIP-IC's own
+// ParseAttestation, which treats expiration as optional precisely because it
+// has real per-attestation revocation to fall back on instead — see
+// NIP-CASH.md's own Security Considerations for the same reasoning written
+// down at the spec level.
+//
+// platform/evidence presence (not content) is checked so a malformed or
+// non-NIP-IC-shaped attestation can't slip through just because this
+// function never previously looked at those two tags — a real
+// nipIC.NewAttestation-produced event always carries both. Their content
+// isn't interpreted for anything: this codebase doesn't need Username/
+// EvidenceURL/etc. for any decision, so it validates evidence is
+// syntactically well-formed JSON without adopting NIP-IC's full typed
+// evidence schema.
 //
 // Like verifyClaimIdentityEvent's own ev.ID, this never calls ev.CheckID(): the
 // claim proof's e-tag (checked by the caller before this runs) only has to
@@ -457,6 +481,17 @@ func verifyClaimAttestationEvent(ev *nostr.Event, iaPubkey, nostrPubkey, connect
 	}
 	if time.Now().Unix() > expUnix {
 		return fmt.Errorf("attestation_event has expired")
+	}
+	platformTag := ev.Tags.Find("platform")
+	if len(platformTag) < 2 || platformTag[1] == "" {
+		return fmt.Errorf("attestation_event is missing a required platform tag")
+	}
+	evidenceTag := ev.Tags.Find("evidence")
+	if len(evidenceTag) < 2 || evidenceTag[1] == "" {
+		return fmt.Errorf("attestation_event is missing a required evidence tag")
+	}
+	if !json.Valid([]byte(evidenceTag[1])) {
+		return fmt.Errorf("attestation_event evidence tag is not valid JSON")
 	}
 	return nil
 }
