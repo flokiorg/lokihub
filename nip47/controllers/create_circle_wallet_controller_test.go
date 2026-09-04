@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,14 +19,14 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// buildCircleWalletIdentityEvent builds and signs a kind-35521 proof that the
+// buildCircleWalletIdentityEvent builds and signs a kind-23199 proof that the
 // caller controls requesterPrivkey, bound to this specific hub via the d-tag
-// — mirrors buildClaimProofEvent (claim_funds_controller_test.go) for the
+// — mirrors buildClaimProofEvent (cash_redeem_controller_test.go) for the
 // simpler circle case (always self-proof, no invoice/attestation binding).
 func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
-		Kind:      nostrKindClaimProof,
+		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
 		Tags:      nostr.Tags{{"d", hubAppPubkey}},
 	}
@@ -41,11 +42,11 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey
 func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubAppPubkey string, maxAmountMloki uint64, expirationSecs int) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
-	params := createCircleWalletParams{
-		RequesterPubkey: requesterPubkey,
-		MaxAmount:       maxAmountMloki,
-		Expiry:          expirationSecs,
-		IdentityEvent:   mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubAppPubkey)),
+	params := nipcw.CreateCircleWalletRequest{
+		Pubkey:        requesterPubkey,
+		MaxAmount:     maxAmountMloki,
+		Expiry:        expirationSecs,
+		IdentityEvent: mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubAppPubkey)),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)
@@ -631,12 +632,12 @@ func TestHandleCreateCircleWalletEvent_NonRoundMloki_CapRoundsDownSafely(t *test
 func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubAppPubkey string, maxAmountMloki uint64, expirationSecs int, budgetRenewal string) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
-	params := createCircleWalletParams{
-		RequesterPubkey: requesterPubkey,
-		MaxAmount:       maxAmountMloki,
-		Expiry:          expirationSecs,
-		BudgetRenewal:   budgetRenewal,
-		IdentityEvent:   mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubAppPubkey)),
+	params := nipcw.CreateCircleWalletRequest{
+		Pubkey:        requesterPubkey,
+		MaxAmount:     maxAmountMloki,
+		Expiry:        expirationSecs,
+		BudgetRenewal: budgetRenewal,
+		IdentityEvent: mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubAppPubkey)),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)

@@ -17,11 +17,20 @@ export const LIST_TRANSACTIONS_LIMIT = 20;
 export const LIST_APPS_LIMIT = 20;
 export const LIST_CIRCLE_CHILDREN_LIMIT = 20;
 export const LIST_CIRCLE_ALLOWLIST_LIMIT = 20;
-export const LIST_JIT_ALLOCATIONS_LIMIT = 20;
+export const LIST_CASH_ALLOCATIONS_LIMIT = 20;
 
 
 export const SUBWALLET_APPSTORE_APP_ID = "lokies";
 export const LOKI_ACCOUNT_APP_NAME = "loki-account";
+
+// App.kind values for top-level subwallets (a hub, or a standalone
+// isolated wallet) — every kind that can be grouped with its siblings via
+// useSiblingHubs. Distinct from SUBWALLET_HUB_CHILD_KINDS below, which are
+// a hub's own children, grouped with useHubChildren instead.
+export const SUBWALLET_HUB_KINDS = ["cash_hub", "circle_hub", "isolated"];
+// App.kind values for a hub's children — grouped with their siblings under
+// the same parent hub via useHubChildren (App.parentAppId), not by kind.
+export const SUBWALLET_HUB_CHILD_KINDS = ["cash_wallet", "circle_wallet"];
 
 export const DEFAULT_APP_BUDGET_LOKI = 21 * 100_000_000; // 21 FLC — matches the first FLC preset
 export const DEFAULT_APP_BUDGET_RENEWAL = "monthly";
@@ -31,7 +40,7 @@ export const FLOKICOIN_DISPLAY_FORMAT_LOKI = "loki";
 export const FLOKICOIN_DISPLAY_FORMAT_AUTO = "auto";
 
 // WEEK_SCALE_PRESETS is for DurationInput callers on a longer timescale than
-// JIT's hour/day-scale default (e.g. a Circle Hub's max wallet expiry).
+// Cash Hub's hour/day-scale default (e.g. a Circle Hub's max wallet expiry).
 export const WEEK_SCALE_PRESETS: { label: string; seconds: number }[] = [
   { label: "1 week", seconds: 7 * 86400 },
   { label: "1 month", seconds: 30 * 86400 },

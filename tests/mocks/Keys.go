@@ -120,11 +120,11 @@ func (_mock *MockKeys) GetAppWalletKey(childIndex uint) (string, error) {
 	return r0, r1
 }
 
-// GetJITPairingKey provides a mock function for the type MockKeys
-func (_mock *MockKeys) GetJITPairingKey(appID uint) (string, error) {
+// GetCashPairingKey provides a mock function for the type MockKeys
+func (_mock *MockKeys) GetCashPairingKey(appID uint) (string, error) {
 	ret := _mock.Called(appID)
 	if len(ret) == 0 {
-		panic("no return value specified for GetJITPairingKey")
+		panic("no return value specified for GetCashPairingKey")
 	}
 	var r0 string
 	var r1 error
@@ -144,30 +144,30 @@ func (_mock *MockKeys) GetJITPairingKey(appID uint) (string, error) {
 	return r0, r1
 }
 
-// MockKeys_GetJITPairingKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetJITPairingKey'
-type MockKeys_GetJITPairingKey_Call struct {
+// MockKeys_GetCashPairingKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCashPairingKey'
+type MockKeys_GetCashPairingKey_Call struct {
 	*mock.Call
 }
 
-// GetJITPairingKey is a helper method to define mock.On call
+// GetCashPairingKey is a helper method to define mock.On call
 //   - appID
-func (_e *MockKeys_Expecter) GetJITPairingKey(appID interface{}) *MockKeys_GetJITPairingKey_Call {
-	return &MockKeys_GetJITPairingKey_Call{Call: _e.mock.On("GetJITPairingKey", appID)}
+func (_e *MockKeys_Expecter) GetCashPairingKey(appID interface{}) *MockKeys_GetCashPairingKey_Call {
+	return &MockKeys_GetCashPairingKey_Call{Call: _e.mock.On("GetCashPairingKey", appID)}
 }
 
-func (_c *MockKeys_GetJITPairingKey_Call) Run(run func(appID uint)) *MockKeys_GetJITPairingKey_Call {
+func (_c *MockKeys_GetCashPairingKey_Call) Run(run func(appID uint)) *MockKeys_GetCashPairingKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(uint))
 	})
 	return _c
 }
 
-func (_c *MockKeys_GetJITPairingKey_Call) Return(s string, err error) *MockKeys_GetJITPairingKey_Call {
+func (_c *MockKeys_GetCashPairingKey_Call) Return(s string, err error) *MockKeys_GetCashPairingKey_Call {
 	_c.Call.Return(s, err)
 	return _c
 }
 
-func (_c *MockKeys_GetJITPairingKey_Call) RunAndReturn(run func(appID uint) (string, error)) *MockKeys_GetJITPairingKey_Call {
+func (_c *MockKeys_GetCashPairingKey_Call) RunAndReturn(run func(appID uint) (string, error)) *MockKeys_GetCashPairingKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

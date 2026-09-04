@@ -1,17 +1,18 @@
 import {
-    BellIcon,
-    CirclePlusIcon,
-    CrownIcon,
-    GiftIcon,
-    HandCoinsIcon,
-    InfoIcon,
-    LucideIcon,
-    NetworkIcon,
-    NotebookTabsIcon,
-    PenLineIcon,
-    SearchIcon,
-    UsersIcon,
-    WalletMinimalIcon,
+  ArrowRightLeftIcon,
+  BellIcon,
+  CirclePlusIcon,
+  CrownIcon,
+  GiftIcon,
+  HandCoinsIcon,
+  InfoIcon,
+  LucideIcon,
+  NetworkIcon,
+  NotebookTabsIcon,
+  PenLineIcon,
+  SearchIcon,
+  UsersIcon,
+  WalletMinimalIcon,
 } from "lucide-react";
 
 export type BackendType = "FLND";
@@ -50,9 +51,10 @@ export type Scope =
   | "sign_message"
   | "notifications" // covers all notification types
   | "superuser"
-  | "jit_hub"
+  | "cash_hub"
   | "circle_wallet"
-  | "jit_claim_funds";
+  | "cash_redeem"
+  | "cash_transfer";
 
 export type Nip47NotificationType = "payment_received" | "payment_sent";
 
@@ -70,9 +72,10 @@ export const scopeIconMap: ScopeIconMap = {
   sign_message: PenLineIcon,
   notifications: BellIcon,
   superuser: CrownIcon,
-  jit_hub: NetworkIcon,
+  cash_hub: NetworkIcon,
   circle_wallet: UsersIcon,
-  jit_claim_funds: GiftIcon,
+  cash_redeem: GiftIcon,
+  cash_transfer: ArrowRightLeftIcon,
 };
 
 export type WalletCapabilities = {
@@ -99,9 +102,10 @@ export const scopeDescriptions: Record<Scope, string> = {
   sign_message: "Sign messages",
   notifications: "Receive wallet notifications",
   superuser: "Create other app connections",
-  jit_hub: "Issue spend-only wallets on demand to beneficiaries",
+  cash_hub: "Mint spend-only Lokicash on demand to beneficiaries",
   circle_wallet: "Issue wallets to your circle's members",
-  jit_claim_funds: "Claim your allocated share of a shared JIT wallet",
+  cash_redeem: "Claim your allocated share of a shared Cash wallet",
+  cash_transfer: "Transfer or split an unclaimed share to someone else",
 };
 
 export const expiryOptions: Record<string, number> = {
@@ -135,6 +139,12 @@ export interface App {
   expiresAt?: string;
   isolated: boolean;
   kind?: string;
+  // parentAppId/parentKind are set only on a Cash/Circle Hub's own children
+  // (cash_wallet/circle_wallet), identifying which specific hub issued
+  // them — used to group siblings under the same hub in the connection
+  // switcher, instead of the hub's own id/kind.
+  parentAppId?: number;
+  parentKind?: string;
   balance: number;
 
   scopes: Scope[];
@@ -158,10 +168,17 @@ export interface App {
     // yet known, same loading semantics as followingCount.
     policySyncedAt?: string;
   };
-  // jitPerWalletMaxMloki/jitMaxExpSecs are set only for jit_hub apps — the
-  // hub-wide defaults set at creation time, editable from Edit Connection.
-  jitPerWalletMaxMloki?: number;
-  jitMaxExpSecs?: number;
+  // cashPerWalletMaxMloki/cashMaxExpSecs/cashMinTransferMloki/cashRedeemFeePpm
+  // are set only for cash_hub apps — the hub-wide defaults set at creation
+  // time, editable from Edit Connection. cashMinTransferMloki (0 = no floor)
+  // is the default floor a freshly-minted wallet's slices inherit for
+  // cash_transfer splitting. cashRedeemFeePpm (0 = free) is the default
+  // per-million cash_redeem fee a freshly-minted wallet's slices inherit,
+  // charged only on a genuine external redemption.
+  cashPerWalletMaxMloki?: number;
+  cashMaxExpSecs?: number;
+  cashMinTransferMloki?: number;
+  cashRedeemFeePpm?: number;
   // circleMaxExpSecs/circleFeesPpm/circlePerWalletMaxMloki/circleMinBudgetRenewal
   // are set only for circle_hub apps, for the same reason as above.
   circleMaxExpSecs?: number;
@@ -203,13 +220,13 @@ export interface AppPermissions {
   budgetRenewal: BudgetRenewalType;
   expiresAt?: Date;
   isolated: boolean;
-  // jitHub/jitPerWalletMaxLoki/jitMaxExpSecs are only meaningful for a new
-  // connection (isNewConnection) — they select kind "jit_hub" instead of
+  // cashHub/cashPerWalletMaxLoki/cashMaxExpSecs are only meaningful for a new
+  // connection (isNewConnection) — they select kind "cash_hub" instead of
   // "isolated" at creation time and are never editable afterward here (see
   // AppDetails' dedicated Hub Settings card for that).
-  jitHub?: boolean;
-  jitPerWalletMaxLoki?: number;
-  jitMaxExpSecs?: number;
+  cashHub?: boolean;
+  cashPerWalletMaxLoki?: number;
+  cashMaxExpSecs?: number;
 }
 
 export interface LSP {
@@ -275,9 +292,9 @@ export type Network = "flokicoin" | "testnet" | "signet";
 export type AppMetadata = {
   app_store_app_id?: string;
   lud16?: string;
-  // Full nostr pubkey behind a JIT/circle wallet's identity, stored for
+  // Full nostr pubkey behind a Cash/circle wallet's identity, stored for
   // display purposes (resolving a profile name instead of the npub prefix
-  // baked into the app name). "identity_pubkey" for JIT wallets (pubkey mode
+  // baked into the app name). "identity_pubkey" for Cash wallets (pubkey mode
   // at creation, connection_key mode once claimed), "requester_pubkey" for
   // circle wallets.
   identity_pubkey?: string;
@@ -348,8 +365,10 @@ export interface CreateAppRequest {
   scopes: Scope[];
   returnTo?: string;
   kind?: string;
-  jitPerWalletMaxMloki?: number;
-  jitMaxExpSecs?: number;
+  cashPerWalletMaxMloki?: number;
+  cashMaxExpSecs?: number;
+  cashMinTransferMloki?: number;
+  cashRedeemFeePpm?: number;
   circleMaxExpSecs?: number;
   circleFeesPpm?: number;
   circlePerWalletMaxMloki?: number;
@@ -408,9 +427,11 @@ export type UpdateAppRequest = {
   scopes?: Scope[];
   metadata?: AppMetadata;
   isolated?: boolean;
-  // jit_hub only
-  jitPerWalletMaxMloki?: number;
-  jitMaxExpSecs?: number;
+  // cash_hub only
+  cashPerWalletMaxMloki?: number;
+  cashMaxExpSecs?: number;
+  cashMinTransferMloki?: number;
+  cashRedeemFeePpm?: number;
   // circle_hub only
   circleMaxExpSecs?: number;
   circleFeesPpm?: number;
@@ -475,8 +496,6 @@ export type PayInvoiceResponse = {
   preimage: string;
   fee: number;
 };
-
-
 
 export type CreateInvoiceRequest = {
   amount: number;
@@ -571,7 +590,7 @@ export type SetupNodeInfo = Partial<{
 
   autoConnect?: boolean;
   // customConfig removed
-  
+
   lokihubServicesURL?: string;
   swapServiceUrl?: string;
   relay?: string;
@@ -583,8 +602,6 @@ export type SetupNodeInfo = Partial<{
 }>;
 
 export type LSPType = "LSPS1";
-
-
 
 export type LokiInfo = {
   version: string;
@@ -766,11 +783,11 @@ export type LSPS1CreateOrderResponse = {
 };
 
 export type LSPS1GetOrderResponse = {
-    order_id: string;
-    state: string;
-    payment_invoice: string;
-    fee_total_loki?: number;
-    order_total_loki?: number;
+  order_id: string;
+  state: string;
+  payment_invoice: string;
+  fee_total_loki?: number;
+  order_total_loki?: number;
 };
 
 export interface LSPS1Order {
@@ -789,7 +806,6 @@ export interface LSPS1Order {
 export type LSPS1ListOrdersResponse = {
   orders: LSPS1Order[];
 };
-
 
 export type ListAppsResponse = {
   apps: App[];
@@ -829,7 +845,6 @@ export type AuthTokenResponse = {
   token: string;
 };
 
-
 export type GetForwardsResponse = {
   outboundAmountForwardedMloki: number;
   totalFeeEarnedMloki: number;
@@ -867,55 +882,92 @@ export interface LSPS2BuyResponse {
   lspNodeID: string;
 }
 
-// JITWalletClaim represents one recipient's slice of a (possibly shared)
-// jit_wallet. id is the claim's own row ID (DELETE
-// /jit-wallets/{wallet_app_id}/claims/{id}, unclaimed only); wallet_app_id
+// CashWalletClaim represents one recipient's slice of a (possibly shared)
+// cash_wallet. id is the claim's own row ID (DELETE
+// /cash-wallets/{wallet_app_id}/claims/{id}, unclaimed only); wallet_app_id
 // identifies the shared connection this slice belongs to (reveal via
-// /jit-connection, delete the whole wallet via DELETE
-// /jit-wallets/{wallet_app_id}). claimed is a plain boolean — claim_funds
+// /cash-connection, delete the whole wallet via DELETE
+// /cash-wallets/{wallet_app_id}). claimed is a plain boolean — cash_redeem
 // either pays a slice out completely or not at all, so there's no
 // partial/active state to derive.
-export interface JITWalletClaim {
+export interface CashWalletClaim {
   id: number;
   wallet_app_id: number;
-  identity_type: "pubkey" | "connection_key";
+  // "bearer" has no identity at all — identity_value is a one-way
+  // commitment (sha256 of a secret only the recipient holds), never an
+  // actual identity, and there is always exactly one claim row per wallet
+  // when this is "bearer" (NIP-CASH §Bearer Slices: a bearer slice never
+  // shares a wallet with another recipient).
+  identity_type: "pubkey" | "connection_key" | "bearer";
   identity_value: string;
   amount_mloki: number;
   expires_at?: number;
   claimed: boolean;
   claimed_at?: number;
   created_at: number;
+  // min_transfer_mloki floors how small a future split off this slice (or
+  // its remainder) may be (0 = no floor). Set once, at creation or inherited
+  // from a split's source slice.
+  min_transfer_mloki: number;
+  // redeem_fee_ppm is this slice's own locked-in redeem fee rate (0 = free),
+  // fixed once at creation or inherited unchanged from a split's source
+  // slice — never retroactively affected by a later change to the Hub's own
+  // default.
+  redeem_fee_ppm: number;
+  // Set when this slice's value was moved into a brand-new dedicated
+  // cash_wallet via a split, rather than redeemed — purely informational.
+  spun_off_to_wallet_app_id?: number;
+  // The wallet's own connection, packaged as a lokicash1... string —
+  // identical for every claim sharing the same wallet_app_id. Only
+  // populated for the page of results actually returned.
+  cash_token?: string;
 }
 
-export type JITAllocationStatus = "unclaimed" | "claimed" | "expired";
+export type CashAllocationStatus = "unclaimed" | "claimed" | "expired";
 
-export interface JITWalletClaimCounts {
+export interface CashWalletClaimCounts {
   all: number;
   unclaimed: number;
   claimed: number;
   expired: number;
 }
 
-export interface ListJITWalletClaimsResponse {
-  claims: JITWalletClaim[];
+export interface ListCashWalletClaimsResponse {
+  claims: CashWalletClaim[];
   totalCount: number;
-  counts: JITWalletClaimCounts;
+  counts: CashWalletClaimCounts;
 }
 
-// JITWalletRecipient describes one recipient's requested slice when creating
-// a (possibly shared) JIT wallet.
-export interface JITWalletRecipient {
-  identity_type: "pubkey" | "connection_key";
-  identity_value: string;
+// CashWalletRecipient describes one recipient's requested slice when
+// creating a (possibly shared) Cash wallet. For identity_type === "bearer",
+// the caller MUST NOT set identity_value or ia_pubkey — the wallet mints the
+// bearer secret itself, and a bearer recipient MUST be the request's only
+// one (NIP-CASH §Bearer Slices).
+export interface CashWalletRecipient {
+  identity_type: "pubkey" | "connection_key" | "bearer";
+  identity_value?: string;
   ia_pubkey?: string; // required iff identity_type === "connection_key"
   amount_mloki: number;
+  // bearer_secret is response-only: populated when identity_type ===
+  // "bearer", and only in the create_cash_wallet response — it is never
+  // retrievable again afterward (NIP-CASH §Bearer Slices).
+  bearer_secret?: string;
 }
 
-export interface CreateJITWalletResponse {
+export interface CreateCashWalletResponse {
   app_id: number;
   pairing_uri: string;
+  cash_token: string;
   expires_at: number;
-  recipients: JITWalletRecipient[];
+  recipients: CashWalletRecipient[];
+}
+
+// CashWalletConnectionResponse is GET /api/apps/{id}/cash-connection's
+// response — the same connection data CreateCashWalletResponse carries,
+// re-derivable at any later time (NIP-CASH §The Pairing Connection).
+export interface CashWalletConnectionResponse {
+  pairing_uri: string;
+  cash_token: string;
 }
 
 export interface IdentityAuthority {
@@ -923,5 +975,9 @@ export interface IdentityAuthority {
   name: string;
   relay_urls?: string[];
   created_at: number;
+  // How many currently-unclaimed connection_key Cash Wallet slices this IA
+  // has attested for right now — the live blast radius a revocation would
+  // immediately strand. Populated by GET /api/identity-authorities; not
+  // meaningful on a just-added IA's own POST response (nothing to count yet).
+  unredeemed_slice_count: number;
 }
-

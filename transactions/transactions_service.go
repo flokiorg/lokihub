@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -45,7 +46,7 @@ type InternalMakeInvoiceMeta struct {
 	// Used only by the Transfer endpoint to route an invoice to a specific sub-wallet.
 	OverrideAppID *uint
 	// InternalTransfer marks the invoice as a hub-internal fund movement,
-	// skipping JIT liquidity provisioning and external fee checks.
+	// skipping Cash liquidity provisioning and external fee checks.
 	InternalTransfer bool
 }
 
@@ -154,35 +155,35 @@ func (err *quotaExceededError) Error() string {
 	return "Your app does not have enough budget remaining to make this payment. Please review this app in the connections page of your Lokihub."
 }
 
-type jitPartialSpendError struct{}
+type cashPartialSpendError struct{}
 
-func NewJITPartialSpendError() error {
-	return &jitPartialSpendError{}
+func NewCashPartialSpendError() error {
+	return &cashPartialSpendError{}
 }
 
-func (err *jitPartialSpendError) Error() string {
-	return "JIT wallet must be drained in a single payment (no partial spends allowed)"
+func (err *cashPartialSpendError) Error() string {
+	return "Cash wallet must be drained in a single payment (no partial spends allowed)"
 }
 
-// enforceJITFullDrain returns jitPartialSpendError if a JIT wallet payment would
+// enforceCashFullDrain returns cashPartialSpendError if a Cash wallet payment would
 // leave more than its fee reserve behind. Shared by SendPaymentSync and
 // SendKeysend so the two payment paths can't silently diverge on this check —
 // they previously duplicated it, and only one of the two copies carried the
-// internal-transfer exemption. isInternalTransfer and isJITClaimSlice are
+// internal-transfer exemption. isInternalTransfer and isCashClaimSlice are
 // explicit at every call site (SendKeysend currently has neither path and
 // passes false for both) so that a future addition to either path only needs
 // to thread its own metadata flag through, not rediscover this rule.
 //
-// isJITClaimSlice exempts claim_funds' payout of one recipient's slice of a
-// SHARED jit_wallet (see nip47/controllers/claim_funds_controller.go). This
+// isCashClaimSlice exempts cash_redeem' payout of one recipient's slice of a
+// SHARED cash_wallet (see nip47/controllers/cash_redeem_controller.go). This
 // whole-wallet-balance check is wrong for that case: it would reject a
 // recipient's payout whenever OTHER recipients' unclaimed slices are still
-// sitting in the same balance. claim_funds already enforces the correct,
+// sitting in the same balance. cash_redeem already enforces the correct,
 // stronger, per-slice exact-amount rule itself before calling
 // SendPaymentSync/SendKeysend with this flag set — this check only ever
 // exists to catch partial spends on an otherwise-unconstrained payment path.
-func enforceJITFullDrain(parentKind string, balance int64, amount uint64, isInternalTransfer, isJITClaimSlice bool) error {
-	if parentKind != db.ParentKindJIT || isInternalTransfer || isJITClaimSlice {
+func enforceCashFullDrain(parentKind string, balance int64, amount uint64, isInternalTransfer, isCashClaimSlice bool) error {
+	if parentKind != db.ParentKindCash || isInternalTransfer || isCashClaimSlice {
 		return nil
 	}
 	feeReserve := CalculateFeeReserveMloki(amount)
@@ -190,7 +191,7 @@ func enforceJITFullDrain(parentKind string, balance int64, amount uint64, isInte
 	// this is called; balance/feeReserve are LN mloki amounts, always far
 	// below int64 range.
 	if balance-int64(amount) > int64(feeReserve) { //nolint:gosec
-		return NewJITPartialSpendError()
+		return NewCashPartialSpendError()
 	}
 	return nil
 }
@@ -246,7 +247,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 		isInternalTransfer = internal.InternalTransfer
 	}
 
-	// JIT Liquidity Check
+	// Cash Liquidity Check
 	invoiceAmount := amount // Default to requested amount
 
 	if svc.liquidityManager != nil && lspJitChannelSCID == nil && !isInternalTransfer {
@@ -255,7 +256,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 			svc.logger.Error().Err(err).Msg("Failed to ensure inbound liquidity")
 			// We continue anyway, but log error
 		} else if jitHints != nil {
-			svc.logger.Info().Msg("Applying JIT channel hints to invoice")
+			svc.logger.Info().Msg("Applying Cash channel hints to invoice")
 			throughNodePubkey = &jitHints.LSPNodeID
 			lspJitChannelSCID = &jitHints.SCID
 			lspCltvExpiryDelta = &jitHints.CLTVExpiryDelta
@@ -272,7 +273,7 @@ func (svc *transactionsService) MakeInvoice(ctx context.Context, amount uint64, 
 			if amount > fee {
 				invoiceAmount = amount - fee
 			} else {
-				svc.logger.Warn().Uint64("amount", amount).Uint64("fee", fee).Msg("JIT Fee exceeds payment amount! Invoice will be 0 net.")
+				svc.logger.Warn().Uint64("amount", amount).Uint64("fee", fee).Msg("Cash Fee exceeds payment amount! Invoice will be 0 net.")
 				invoiceAmount = 0 // Should probably fail?
 			}
 		}
@@ -404,22 +405,12 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		return nil, errors.New("this invoice has expired")
 	}
 
-	selfPayment := false
-	if paymentRequest.Payee != "" && paymentRequest.Payee == lnClient.GetPubkey() {
-		var incomingTransaction db.Transaction
-		result := svc.db.Limit(1).Find(&incomingTransaction, &db.Transaction{
-			Type:        constants.TRANSACTION_TYPE_INCOMING,
-			PaymentHash: paymentRequest.PaymentHash,
-		})
-		if result.Error == nil && result.RowsAffected > 0 {
-			selfPayment = true
-		}
-	}
+	selfPayment := IsSelfPayment(svc.db, paymentRequest, lnClient)
 
 	var dbTransaction db.Transaction
 
-	paymentAmount := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int/uint64 range
-	if amountMloki != nil && paymentRequest.MSat == 0 {
+	paymentAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int/uint64 range
+	if amountMloki != nil && paymentRequest.AmountMloki == 0 {
 		paymentAmount = *amountMloki
 	}
 
@@ -448,26 +439,38 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			return errors.New("there is already a payment pending for this invoice")
 		}
 
-		// Internal transfers (hub cleanup, self-payment) and claim_funds' own
+		// Internal transfers (hub cleanup, self-payment) and cash_redeem' own
 		// per-slice payout (which enforces its own, stronger exact-amount rule
 		// upstream) are exempt from both the fee-reserve balance/quota headroom
 		// (validateCanPay) and the whole-wallet full-drain shape check
-		// (enforceJITFullDrain) below. Internal transfers are additionally
+		// (enforceCashFullDrain) below. Internal transfers are additionally
 		// exempt from the MaxAmountLoki budget cap itself (skipBudgetCap) -
 		// see validateCanPay's doc comment.
 		isInternalTransfer, _ := metadata["internal_transfer"].(bool)
-		isJITClaimSlice, _ := metadata["jit_claim_slice"].(bool)
+		isCashClaimSlice, _ := metadata["cash_claim_slice"].(bool)
+		// cashRedeemFeeMloki is set only by cash_redeem_controller.go — the
+		// redeem fee it already quoted to the recipient (and deducted from
+		// paymentAmount) BEFORE this call, computed from the slice's own
+		// CashWalletClaim.RedeemFeePpm, 0 for a same-node redemption. Carried
+		// onto the pending row below so markTransactionSettled can reconcile
+		// it against the real routing fee once known (reconcileCashRedeemFee)
+		// — see db.Transaction.CashRedeemFeeMloki's own doc comment for why
+		// this must stay out of FeeSkimMloki/validateCanPay entirely.
+		var cashRedeemFeeMloki *uint64
+		if v, ok := metadata["cash_redeem_fee_mloki"].(uint64); ok {
+			cashRedeemFeeMloki = &v
+		}
 
 		balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment, validateCanPayExemptions{
-			SkipFeeReserve: isJITClaimSlice,
+			SkipFeeReserve: isCashClaimSlice,
 			SkipBudgetCap:  isInternalTransfer,
 		})
 		if err != nil {
 			return err
 		}
-		// JIT wallets must drain their full balance in a single payment.
+		// Cash wallets must drain their full balance in a single payment.
 		// Enforced here (shared layer) so the HTTP API and keysend paths cannot bypass it.
-		if err := enforceJITFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isJITClaimSlice); err != nil {
+		if err := enforceCashFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isCashClaimSlice); err != nil {
 			return err
 		}
 
@@ -477,20 +480,21 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			expiresAt = &expiresAtValue
 		}
 		dbTransaction = db.Transaction{
-			AppId:           appId,
-			RequestEventId:  requestEventId,
-			Type:            constants.TRANSACTION_TYPE_OUTGOING,
-			State:           constants.TRANSACTION_STATE_PENDING,
-			FeeReserveMloki: CalculateFeeReserveMloki(paymentAmount),
-			FeeSkimMloki:    feeSkimMloki,
-			AmountMloki:     paymentAmount,
-			PaymentRequest:  payReq,
-			PaymentHash:     paymentRequest.PaymentHash,
-			Description:     paymentRequest.Description,
-			DescriptionHash: paymentRequest.DescriptionHash,
-			ExpiresAt:       expiresAt,
-			SelfPayment:     selfPayment,
-			Metadata:        datatypes.JSON(metadataBytes),
+			AppId:              appId,
+			RequestEventId:     requestEventId,
+			Type:               constants.TRANSACTION_TYPE_OUTGOING,
+			State:              constants.TRANSACTION_STATE_PENDING,
+			FeeReserveMloki:    CalculateFeeReserveMloki(paymentAmount),
+			FeeSkimMloki:       feeSkimMloki,
+			CashRedeemFeeMloki: cashRedeemFeeMloki,
+			AmountMloki:        paymentAmount,
+			PaymentRequest:     payReq,
+			PaymentHash:        paymentRequest.PaymentHash,
+			Description:        paymentRequest.Description,
+			DescriptionHash:    paymentRequest.DescriptionHash,
+			ExpiresAt:          expiresAt,
+			SelfPayment:        selfPayment,
+			Metadata:           datatypes.JSON(metadataBytes),
 		}
 		return tx.Create(&dbTransaction).Error
 	})
@@ -636,8 +640,8 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		if err != nil {
 			return err
 		}
-		// SendKeysend has no internal-transfer or claim_funds path today (see enforceJITFullDrain doc).
-		if err := enforceJITFullDrain(parentKind, balance, amount, false, false); err != nil {
+		// SendKeysend has no internal-transfer or cash_redeem path today (see enforceCashFullDrain doc).
+		if err := enforceCashFullDrain(parentKind, balance, amount, false, false); err != nil {
 			return err
 		}
 
@@ -1232,6 +1236,29 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 	}
 }
 
+// IsSelfPayment reports whether paymentRequest resolves to a payment that
+// never actually needs to leave this node's own Lightning liquidity — the
+// invoice's embedded payee matches this node's own pubkey, AND a matching
+// incoming db.Transaction row already exists for that exact payment hash
+// (any state), meaning some app on this same instance minted it via the
+// shared MakeInvoice path. Extracted from SendPaymentSync's own internal
+// self-payment detection (unchanged behavior) so a caller that needs to know
+// the answer BEFORE calling SendPaymentSync — e.g. cash_redeem_controller.go,
+// to decide whether its redeem fee applies to this specific redemption —
+// can ask the identical question SendPaymentSync will ask moments later,
+// rather than duplicating or guessing at the logic.
+func IsSelfPayment(gormDB *gorm.DB, paymentRequest *decodepay.Bolt11, lnClient lnclient.LNClient) bool {
+	if paymentRequest.Payee == "" || paymentRequest.Payee != lnClient.GetPubkey() {
+		return false
+	}
+	var incomingTransaction db.Transaction
+	result := gormDB.Limit(1).Find(&incomingTransaction, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		PaymentHash: paymentRequest.PaymentHash,
+	})
+	return result.Error == nil && result.RowsAffected > 0
+}
+
 func (svc *transactionsService) interceptSelfPayment(paymentHash string, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
 	svc.logger.Debug().Str("payment_hash", paymentHash).Msg("Intercepting self payment")
 	incomingTransaction := db.Transaction{}
@@ -1316,17 +1343,17 @@ func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnC
 
 // validateCanPay checks whether the given app is permitted to pay the given amount.
 // Returns the isolated balance (0 if not isolated) and the app's parent_kind so
-// the JIT full-drain check can be applied by the caller without an extra DB query.
+// the Cash full-drain check can be applied by the caller without an extra DB query.
 //
-// skipFeeReserve additionally exempts claim_funds' per-slice payout from the
+// skipFeeReserve additionally exempts cash_redeem' per-slice payout from the
 // fee-reserve headroom below, for the same reason it's exempt from
-// enforceJITFullDrain: a shared JIT wallet is funded with EXACTLY the sum of
-// its recipients' declared slices (jitwallet.Commit), and each slice's own
+// enforceCashFullDrain: a shared Cash wallet is funded with EXACTLY the sum of
+// its recipients' declared slices (cashwallet.Commit), and each slice's own
 // budget cap (AppPermission.MaxAmountLoki) is set to that same exact sum —
 // so "balance/budget must cover amount + reserve" is never satisfiable for a
 // wallet's last (or only) recipient no matter the amount's scale, since the
 // reserve is strictly positive and the balance available for that specific
-// claim can be exactly the claimed amount. claim_funds already independently
+// claim can be exactly the claimed amount. cash_redeem already independently
 // enforces its own, stronger exact-match rule (invoice amount == the proven
 // slice, checked before payment) — this reserve is a generic conservative
 // pre-check for arbitrary payments, and is redundant/counter-productive for
@@ -1362,11 +1389,11 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	}
 
 	// Fetch app and its pay-capable permission in a single JOIN so we only hit
-	// the DB once. parent_kind is returned so the caller can enforce JIT
+	// the DB once. parent_kind is returned so the caller can enforce Cash
 	// full-drain without a second query. Matches against
 	// constants.PayCapableScopes (not just PAY_INVOICE_SCOPE alone) since
-	// jit_wallet children carry JIT_CLAIM_FUNDS_SCOPE instead — without this,
-	// claim_funds would fail every call with "app does not have pay_invoice
+	// cash_wallet children carry CASH_REDEEM_SCOPE instead — without this,
+	// cash_redeem would fail every call with "app does not have pay_invoice
 	// scope" the moment it reaches this shared payment layer.
 	//
 	// The LEFT JOIN to circle_hub_configs resolves a circle_wallet's parent
@@ -1404,9 +1431,9 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 		// skipBudgetCap (internal_transfer) is only ever set by trusted
 		// server-side call sites (api.Transfer's admin-initiated balance
 		// decrease, hub reclaim/cleanup) — never reachable from an external
-		// NWC pay_invoice/keysend/claim_funds request, which all strip this
+		// NWC pay_invoice/keysend/cash_redeem request, which all strip this
 		// flag from caller-supplied metadata before it gets here (see
-		// pay_invoice_controller.go/claim_funds_controller.go). So it's safe
+		// pay_invoice_controller.go/cash_redeem_controller.go). So it's safe
 		// to let an admin manually decrease a hub's own balance (still fully
 		// subject to the isolated-balance check below - just not gated on a
 		// pay_invoice scope the hub was deliberately never granted over NWC)
@@ -1420,7 +1447,7 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	// A selfPayment (lnClient's own self-payment-interception shortcut, hit
 	// whenever the invoice being paid was minted by an app on this same
 	// lokihub instance) is exempt from the skim — by design, not just for the
-	// hub's own internal_transfer reclaim. Every JIT wallet, circle wallet,
+	// hub's own internal_transfer reclaim. Every Cash wallet, circle wallet,
 	// and generic NWC app sharing this instance settles between each other
 	// this way, so this single flag is exactly "member-to-member / member-to-
 	// any-other-app-on-this-instance" traffic, which should stay fee-free;
@@ -1512,7 +1539,26 @@ func CalculateFeeSkimMloki(amountMloki uint64, feesPpm int) uint64 {
 	if feesPpm <= 0 {
 		return 0
 	}
-	return amountMloki * uint64(feesPpm) / constants.PPM_DIVISOR
+	// amountMloki*uint64(feesPpm) can overflow uint64 well before
+	// amountMloki reaches cashwallet.Resolve's own permitted per-recipient
+	// ceiling (~1.845e13 mloki at the maximum 100% rate) — a plain "*"
+	// silently wraps to an arbitrary, WRONG fee instead of erroring or
+	// saturating. bits.Mul64 computes the full 128-bit product so no
+	// precision is lost, then bits.Div64 divides that full-precision value
+	// by PPM_DIVISOR. The true quotient can only exceed uint64's range if
+	// feesPpm > PPM_DIVISOR (i.e. a >100% rate, never valid — feesPpm is
+	// clamped to constants.MAX_FEES_PPM == PPM_DIVISOR at config-validation
+	// time, but this function doesn't assume its caller enforced that), in
+	// which case bits.Div64 would panic on a quotient overflow — saturate at
+	// math.MaxUint64 instead, so a defensive/future caller passing an
+	// out-of-range rate fails safe (an unmistakably-wrong huge fee) rather
+	// than crashing or wrapping to a plausible-looking wrong number.
+	hi, lo := bits.Mul64(amountMloki, uint64(feesPpm)) //nolint:gosec // feesPpm > 0 already checked above
+	if hi >= constants.PPM_DIVISOR {
+		return math.MaxUint64
+	}
+	quotient, _ := bits.Div64(hi, lo, constants.PPM_DIVISOR)
+	return quotient
 }
 
 func makePreimageHex() ([]byte, error) {
@@ -1803,6 +1849,15 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		}
 	}
 
+	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.CashRedeemFeeMloki != nil {
+		if err := svc.reconcileCashRedeemFee(tx, dbTransaction, fee); err != nil {
+			svc.logger.Error().Err(err).
+				Str("payment_hash", dbTransaction.PaymentHash).
+				Msg("Failed to reconcile cash redeem fee")
+			return nil, err
+		}
+	}
+
 	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.AppId != nil {
 		svc.checkBudgetUsage(dbTransaction, tx)
 	}
@@ -1864,6 +1919,165 @@ func (svc *transactionsService) creditCircleHubFeeSkim(tx *gorm.DB, dbTransactio
 // accounting row with the real payment it was skimmed from.
 func deriveCircleFeeSkimPaymentHash(sourcePaymentHash string) string {
 	sum := sha256.Sum256([]byte(sourcePaymentHash + ":circle_fee_skim"))
+	return hex.EncodeToString(sum[:])
+}
+
+// reconcileCashRedeemFee is cash_redeem's counterpart to creditCircleHubFeeSkim
+// — but unlike circle's one-directional skim (always debits the child, always
+// credits the hub), this moves the SIGNED difference between the redeem fee
+// already quoted to (and deducted from) the recipient's payout
+// (dbTransaction.CashRedeemFeeMloki, fixed before the payment was attempted)
+// and the real routing fee this payment turned out to cost (realFeeMloki,
+// only known now, at settlement). This is deliberately a separate mechanism
+// from FeeSkimMloki, not a reuse of it: dbTransaction's own AmountMloki is
+// already the fee-REDUCED net payout (not the full slice plus an add-on skim
+// the way a circle_wallet payment is), so folding CashRedeemFeeMloki into
+// FeeSkimMloki here would double-count it in db/queries.GetIsolatedBalance's
+// SQL and silently reopen the exact shared-wallet stranding bug this whole
+// mechanism exists to close (see the audit finding referenced in
+// db.CashWalletClaim.RedeemFeePpm's own doc comment).
+//
+// delta = quoted hub fee − real routing fee:
+//   - delta > 0: the quoted fee covered the real cost with some to spare —
+//     the wallet pays the Cash Hub exactly that surplus, as real fee revenue.
+//   - delta < 0: the real cost exceeded what was quoted — the Cash Hub
+//     reimburses the wallet exactly the shortfall, out of its own balance
+//     (an explicit, tracked version of the same operator-absorbs-the-fee
+//     behavior a single-recipient wallet already has today — see
+//     transactions_service_test.go's self-payment/single-recipient cases).
+//   - delta == 0 (always true for a same-node redemption, where both the
+//     quoted fee and the real fee are 0): no rows are created.
+//
+// Either way, the net effect on the wallet's own isolated balance
+// (GetIsolatedBalance) works out to exactly the redeemed slice's own
+// AmountMloki — see db.Transaction.CashRedeemFeeMloki's doc comment for the
+// arithmetic. Runs inside the same DB transaction as the payout's own
+// settlement update (its caller, markTransactionSettled), so the payout and
+// the reconciliation commit atomically together — a crash between the two
+// must never happen, since a controller-side second transfer (after
+// SendPaymentSync's own transaction has already committed) could not offer
+// that guarantee.
+// Every early-exit below intentionally logs and returns nil (skip
+// reconciliation only) rather than returning an error: by the time this
+// function runs, the real payment this settlement represents has ALREADY
+// unconditionally happened — either a real Lightning payment already sent
+// (SendPaymentSync calls this from inside a DB transaction entered only
+// AFTER the real send succeeded, transactions_service.go's own "the payment
+// definitely succeeded" comment), or a self-payment already marked settled.
+// Returning an error here would abort the ENCLOSING settlement transaction
+// (the same one this function runs inside), rolling back the very "mark
+// this payment SETTLED" update that must not be undone — leaving a payment
+// that genuinely went out looking FAILED to its caller. For cash_redeem
+// specifically, that would make the controller roll back the slice's claim
+// (UnclaimCashSlice) and report failure, reopening an already-paid slice for
+// a second claim — a real double-payout risk strictly worse than skipping
+// one reconciliation adjustment. Every condition below is confirmed
+// unreachable through any real application code path; if one is ever hit
+// anyway, the ERROR-level log is the loud, alerting-worthy signal an
+// operator needs, without corrupting settlement state to raise it.
+func (svc *transactionsService) reconcileCashRedeemFee(tx *gorm.DB, dbTransaction *db.Transaction, realFeeMloki uint64) error {
+	quotedFeeMloki := *dbTransaction.CashRedeemFeeMloki
+	delta := int64(quotedFeeMloki) - int64(realFeeMloki) //nolint:gosec // both operands are mloki amounts, always far below int64 range
+	if delta == 0 {
+		return nil
+	}
+
+	if dbTransaction.AppId == nil {
+		svc.logger.Error().Str("payment_hash", dbTransaction.PaymentHash).
+			Msg("cash redeem fee reconciliation: transaction has CashRedeemFeeMloki but no AppId; skipping fee reconciliation")
+		return nil
+	}
+
+	var walletApp db.App
+	if tx.Select("id, kind, parent_app_id, parent_kind").Limit(1).Find(&walletApp, *dbTransaction.AppId).RowsAffected == 0 {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("cash redeem fee reconciliation: app not found; skipping fee reconciliation")
+		return nil
+	}
+	// Defense in depth against a spoofed/misrouted CashRedeemFeeMloki ever
+	// reaching this point for a non-cash_wallet app — the primary guard is
+	// stripping this metadata key from every general-purpose payment entry
+	// point (pay_invoice_controller.go, api/transactions.go); this makes the
+	// function itself safe even if some future caller reaches it another way.
+	// Never move ledger balance between an arbitrary app and its parent under
+	// this mechanism's name.
+	if walletApp.Kind != db.AppKindCashWallet || walletApp.ParentKind != db.ParentKindCash {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).Str("kind", walletApp.Kind).
+			Msg("cash redeem fee reconciliation: app is not a cash_wallet; skipping fee reconciliation")
+		return nil
+	}
+	if walletApp.ParentAppID == nil {
+		// Unreachable in practice — a cash_wallet is always created as a
+		// child of a cash_hub (cashwallet.Commit/Split unconditionally set
+		// ParentAppID) — but never silently strand a reconciliation into the
+		// void without at least a loud log if lineage is somehow missing.
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
+			Msg("cash_wallet has CashRedeemFeeMloki but no parent hub app; skipping fee reconciliation")
+		return nil
+	}
+
+	metadataBytes, err := json.Marshal(map[string]interface{}{
+		"cash_redeem_fee_source_app_id":       *dbTransaction.AppId,
+		"cash_redeem_fee_source_payment_hash": dbTransaction.PaymentHash,
+		"cash_redeem_hub_fee_mloki":           quotedFeeMloki,
+		"cash_redeem_real_fee_mloki":          realFeeMloki,
+		"cash_redeem_delta_mloki":             delta,
+	})
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	walletAppID := *dbTransaction.AppId
+	hubAppID := *walletApp.ParentAppID
+	var fromAppID, toAppID uint
+	var amountMloki uint64
+	if delta > 0 {
+		// The quoted fee covered the real cost — wallet pays the surplus to the hub.
+		fromAppID, toAppID = walletAppID, hubAppID
+		amountMloki = uint64(delta) //nolint:gosec // delta > 0 just checked
+	} else {
+		// The real cost exceeded the quote — the hub reimburses the shortfall.
+		fromAppID, toAppID = hubAppID, walletAppID
+		amountMloki = uint64(-delta) //nolint:gosec // delta < 0 just checked, negation is positive
+	}
+
+	debit := db.Transaction{
+		AppId:       &fromAppID,
+		Type:        constants.TRANSACTION_TYPE_OUTGOING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: amountMloki,
+		PaymentHash: deriveCashRedeemFeePaymentHash(dbTransaction.PaymentHash, "debit"),
+		Description: "Cash redeem fee reconciliation",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	if err := tx.Create(&debit).Error; err != nil {
+		return err
+	}
+	credit := db.Transaction{
+		AppId:       &toAppID,
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		State:       constants.TRANSACTION_STATE_SETTLED,
+		AmountMloki: amountMloki,
+		PaymentHash: deriveCashRedeemFeePaymentHash(dbTransaction.PaymentHash, "credit"),
+		Description: "Cash redeem fee reconciliation",
+		Metadata:    datatypes.JSON(metadataBytes),
+		SettledAt:   &now,
+		SelfPayment: true,
+	}
+	return tx.Create(&credit).Error
+}
+
+// deriveCashRedeemFeePaymentHash generates a distinct, deterministic synthetic
+// payment hash for one leg of a cash_redeem fee reconciliation, derived from
+// the source payout's own hash plus a leg suffix (so the debit and credit
+// legs of the same reconciliation get two different hashes, never colliding
+// with each other, with deriveCircleFeeSkimPaymentHash's own derived hashes,
+// or with a real bolt11 payment hash).
+func deriveCashRedeemFeePaymentHash(sourcePaymentHash string, leg string) string {
+	sum := sha256.Sum256([]byte(sourcePaymentHash + ":cash_redeem_fee:" + leg))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -1939,7 +2153,7 @@ func (svc *transactionsService) markPaymentFailed(tx *gorm.DB, dbTransaction *db
 	// guard) before this failure branch runs. Without this check, a payment that
 	// actually succeeded would get flipped to FAILED here, dropping its amount out of
 	// isolated-balance accounting (which only sums SETTLED rows) even though the funds
-	// already left the node — and, for a JIT claim, incorrectly reopening the slice for
+	// already left the node — and, for a Cash claim, incorrectly reopening the slice for
 	// a second payout. Never downgrade an already-settled transaction to failed.
 	if existingTransaction.State == constants.TRANSACTION_STATE_SETTLED {
 		svc.logger.Info().Str("payment_hash", dbTransaction.PaymentHash).Msg("payment already settled; ignoring late failure notification")
@@ -1977,7 +2191,7 @@ func (svc *transactionsService) EstimateFee(payReq string) (uint64, error) {
 	for _, route := range paymentRequest.Route {
 		var routeFeeMloki uint64 = 0
 		for _, hop := range route {
-			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.MSat) * uint64(hop.FeeProportionalMillionths) / 1000000) //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range; this is a fee preview only, doesn't gate actual payment execution
+			fee := uint64(hop.FeeBaseMloki) + (uint64(paymentRequest.AmountMloki) * uint64(hop.FeeProportionalMillionths) / 1000000) //nolint:gosec // invoice-declared mloki amount is always non-negative and far below int64 range; this is a fee preview only, doesn't gate actual payment execution
 			routeFeeMloki += fee
 		}
 		if routeFeeMloki > maxHintFeeMloki {

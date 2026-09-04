@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { Link } from "react-router-dom";
-import { JITHubConfigCard } from "src/components/JITHubConfigCard";
+import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Label } from "src/components/ui/label";
@@ -49,13 +49,13 @@ const scopeGroupDescriptions: Record<ScopeGroup, string> = {
   custom: "Define specific permissions for this app's wallet access",
 };
 
-// Defaults applied the moment JIT Hub is switched on — same starting values
-// as the dedicated Sub-wallets "New JIT Hub" flow (NewJITHub.tsx). Exported
-// so callers (NewApp.tsx) can seed the same values into AppPermissions up
-// front, since these fields only get a value pushed up via
-// onJitHubConfigChanged once the user actually edits one of the inputs.
-export const DEFAULT_JIT_PER_WALLET_MAX_LOKI = 1000;
-export const DEFAULT_JIT_MAX_EXP_SECS = 86400;
+// Defaults applied the moment Cash Hub is switched on — same starting
+// values as the dedicated Sub-wallets "New Cash Hub" flow (NewCashHub.tsx).
+// Exported so callers (NewApp.tsx) can seed the same values into
+// AppPermissions up front, since these fields only get a value pushed up via
+// onCashHubConfigChanged once the user actually edits one of the inputs.
+export const DEFAULT_CASH_PER_WALLET_MAX_LOKI = 1000;
+export const DEFAULT_CASH_MAX_EXP_SECS = 86400;
 
 interface ScopesProps {
   capabilities: WalletCapabilities;
@@ -63,15 +63,15 @@ interface ScopesProps {
   isolated: boolean;
   isNewConnection: boolean;
   onScopesChanged: (scopes: Scope[], isolated: boolean) => void;
-  // JIT Hub escalation — only ever offered on a brand-new connection (kind is
-  // immutable after creation, see AppDetails' own Hub Settings card for
+  // Cash Hub escalation — only ever offered on a brand-new connection (kind
+  // is immutable after creation, see AppDetails' own Hub Settings card for
   // editing an existing hub) and only once the connection is isolated, since
-  // kind "jit_hub" always carries its own isolated balance server-side.
-  jitHub?: boolean;
-  jitPerWalletMaxLoki?: number;
-  jitMaxExpSecs?: number;
-  onJitHubChanged?: (jitHub: boolean) => void;
-  onJitHubConfigChanged?: (config: {
+  // kind "cash_hub" always carries its own isolated balance server-side.
+  cashHub?: boolean;
+  cashPerWalletMaxLoki?: number;
+  cashMaxExpSecs?: number;
+  onCashHubChanged?: (cashHub: boolean) => void;
+  onCashHubConfigChanged?: (config: {
     perWalletMaxLoki?: number;
     maxExpSecs?: number;
   }) => void;
@@ -83,11 +83,11 @@ const Scopes: React.FC<ScopesProps> = ({
   isolated,
   isNewConnection,
   onScopesChanged,
-  jitHub = false,
-  jitPerWalletMaxLoki = DEFAULT_JIT_PER_WALLET_MAX_LOKI,
-  jitMaxExpSecs = DEFAULT_JIT_MAX_EXP_SECS,
-  onJitHubChanged,
-  onJitHubConfigChanged,
+  cashHub = false,
+  cashPerWalletMaxLoki = DEFAULT_CASH_PER_WALLET_MAX_LOKI,
+  cashMaxExpSecs = DEFAULT_CASH_MAX_EXP_SECS,
+  onCashHubChanged,
+  onCashHubConfigChanged,
 }) => {
   const [isSheetOpen, setSheetOpen] = React.useState(false);
   const fullAccessScopes: Scope[] = React.useMemo(() => {
@@ -213,14 +213,14 @@ const Scopes: React.FC<ScopesProps> = ({
             })}
             {!isNewConnection && (
               <p className="text-xs text-muted-foreground px-1">
-                An existing connection can't be upgraded to JIT or Circle
+                An existing connection can't be upgraded to Cash or Circle
                 wallets.{" "}
                 <Link
-                  to="/sub-wallets/new/jit"
+                  to="/cash-hub/new"
                   className="underline hover:text-foreground"
                   onClick={() => setSheetOpen(false)}
                 >
-                  Create a JIT Hub
+                  Create a Cash Hub
                 </Link>{" "}
                 or{" "}
                 <Link
@@ -305,35 +305,35 @@ const Scopes: React.FC<ScopesProps> = ({
         </div>
       )}
 
-      {isNewConnection && isolated && onJitHubChanged && (
+      {isNewConnection && isolated && onCashHubChanged && (
         <div className="mb-2 border rounded-md p-4">
-          <p className="font-medium text-sm mb-2">JIT Hub (optional)</p>
+          <p className="font-medium text-sm mb-2">Cash Hub (optional)</p>
           <div className="flex items-center">
             <Checkbox
-              id="jitHub"
+              id="cashHub"
               className="me-2"
-              onCheckedChange={() => onJitHubChanged(!jitHub)}
-              checked={jitHub}
+              onCheckedChange={() => onCashHubChanged(!cashHub)}
+              checked={cashHub}
             />
-            <Label htmlFor="jitHub" className="cursor-pointer">
-              Also allow this app to create JIT wallets, paying third parties
-              directly from its balance
+            <Label htmlFor="cashHub" className="cursor-pointer">
+              Also allow this app to create Cash wallets, paying third
+              parties directly from its balance
             </Label>
           </div>
-          {jitHub && onJitHubConfigChanged && (
+          {cashHub && onCashHubConfigChanged && (
             <div className="mt-3">
-              <JITHubConfigCard
+              <CashHubConfigCard
                 budgetLabel="Max Wallet Budget"
-                budgetHelper="Maximum budget that can be allocated to each JIT wallet issued from this connection"
+                budgetHelper="Maximum cash that can be minted into each Cash wallet from this connection"
                 expiryLabel="Max Wallet Expiry"
-                expiryHelper="Maximum lifetime for issued JIT wallets"
-                perWalletMaxLoki={jitPerWalletMaxLoki}
+                expiryHelper="Maximum lifetime for a Cash wallet's minted cash"
+                perWalletMaxLoki={cashPerWalletMaxLoki}
                 onPerWalletMaxLokiChange={(perWalletMaxLoki) =>
-                  onJitHubConfigChanged({ perWalletMaxLoki })
+                  onCashHubConfigChanged({ perWalletMaxLoki })
                 }
-                maxExpSecs={jitMaxExpSecs}
+                maxExpSecs={cashMaxExpSecs}
                 onMaxExpSecsChange={(maxExpSecs) =>
-                  onJitHubConfigChanged({ maxExpSecs })
+                  onCashHubConfigChanged({ maxExpSecs })
                 }
               />
             </div>

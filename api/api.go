@@ -24,25 +24,26 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/jitwallet"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
 
+	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/utils"
-	"github.com/flokiorg/lokihub/appversion"
 )
 
 const (
@@ -107,8 +108,8 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	var pairingSecretKey string
 
 	switch kind {
-	case db.AppKindJITHub:
-		app, pairingSecretKey, err = api.appsSvc.CreateJITHub(
+	case db.AppKindCashHub:
+		app, pairingSecretKey, err = api.appsSvc.CreateCashHub(
 			createAppRequest.Name,
 			createAppRequest.Pubkey,
 			createAppRequest.MaxAmountLoki,
@@ -116,9 +117,11 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			expiresAt,
 			createAppRequest.Scopes,
 			createAppRequest.Metadata,
-			db.JITHubConfig{
-				PerWalletMaxMloki: createAppRequest.JITPerWalletMaxMloki,
-				MaxExpSecs:        createAppRequest.JITMaxExpSecs,
+			db.CashHubConfig{
+				PerWalletMaxMloki: createAppRequest.CashPerWalletMaxMloki,
+				MaxExpSecs:        createAppRequest.CashMaxExpSecs,
+				MinTransferMloki:  createAppRequest.CashMinTransferMloki,
+				RedeemFeePpm:      createAppRequest.CashRedeemFeePpm,
 			},
 		)
 	case db.AppKindCircleHub:
@@ -245,7 +248,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 				return fmt.Errorf("won't update an app to have no name")
 			}
 			if name != userApp.Name {
-				// JIT/circle wallet names are system-generated and carry the
+				// Cash/circle wallet names are system-generated and carry the
 				// identity used to resolve a Nostr profile for display —
 				// renaming here would silently break that.
 				if db.IsNameImmutableKind(userApp.Kind) {
@@ -284,7 +287,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 			}
 
 			// Some privileged kinds also have system-managed budget/expiry
-			// (e.g. circle wallets, JIT allocations); a circle hub's own
+			// (e.g. circle wallets, Cash allocations); a circle hub's own
 			// budget/expiry, however, is user-configurable like a regular app.
 			if (updateAppRequest.MaxAmountLoki != nil || updateAppRequest.BudgetRenewal != nil ||
 				updateAppRequest.ExpiresAt != nil || updateAppRequest.UpdateExpiresAt) &&
@@ -307,7 +310,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 			if len(existingPermissions) > 0 {
 				// Find the pay-capable permission for budget-related fields
 				// (constants.PayCapableScopes, not just pay_invoice alone —
-				// jit_wallet apps carry jit_claim_funds instead).
+				// cash_wallet apps carry cash_redeem instead).
 				for _, perm := range existingPermissions {
 					if slices.Contains(constants.PayCapableScopes, perm.Scope) {
 						maxAmount = uint64(perm.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
@@ -412,10 +415,12 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		return err
 	}
 
-	if userApp.Kind == db.AppKindJITHub &&
-		(updateAppRequest.JITPerWalletMaxMloki != nil || updateAppRequest.JITMaxExpSecs != nil) {
-		if err := api.appsSvc.UpdateJITHubConfig(userApp.ID,
-			updateAppRequest.JITPerWalletMaxMloki, updateAppRequest.JITMaxExpSecs); err != nil {
+	if userApp.Kind == db.AppKindCashHub &&
+		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
+			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil) {
+		if err := api.appsSvc.UpdateCashHubConfig(userApp.ID,
+			updateAppRequest.CashPerWalletMaxMloki, updateAppRequest.CashMaxExpSecs,
+			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm); err != nil {
 			return err
 		}
 	}
@@ -434,15 +439,15 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 }
 
 func (api *api) DeleteApp(userApp *db.App) error {
-	// jit_wallet/circle_wallet hold a shared balance that must be reclaimed
+	// cash_wallet/circle_wallet hold a shared balance that must be reclaimed
 	// back to their hub before the row disappears — apps.DeleteApp has no
 	// such logic (it only guards the hub kinds against orphaning children),
 	// so a plain delete here would silently destroy any remaining balance.
 	// Route through the same reclaim-then-delete path the dedicated
-	// DeleteJITWallet/DeleteCircleWalletChild endpoints use, so this generic
+	// DeleteCashWallet/DeleteCircleWalletChild endpoints use, so this generic
 	// path (e.g. the app detail page's Disconnect action) is safe too,
 	// regardless of claim state.
-	if userApp.Kind == db.AppKindJITWallet || userApp.Kind == db.AppKindCircleWallet {
+	if userApp.Kind == db.AppKindCashWallet || userApp.Kind == db.AppKindCircleWallet {
 		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
 			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp)
 	}
@@ -461,8 +466,8 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 	for _, appPerm := range appPermissions {
 		expiresAt = appPerm.ExpiresAt
 		if slices.Contains(constants.PayCapableScopes, appPerm.Scope) {
-			// find the pay-capable permission (pay_invoice, or jit_claim_funds
-			// for a jit_wallet)
+			// find the pay-capable permission (pay_invoice, or cash_redeem
+			// for a cash_wallet)
 			paySpecificPermission = appPerm
 		}
 		requestMethods = append(requestMethods, appPerm.Scope)
@@ -528,6 +533,8 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 		BudgetUsage:        budgetUsage,
 		BudgetRenewal:      budgetPermission.BudgetRenewal,
 		Kind:               dbApp.Kind,
+		ParentAppID:        dbApp.ParentAppID,
+		ParentKind:         dbApp.ParentKind,
 		Isolated:           dbApp.IsIsolated(),
 		Metadata:           metadata,
 		WalletPubkey:       walletPubkey,
@@ -539,10 +546,12 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 		response.Balance = queries.GetIsolatedBalance(api.db, dbApp.ID)
 	}
 
-	if dbApp.Kind == db.AppKindJITHub {
-		if cfg, cfgErr := api.appsSvc.GetJITHubConfig(dbApp.ID); cfgErr == nil {
-			response.JITPerWalletMaxMloki = &cfg.PerWalletMaxMloki
-			response.JITMaxExpSecs = &cfg.MaxExpSecs
+	if dbApp.Kind == db.AppKindCashHub {
+		if cfg, cfgErr := api.appsSvc.GetCashHubConfig(dbApp.ID); cfgErr == nil {
+			response.CashPerWalletMaxMloki = &cfg.PerWalletMaxMloki
+			response.CashMaxExpSecs = &cfg.MaxExpSecs
+			response.CashMinTransferMloki = &cfg.MinTransferMloki
+			response.CashRedeemFeePpm = &cfg.RedeemFeePpm
 		}
 	}
 
@@ -738,11 +747,26 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		}
 	}
 
-	// jit_wallet children are ephemeral, spend-only wallets issued on demand by
-	// a JIT Hub — they're reachable via the hub's allocations list/reveal flow
-	// and their own AppDetails page, but must never surface in general app
-	// listings (Connections page, command palette, unused-apps nudges, etc.).
-	query = query.Where("kind != ?", db.AppKindJITWallet)
+	if filters.Kind != "" {
+		query = query.Where("kind = ?", filters.Kind)
+		if filters.TopLevelOnly {
+			query = query.Where("parent_app_id IS NULL")
+		}
+	}
+
+	if filters.ParentAppId != nil {
+		query = query.Where("parent_app_id = ?", *filters.ParentAppId)
+	}
+
+	if filters.ParentAppId == nil {
+		// cash_wallet children are ephemeral, spend-only wallets issued on demand by
+		// a Cash Hub — they're reachable via the hub's allocations list/reveal flow
+		// and their own AppDetails page, but must never surface in general app
+		// listings (Connections page, command palette, unused-apps nudges, etc.).
+		// Filtering for a specific hub's children (ParentAppId set) is exactly
+		// that narrow, intentional exception, so skip the exclusion in that case.
+		query = query.Where("kind != ?", db.AppKindCashWallet)
+	}
 
 	if orderBy == "" {
 		orderBy = "last_used_at"
@@ -805,6 +829,8 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			UpdatedAt:          dbApp.UpdatedAt,
 			AppPubkey:          dbApp.AppPubkey,
 			Kind:               dbApp.Kind,
+			ParentAppID:        dbApp.ParentAppID,
+			ParentKind:         dbApp.ParentKind,
 			Isolated:           dbApp.IsIsolated(),
 			WalletPubkey:       walletPubkey,
 			UniqueWalletPubkey: uniqueWalletPubkey,
@@ -2858,7 +2884,7 @@ func childAppIDs(children []db.App) []uint {
 // DeleteCircleHub, which only ever operates on the whole hub at once. Any
 // remaining balance is first reclaimed back to the hub and the child app
 // deleted (service.ReclaimAndDeleteSubWallet), the same way
-// DeleteJITHubAllocation handles a claimed JIT wallet.
+// DeleteCashHubAllocation handles a claimed Cash wallet.
 func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 	var hub db.App
 	if err := api.db.First(&hub, hubAppID).Error; err != nil {
@@ -2967,52 +2993,55 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 	return result, nil
 }
 
-// jitClaimStatus buckets a claim row into one of the JITAllocationStatus*
+// cashClaimStatus buckets a claim row into one of the CashAllocationStatus*
 // values. Unlike the old spend-fraction-based grouping (unavoidable when one
 // wallet == one recipient sharing a balance that could be partially drained),
 // a claim's status is now a plain binary — ClaimedAt set or not — since
-// claim_funds either pays a slice out completely or rolls back entirely.
+// cash_redeem either pays a slice out completely or rolls back entirely.
 // "expired" only applies to a still-unclaimed row whose wallet's deadline has
 // passed.
-func jitClaimStatus(claimed bool, expiresAt *int64, now time.Time) string {
+func cashClaimStatus(claimed bool, expiresAt *int64, now time.Time) string {
 	if claimed {
-		return JITAllocationStatusClaimed
+		return CashAllocationStatusClaimed
 	}
 	if expiresAt != nil && *expiresAt < now.Unix() {
-		return JITAllocationStatusExpired
+		return CashAllocationStatusExpired
 	}
-	return JITAllocationStatusUnclaimed
+	return CashAllocationStatusUnclaimed
 }
 
-// ListJITWalletClaims returns a page of a jit_hub's recipient slices (one row
-// per JITWalletClaim, across every jit_wallet child), newest first. limit ==
-// 0 returns every row unpaginated. status filters by JITAllocationStatus*
+// ListCashWalletClaims returns a page of a cash_hub's recipient slices (one row
+// per CashWalletClaim, across every cash_wallet child), newest first. limit ==
+// 0 returns every row unpaginated. status filters by CashAllocationStatus*
 // ("" means unfiltered); the returned counts always reflect the full,
 // unfiltered set regardless of status or paging.
-func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]JITWalletClaimResponse, uint64, JITWalletClaimCounts, error) {
+func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]CashWalletClaimResponse, uint64, CashWalletClaimCounts, error) {
 	var app db.App
 	if err := api.db.First(&app, appID).Error; err != nil {
-		return nil, 0, JITWalletClaimCounts{}, fmt.Errorf("app not found: %w", err)
+		return nil, 0, CashWalletClaimCounts{}, fmt.Errorf("app not found: %w", err)
 	}
-	if app.Kind != db.AppKindJITHub {
-		return nil, 0, JITWalletClaimCounts{}, fmt.Errorf("app is not a jit_hub")
+	if app.Kind != db.AppKindCashHub {
+		return nil, 0, CashWalletClaimCounts{}, fmt.Errorf("app is not a cash_hub")
 	}
 
-	rows, err := api.appsSvc.ListJITWalletClaims(appID)
+	rows, err := api.appsSvc.ListCashWalletClaims(appID)
 	if err != nil {
-		return nil, 0, JITWalletClaimCounts{}, err
+		return nil, 0, CashWalletClaimCounts{}, err
 	}
 
-	result := make([]JITWalletClaimResponse, 0, len(rows))
+	result := make([]CashWalletClaimResponse, 0, len(rows))
 	for _, row := range rows {
-		r := JITWalletClaimResponse{
-			ID:            row.ID,
-			WalletAppID:   row.WalletAppID,
-			IdentityType:  row.IdentityType,
-			IdentityValue: row.IdentityValue,
-			AmountMloki:   row.AmountMloki,
-			Claimed:       row.ClaimedAt != nil,
-			CreatedAt:     row.CreatedAt.Unix(),
+		r := CashWalletClaimResponse{
+			ID:                   row.ID,
+			WalletAppID:          row.WalletAppID,
+			IdentityType:         row.IdentityType,
+			IdentityValue:        row.IdentityValue,
+			AmountMloki:          row.AmountMloki,
+			Claimed:              row.ClaimedAt != nil,
+			CreatedAt:            row.CreatedAt.Unix(),
+			MinTransferMloki:     row.MinTransferMloki,
+			RedeemFeePpm:         row.RedeemFeePpm,
+			SpunOffToWalletAppID: row.SpunOffToWalletAppID,
 		}
 		if row.ClaimedAt != nil {
 			claimedAt := row.ClaimedAt.Unix()
@@ -3029,22 +3058,22 @@ func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, sta
 	// status filter below so a UI's tab counts stay accurate regardless of
 	// which tab (if any) is currently selected.
 	now := time.Now()
-	counts := JITWalletClaimCounts{All: uint64(len(result))}
+	counts := CashWalletClaimCounts{All: uint64(len(result))}
 	for _, r := range result {
-		switch jitClaimStatus(r.Claimed, r.ExpiresAt, now) {
-		case JITAllocationStatusUnclaimed:
+		switch cashClaimStatus(r.Claimed, r.ExpiresAt, now) {
+		case CashAllocationStatusUnclaimed:
 			counts.Unclaimed++
-		case JITAllocationStatusClaimed:
+		case CashAllocationStatusClaimed:
 			counts.Claimed++
-		case JITAllocationStatusExpired:
+		case CashAllocationStatusExpired:
 			counts.Expired++
 		}
 	}
 
 	if status != "" {
-		filtered := make([]JITWalletClaimResponse, 0, len(result))
+		filtered := make([]CashWalletClaimResponse, 0, len(result))
 		for _, r := range result {
-			if jitClaimStatus(r.Claimed, r.ExpiresAt, now) == status {
+			if cashClaimStatus(r.Claimed, r.ExpiresAt, now) == status {
 				filtered = append(filtered, r)
 			}
 		}
@@ -3055,45 +3084,96 @@ func (api *api) ListJITWalletClaims(appID uint, limit uint64, offset uint64, sta
 	if limit > 0 {
 		result = paginateSlice(result, limit, offset)
 	}
+
+	// Derive each wallet's lokicash token only for the page actually being
+	// returned, and only once per unique wallet (every claim sharing a
+	// WalletAppID gets the identical value) — deriving it for every claim
+	// across the whole hub, unpaginated, would be wasted work for rows the
+	// caller never sees. Includes the same identity-required hint
+	// GetCashWalletConnection encodes, read off any one claim for that
+	// wallet — uniform across every claim of the same wallet (see
+	// db.CashWalletClaim's own field docs), so which one doesn't matter.
+	walletPubkeyByID := make(map[uint]string, len(rows))
+	representativeClaimByWallet := make(map[uint]apps.CashWalletClaimRow, len(rows))
+	for _, row := range rows {
+		if row.WalletPubkey != nil {
+			walletPubkeyByID[row.WalletAppID] = *row.WalletPubkey
+		}
+		if _, ok := representativeClaimByWallet[row.WalletAppID]; !ok {
+			representativeClaimByWallet[row.WalletAppID] = row
+		}
+	}
+	tokenByWallet := make(map[uint]string, len(result))
+	relayUrls := api.cfg.GetRelayUrls()
+	for i := range result {
+		walletAppID := result[i].WalletAppID
+		token, ok := tokenByWallet[walletAppID]
+		if !ok {
+			walletPubkey, havePubkey := walletPubkeyByID[walletAppID]
+			pairingSecretKey, keyErr := api.keys.GetCashPairingKey(walletAppID)
+			if havePubkey && keyErr == nil {
+				var identityRequired *bool
+				if claim, haveClaim := representativeClaimByWallet[walletAppID]; haveClaim {
+					required := claim.IdentityType != db.CashIdentityBearer
+					identityRequired = &required
+				}
+				token, keyErr = lokicash.Encode(lokicash.Token{
+					HRP:              lokicash.HRP,
+					WalletPubkey:     walletPubkey,
+					Secret:           pairingSecretKey,
+					RelayURLs:        relayUrls,
+					IdentityRequired: identityRequired,
+				})
+			}
+			if !havePubkey || keyErr != nil {
+				logger.Logger.Error().Err(keyErr).Uint("wallet_app_id", walletAppID).
+					Msg("Failed to derive lokicash token for Cash wallet claims list")
+				token = ""
+			}
+			tokenByWallet[walletAppID] = token
+		}
+		result[i].CashToken = token
+	}
+
 	return result, totalCount, counts, nil
 }
 
-// DeleteJITWalletClaim removes an unclaimed slice, sweeping its AmountMloki
+// DeleteCashClaim removes an unclaimed slice, sweeping its AmountMloki
 // back to the hub via an internal transfer before deleting the row — so
 // removing one bad recipient from a shared wallet doesn't strand unclaimable
 // balance in it. If that was the wallet's last remaining recipient, the now
-// claims-less wallet is reclaimed and deleted too: ListJITWalletClaims is an
-// inner join starting from the claims table (apps/jit_hub_service.go), so a
+// claims-less wallet is reclaimed and deleted too: ListCashWalletClaims is an
+// inner join starting from the claims table (apps/cash_hub_service.go), so a
 // wallet with zero claims can never appear there under any filter - left
 // behind, it would still count against its hub's apps.DeleteApp child-count
 // guard forever, with no way for an operator to ever find and remove it
 // through the normal listing/delete flow again.
-func (api *api) DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID uint) error {
+func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) error {
 	var hub db.App
 	if err := api.db.First(&hub, hubAppID).Error; err != nil {
 		return fmt.Errorf("app not found: %w", err)
 	}
-	if hub.Kind != db.AppKindJITHub {
-		return fmt.Errorf("app is not a jit_hub")
+	if hub.Kind != db.AppKindCashHub {
+		return fmt.Errorf("app is not a cash_hub")
 	}
 
 	var wallet db.App
 	if err := api.db.Where("id = ? AND parent_app_id = ? AND parent_kind = ? AND kind = ?",
-		walletAppID, hubAppID, db.ParentKindJIT, db.AppKindJITWallet).First(&wallet).Error; err != nil {
+		walletAppID, hubAppID, db.ParentKindCash, db.AppKindCashWallet).First(&wallet).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("%w: JIT wallet not found for this hub", constants.ErrInvalidParams)
+			return fmt.Errorf("%w: Cash wallet not found for this hub", constants.ErrInvalidParams)
 		}
 		return err
 	}
 
-	claim, err := api.appsSvc.DeleteJITWalletClaim(walletAppID, claimID)
+	claim, err := api.appsSvc.DeleteCashClaim(walletAppID, claimID)
 	if err != nil {
 		return err
 	}
 
 	if claim.AmountMloki > 0 && wallet.ParentAppID != nil {
 		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
-			context.Background(), uint64(claim.AmountMloki), "jit claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
+			context.Background(), uint64(claim.AmountMloki), "cash claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
 			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
 			&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
 		)
@@ -3119,24 +3199,24 @@ func (api *api) DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID ui
 		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
 }
 
-// DeleteJITWallet reclaims any remaining balance of a jit_wallet child back
+// DeleteCashWallet reclaims any remaining balance of a cash_wallet child back
 // to its hub and deletes it (service.ReclaimAndDeleteSubWallet), regardless
 // of how much of it has already been spent — the same pattern
 // DeleteCircleWalletChild uses for the sibling Circles feature.
-func (api *api) DeleteJITWallet(hubAppID uint, walletAppID uint) error {
+func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 	var hub db.App
 	if err := api.db.First(&hub, hubAppID).Error; err != nil {
 		return fmt.Errorf("app not found: %w", err)
 	}
-	if hub.Kind != db.AppKindJITHub {
-		return fmt.Errorf("app is not a jit_hub")
+	if hub.Kind != db.AppKindCashHub {
+		return fmt.Errorf("app is not a cash_hub")
 	}
 
 	var wallet db.App
 	if err := api.db.Where("id = ? AND parent_app_id = ? AND parent_kind = ? AND kind = ?",
-		walletAppID, hubAppID, db.ParentKindJIT, db.AppKindJITWallet).First(&wallet).Error; err != nil {
+		walletAppID, hubAppID, db.ParentKindCash, db.AppKindCashWallet).First(&wallet).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("%w: JIT wallet not found for this hub", constants.ErrInvalidParams)
+			return fmt.Errorf("%w: Cash wallet not found for this hub", constants.ErrInvalidParams)
 		}
 		return err
 	}
@@ -3145,70 +3225,105 @@ func (api *api) DeleteJITWallet(hubAppID uint, walletAppID uint) error {
 		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
 }
 
-// GetJITWalletConnection returns the NWC pairing URI for an already-created JIT
+// GetCashWalletConnection returns the NWC pairing URI for an already-created Cash
 // wallet. Unlike a normal app's pairing secret (a random key generated once at
-// creation and never persisted), a JIT wallet's pairing key is deterministic —
-// derived on demand from the wallet's own app ID via keys.GetJITPairingKey,
+// creation and never persisted), a Cash wallet's pairing key is deterministic —
+// derived on demand from the wallet's own app ID via keys.GetCashPairingKey,
 // specifically so the connection_key claim flow never has to store it. That
 // same determinism means it can be safely re-derived here any number of
 // times: nothing is rotated or invalidated for a client already using it.
-func (api *api) GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse, error) {
+func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionResponse, error) {
 	var app db.App
 	if err := api.db.First(&app, appID).Error; err != nil {
 		return nil, fmt.Errorf("app not found: %w", err)
 	}
-	if app.Kind != db.AppKindJITWallet {
-		return nil, fmt.Errorf("app is not a jit_wallet")
+	if app.Kind != db.AppKindCashWallet {
+		return nil, fmt.Errorf("app is not a cash_wallet")
 	}
 	if app.WalletPubkey == nil {
-		return nil, fmt.Errorf("jit wallet has no wallet pubkey")
+		return nil, fmt.Errorf("cash wallet has no wallet pubkey")
 	}
 
-	pairingSecretKey, err := api.keys.GetJITPairingKey(app.ID)
+	pairingSecretKey, err := api.keys.GetCashPairingKey(app.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive JIT pairing key: %w", err)
+		return nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
 	}
+
+	relayUrls := api.cfg.GetRelayUrls()
 
 	var b strings.Builder
 	b.WriteString("nostr+walletconnect://")
 	b.WriteString(*app.WalletPubkey)
 	b.WriteString("?relay=")
-	b.WriteString(strings.Join(api.cfg.GetRelayUrls(), "&relay="))
+	b.WriteString(strings.Join(relayUrls, "&relay="))
 	b.WriteString("&secret=")
 	b.WriteString(pairingSecretKey)
 
-	return &JITWalletConnectionResponse{PairingURI: b.String()}, nil
+	// Unlike Commit/SpinOff (which know a just-created wallet's identity
+	// requirement directly from the params they were just given), this
+	// endpoint can be called at any later time — after the wallet's sole
+	// recipient may have moved into or out of bearer status via
+	// cash_transfer — so it re-derives the hint from the wallet's CURRENT
+	// claim rows rather than trusting anything cached at creation time. A
+	// wallet with no claims left (every recipient individually removed) has
+	// no well-defined identity requirement to report; it stays nil in that
+	// case, exactly like a token predating this field.
+	var identityRequired *bool
+	claims, err := api.appsSvc.ListClaimsForWallet(app.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list cash wallet claims: %w", err)
+	}
+	if len(claims) > 0 {
+		required := claims[0].IdentityType != db.CashIdentityBearer
+		identityRequired = &required
+	}
+
+	lokicashToken, err := lokicash.Encode(lokicash.Token{
+		HRP:              lokicash.HRP,
+		WalletPubkey:     *app.WalletPubkey,
+		Secret:           pairingSecretKey,
+		RelayURLs:        relayUrls,
+		IdentityRequired: identityRequired,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode lokicash token: %w", err)
+	}
+
+	return &CashWalletConnectionResponse{PairingURI: b.String(), CashToken: lokicashToken}, nil
 }
 
-// GetJITWalletRecipients returns every recipient slice of a single
-// jit_wallet, claimed or not — the admin-API counterpart of list_recipients
+// GetCashWalletRecipients returns every recipient slice of a single
+// cash_wallet, claimed or not — the admin-API counterpart of list_recipients
 // (which is scoped to whoever holds the wallet's NWC connection), used by a
-// jit_wallet's own AppDetails page. A wallet can serve more than one
+// cash_wallet's own AppDetails page. A wallet can serve more than one
 // beneficiary now, so this can return more than one row.
-func (api *api) GetJITWalletRecipients(appID uint) ([]JITWalletClaimResponse, error) {
+func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, error) {
 	var app db.App
 	if err := api.db.First(&app, appID).Error; err != nil {
 		return nil, fmt.Errorf("app not found: %w", err)
 	}
-	if app.Kind != db.AppKindJITWallet {
-		return nil, fmt.Errorf("app is not a jit_wallet")
+	if app.Kind != db.AppKindCashWallet {
+		return nil, fmt.Errorf("app is not a cash_wallet")
 	}
 
 	claims, err := api.appsSvc.ListClaimsForWallet(app.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list JIT wallet recipients: %w", err)
+		return nil, fmt.Errorf("failed to list Cash wallet recipients: %w", err)
 	}
 
-	result := make([]JITWalletClaimResponse, 0, len(claims))
+	result := make([]CashWalletClaimResponse, 0, len(claims))
 	for _, c := range claims {
-		r := JITWalletClaimResponse{
-			ID:            c.ID,
-			WalletAppID:   c.WalletAppID,
-			IdentityType:  c.IdentityType,
-			IdentityValue: c.IdentityValue,
-			AmountMloki:   c.AmountMloki,
-			Claimed:       c.ClaimedAt != nil,
-			CreatedAt:     c.CreatedAt.Unix(),
+		r := CashWalletClaimResponse{
+			ID:                   c.ID,
+			WalletAppID:          c.WalletAppID,
+			IdentityType:         c.IdentityType,
+			IdentityValue:        c.IdentityValue,
+			AmountMloki:          c.AmountMloki,
+			Claimed:              c.ClaimedAt != nil,
+			CreatedAt:            c.CreatedAt.Unix(),
+			MinTransferMloki:     c.MinTransferMloki,
+			RedeemFeePpm:         c.RedeemFeePpm,
+			SpunOffToWalletAppID: c.SpunOffToWalletAppID,
 		}
 		if c.ClaimedAt != nil {
 			claimedAt := c.ClaimedAt.Unix()
@@ -3223,38 +3338,38 @@ func (api *api) GetJITWalletRecipients(appID uint) ([]JITWalletClaimResponse, er
 	return result, nil
 }
 
-// CreateJITWallet is the admin equivalent of a hub calling create_jit_wallet
+// CreateCashWallet is the admin equivalent of a hub calling mint_cash
 // over NWC: it immediately creates, funds, and returns the plaintext pairing
-// URI for a shared JIT wallet serving every recipient in the request in one
+// URI for a shared Cash wallet serving every recipient in the request in one
 // shot — the connection is meant to be distributed to the whole recipient
 // group by the hub owner afterward.
-func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*CreateJITWalletResponse, error) {
+func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*CreateCashWalletResponse, error) {
 	var hub db.App
 	if err := api.db.First(&hub, hubID).Error; err != nil {
 		return nil, fmt.Errorf("app not found: %w", err)
 	}
-	if hub.Kind != db.AppKindJITHub {
-		return nil, fmt.Errorf("app is not a jit_hub")
+	if hub.Kind != db.AppKindCashHub {
+		return nil, fmt.Errorf("app is not a cash_hub")
 	}
 
-	// Serialize concurrent create_jit_wallet attempts against this hub (across
+	// Serialize concurrent mint_cash attempts against this hub (across
 	// this admin HTTP path and the NWC path,
-	// nip47/controllers/create_jit_wallet_controller.go) so two racing
-	// requests can't both pass jitwallet.Resolve's balance pre-check against
+	// nip47/controllers/mint_cash_controller.go) so two racing
+	// requests can't both pass cashwallet.Resolve's balance pre-check against
 	// the same stale balance before either one's Commit actually transfers
 	// funds out.
-	release, ok := jitwallet.LockHub(hub.ID)
+	release, ok := cashwallet.LockHub(hub.ID)
 	if !ok {
 		return nil, fmt.Errorf("%w: wallet creation already in progress for this hub", constants.ErrInvalidParams)
 	}
 	defer release()
 
-	recipients := make([]jitwallet.RecipientInput, len(req.Recipients))
+	recipients := make([]cashwallet.RecipientInput, len(req.Recipients))
 	for i, r := range req.Recipients {
 		if r.AmountMloki < 0 {
 			return nil, fmt.Errorf("%w: recipient amount_mloki must not be negative", constants.ErrInvalidParams)
 		}
-		recipients[i] = jitwallet.RecipientInput{
+		recipients[i] = cashwallet.RecipientInput{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			IAPubkey:      r.IAPubkey,
@@ -3262,7 +3377,7 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 		}
 	}
 
-	result, err := jitwallet.Create(context.Background(), jitwallet.Deps{
+	result, err := cashwallet.Create(context.Background(), cashwallet.Deps{
 		AppsService:         api.appsSvc,
 		TransactionsService: api.svc.GetTransactionsService(),
 		LNClient:            api.svc.GetLNClient(),
@@ -3270,41 +3385,73 @@ func (api *api) CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*Creat
 		DB:                  api.db,
 		RelayURLs:           api.cfg.GetRelayUrls(),
 		IAChecker:           api.iaManager,
-	}, jitwallet.Params{
+	}, cashwallet.Params{
 		HubApp:     &hub,
 		Recipients: recipients,
 		ExpirySecs: req.ExpirySecs,
+		SignMint:   req.MintSignature,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	recipientResults := make([]JITWalletRecipient, len(result.Recipients))
+	recipientResults := make([]CashWalletRecipient, len(result.Recipients))
 	for i, r := range result.Recipients {
-		recipientResults[i] = JITWalletRecipient{
+		recipientResults[i] = CashWalletRecipient{
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
-			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // msat amounts are always far below int64 range
+			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // mloki amounts are always far below int64 range
+			BearerSecret:  r.BearerSecret,
 		}
 	}
 
-	return &CreateJITWalletResponse{
+	var expiresAt *int64
+	if result.ExpiresAt != nil {
+		ts := result.ExpiresAt.Unix()
+		expiresAt = &ts
+	}
+
+	return &CreateCashWalletResponse{
 		AppID:      result.WalletApp.ID,
 		PairingURI: result.PairingURI,
-		ExpiresAt:  result.ExpiresAt.Unix(),
+		CashToken:  result.CashToken,
+		ExpiresAt:  expiresAt,
 		Recipients: recipientResults,
 	}, nil
 }
 
-// ListIdentityAuthorities returns every registered Identity Authority.
+// ListIdentityAuthorities returns every registered Identity Authority, each
+// with its own live UnredeemedSliceCount — the settings screen's remove
+// confirmation needs this to show the real blast radius before an operator
+// revokes one, so it's computed here via one grouped query rather than a
+// per-authority round trip, mirroring ListCircleIdentities' UsedByCount.
 func (api *api) ListIdentityAuthorities() ([]IdentityAuthorityResponse, error) {
 	authorities, err := api.iaManager.List()
 	if err != nil {
 		return nil, err
 	}
+
+	var counts []struct {
+		IAPubkey string
+		Count    int
+	}
+	if err := api.db.Model(&db.CashWalletClaim{}).
+		Where("claimed_at IS NULL AND ia_pubkey != ''").
+		Select("ia_pubkey, count(*) as count").
+		Group("ia_pubkey").
+		Find(&counts).Error; err != nil {
+		return nil, err
+	}
+	unredeemedByIA := make(map[string]int, len(counts))
+	for _, c := range counts {
+		unredeemedByIA[c.IAPubkey] = c.Count
+	}
+
 	result := make([]IdentityAuthorityResponse, 0, len(authorities))
 	for _, a := range authorities {
-		result = append(result, identityAuthorityToResponse(a))
+		response := identityAuthorityToResponse(a)
+		response.UnredeemedSliceCount = unredeemedByIA[a.Pubkey]
+		result = append(result, response)
 	}
 	return result, nil
 }

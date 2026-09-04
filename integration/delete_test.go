@@ -2,7 +2,7 @@
 
 // delete_test.go treats hub/child deletion as a first-class subject under
 // test, rather than the pure fixture-teardown role it plays everywhere else
-// in this suite (see admin_client.go's deleteCircleChild/deleteJITWallet/
+// in this suite (see admin_client.go's deleteCircleChild/deleteCashWallet/
 // deleteApp and ephemeral_test.go's own t.Cleanup usage). It exercises real
 // scenarios around apps.DeleteApp's child-count guard and
 // service.ReclaimAndDeleteSubWallet's reclaim/settlement-deferral behavior
@@ -68,28 +68,28 @@ func TestDeleteCircleHub_RefusedWhileChildrenExist(t *testing.T) {
 	require.NoError(t, admin.deleteApp(hubAppID), "once the only child is gone, the hub itself must now delete cleanly")
 }
 
-// TestDeleteJITHub_RefusedWhileChildrenExist is
-// TestDeleteCircleHub_RefusedWhileChildrenExist's jit_hub mirror.
-func TestDeleteJITHub_RefusedWhileChildrenExist(t *testing.T) {
+// TestDeleteCashHub_RefusedWhileChildrenExist is
+// TestDeleteCircleHub_RefusedWhileChildrenExist's cash_hub mirror.
+func TestDeleteCashHub_RefusedWhileChildrenExist(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, hubAppID, admin := createEphemeralJITHub(t, cfg, "delete-guard-jit-hub", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "delete-guard-cash-hub", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	beneficiaryPub := mustPubkey(t, newTestPrivkey(t))
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
 	err := admin.deleteApp(hubAppID)
-	require.Error(t, err, "a jit_hub with a live child must refuse deletion")
+	require.Error(t, err, "a cash_hub with a live child must refuse deletion")
 	require.True(t, strings.Contains(err.Error(), "issued wallet"), "expected apps.DeleteApp's own child-count guard message, got: %v", err)
 
-	claims, err := admin.listJITWalletClaims(hubAppID)
+	claims, err := admin.listCashWalletClaims(hubAppID)
 	require.NoError(t, err)
 	require.NotEmpty(t, claims)
-	require.NoError(t, admin.deleteJITWallet(hubAppID, claims[0].WalletAppID))
+	require.NoError(t, admin.deleteCashWallet(hubAppID, claims[0].WalletAppID))
 	require.NoError(t, admin.deleteApp(hubAppID), "once the only child is gone, the hub itself must now delete cleanly")
 }
 
@@ -138,15 +138,15 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 		"deleting a funded child must reclaim its exact remaining balance back to the hub")
 }
 
-// TestDeleteJITWallet_UnclaimedReclaimsFullAmountToHub is
-// TestDeleteCircleChild_ReclaimsBalanceToHub's jit_hub mirror: a jit_wallet
+// TestDeleteCashWallet_UnclaimedReclaimsFullAmountToHub is
+// TestDeleteCircleChild_ReclaimsBalanceToHub's cash_hub mirror: a cash_wallet
 // child is pre-funded with its full declared amount at creation time (moved
 // out of the hub's own balance immediately, unlike a circle child which
 // starts at zero) - deleting it before anyone claims it must return that
 // entire amount to the hub, as if it had never been minted.
-func TestDeleteJITWallet_UnclaimedReclaimsFullAmountToHub(t *testing.T) {
+func TestDeleteCashWallet_UnclaimedReclaimsFullAmountToHub(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, hubAppID, admin := createEphemeralJITHub(t, cfg, "delete-reclaim-jit-hub", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "delete-reclaim-cash-hub", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	var hubBalanceBefore GetBalanceResult
@@ -154,8 +154,8 @@ func TestDeleteJITWallet_UnclaimedReclaimsFullAmountToHub(t *testing.T) {
 
 	const amountMloki = 5000
 	beneficiaryPub := mustPubkey(t, newTestPrivkey(t))
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 		Recipients: onePubkeyRecipient(beneficiaryPub, amountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
@@ -165,14 +165,14 @@ func TestDeleteJITWallet_UnclaimedReclaimsFullAmountToHub(t *testing.T) {
 	require.EqualValues(t, hubBalanceBefore.Balance-amountMloki, hubBalanceMid.Balance,
 		"creating the child must have moved the amount out of the hub's own balance")
 
-	claims, err := admin.listJITWalletClaims(hubAppID)
+	claims, err := admin.listCashWalletClaims(hubAppID)
 	require.NoError(t, err)
-	require.NoError(t, admin.deleteJITWallet(hubAppID, claims[0].WalletAppID))
+	require.NoError(t, admin.deleteCashWallet(hubAppID, claims[0].WalletAppID))
 
 	var hubBalanceAfter GetBalanceResult
 	require.NoError(t, hubClient.Call(ctxT(t), "get_balance", struct{}{}, &hubBalanceAfter))
 	require.EqualValues(t, hubBalanceBefore.Balance, hubBalanceAfter.Balance,
-		"deleting an unclaimed jit child must reclaim its entire amount back to the hub, as if it never left")
+		"deleting an unclaimed cash child must reclaim its entire amount back to the hub, as if it never left")
 }
 
 // TestDeleteCircleChild_FreesIdentityForNewWallet proves the
@@ -312,11 +312,11 @@ func TestDeleteApp_Nonexistent_Errors(t *testing.T) {
 	require.Error(t, err, "deleting a nonexistent app id must error, not silently succeed")
 }
 
-// findJITClaimByIdentity locates the claim row for identityValue among
-// claims - listJITWalletClaims returns every recipient across every live
+// findCashClaimByIdentity locates the claim row for identityValue among
+// claims - listCashWalletClaims returns every recipient across every live
 // wallet under the hub, not scoped to one wallet, so callers filter by
 // identity to find the one they minted.
-func findJITClaimByIdentity(t *testing.T, claims []adminJITWalletClaim, identityValue string) adminJITWalletClaim {
+func findCashClaimByIdentity(t *testing.T, claims []adminCashWalletClaim, identityValue string) adminCashWalletClaim {
 	t.Helper()
 	for _, claim := range claims {
 		if claim.IdentityValue == identityValue {
@@ -324,41 +324,41 @@ func findJITClaimByIdentity(t *testing.T, claims []adminJITWalletClaim, identity
 		}
 	}
 	t.Fatalf("no claim found for identity %s", identityValue)
-	return adminJITWalletClaim{}
+	return adminCashWalletClaim{}
 }
 
-// TestJITWalletClaim_ListingReflectsDeletionState is the exact regression
-// test for a real production incident: a jit_hub became permanently
+// TestCashWalletClaim_ListingReflectsDeletionState is the exact regression
+// test for a real production incident: a cash_hub became permanently
 // undeletable ("still has 1 issued wallet(s)") while its own "issued
-// wallets" listing showed nothing at all. Root cause: DeleteJITWalletClaim
+// wallets" listing showed nothing at all. Root cause: DeleteCashClaim
 // removed a recipient's slice (sweeping its balance back to the hub
 // correctly) without ever checking whether that was the wallet's last
 // remaining claim - the now-empty wallet survived as an invisible orphan,
-// since ListJITWalletClaims is an inner join starting from the claims table
+// since ListCashWalletClaims is an inner join starting from the claims table
 // (a wallet with zero claims can never appear there, under any filter), yet
 // apps.DeleteApp's child-count guard kept counting it forever. This exercises
 // the fix end to end through the real admin HTTP API (not just the unit
-// test in api/jit_wallet_claims_test.go): the listing and the hub's own
+// test in api/cash_wallet_claims_test.go): the listing and the hub's own
 // deletability must stay consistent with each other at every step -
 // two-recipients-live, one-removed, and both-removed.
-func TestJITWalletClaim_ListingReflectsDeletionState(t *testing.T) {
+func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, hubAppID, admin := createEphemeralJITHub(t, cfg, "claim-listing-hub", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "claim-listing-hub", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	pub1 := mustPubkey(t, newTestPrivkey(t))
 	pub2 := mustPubkey(t, newTestPrivkey(t))
-	var created CreateJITWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-		Recipients: []JITWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: pub1, AmountMloki: happyPathAmountMloki},
-			{IdentityType: "pubkey", IdentityValue: pub2, AmountMloki: happyPathAmountMloki},
+	var created MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+		Recipients: []CashWalletRecipientParam{
+			{IdentityType: "pubkey", IdentityValue: pub1, AmountMillis: happyPathAmountMloki},
+			{IdentityType: "pubkey", IdentityValue: pub2, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
 
 	t.Run("BothRecipientsLive_ListingShowsBoth_HubRefusesDeletion", func(t *testing.T) {
-		claims, err := admin.listJITWalletClaims(hubAppID)
+		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
 		require.Len(t, claims, 2)
 
@@ -366,17 +366,17 @@ func TestJITWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 		require.Error(t, err, "the hub must refuse deletion while its wallet is still live")
 	})
 
-	claim1 := func() adminJITWalletClaim {
-		claims, err := admin.listJITWalletClaims(hubAppID)
+	claim1 := func() adminCashWalletClaim {
+		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
-		return findJITClaimByIdentity(t, claims, pub1)
+		return findCashClaimByIdentity(t, claims, pub1)
 	}()
 	walletAppID := claim1.WalletAppID
 
 	t.Run("OneRecipientRemoved_ListingShowsOnlyTheOther_HubStillRefuses", func(t *testing.T) {
-		require.NoError(t, admin.deleteJITWalletClaim(hubAppID, walletAppID, claim1.ID))
+		require.NoError(t, admin.deleteCashWalletClaim(hubAppID, walletAppID, claim1.ID))
 
-		claims, err := admin.listJITWalletClaims(hubAppID)
+		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
 		require.Len(t, claims, 1, "the listing must still show the wallet - it still has a live recipient")
 		require.Equal(t, pub2, claims[0].IdentityValue)
@@ -386,13 +386,13 @@ func TestJITWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 	})
 
 	t.Run("LastRecipientRemoved_ListingGoesToZero_HubBecomesImmediatelyDeletable", func(t *testing.T) {
-		claims, err := admin.listJITWalletClaims(hubAppID)
+		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
-		claim2 := findJITClaimByIdentity(t, claims, pub2)
+		claim2 := findCashClaimByIdentity(t, claims, pub2)
 
-		require.NoError(t, admin.deleteJITWalletClaim(hubAppID, walletAppID, claim2.ID))
+		require.NoError(t, admin.deleteCashWalletClaim(hubAppID, walletAppID, claim2.ID))
 
-		claimsAfter, err := admin.listJITWalletClaims(hubAppID)
+		claimsAfter, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
 		require.Empty(t, claimsAfter, "the listing must show nothing once every recipient is gone")
 
@@ -403,40 +403,40 @@ func TestJITWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 	})
 }
 
-// TestDeleteJITWalletClaim_WrongHub_Rejected is the regression test for a
+// TestDeleteCashClaim_WrongHub_Rejected is the regression test for a
 // cross-hub deletion bug found in code review: DELETE
-// /api/apps/:id/jit-wallets/:walletId/claims/:claimId used to never validate
+// /api/apps/:id/cash-wallets/:walletId/claims/:claimId used to never validate
 // that walletId/claimId actually belonged to the hub named by :id - the
 // server-side handler parsed the URL's other IDs but silently ignored the
 // hub id entirely. A caller scoped to hub A's endpoint could delete (and
 // redirect the sweep-back of) a claim that actually belonged to a completely
 // unrelated hub B, simply by supplying hub B's walletId/claimId while hitting
 // hub A's URL.
-func TestDeleteJITWalletClaim_WrongHub_Rejected(t *testing.T) {
+func TestDeleteCashClaim_WrongHub_Rejected(t *testing.T) {
 	cfg := requireConfig(t)
-	_, hubAppIDA, admin := createEphemeralJITHub(t, cfg, "wrong-hub-a", nil)
-	hubB, hubAppIDB, _ := createEphemeralJITHub(t, cfg, "wrong-hub-b", nil)
+	_, hubAppIDA, admin := createEphemeralCashHub(t, cfg, "wrong-hub-a", nil)
+	hubB, hubAppIDB, _ := createEphemeralCashHub(t, cfg, "wrong-hub-b", nil)
 
 	hubBClient := mustConnect(t, hubB.Connection)
 	pub := mustPubkey(t, newTestPrivkey(t))
-	var created CreateJITWalletResult
-	require.NoError(t, hubBClient.Call(ctxT(t), constants.NIP47MethodCreateJITWallet, CreateJITWalletParams{
-		Recipients: []JITWalletRecipientParam{
-			{IdentityType: "pubkey", IdentityValue: pub, AmountMloki: happyPathAmountMloki},
+	var created MintCashResult
+	require.NoError(t, hubBClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+		Recipients: []CashWalletRecipientParam{
+			{IdentityType: "pubkey", IdentityValue: pub, AmountMillis: happyPathAmountMloki},
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
 
-	claimsB, err := admin.listJITWalletClaims(hubAppIDB)
+	claimsB, err := admin.listCashWalletClaims(hubAppIDB)
 	require.NoError(t, err)
 	require.Len(t, claimsB, 1)
 	claimB := claimsB[0]
 
 	// hubA's own ID in the URL, but walletAppID/claimID actually belong to hubB.
-	err = admin.deleteJITWalletClaim(hubAppIDA, claimB.WalletAppID, claimB.ID)
+	err = admin.deleteCashWalletClaim(hubAppIDA, claimB.WalletAppID, claimB.ID)
 	require.Error(t, err, "a claim belonging to a different hub must not be deletable through this hub's endpoint")
 
-	claimsBAfter, err := admin.listJITWalletClaims(hubAppIDB)
+	claimsBAfter, err := admin.listCashWalletClaims(hubAppIDB)
 	require.NoError(t, err)
 	require.Len(t, claimsBAfter, 1, "hubB's claim must be untouched by the rejected cross-hub request")
 }

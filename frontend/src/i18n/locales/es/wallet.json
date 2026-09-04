@@ -167,10 +167,6 @@
         "title": "Sub-billetera simple",
         "description": "Una billetera independiente con su propio saldo, financiada desde tu hub, con permisos completos de envío y recepción."
       },
-      "jit": {
-        "title": "Hub de Billetera JIT",
-        "description": "Emite automáticamente una billetera de solo gasto cada vez que un destinatario sin billetera Lightning necesita recibir un pago."
-      },
       "circle": {
         "title": "Hub de Billetera de Círculo",
         "description": "Los miembros autorizados de tu círculo de Nostr pueden solicitarte una billetera Lightning, verificada contra tu lista de seguidos o tu lista de permitidos."

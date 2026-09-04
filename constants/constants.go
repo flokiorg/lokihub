@@ -12,6 +12,13 @@ var (
 	ErrQuotaExceeded     = errors.New("quota exceeded")
 	ErrInsufficientFunds = errors.New("insufficient funds")
 	ErrDuplicate         = errors.New("duplicate entry")
+	// ErrNotFound distinguishes "the caller's request was malformed" from
+	// "there's nothing there (anymore)" for callers that need to pick a
+	// different NWC error code for each — e.g. ReassignCashSliceIdentity's
+	// race-loss case is reported this way rather than as ErrInvalidParams,
+	// and cash_transfer_controller.go needs to tell them apart to return
+	// NOT_FOUND vs BAD_REQUEST correctly (see its own doc comment).
+	ErrNotFound = errors.New("not found")
 
 	// ErrSocialCacheWarmingUp is returned by a following-policy authorization
 	// check when the hub's in-memory Nostr social cache hasn't finished its
@@ -99,30 +106,51 @@ const (
 	NOTIFICATIONS_SCOPE     = "notifications" // covers all notification types
 	SUPERUSER_SCOPE         = "superuser"
 
-	// JIT Hub scope — grants create_jit_wallet on an isolated wallet
-	JIT_HUB_SCOPE = "jit_hub"
+	// Cash Hub scope — grants mint_cash on an isolated wallet
+	CASH_HUB_SCOPE = "cash_hub"
 	// Circle Wallet scope — grants create_circle_wallet on a circle_admin wallet
 	CIRCLE_WALLET_SCOPE = "circle_wallet"
-	// JIT Claim Funds scope — granted on jit_wallet children only. Covers
-	// claim_funds (pay out a recipient's proven slice) and list_recipients
+	// Cash Redeem scope — granted on cash_wallet children only. Covers
+	// cash_redeem (pay out a recipient's proven slice) and list_recipients
 	// (read-only roster of a shared wallet's recipients/claim status).
 	// Deliberately does NOT cover pay_invoice/lookup_invoice/list_transactions:
-	// a jit_wallet's connection may be widely shared, so its method surface is
+	// a cash_wallet's connection may be widely shared, so its method surface is
 	// a narrow, explicit allowlist rather than a normal wallet's scope set.
-	JIT_CLAIM_FUNDS_SCOPE = "jit_claim_funds"
+	CASH_REDEEM_SCOPE = "cash_redeem"
+	// CASH_TRANSFER_SCOPE is granted on cash_wallet children only, alongside
+	// CASH_REDEEM_SCOPE — every cash_wallet connection gets both, always
+	// (cashwallet.cashWalletScopes is a fixed, non-configurable list; there is
+	// no way to grant one without the other today). Kept as its own scope
+	// rather than folded into CASH_REDEEM_SCOPE because cash_transfer
+	// never moves funds — it doesn't belong in PayCapableScopes the way
+	// cash_redeem does, and lumping them together would make cash_transfer
+	// inherit budget-consuming semantics it shouldn't have.
+	CASH_TRANSFER_SCOPE = "cash_transfer"
+	// CASH_CONSOLIDATE_SCOPE is granted on cash_wallet children alongside
+	// CASH_REDEEM_SCOPE/CASH_TRANSFER_SCOPE (same fixed, non-configurable list).
+	// Like cash_transfer it never draws budget in the pay_invoice sense — it only
+	// combines slices this same node already custodies (NIP-CASH §Consolidating
+	// Tokens) — so it stays out of PayCapableScopes for the same reason.
+	CASH_CONSOLIDATE_SCOPE = "cash_consolidate"
 )
 
-// NIP-47 method names for JIT and Circle Wallet operations.
+// NIP-47 method names for Cash and Circle Wallet operations.
 const (
-	NIP47MethodCreateJITWallet    = "create_jit_wallet"
+	NIP47MethodMintCash           = "mint_cash"
 	NIP47MethodCreateCircleWallet = "create_circle_wallet"
-	// NIP47MethodClaimFunds pays out a proven recipient's slice of a shared
-	// jit_wallet in one shot. Replaces the old, per-recipient
-	// create_jit_wallet/claim_jit_wallet reveal flow entirely.
-	NIP47MethodClaimFunds = "claim_funds"
-	// NIP47MethodListRecipients is a read-only roster of a shared jit_wallet's
+	// NIP47MethodCashRedeem pays out a proven recipient's slice of a shared
+	// cash_wallet in one shot (NIP-CASH §Redeeming Funds).
+	NIP47MethodCashRedeem = "cash_redeem"
+	// NIP47MethodCashTransfer reassigns, or partially splits off, an
+	// unclaimed slice's value (NIP-CASH §Transferring/Splitting a Slice)
+	// without redeeming it.
+	NIP47MethodCashTransfer = "cash_transfer"
+	// NIP47MethodCashConsolidate combines several same-hub slices this node
+	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
+	NIP47MethodCashConsolidate = "cash_consolidate"
+	// NIP47MethodListRecipients is a read-only roster of a shared cash_wallet's
 	// recipients (identity, entitled amount, claimed status) — no invoice or
-	// preimage detail, since a jit_wallet has no list_transactions grant.
+	// preimage detail, since a cash_wallet has no list_transactions grant.
 	NIP47MethodListRecipients = "list_recipients"
 )
 
@@ -130,10 +158,10 @@ const (
 // MaxAmountLoki/BudgetRenewal budget semantics for SendPaymentSync/
 // SendKeysend and for app budget/expiry display (api.GetApp/ListApps/
 // UpdateApp, get_budget). Historically only PAY_INVOICE_SCOPE played this
-// role; JIT_CLAIM_FUNDS_SCOPE joins it because jit_wallet children no longer
+// role; CASH_REDEEM_SCOPE joins it because cash_wallet children no longer
 // carry PAY_INVOICE_SCOPE at all. Any future scope that authorizes its own
 // distinct payment-shaped method should be added here too.
-var PayCapableScopes = []string{PAY_INVOICE_SCOPE, JIT_CLAIM_FUNDS_SCOPE}
+var PayCapableScopes = []string{PAY_INVOICE_SCOPE, CASH_REDEEM_SCOPE}
 
 // PPM_DIVISOR is the parts-per-million base used by CircleHubConfig.FeesPpm:
 // a circle_hub forwarding fee of feesPpm on an outgoing payment of amount
@@ -146,6 +174,19 @@ const PPM_DIVISOR = 1_000_000
 // the mathematically sound ceiling; UpdateCircleHubConfig/CreateCircleHub
 // reject anything higher).
 const MAX_FEES_PPM = PPM_DIVISOR
+
+// MAX_EXPIRY_SECS is the upper bound accepted for any config or request field
+// expressed in raw expiry seconds that eventually feeds into
+// time.Duration(secs) * time.Second (e.g. db.CashHubConfig.MaxExpSecs and a
+// mint_cash caller's own ExpirySecs, cashwallet.Resolve). time.Duration is an
+// int64 count of NANOSECONDS, so it silently wraps once the equivalent
+// seconds value exceeds roughly 292 years — a value large enough to overflow
+// that conversion would produce an arbitrary, possibly-already-past
+// ExpiresAt instead of a validation error. 100 years is comfortably below
+// that wraparound point (leaving a ~3x margin) while still being far beyond
+// any wallet lifetime a real caller would ever need, so it never constrains
+// a legitimate "effectively never expires" request.
+const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
 
 // DefaultGeneralRelays seeds the "GeneralRelay" config key on first run.
 // These relays are used to fetch general Nostr social data — profiles,

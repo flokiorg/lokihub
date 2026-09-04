@@ -3,6 +3,7 @@
     "home": "Home",
     "wallet": "Wallet",
     "subWallets": "Sub-wallets",
+    "cashHub": "Cash Hubs",
     "connections": "Connections",
     "node": "Node",
     "settings": "Settings",
@@ -39,9 +40,7 @@
     "viewAll": "View all",
     "retry": "Retry",
     "payAndOpen": "Pay and open channel",
-    "payExternally": "Pay with another wallet",
-    "connect": "Connect",
-    "confirm": "Confirm"
+    "payExternally": "Pay with another wallet"
   },
   "status": {
     "online": "Online",

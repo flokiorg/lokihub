@@ -21,12 +21,23 @@ import { App } from "src/types";
 export function ConnectAppCard({
   app,
   pairingUri,
+  lokicashToken,
+  bearerSecret,
   appStoreApp,
   variant = "create",
   showConnectionStatus = variant === "create",
+  primaryFormat = "nwc",
 }: {
   app: App;
   pairingUri: string;
+  // lokicashToken: the same connection as pairingUri, packaged as a single
+  // lokicash1... string (NIP-CASH §The Lokicash Token).
+  lokicashToken?: string;
+  // bearerSecret: a Cash wallet's bearer redemption secret, present only
+  // right after creating a bearer-mode wallet — the wallet mints it once
+  // and never returns it again (NIP-CASH §Bearer Slices), so it has to be
+  // shown here, not just left to a later "reveal".
+  bearerSecret?: string;
   appStoreApp?: AppStoreApp;
   // "create": full Card with header, used on standalone pairing pages.
   // "reveal": bare content (no Card wrapper) for showing a secret inside a
@@ -37,14 +48,22 @@ export function ConnectAppCard({
   // independently — e.g. a Dialog-hosted "reveal" layout for a brand-new,
   // not-yet-connected wallet still wants this status shown.
   showConnectionStatus?: boolean;
+  // "nwc" (default): QR + primary copy button both use pairingUri, exactly
+  // as every other app connection (regular apps, circle wallets) works.
+  // "lokicash": for Cash wallets specifically, where the product surface is
+  // the lokicash1... token, not the raw NWC pairing URI — the QR encodes
+  // lokicashToken instead, and pairingUri is never shown or copied at all.
+  // REQUIRES lokicashToken to be set.
+  primaryFormat?: "nwc" | "lokicash";
 }) {
   const [timeout, setTimeout] = useState(false);
   const [isQRCodeVisible, setIsQRCodeVisible] = useState(false);
   const logoSrc = useAppLogo(appStoreApp?.id);
   const { t } = useTranslation("apps");
 
+  const qrValue = primaryFormat === "lokicash" ? (lokicashToken ?? "") : pairingUri;
   const copy = () => {
-    copyToClipboard(pairingUri);
+    copyToClipboard(primaryFormat === "lokicash" ? (lokicashToken ?? "") : pairingUri);
   };
 
   useEffect(() => {
@@ -85,7 +104,7 @@ export function ConnectAppCard({
             className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
             onClick={() => setIsQRCodeVisible(true)}
           >
-            <QRCode value={pairingUri} withIcon={!logoSrc} />
+            <QRCode value={qrValue} withIcon={!logoSrc} />
             {logoSrc ? (
               <img
                 src={logoSrc}
@@ -106,17 +125,52 @@ export function ConnectAppCard({
           ) : null}
         </div>
       ) : null}
-      <div className="flex gap-2">
-        <Button onClick={copy} variant="outline">
-          <CopyIcon />
-          {t("connectAppCard.copySecret", "Copy Connection Secret")}
-        </Button>
-        {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
-        {/* <ExternalLinkButton to={pairingUri} variant="outline">
-          <ExternalLinkIcon />
-          Open In App
-        </ExternalLinkButton> */}
+      <div className="flex flex-wrap justify-center gap-2">
+        {primaryFormat === "lokicash" ? (
+          <Button onClick={copy} variant="outline">
+            <CopyIcon />
+            {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
+          </Button>
+        ) : (
+          <>
+            <Button onClick={copy} variant="outline">
+              <CopyIcon />
+              {t("connectAppCard.copySecret", "Copy Connection Secret")}
+            </Button>
+            {/* For now not showing open in-app, only works well on Android, not on Desktop or iOS */}
+            {/* <ExternalLinkButton to={pairingUri} variant="outline">
+              <ExternalLinkIcon />
+              Open In App
+            </ExternalLinkButton> */}
+            {lokicashToken ? (
+              <Button
+                onClick={() => copyToClipboard(lokicashToken)}
+                variant="outline"
+              >
+                <CopyIcon />
+                {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
+              </Button>
+            ) : null}
+          </>
+        )}
+        {bearerSecret ? (
+          <Button
+            onClick={() => copyToClipboard(bearerSecret)}
+            variant="outline"
+          >
+            <CopyIcon />
+            {t("connectAppCard.copyBearerSecret", "Copy Bearer Secret")}
+          </Button>
+        ) : null}
       </div>
+      {bearerSecret ? (
+        <p className="text-sm text-muted-foreground text-center max-w-sm">
+          {t(
+            "connectAppCard.bearerSecretHelper",
+            "This is a bearer secret — anyone who has it can redeem this wallet's funds, with no other proof required. It's shown only this once; hand both this and the connection above to the intended recipient, out of band."
+          )}
+        </p>
+      ) : null}
     </>
   );
 

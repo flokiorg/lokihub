@@ -153,34 +153,34 @@ type API interface {
 	// Invoice Fee Estimation
 	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
 
-	// JIT wallets / claims
-	// ListJITWalletClaims returns a page of a jit_hub's recipient slices
-	// (one row per JITWalletClaim, across every jit_wallet child). limit == 0
-	// returns every row unpaginated. status filters by JITAllocationStatus*
-	// ("" means unfiltered); counts in the returned JITWalletClaimCounts
+	// Cash wallets / claims
+	// ListCashWalletClaims returns a page of a cash_hub's recipient slices
+	// (one row per CashWalletClaim, across every cash_wallet child). limit == 0
+	// returns every row unpaginated. status filters by CashAllocationStatus*
+	// ("" means unfiltered); counts in the returned CashWalletClaimCounts
 	// always reflect the full, unfiltered set so a UI can show per-tab totals
 	// regardless of which tab is selected.
-	ListJITWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]JITWalletClaimResponse, uint64, JITWalletClaimCounts, error)
-	// CreateJITWallet creates, funds, and reveals a shared JIT wallet serving
+	ListCashWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]CashWalletClaimResponse, uint64, CashWalletClaimCounts, error)
+	// CreateCashWallet creates, funds, and reveals a shared Cash wallet serving
 	// every recipient in the request in one shot — the admin equivalent of a
-	// beneficiary calling create_jit_wallet over NWC.
-	CreateJITWallet(hubID uint, req *CreateJITWalletRequest) (*CreateJITWalletResponse, error)
-	// DeleteJITWalletClaim removes an unclaimed slice, sweeping its amount
+	// hub owner calling mint_cash over NWC.
+	CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*CreateCashWalletResponse, error)
+	// DeleteCashClaim removes an unclaimed slice, sweeping its amount
 	// back to the hub. To delete the whole wallet (all its slices), use
-	// DeleteJITWallet instead. Rejects if walletAppID is not actually a
-	// jit_wallet child of hubAppID, mirroring DeleteJITWallet's own check —
+	// DeleteCashWallet instead. Rejects if walletAppID is not actually a
+	// cash_wallet child of hubAppID, mirroring DeleteCashWallet's own check —
 	// callers must not be able to reach into a hub they don't own by
 	// supplying an arbitrary walletAppID/claimID pair.
-	DeleteJITWalletClaim(hubAppID uint, walletAppID uint, claimID uint) error
-	// DeleteJITWallet reclaims any remaining balance back to the hub and
-	// deletes a jit_wallet child, regardless of how much of it has been spent.
-	DeleteJITWallet(hubAppID uint, walletAppID uint) error
-	GetJITWalletConnection(appID uint) (*JITWalletConnectionResponse, error)
-	// GetJITWalletRecipients returns every recipient slice of a single
-	// jit_wallet (claimed or not), scoped by the wallet's own app ID rather
-	// than its parent hub's — for a jit_wallet's own AppDetails page to show
+	DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) error
+	// DeleteCashWallet reclaims any remaining balance back to the hub and
+	// deletes a cash_wallet child, regardless of how much of it has been spent.
+	DeleteCashWallet(hubAppID uint, walletAppID uint) error
+	GetCashWalletConnection(appID uint) (*CashWalletConnectionResponse, error)
+	// GetCashWalletRecipients returns every recipient slice of a single
+	// cash_wallet (claimed or not), scoped by the wallet's own app ID rather
+	// than its parent hub's — for a cash_wallet's own AppDetails page to show
 	// who it serves, which may be more than one beneficiary.
-	GetJITWalletRecipients(appID uint) ([]JITWalletClaimResponse, error)
+	GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, error)
 
 	// Identity Authority registry
 	ListIdentityAuthorities() ([]IdentityAuthorityResponse, error)
@@ -202,8 +202,14 @@ type App struct {
 	BudgetUsage   uint64     `json:"budgetUsage"`
 	BudgetRenewal string     `json:"budgetRenewal"`
 	Kind          string     `json:"kind"`
+	// ParentAppID/ParentKind mirror db.App — set only on a Cash/Circle Hub's
+	// own children (cash_wallet/circle_wallet), identifying which specific
+	// hub issued them. Used by the frontend to group siblings under the same
+	// hub for the connection switcher, instead of the hub's own ID/kind.
+	ParentAppID *uint  `json:"parentAppId,omitempty"`
+	ParentKind  string `json:"parentKind,omitempty"`
 	// Isolated is derived from Kind (db.App.IsIsolated) — true for every kind
-	// that maintains its own balance (isolated, jit_hub, jit_wallet,
+	// that maintains its own balance (isolated, cash_hub, cash_wallet,
 	// circle_hub, circle_wallet). Kept as an explicit field because the
 	// frontend gates isolated-balance UI (e.g. the increase/decrease buttons)
 	// on it directly rather than duplicating the kind list client-side.
@@ -216,11 +222,21 @@ type App struct {
 	// summary of the attached identity plus policy-specific counts, so the
 	// frontend Circles card doesn't need an extra round-trip per app.
 	CircleIdentity *CircleIdentitySummaryWithCounts `json:"circleIdentity,omitempty"`
-	// JITPerWalletMaxMloki/JITMaxExpSecs are set only for jit_hub apps — the
-	// hub-wide defaults set at creation time, surfaced here so Edit Connection
-	// can display and update them instead of only being settable once.
-	JITPerWalletMaxMloki *int `json:"jitPerWalletMaxMloki,omitempty"`
-	JITMaxExpSecs        *int `json:"jitMaxExpSecs,omitempty"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs/CashMinTransferMloki/CashRedeemFeePpm
+	// are set only for cash_hub apps — the hub-wide defaults set at creation
+	// time, surfaced here so Edit Connection can display and update them
+	// instead of only being settable once. CashMinTransferMloki is the
+	// default floor (0 = no floor) a freshly-minted wallet's slices inherit
+	// for cash_transfer splitting — see db.CashHubConfig.MinTransferMloki.
+	// CashRedeemFeePpm is the default per-million cash_redeem fee (0 = free)
+	// a freshly-minted wallet's slices inherit, charged only on a genuine
+	// external redemption — see db.CashHubConfig.RedeemFeePpm. CashMaxExpSecs
+	// of 0 means "never" — no ceiling on how long an issued wallet may
+	// remain unredeemed; see db.CashHubConfig.MaxExpSecs.
+	CashPerWalletMaxMloki *int   `json:"cashPerWalletMaxMloki,omitempty"`
+	CashMaxExpSecs        *int   `json:"cashMaxExpSecs,omitempty"`
+	CashMinTransferMloki  *int64 `json:"cashMinTransferMloki,omitempty"`
+	CashRedeemFeePpm      *int   `json:"cashRedeemFeePpm,omitempty"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// are set only for circle_hub apps — the hub-wide defaults set at
 	// creation time, for the same reason as above.
@@ -273,6 +289,18 @@ type ListAppsFilters struct {
 	AppStoreAppId string `json:"appStoreAppId"`
 	Unused        bool   `json:"unused"`
 	SubWallets    *bool  `json:"subWallets"`
+	// Kind + TopLevelOnly group top-level subwallets of the same kind
+	// together (e.g. "my other Cash Hubs") — TopLevelOnly restricts to
+	// parent_app_id IS NULL so a hub's own children (which share the
+	// sibling *_wallet kind, not the hub kind) never leak in.
+	Kind         string `json:"kind"`
+	TopLevelOnly bool   `json:"topLevelOnly"`
+	// ParentAppId groups one specific hub's children together (e.g. "other
+	// wallets under this Cash Hub") — mirrors db.App.ParentAppID. Also lifts
+	// the cash_wallet general-listing exclusion in ListApps, since asking
+	// for a specific hub's children is exactly the narrow, intentional case
+	// that exclusion is meant to still allow.
+	ParentAppId *uint `json:"parentAppId"`
 }
 
 type ListAppsResponse struct {
@@ -288,10 +316,13 @@ type UpdateAppRequest struct {
 	UpdateExpiresAt bool      `json:"updateExpiresAt"`
 	Scopes          []string  `json:"scopes"`
 	Metadata        *Metadata `json:"metadata"`
-	// JITPerWalletMaxMloki/JITMaxExpSecs update a jit_hub's JITHubConfig; nil
-	// leaves the corresponding field unchanged. Ignored for other app kinds.
-	JITPerWalletMaxMloki *int `json:"jitPerWalletMaxMloki"`
-	JITMaxExpSecs        *int `json:"jitMaxExpSecs"`
+	// CashPerWalletMaxMloki/CashMaxExpSecs/CashMinTransferMloki/CashRedeemFeePpm
+	// update a cash_hub's CashHubConfig; nil leaves the corresponding field
+	// unchanged. Ignored for other app kinds.
+	CashPerWalletMaxMloki *int   `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs        *int   `json:"cashMaxExpSecs"`
+	CashMinTransferMloki  *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm      *int   `json:"cashRedeemFeePpm"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// update a circle_hub's CircleHubConfig; nil leaves the
 	// corresponding field unchanged. Ignored for other app kinds.
@@ -318,8 +349,10 @@ type CreateAppRequest struct {
 	Kind                    string   `json:"kind"`
 	Metadata                Metadata `json:"metadata,omitempty"`
 	UnlockPassword          string   `json:"unlockPassword"`
-	JITPerWalletMaxMloki    int      `json:"jitPerWalletMaxMloki"`
-	JITMaxExpSecs           int      `json:"jitMaxExpSecs"`
+	CashPerWalletMaxMloki   int      `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs          int      `json:"cashMaxExpSecs"`
+	CashMinTransferMloki    int64    `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm        int      `json:"cashRedeemFeePpm"`
 	CircleMaxExpSecs        int      `json:"circleMaxExpSecs"`
 	CircleFeesPpm           int      `json:"circleFeesPpm"`
 	CirclePerWalletMaxMloki int      `json:"circlePerWalletMaxMloki"`
@@ -339,64 +372,83 @@ type CreateLightningAddressRequest struct {
 	AppId   uint   `json:"appId"`
 }
 
-// JIT wallet / claim types.
+// Cash wallet / claim types.
 
-// JITWalletRecipient describes one recipient's requested slice when creating
-// a (possibly shared) JIT wallet — a wallet may serve several recipients at
+// CashWalletRecipient describes one recipient's requested slice when creating
+// a (possibly shared) Cash wallet — a wallet may serve several recipients at
 // once, each with their own amount, all sharing the wallet's one expiry.
-type JITWalletRecipient struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key"
-	IdentityValue string `json:"identity_value"`
+type CashWalletRecipient struct {
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   int64  `json:"amount_mloki"`
+	// BearerSecret is response-only: populated when identity_type == "bearer",
+	// and only in the create_cash_wallet response — it is never retrievable
+	// again afterward (NIP-JW §Bearer Slices). A caller MUST NOT set it on a
+	// request; there is nothing for it to mean there.
+	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
-type CreateJITWalletRequest struct {
-	Recipients []JITWalletRecipient `json:"recipients"`
-	ExpirySecs int                  `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+// CreateCashWalletRequest's split floor (MinTransferMloki) is NOT a request
+// field — it's inherited from the issuing Cash Hub's own configured default
+// (db.CashHubConfig), not supplied per call. See
+// CreateAppRequest.CashMinTransferMloki for where a hub owner actually sets it.
+type CreateCashWalletRequest struct {
+	Recipients []CashWalletRecipient `json:"recipients"`
+	ExpirySecs int                   `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// MintSignature opts the issued token into mint provenance (NIP-CASH
+	// §Mint Provenance) — same opt-in the NWC-facing mint_cash/cash_transfer/
+	// cash_consolidate methods already carry (mint_signature). Best-effort:
+	// a signing failure never fails the mint, it just produces a token
+	// without the signature.
+	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
-type CreateJITWalletResponse struct {
-	AppID      uint                 `json:"app_id"`
-	PairingURI string               `json:"pairing_uri"`
-	ExpiresAt  int64                `json:"expires_at"`
-	Recipients []JITWalletRecipient `json:"recipients"`
+type CreateCashWalletResponse struct {
+	AppID      uint   `json:"app_id"`
+	PairingURI string `json:"pairing_uri"`
+	CashToken  string `json:"cash_token"`
+	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
+	// own CashMaxExpSecs is 0 ("never") and the request didn't carry its
+	// own ExpirySecs.
+	ExpiresAt  *int64                `json:"expires_at,omitempty"`
+	Recipients []CashWalletRecipient `json:"recipients"`
 }
 
-// ListJITWalletClaimsResponse is the paginated response for
-// ListJITWalletClaims — mirrors ListTransactionsResponse's shape.
-type ListJITWalletClaimsResponse struct {
-	Claims     []JITWalletClaimResponse `json:"claims"`
-	TotalCount uint64                   `json:"totalCount"`
-	Counts     JITWalletClaimCounts     `json:"counts"`
+// ListCashWalletClaimsResponse is the paginated response for
+// ListCashWalletClaims — mirrors ListTransactionsResponse's shape.
+type ListCashWalletClaimsResponse struct {
+	Claims     []CashWalletClaimResponse `json:"claims"`
+	TotalCount uint64                    `json:"totalCount"`
+	Counts     CashWalletClaimCounts     `json:"counts"`
 }
 
-// JIT claim status filter values, accepted by ListJITWalletClaims' status
-// param and returned by jitClaimStatus.
+// Cash claim status filter values, accepted by ListCashWalletClaims' status
+// param and returned by cashClaimStatus.
 const (
-	JITAllocationStatusUnclaimed = "unclaimed"
-	JITAllocationStatusClaimed   = "claimed"
-	JITAllocationStatusExpired   = "expired"
+	CashAllocationStatusUnclaimed = "unclaimed"
+	CashAllocationStatusClaimed   = "claimed"
+	CashAllocationStatusExpired   = "expired"
 )
 
-// JITWalletClaimCounts totals a hub's claim rows by status, over the full
+// CashWalletClaimCounts totals a hub's claim rows by status, over the full
 // unfiltered set — meant for a UI's per-tab counts.
-type JITWalletClaimCounts struct {
+type CashWalletClaimCounts struct {
 	All       uint64 `json:"all"`
 	Unclaimed uint64 `json:"unclaimed"`
 	Claimed   uint64 `json:"claimed"`
 	Expired   uint64 `json:"expired"`
 }
 
-// JITWalletClaimResponse represents one recipient's slice of a jit_wallet.
-// ID is the claim's own row ID (delete via DeleteJITWalletClaim, unclaimed
+// CashWalletClaimResponse represents one recipient's slice of a cash_wallet.
+// ID is the claim's own row ID (delete via DeleteCashClaim, unclaimed
 // only); WalletAppID identifies the shared connection this slice belongs to
-// (reveal via GetJITWalletConnection, delete the whole wallet via
-// DeleteJITWallet). Claimed is a plain boolean (ClaimedAt != nil) — unlike
+// (reveal via GetCashWalletConnection, delete the whole wallet via
+// DeleteCashWallet). Claimed is a plain boolean (ClaimedAt != nil) — unlike
 // the old single-recipient-per-wallet model, there's no spend-fraction
-// derivation here, since claim_funds either pays a slice out completely or
+// derivation here, since cash_redeem either pays a slice out completely or
 // not at all.
-type JITWalletClaimResponse struct {
+type CashWalletClaimResponse struct {
 	ID            uint   `json:"id"`
 	WalletAppID   uint   `json:"wallet_app_id"`
 	IdentityType  string `json:"identity_type"`
@@ -406,10 +458,36 @@ type JITWalletClaimResponse struct {
 	Claimed       bool   `json:"claimed"`
 	ClaimedAt     *int64 `json:"claimed_at,omitempty"`
 	CreatedAt     int64  `json:"created_at"`
+	// MinTransferMloki is this slice's own split floor — how small a future
+	// split off it (or the remainder left behind) may be (0 = no floor). Set
+	// once, at creation or inherited from a split's source slice — see
+	// db.CashWalletClaim's own doc comments.
+	MinTransferMloki int64 `json:"min_transfer_mloki"`
+	// RedeemFeePpm is this slice's own locked-in redeem fee rate (0 = free),
+	// fixed once at creation or inherited unchanged from a split's source
+	// slice — never retroactively affected by a later change to the Hub's
+	// own default (NIP-CASH.md §The Redeem Fee). Exposed so the Hub owner
+	// can actually verify that immutability guarantee on a specific,
+	// already-issued lokicash, not just trust the Hub Settings UI's own copy
+	// about it — see db.CashWalletClaim.RedeemFeePpm's own doc comment.
+	RedeemFeePpm int `json:"redeem_fee_ppm"`
+	// SpunOffToWalletAppID is set when this slice's value was moved into a
+	// brand-new dedicated cash_wallet via a split, rather than redeemed —
+	// purely informational, for the UI to explain why a claim is claimed
+	// with no matching payment.
+	SpunOffToWalletAppID *uint `json:"spun_off_to_wallet_app_id,omitempty"`
+	// CashToken is the wallet's own connection, packaged as a
+	// lokicash1... string (NIP-JW §The Lokicash Token) — identical for every
+	// claim sharing the same WalletAppID. Only ever populated for the page
+	// of results actually being returned (ListCashWalletClaims derives it
+	// after pagination, once per unique wallet on that page, not for every
+	// claim across the whole hub).
+	CashToken string `json:"cash_token,omitempty"`
 }
 
-type JITWalletConnectionResponse struct {
+type CashWalletConnectionResponse struct {
 	PairingURI string `json:"pairing_uri"`
+	CashToken  string `json:"cash_token"`
 }
 
 // Identity Authority registry types.
@@ -425,6 +503,12 @@ type IdentityAuthorityResponse struct {
 	Name      string   `json:"name"`
 	RelayURLs []string `json:"relay_urls,omitempty"`
 	CreatedAt int64    `json:"created_at"`
+	// UnredeemedSliceCount is how many currently-unclaimed connection_key Cash
+	// Wallet slices this IA has attested for right now — the live blast
+	// radius a revocation would immediately strand, computed by
+	// ListIdentityAuthorities (never populated by AddIdentityAuthority's own
+	// response, which has nothing to count yet).
+	UnredeemedSliceCount int `json:"unredeemed_slice_count"`
 }
 
 type InitiateSwapRequest struct {

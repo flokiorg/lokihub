@@ -313,3 +313,109 @@ func TestHandleCreateConnectionEvent_DoNotAllowCreateConnectionMethod(t *testing
 	assert.Equal(t, models.CREATE_CONNECTION_METHOD, publishedResponse.ResultType)
 	assert.Nil(t, publishedResponse.Result)
 }
+
+// Fixed 2026-08-31 (companion to the Circle Wallet fix in
+// create_circle_wallet_controller.go): a nonzero max_amount in [1, 999]
+// mloki used to floor to a stored budget cap of 0, which validateCanPay
+// treats as "no cap at all" - the same silent-bypass shape as the Circle
+// Wallet bug. Unlike create_circle_wallet, max_amount: 0 itself stays legal
+// here (it's this codebase's established "no budget cap" convention for
+// generic connections) - only the truncating [1, 999] range is rejected.
+func TestHandleCreateConnectionEvent_SubLokiMaxAmount_Rejected(t *testing.T) {
+	for _, maxAmount := range []uint64{1, 500, 999} {
+		t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
+			ctx := context.TODO()
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+
+			pairingSecretKey := nostr.GeneratePrivateKey()
+			pairingPublicKey, err := nostr.GetPublicKey(pairingSecretKey)
+			require.NoError(t, err)
+
+			nip47CreateConnectionJson := fmt.Sprintf(`
+{
+	"method": "create_connection",
+	"params": {
+		"pubkey": "%s",
+		"name": "Test 123",
+		"request_methods": ["get_info", "pay_invoice"],
+		"max_amount": %d,
+		"kind": "isolated"
+	}
+}
+`, pairingPublicKey, maxAmount)
+
+			nip47Request := &models.Request{}
+			require.NoError(t, json.Unmarshal([]byte(nip47CreateConnectionJson), nip47Request))
+
+			dbRequestEvent := &db.RequestEvent{}
+			require.NoError(t, svc.DB.Create(&dbRequestEvent).Error)
+
+			var publishedResponse *models.Response
+			publishResponse := func(response *models.Response, tags nostr.Tags) {
+				publishedResponse = response
+			}
+
+			NewTestNip47Controller(svc).
+				HandleCreateConnectionEvent(ctx, nip47Request, dbRequestEvent.ID, publishResponse)
+
+			require.NotNil(t, publishedResponse.Error,
+				"a max_amount below 1000 mloki must be rejected outright, never silently truncated to an unlimited cap")
+			assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+
+			var count int64
+			require.NoError(t, svc.DB.Model(&db.App{}).Where("app_pubkey = ?", pairingPublicKey).Count(&count).Error)
+			assert.Equal(t, int64(0), count, "a rejected request must not leave a partially-created app behind")
+		})
+	}
+}
+
+// Control: max_amount: 0 is NOT rejected by the fix above - it's a
+// deliberate, pre-existing "unlimited" request, distinct from an accidental
+// sub-loki truncation.
+func TestHandleCreateConnectionEvent_ZeroMaxAmount_StillMeansUnlimited(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	pairingSecretKey := nostr.GeneratePrivateKey()
+	pairingPublicKey, err := nostr.GetPublicKey(pairingSecretKey)
+	require.NoError(t, err)
+
+	nip47CreateConnectionJson := fmt.Sprintf(`
+{
+	"method": "create_connection",
+	"params": {
+		"pubkey": "%s",
+		"name": "Test 123",
+		"request_methods": ["get_info", "pay_invoice"],
+		"max_amount": 0,
+		"kind": "isolated"
+	}
+}
+`, pairingPublicKey)
+
+	nip47Request := &models.Request{}
+	require.NoError(t, json.Unmarshal([]byte(nip47CreateConnectionJson), nip47Request))
+
+	dbRequestEvent := &db.RequestEvent{}
+	require.NoError(t, svc.DB.Create(&dbRequestEvent).Error)
+
+	var publishedResponse *models.Response
+	publishResponse := func(response *models.Response, tags nostr.Tags) {
+		publishedResponse = response
+	}
+
+	NewTestNip47Controller(svc).
+		HandleCreateConnectionEvent(ctx, nip47Request, dbRequestEvent.ID, publishResponse)
+
+	require.Nil(t, publishedResponse.Error)
+	app := db.App{}
+	require.NoError(t, svc.DB.Where("app_pubkey = ?", pairingPublicKey).First(&app).Error)
+	permissions := []db.AppPermission{}
+	require.NoError(t, svc.DB.Where("app_id = ?", app.ID).Find(&permissions).Error)
+	require.Len(t, permissions, 2)
+	assert.Equal(t, 0, permissions[1].MaxAmountLoki)
+}

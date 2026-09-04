@@ -218,7 +218,7 @@ func TestDeleteCircleHub_FundedChild_ModeAll_DeletesEverythingAnyway(t *testing.
 }
 
 // mode="all" is a plain bulk delete with no reclaim, unlike every other
-// circle/JIT deletion path (DeleteCircleWalletChild, the periodic expiry
+// circle/Cash deletion path (DeleteCircleWalletChild, the periodic expiry
 // sweep, mode="empty_only") — a funded child's balance is discarded, not
 // swept back to the hub. Both the funded child AND the hub itself are
 // deleted in one call here, so there's no surviving row to query balances

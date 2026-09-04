@@ -32,8 +32,9 @@
     "allowlist": "允许列表"
   },
   "identityType": {
-    "pubkey": "Nostr 公钥",
-    "connectionKey": "连接密钥"
+    "pubkey": "Nostr 身份",
+    "connectionKey": "网络身份",
+    "bearer": "持有人"
   },
   "avatarStack": {
     "more": "还有 {{count}} 位"
@@ -72,16 +73,17 @@
     "summary_other": "现在将授权 {{count}} 人，且该列表会随着该身份关注或取消关注他人而自动保持同步。"
   },
   "claimBadge": {
-    "claimed": "已领取",
-    "unclaimed": "未领取"
+    "claimed": "已兑换",
+    "unclaimed": "未兑换",
+    "movedToNewWallet": "已转移到新钱包"
   },
   "claimDeadline": {
-    "expired": "领取窗口已过期",
-    "withinMinutes_one": "需在 {{count}} 分钟内领取",
-    "withinMinutes_other": "需在 {{count}} 分钟内领取",
-    "withinHours": "需在 {{count}} 小时内领取",
-    "byDate": "需在 {{date}} 前领取",
-    "none": "无领取截止时间"
+    "expired": "兑换窗口已过期",
+    "withinMinutes_one": "需在 {{count}} 分钟内兑换",
+    "withinMinutes_other": "需在 {{count}} 分钟内兑换",
+    "withinHours": "需在 {{count}} 小时内兑换",
+    "byDate": "需在 {{date}} 前兑换",
+    "none": "无兑换截止时间"
   },
   "circleCard": {
     "member_one": "{{count}} 位成员",
@@ -89,8 +91,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "圈子钱包",
-    "jitWallet": "JIT 钱包",
-    "claimedCount": "已领取 {{claimed}}/{{total}}",
+    "cashWallet": "现金钱包",
+    "claimedCount": "已兑换 {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "加载 JIT 钱包接收人失败"
     }
@@ -154,9 +156,7 @@
       "removeSelected": "移除所选圈子钱包失败"
     }
   },
-  "jitHubAllocations": {
-    "participantsPair": "{{first}} 和 {{second}}",
-    "participantsOthers": "{{first}} 及另外 {{count}} 人",
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} 天",
     "durationDays_other": "{{count}} 天",
     "durationHours_one": "{{count}} 小时",
@@ -168,53 +168,66 @@
     "connectionKeyLabel": "连接密钥（十六进制）",
     "iaPubkeyLabel": "身份认证机构公钥（十六进制）",
     "iaPubkeyHelper": "必须是受信任的身份认证机构（设置 → 身份认证机构）",
-    "duplicateIdentity": "该身份已被此钱包中的另一位接收人使用。每位接收人都需要使用不同的身份。",
-    "walletBudgetLabel": "钱包预算",
+    "selectIAPlaceholder": "选择身份认证机构",
+    "savedIAsLabel": "已在设置中声明",
+    "enterIAManually": "手动输入公钥",
+    "chooseSavedIAInstead": "改为从设置中选择",
+    "duplicateIdentity": "该身份已被另一位接收人使用。",
+    "walletBudgetLabel": "金额",
     "requestedSummary": "已申请 {{total}} loki",
     "requestedSummaryWithMax": "已申请 {{total}} loki，占此中心最大钱包预算 {{max}} loki 的一部分",
-    "claimDeadlineLabel": "领取截止时间",
-    "deadlineExceeds": "超过此中心的最长领取截止时间 {{max}}",
-    "deadlineHelp": "每位接收人都必须在创建后的这段时间内领取自己的份额",
-    "deadlineHelpWithMax": "每位接收人都必须在创建后的这段时间内领取自己的份额（默认使用此中心的上限：{{max}}）",
+    "claimDeadlineLabel": "兑换截止时间",
+    "deadlineExceeds": "超过此中心的最长兑换期限 {{max}}",
+    "deadlineHelp": "每位接收人都必须在创建后的这段时间内兑换",
+    "deadlineHelpWithMax": "每位接收人都必须在创建后的这段时间内兑换（默认使用此中心的最大值：{{max}}）",
     "addRecipient": "添加另一位接收人",
-    "setClaimDeadline": "设置领取截止时间",
+    "setClaimDeadline": "设置兑换截止时间",
+    "mintSignatureLabel": "签署铸造来源证明",
+    "mintSignatureHelp": "附加节点签名以证明此 Lokicash 的来源和金额 — 可选，会使代币长度大约翻倍",
     "statusAll": "全部",
     "statusExpired": "已过期",
     "allocatedSummary": "本页已分配 {{allocated}} loki · 共 {{total}} 个{{status}}",
     "recipientColumn": "接收人",
-    "revealConnection": "显示 NWC 连接",
-    "groupSummary_one": "{{count}} 位接收人 · 已领取 {{claimed}}/{{count}}",
-    "groupSummary_other": "{{count}} 位接收人 · 已领取 {{claimed}}/{{count}}",
+    "revealConnection": "显示连接",
     "selectRecipient": "选择接收人",
     "selectAllInWallet": "选择此钱包的所有接收人",
     "collapseRecipients": "收起接收人",
     "expandRecipients": "展开接收人",
-    "removeWallet": "移除钱包",
-    "noneFiltered": "没有{{status}}的 JIT 钱包。",
-    "noneOnPage": "此页没有 JIT 钱包。",
-    "addHeading": "添加 JIT 钱包",
-    "createDialogTitle": "创建 JIT 钱包",
+    "removeWallet": "移除 Lokicash",
+    "noneFiltered": "没有{{status}}的 Lokicash。",
+    "noneOnPage": "此页面没有 Lokicash。",
+    "addHeading": "铸造 Lokicash",
+    "createDialogTitle": "铸造 Lokicash",
     "removeRecipientTitle": "移除该接收人？",
-    "removeRecipientDescription": "该身份将无法再领取此钱包中的份额。已分配的余额将转回此中心。此操作无法撤销。",
-    "removeWalletTitle": "移除该钱包？",
-    "removeWalletDescription": "此钱包的剩余余额将转回此中心，其 NWC 连接将立即停止工作。如果此钱包服务于其他接收人，他们也将失去访问权限 —— 包括尚未领取份额的人。此操作无法撤销。",
+    "removeRecipientDescription": "该身份将无法再兑换其份额。已分配的余额将转回此中心。此操作无法撤销。",
+    "removeWalletTitle": "移除此 Lokicash？",
+    "removeWalletDescription": "此 Lokicash 的剩余余额将转回此中心，其 NWC 连接将立即停止工作。如果它服务于其他接收人，他们也将失去访问权限 —— 包括尚未兑换份额的人。此操作无法撤销。",
     "removeSelectedTitle_one": "移除 {{count}} 位接收人？",
     "removeSelectedTitle_other": "移除 {{count}} 位接收人？",
-    "removeSelectedDescription": "这些身份将无法再领取其钱包中的份额。已分配的余额将转回此中心。此操作无法撤销。",
-    "createdToast_one": "JIT 钱包已创建并注资",
-    "createdToast_other": "JIT 钱包已创建并为 {{count}} 位接收人注资",
-    "recipientRemovedToast": "JIT 钱包接收人已移除",
-    "walletRemovedToast": "JIT 钱包已移除",
-    "recipientsRemovedToast_one": "JIT 钱包接收人已移除",
-    "recipientsRemovedToast_other": "已移除 {{count}} 位 JIT 钱包接收人",
+    "removeSelectedDescription": "这些身份将无法再兑换其份额。已分配的余额将转回此中心。此操作无法撤销。",
+    "createdToast_one": "Lokicash 已铸造并注资",
+    "createdToast_other": "Lokicash 已铸造并为 {{count}} 位接收人注资",
+    "recipientRemovedToast": "接收人已移除",
+    "walletRemovedToast": "Lokicash 已移除",
+    "recipientsRemovedToast_one": "接收人已移除",
+    "recipientsRemovedToast_other": "已移除 {{count}} 位接收人",
     "errors": {
-      "loadConnection": "加载 JIT 钱包连接失败",
-      "load": "加载 JIT 钱包失败",
-      "create": "创建 JIT 钱包失败",
-      "removeRecipient": "移除 JIT 钱包接收人失败",
-      "removeWallet": "移除 JIT 钱包失败",
+      "loadConnection": "加载 Lokicash 连接失败",
+      "load": "加载 Lokicash 失败",
+      "create": "铸造 Lokicash 失败",
+      "removeRecipient": "移除接收人失败",
+      "removeWallet": "移除 Lokicash 失败",
       "removeSelected": "移除所选接收人失败"
-    }
+    },
+    "bearerHelper": "持有人：任何持有密钥的人都可以兑换 — 没有身份验证，一旦丢失或被截获也无法找回。",
+    "bearerRequiresSoleRecipient": "持有人必须是唯一的接收人",
+    "pubkeyModeHelper": "只有此 Nostr 身份可以兑换。",
+    "connectionKeyModeHelper": "只有已验证的身份可以兑换。",
+    "copyLokicash": "复制 Lokicash",
+    "tokenStatusUnredeemed": "未兑换",
+    "tokenStatusFullyRedeemed": "已全部兑换",
+    "tokenStatusPartiallyRedeemed": "已兑换 {{claimed}}/{{count}}",
+    "lokicashBadge": "Lokicash"
   },
   "newCircleHub": {
     "title": "新建圈子钱包中心",
@@ -251,7 +264,7 @@
       "create": "创建圈子钱包中心失败"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "新建 JIT 钱包中心",
     "description": "创建一个预先注资的中心，为受益人发放仅支持支出的 JIT 钱包",
     "maxWalletBudgetHelper": "此中心发放的每个 JIT 钱包可分配的最大预算",
@@ -285,7 +298,7 @@
       "delete": "删除圈子失败"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "您确定要删除此 JIT 钱包中心吗？",
     "checking": "正在检查已发放的 JIT 钱包…",
     "hasOutstanding_one": "此中心已发放的 JIT 钱包中仍有 {{count}} 份接收人份额。请先从下方的 JIT 钱包列表中移除它们（或等待其过期），然后再删除此中心。",

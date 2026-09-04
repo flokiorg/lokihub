@@ -11,7 +11,7 @@ package transactions
 // with no PayCapableScopes row (like a circle_hub) still resolves its
 // kind/balance, and skips the "app does not have pay_invoice scope" error
 // specifically when skipBudgetCap (internal_transfer) is set — never
-// reachable from a real NWC pay_invoice/keysend/claim_funds request, which
+// reachable from a real NWC pay_invoice/keysend/cash_redeem request, which
 // all strip that flag from caller-supplied metadata before reaching here.
 //
 // These three tests cover: the fix itself (internal transfer succeeds

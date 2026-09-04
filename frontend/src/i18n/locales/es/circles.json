@@ -32,8 +32,9 @@
     "allowlist": "Lista de permitidos"
   },
   "identityType": {
-    "pubkey": "Clave pública de Nostr",
-    "connectionKey": "Clave de conexión"
+    "pubkey": "Identidad Nostr",
+    "connectionKey": "Identidad Web",
+    "bearer": "Portador"
   },
   "avatarStack": {
     "more": "+{{count}} más"
@@ -72,16 +73,17 @@
     "summary_other": "{{count}} personas serán autorizadas ahora, y la lista se mantendrá sincronizada automáticamente a medida que esta identidad siga o deje de seguir a otros."
   },
   "claimBadge": {
-    "claimed": "Reclamado",
-    "unclaimed": "Sin reclamar"
+    "claimed": "Canjeado",
+    "unclaimed": "Sin canjear",
+    "movedToNewWallet": "Movido a nueva billetera"
   },
   "claimDeadline": {
-    "expired": "Plazo de reclamo vencido",
-    "withinMinutes_one": "Reclamar en {{count}} min",
-    "withinMinutes_other": "Reclamar en {{count}} min",
-    "withinHours": "Reclamar en {{count}}h",
-    "byDate": "Reclamar antes del {{date}}",
-    "none": "Sin plazo de reclamo"
+    "expired": "Plazo de canje vencido",
+    "withinMinutes_one": "Canjear en {{count}} min",
+    "withinMinutes_other": "Canjear en {{count}} min",
+    "withinHours": "Canjear en {{count}}h",
+    "byDate": "Canjear antes del {{date}}",
+    "none": "Sin plazo de canje"
   },
   "circleCard": {
     "member_one": "{{count}} miembro",
@@ -89,8 +91,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "Billetera de círculo",
-    "jitWallet": "Billetera JIT",
-    "claimedCount": "{{claimed}}/{{total}} reclamados",
+    "cashWallet": "Billetera de Efectivo",
+    "claimedCount": "{{claimed}}/{{total}} canjeados",
     "errors": {
       "loadRecipients": "Error al cargar los destinatarios de la billetera JIT"
     }
@@ -154,9 +156,7 @@
       "removeSelected": "Error al eliminar las billeteras de círculo seleccionadas"
     }
   },
-  "jitHubAllocations": {
-    "participantsPair": "{{first}} y {{second}}",
-    "participantsOthers": "{{first}} y {{count}} más",
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} día",
     "durationDays_other": "{{count}} días",
     "durationHours_one": "{{count}} hora",
@@ -168,53 +168,66 @@
     "connectionKeyLabel": "Clave de conexión (hex)",
     "iaPubkeyLabel": "Clave pública de la Autoridad de Identidad (hex)",
     "iaPubkeyHelper": "Debe ser una Autoridad de Identidad de confianza (Ajustes → Autoridades de Identidad)",
-    "duplicateIdentity": "Esta identidad ya la usa otro destinatario en esta billetera. Cada destinatario necesita una identidad distinta.",
-    "walletBudgetLabel": "Presupuesto de la billetera",
+    "selectIAPlaceholder": "Selecciona una Autoridad de Identidad",
+    "savedIAsLabel": "Declaradas en Ajustes",
+    "enterIAManually": "Introducir una clave pública manualmente",
+    "chooseSavedIAInstead": "Elegir desde Ajustes en su lugar",
+    "duplicateIdentity": "Esta identidad ya la usa otro destinatario.",
+    "walletBudgetLabel": "Importe",
     "requestedSummary": "{{total}} loki solicitados",
     "requestedSummaryWithMax": "{{total}} loki solicitados de un presupuesto máximo de billetera de este hub de {{max}} loki",
-    "claimDeadlineLabel": "Plazo de reclamo",
-    "deadlineExceeds": "Supera el plazo máximo de reclamo de este hub de {{max}}",
-    "deadlineHelp": "Cada destinatario debe reclamar su parte dentro de este tiempo desde la creación",
-    "deadlineHelpWithMax": "Cada destinatario debe reclamar su parte dentro de este tiempo desde la creación (por defecto, el máximo de este hub: {{max}})",
+    "claimDeadlineLabel": "Plazo de canje",
+    "deadlineExceeds": "Supera el plazo máximo de canje de este hub de {{max}}",
+    "deadlineHelp": "Cada destinatario debe canjear dentro de este plazo desde la creación",
+    "deadlineHelpWithMax": "Cada destinatario debe canjear dentro de este plazo desde la creación (por defecto, el máximo de este hub: {{max}})",
     "addRecipient": "Añadir otro destinatario",
-    "setClaimDeadline": "Establecer plazo de reclamo",
+    "setClaimDeadline": "Establecer plazo de canje",
+    "mintSignatureLabel": "Firmar procedencia de acuñación",
+    "mintSignatureHelp": "Adjuntar una firma del nodo que demuestre el origen y el importe de este Lokicash — opcional, duplica aproximadamente la longitud del token",
     "statusAll": "Todos",
     "statusExpired": "Vencidos",
     "allocatedSummary": "{{allocated}} loki asignados en esta página · {{total}} {{status}}",
     "recipientColumn": "Destinatario",
-    "revealConnection": "Revelar conexión NWC",
-    "groupSummary_one": "{{count}} destinatario · {{claimed}}/{{count}} reclamados",
-    "groupSummary_other": "{{count}} destinatarios · {{claimed}}/{{count}} reclamados",
+    "revealConnection": "Revelar conexión",
     "selectRecipient": "Seleccionar destinatario",
     "selectAllInWallet": "Seleccionar todos los destinatarios de esta billetera",
     "collapseRecipients": "Contraer destinatarios",
     "expandRecipients": "Expandir destinatarios",
-    "removeWallet": "Eliminar billetera",
-    "noneFiltered": "No hay billeteras JIT {{status}}.",
-    "noneOnPage": "No hay billeteras JIT en esta página.",
-    "addHeading": "Añadir billetera JIT",
-    "createDialogTitle": "Crear billetera JIT",
+    "removeWallet": "Eliminar Lokicash",
+    "noneFiltered": "No hay Lokicash {{status}}.",
+    "noneOnPage": "No hay Lokicash en esta página.",
+    "addHeading": "Acuñar Lokicash",
+    "createDialogTitle": "Acuñar Lokicash",
     "removeRecipientTitle": "¿Eliminar a este destinatario?",
-    "removeRecipientDescription": "Esta identidad ya no podrá reclamar su parte de esta billetera. Su saldo asignado se transferirá de vuelta a este hub. Esto no se puede deshacer.",
-    "removeWalletTitle": "¿Eliminar esta billetera?",
-    "removeWalletDescription": "El saldo restante de esta billetera se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Si esta billetera sirve a otros destinatarios, ellos también perderán el acceso — incluidos quienes aún no hayan reclamado su parte. Esto no se puede deshacer.",
+    "removeRecipientDescription": "Esta identidad ya no podrá canjear su parte. Su saldo asignado se transferirá de vuelta a este hub. Esto no se puede deshacer.",
+    "removeWalletTitle": "¿Eliminar este Lokicash?",
+    "removeWalletDescription": "El saldo restante de este Lokicash se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Si sirve a otros destinatarios, también perderán el acceso, incluido quien aún no haya canjeado su parte. Esto no se puede deshacer.",
     "removeSelectedTitle_one": "¿Eliminar {{count}} destinatario?",
     "removeSelectedTitle_other": "¿Eliminar {{count}} destinatarios?",
-    "removeSelectedDescription": "Estas identidades ya no podrán reclamar su parte de sus billeteras. Sus saldos asignados se transferirán de vuelta a este hub. Esto no se puede deshacer.",
-    "createdToast_one": "Billetera JIT creada y financiada",
-    "createdToast_other": "Billetera JIT creada y financiada para {{count}} destinatarios",
-    "recipientRemovedToast": "Destinatario de la billetera JIT eliminado",
-    "walletRemovedToast": "Billetera JIT eliminada",
-    "recipientsRemovedToast_one": "Destinatario de la billetera JIT eliminado",
-    "recipientsRemovedToast_other": "{{count}} destinatarios de la billetera JIT eliminados",
+    "removeSelectedDescription": "Estas identidades ya no podrán canjear su parte. Sus saldos asignados se transferirán de vuelta a este hub. Esto no se puede deshacer.",
+    "createdToast_one": "Lokicash acuñado y financiado",
+    "createdToast_other": "Lokicash acuñado y financiado para {{count}} destinatarios",
+    "recipientRemovedToast": "Destinatario eliminado",
+    "walletRemovedToast": "Lokicash eliminado",
+    "recipientsRemovedToast_one": "Destinatario eliminado",
+    "recipientsRemovedToast_other": "{{count}} destinatarios eliminados",
     "errors": {
-      "loadConnection": "Error al cargar la conexión de la billetera JIT",
-      "load": "Error al cargar las billeteras JIT",
-      "create": "Error al crear la billetera JIT",
-      "removeRecipient": "Error al eliminar el destinatario de la billetera JIT",
-      "removeWallet": "Error al eliminar la billetera JIT",
+      "loadConnection": "Error al cargar la conexión Lokicash",
+      "load": "Error al cargar Lokicash",
+      "create": "Error al acuñar Lokicash",
+      "removeRecipient": "Error al eliminar el destinatario",
+      "removeWallet": "Error al eliminar Lokicash",
       "removeSelected": "Error al eliminar los destinatarios seleccionados"
-    }
+    },
+    "bearerHelper": "Portador: quien tenga el secreto puede canjearlo — no hay verificación de identidad ni forma de recuperarlo si se pierde o es interceptado.",
+    "bearerRequiresSoleRecipient": "El portador debe ser el único destinatario",
+    "pubkeyModeHelper": "Solo esta identidad Nostr puede canjearlo.",
+    "connectionKeyModeHelper": "Solo una identidad verificada puede canjearlo.",
+    "copyLokicash": "Copiar Lokicash",
+    "tokenStatusUnredeemed": "Sin canjear",
+    "tokenStatusFullyRedeemed": "Totalmente canjeado",
+    "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} canjeados",
+    "lokicashBadge": "Lokicash"
   },
   "newCircleHub": {
     "title": "Nuevo Hub de Billetera de Círculo",
@@ -251,7 +264,7 @@
       "create": "Error al crear el Hub de Billetera de Círculo"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "Nuevo Hub de Billetera JIT",
     "description": "Crea un hub prefinanciado que emite billeteras JIT de solo gasto a los beneficiarios",
     "maxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada billetera JIT emitida desde este hub",
@@ -285,7 +298,7 @@
       "delete": "Error al eliminar el círculo"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "¿Seguro que quieres eliminar este Hub de Billetera JIT?",
     "checking": "Comprobando las billeteras JIT emitidas…",
     "hasOutstanding_one": "Este hub todavía tiene {{count}} parte de destinatario pendiente en sus billeteras JIT emitidas. Elimínala de la lista de Billeteras JIT de abajo (o espera a que caduque) antes de eliminar el hub.",

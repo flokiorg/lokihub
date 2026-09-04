@@ -69,94 +69,94 @@ func TestCreateApp_ParentAppID_SetForSubWallets(t *testing.T) {
 	parent, _, err := newAppsService(svc).CreateApp(
 		"hub", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE},
-		db.AppKindJITHub, nil, "", nil,
+		db.AppKindCashHub, nil, "", nil,
 	)
 	require.NoError(t, err)
 
 	exp := time.Now().Add(time.Hour)
 	child, _, err := newAppsService(svc).CreateApp(
-		"jit", "", 0, "never", &exp,
+		"cash", "", 0, "never", &exp,
 		[]string{constants.PAY_INVOICE_SCOPE},
-		db.AppKindJITWallet, &parent.ID, db.ParentKindJIT, nil,
+		db.AppKindCashWallet, &parent.ID, db.ParentKindCash, nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, child.ParentAppID)
 	assert.Equal(t, parent.ID, *child.ParentAppID)
-	assert.Equal(t, db.ParentKindJIT, child.ParentKind)
+	assert.Equal(t, db.ParentKindCash, child.ParentKind)
 }
 
-func TestCreateJITHub_ConfigPersisted(t *testing.T) {
+func TestCreateCashHub_ConfigPersisted(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	appSvc := newAppsService(svc)
-	app, _, err := appSvc.CreateJITHub(
+	app, _, err := appSvc.CreateCashHub(
 		"hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE, constants.JIT_HUB_SCOPE},
+		[]string{constants.GET_BALANCE_SCOPE, constants.CASH_HUB_SCOPE},
 		nil,
-		db.JITHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
+		db.CashHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, db.AppKindJITHub, app.Kind)
+	assert.Equal(t, db.AppKindCashHub, app.Kind)
 
-	cfg, err := appSvc.GetJITHubConfig(app.ID)
+	cfg, err := appSvc.GetCashHubConfig(app.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 500_000, cfg.PerWalletMaxMloki)
 	assert.Equal(t, 3600, cfg.MaxExpSecs)
 }
 
-// TestDeleteApp_JITHubWithChildren_Refused guards against orphaning a
-// jit_wallet child: deleting its jit_hub parent out from under it leaves the
+// TestDeleteApp_CashHubWithChildren_Refused guards against orphaning a
+// cash_wallet child: deleting its cash_hub parent out from under it leaves the
 // child's parent_app_id pointing at a nonexistent app row, so the periodic
 // cleanup ticker (service.ReclaimAndDeleteSubWallet) fails a FOREIGN KEY
 // constraint every time it tries to credit the reclaimed balance back to
 // that parent — forever, since the child never gets deleted. This mirrors
 // the existing circle_hub guard below.
-func TestDeleteApp_JITHubWithChildren_Refused(t *testing.T) {
+func TestDeleteApp_CashHubWithChildren_Refused(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	appSvc := newAppsService(svc)
-	hub, _, err := appSvc.CreateJITHub(
+	hub, _, err := appSvc.CreateCashHub(
 		"hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE, constants.JIT_HUB_SCOPE},
+		[]string{constants.GET_BALANCE_SCOPE, constants.CASH_HUB_SCOPE},
 		nil,
-		db.JITHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
+		db.CashHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
 	)
 	require.NoError(t, err)
 
 	exp := time.Now().Add(time.Hour)
 	_, _, err = appSvc.CreateApp(
-		"jit", "", 0, "never", &exp,
+		"cash", "", 0, "never", &exp,
 		[]string{constants.PAY_INVOICE_SCOPE},
-		db.AppKindJITWallet, &hub.ID, db.ParentKindJIT, nil,
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
 	)
 	require.NoError(t, err)
 
 	err = appSvc.DeleteApp(hub)
-	require.Error(t, err, "jit_hub with a live jit_wallet child must not be deletable")
+	require.Error(t, err, "cash_hub with a live cash_wallet child must not be deletable")
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 
 	var stillThere db.App
 	assert.NoError(t, svc.DB.First(&stillThere, hub.ID).Error, "hub must still exist after refused delete")
 }
 
-// TestDeleteApp_JITHubWithoutChildren_Succeeds is the counterpart to the
-// guard above: a jit_hub with no outstanding children must still be
+// TestDeleteApp_CashHubWithoutChildren_Succeeds is the counterpart to the
+// guard above: a cash_hub with no outstanding children must still be
 // deletable normally.
-func TestDeleteApp_JITHubWithoutChildren_Succeeds(t *testing.T) {
+func TestDeleteApp_CashHubWithoutChildren_Succeeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	appSvc := newAppsService(svc)
-	hub, _, err := appSvc.CreateJITHub(
+	hub, _, err := appSvc.CreateCashHub(
 		"hub", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE, constants.JIT_HUB_SCOPE},
+		[]string{constants.GET_BALANCE_SCOPE, constants.CASH_HUB_SCOPE},
 		nil,
-		db.JITHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
+		db.CashHubConfig{PerWalletMaxMloki: 500_000, MaxExpSecs: 3600},
 	)
 	require.NoError(t, err)
 
@@ -172,8 +172,8 @@ func TestIsIsolated_ReturnsTrueForSubWalletKinds(t *testing.T) {
 		expected bool
 	}{
 		{db.AppKindIsolated, true},
-		{db.AppKindJITHub, true},
-		{db.AppKindJITWallet, true},
+		{db.AppKindCashHub, true},
+		{db.AppKindCashWallet, true},
 		{db.AppKindCircleHub, true},
 		{db.AppKindCircleWallet, true},
 		{"", false},
@@ -184,28 +184,28 @@ func TestIsIsolated_ReturnsTrueForSubWalletKinds(t *testing.T) {
 	}
 }
 
-// E9: ClaimJITWalletSlice is race-safe — concurrent calls for the same
-// identity must result in exactly one success and the rest failing with "no
-// unclaimed slice for this identity" (covers both "never existed" and
-// "already claimed" through the same atomic guard).
-func TestClaimJITWalletSlice_ConcurrentRace(t *testing.T) {
+// E9: ClaimCashSlice is race-safe — concurrent calls for the same
+// identity must result in exactly one success and the rest failing with
+// ErrNotFound ("this slice has already been redeemed") through the same
+// atomic guard.
+func TestClaimCashSlice_ConcurrentRace(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
 	future := time.Now().Add(time.Hour)
 	wallet, _, err := svc.AppsService.CreateApp(
-		"jit-race", "", 0, constants.BUDGET_RENEWAL_NEVER, &future,
-		[]string{constants.JIT_CLAIM_FUNDS_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindJITWallet, &hub.ID, db.ParentKindJIT, nil,
+		"cash-race", "", 0, constants.BUDGET_RENEWAL_NEVER, &future,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
 	)
 	require.NoError(t, err)
 
 	identityValue := tests.RandomHex32()
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: identityValue, AmountMloki: 100_000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: identityValue, AmountMloki: 100_000},
 	}))
 
 	const goroutines = 5
@@ -222,7 +222,7 @@ func TestClaimJITWalletSlice_ConcurrentRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-ready
-			amount, err := svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, identityValue)
+			amount, err := svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, identityValue)
 			results <- result{amount, err}
 		}()
 	}
@@ -237,7 +237,7 @@ func TestClaimJITWalletSlice_ConcurrentRace(t *testing.T) {
 			assert.Equal(t, int64(100_000), r.amount)
 		} else {
 			failures++
-			assert.ErrorIs(t, r.err, constants.ErrInvalidParams)
+			assert.ErrorIs(t, r.err, constants.ErrNotFound)
 		}
 	}
 	assert.Equal(t, 1, successes, "exactly one goroutine must claim successfully")

@@ -1,12 +1,12 @@
 module github.com/flokiorg/lokihub
 
-go 1.26.5
+go 1.26.8
 
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/flokiorg/go-flokicoin v0.26.1-alpha
 	github.com/getlantern/systray v1.2.2
-	github.com/labstack/echo/v4 v4.13.4
+	github.com/labstack/echo/v4 v4.15.3
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/nbd-wtf/go-nostr v0.52.3
 	github.com/peterldowns/pgtestdb v0.1.1
@@ -17,7 +17,7 @@ require (
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/image v0.12.0
-	google.golang.org/grpc v1.79.3
+	google.golang.org/grpc v1.82.1
 	gopkg.in/macaroon.v2 v2.1.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -26,19 +26,21 @@ require (
 
 require (
 	github.com/btcsuite/btcd v0.25.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
+	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.9 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 )
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/flokiorg/flnd v0.2.1-beta
+	github.com/btcsuite/btcd/btcec/v2 v2.3.5
+	github.com/flokiorg/flnd v0.2.2-beta
 	github.com/flokiorg/flndecodepay v1.0.3
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
+	github.com/ohstr/nmilat v0.2.7
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.56.0
@@ -63,7 +65,6 @@ require (
 	github.com/aead/siphash v1.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.5 // indirect
 	github.com/btcsuite/btclog v0.0.0-20241003133417-09c4e92e319c // indirect
 	github.com/bytedance/sonic v1.13.1 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
@@ -126,7 +127,7 @@ require (
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
-	github.com/labstack/gommon v0.4.2 // indirect
+	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
 	github.com/leaanthony/gosod v1.0.4 // indirect
 	github.com/leaanthony/slicer v1.6.0 // indirect
@@ -140,7 +141,7 @@ require (
 	github.com/lightningnetwork/lnd/tlv v1.3.1 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/miekg/dns v1.1.63 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -168,7 +169,7 @@ require (
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
@@ -189,7 +190,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/xiang90/probing v0.0.0-20221125231312-a49e3df8f510 // indirect
-	go.etcd.io/bbolt v1.4.3 // indirect
+	go.etcd.io/bbolt v1.5.0 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.7 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.7 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.7 // indirect
@@ -198,12 +199,12 @@ require (
 	go.etcd.io/raft/v3 v3.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
-	go.opentelemetry.io/otel v1.39.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.34.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.34.0 // indirect
-	go.opentelemetry.io/otel/metric v1.39.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
-	go.opentelemetry.io/otel/trace v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -211,11 +212,11 @@ require (
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-	golang.org/x/time v0.12.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 	gopkg.in/macaroon-bakery.v2 v2.3.0 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,16 +24,16 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 3000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 3000)
 
 	pkClaimed, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	pkUnclaimed, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	require.NoError(t, svc.AppsService.CreateJITWalletClaims(wallet.ID, []db.JITWalletClaim{
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pkClaimed, AmountMloki: 1000},
-		{IdentityType: db.JITAllocIdentityPubkey, IdentityValue: pkUnclaimed, AmountMloki: 2000},
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: pkClaimed, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: pkUnclaimed, AmountMloki: 2000},
 	}))
-	_, err = svc.AppsService.ClaimJITWalletSlice(wallet.ID, db.JITAllocIdentityPubkey, pkClaimed)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pkClaimed)
 	require.NoError(t, err)
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
@@ -42,27 +43,27 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(listRecipientsResponse)
+	result := response.Result.(nipcash.ListRecipientsResult)
 	require.Len(t, result.Recipients, 2)
 
-	byIdentity := map[string]recipientStatus{}
+	byIdentity := map[string]nipcash.RecipientStatus{}
 	for _, r := range result.Recipients {
 		byIdentity[r.IdentityValue] = r
 	}
 	assert.True(t, byIdentity[pkClaimed].Claimed)
 	assert.NotNil(t, byIdentity[pkClaimed].ClaimedAt)
-	assert.Equal(t, int64(1000), byIdentity[pkClaimed].AmountMloki)
+	assert.Equal(t, uint64(1000), byIdentity[pkClaimed].AmountMillis)
 	assert.False(t, byIdentity[pkUnclaimed].Claimed)
 	assert.Nil(t, byIdentity[pkUnclaimed].ClaimedAt)
-	assert.Equal(t, int64(2000), byIdentity[pkUnclaimed].AmountMloki)
+	assert.Equal(t, uint64(2000), byIdentity[pkUnclaimed].AmountMillis)
 }
 
-func TestHandleListRecipientsEvent_NonJITWalletApp_Rejected(t *testing.T) {
+func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
@@ -79,8 +80,8 @@ func TestHandleListRecipientsEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	hub := tests.CreateJITHub(t, svc, 100_000, 3600)
-	wallet := newFundedJITWallet(t, svc, hub, 1000)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
@@ -89,6 +90,6 @@ func TestHandleListRecipientsEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(listRecipientsResponse)
+	result := response.Result.(nipcash.ListRecipientsResult)
 	assert.Empty(t, result.Recipients)
 }
