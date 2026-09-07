@@ -41,12 +41,17 @@ const (
 	// (20000-29999), not the addressable/parameterized-replaceable range
 	// (30000-39999) NIP-IC's long-lived claim correctly uses. 23198 sits
 	// directly adjacent to NIP-47's own 23194-23197 block, since this NIP
-	// depends on NIP-47.
-	nostrKindClaimProof = 23198
+	// depends on NIP-47. Aliased to nipcash's own exported constant (nmilat
+	// migration, PR #90) rather than a re-hardcoded literal, so this value
+	// can never drift from the protocol layer's own definition of it.
+	nostrKindClaimProof = nipcash.KindClaimProof
 	// nostrKindIAAttestation is unchanged from the old design: an Identity
 	// Authority's signed attestation that a given nostr pubkey owns a given
-	// connection_key. Only used for identity_type == connection_key.
-	nostrKindIAAttestation = 35522
+	// connection_key. Only used for identity_type == connection_key. Aliased
+	// to nipIC's own exported constant (nmilat migration, PR #90) — this is
+	// genuinely NIP-IC's own kind, not NIP-CASH's, so it borrows nipIC's name
+	// for it directly rather than redeclaring the number.
+	nostrKindIAAttestation = nipIC.KindAttestation
 
 	// cashRedeemIdentityFreshnessWindow bounds how old (or how far in the
 	// future) a claim proof's own timestamp may be. Defense-in-depth on top

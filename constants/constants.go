@@ -3,6 +3,9 @@ package constants
 import (
 	"errors"
 	"time"
+
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 )
 
 // Sentinel errors used by service and controller layers.
@@ -134,24 +137,27 @@ const (
 	CASH_CONSOLIDATE_SCOPE = "cash_consolidate"
 )
 
-// NIP-47 method names for Cash and Circle Wallet operations.
+// NIP-47 method names for Cash and Circle Wallet operations. Aliased to
+// nmilat's own exported nipcash/nipcw method-name constants (nmilat
+// migration, PR #90) rather than re-hardcoded literals, so these can never
+// drift from the protocol layer's own definition of them.
 const (
-	NIP47MethodMintCash           = "mint_cash"
-	NIP47MethodCreateCircleWallet = "create_circle_wallet"
+	NIP47MethodMintCash           = nipcash.MethodMintCash
+	NIP47MethodCreateCircleWallet = nipcw.MethodCreateCircleWallet
 	// NIP47MethodCashRedeem pays out a proven recipient's slice of a shared
 	// cash_wallet in one shot (NIP-CASH §Redeeming Funds).
-	NIP47MethodCashRedeem = "cash_redeem"
+	NIP47MethodCashRedeem = nipcash.MethodCashRedeem
 	// NIP47MethodCashTransfer reassigns, or partially splits off, an
 	// unclaimed slice's value (NIP-CASH §Transferring/Splitting a Slice)
 	// without redeeming it.
-	NIP47MethodCashTransfer = "cash_transfer"
+	NIP47MethodCashTransfer = nipcash.MethodCashTransfer
 	// NIP47MethodCashConsolidate combines several same-hub slices this node
 	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
-	NIP47MethodCashConsolidate = "cash_consolidate"
+	NIP47MethodCashConsolidate = nipcash.MethodCashConsolidate
 	// NIP47MethodListRecipients is a read-only roster of a shared cash_wallet's
 	// recipients (identity, entitled amount, claimed status) — no invoice or
 	// preimage detail, since a cash_wallet has no list_transactions grant.
-	NIP47MethodListRecipients = "list_recipients"
+	NIP47MethodListRecipients = nipcash.MethodListRecipients
 )
 
 // PayCapableScopes lists every scope whose AppPermission row can carry
