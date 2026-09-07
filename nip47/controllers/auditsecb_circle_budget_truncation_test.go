@@ -51,7 +51,7 @@ func TestHandleCreateCircleWalletEvent_SubLokiMaxAmount_Rejected(t *testing.T) {
 
 			nip47Request := &models.Request{}
 			require.NoError(t, json.Unmarshal(
-				[]byte(makeCircleWalletRequest(t, requesterKey, provider.AppPubkey, maxAmount, 3600)), nip47Request))
+				[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, maxAmount, 3600)), nip47Request))
 
 			dbRequestEvent := &db.RequestEvent{}
 			svc.DB.Create(&dbRequestEvent)
@@ -94,7 +94,7 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t 
 	// The smallest amount the fix still accepts: exactly 1 loki.
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, provider.AppPubkey, 1000, 3600)), nip47Request))
+		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 1000, 3600)), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
@@ -154,7 +154,7 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *t
 	// 1000 mloki == exactly 1 loki: the smallest amount that does NOT floor to zero.
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, provider.AppPubkey, 1000, 3600)), nip47Request))
+		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 1000, 3600)), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)

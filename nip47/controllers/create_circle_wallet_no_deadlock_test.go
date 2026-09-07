@@ -55,7 +55,7 @@ func TestHandleCreateCircleWalletEvent_ConcurrentCreations_NeverStall(t *testing
 		hub := createCircleHub(t, svc, 7200, 200_000)
 		requesterKey := nostr.GeneratePrivateKey()
 		req := &models.Request{}
-		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, hub.AppPubkey, 100_000, 3600)), req))
+		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *hub.WalletPubkey, 100_000, 3600)), req))
 		ev := &db.RequestEvent{NostrId: nostr.GeneratePrivateKey()}
 		require.NoError(t, svc.DB.Create(&ev).Error)
 		work[i] = prepared{req: req, eventID: ev.ID, hub: hub}

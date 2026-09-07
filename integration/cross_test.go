@@ -41,7 +41,7 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 	hubClient := mustConnect(t, hub.Connection)
 	authorizedPub := mustPubkey(t, authorizedPrivkey)
 
-	identityEvent := buildCircleWalletIdentityEvent(t, authorizedPrivkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, authorizedPrivkey, hubClient.WalletPubkey())
 
 	var result CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -52,7 +52,7 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &result))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(authorizedPrivkey, result.WalletPubkey, result.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(authorizedPrivkey, hubClient.WalletPubkey(), result.EncryptedPairingURI)
 	require.NoError(t, err)
 	return mustConnect(t, pairingURI)
 }

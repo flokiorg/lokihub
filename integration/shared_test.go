@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipIC"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/integration/nwcclient"
@@ -42,11 +45,14 @@ func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 // 35522: Identity Authority attestation, connection_key mode only — this one
 // is NIP-IC's own kind, genuinely reused rather than owned by NIP-CASH) and
 // nip47/controllers/create_circle_wallet_identity.go (Kind 23199: NIP-CW's
-// own, separate per-call identity proof).
+// own, separate per-call identity proof). Sourced directly from nmilat's own
+// exported constants rather than re-hardcoded literals (nmilat migration, PR
+// #90), so this mirror can't drift from what those controllers actually
+// check.
 const (
-	nostrKindClaimProof          = 23198
-	nostrKindCircleIdentityProof = 23199
-	nostrKindIAAttestation       = 35522
+	nostrKindClaimProof          = nipcash.KindClaimProof
+	nostrKindCircleIdentityProof = nipcw.KindCircleIdentityProof
+	nostrKindIAAttestation       = nipIC.KindAttestation
 )
 
 // buildClaimProofEvent builds and signs a kind-23198 claim proof bound to
@@ -127,14 +133,20 @@ func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNos
 
 // buildCircleWalletIdentityEvent builds and signs a kind-23199 proof that the
 // caller controls requesterPrivkey, bound to this specific circle hub via the
-// d-tag (nip47/controllers/create_circle_wallet_identity.go) — hubAppPubkey
-// is the hub connection's own ClientPubkey(), not its WalletPubkey().
-func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubAppPubkey string) *nostr.Event {
+// d-tag (nip47/controllers/create_circle_wallet_identity.go) — hubWalletPubkey
+// is the hub connection's own WalletPubkey(), the pubkey in its pairing URI
+// (NIP-CW's own "the Hub's own pubkey" wording — see NIP-CW.md's Identity
+// Proof section). It is NOT ClientPubkey(): that's derived from the
+// connection's own secret and never appears anywhere a member holding just
+// the shared connection string could learn it — binding here to AppPubkey
+// (lokihub's ClientPubkey equivalent) made create_circle_wallet unusable by
+// any real external client until fixed.
+func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPubkey string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubAppPubkey}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
 	return ev
@@ -165,12 +177,12 @@ func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue
 // distinctCircleWalletRequest in
 // nip47/controllers/create_circle_wallet_membership_test.go, the same fix at
 // the unit-test level.
-func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubAppPubkey, disambiguator string) *nostr.Event {
+func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubWalletPubkey, disambiguator string) *nostr.Event {
 	t.Helper()
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubAppPubkey}, {"disambiguator", disambiguator}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
 	return ev

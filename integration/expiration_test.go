@@ -56,7 +56,7 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -67,7 +67,7 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 
@@ -197,7 +197,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 	// isolates "does the parent's expiry cascade" from "did the child's own
 	// expiry also just happen to lapse". createEphemeralCircleHub's own
 	// t.Cleanup sweeps every child this hub ever mints.
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
@@ -206,7 +206,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 
@@ -214,7 +214,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 
 	t.Run("Hub_CreateCircleWallet_RejectedOnceHubExpired", func(t *testing.T) {
 		otherPriv := newTestPrivkey(t)
-		otherIdentityEvent := buildCircleWalletIdentityEvent(t, otherPriv, hubClient.ClientPubkey())
+		otherIdentityEvent := buildCircleWalletIdentityEvent(t, otherPriv, hubClient.WalletPubkey())
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        mustPubkey(t, otherPriv),

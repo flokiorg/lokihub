@@ -43,7 +43,7 @@ func createCircleWalletExpectingCode(t *testing.T, cfg *Config, floor, requested
 		ephemeralCircleHubOpts{MinBudgetRenewal: floor})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var result CreateCircleWalletResult
 	err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -102,7 +102,7 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 		ephemeralCircleHubOpts{MinBudgetRenewal: constants.BUDGET_RENEWAL_MONTHLY})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var result CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -113,7 +113,7 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &result))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, result.WalletPubkey, result.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), result.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 

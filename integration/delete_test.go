@@ -48,7 +48,7 @@ func TestDeleteCircleHub_RefusedWhileChildrenExist(t *testing.T) {
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -104,7 +104,7 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var hubBalanceBefore GetBalanceResult
 	require.NoError(t, hubClient.Call(ctxT(t), "get_balance", struct{}{}, &hubBalanceBefore))
@@ -118,7 +118,7 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 
@@ -189,7 +189,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
 
-	ev1 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey(), "first")
+	ev1 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey(), "first")
 	var first CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
@@ -199,7 +199,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 		IdentityEvent: eventJSON(t, ev1),
 	}, &first))
 
-	ev2 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey(), "second-before-delete")
+	ev2 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey(), "second-before-delete")
 	var second CreateCircleWalletResult
 	err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
@@ -212,7 +212,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
 
-	ev3 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey(), "third-after-delete")
+	ev3 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey(), "third-after-delete")
 	var third CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
@@ -240,7 +240,7 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -251,7 +251,7 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 
@@ -284,7 +284,7 @@ func TestDeleteCircleChild_AlreadyDeleted_Errors(t *testing.T) {
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{

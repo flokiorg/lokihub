@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 )
 
 // circleWalletIdentityFreshnessWindow bounds how old (or how far in the
@@ -25,8 +26,11 @@ const circleWalletIdentityFreshnessWindow = 5 * time.Minute
 // (20000-29999): never independently published to a relay, only ever
 // travels embedded inside an already end-to-end-encrypted NIP-47 request.
 // 23199 sits directly adjacent to NIP-CASH's 23198 and NIP-47's own
-// 23194-23197 block, since NIP-CW depends on NIP-47 too.
-const nostrKindCircleIdentityProof = 23199
+// 23194-23197 block, since NIP-CW depends on NIP-47 too. Aliased to nipcw's
+// own exported constant (nmilat migration, PR #90) rather than a
+// re-hardcoded literal, so this value can never drift from the protocol
+// layer's own definition of it.
+const nostrKindCircleIdentityProof = nipcw.KindCircleIdentityProof
 
 // verifyCircleWalletIdentityEvent checks a kind-23199 proof that the caller
 // of create_circle_wallet actually controls requesterPubkey, rather than
@@ -39,7 +43,13 @@ const nostrKindCircleIdentityProof = 23199
 // one); the d-tag binds the proof to this specific hub instead, and the
 // caller is responsible for also enforcing single-use via the event ID
 // (see the CircleWalletIdentityProof replay guard in the controller).
-func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubAppPubkey string) error {
+// hubWalletPubkey MUST be the hub connection's own pairing-URI pubkey
+// (app.WalletPubkey) — the only "Hub's own pubkey" (NIP-CW's own wording)
+// a member holding just the shared connection string can ever know. Binding
+// to app.AppPubkey instead (an internal id derived from the connection's
+// secret, never exposed to a member) made this call unusable by any real
+// client until fixed.
+func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubWalletPubkey string) error {
 	if ev.Kind != nostrKindCircleIdentityProof {
 		return fmt.Errorf("identity_event must be kind %d, got %d", nostrKindCircleIdentityProof, ev.Kind)
 	}
@@ -65,7 +75,7 @@ func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubAppPub
 		return fmt.Errorf("identity_event must be signed by the requester pubkey")
 	}
 	dTag := ev.Tags.Find("d")
-	if len(dTag) < 2 || dTag[1] != hubAppPubkey {
+	if len(dTag) < 2 || dTag[1] != hubWalletPubkey {
 		return fmt.Errorf("identity_event d-tag does not match this circle hub")
 	}
 	now := time.Now()

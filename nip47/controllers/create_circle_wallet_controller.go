@@ -115,7 +115,20 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
 		return
 	}
-	if err := verifyCircleWalletIdentityEvent(&identityEvent, params.Pubkey, app.AppPubkey); err != nil {
+	// The d-tag binds this proof to "the Hub's own pubkey" (NIP-CW's own
+	// wording) — the value in the circle_hub connection's own pairing URI,
+	// i.e. app.WalletPubkey, not app.AppPubkey. AppPubkey is derived from
+	// the connection's secret and never appears anywhere a member holding
+	// only the shared connection string could learn it — checking against
+	// it here made this call unusable by any client that wasn't lokihub's
+	// own test suite (which cheats by deriving it locally). See the
+	// TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt regression test.
+	if app.WalletPubkey == nil {
+		logger.Logger.Error().Uint("app_id", app.ID).Msg("Circle Hub has no wallet pubkey set")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "circle hub is not fully initialized")
+		return
+	}
+	if err := verifyCircleWalletIdentityEvent(&identityEvent, params.Pubkey, *app.WalletPubkey); err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 		return
 	}
@@ -359,14 +372,21 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	walletPubkey := *newApp.WalletPubkey
 	pairingURI := buildNWCPairingURI(walletPubkey, controller.cfg.GetRelayUrls(), pairingSecretKey)
 
-	circleWalletPrivKey, err := controller.keys.GetAppWalletKey(newApp.ID)
+	// Encrypt with the Hub's own key (app, not newApp): the requester's only
+	// prior trust anchor is the Hub connection they already dialed — the new
+	// child wallet's own pubkey is just a cleartext field inside this same
+	// unauthenticated response (createCircleWalletResponse.WalletPubkey), so
+	// using it as the encryption key would let the response vouch for
+	// itself. Signing with the already-established Hub key is what lets the
+	// requester trust this really came from the Hub they connected to.
+	hubWalletPrivKey, err := controller.keys.GetAppWalletKey(app.ID)
 	if err != nil {
-		logger.Logger.Error().Err(err).Uint("circle_wallet_id", newApp.ID).Msg("Failed to get circle wallet private key")
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to get circle hub private key")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to derive wallet key")
 		return
 	}
 
-	encryptedURI, err := encryptPairingURI(params.Pubkey, circleWalletPrivKey, pairingURI)
+	encryptedURI, err := encryptPairingURI(params.Pubkey, hubWalletPrivKey, pairingURI)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to encrypt pairing URI for circle wallet")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encrypt pairing URI")

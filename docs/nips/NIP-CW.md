@@ -203,12 +203,17 @@ per-call proof, for a different NIP), and not NIP-IC's `35521` (a long-lived, re
 claim, incompatible with this proof's single-use, per-request binding — see NIP-CASH.md's own Methods
 section for the general reasoning, which applies identically here).
 
-```
-kind: 23199
-pubkey: <requester pubkey — MUST equal `pubkey` in the request>
-tags:
-  d = <Circle Wallet Hub's own pubkey>   // binds proof to THIS Hub; no invoice to bind it to
-created_at: now (± 5 minute freshness window)
+```jsonc
+{
+  "kind": 23199,
+  "pubkey": "<requester pubkey — MUST equal `pubkey` in the request>",
+  "created_at": 1720000000, // ± 5 minute freshness window
+  "tags": [
+    ["d", "<Circle Wallet Hub's own pubkey>"] // binds proof to THIS Hub; no invoice to bind it to
+  ],
+  "content": "",
+  "sig": "<schnorr signature by `pubkey`>"
+}
 ```
 
 There's only one identity mode here, since a Circle Wallet member is always a raw Nostr pubkey.

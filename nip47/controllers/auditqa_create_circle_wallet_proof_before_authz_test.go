@@ -63,7 +63,7 @@ func TestHandleCreateCircleWalletEvent_InvalidProof_NeverReachesAuthorizationChe
 
 	// Same forged-proof shape as TestHandleCreateCircleWalletEvent_IdentityEvent_WrongSigner_Rejected:
 	// the attacker signs with their OWN key but claims the victim's pubkey.
-	forgedEvent := buildCircleWalletIdentityEvent(t, attackerKey, provider.AppPubkey)
+	forgedEvent := buildCircleWalletIdentityEvent(t, attackerKey, *provider.WalletPubkey)
 	requestJSON := rawCircleWalletRequest(t, victimPubkey, 100_000, 3600, mustMarshal(t, forgedEvent))
 
 	// authorized: true is deliberate — if the ordering regressed and
