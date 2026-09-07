@@ -290,6 +290,54 @@ MUST NOT be able to reconstruct a member's connection string after the fact. Tha
 custody choice: no "reveal connection again" capability, even for the host. Offering one would require
 switching to a deterministic, re-derivable pairing key instead — a custody trade-off, not an oversight.
 
+## The Circle Wallet Hub Connection (`circlehub1...`)
+
+A Circle Wallet Hub's own connection — the one members send `create_circle_wallet` to — is otherwise an
+ordinary NWC pairing, indistinguishable by string alone from a Circle Wallet a member already holds, or
+from any unrelated application connection. A prospective member pasting a connection into a client has no
+way to tell "this is a Hub I can join" from "this is already someone's finished wallet" without a live
+`get_info` round-trip.
+
+`circlehub1...` packages the same pairing data as an ordinary `nostr+walletconnect://` string, wrapped in
+a NIP-19-style bech32 identifier — the same technique NIP-CASH uses for its own cash token, applied here to
+a Hub connection instead. Wire format: a human-readable prefix (`circlehub`), the digit `1`, then
+TLV-encoded pairing data converted from 8-bit to 5-bit groups exactly as NIP-19 does for
+`nprofile`/`nevent`/`naddr`. Each entry is `<type: 1 byte><length: 1 byte><value: length bytes>`:
+
+| Type | Name | Value | Cardinality |
+|---|---|---|---|
+| `0` | wallet pubkey | 32 raw bytes — the Hub's own pubkey | exactly one, REQUIRED |
+| `1` | relay | a relay URL, ASCII | one or more, order preserved |
+| `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
+| `3` | label | a human-readable name, UTF-8 | zero or one, OPTIONAL |
+
+A decoder MUST ignore any TLV entry of an unrecognized type rather than rejecting the string, so a future
+field can be added without breaking older decoders. A decoder MUST reject a string missing either required
+field (`0` or `2`), carrying a wrong-length value for a typed field, or repeating one.
+
+`label` (type `3`) exists purely so a prospective member sees what they're being invited to — "Ada's
+Family Circle" — before deciding whether to send `create_circle_wallet` at all, with no round-trip
+required to learn it.
+
+This wire format is informative for connection portability and recognition, not a new authorization
+mechanism: everything §Security Considerations and §Membership say about the underlying connection and the
+identity-proof requirement apply unchanged to a `circlehub1...`-encoded one. Decoding one and dialing it
+grants exactly the access `create_circle_wallet`'s own scope already carries — nothing more.
+
+A resulting Circle Wallet (§Pairing Connection, above) is deliberately NOT given its own bech32 form here
+— only the Hub connection a prospective member needs to *recognize before acting on* benefits from this; a
+Circle Wallet a member already holds is just an ordinary wallet connection like any other, with nothing
+left to distinguish it from.
+
+**Recommended presentation.** An implementation SHOULD present a Circle Wallet Hub connection to its host
+as `circlehub1...` by default — including in any QR code offered for scanning — rather than the raw
+`nostr+walletconnect://` string, since the bech32 form is instantly recognizable and copy-paste-safe in a
+way the URI form isn't. For a tool that doesn't yet decode this format, the implementation SHOULD offer an
+explicit way to reveal the equivalent `nostr+walletconnect://` URI instead — e.g. a toggle beneath the
+primary QR code/string labeled "Show as classic NWC URI," flipping to "Show as `circlehub1...`" once
+switched — never silently, so whoever copies whichever form is on screen at the time always knows which
+one they're sharing.
+
 ## Lifecycle and Deletion
 
 ```mermaid

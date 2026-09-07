@@ -1092,6 +1092,57 @@ prefix changes. `lokicash1...` names flokicoin behind the wallet; a Bitcoin-back
 its funds the same way under `satscash1...`. A decoder MUST NOT assume a fixed prefix; it should accept
 whichever one a token actually carries and use it to determine which base asset backs the wallet.
 
+## The Cash Hub Connection (`cashhub1...`)
+
+A Cash Hub's own connection — the one its owner calls `mint_cash` over — is otherwise an ordinary NWC
+pairing, indistinguishable by string alone from a Cash Wallet, a Circle Wallet, or any other application
+connection sharing the same underlying node. An owner moving that connection between tools or devices, or
+a client recognizing what kind of connection was just pasted in, has no way to tell without a live
+`get_info` round-trip. A Cash Wallet's own connection already has a recognizable form (§The Cash Token,
+`lokicash1...`) — this section closes the other half of the gap: the Hub connection an owner mints
+*from*, which previously had no distinct form of its own.
+
+`cashhub1...` packages the same pairing data as an ordinary `nostr+walletconnect://` string, wrapped in a
+NIP-19-style bech32 identifier the same way `lokicash1...`/`satscash1...` already wrap a Cash Wallet's:
+recognizable at a glance, and machine-parseable without a network call. Wire format: the same TLV encoding
+as §The Cash Token's Wire Format (8-bit to 5-bit grouping, `<type: 1 byte><length: 1 byte><value: length
+bytes>` entries, unrecognized types ignored), with a payload deliberately smaller than a cash token's,
+since a Hub connection carries no slice, no expiry, and no provenance:
+
+| Type | Name | Value | Cardinality |
+|---|---|---|---|
+| `0` | wallet pubkey | 32 raw bytes — the Hub's own pubkey | exactly one, REQUIRED |
+| `1` | relay | a relay URL, ASCII | one or more, order preserved |
+| `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
+| `3` | label | a human-readable name, UTF-8 | zero or one, OPTIONAL |
+
+Types `0`–`2` carry the identical meaning §The Cash Token's own table gives them. This format's type
+numbers are scoped to its own HRP and don't need to, and don't, line up with a cash token's types `3`/`5`/
+`6` — identity-required, mint provenance — which describe concepts that don't apply to a Hub connection at
+all. A decoder MUST ignore any TLV entry of an unrecognized type rather than rejecting the string, per the
+same forward-compatibility rule §The Cash Token's Wire Format establishes.
+
+`label` (type `3`) exists purely for the human on the other end of a share — "Alice's Cash Hub" — surfaced
+before a client is ever asked to actually dial the connection.
+
+A decoder MUST reject a `cashhub1...` string missing either required field (`0` or `2`), carrying a
+wrong-length value for a typed field, or repeating one — the same class of malformed-input rule §The Cash
+Token's Wire Format applies to `lokicash1...`.
+
+This wire format is informative for connection portability and recognition, not a new authorization
+mechanism: everything §Security Considerations and §Scope Surface say about the underlying NWC connection
+apply unchanged to a `cashhub1...`-encoded one. Decoding one and dialing it grants exactly the access the
+connection's own scope already carries — nothing more, nothing less.
+
+**Recommended presentation.** An implementation SHOULD present a Cash Hub connection to its owner as
+`cashhub1...` by default — including in any QR code offered for scanning — rather than the raw
+`nostr+walletconnect://` string, since the bech32 form is instantly recognizable and copy-paste-safe in a
+way the URI form isn't (the same rationale §The Cash Token already gives for `lokicash1...`). For a tool
+that doesn't yet decode this format, the implementation SHOULD offer an explicit way to reveal the
+equivalent `nostr+walletconnect://` URI instead — e.g. a toggle beneath the primary QR code/string labeled
+"Show as classic NWC URI," flipping to "Show as `cashhub1...`" once switched — never silently, so whoever
+copies whichever form is on screen at the time always knows which one they're sharing.
+
 ## The Pairing Connection
 
 A Cash Wallet's pairing secret MUST be deterministically derived from its own connection identifier. That
