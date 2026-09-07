@@ -18,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 )
@@ -370,7 +371,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// Encrypt pairing URI for the requester using NIP-44.
 	walletPubkey := *newApp.WalletPubkey
-	pairingURI := buildNWCPairingURI(walletPubkey, controller.cfg.GetRelayUrls(), pairingSecretKey)
+	pairingURI := nmilatnip47.BuildPairingURI(walletPubkey, controller.cfg.GetRelayUrls(), pairingSecretKey, nil)
 
 	// Encrypt with the Hub's own key (app, not newApp): the requester's only
 	// prior trust anchor is the Hub connection they already dialed — the new

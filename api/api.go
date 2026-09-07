@@ -20,6 +20,7 @@ import (
 
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/go-flokicoin/chainutil"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
@@ -209,11 +210,37 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
-	var lud16 string
+	var extra url.Values
 	if lightningAddress != "" && !app.IsIsolated() {
-		lud16 = fmt.Sprintf("&lud16=%s", lightningAddress)
+		extra = url.Values{"lud16": []string{lightningAddress}}
 	}
-	responseBody.PairingUri = fmt.Sprintf("nostr+walletconnect://%s?relay=%s&secret=%s%s", *app.WalletPubkey, strings.Join(relayUrls, "&relay="), pairingSecretKey, lud16)
+	responseBody.PairingUri = nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, extra)
+
+	var hubHRP string
+	switch kind {
+	case db.AppKindCashHub:
+		hubHRP = constants.CashHubTokenHRP
+	case db.AppKindCircleHub:
+		hubHRP = constants.CircleHubTokenHRP
+	}
+	if hubHRP != "" {
+		hubToken, err := nmilatnip47.EncodeHubConnection(nmilatnip47.HubConnection{
+			HRP:          hubHRP,
+			WalletPubkey: *app.WalletPubkey,
+			Secret:       pairingSecretKey,
+			RelayURLs:    relayUrls,
+			Label:        app.Name,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode hub connection token: %w", err)
+		}
+		switch kind {
+		case db.AppKindCashHub:
+			responseBody.CashHubToken = &hubToken
+		case db.AppKindCircleHub:
+			responseBody.CircleHubToken = &hubToken
+		}
+	}
 
 	return responseBody, nil
 }
@@ -3251,13 +3278,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 
 	relayUrls := api.cfg.GetRelayUrls()
 
-	var b strings.Builder
-	b.WriteString("nostr+walletconnect://")
-	b.WriteString(*app.WalletPubkey)
-	b.WriteString("?relay=")
-	b.WriteString(strings.Join(relayUrls, "&relay="))
-	b.WriteString("&secret=")
-	b.WriteString(pairingSecretKey)
+	pairingURI := nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, nil)
 
 	// Unlike Commit/SpinOff (which know a just-created wallet's identity
 	// requirement directly from the params they were just given), this
@@ -3289,7 +3310,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 		return nil, fmt.Errorf("failed to encode lokicash token: %w", err)
 	}
 
-	return &CashWalletConnectionResponse{PairingURI: b.String(), CashToken: lokicashToken}, nil
+	return &CashWalletConnectionResponse{PairingURI: pairingURI, CashToken: lokicashToken}, nil
 }
 
 // GetCashWalletRecipients returns every recipient slice of a single

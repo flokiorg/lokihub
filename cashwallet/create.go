@@ -24,7 +24,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +36,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"gorm.io/gorm"
 )
 
@@ -579,7 +579,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 
 	return &Result{
 		WalletApp:  newApp,
-		PairingURI: buildNWCPairingURI(walletPubkey, deps.RelayURLs, pairingSecretKey),
+		PairingURI: nmilatnip47.BuildPairingURI(walletPubkey, deps.RelayURLs, pairingSecretKey, nil),
 		CashToken:  lokicashToken,
 		ExpiresAt:  resolved.ExpiresAt,
 		Recipients: recipientResults,
@@ -772,18 +772,3 @@ func Create(ctx context.Context, deps Deps, params Params) (*Result, error) {
 	return Commit(ctx, deps, resolved)
 }
 
-// buildNWCPairingURI assembles the nostr+walletconnect pairing URI. Duplicated
-// (rather than imported) from nip47/controllers/pairing.go: it's an 8-line
-// string builder, and duplicating it keeps this package free of a dependency
-// on nip47/controllers, which would otherwise be the only import edge from a
-// core business-logic package into a protocol package.
-func buildNWCPairingURI(walletPubkey string, relayUrls []string, secret string) string {
-	var b strings.Builder
-	b.WriteString("nostr+walletconnect://")
-	b.WriteString(walletPubkey)
-	b.WriteString("?relay=")
-	b.WriteString(strings.Join(relayUrls, "&relay="))
-	b.WriteString("&secret=")
-	b.WriteString(secret)
-	return b.String()
-}

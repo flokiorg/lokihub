@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -73,7 +74,9 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.WalletApp)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
-	assert.Contains(t, result.PairingURI, "?relay=wss://relay.test")
+	parsedPairing, err := nmilatnip47.ParsePairingURI(result.PairingURI)
+	require.NoError(t, err)
+	assert.Contains(t, parsedPairing.RelayURLs, "wss://relay.test")
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
 	require.NotNil(t, result.ExpiresAt)

@@ -663,6 +663,13 @@ type CreateAppResponse struct {
 	Id            uint     `json:"id"`
 	Name          string   `json:"name"`
 	ReturnTo      string   `json:"returnTo"`
+	// CashHubToken and CircleHubToken are an alternative bech32 encoding of
+	// the same pairing data as PairingUri (docs/nips/NIP-CASH.md §The Cash
+	// Hub Connection, NIP-CW.md §The Circle Wallet Hub Connection) —
+	// populated only when Kind is cash_hub/circle_hub respectively, and, like
+	// PairingUri, shown to the operator this one time only.
+	CashHubToken   *string `json:"cashHubToken,omitempty"`
+	CircleHubToken *string `json:"circleHubToken,omitempty"`
 }
 
 type User struct {

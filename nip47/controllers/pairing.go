@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"strings"
-
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -17,19 +15,6 @@ func respondError(publishResponse publishFunc, method, code, message string) {
 		ResultType: method,
 		Error:      &models.Error{Code: code, Message: message},
 	}, nostr.Tags{})
-}
-
-// buildNWCPairingURI assembles the nostr+walletconnect pairing URI.
-// Uses strings.Builder to avoid intermediate allocations from fmt.Sprintf.
-func buildNWCPairingURI(walletPubkey string, relayUrls []string, secret string) string {
-	var b strings.Builder
-	b.WriteString("nostr+walletconnect://")
-	b.WriteString(walletPubkey)
-	b.WriteString("?relay=")
-	b.WriteString(strings.Join(relayUrls, "&relay="))
-	b.WriteString("&secret=")
-	b.WriteString(secret)
-	return b.String()
 }
 
 // encryptPairingURI NIP-44 encrypts the pairing URI for the recipient.

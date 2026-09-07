@@ -141,6 +141,8 @@ github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd h1:+ronJTVUGaH8N
 github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd/go.mod h1:YSmQVJwQclEkeLWZjbFO3MFVAycIO/fTCTvDs1jRzaE=
 github.com/flokiorg/lightning-onion v1.0.1-alpha h1:wCXA+QR89wp+EMwKg+n1w7sBOJH7JGZW4vr4xedyoy8=
 github.com/flokiorg/lightning-onion v1.0.1-alpha/go.mod h1:171FAEbkreHmQpF7TsK7wMqEwUFxGtWFasXju+jztwI=
+github.com/flokiorg/nmilat v0.2.8-0.20260907145903-2ce509eeda17 h1:qeJtlE47DgUVViwClCog+ngFt8QGlNdHWi294r/koMs=
+github.com/flokiorg/nmilat v0.2.8-0.20260907145903-2ce509eeda17/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
 github.com/flokiorg/walletd v0.2.0-beta h1:ObQta6isASbDzkm5WbaGKmJDw0em6HzzGUC4JlR6MMQ=
 github.com/flokiorg/walletd v0.2.0-beta/go.mod h1:tR4og6jw5+POhHMNrhUNrt0c2+X1m3aoQcJbhk6tJpQ=
 github.com/flowgate-lsp/nostr-lsps5 v1.0.2 h1:Xd1G90nPMoZJ4Aq21njhpXnXtGRP4Ex+3DVtBvMCHI0=
