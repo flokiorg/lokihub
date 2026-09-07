@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ohstr/nmilat/nipIC"
 	"github.com/ohstr/nmilat/nipcash"
 	cashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/ohstr/nmilat/nipcw"
@@ -63,6 +65,99 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	// MintRedeem_ConnectionKey exercises NIP-CASH's third identity mode — the
+	// most protocol-heavy of the three (an Identity Authority attestation,
+	// nipIC.NewConnectionKey's platform+externalID hashing, and the
+	// claimant's own separate Nostr keypair signing the per-call proof) —
+	// through nmilat's real client end to end, the one path
+	// MintRedeem_Pubkey/_Bearer above don't touch at all.
+	t.Run("MintRedeem_ConnectionKey", func(t *testing.T) {
+		iaPriv := createEphemeralTrustedIA(t, cfg)
+		iaPub := mustPubkey(t, iaPriv)
+
+		const platform = nipIC.WebIdentity("discord")
+		const externalID = "nmilat-sdk-test-user"
+		connKey := nipIC.NewConnectionKey(platform, externalID)
+
+		result, err := hubClient.MintCash(ctxT(t), nipcash.MintCashParams{
+			Recipients: []nipcash.Allocation{nipcash.Send(nipcash.ConnectionKey(platform, externalID, iaPub), nmilatHappyPathAmountMillis)},
+			Expiry:     nmilatHappyPathExpiry,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, result.PairingURI)
+
+		wallet, err := cashclient.Connect(ctxT(t), result.PairingURI)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		// The claimant proves control of connKey via their own real Nostr
+		// identity, witnessed by the IA's attestation — two separate
+		// keypairs, neither of which is the wallet's own connection secret.
+		claimantPriv := newTestPrivkey(t)
+		claimantPub := mustPubkey(t, claimantPriv)
+
+		attEvent, err := nipIC.NewAttestation(nipIC.AttestationParams{
+			PrivateKey:    iaPriv,
+			ConnectionKey: connKey,
+			UserPubkey:    claimantPub,
+			Platform:      platform,
+			Evidence: nipIC.Evidence{
+				Platform:   platform,
+				UserID:     externalID,
+				VerifiedAt: time.Now().Unix(),
+			},
+			ExpirationDays: 1,
+		})
+		require.NoError(t, err)
+		attestation, err := nipIC.ParseAttestation(attEvent)
+		require.NoError(t, err)
+
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk connection_key redeem")
+		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
+			Invoice:    invoice.Invoice,
+			Credential: nipcash.BySigningConnectionKey(claimantPriv, platform, externalID, attestation),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, redeemResult.Preimage)
+	})
+
+	// ListRecipients exercises the one migrated method the rest of this file
+	// never calls at all — a multi-recipient roster read, through nmilat's
+	// real client.
+	t.Run("ListRecipients", func(t *testing.T) {
+		pubA := mustPubkey(t, newTestPrivkey(t))
+		pubB := mustPubkey(t, newTestPrivkey(t))
+
+		minted, err := hubClient.MintCash(ctxT(t), nipcash.MintCashParams{
+			Recipients: []nipcash.Allocation{
+				nipcash.Send(nipcash.Pubkey(pubA), nmilatHappyPathAmountMillis),
+				nipcash.Send(nipcash.Pubkey(pubB), nmilatHappyPathAmountMillis*2),
+			},
+			Expiry: nmilatHappyPathExpiry,
+		})
+		require.NoError(t, err)
+
+		wallet, err := cashclient.Connect(ctxT(t), minted.PairingURI)
+		require.NoError(t, err)
+		t.Cleanup(wallet.Close)
+
+		roster, err := wallet.ListRecipients(ctxT(t))
+		require.NoError(t, err)
+		require.Len(t, roster.Recipients, 2)
+		for _, r := range roster.Recipients {
+			assert.Equal(t, "pubkey", r.IdentityType)
+			assert.False(t, r.Claimed)
+			switch r.IdentityValue {
+			case pubA:
+				assert.EqualValues(t, nmilatHappyPathAmountMillis, r.AmountMillis)
+			case pubB:
+				assert.EqualValues(t, nmilatHappyPathAmountMillis*2, r.AmountMillis)
+			default:
+				t.Errorf("unexpected recipient identity_value %q", r.IdentityValue)
+			}
+		}
 	})
 
 	t.Run("MintRedeem_Bearer", func(t *testing.T) {
