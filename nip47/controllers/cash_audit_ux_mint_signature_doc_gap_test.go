@@ -67,7 +67,7 @@ func nipCashDocSection(t *testing.T, headingPrefix string) string {
 // without reading the Go source directly. Each method's own "### Request"
 // section now documents it.
 func TestNIPCashDoc_MintSignatureRequestFieldDocumented(t *testing.T) {
-	mintSection := nipCashDocSection(t, "## Minting a Cash Wallet")
+	mintSection := nipCashDocSection(t, "## Minting Cash")
 	assert.Contains(t, mintSection, "mint_signature",
 		"mint_cash's own spec section must document the mint_signature request field")
 
