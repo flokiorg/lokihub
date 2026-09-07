@@ -163,13 +163,12 @@ const (
 // Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string
 // (docs/nips/NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
 // Wallet Hub Connection) — an alternative encoding of the same pairing data
-// as PairingUri, built via nmilat's nip47.EncodeHubConnection. Unlike the
-// NIP47Method* constants above, nmilat has no exported constant for these:
-// a HubConnection's HRP is caller-supplied, same as nipcash.Token's own HRP
-// field (compare lokicash.HRP, defined locally for the same reason).
+// as PairingUri, built via nipcash.EncodeCashHubConnection /
+// nipcw.EncodeCircleHubConnection. Aliased the same way NIP47Method* above
+// aliases nipcash/nipcw's own constants, rather than a hardcoded literal.
 const (
-	CashHubTokenHRP   = "cashhub"
-	CircleHubTokenHRP = "circlehub"
+	CashHubTokenHRP   = nipcash.CashHubConnectionHRP
+	CircleHubTokenHRP = nipcw.CircleHubConnectionHRP
 )
 
 // PayCapableScopes lists every scope whose AppPermission row can carry

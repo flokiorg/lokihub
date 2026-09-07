@@ -21,6 +21,8 @@ import (
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
@@ -216,30 +218,29 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	}
 	responseBody.PairingUri = nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, extra)
 
-	var hubHRP string
 	switch kind {
 	case db.AppKindCashHub:
-		hubHRP = constants.CashHubTokenHRP
-	case db.AppKindCircleHub:
-		hubHRP = constants.CircleHubTokenHRP
-	}
-	if hubHRP != "" {
-		hubToken, err := nmilatnip47.EncodeHubConnection(nmilatnip47.HubConnection{
-			HRP:          hubHRP,
+		hubToken, err := nipcash.EncodeCashHubConnection(nipcash.CashHubConnection{
 			WalletPubkey: *app.WalletPubkey,
 			Secret:       pairingSecretKey,
 			RelayURLs:    relayUrls,
 			Label:        app.Name,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode hub connection token: %w", err)
+			return nil, fmt.Errorf("failed to encode cash hub connection token: %w", err)
 		}
-		switch kind {
-		case db.AppKindCashHub:
-			responseBody.CashHubToken = &hubToken
-		case db.AppKindCircleHub:
-			responseBody.CircleHubToken = &hubToken
+		responseBody.CashHubToken = &hubToken
+	case db.AppKindCircleHub:
+		hubToken, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
+			WalletPubkey: *app.WalletPubkey,
+			Secret:       pairingSecretKey,
+			RelayURLs:    relayUrls,
+			Label:        app.Name,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode circle hub connection token: %w", err)
 		}
+		responseBody.CircleHubToken = &hubToken
 	}
 
 	return responseBody, nil

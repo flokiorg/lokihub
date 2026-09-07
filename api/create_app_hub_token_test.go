@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -52,9 +54,8 @@ func TestCreateApp_CashHub_EmitsCashHubToken(t *testing.T) {
 	wantPairing, err := nmilatnip47.ParsePairingURI(resp.PairingUri)
 	require.NoError(t, err)
 
-	got, err := nmilatnip47.DecodeHubConnection(*resp.CashHubToken)
+	got, err := nipcash.DecodeCashHubConnection(*resp.CashHubToken)
 	require.NoError(t, err)
-	assert.Equal(t, constants.CashHubTokenHRP, got.HRP)
 	assert.Equal(t, wantPairing.WalletPubkey, got.WalletPubkey)
 	assert.Equal(t, wantPairing.Secret, got.Secret)
 	assert.Equal(t, wantPairing.RelayURLs, got.RelayURLs)
@@ -86,9 +87,8 @@ func TestCreateApp_CircleHub_EmitsCircleHubToken(t *testing.T) {
 	wantPairing, err := nmilatnip47.ParsePairingURI(resp.PairingUri)
 	require.NoError(t, err)
 
-	got, err := nmilatnip47.DecodeHubConnection(*resp.CircleHubToken)
+	got, err := nipcw.DecodeCircleHubConnection(*resp.CircleHubToken)
 	require.NoError(t, err)
-	assert.Equal(t, constants.CircleHubTokenHRP, got.HRP)
 	assert.Equal(t, wantPairing.WalletPubkey, got.WalletPubkey)
 	assert.Equal(t, wantPairing.Secret, got.Secret)
 	assert.Equal(t, wantPairing.RelayURLs, got.RelayURLs)

@@ -248,8 +248,8 @@ replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-d
 
 // TEMPORARY: points at flokiorg/nmilat's feat/hub-connection-bech32 branch
 // (ohstr/nmilat#16, not yet merged/tagged upstream) for
-// nip47.EncodeHubConnection/DecodeHubConnection (cashhub1.../circlehub1...
-// support, for docs/nips/NIP-CASH.md's and NIP-CW.md's new Hub Connection
-// sections). Revert to a plain require once a released nmilat version with
-// it lands.
-replace github.com/ohstr/nmilat => github.com/flokiorg/nmilat v0.2.8-0.20260907145903-2ce509eeda17
+// nipcash.EncodeCashHubConnection/nipcw.EncodeCircleHubConnection
+// (cashhub1.../circlehub1... support, for docs/nips/NIP-CASH.md's and
+// NIP-CW.md's new Hub Connection sections). Revert to a plain require once
+// a released nmilat version with it lands.
+replace github.com/ohstr/nmilat => github.com/flokiorg/nmilat v0.2.8-0.20260907151010-d505c38f969c
