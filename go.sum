@@ -141,10 +141,6 @@ github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd h1:+ronJTVUGaH8N
 github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd/go.mod h1:YSmQVJwQclEkeLWZjbFO3MFVAycIO/fTCTvDs1jRzaE=
 github.com/flokiorg/lightning-onion v1.0.1-alpha h1:wCXA+QR89wp+EMwKg+n1w7sBOJH7JGZW4vr4xedyoy8=
 github.com/flokiorg/lightning-onion v1.0.1-alpha/go.mod h1:171FAEbkreHmQpF7TsK7wMqEwUFxGtWFasXju+jztwI=
-github.com/flokiorg/nmilat v0.2.8-0.20260907145903-2ce509eeda17 h1:qeJtlE47DgUVViwClCog+ngFt8QGlNdHWi294r/koMs=
-github.com/flokiorg/nmilat v0.2.8-0.20260907145903-2ce509eeda17/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
-github.com/flokiorg/nmilat v0.2.8-0.20260907151010-d505c38f969c h1:wybFsA2ktKuK7XrcCHdnICuKl2g0JzkKDYN3va+o4N8=
-github.com/flokiorg/nmilat v0.2.8-0.20260907151010-d505c38f969c/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
 github.com/flokiorg/walletd v0.2.0-beta h1:ObQta6isASbDzkm5WbaGKmJDw0em6HzzGUC4JlR6MMQ=
 github.com/flokiorg/walletd v0.2.0-beta/go.mod h1:tR4og6jw5+POhHMNrhUNrt0c2+X1m3aoQcJbhk6tJpQ=
 github.com/flowgate-lsp/nostr-lsps5 v1.0.2 h1:Xd1G90nPMoZJ4Aq21njhpXnXtGRP4Ex+3DVtBvMCHI0=
@@ -382,8 +378,8 @@ github.com/ncruces/go-strftime v0.1.9/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJm
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
-github.com/ohstr/nmilat v0.2.7 h1:i+pt8Kd8TBqYW7MgQjqGU8jRgMF4ChnSJnVc2d2uL0w=
-github.com/ohstr/nmilat v0.2.7/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
+github.com/ohstr/nmilat v0.2.8 h1:SVOy6KL1glTeuZ2cgHojcivzGP1Rr2bOvl3x16KAmhU=
+github.com/ohstr/nmilat v0.2.8/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=

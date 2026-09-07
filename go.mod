@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.2.7
+	github.com/ohstr/nmilat v0.2.8
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.56.0
@@ -245,11 +245,3 @@ require (
 // We want to format raw bytes as hex instead of base64. The forked version
 // allows us to specify that as an option.
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
-
-// TEMPORARY: points at flokiorg/nmilat's feat/hub-connection-bech32 branch
-// (ohstr/nmilat#16, not yet merged/tagged upstream) for
-// nipcash.EncodeCashHubConnection/nipcw.EncodeCircleHubConnection
-// (cashhub1.../circlehub1... support, for docs/nips/NIP-CASH.md's and
-// NIP-CW.md's new Hub Connection sections). Revert to a plain require once
-// a released nmilat version with it lands.
-replace github.com/ohstr/nmilat => github.com/flokiorg/nmilat v0.2.8-0.20260907151010-d505c38f969c
