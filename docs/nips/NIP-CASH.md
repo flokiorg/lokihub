@@ -955,6 +955,9 @@ Losing it is equivalent to losing the funds — same as losing any bearer ecash 
 
 No Identity Authority check, no signature to verify — presenting the correct secret is the entire proof.
 The processing algorithm in §Redeeming a Slice applies unchanged; step 2 becomes a direct secret comparison.
+This `bearer_secret` is the value from §Creating a Bearer Slice's mint response — never the token's own
+type-`2` connection secret; see §The Cash Token's Redemption Metadata for why the two are never
+interchangeable.
 
 ### Security Considerations for Bearer Slices
 
@@ -1039,10 +1042,23 @@ relay round-trip first, purely as a convenience:
 
 - **Identity required** (`0` = false, `1` = true) reports whether the wallet currently requires a proof at
   all: `false` means the wallet is a single bearer slice (`cash_redeem`/`cash_transfer` need only its
-  secret — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
+  `bearer_secret` — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
   identity-bound (a signed proof is required). This is well-defined per wallet, not per slice, because a
   bearer slice's wallet is always single-recipient (§Bearer Slices) — there's never a wallet mixing bearer
   and identity-bound slices for this flag to be ambiguous about.
+
+  **This `bearer_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
+  only the NWC connection secret (§The Pairing Connection) — it lets anyone holding this token dial the
+  wallet and call read-only methods like `list_recipients`, nothing more; mere possession of the
+  connection is explicitly not a spending credential (§The Cash Token's own opening paragraph). The actual
+  spending credential for a bearer slice is a separate, independently-generated
+  value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Bearer
+  Slice) — it is never encoded in this token and cannot be derived from it. A client presenting this
+  token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
+  `NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
+  separate values out of band together — this token, and the `bearer_secret` from the mint response — never
+  one alone; see lokihub's own `ConnectAppCard`/`RevealConnectionDialog` for the reference pattern (two
+  distinct "copy" actions shown side by side, not merged into one string).
 
 **This field is a best-effort hint, snapshotted at whatever moment the token was minted or last
 re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of bearer status via
