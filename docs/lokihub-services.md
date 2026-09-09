@@ -28,12 +28,13 @@ for a new user.
 
 ## The built-in defaults list
 
-A few of these — LSPs especially — can also be seeded from a small `services.json` file Lokihub keeps in
-its own `lokihub-services` repo, the same pattern the [App Store](lokihub-appstore.md) uses for its
-catalog: a separate repo, served over HTTPS, updatable without an app release. Despite the internal name,
-it's not a crowdsourced or community-editable list — it's Lokihub's own short list of known-good
-defaults, there so a new user doesn't have to hand-type a raw LSP connection string. The source is
-configurable too, for pointing at your own mirror.
+Right now only the LSP list is actually seeded this way, from a small `services.json` file Lokihub keeps
+in its own `lokihub-services` repo — the same pattern the [App Store](lokihub-appstore.md) uses for its
+catalog: a separate repo, served over HTTPS, updatable without an app release. The other rows in the
+table above don't currently have a synced default source. Despite the internal name, this isn't a
+crowdsourced or community-editable list — it's Lokihub's own short list of known-good LSPs, there so a
+new user doesn't have to hand-type a raw connection string. The source is configurable too, for pointing
+at your own mirror.
 
 ```mermaid
 sequenceDiagram
@@ -52,8 +53,11 @@ sequenceDiagram
     You-->>You: pick one, or type in your own
 ```
 
-The merge is additive, always: a default suggestion never overrides something you configured yourself —
-it only ever pre-fills a form.
+The merge is meant to be additive — a default suggestion pre-fills the form rather than replacing what
+you typed. One edge case falls outside that: entries are matched by pubkey, so if an LSP you added by
+hand shares a pubkey with one that later shows up on the community list, the sync overwrites that
+entry's name, host, and description with the community version (it does preserve whether you'd marked it
+active). Only a pubkey collision triggers this — an LSP you added under a different key is never touched.
 
 ## Where the trust actually lives
 

@@ -52,16 +52,22 @@ sequenceDiagram
 Untrusted events are dropped before anything else happens to them, so a flood of junk from unknown
 pubkeys is cheap to reject rather than something that has to be fully parsed first.
 
-If a relay connection drops, the wallet backs off a few seconds and resubscribes, rather than hammering a
-relay that's having a bad day, and it doesn't replay history on reconnect — it picks up from "now."
+The initial subscribe on startup fetches the last 24 hours of backlog; a reconnect after that doesn't
+replay history — it picks up from "now." If a relay connection drops, the wallet backs off a few seconds
+and resubscribes, rather than hammering a relay that's having a bad day.
 
 ## The trust question, either transport
 
 A signature only proves someone controls a key — it doesn't prove that key belongs to an LSP the wallet
 owner actually added. Both transports check the sender against the same registered-LSP list before
-acting on anything, on top of verifying the signature. For anything that changes an order's state, there's
-one more check: does the sender's key match the LSP that actually owns *that* order? Otherwise one
-registered LSP could forge a state change for somebody else's order.
+acting on anything, on top of verifying the signature.
+
+**Known gap:** for a notification that changes an order's state, the HTTP webhook path additionally
+checks that the sender's key matches the LSP that actually owns *that* order — a registered LSP can't
+forge a state change for somebody else's order over that transport. The Nostr path doesn't carry the
+same check yet: any trusted LSP's signed event is currently accepted regardless of which LSP the order
+actually belongs to. Worth closing, since it's the kind of gap that's easy to miss precisely because the
+webhook path already got it right.
 
 A relay is never treated as proof of anything — it's a pipe. Every event's signature is checked
 independently; nothing about a relay's own behavior is trusted as a stand-in for that.

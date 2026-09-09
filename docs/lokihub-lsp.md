@@ -27,8 +27,8 @@ Lightning connection, no HTTP involved. Asking an LSP for its basic info also re
 which gets cached and reused later by the notification side of things.
 
 Underneath all four specs sits one more piece: something that keeps Lokihub peered to whichever LSPs are
-marked active, reconnecting every couple of minutes if a link drops. Nothing below works if that
-connection isn't up.
+marked active, reconnecting every 2 minutes if a link drops. Nothing below works if that connection isn't
+up.
 
 ## [LSPS1](https://github.com/BitcoinAndLightningLayerSpecs/lsp/blob/main/LSPS1/README.md) — buying a channel ahead of time
 

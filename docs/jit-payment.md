@@ -49,6 +49,10 @@ specifically the first one on that list, not a ranked choice. When that LSP hand
 options, Lokihub takes the first one offered rather than shopping for the cheapest. Picking the cheapest
 option isn't built yet.
 
+If checking or buying liquidity fails outright — the LSP is unreachable, for instance — invoice creation
+doesn't fail either. It logs the error and falls through to an ordinary invoice, which may end up unable
+to receive the full payment rather than surfacing the failure to the caller.
+
 ## Buying a JIT channel directly
 
 Outside of any specific invoice, a wallet owner can trigger a JIT channel buy on demand — useful for
