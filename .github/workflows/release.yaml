@@ -52,6 +52,11 @@ jobs:
             exit 1
           fi
           echo "TAG=$TAG" >> $GITHUB_ENV
+          if [[ "$TAG" == *-* ]]; then
+            echo "PRERELEASE=true" >> $GITHUB_ENV
+          else
+            echo "PRERELEASE=false" >> $GITHUB_ENV
+          fi
 
       - name: Check Release Note
         id: check_note
@@ -87,4 +92,4 @@ jobs:
           body_path: releases/${{ env.TAG }}.md
           files: artifacts/**/*
           fail_on_unmatched_files: false
-          prerelease: false
+          prerelease: ${{ env.PRERELEASE }}
