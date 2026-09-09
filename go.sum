@@ -378,8 +378,8 @@ github.com/ncruces/go-strftime v0.1.9/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJm
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
-github.com/ohstr/nmilat v0.2.8 h1:SVOy6KL1glTeuZ2cgHojcivzGP1Rr2bOvl3x16KAmhU=
-github.com/ohstr/nmilat v0.2.8/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
+github.com/ohstr/nmilat v0.2.9 h1:ajC/HMGb8N0tqGNdIpEI2SppsZjsOX9Wp1gBj7zSstg=
+github.com/ohstr/nmilat v0.2.9/go.mod h1:+6B0CT40RAJmnZESl1sBukc07RkdyPn5/EQ8ROVof0Y=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=
