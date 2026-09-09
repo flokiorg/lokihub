@@ -1,0 +1,35 @@
+{
+  "_comment": "Real, dedicated Nostr identities generated once for this test suite's own use (not shared with anything else, no funds/reputation attached) - not synthetic/placeholder data. 'provider' publishes a kind:3 (NIP-02 contact list) follow list naming every 'members' entry at relay-seed time (see seedrelay/main.go, run via `just dev seed-relay` / `just dev reset`), so circle-hub \"following\"-policy tests that want a stable, already-authorized identity can use these directly instead of generating a fresh keypair and live-publishing a follow list over the network on every run. A pubkey NOT listed under 'members' (e.g. a freshly generated one) is a ready-made 'not followed' identity for rejection-path tests - no separate 'nonmember' fixture needed.",
+  "provider": {
+    "name": "provider",
+    "privkey": "51670507a7e2596fa2216191b9a82dbc0e81a415b52738197f0af5629df04bd1",
+    "pubkey": "0a7fe275363c24d71fbe018112dc0d28b311c0329130c86b10493b2d03e1eaa9"
+  },
+  "members": [
+    {
+      "name": "member1",
+      "privkey": "c9e6577a452a59e735ac39259bb1a64d0764044f311bbb9f4e0d31a8c9693f64",
+      "pubkey": "27929b920d8f22cd0d4c1ef1ec3029115f92b6948fa5b24dd4afcb50f9ba1ea3"
+    },
+    {
+      "name": "member2",
+      "privkey": "a7c6f0ee89e134826d8683134166453123c5aa30b59543d9ace78d3b460c1816",
+      "pubkey": "321f77bc605e92530274342b8fa8aeabe375d22a13d58479a7ff06c4f931c569"
+    },
+    {
+      "name": "member3",
+      "privkey": "ac879cb77efe1bfecac37d60446533b22458ec44801d7c597a5dbf3b4ceef93c",
+      "pubkey": "09584a8d50dd5d8c4e63ef27ea6d0451bcac01ef5fc1933ab94b69bdb0c04f47"
+    },
+    {
+      "name": "member4",
+      "privkey": "69884c6d4d760891d56d9a76608001f5a93dda9123f0870f450ca5db16edc6de",
+      "pubkey": "d2956585e3ca79e14d711a6276eef9d02abcafa343b52f9ee59020532234901a"
+    },
+    {
+      "name": "member5",
+      "privkey": "28387642f1ca66c257ae4e9c55dcedcf816c5cf3be80e33e3ed9d762f1452438",
+      "pubkey": "ba47d9d40a616f3f81ea7b912843856c51f7dae9bb8858bb2e5c0604a431c679"
+    }
+  ]
+}

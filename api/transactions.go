@@ -85,9 +85,14 @@ func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *ui
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
+	// See nip47/controllers/pay_invoice_controller.go's pay() for why all
+	// three of these are stripped here too — this is the other general-
+	// purpose payment entry point capable of reaching SendPaymentSync with
+	// caller-supplied metadata.
 	if metadata != nil {
 		delete(metadata, "internal_transfer")
-		delete(metadata, "jit_claim_slice")
+		delete(metadata, "cash_claim_slice")
+		delete(metadata, "cash_redeem_fee_mloki")
 	}
 	transaction, err := api.svc.GetTransactionsService().SendPaymentSync(invoice, amountMloki, metadata, api.svc.GetLNClient(), appID, nil)
 	if err != nil {
@@ -170,10 +175,10 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 			if !dbApp.IsIsolated() {
 				return errors.New("app is not isolated")
 			}
-			// jit_wallet/circle_wallet balances only move via their hub's own
-			// allocation transfer (jitwallet.Create) and the wallet's own spend —
+			// cash_wallet/circle_wallet balances only move via their hub's own
+			// allocation transfer (cashwallet.Create) and the wallet's own spend —
 			// a manual transfer here would desync that accounting.
-			if dbApp.Kind == db.AppKindJITWallet || dbApp.Kind == db.AppKindCircleWallet {
+			if dbApp.Kind == db.AppKindCashWallet || dbApp.Kind == db.AppKindCircleWallet {
 				return fmt.Errorf("%w: manual transfers are not allowed for %s apps", constants.ErrInvalidParams, dbApp.Kind)
 			}
 		}

@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/swaps"
-	"github.com/flokiorg/lokihub/appversion"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -123,7 +123,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 	svc.nip47Service.StartNotifier(ctx, pool)
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
-	StartJITCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient)
+	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
 
 	// Start LSPS5 listener
@@ -308,7 +308,7 @@ func (svc *service) watchSubscription(ctx context.Context, pool *nostr.SimplePoo
 			default:
 				// Tracked on group (not a bare `go`) so that StopApp/Shutdown's
 				// nostrGroup.Wait() genuinely blocks until any in-flight NIP-47
-				// request — including a create_jit_wallet call mid fund-transfer —
+				// request — including a mint_cash call mid fund-transfer —
 				// finishes, before the LN client or DB pool is torn down. Safe to
 				// call concurrently with group.Wait(): the goroutine running this
 				// loop already holds a slot in group for as long as it's dispatching

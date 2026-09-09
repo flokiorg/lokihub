@@ -484,7 +484,7 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclien
 		return nil, err
 	}
 
-	paymentAmountMloki := uint64(paymentRequest.MSat) //nolint:gosec // msat amounts are always far below int64/uint64 range
+	paymentAmountMloki := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
 	if amount != nil {
 		paymentAmountMloki = *amount
 	}
@@ -736,12 +736,12 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 			}
 
 			// Check if channel has sufficient inbound capacity (remote balance)
-			// RemoteBalance is in satoshis, amount is in millisatoshis
-			remoteBalanceMsat := channel.RemoteBalance * 1000
-			if amount > 0 && remoteBalanceMsat < amount {
+			// RemoteBalance is in loki, amount is in milli-loki (mloki)
+			remoteBalanceMloki := channel.RemoteBalance * 1000
+			if amount > 0 && remoteBalanceMloki < amount {
 				logger.Logger.Debug().
 					Uint64("channel_id", channel.ChanId).
-					Int64("remote_balance_msat", remoteBalanceMsat).
+					Int64("remote_balance_mloki", remoteBalanceMloki).
 					Int64("invoice_amount_mloki", amount).
 					Msg("Skipping channel with insufficient inbound capacity for route hints")
 				continue
@@ -815,7 +815,7 @@ func (svc *FLNDService) MakeInvoice(ctx context.Context, amount int64, descripti
 			logger.Logger.Debug().
 				Uint64("channel_id", candidate.channel.ChanId).
 				Int64("remote_balance_sat", candidate.channel.RemoteBalance).
-				Uint32("fee_base_msat", clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat)).
+				Uint32("fee_base_mloki", clampInt64ToUint32(candidate.remotePolicy.FeeBaseMsat)).
 				Str("remote_pubkey", candidate.channel.RemotePubkey).
 				Msg("Added channel to route hints")
 		}

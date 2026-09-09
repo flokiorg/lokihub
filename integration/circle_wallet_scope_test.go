@@ -52,10 +52,10 @@ func fundCircleChild(t *testing.T, cfg *Config, child *nwcclient.Client, amountM
 func testCircleWalletChildScope(t *testing.T, cfg *Config, hub CircleHubConfig) {
 	child := mintCircleChild(t, hub)
 
-	// A circle_wallet child, unlike a jit_wallet child, must be able to
+	// A circle_wallet child, unlike a cash_wallet child, must be able to
 	// receive funds directly (make_invoice) from any external payer - not
 	// just from another child of the same lokihub instance, as cross_test.go
-	// already covers via a jit_wallet child paying a circle child's invoice.
+	// already covers via a cash_wallet child paying a circle child's invoice.
 	//
 	// Withdraws the same amount back out at the end so later subtests in
 	// this same function (which share this one child) don't inherit
@@ -131,7 +131,7 @@ func testCircleWalletChildScope(t *testing.T, cfg *Config, hub CircleHubConfig) 
 	// and distinct from the outgoing-spend cap circle_hub_test.go's
 	// CreateWallet_MaxAmountExceedsPerWalletCap already covers at wallet
 	// creation time. get_budget's TotalBudget reports the wallet's own
-	// max_amount (available to a circle wallet child, unlike a jit wallet
+	// max_amount (available to a circle wallet child, unlike a cash wallet
 	// child which has no get_budget access at all), so headroom is computed
 	// from it rather than hardcoding the value configured at creation time.
 	t.Run("MakeInvoice_ExceedsPerWalletCap_QuotaExceededRejected", func(t *testing.T) {
@@ -152,7 +152,7 @@ func testCircleWalletChildScope(t *testing.T, cfg *Config, hub CircleHubConfig) 
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 	})
 
-	// get_budget is reachable for a circle_wallet child (unlike jit_wallet,
+	// get_budget is reachable for a circle_wallet child (unlike cash_wallet,
 	// see integration/README.md) and must reflect real cumulative outgoing
 	// spend, not just the cap it was created with. get_budget_controller.go/
 	// GetBudgetUsageSat round-trip the real mloki sum through a sat-ish unit

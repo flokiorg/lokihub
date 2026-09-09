@@ -242,7 +242,7 @@ func TestHandleGetBudgetEvent_NoPayInvoicePermission(t *testing.T) {
 // carries no circle-allowlist/following policy check — reachable by anyone
 // holding a circle_hub's raw connection string, authorized or not. This pins
 // down that it still leaks nothing about the hub's real committed capacity:
-// a circle_hub is never granted pay_invoice/jit_claim_funds (the only scopes
+// a circle_hub is never granted pay_invoice/cash_redeem (the only scopes
 // get_budget's own MaxAmountLoki lookup matches against), even when the hub
 // has a real admin-set budget ceiling configured (stored on its
 // CIRCLE_WALLET_SCOPE permission row instead — a different scope, deliberately

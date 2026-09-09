@@ -30,20 +30,25 @@ const (
 )
 
 type Transaction struct {
-	Type            string      `json:"type"`
-	State           string      `json:"state"`
-	Invoice         string      `json:"invoice"`
-	Description     string      `json:"description"`
-	DescriptionHash string      `json:"description_hash"`
-	Preimage        string      `json:"preimage"`
-	PaymentHash     string      `json:"payment_hash"`
-	Amount          int64       `json:"amount"`
-	FeesPaid        int64       `json:"fees_paid"`
-	CreatedAt       int64       `json:"created_at"`
-	ExpiresAt       *int64      `json:"expires_at"`
-	SettledAt       *int64      `json:"settled_at"`
-	SettleDeadline  *uint32     `json:"settle_deadline"` // block number for accepted hold invoices
-	Metadata        interface{} `json:"metadata,omitempty"`
+	Type            string `json:"type"`
+	State           string `json:"state"`
+	Invoice         string `json:"invoice"`
+	Description     string `json:"description"`
+	DescriptionHash string `json:"description_hash"`
+	Preimage        string `json:"preimage"`
+	PaymentHash     string `json:"payment_hash"`
+	Amount          int64  `json:"amount"`
+	FeesPaid        int64  `json:"fees_paid"`
+	// FeeSkimMloki is the circle-hub forwarding-fee cut debited from a
+	// circle_wallet's own outgoing payment, on top of FeesPaid — omitted for
+	// every other app kind/payment. See payResponse.FeeSkimMloki's doc
+	// comment (nip47/controllers/models.go) for why this exists.
+	FeeSkimMloki   uint64      `json:"fee_skim_mloki,omitempty"`
+	CreatedAt      int64       `json:"created_at"`
+	ExpiresAt      *int64      `json:"expires_at"`
+	SettledAt      *int64      `json:"settled_at"`
+	SettleDeadline *uint32     `json:"settle_deadline"` // block number for accepted hold invoices
+	Metadata       interface{} `json:"metadata,omitempty"`
 }
 
 type PayRequest struct {

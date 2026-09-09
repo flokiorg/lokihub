@@ -75,34 +75,34 @@ const Permissions: React.FC<PermissionsProps> = ({
 
   const onScopesChanged = React.useCallback(
     (scopes: Scope[], isolated: boolean) => {
-      // Un-isolating always drops any pending JIT Hub escalation with it —
-      // kind "jit_hub" cannot exist without isolation server-side (see
+      // Un-isolating always drops any pending Cash Hub escalation with it —
+      // kind "cash_hub" cannot exist without isolation server-side (see
       // Scopes.tsx), so keep local state from drifting into that impossible
       // combination even transiently.
       handlePermissionsChange({
         scopes,
         isolated,
-        ...(!isolated && { jitHub: false }),
+        ...(!isolated && { cashHub: false }),
       });
     },
     [handlePermissionsChange]
   );
 
-  const onJitHubChanged = React.useCallback(
-    (jitHub: boolean) => {
-      handlePermissionsChange({ jitHub });
+  const onCashHubChanged = React.useCallback(
+    (cashHub: boolean) => {
+      handlePermissionsChange({ cashHub });
     },
     [handlePermissionsChange]
   );
 
-  const onJitHubConfigChanged = React.useCallback(
+  const onCashHubConfigChanged = React.useCallback(
     (config: { perWalletMaxLoki?: number; maxExpSecs?: number }) => {
       handlePermissionsChange({
         ...(config.perWalletMaxLoki !== undefined && {
-          jitPerWalletMaxLoki: config.perWalletMaxLoki,
+          cashPerWalletMaxLoki: config.perWalletMaxLoki,
         }),
         ...(config.maxExpSecs !== undefined && {
-          jitMaxExpSecs: config.maxExpSecs,
+          cashMaxExpSecs: config.maxExpSecs,
         }),
       });
     },
@@ -139,11 +139,11 @@ const Permissions: React.FC<PermissionsProps> = ({
           isolated={permissions.isolated}
           onScopesChanged={onScopesChanged}
           isNewConnection={isNewConnection}
-          jitHub={permissions.jitHub}
-          jitPerWalletMaxLoki={permissions.jitPerWalletMaxLoki}
-          jitMaxExpSecs={permissions.jitMaxExpSecs}
-          onJitHubChanged={onJitHubChanged}
-          onJitHubConfigChanged={onJitHubConfigChanged}
+          cashHub={permissions.cashHub}
+          cashPerWalletMaxLoki={permissions.cashPerWalletMaxLoki}
+          cashMaxExpSecs={permissions.cashMaxExpSecs}
+          onCashHubChanged={onCashHubChanged}
+          onCashHubConfigChanged={onCashHubConfigChanged}
         />
       ) : (
         <>

@@ -88,10 +88,10 @@ export function AppUsage({ app }: { app: App }) {
                     amount={Math.floor(app.balance / 1000)}
                   />
                 </div>
-                {/* jit_wallet/circle_wallet balances only move via their hub's
+                {/* cash_wallet/circle_wallet balances only move via their hub's
                     allocation transfer and the wallet's own spend — manual
                     admin adjustment here would bypass that accounting. */}
-                {app.kind !== "jit_wallet" && app.kind !== "circle_wallet" && (
+                {app.kind !== "cash_wallet" && app.kind !== "circle_wallet" && (
                   <div className="flex flex-wrap gap-2 items-center">
                     {app.balance > 0 && (
                       <IsolatedAppDrawDownDialog appId={app.id}>

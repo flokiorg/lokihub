@@ -25,7 +25,7 @@ interface ExpiryProps {
   label?: string;
   // maxDate disables any preset or custom date past it (and disables "Never"
   // entirely, since an unbounded expiry always exceeds a finite cap) — used
-  // where a caller enforces its own ceiling (e.g. a JIT Hub's max_exp_secs).
+  // where a caller enforces its own ceiling (e.g. a Cash Hub's max_exp_secs).
   maxDate?: Date;
 }
 

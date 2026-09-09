@@ -10,6 +10,11 @@
 
 set shell := ["bash", "-c"]
 set positional-arguments
+# Makes .env visible to both `just` recipes (via env_var_or_default below,
+# and directly in bash recipe bodies) and docker compose's own interpolation
+# (which already reads .env from the compose file's directory natively) —
+# one file, one place to set DEV_DATA_DIR (see DATA_DIR below) per checkout.
+set dotenv-load := true
 
 VERSION := shell('cat VERSION 2>/dev/null || echo "v0.0.1"')
 DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
@@ -18,6 +23,15 @@ DOCKER_COMPOSE_DEV := "docker compose -f docker-compose.dev.yml"
 # is named to match — so it looks in .../mainnet/ and never finds the
 # macaroon there. All authenticated flncli calls need this explicit path.
 FLND_MACAROON_PATH := "/root/.flnd/data/chain/flokicoin/main/admin.macaroon"
+# Where flnd's chain/wallet state and the hub's own data live. Defaults to
+# ./data (this checkout's own, gitignored, uninitialized in a fresh clone or
+# worktree). Set DEV_DATA_DIR in .env to an absolute path — e.g. another
+# checkout's own data/ — to reuse its already-synced flnd wallet and hub DB
+# instead of syncing/setting up a second one from scratch. Only one dev
+# stack should ever be pointed at a given data dir at a time (see `just dev
+# down`/`up` — container names are fixed, so only one stack runs at once
+# anyway).
+DATA_DIR := env_var_or_default("DEV_DATA_DIR", "data")
 
 default:
     @just --list
@@ -29,14 +43,14 @@ dev subcommand="" *args:
     set -euo pipefail
     case "$1" in
         setup)
-            mkdir -p data/flnd data/hub
-            [ -f data/flnd/flnd.conf ] || cp data/flnd/flnd.conf.sample data/flnd/flnd.conf
-            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' data/flnd/flnd.conf
-            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' data/flnd/flnd.conf
+            mkdir -p "{{DATA_DIR}}/flnd" "{{DATA_DIR}}/hub"
+            [ -f "{{DATA_DIR}}/flnd/flnd.conf" ] || cp "{{DATA_DIR}}/flnd/flnd.conf.sample" "{{DATA_DIR}}/flnd/flnd.conf"
+            sed -i 's/^; flokicoin.mainnet=true/flokicoin.mainnet=true/' "{{DATA_DIR}}/flnd/flnd.conf"
+            sed -i 's/^; flokicoin.node=neutrino/flokicoin.node=neutrino/' "{{DATA_DIR}}/flnd/flnd.conf"
             [ -f .env ] || cp .env.example .env
             ;;
         setup-wallet)
-            if [ -f "data/flnd/data/chain/flokicoin/main/wallet.db" ]; then
+            if [ -f "{{DATA_DIR}}/flnd/data/chain/flokicoin/main/wallet.db" ]; then
                 echo "✅ Existing wallet detected. Skipping creation."
             else
                 echo "🔐 Setting up FLND Wallet..."
@@ -67,23 +81,44 @@ dev subcommand="" *args:
                 echo "✅ Wallet is already unlocked."
                 exit 0
             fi
-            if [ ! -f "data/flnd/wallet-password.txt" ]; then
-                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("data/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("data/flnd/wallet-password.txt", 0o600)'
-                if grep -q "^wallet-unlock-password-file=" data/flnd/flnd.conf; then
-                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" data/flnd/flnd.conf
+            if [ ! -f "{{DATA_DIR}}/flnd/wallet-password.txt" ]; then
+                python3 -c 'import getpass, os; p = getpass.getpass("Enter wallet password: "); f = open("{{DATA_DIR}}/flnd/wallet-password.txt", "w"); f.write(p); f.close(); os.chmod("{{DATA_DIR}}/flnd/wallet-password.txt", 0o600)'
+                if grep -q "^wallet-unlock-password-file=" "{{DATA_DIR}}/flnd/flnd.conf"; then
+                    sed -i "s|^wallet-unlock-password-file=.*|wallet-unlock-password-file=/root/.flnd/wallet-password.txt|" "{{DATA_DIR}}/flnd/flnd.conf"
                 else
-                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' data/flnd/flnd.conf > data/flnd/flnd.conf.tmp && mv data/flnd/flnd.conf.tmp data/flnd/flnd.conf
+                    awk -v line="wallet-unlock-password-file=/root/.flnd/wallet-password.txt" '!done && /^\[/ { print line; done=1 } { print }' "{{DATA_DIR}}/flnd/flnd.conf" > "{{DATA_DIR}}/flnd/flnd.conf.tmp" && mv "{{DATA_DIR}}/flnd/flnd.conf.tmp" "{{DATA_DIR}}/flnd/flnd.conf"
                 fi
                 {{DOCKER_COMPOSE_DEV}} restart flnd
             else
-                echo "🔐 Auto-unlock is configured but wallet is still locked. Check data/flnd/wallet-password.txt."
+                echo "🔐 Auto-unlock is configured but wallet is still locked. Check {{DATA_DIR}}/flnd/wallet-password.txt."
             fi
             ;;
         up)
+            # frontend.go does //go:embed dist, so `air` can't compile the
+            # backend at all unless frontend/dist has at least one file —
+            # even though dev mode never actually serves from it (the
+            # frontend container's own Vite server does, via FRONTEND_URL).
+            # frontend/dist is git- and docker-ignored (it's a build
+            # artifact), so a fresh clone, or one where it's been deleted,
+            # has none. This placeholder exists purely to satisfy the embed;
+            # a real `frontend && yarn build:http` output overwrites it
+            # harmlessly if one's ever produced in this tree.
+            mkdir -p frontend/dist
+            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
             {{DOCKER_COMPOSE_DEV}} up -d --build
             ;;
         down)
             {{DOCKER_COMPOSE_DEV}} down
+            ;;
+        restart)
+            shift
+            # Same frontend/dist placeholder as `up` above — the backend
+            # container bind-mounts the live host tree, so restarting it
+            # re-runs air's build against whatever's on disk right now, not
+            # whatever existed at image-build time.
+            mkdir -p frontend/dist
+            [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
+            {{DOCKER_COMPOSE_DEV}} restart "$@"
             ;;
         logs)
             shift
@@ -91,6 +126,35 @@ dev subcommand="" *args:
             ;;
         status)
             {{DOCKER_COMPOSE_DEV}} ps
+            ;;
+        reset)
+            # Restarts relay + backend (in that order - backend's own Nostr
+            # pool reconnects fresh against a relay with zero prior
+            # subscription state) so a run starts from the same server-side
+            # baseline every time, instead of whatever session/subscription
+            # state a previous run's own load left behind. `just test
+            # integration` already runs this before every invocation - this
+            # subcommand exists for manually forcing the same reset on
+            # demand (e.g. mid-investigation, without running the suite).
+            # Doesn't touch flnd/frontend/caddy or any volume - flnd's chain
+            # sync and the hub's own DB are untouched.
+            {{DOCKER_COMPOSE_DEV}} restart relay
+            {{DOCKER_COMPOSE_DEV}} restart backend
+            echo "waiting for backend to come back up..."
+            for i in $(seq 1 30); do
+                docker logs lokihub-dev-backend --since 20s 2>&1 | grep -q "http server started" && break
+                sleep 1
+            done
+            just -f "{{justfile()}}" dev seed-relay
+            ;;
+        seed-relay)
+            # Publishes integration/testdata/social_graph.json's fixed
+            # "provider"/"members" identities' kind:3 follow list to the dev
+            # relay (see integration/cmd/seedrelay) - idempotent (kind:3 is
+            # replaceable), so this is safe to run on every `dev reset`, not
+            # just once. Keeps circle "following"-policy integration tests
+            # off any real third-party relay - see integration/README.md.
+            go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
             ;;
         flncli)
             shift
@@ -109,10 +173,26 @@ dev subcommand="" *args:
       unlock                ensure the FLND wallet is unlocked (sets up auto-unlock if needed)
       up                    start the docker dev environment (flnd, backend, frontend w/ hot-reload)
       down                  stop the docker dev environment
+      restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
       logs [service]        follow logs for the docker dev environment or a specific service
       status                show status of the docker dev environment
+      reset                  restart relay + backend for a clean server-side session/subscription baseline, then reseed (`just test integration` already does this)
+      seed-relay             publish the fixed integration test identities' follow list to the dev relay (`dev reset` already does this)
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
       wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
+
+    set DEV_DATA_DIR in .env to an absolute path to point this stack's
+    flnd/hub data at another checkout's already-synced data/ (e.g. from a
+    worktree, to reuse the main checkout's wallet instead of syncing a
+    second one from scratch) — defaults to ./data. Only one dev stack can
+    be up at a time regardless (container names are fixed), so switching
+    checkouts is `just dev down` then `up` from the other one.
+
+    `restart` just restarts the existing container(s) in place - it won't
+    fix a service whose own container state is broken (e.g. an anonymous
+    volume like frontend's node_modules gone missing mid-run). For that,
+    force a clean recreation instead:
+        docker compose -f docker-compose.dev.yml up -d --force-recreate --renew-anon-volumes <service>
     USAGE
             ;;
         *)
@@ -143,6 +223,15 @@ test subcommand="unit" *args:
             # up (`just dev up`) with a real LN backend, and
             # integration/config.local.yaml pointing at an admin API token
             # (see integration/README.md).
+            #
+            # `dev reset` first so every run starts from the same server-side
+            # baseline (fresh relay/backend session and subscription state)
+            # regardless of what a previous run's own load left behind - see
+            # issues.md's "too many concurrent REQs" investigation, where
+            # stale in-memory relay state (on top of a DB-level leak, now
+            # fixed - see aaa_preflight_cleanup_test.go/zz_leak_check_test.go)
+            # made re-running the suite non-reproducible.
+            just -f "{{justfile()}}" dev reset
             go vet -tags integration ./integration/...
             go test -tags integration -count=1 -timeout 8m ./integration/...
             ;;
@@ -156,8 +245,8 @@ test subcommand="unit" *args:
             # with limits on.
             restore() {
                 sed -i \
-                    -e 's/^JIT_WALLET_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_RATE_LIMIT_PER_HOUR=0/' \
-                    -e 's/^JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0/' \
+                    -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=0/' \
+                    -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0/' \
                     -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=0/' \
                     .env
                 {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
@@ -166,8 +255,8 @@ test subcommand="unit" *args:
             trap restore EXIT
 
             sed -i \
-                -e 's/^JIT_WALLET_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_RATE_LIMIT_PER_HOUR=10/' \
-                -e 's/^JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
+                -e 's/^CASH_WALLET_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_RATE_LIMIT_PER_HOUR=10/' \
+                -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
                 -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=3/' \
                 .env
             {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
@@ -178,7 +267,7 @@ test subcommand="unit" *args:
             done
 
             INTEGRATION_RUN_RATE_LIMIT_TESTS=1 go test -tags integration -count=1 -timeout 3m \
-                -run 'TestJITHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited' \
+                -run 'TestCashHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited' \
                 -v ./integration/...
             ;;
         integration-all)

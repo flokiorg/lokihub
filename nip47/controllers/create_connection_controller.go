@@ -52,6 +52,25 @@ func (controller *nip47Controller) HandleCreateConnectionEvent(ctx context.Conte
 
 	maxAmountLoki := params.MaxAmount / 1000
 
+	// Reject a nonzero max_amount that would floor to 0 whole loki (any value
+	// in [1, 999] mloki). 0 itself is left valid — it's this codebase's
+	// established "no budget cap" convention for generic connections, unlike
+	// create_circle_wallet's spec, which requires a real cap on every
+	// request. Silently accepting a sub-loki nonzero value used to produce
+	// the exact same stored MaxAmountLoki == 0 as an explicit "unlimited"
+	// request, which validateCanPay can't tell apart from a real cap that
+	// merely rounded away.
+	if params.MaxAmount > 0 && maxAmountLoki == 0 {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_BAD_REQUEST,
+				Message: "max_amount is below the minimum enforceable cap of 1000 mloki (1 loki); use 0 for no cap",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
 	// explicitly do not allow creating an app with create_connection permission
 	if slices.Contains(params.RequestMethods, models.CREATE_CONNECTION_METHOD) {
 		publishResponse(&models.Response{

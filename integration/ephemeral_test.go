@@ -1,7 +1,7 @@
 //go:build integration
 
 // ephemeral_test.go provides every throwaway, admin-API-provisioned fixture
-// this suite needs to be fully self-sufficient: fresh jit_hub/circle_hub
+// this suite needs to be fully self-sufficient: fresh cash_hub/circle_hub
 // apps (either circle policy, including a synthetic Nostr identity for
 // "following"), a simple external-payer wallet, and root self-funding for
 // all of them - so no test depends on config.local.yaml naming a real,
@@ -36,24 +36,25 @@ const (
 	circlePolicyFollowing = "following"
 )
 
-// generalRelayURL is this lokihub instance's configured Nostr relay - the
-// same one baked into every admin-created app's own pairing URI (see
-// adminCreateAppResponse.PairingUri), and confirmed present in this
-// instance's GetGeneralRelayUrls() setting (config/config.go), which is what
-// the backend's "following" circle-policy check (service/
-// nostr_social_cache.go) actually queries kind:3 from. Hardcoded because
-// there's no admin endpoint to discover it - update this if the instance's
-// own Relay/GeneralRelay settings ever change.
-const generalRelayURL = "wss://relay.ohstr.com"
-
 // publishFollowList publishes a real, signed kind:3 (NIP-02 contact list)
-// event from providerPrivkey naming every one of followedPubkeys, to
-// generalRelayURL - this is the entire authorization mechanism for
-// "following"-policy circle hubs: nostrSocialCache.IsAuthorized treats
-// "following" as "the provider follows the requester" (provider's own
+// event from providerPrivkey naming every one of followedPubkeys, to cfg's
+// own RelayURL (config.local.yaml) - this is the entire authorization
+// mechanism for "following"-policy circle hubs: nostrSocialCache.IsAuthorized
+// treats "following" as "the provider follows the requester" (provider's own
 // kind:3 contains the requester), so publishing this makes followedPubkeys
 // (and only them) authorized under a circle_hub using providerPrivkey's
 // pubkey as its ProviderPubkey.
+//
+// cfg.RelayURL must be one of the relays this lokihub instance's own
+// GetGeneralRelayUrls() setting (config/config.go) names - that's what the
+// backend's "following" circle-policy check (service/nostr_social_cache.go)
+// actually queries kind:3 from. Deliberately never a public/third-party
+// relay (this suite's own dev relay, docker-compose.dev.yml's `relay`
+// service, in dev) - a real relay this suite doesn't control being slow,
+// rate-limiting, or unreachable should never be why this suite fails. See
+// also cmd/seedrelay, which publishes testdata/social_graph.json's fixed
+// "provider"/"members" identities the same way, once, so tests that don't
+// need a fresh per-test identity can skip calling this at all.
 //
 // MUST be called before the circle_hub itself is created. api.CreateApp's
 // AppKindCircleHub branch calls WarmCircleFollowingCache immediately at
@@ -63,8 +64,9 @@ const generalRelayURL = "wss://relay.ohstr.com"
 // until the background refresher eventually runs - so a hub created before
 // this publish would see its members as unauthorized for an indeterminate
 // time, not immediately after this call returns.
-func publishFollowList(t *testing.T, providerPrivkey string, followedPubkeys []string) {
+func publishFollowList(t *testing.T, cfg *Config, providerPrivkey string, followedPubkeys []string) {
 	t.Helper()
+	require.NotEmpty(t, cfg.RelayURL, "config.local.yaml: relay_url must be set - see config.example.yaml")
 
 	tags := make(nostr.Tags, 0, len(followedPubkeys))
 	for _, pubkey := range followedPubkeys {
@@ -79,8 +81,8 @@ func publishFollowList(t *testing.T, providerPrivkey string, followedPubkeys []s
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	relay, err := nostr.RelayConnect(ctx, generalRelayURL)
-	require.NoError(t, err, "connect to %s to publish provider follow list", generalRelayURL)
+	relay, err := nostr.RelayConnect(ctx, cfg.RelayURL)
+	require.NoError(t, err, "connect to %s to publish provider follow list", cfg.RelayURL)
 	defer relay.Close()
 
 	require.NoError(t, relay.Publish(ctx, ev), "publish provider kind:3 follow list")
@@ -171,11 +173,34 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	if policy == circlePolicyFollowing {
 		providerPrivkey := newTestPrivkey(t)
 		req.ProviderPubkey = mustPubkey(t, providerPrivkey)
-		publishFollowList(t, providerPrivkey, authorizedPubkeys)
+		publishFollowList(t, cfg, providerPrivkey, authorizedPubkeys)
 	}
 
 	resp, err := admin.createApp(req)
 	require.NoError(t, err)
+
+	// Registered first so it runs LAST (t.Cleanup is LIFO), after the hub app
+	// below is deleted: apps.DeleteCircleIdentity refuses while any circle_hub
+	// still references it, and every ephemeral hub here gets its own
+	// brand-new identity (CircleIdentityName is always set, never
+	// CircleIdentityId). Without this, the identity itself outlives the hub
+	// forever (see TestCreateCircleHub_IdentitySurvivesHubDeletion - by
+	// design, identities are meant to be reusable across hubs) and, for
+	// circlePolicyFollowing, keeps getting swept by the background social
+	// cache refresher (nostr_social_cache.go's runSocialCacheRefresh) every
+	// 5 minutes indefinitely - this was found live accumulating hundreds of
+	// leaked "following"-policy identities, each still being re-queried
+	// against the general relays and contributing to the "too many
+	// concurrent REQs" notices/timeouts this suite has hit.
+	if identityID, err := admin.getCircleIdentityID(resp.ID); err != nil {
+		t.Logf("cleanup: failed to resolve ephemeral circle_hub app_id=%d's own circle identity id, cannot clean it up (%v)", resp.ID, err)
+	} else {
+		t.Cleanup(func() {
+			if err := admin.deleteCircleIdentity(identityID); err != nil {
+				t.Logf("cleanup: failed to delete ephemeral circle identity id=%d (%v)", identityID, err)
+			}
+		})
+	}
 	// Registered before the sweep below so it runs second (t.Cleanup is
 	// LIFO): every child this hub ever mints, across every subtest that
 	// uses it, must be reclaimed/deleted before the hub itself can be -
@@ -214,25 +239,25 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	}, resp.ID, admin
 }
 
-// ephemeralJITHubFundLoki is root-funded into every ephemeral jit_hub
-// createEphemeralJITHub mints - comfortably more than the single small test
+// ephemeralCashHubFundLoki is root-funded into every ephemeral cash_hub
+// createEphemeralCashHub mints - comfortably more than the single small test
 // child each caller typically mints.
-const ephemeralJITHubFundLoki = 2000
+const ephemeralCashHubFundLoki = 2000
 
-// createEphemeralJITHub provisions a throwaway jit_hub app via the admin API
+// createEphemeralCashHub provisions a throwaway cash_hub app via the admin API
 // (POST /api/apps), expiring at expiresAt (nil = never), and root-funds it
 // (see adminClient.transfer) so it can actually mint a child. Registers
 // t.Cleanup to delete it afterward - this only succeeds if the caller has
 // already reclaimed/deleted any child it minted (via the returned admin
-// client's deleteJITWallet), matching apps.DeleteApp's own child-count
+// client's deleteCashWallet), matching apps.DeleteApp's own child-count
 // guard; a leftover ephemeral hub with a child still attached is logged, not
 // failed, so one test's cleanup miss doesn't cascade into unrelated test
 // failures.
 //
-// Returns the hub's ready-to-use JITHubConfig (for mintJITChild et al.), the
-// admin API's own app id for it (for deleteJITWallet/deleteApp), and the
+// Returns the hub's ready-to-use CashHubConfig (for mintCashChild et al.), the
+// admin API's own app id for it (for deleteCashWallet/deleteApp), and the
 // adminClient itself (so callers don't need to re-derive one).
-func createEphemeralJITHub(t *testing.T, cfg *Config, name string, expiresAt *time.Time) (JITHubConfig, uint, *adminClient) {
+func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *time.Time) (CashHubConfig, uint, *adminClient) {
 	t.Helper()
 	admin, ok := newAdminClient(cfg)
 	if !ok {
@@ -242,16 +267,16 @@ func createEphemeralJITHub(t *testing.T, cfg *Config, name string, expiresAt *ti
 	req := adminCreateAppRequest{
 		Name: ephemeralFixtureNamePrefix + " " + name,
 		// PAY_INVOICE_SCOPE and MAKE_INVOICE_SCOPE aren't needed for
-		// create_jit_wallet itself, but jit_hub_payment_test.go's own
+		// mint_cash itself, but cash_hub_payment_test.go's own
 		// mintInvoiceFromHub uses the hub's own make_invoice to fund a real
 		// invoice for one of its children to claim against, and
 		// TestCrossHub_HubBalance_DecreasesWhenChildMinted probes get_balance -
 		// granting all three upfront means those tests exercise the real
 		// path instead of skipping for a missing scope.
-		Scopes:               []string{constants.JIT_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.MAKE_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
-		Kind:                 "jit_hub",
-		JITPerWalletMaxMloki: 10_000_000,
-		JITMaxExpSecs:        3600,
+		Scopes:               []string{constants.CASH_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.MAKE_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
+		Kind:                 "cash_hub",
+		CashPerWalletMaxMloki: 10_000_000,
+		CashMaxExpSecs:        3600,
 	}
 	if expiresAt != nil {
 		req.ExpiresAt = expiresAt.Format(time.RFC3339)
@@ -262,17 +287,17 @@ func createEphemeralJITHub(t *testing.T, cfg *Config, name string, expiresAt *ti
 	// Registered before the sweep below so it runs second (t.Cleanup is
 	// LIFO): every child this hub ever mints, across every subtest that
 	// uses it, must be reclaimed/deleted before the hub itself can be -
-	// apps.DeleteApp refuses a jit_hub with any jit_wallet children still
+	// apps.DeleteApp refuses a cash_hub with any cash_wallet children still
 	// attached.
 	t.Cleanup(func() {
 		if err := admin.deleteApp(resp.ID); err != nil {
-			t.Logf("cleanup: failed to delete ephemeral jit_hub app_id=%d (%v)", resp.ID, err)
+			t.Logf("cleanup: failed to delete ephemeral cash_hub app_id=%d (%v)", resp.ID, err)
 		}
 	})
 	t.Cleanup(func() {
-		claims, err := admin.listJITWalletClaims(resp.ID)
+		claims, err := admin.listCashWalletClaims(resp.ID)
 		if err != nil {
-			t.Logf("cleanup: failed to list jit wallet children for ephemeral hub app_id=%d (%v)", resp.ID, err)
+			t.Logf("cleanup: failed to list cash wallet children for ephemeral hub app_id=%d (%v)", resp.ID, err)
 			return
 		}
 		seen := map[uint]bool{}
@@ -281,24 +306,24 @@ func createEphemeralJITHub(t *testing.T, cfg *Config, name string, expiresAt *ti
 				continue
 			}
 			seen[claim.WalletAppID] = true
-			if err := admin.deleteJITWallet(resp.ID, claim.WalletAppID); err != nil {
-				t.Logf("cleanup: failed to delete ephemeral jit wallet child app_id=%d (%v)", claim.WalletAppID, err)
+			if err := admin.deleteCashWallet(resp.ID, claim.WalletAppID); err != nil {
+				t.Logf("cleanup: failed to delete ephemeral cash wallet child app_id=%d (%v)", claim.WalletAppID, err)
 			}
 		}
 	})
 
-	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralJITHubFundLoki))
+	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
 
-	return JITHubConfig{Name: name, Connection: resp.PairingUri}, resp.ID, admin
+	return CashHubConfig{Name: name, Connection: resp.PairingUri}, resp.ID, admin
 }
 
 // ephemeralSimpleWalletFundLoki is root-funded into every ephemeral simple
 // wallet createEphemeralSimpleWallet mints - enough headroom to pay several
-// small test invoices out to a circle/jit child.
+// small test invoices out to a circle/cash child.
 const ephemeralSimpleWalletFundLoki = 2000
 
 // createEphemeralSimpleWallet provisions a throwaway, plain isolated app
-// (not a jit_hub/circle_hub) granted make_invoice+pay_invoice, root-funded
+// (not a cash_hub/circle_hub) granted make_invoice+pay_invoice, root-funded
 // so it can act as an external payer/payee - the self-provisioned
 // replacement for config.local.yaml's simple_wallet. Registers t.Cleanup to
 // delete it (a bare isolated app with no children of its own, so
@@ -330,9 +355,9 @@ func createEphemeralSimpleWallet(t *testing.T, cfg *Config) SimpleWalletConfig {
 // createEphemeralTrustedIA generates a fresh Identity Authority keypair and
 // registers its pubkey as trusted via the admin API (POST
 // /api/identity-authorities) - the self-provisioned replacement for
-// config.local.yaml's jit_hubs[].trusted_ia_privkey, used by
-// connection_key-mode scenarios (jit_hub_test.go's
-// CreateWallet_ConnectionKeyMode_HappyPath, claim_funds_test.go's
+// config.local.yaml's cash_hubs[].trusted_ia_privkey, used by
+// connection_key-mode scenarios (cash_hub_test.go's
+// CreateWallet_ConnectionKeyMode_HappyPath, cash_redeem_test.go's
 // connection_key-mode claiming). Registers t.Cleanup to revoke it again.
 func createEphemeralTrustedIA(t *testing.T, cfg *Config) string {
 	t.Helper()

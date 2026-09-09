@@ -1,10 +1,10 @@
 package service
 
-// Covers the fix for the NWC-specific race behind orphaned/invisible JIT
+// Covers the fix for the NWC-specific race behind orphaned/invisible Cash
 // wallets: watchSubscription used to dispatch each incoming NIP-47 event via
 // a bare, untracked `go` statement, so StopApp/Shutdown's nostrGroup.Wait()
 // could return — and the LN client/DB pool be torn down — while a
-// create_jit_wallet request was still mid-flight. Event handling is now
+// mint_cash request was still mid-flight. Event handling is now
 // tracked on the passed-in *errgroup.Group instead, so group.Wait() must
 // block until any in-flight handler actually finishes.
 
@@ -60,7 +60,7 @@ func TestWatchSubscription_GroupWaitsForInFlightEventHandling(t *testing.T) {
 	// Deliver one event, wait for the handler to actually start (avoiding a
 	// race where cancel() below wins the inner select before the event is
 	// even dispatched), then cancel — simulating a shutdown/lock/reload
-	// arriving while a NIP-47 request (e.g. create_jit_wallet, mid
+	// arriving while a NIP-47 request (e.g. mint_cash, mid
 	// fund-transfer) is still being handled.
 	eventsChannel <- nostr.RelayEvent{Event: &nostr.Event{}}
 	select {

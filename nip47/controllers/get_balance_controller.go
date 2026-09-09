@@ -10,10 +10,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const (
-	MSAT_PER_SAT = 1000
-)
-
 type getBalanceResponse struct {
 	Balance int64 `json:"balance"`
 	// MaxAmount     int    `json:"max_amount"`

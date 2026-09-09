@@ -246,10 +246,6 @@
         "title": "Simple Sub-wallet",
         "description": "A standalone wallet with its own balance, funded from your Hub, with full send and receive permissions."
       },
-      "jit": {
-        "title": "JIT Wallet Hub",
-        "description": "Automatically issues a spend-only wallet whenever a recipient without a Lightning Wallet needs to get paid."
-      },
       "circle": {
         "title": "Circle Wallet Hub",
         "description": "Authorized members of your Nostr circle can request a Lightning Wallet from you, verified against your following list or allowlist."

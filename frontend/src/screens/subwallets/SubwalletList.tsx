@@ -62,7 +62,10 @@ export function SubwalletList() {
     return <Loading />;
   }
 
-  const subwalletApps = appsData.apps;
+  // cash_hub apps have their own dedicated top-level page (/cash-hub) now —
+  // excluded here (and from this screen's own aggregate stats below) so
+  // they're not double-listed.
+  const subwalletApps = appsData.apps.filter((app) => app.kind !== "cash_hub");
 
   if (!subwalletApps.length) {
     return <SubwalletIntro />;

@@ -64,8 +64,9 @@ func (controller *nip47Controller) payKeysend(ctx context.Context, payKeysendPar
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: payResponse{
-			Preimage: *transaction.Preimage,
-			FeesPaid: transaction.FeeMloki,
+			Preimage:     *transaction.Preimage,
+			FeesPaid:     transaction.FeeMloki,
+			FeeSkimMloki: transaction.FeeSkimMloki,
 		},
 	}, tags)
 }

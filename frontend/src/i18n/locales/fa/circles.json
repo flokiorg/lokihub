@@ -32,8 +32,9 @@
     "allowlist": "فهرست مجاز"
   },
   "identityType": {
-    "pubkey": "کلید عمومی Nostr",
-    "connectionKey": "کلید اتصال"
+    "pubkey": "هویت Nostr",
+    "connectionKey": "هویت وب",
+    "bearer": "حامل"
   },
   "avatarStack": {
     "more": "+{{count}} نفر دیگر"
@@ -72,16 +73,17 @@
     "summary_other": "اکنون {{count}} نفر تأیید خواهند شد و با دنبال کردن یا لغو دنبال کردن دیگران توسط این هویت، فهرست به‌طور خودکار همگام می‌ماند."
   },
   "claimBadge": {
-    "claimed": "دریافت شده",
-    "unclaimed": "دریافت‌نشده"
+    "claimed": "بازخرید شده",
+    "unclaimed": "بازخرید‌نشده",
+    "movedToNewWallet": "به کیف پول جدید منتقل شد"
   },
   "claimDeadline": {
-    "expired": "مهلت دریافت به پایان رسیده است",
-    "withinMinutes_one": "دریافت ظرف {{count}} دقیقه",
-    "withinMinutes_other": "دریافت ظرف {{count}} دقیقه",
-    "withinHours": "دریافت ظرف {{count}} ساعت",
-    "byDate": "دریافت تا {{date}}",
-    "none": "بدون مهلت دریافت"
+    "expired": "مهلت بازخرید به پایان رسیده است",
+    "withinMinutes_one": "بازخرید ظرف {{count}} دقیقه",
+    "withinMinutes_other": "بازخرید ظرف {{count}} دقیقه",
+    "withinHours": "بازخرید ظرف {{count}} ساعت",
+    "byDate": "بازخرید تا {{date}}",
+    "none": "بدون مهلت بازخرید"
   },
   "circleCard": {
     "member_one": "{{count}} عضو",
@@ -89,8 +91,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "کیف‌پول حلقه",
-    "jitWallet": "کیف‌پول JIT",
-    "claimedCount": "{{claimed}}/{{total}} دریافت شده",
+    "cashWallet": "کیف‌پول نقدی",
+    "claimedCount": "{{claimed}}/{{total}} بازخرید شده",
     "errors": {
       "loadRecipients": "بارگذاری دریافت‌کنندگان کیف‌پول JIT ناموفق بود"
     }
@@ -154,9 +156,7 @@
       "removeSelected": "حذف کیف‌پول‌های حلقه انتخاب‌شده ناموفق بود"
     }
   },
-  "jitHubAllocations": {
-    "participantsPair": "{{first}} و {{second}}",
-    "participantsOthers": "{{first}} و {{count}} نفر دیگر",
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} روز",
     "durationDays_other": "{{count}} روز",
     "durationHours_one": "{{count}} ساعت",
@@ -168,53 +168,66 @@
     "connectionKeyLabel": "کلید اتصال (هگزادسیمال)",
     "iaPubkeyLabel": "کلید عمومی مرجع هویت (هگزادسیمال)",
     "iaPubkeyHelper": "باید یک مرجع هویت مورد اعتماد باشد (تنظیمات ← مراجع هویت)",
-    "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری در این کیف‌پول استفاده می‌شود. هر دریافت‌کننده باید هویت متفاوتی داشته باشد.",
-    "walletBudgetLabel": "بودجه کیف‌پول",
+    "selectIAPlaceholder": "یک مرجع هویت انتخاب کنید",
+    "savedIAsLabel": "ثبت‌شده در تنظیمات",
+    "enterIAManually": "کلید عمومی را به‌صورت دستی وارد کنید",
+    "chooseSavedIAInstead": "در عوض از تنظیمات انتخاب کنید",
+    "duplicateIdentity": "این هویت هم‌اکنون توسط دریافت‌کننده دیگری استفاده می‌شود.",
+    "walletBudgetLabel": "مبلغ",
     "requestedSummary": "{{total}} loki درخواست شد",
     "requestedSummaryWithMax": "{{total}} loki درخواست شد از حداکثر بودجه کیف‌پول این هاب که {{max}} loki است",
-    "claimDeadlineLabel": "مهلت دریافت",
-    "deadlineExceeds": "از حداکثر مهلت دریافت این هاب که {{max}} است بیشتر می‌شود",
-    "deadlineHelp": "هر دریافت‌کننده باید سهم خود را ظرف این مدت از زمان ایجاد دریافت کند",
-    "deadlineHelpWithMax": "هر دریافت‌کننده باید سهم خود را ظرف این مدت از زمان ایجاد دریافت کند (پیش‌فرض حداکثر این هاب: {{max}})",
+    "claimDeadlineLabel": "مهلت بازخرید",
+    "deadlineExceeds": "از حداکثر مهلت بازخرید این هاب یعنی {{max}} بیشتر است",
+    "deadlineHelp": "هر دریافت‌کننده باید ظرف این مدت از زمان ایجاد، بازخرید کند",
+    "deadlineHelpWithMax": "هر دریافت‌کننده باید ظرف این مدت از زمان ایجاد، بازخرید کند (پیش‌فرض: حداکثر این هاب، {{max}})",
     "addRecipient": "افزودن دریافت‌کننده دیگر",
-    "setClaimDeadline": "تعیین مهلت دریافت",
+    "setClaimDeadline": "تعیین مهلت بازخرید",
+    "mintSignatureLabel": "امضای منشأ ضرابخانه",
+    "mintSignatureHelp": "امضای گره‌ای که منشأ و مبلغ این لوکیکش را اثبات می‌کند اضافه کنید — اختیاری، طول توکن را تقریباً دو برابر می‌کند",
     "statusAll": "همه",
     "statusExpired": "منقضی‌شده",
     "allocatedSummary": "{{allocated}} loki در این صفحه تخصیص یافته · {{total}} {{status}}",
     "recipientColumn": "دریافت‌کننده",
-    "revealConnection": "نمایش اتصال NWC",
-    "groupSummary_one": "{{count}} دریافت‌کننده · {{claimed}}/{{count}} دریافت شده",
-    "groupSummary_other": "{{count}} دریافت‌کننده · {{claimed}}/{{count}} دریافت شده",
+    "revealConnection": "نمایش اتصال",
     "selectRecipient": "انتخاب دریافت‌کننده",
     "selectAllInWallet": "انتخاب همه دریافت‌کنندگان این کیف‌پول",
     "collapseRecipients": "جمع کردن دریافت‌کنندگان",
     "expandRecipients": "گسترش دریافت‌کنندگان",
-    "removeWallet": "حذف کیف‌پول",
-    "noneFiltered": "هیچ کیف‌پول JIT با وضعیت «{{status}}» وجود ندارد.",
-    "noneOnPage": "هیچ کیف‌پول JIT در این صفحه وجود ندارد.",
-    "addHeading": "افزودن کیف‌پول JIT",
-    "createDialogTitle": "ایجاد کیف‌پول JIT",
+    "removeWallet": "حذف Lokicash",
+    "noneFiltered": "هیچ Lokicash‌ {{status}} وجود ندارد.",
+    "noneOnPage": "هیچ Lokicash‌ای در این صفحه نیست.",
+    "addHeading": "ضرب Lokicash",
+    "createDialogTitle": "ضرب Lokicash",
     "removeRecipientTitle": "این دریافت‌کننده حذف شود؟",
-    "removeRecipientDescription": "این هویت دیگر نمی‌تواند سهم خود از این کیف‌پول را دریافت کند. موجودی تخصیص‌یافته به آن به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
-    "removeWalletTitle": "این کیف‌پول حذف شود؟",
-    "removeWalletDescription": "موجودی باقی‌مانده این کیف‌پول به این هاب بازگردانده می‌شود و اتصال NWC آن بلافاصله از کار می‌افتد. اگر این کیف‌پول به دریافت‌کنندگان دیگری نیز خدمت می‌کند، آن‌ها نیز دسترسی خود را از دست می‌دهند — از جمله کسانی که هنوز سهم خود را دریافت نکرده‌اند. این کار قابل بازگشت نیست.",
+    "removeRecipientDescription": "این هویت دیگر نمی‌تواند سهم خود را بازخرید کند. موجودی تخصیص‌یافته به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
+    "removeWalletTitle": "این Lokicash حذف شود؟",
+    "removeWalletDescription": "موجودی باقی‌مانده این Lokicash به این هاب بازگردانده می‌شود و اتصال NWC آن بلافاصله از کار می‌افتد. اگر به دریافت‌کنندگان دیگری نیز خدمت می‌کند، آن‌ها نیز دسترسی خود را از دست می‌دهند — از جمله کسانی که هنوز سهم خود را بازخرید نکرده‌اند. این کار قابل بازگشت نیست.",
     "removeSelectedTitle_one": "{{count}} دریافت‌کننده حذف شود؟",
     "removeSelectedTitle_other": "{{count}} دریافت‌کننده حذف شود؟",
-    "removeSelectedDescription": "این هویت‌ها دیگر نمی‌توانند سهم خود از کیف‌پول‌هایشان را دریافت کنند. موجودی تخصیص‌یافته به آن‌ها به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
-    "createdToast_one": "کیف‌پول JIT ایجاد و تأمین مالی شد",
-    "createdToast_other": "کیف‌پول JIT ایجاد و برای {{count}} دریافت‌کننده تأمین مالی شد",
-    "recipientRemovedToast": "دریافت‌کننده کیف‌پول JIT حذف شد",
-    "walletRemovedToast": "کیف‌پول JIT حذف شد",
-    "recipientsRemovedToast_one": "دریافت‌کننده کیف‌پول JIT حذف شد",
-    "recipientsRemovedToast_other": "{{count}} دریافت‌کننده کیف‌پول JIT حذف شد",
+    "removeSelectedDescription": "این هویت‌ها دیگر نمی‌توانند سهم خود را بازخرید کنند. موجودی تخصیص‌یافته به آن‌ها به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
+    "createdToast_one": "Lokicash ضرب و تأمین مالی شد",
+    "createdToast_other": "Lokicash برای {{count}} دریافت‌کننده ضرب و تأمین مالی شد",
+    "recipientRemovedToast": "دریافت‌کننده حذف شد",
+    "walletRemovedToast": "Lokicash حذف شد",
+    "recipientsRemovedToast_one": "دریافت‌کننده حذف شد",
+    "recipientsRemovedToast_other": "{{count}} دریافت‌کننده حذف شد",
     "errors": {
-      "loadConnection": "بارگذاری اتصال کیف‌پول JIT ناموفق بود",
-      "load": "بارگذاری کیف‌پول‌های JIT ناموفق بود",
-      "create": "ایجاد کیف‌پول JIT ناموفق بود",
-      "removeRecipient": "حذف دریافت‌کننده کیف‌پول JIT ناموفق بود",
-      "removeWallet": "حذف کیف‌پول JIT ناموفق بود",
+      "loadConnection": "بارگذاری اتصال Lokicash ناموفق بود",
+      "load": "بارگذاری Lokicash ناموفق بود",
+      "create": "ضرب Lokicash ناموفق بود",
+      "removeRecipient": "حذف دریافت‌کننده ناموفق بود",
+      "removeWallet": "حذف Lokicash ناموفق بود",
       "removeSelected": "حذف دریافت‌کنندگان انتخاب‌شده ناموفق بود"
-    }
+    },
+    "bearerHelper": "حامل: هر کس رمز را داشته باشد می‌تواند آن را بازخرید کند — هیچ بررسی هویتی وجود ندارد و در صورت گم شدن یا دزدیده شدن، امکان بازیابی نیست.",
+    "bearerRequiresSoleRecipient": "حامل باید تنها گیرنده باشد",
+    "pubkeyModeHelper": "فقط این هویت Nostr می‌تواند آن را بازخرید کند.",
+    "connectionKeyModeHelper": "فقط یک هویت تأییدشده می‌تواند آن را بازخرید کند.",
+    "copyLokicash": "کپی Lokicash",
+    "tokenStatusUnredeemed": "بازخرید‌نشده",
+    "tokenStatusFullyRedeemed": "کاملاً بازخرید شده",
+    "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} بازخرید شده",
+    "lokicashBadge": "Lokicash"
   },
   "newCircleHub": {
     "title": "هاب کیف‌پول حلقه جدید",
@@ -251,7 +264,7 @@
       "create": "ایجاد هاب کیف‌پول حلقه ناموفق بود"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "هاب کیف‌پول JIT جدید",
     "description": "یک هاب از پیش تأمین‌مالی‌شده ایجاد کنید که کیف‌پول‌های JIT مخصوص خرج کردن را برای ذی‌نفعان صادر می‌کند",
     "maxWalletBudgetHelper": "حداکثر بودجه‌ای که می‌توان به هر کیف‌پول JIT صادرشده از این هاب تخصیص داد",
@@ -285,7 +298,7 @@
       "delete": "حذف حلقه ناموفق بود"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "آیا مطمئن هستید که می‌خواهید این هاب کیف‌پول JIT را حذف کنید؟",
     "checking": "در حال بررسی کیف‌پول‌های JIT صادرشده…",
     "hasOutstanding_one": "این هاب هنوز {{count}} سهم دریافت‌کننده معلق در کیف‌پول‌های JIT صادرشده خود دارد. پیش از حذف هاب، آن را از فهرست کیف‌پول‌های JIT در پایین حذف کنید (یا منتظر انقضای آن بمانید).",

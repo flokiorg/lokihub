@@ -73,7 +73,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// subtest below is likewise placed before the happy path, for the same
 	// reason.
 	t.Run("CreateWallet_MaxAmountExceedsPerWalletCap", func(t *testing.T) {
-		identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "MaxAmountExceedsPerWalletCap")
+		identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "MaxAmountExceedsPerWalletCap")
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
@@ -84,11 +84,33 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 	})
 
+	// Any max_amount below 1000 mloki (one whole loki) used
+	// to floor to a stored budget cap of exactly 0, which the payment layer
+	// treats as "no cap at all" - a silent, complete bypass of the member's
+	// own quoted spend cap. Every value in [0, 999] mloki must now be
+	// rejected outright, before a wallet is ever created.
+	t.Run("CreateWallet_SubLokiMaxAmount_Rejected", func(t *testing.T) {
+		for _, maxAmount := range []uint64{0, 1, 500, 999} {
+			t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
+				identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(),
+					fmt.Sprintf("SubLokiMaxAmount%d", maxAmount))
+				var result CreateCircleWalletResult
+				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
+					Pubkey:        member0Pub,
+					MaxAmount:     maxAmount,
+					Expiry:        happyPathExpirySecs,
+					IdentityEvent: eventJSON(t, identityEvent),
+				}, &result)
+				requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+			})
+		}
+	})
+
 	t.Run("CreateWallet_BudgetRenewalTighterThanFloor", func(t *testing.T) {
 		// "daily" is the tightest possible rank, so it is rejected against
 		// this hub's own min_budget_renewal floor (BUDGET_RENEWAL_MONTHLY,
 		// set explicitly above).
-		identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "BudgetRenewalTighterThanFloor")
+		identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "BudgetRenewalTighterThanFloor")
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
@@ -127,7 +149,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// not their private key) cannot forge a proof on the victim's behalf.
 	t.Run("CreateWallet_IdentityEvent_WrongSigner_Rejected", func(t *testing.T) {
 		attackerPriv := newTestPrivkey(t)
-		forged := buildCircleWalletIdentityEvent(t, attackerPriv, hubClient.ClientPubkey())
+		forged := buildCircleWalletIdentityEvent(t, attackerPriv, hubClient.WalletPubkey())
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -158,7 +180,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	})
 
 	t.Run("CreateWallet_IdentityEvent_Stale_Rejected", func(t *testing.T) {
-		ev := buildCircleWalletIdentityEventCustom(t, member0Priv, hubClient.ClientPubkey(), time.Now().Add(-10*time.Minute))
+		ev := buildCircleWalletIdentityEventCustom(t, member0Priv, hubClient.WalletPubkey(), time.Now().Add(-10*time.Minute))
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -171,7 +193,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	})
 
 	t.Run("CreateWallet_IdentityEvent_FutureTimestamp_Rejected", func(t *testing.T) {
-		ev := buildCircleWalletIdentityEventCustom(t, member0Priv, hubClient.ClientPubkey(), time.Now().Add(10*time.Minute))
+		ev := buildCircleWalletIdentityEventCustom(t, member0Priv, hubClient.WalletPubkey(), time.Now().Add(10*time.Minute))
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -191,7 +213,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// proof could otherwise resubmit it indefinitely by mutating only the
 	// `id` field.
 	t.Run("CreateWallet_IdentityEvent_TamperedID_Rejected", func(t *testing.T) {
-		genuine := buildCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey())
+		genuine := buildCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey())
 		tamperedJSON := eventJSONWithTamperedID(t, genuine)
 
 		var result CreateCircleWalletResult
@@ -213,7 +235,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// must still be rejected - specifically because the proof was already
 	// used, not because of anything amount-related.
 	t.Run("CreateWallet_IdentityEvent_Replayed_Rejected", func(t *testing.T) {
-		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "IdentityEventReplayed")
+		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "IdentityEventReplayed")
 		evJSON := eventJSON(t, ev)
 
 		var first CreateCircleWalletResult
@@ -258,7 +280,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	})
 
 	t.Run("CreateWallet_BudgetRenewal_InvalidValue_Rejected", func(t *testing.T) {
-		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "BudgetRenewalInvalidValue")
+		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "BudgetRenewalInvalidValue")
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -275,7 +297,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// commitment/balance check must be rejected unconditionally, independent
 	// of any configured per-wallet cap.
 	t.Run("CreateWallet_MaxAmount_Overflow_Rejected", func(t *testing.T) {
-		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "MaxAmountOverflow")
+		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "MaxAmountOverflow")
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -300,7 +322,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	t.Run("CreateWallet_SpoofedIdentity_MembershipOracleClosed", func(t *testing.T) {
 		attempt := func(targetPubkey string) *nwcclient.NWCError {
 			attackerPriv := newTestPrivkey(t)
-			forged := buildCircleWalletIdentityEvent(t, attackerPriv, hubClient.ClientPubkey())
+			forged := buildCircleWalletIdentityEvent(t, attackerPriv, hubClient.WalletPubkey())
 			var result CreateCircleWalletResult
 			err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 				Pubkey:        targetPubkey,
@@ -338,7 +360,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		}
 		for i, member := range members {
 			t.Run(fmt.Sprintf("member_%d", i), func(t *testing.T) {
-				identityEvent := distinctCircleWalletIdentityEvent(t, member.priv, hubClient.ClientPubkey(), fmt.Sprintf("HappyPath-member-%d", i))
+				identityEvent := distinctCircleWalletIdentityEvent(t, member.priv, hubClient.WalletPubkey(), fmt.Sprintf("HappyPath-member-%d", i))
 
 				params := CreateCircleWalletParams{
 					Pubkey:        member.pub,
@@ -373,7 +395,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 						"an omitted expiry must default to the hub's own max_exp_secs, not produce an already-expired wallet")
 				}
 
-				pairingURI, err := nwcclient.DecryptPairingURI(member.priv, result.WalletPubkey, result.EncryptedPairingURI)
+				pairingURI, err := nwcclient.DecryptPairingURI(member.priv, hubClient.WalletPubkey(), result.EncryptedPairingURI)
 				require.NoError(t, err)
 
 				child := mustConnect(t, pairingURI)
@@ -384,7 +406,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 
 				var info GetInfoResult
 				require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &info))
-				require.Contains(t, info.Methods, "make_invoice", "circle wallets, unlike JIT wallets, must be able to receive funds")
+				require.Contains(t, info.Methods, "make_invoice", "circle wallets, unlike Cash wallets, must be able to receive funds")
 				require.Contains(t, info.Methods, "pay_invoice")
 				require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet, "a circle_wallet child must not be able to issue its own sub-wallets")
 			})
@@ -396,7 +418,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// the one-active-wallet-per-identity cap, not silently mint a second
 	// wallet.
 	t.Run("CreateWallet_SecondRequestForActiveIdentity_Rejected", func(t *testing.T) {
-		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.ClientPubkey(), "SecondRequestForActiveIdentity")
+		ev := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(), "SecondRequestForActiveIdentity")
 
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -419,7 +441,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			t.Run(fmt.Sprintf("identity_%d", i), func(t *testing.T) {
 				unauthorizedPriv := newTestPrivkey(t)
 				unauthorizedPub := mustPubkey(t, unauthorizedPriv)
-				identityEvent := buildCircleWalletIdentityEvent(t, unauthorizedPriv, hubClient.ClientPubkey())
+				identityEvent := buildCircleWalletIdentityEvent(t, unauthorizedPriv, hubClient.WalletPubkey())
 
 				var result CreateCircleWalletResult
 				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{

@@ -21,8 +21,8 @@ var expectedTables = []string{
 	"circle_hub_configs",
 	"circle_wallet_identity_proofs",
 	"circle_wallet_memberships",
-	"jit_wallet_claims",
-	"jit_hub_configs",
+	"cash_wallet_claims",
+	"cash_hub_configs",
 	"request_events",
 	"response_events",
 	"transactions",
@@ -31,11 +31,13 @@ var expectedTables = []string{
 	"forwards",
 	"circle_identities",
 	"circle_identity_allowed_pubkeys",
-	"jit_hub_configs",
+	"cash_hub_configs",
 	"circle_hub_configs",
-	"jit_wallet_claims",
+	"cash_wallet_claims",
 	"circle_wallet_identity_proofs",
 	"circle_wallet_memberships",
+	"cash_transfer_proofs",
+	"cash_stranded_funds",
 }
 
 func main() {

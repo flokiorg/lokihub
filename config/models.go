@@ -44,14 +44,14 @@ type AppConfig struct {
 	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 	LSP                   string `envconfig:"LSP"`
 
-	// JITWalletRateLimitPerHour caps create_jit_wallet calls per calling app
+	// CashWalletRateLimitPerHour caps mint_cash calls per calling app
 	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
 	// against a shared long-lived hub).
-	JITWalletRateLimitPerHour int `envconfig:"JIT_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
-	// JITWalletClaimRateLimitPerHour caps claim_funds calls per calling jit_wallet
-	// app pubkey (separate limiter from JITWalletRateLimitPerHour). 0 disables
+	CashWalletRateLimitPerHour int `envconfig:"CASH_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
+	// CashWalletClaimRateLimitPerHour caps cash_redeem calls per calling cash_wallet
+	// app pubkey (separate limiter from CashWalletRateLimitPerHour). 0 disables
 	// the limit entirely.
-	JITWalletClaimRateLimitPerHour int `envconfig:"JIT_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
+	CashWalletClaimRateLimitPerHour int `envconfig:"CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`

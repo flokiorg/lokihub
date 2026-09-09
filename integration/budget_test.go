@@ -56,7 +56,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 		ephemeralCircleHubOpts{FundLoki: 100_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -67,7 +67,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 	require.NoError(t, err)
 	child := mustConnect(t, pairingURI)
 
@@ -128,7 +128,7 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 				ephemeralCircleHubOpts{MinBudgetRenewal: constants.BUDGET_RENEWAL_DAILY, FundLoki: 10_000})
 			hubClient := mustConnect(t, hub.Connection)
 			pubkey := mustPubkey(t, privkey)
-			identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.ClientPubkey())
+			identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 			var created CreateCircleWalletResult
 			require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
@@ -140,7 +140,7 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 			}, &created))
 			require.Equal(t, renewal, created.BudgetRenewal)
 
-			pairingURI, err := nwcclient.DecryptPairingURI(privkey, created.WalletPubkey, created.EncryptedPairingURI)
+			pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
 			require.NoError(t, err)
 			child := mustConnect(t, pairingURI)
 

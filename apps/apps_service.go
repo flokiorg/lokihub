@@ -24,7 +24,7 @@ import (
 type AppsService interface {
 	// CreateApp creates a new NWC app connection.
 	// kind must be one of the db.AppKind* constants.
-	// parentAppID / parentKind are set for sub-wallets (jit_wallet, circle_child).
+	// parentAppID / parentKind are set for sub-wallets (cash_wallet, circle_child).
 	CreateApp(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 		expiresAt *time.Time, scopes []string, kind string,
 		parentAppID *uint, parentKind string,
@@ -33,7 +33,7 @@ type AppsService interface {
 	// opening its own. Use this when app creation must be atomic with another
 	// check made in the same transaction (e.g. a Postgres advisory lock guarding
 	// a budget-commitment check) — see create_circle_wallet_controller.go and
-	// create_jit_wallet_controller.go's allocation-claim path.
+	// mint_cash_controller.go's allocation-claim path.
 	//
 	// Unlike CreateApp, this does NOT publish "nwc_app_created" itself — the
 	// caller's transaction is not guaranteed committed yet when CreateAppTx
@@ -54,15 +54,18 @@ type AppsService interface {
 	// of CreateAppTx must call this explicitly once their own outer
 	// transaction has committed — see CreateAppTx's doc comment.
 	NotifyAppCreated(app *db.App)
-	// CreateJITHub creates a jit_hub app and persists its JITHubConfig.
-	CreateJITHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
+	// CreateCashHub creates a cash_hub app and persists its CashHubConfig.
+	CreateCashHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
-		config db.JITHubConfig) (*db.App, string, error)
-	// GetJITHubConfig returns the JITHubConfig for a jit_hub app.
-	GetJITHubConfig(appID uint) (*db.JITHubConfig, error)
-	// UpdateJITHubConfig updates a jit_hub's PerWalletMaxMloki and/or MaxExpSecs.
-	// A nil pointer leaves that field unchanged; a non-nil pointer must be positive.
-	UpdateJITHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int) error
+		config db.CashHubConfig) (*db.App, string, error)
+	// GetCashHubConfig returns the CashHubConfig for a cash_hub app.
+	GetCashHubConfig(appID uint) (*db.CashHubConfig, error)
+	// UpdateCashHubConfig updates a cash_hub's PerWalletMaxMloki, MaxExpSecs,
+	// MinTransferMloki, and/or RedeemFeePpm. A nil pointer leaves that field
+	// unchanged; PerWalletMaxMloki/MaxExpSecs must be positive when non-nil;
+	// MinTransferMloki must only be non-negative (0 = no floor is valid);
+	// RedeemFeePpm must be within 0..constants.MAX_FEES_PPM (0 = free).
+	UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int) error
 	// CreateCircleHub creates a circle_hub app and persists its CircleHubConfig,
 	// attaching it to either an existing CircleIdentity (identityRef.ExistingID) or a
 	// brand-new one created from identityRef's remaining fields.
@@ -91,53 +94,153 @@ type AppsService interface {
 	SetAppMetadata(appId uint, metadata map[string]interface{}) error
 	HasLightningAddress(app *db.App) bool
 
-	// CreateJITWalletClaims batch-inserts one JITWalletClaim row per recipient
-	// of a freshly-created, shared jit_wallet app. Called once by
-	// jitwallet.Commit right after the wallet app itself is created.
-	CreateJITWalletClaims(walletAppID uint, entries []db.JITWalletClaim) error
+	// CreateCashWalletClaims batch-inserts one CashWalletClaim row per recipient
+	// of a freshly-created, shared cash_wallet app. Called once by
+	// cashwallet.Commit right after the wallet app itself is created.
+	CreateCashWalletClaims(walletAppID uint, entries []db.CashWalletClaim) error
 	// ListClaimsForWallet returns every recipient slice (claimed or not) of a
-	// single jit_wallet app — the roster the list_recipients NIP-47 method
+	// single cash_wallet app — the roster the list_recipients NIP-47 method
 	// exposes. Ordered by created_at asc.
-	ListClaimsForWallet(walletAppID uint) ([]db.JITWalletClaim, error)
-	// ListJITHubWalletChildren returns every jit_wallet app that is a child of
+	ListClaimsForWallet(walletAppID uint) ([]db.CashWalletClaim, error)
+	// ListCashHubWalletChildren returns every cash_wallet app that is a child of
 	// hubID, queried directly from apps. Ordered by created_at asc.
-	ListJITHubWalletChildren(hubID uint) ([]db.App, error)
-	// ListJITWalletClaims returns every JITWalletClaim belonging to any
-	// jit_wallet child of hubID, joined with its wallet's ExpiresAt, newest
+	ListCashHubWalletChildren(hubID uint) ([]db.App, error)
+	// ListCashWalletClaims returns every CashWalletClaim belonging to any
+	// cash_wallet child of hubID, joined with its wallet's ExpiresAt, newest
 	// first, unfiltered/unpaginated — the caller applies status filtering,
 	// counts, and pagination in memory.
-	ListJITWalletClaims(hubID uint) ([]JITWalletClaimRow, error)
-	// GetJITWalletClaim is a read-only lookup of one recipient's still-unclaimed
-	// slice, used by claim_funds to verify identity/attestation proof (which
+	ListCashWalletClaims(hubID uint) ([]CashWalletClaimRow, error)
+	// GetCashWalletClaim is a read-only lookup of one recipient's still-unclaimed
+	// slice, used by cash_redeem to verify identity/attestation proof (which
 	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the
 	// atomic claim — so an invalid/unverifiable proof never touches the atomic
 	// slot at all, which would otherwise let anyone who merely knows a
 	// recipient's identity_value (exposed via list_recipients) briefly grief a
 	// legitimate concurrent claimer without ever proving ownership. Returns
 	// nil, nil if no unclaimed row matches.
-	GetJITWalletClaim(walletAppID uint, identityType, identityValue string) (*db.JITWalletClaim, error)
-	// ClaimJITWalletSlice atomically marks one recipient's slice claimed, guarded
-	// by "WHERE claimed_at IS NULL" so concurrent/replayed claims can't double-pay.
-	// Returns the claimed row's AmountMloki, or a constants.ErrInvalidParams-wrapped
-	// error if no matching unclaimed row exists (never existed, wrong identity, or
-	// already claimed — all three look identical to the caller by design).
-	ClaimJITWalletSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
-	// UnclaimJITWalletSlice reverts ClaimJITWalletSlice, guarded so it can only
+	GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error)
+	// ClaimCashSlice atomically marks one recipient's slice claimed, guarded
+	// by "WHERE claimed_at IS NULL" so concurrent/replayed claims can't double-pay,
+	// AND by an optimistic lock on the slice's current TransferCount — closing a
+	// TOCTOU race against a concurrent SplitCashSliceAmount call, which can shrink
+	// this same row's AmountMloki (via a partial split) without ever touching
+	// ClaimedAt or the registered identity. Without pinning TransferCount too, a
+	// redeem racing a partial split could commit against the row's PRE-split
+	// (too-large) AmountMloki even though the update itself still matches on
+	// identity+claimed_at alone — paying out more than the slice's real remaining
+	// balance backs. Returns the claimed row's AmountMloki, or a
+	// constants.ErrNotFound-wrapped error if no matching unclaimed row exists
+	// (never existed, wrong identity, already claimed, or raced against a
+	// concurrent split/transfer — all look identical to the caller by design).
+	ClaimCashSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
+	// UnclaimCashSlice reverts ClaimCashSlice, guarded so it can only
 	// undo the exact claim it's asked to. Used to roll back a slice claim when
 	// the invoice-amount check or the payment itself subsequently fails.
-	UnclaimJITWalletSlice(walletAppID uint, identityType, identityValue string) error
-	// DeleteJITWalletClaim removes an unclaimed slice from a jit_wallet. Returns
+	UnclaimCashSlice(walletAppID uint, identityType, identityValue string) error
+	// ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
+	// registered identity from (currentIdentityType, currentIdentityValue) to
+	// (newIdentityType, newIdentityValue, newIAPubkey), guarded by
+	// "claimed_at IS NULL" and an optimistic lock on the slice's current
+	// TransferCount — so two concurrent transfers of the same slice can never
+	// both succeed. Returns the slice's unchanged AmountMloki on success. Used
+	// ONLY for the narrow "lifetime-solo wallet, full-amount transfer" fast
+	// path (cash_transfer_controller.go) — every other transfer/split outcome
+	// goes through SplitCashSliceAmount instead.
+	ReassignCashSliceIdentity(walletAppID uint, currentIdentityType, currentIdentityValue,
+		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
+	// SplitCashSliceAmount atomically moves splitMloki out of one unclaimed
+	// slice, guarded by "claimed_at IS NULL" plus an optimistic lock on
+	// TransferCount (same pattern as ReassignCashSliceIdentity — a concurrent
+	// split/transfer/redeem of the same row invalidates a stale read, reported
+	// as constants.ErrNotFound). Two outcomes, both atomic:
+	//   - splitMloki == the slice's current AmountMloki: a full split — the
+	//     slice is claimed/terminal exactly like a redemption, its AmountMloki
+	//     untouched (the whole value is leaving, nothing to shrink).
+	//     Result.FullyDrained is true.
+	//   - splitMloki < AmountMloki: a partial split — AmountMloki is decremented
+	//     by splitMloki, TransferCount increments, the slice stays unclaimed
+	//     under its SAME registered identity with the remainder, redeemable/
+	//     transferable again later. Result.FullyDrained is false.
+	// splitMloki must be positive and MinTransferMloki-or-more (0 = no floor);
+	// for a partial split, the remainder left behind must ALSO be either
+	// exactly 0 or at least MinTransferMloki — a split that would leave
+	// unmovable dust behind is rejected (constants.ErrInvalidParams) rather
+	// than silently stranding it. Returns the source slice's own
+	// MinTransferMloki for the caller to pass into cashwallet.Split so the
+	// new wallet inherits it.
+	SplitCashSliceAmount(walletAppID uint, identityType, identityValue string, splitMloki int64) (CashSliceSplitResult, error)
+	// UndoCashSliceSplit reverts a PARTIAL SplitCashSliceAmount call (adds
+	// splitMloki back, decrements TransferCount), guarded by "claimed_at IS
+	// NULL" so it can only apply to a slice that's still alive — used to roll
+	// back when the new dedicated wallet's creation/funding subsequently
+	// fails. Mirrors UnclaimCashSlice's rollback posture but for the amount
+	// dimension rather than the ClaimedAt one; do not call this for a FULL
+	// split's rollback — use UnclaimCashSlice for that instead (SplitCashSliceAmount's
+	// full-split branch never touches AmountMloki, so UnclaimCashSlice alone
+	// correctly restores it).
+	UndoCashSliceSplit(walletAppID uint, identityType, identityValue string, splitMloki int64) error
+	// SetCashSliceSplitTarget records which new wallet a
+	// just-claimed slice's value was spun off into. Purely informational
+	// (see db.CashWalletClaim.SpunOffToWalletAppID) — call only after the
+	// new wallet has been created and funded.
+	SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error
+	// SetCashWalletSplitSource records, on the NEW wallet's own App row, which
+	// source cash_wallet it was split from — purely informational (see
+	// db.App.SplitFromWalletAppID), the reverse of SetCashSliceSplitTarget.
+	// Call only after the new wallet has been created and funded.
+	SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error
+	// DeleteCashClaim removes an unclaimed slice from a cash_wallet. Returns
 	// an error if the claim is not found, belongs to a different wallet, or has
 	// already been claimed. The caller is responsible for sweeping the slice's
 	// AmountMloki back to the hub before calling this.
-	DeleteJITWalletClaim(walletAppID uint, claimID uint) (*db.JITWalletClaim, error)
+	DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error)
+
+	// RecordCashStrandedFund durably logs one compensating-saga reversal that
+	// itself failed (cashwallet.Consolidate/SplitInTwo), so an operator sweep
+	// is driven by a query instead of grepping logs — see db.CashStrandedFund's
+	// own doc comment for the field semantics. Best-effort from the caller's
+	// perspective: a failure to record must never change saga control flow,
+	// only be logged alongside it.
+	RecordCashStrandedFund(operation string, sourceWalletAppID, retainedWalletAppID uint, amountMloki uint64) error
+	// ListCashStrandedFunds returns every CashStrandedFund record, newest
+	// first; onlyUnresolved filters to ResolvedAt IS NULL.
+	ListCashStrandedFunds(onlyUnresolved bool) ([]db.CashStrandedFund, error)
+	// ResolveCashStrandedFund sets ResolvedAt on one record once an operator
+	// has manually swept its funds back. Idempotent: a no-op (not an error) if
+	// already resolved.
+	ResolveCashStrandedFund(id uint) error
 }
 
-// JITWalletClaimRow is one row of ListJITWalletClaims' result — a
-// JITWalletClaim joined with its wallet's ExpiresAt.
-type JITWalletClaimRow struct {
-	db.JITWalletClaim
+// CashSliceSplitResult is returned by AppsService.SplitCashSliceAmount.
+type CashSliceSplitResult struct {
+	// SplitAmountMloki is the amount moving to the new dedicated wallet —
+	// what the caller should fund the new wallet with.
+	SplitAmountMloki int64
+	// FullyDrained is true when the split consumed the slice's entire
+	// remaining AmountMloki — the source slice is now claimed/terminal, and
+	// the source wallet may be eligible for auto-deletion if this was its
+	// last unclaimed slice.
+	FullyDrained bool
+	// RemainingAmountMloki is what's left on the source slice after this
+	// split — always 0 when FullyDrained is true.
+	RemainingAmountMloki int64
+	// MinTransferMloki is the SOURCE slice's own value, for the caller to
+	// pass into cashwallet.Split so the new wallet inherits it — never reset
+	// to the hub's own current config.
+	MinTransferMloki int64
+	// RedeemFeePpm is likewise the SOURCE slice's own value, for the caller
+	// to pass into cashwallet.Split so the new wallet inherits it unchanged.
+	RedeemFeePpm int
+}
+
+// CashWalletClaimRow is one row of ListCashWalletClaims' result — a
+// CashWalletClaim joined with its wallet's ExpiresAt and WalletPubkey (the
+// latter lets the caller derive/encode a lokicash token for the page it
+// actually renders, without a second per-wallet query).
+type CashWalletClaimRow struct {
+	db.CashWalletClaim
 	WalletExpiresAt *time.Time
+	WalletPubkey    *string
 }
 
 type appsService struct {
@@ -366,7 +469,7 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 
 // verifyParentHubTx checks, within tx, that parentAppID still exists and is
 // the hub kind parentKind expects. Called before inserting a circle_wallet/
-// jit_wallet child, inside the same transaction as the insert, so a
+// cash_wallet child, inside the same transaction as the insert, so a
 // concurrent DeleteApp on that hub can't race a child creation into
 // orphaning it: App.ParentAppID has no DB-level cascade. On Postgres, an
 // advisory lock keyed by the hub's own ID serializes this check+insert
@@ -379,7 +482,7 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentKind string) error {
 	expectedHubKind, ok := map[string]string{
 		db.ParentKindCircle: db.AppKindCircleHub,
-		db.ParentKindJIT:    db.AppKindJITHub,
+		db.ParentKindCash:   db.AppKindCashHub,
 	}[parentKind]
 	if !ok {
 		return fmt.Errorf("%w: unrecognized parent_kind %q", constants.ErrInvalidParams, parentKind)
@@ -407,7 +510,7 @@ func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentK
 func (svc *appsService) DeleteApp(app *db.App) error {
 	var err error
 	switch app.Kind {
-	case db.AppKindCircleHub, db.AppKindJITHub:
+	case db.AppKindCircleHub, db.AppKindCashHub:
 		err = svc.deleteHubAppTx(app)
 	default:
 		err = svc.db.Delete(app).Error
@@ -425,24 +528,24 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 	return nil
 }
 
-// deleteHubAppTx deletes a circle_hub/jit_hub app, refusing if it still has
+// deleteHubAppTx deletes a circle_hub/cash_hub app, refusing if it still has
 // children (App.ParentAppID has no DB-level cascade, so a plain delete would
 // orphan them). The child-count check and the delete run inside one
 // transaction, with the same Postgres advisory lock (keyed by this hub's own
 // ID) that verifyParentHubTx takes before inserting a new child — otherwise a
-// concurrent circle_wallet/jit_wallet creation for this exact hub could still
+// concurrent circle_wallet/cash_wallet creation for this exact hub could still
 // commit in the gap between a separate count-then-delete, orphaning it. On
 // sqlite no explicit lock is needed: wrapping the count and the delete in one
 // transaction is sufficient on its own, since sqlite transactions serialize
 // by default (only one writer active at a time).
 func (svc *appsService) deleteHubAppTx(app *db.App) error {
 	parentKind, kindLabel, hint := db.ParentKindCircle, "circle_hub", "member wallet(s); use the circle delete endpoint instead"
-	if app.Kind == db.AppKindJITHub {
-		// Same orphan hazard as circle_hub, but for jit_hub: a jit_wallet
-		// child's periodic reclaim (jit_cleanup_service.ReclaimAndDeleteSubWallet)
+	if app.Kind == db.AppKindCashHub {
+		// Same orphan hazard as circle_hub, but for cash_hub: a cash_wallet
+		// child's periodic reclaim (cash_cleanup_service.ReclaimAndDeleteSubWallet)
 		// would try to credit a parent app row that no longer exists — a
 		// FOREIGN KEY violation on every cleanup tick, forever.
-		parentKind, kindLabel, hint = db.ParentKindJIT, "jit_hub", "issued wallet(s); wait for them to expire/reclaim or delete them first"
+		parentKind, kindLabel, hint = db.ParentKindCash, "cash_hub", "issued wallet(s); wait for them to expire/reclaim or delete them first"
 	}
 
 	return svc.db.Transaction(func(tx *gorm.DB) error {

@@ -26,8 +26,8 @@ func (controller *nip47Controller) HandleGetBudgetEvent(ctx context.Context, nip
 		Msg("Getting budget")
 
 	// Matches against constants.PayCapableScopes, not just pay_invoice alone —
-	// a jit_wallet's budget-bearing scope is jit_claim_funds instead (though
-	// jit_wallet never actually reaches this handler in practice: get_budget
+	// a cash_wallet's budget-bearing scope is cash_redeem instead (though
+	// cash_wallet never actually reaches this handler in practice: get_budget
 	// is carved out of the system-wide always-granted list for that app kind
 	// in event_handler.go). Kept general for any future scope in the same
 	// position.
