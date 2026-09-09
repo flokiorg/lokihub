@@ -131,9 +131,9 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *t
 
 	// The CALLER generates their own secret and submits only its commitment —
 	// the wallet never mints or returns a bearer secret over the shared
-	// connection (Finding 1, 2026-07-28 audit: a server-generated secret
-	// returned here would be decryptable by every other holder of this
-	// shared cash_wallet connection).
+	// connection: a server-generated secret returned here would be
+	// decryptable by every other holder of this shared cash_wallet
+	// connection.
 	newSecretHex, newSecretHash := bearerSecretAndHash(t)
 	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
 
@@ -674,8 +674,7 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 }
 
 // TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeftInPlace
-// is the regression for independent Security Auditor B's finding 2:
-// SplitInTwo's own carved-wallet compensation was already correctly gated
+// is a regression test: SplitInTwo's own carved-wallet compensation was already correctly gated
 // (only deletes the carved wallet once its reverse transfer is confirmed), but
 // the CALLER — this controller's rollback() — was still restoring the source
 // slice to its full original amount unconditionally, even when that reverse
@@ -1105,8 +1104,7 @@ func TestHandleCashTransferEvent_ConcurrentTransfers_OnlyOneSucceeds(t *testing.
 }
 
 // TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet
-// is a regression test for an independent-audit finding (2026-07-28b): a
-// bearer slice used to be safe only when no other party had ever held the
+// is a regression test: a bearer slice used to be safe only when no other party had ever held the
 // wallet's shared NWC connection, because a bearer redeem transmits the raw
 // secret in the request body — decryptable by every party that ever received
 // the (single, shared) pairing secret, whether or not they've since claimed
@@ -1263,8 +1261,7 @@ func cashWalletClaimByIdentity(t *testing.T, svc *tests.TestService, walletAppID
 }
 
 // TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed is a
-// regression test for an independent dynamic (live black-box) audit finding
-// (2026-07-28): ClaimCashSlice's committing UPDATE used to be guarded
+// regression test: ClaimCashSlice's committing UPDATE used to be guarded
 // only by "id = ? AND claimed_at IS NULL" — it never re-checked
 // identity_type/identity_value. A concurrent cash_transfer can reassign a
 // row's identity without ever setting claimed_at, so a cash_redeem racing it
@@ -1364,7 +1361,7 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 // (constants.ErrNotFound) from a genuinely-invalid-request error
 // (constants.ErrInvalidParams, still BAD_REQUEST). Found live via the
 // integration suite's TestAudit_CashTransferVsRedeem_NeverBothSucceed
-// (integration/audit_dynamic_test.go) during the 2026-07-29 follow-up audit.
+// (integration/audit_dynamic_test.go).
 func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound(t *testing.T) {
 	const trials = 15
 	sawTransferLoss := false

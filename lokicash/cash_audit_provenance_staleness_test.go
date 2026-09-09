@@ -1,8 +1,8 @@
 package lokicash
 
-// Financial / economic design review — mint provenance amount attestation
-// (2026-08-29 round). Reuses signMintPayload/minterKey/testPubkey from the
-// existing lokicash test files (same package). No existing file is modified.
+// Covers mint provenance amount attestation. Reuses
+// signMintPayload/minterKey/testPubkey from the existing lokicash test files
+// (same package). No existing file is modified.
 //
 // These tests pin what a recipient can and CANNOT economically rely on when a
 // token carries a mint signature (TLV 5) + attested amount (TLV 6).

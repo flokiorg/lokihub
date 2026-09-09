@@ -47,7 +47,7 @@ var errCircleMemberAlreadyHasWallet = errors.New("identity already has an active
 // exported CreateCircleWalletRequest (Pubkey/MaxAmount/Expiry/BudgetRenewal/
 // IdentityEvent) — same wire shape, field-for-field identical JSON tags to
 // this controller's former local createCircleWalletParams, adopted directly
-// instead of maintaining a parallel copy (nmilat migration, PR #90). The
+// instead of maintaining a parallel copy (nmilat migration). The
 // response stays this controller's own createCircleWalletResponse: nipcw's
 // own wire response type is unexported (it carries a still-NIP-44-encrypted
 // encrypted_pairing_uri nipcw only exposes post-decryption to its own client

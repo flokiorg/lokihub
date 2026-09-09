@@ -27,7 +27,7 @@ import (
 // can decrypt EVERY response on that connection, not just their own
 // request's response.
 //
-// This was originally found (2026-07-28 independent audit) as an exploit
+// This was originally an exploit
 // path: cash_transfer used to mint a fresh bearer secret server-side and
 // return it in this exact response shape — decryptable by any co-recipient,
 // who could then redeem the slice before its intended holder. The fix

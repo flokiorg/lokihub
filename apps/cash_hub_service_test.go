@@ -655,8 +655,7 @@ func TestClaimAndDeleteCashClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
 }
 
 // TestClaimAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed is a
-// regression test for an independent dynamic (live black-box) audit finding
-// (2026-07-28): ClaimCashSlice's committing UPDATE used to be guarded
+// regression test: ClaimCashSlice's committing UPDATE used to be guarded
 // only by "id = ? AND claimed_at IS NULL" — it never re-checked
 // identity_type/identity_value. ReassignCashSliceIdentity can reassign a row's
 // identity without ever setting claimed_at, so a claim racing it could still
@@ -668,9 +667,9 @@ func TestClaimAndDeleteCashClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
 // (TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed in
 // nip47/controllers), specifically so it can run many cheap trials: racing
 // through the real payment/invoice layer only allows one or two iterations
-// before running out of distinct mock invoices, and — as the live audit
-// found — this race's window is narrow enough that a single trial routinely
-// doesn't hit it even pre-fix. Racing the two DB operations directly sees the
+// before running out of distinct mock invoices, and this race's window is
+// narrow enough that a single trial routinely doesn't hit it even pre-fix.
+// Racing the two DB operations directly sees the
 // same window far more often, since it isn't gated on Lightning payment mock
 // bookkeeping at all.
 func TestClaimAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed(t *testing.T) {

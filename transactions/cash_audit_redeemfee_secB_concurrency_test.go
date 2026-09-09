@@ -1,7 +1,6 @@
 package transactions
 
-// Independent Security Engagement B (2026-08-02) — cash_redeem redeem-fee
-// reconciliation, concurrency angle.
+// This file covers cash_redeem redeem-fee reconciliation, concurrency angle.
 //
 // The mechanism under review (reconcileCashRedeemFee, called from
 // markTransactionSettled whenever an OUTGOING transaction carries a non-nil
@@ -22,7 +21,7 @@ package transactions
 // payment. Do the two concurrent reconciliations ever interfere with each
 // other, deadlock, or leave the wallet's/hub's ledger in a wrong state?
 //
-// FINDING: no defect found. Verified below by actually running both
+// No defect found. Verified below by actually running both
 // redemptions concurrently (real goroutines, real overlapping DB
 // transactions via an artificial payment delay on one leg) rather than
 // only sequentially. The reason this holds: reconcileCashRedeemFee never

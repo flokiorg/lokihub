@@ -105,9 +105,7 @@ type ConsolidateResult struct {
 // funds are still sitting in the (deliberately retained) merged wallet, so
 // restoring the claim to its full original amount would create an
 // over-entitlement the source's real balance can't back. Every OTHER source —
-// never funded, or successfully reversed — is safe to unclaim as before
-// (independent security audit, Auditor B, finding 1 —
-// data/docs/audits/cash-consolidate-2026-08-29/).
+// never funded, or successfully reversed — is safe to unclaim as before.
 func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (result *ConsolidateResult, strandedSourceAppIDs []uint, err error) {
 	if len(params.Sources) < 2 {
 		return nil, nil, fmt.Errorf("%w: consolidate needs at least two sources", constants.ErrInvalidParams)

@@ -84,9 +84,8 @@ type resolvedConsolidateSource struct {
 // earliest-expiry checks below are the novel surface; the fund movement and
 // nested-encrypted delivery reuse cashwallet.Consolidate and encryptPairingURI,
 // which are covered elsewhere. Covered end to end against a live node by
-// integration/cash_consolidate_test.go and cash_consolidate_adversarial_test.go
-// (data/docs/audits/cash-consolidate-2026-08-29/), on top of the unit/guard
-// suites in this package and cashwallet.
+// integration/cash_consolidate_test.go and cash_consolidate_adversarial_test.go,
+// on top of the unit/guard suites in this package and cashwallet.
 //
 // v1 scope: sources MUST be pubkey-identified; new_identity MUST be pubkey
 // (the merged wallet is owned by, and its token delivered encrypted to, that
@@ -94,8 +93,7 @@ type resolvedConsolidateSource struct {
 // specifically because a source's secret would sit in plaintext in a request
 // encrypted only under the CALLING connection's shared key, decryptable by any
 // co-recipient of a shared calling wallet with no claim on that foreign
-// bearer note (independent security audit, Auditor A, finding 1 —
-// data/docs/audits/cash-consolidate-2026-08-29/).
+// bearer note.
 func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
 	params := &nipcash.CashConsolidateRequest{}
 	if resp := decodeRequest(nip47Request, params); resp != nil {
@@ -177,8 +175,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	// acted) — see §Data Model, "a wallet's total funding MUST equal the
 	// sum of its slices." Keying on the wallet alone incorrectly rejected
 	// a spec-conformant consolidate of two distinct, individually-proven
-	// slices that happen to share one wallet_pubkey (independent security
-	// audit, Auditor A, finding 1 — data/docs/audits/circle-cash-audit-2026-08-31/).
+	// slices that happen to share one wallet_pubkey.
 	type seenKey struct {
 		walletAppID   uint
 		identityType  string
@@ -234,8 +231,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		// future "PerWalletMaxMloki == 0 means no ceiling" a plausible
 		// addition this cast shouldn't depend on being caught elsewhere.
 		// Mirrors cashwallet/create.go's identical guard on mint_cash's own
-		// recipient-sum overflow (independent financial-review finding —
-		// data/docs/audits/cash-consolidate-2026-08-29/).
+		// recipient-sum overflow.
 		if amt > uint64(math.MaxInt64)-total {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "consolidated amount overflows")
 			return
@@ -291,8 +287,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	// restoring their claim to the full original amount would let the caller
 	// believe they have more than the wallet can actually pay out. Every other
 	// claimed source (never funded, or successfully reversed) is unclaimed as
-	// before (independent security audit, Auditor B, finding 1 —
-	// data/docs/audits/cash-consolidate-2026-08-29/).
+	// before.
 	claimed := make([]resolvedConsolidateSource, 0, len(resolved))
 	unclaimAll := func(strandedAppIDs []uint) {
 		stranded := make(map[uint]bool, len(strandedAppIDs))
@@ -483,8 +478,7 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 	// multi-identity calling wallet, none of whom have any claim on that
 	// foreign bearer note. Rejected outright rather than scoped to
 	// "self only": deferred alongside connection_key, matching the doc's
-	// existing v1-scope style (independent security audit, Auditor A, finding
-	// 1 — data/docs/audits/cash-consolidate-2026-08-29/).
+	// existing v1-scope style.
 	if src.BearerSecret != "" {
 		return nil, "", constants.ERROR_BAD_REQUEST, "bearer sources are not supported by cash_consolidate yet"
 	}

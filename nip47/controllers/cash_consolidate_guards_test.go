@@ -456,8 +456,8 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 	}
 }
 
-// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers is the
-// regression for the audit finding that a rejected consolidate could
+// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers is a
+// regression test: a rejected consolidate could
 // permanently burn a caller's still-valid proofs, or (a botched fix) un-burn a
 // proof another request legitimately consumed. When source 2's proof is already
 // consumed (by a prior request) and the consolidate is therefore rejected: the
@@ -510,7 +510,7 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 }
 
 // TestConsolidate_StrandedSource_ClaimLeftInPlace is the controller-level
-// regression for independent Security Auditor B's finding 1: Consolidate's own
+// regression test: Consolidate's own
 // F-1 fix (cashwallet/consolidate.go) correctly stops it from deleting the
 // merged wallet when a compensating reverse-transfer fails, but the CALLER was
 // still restoring every claimed source's slice to its full original amount

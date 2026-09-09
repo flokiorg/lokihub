@@ -17,9 +17,8 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt is the
-// UX-audit counterpart to the already-fixed max_transfers finding. FIXED
-// 2026-08-31: `list_recipients` — the ONLY NIP-47 method a recipient can call
+// TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt:
+// `list_recipients` — the ONLY NIP-47 method a recipient can call
 // to introspect their own slice's state over the shared cash_wallet
 // connection — now surfaces both pieces of state NIP-CASH says a recipient
 // needs to act correctly, which it used to omit entirely:

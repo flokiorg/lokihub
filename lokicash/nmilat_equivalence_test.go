@@ -1,6 +1,6 @@
 package lokicash
 
-// nmilat migration (PR #90): Encode/Decode/MintPayload/VerifyMint now
+// nmilat migration: Encode/Decode/MintPayload/VerifyMint now
 // delegate to github.com/ohstr/nmilat/nipcash's token codec / mint-provenance
 // helpers (see lokicash.go's own doc comments). Equivalence was verified
 // first, as a Phase 0 spike, before that delegation landed; these tests now

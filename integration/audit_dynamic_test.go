@@ -1,7 +1,6 @@
 //go:build integration
 
-// audit_dynamic_test.go holds NEW black-box scenarios written for the
-// 2026-07-28 dynamic-analysis security audit. They drive ONLY the real
+// audit_dynamic_test.go holds black-box scenarios. They drive ONLY the real
 // NWC/HTTP surface (never Go internals), as a malicious or compromised holder
 // of a shared cash_wallet connection would, probing the cash_transfer / cash_redeem
 // slice-accounting guards over real Nostr relay round-trips and real Lightning
@@ -62,9 +61,8 @@ func fireBarrier(a, b func()) {
 // against a real cash_transfer on the SAME bearer slice, over real relay
 // round-trips, and asserts exactly one of them ever wins.
 //
-// REGRESSION GUARD for a fixed atomicity violation (fixed in e0d4559, see
-// data/docs/audits/consolidated-findings-2026-07-28.md "ClaimCashSlice's
-// commit didn't re-verify identity"): cash_transfer and cash_redeem used to be
+// REGRESSION GUARD for a fixed atomicity violation (fixed in e0d4559 —
+// ClaimCashSlice's commit didn't re-verify identity): cash_transfer and cash_redeem used to be
 // able to BOTH report success for one slice. Root cause was
 // ClaimCashSlice's committing UPDATE being guarded by
 // "WHERE id = ? AND claimed_at IS NULL" only — it never re-checked
@@ -75,8 +73,8 @@ func fireBarrier(a, b func()) {
 // transfer the API had just told the new owner had succeeded.
 //
 // This test previously asserted the OPPOSITE (that the race reproduced) as
-// the live characterization of that bug. Re-run against this branch on
-// 2026-07-29, it could no longer reproduce a single "both won" outcome across
+// the live characterization of that bug. Re-run against the fix, it could
+// no longer reproduce a single "both won" outcome across
 // 40 iterations — the fix holds under real network round-trips, not just in
 // the unit-level race test. It's inverted here into a permanent regression
 // guard: hard-fail immediately the moment both sides ever win again.

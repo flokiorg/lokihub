@@ -1,67 +1,39 @@
 package cashwallet
 
-// Financial/economic review (2026-08-31, blinded round) — a NEW angle not
-// covered by any existing cash_audit_* test file: cash_redeem's REAL payment
-// leg runs through transactions.validateCanPay's generic "budget cap" gate
+// cash_redeem's real payment leg runs through
+// transactions.validateCanPay's generic budget-cap gate
 // (AppPermission.MaxAmountLoki), not only the exact, mloki-precise isolated-
-// balance check (db/queries.GetIsolatedBalance).
+// balance check (db/queries.GetIsolatedBalance). cashwallet.Commit/Split/
+// Consolidate all derive maxAmountLoki via `sum/1000` (integer division —
+// create.go:468, create.go:675, consolidate.go:123), so whenever a wallet's
+// committed total isn't an exact multiple of 1000 mloki, the stored
+// MaxAmountLoki is strictly less than the wallet's real total, by up to 999
+// mloki.
 //
-// cashwallet.Commit/Split/Consolidate all call apps.AppsService.CreateApp
-// with `sum/1000` (integer division — create.go:468, split_in_two-adjacent
-// Split at create.go:675, Consolidate at consolidate.go:123) as the new
-// cash_wallet's maxAmountLoki. Every scope on that app — including
-// CASH_REDEEM_SCOPE, one of the two scopes constants.PayCapableScopes lists —
-// gets an AppPermission row stamped with that SAME floor-divided value
-// (apps_service.go's saveAppTx, `utils.ClampUint64ToInt(maxAmountLoki)`).
-//
-// A cash_wallet's real committed total is tracked to the exact mloki
-// (CashWalletClaim.AmountMloki, db int64, no truncation) and its real balance
-// is tracked to the exact mloki too (the transactions ledger,
-// db/queries.GetIsolatedBalance). But AppPermission.MaxAmountLoki is
-// LOKI-denominated (1 loki == 1000 mloki) and gets floor-divided at wallet
-// creation — so whenever a wallet's total committed amount isn't an exact
-// multiple of 1000 mloki (an entirely ordinary amount — nothing in NIP-CASH
-// or this codebase requires round-loki amounts), the stored MaxAmountLoki
-// is STRICTLY LESS than the wallet's real total, by up to 999 mloki.
-//
-// This looks, on its face, like exactly the shape of bug this audit's
-// mandate calls out: a ceiling that could reject or strand a slice's tail
-// end. It ISN'T, and this file proves why not, with real numbers run through
-// the REAL production code path (cashwallet.Create -> the real
-// transactions.SendPaymentSync -> the real validateCanPay budget-cap check),
-// not just the arithmetic in isolation:
-//
-// The check (transactions_service.go ~line 1494, ~line 1506) is
-// `floor(amountWithFeeReserve/1000) + floor(budgetUsageSoFar/1000) >
-// MaxAmountLoki`, where MaxAmountLoki itself is `floor(totalFundedMloki/1000)`
-// and budgetUsageSoFar is computed by GetBudgetUsageSat as a SINGLE floor
-// over the exact-mloki SUM of every prior outgoing transaction (not a
-// per-transaction floor accumulated across calls — see
-// db/queries/get_budget_usage.go). Because floor(a)+floor(b) <=
+// That floor-division looks like it could reject or strand a slice's tail
+// end. It can't: the budget-cap check (transactions_service.go ~line 1494,
+// ~1506) is `floor(amountWithFeeReserve/1000) + floor(budgetUsageSoFar/1000)
+// > MaxAmountLoki`, where MaxAmountLoki is `floor(totalFundedMloki/1000)` and
+// budgetUsageSoFar is a single floor over the exact-mloki sum of every prior
+// outgoing transaction (db/queries/get_budget_usage.go), not a per-
+// transaction floor accumulated across calls. Because floor(a)+floor(b) <=
 // floor(a+b) for any nonnegative a, b, and the isolated-balance check already
 // guarantees currentAmount+priorSum <= totalFundedMloki, the budget-cap
-// check's own left-hand side is ALWAYS <= floor(totalFundedMloki/1000) ==
-// MaxAmountLoki. It is mathematically incapable of firing for any sequence
-// of redemptions whose real mloki amounts sum to no more than the wallet's
-// real funded total — so it can never wrongfully reject, and never strand,
-// a legitimate redemption, no matter how the wallet's total or a
-// redemption's own amount interacts with the /1000 truncation.
+// check's left-hand side is always <= MaxAmountLoki: it's mathematically
+// incapable of firing for any sequence of redemptions that sum to no more
+// than the wallet's real funded total. This file proves that with real
+// numbers through the real production path (cashwallet.Create ->
+// transactions.SendPaymentSync -> validateCanPay), not just the arithmetic.
 //
-// FINDING (Informational, genuinely new — not one of the scope doc's known
-// open items): the MaxAmountLoki budget-cap gate, as applied to a
-// cash_wallet's CASH_REDEEM_SCOPE permission, is vestigial. It is
-// unconditionally weaker than (implied by) the exact-mloki isolated-balance
-// check that already runs first in the same function, for every input this
-// system can produce. It provides no defense-in-depth, contrary to what its
-// presence in the code might suggest to a future maintainer, and burns one
-// extra query (GetBudgetUsageSat) per external cash_redeem for a check that
-// can never fire. Recommendation: either drop the check for isolated-kind
-// apps (already covered exactly by GetIsolatedBalance) or, if retained for
-// non-cash isolated kinds too, stop deriving a cash_wallet's own
-// MaxAmountLoki via floor-division of an mloki total — ceil-divide instead
-// (or store/enforce the cap in mloki directly) so the two gates actually
-// agree on what "the ceiling" means, rather than one silently subsuming the
-// other by construction.
+// Note: this makes the MaxAmountLoki budget-cap gate vestigial for a
+// cash_wallet's CASH_REDEEM_SCOPE permission — unconditionally weaker than
+// the exact-mloki isolated-balance check that already runs first in the same
+// function, for every input this system can produce, and it burns one extra
+// query (GetBudgetUsageSat) per external cash_redeem for a check that can
+// never fire. Either drop the check for isolated-kind apps (already covered
+// by GetIsolatedBalance) or, if kept for non-cash isolated kinds, ceil-divide
+// (or enforce the cap in mloki directly) so the two gates agree on what "the
+// ceiling" means.
 
 import (
 	"testing"
@@ -85,8 +57,7 @@ import (
 // (mirroring transactions/cash_redeem_fee_reconciliation_test.go's own
 // newCashHubAndWallet helper) rather than by driving the real mint path,
 // because the mock LN client's MakeInvoice ignores the requested amount --
-// a known, already-documented test-infra limitation (see
-// data/docs/audits/security-audit-scope-2026-08-30.md §7) that would make
+// a known test-infra limitation that would make
 // fundInternal move the WRONG amount in this unit-test environment and
 // confound the very check this test targets. This still exercises the REAL
 // transactions.SendPaymentSync -> validateCanPay code path unchanged --

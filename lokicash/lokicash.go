@@ -103,10 +103,9 @@ type Token struct {
 
 // Encode packages t into a lokicash-family bech32 token under t.HRP.
 // WalletPubkey and Secret MUST each be a 32-byte hex string. Delegates to
-// nipcash.Encode (github.com/ohstr/nmilat) — the same TLV wire format,
+// nipcash.Encode (github.com/ohstr/nmilat), the same TLV wire format,
 // verified byte-for-byte equivalent to this package's own former
-// implementation in lokicash/nmilat_equivalence_test.go before this delegation
-// was adopted (see PR #90's nmilat migration).
+// implementation in lokicash/nmilat_equivalence_test.go.
 func Encode(t Token) (string, error) {
 	return nipcash.Encode(toNipcashToken(t))
 }
@@ -179,8 +178,8 @@ func MintPayload(hrp, walletPubkeyHex string, amountMillis uint64) string {
 // origin and denomination only — it is never a spending credential.
 // Delegates to nipcash.VerifyProvenance — see Encode's own doc comment for
 // why; equivalence across two different secp256k1 library stacks (this
-// package used btcsuite's, nipcash uses decred/flokiorg-fork's) was verified
-// in lokicash/nmilat_equivalence_test.go before this delegation was adopted.
+// package used btcsuite's, nipcash uses decred/flokiorg-fork's) is verified
+// in lokicash/nmilat_equivalence_test.go.
 func VerifyMint(t Token) (minterPubkeyHex string, ok bool) {
 	return nipcash.VerifyProvenance(toNipcashToken(t))
 }

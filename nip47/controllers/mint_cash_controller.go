@@ -24,7 +24,7 @@ const cashRateLimitPerHour = 10
 // mint_cash's request/response wire structs are github.com/ohstr/nmilat/nipcash's
 // own exported types (nipcash.MintCashRequest/MintCashResult/RecipientParam/
 // RecipientResult) — same wire shape, adopted directly instead of maintaining
-// a parallel copy (nmilat migration, PR #90). One accepted, tested difference:
+// a parallel copy (nmilat migration). One accepted, tested difference:
 // nipcash.MintCashResult.ExpiresAt is a plain int64 with `omitempty` (omitted
 // when zero) rather than this controller's former *int64 (omitted when nil) —
 // behaviorally identical for every real expiry timestamp, which is never 0.

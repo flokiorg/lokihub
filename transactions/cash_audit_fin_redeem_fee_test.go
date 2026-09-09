@@ -1,7 +1,5 @@
 package transactions
 
-// Financial/economic design review (2026-08-02) — Cash Hub / lokicash.
-//
 // This test isolates a purely economic property of the shared-pool funding
 // model, not a security bug: a cash_wallet is funded with EXACTLY the sum of
 // its recipients' slices (cashwallet.Commit / NIP-CASH "total funding MUST
@@ -69,7 +67,7 @@ func newFundedCashWallet(t *testing.T, svc *tests.TestService, fundedMloki int64
 	return app
 }
 
-// FINDING (High): the last recipient of a multi-recipient cash_wallet can be
+// The last recipient of a multi-recipient cash_wallet can be
 // permanently unable to redeem their own, legitimately-owned slice, because an
 // earlier co-recipient's external-redemption routing fee was subtracted from
 // the shared pool that still had to back it. No theft, no double-spend — the

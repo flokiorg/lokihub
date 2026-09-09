@@ -114,8 +114,7 @@ func TestConsolidate_RejectsConnectionKeySource(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "connection_key sources are not supported")
 }
 
-// TestConsolidate_RejectsBearerSource is the regression for independent
-// Security Auditor A's finding: a bearer source's secret has no signature and
+// TestConsolidate_RejectsBearerSource is a regression test: a bearer source's secret has no signature and
 // no binding to the request carrying it — unlike cash_transfer/cash_redeem
 // (which never name a foreign wallet_pubkey, so a bearer secret only ever
 // transits over its own single-recipient wallet's own connection),

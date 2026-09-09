@@ -1,7 +1,6 @@
 //go:build integration
 
-// cash_transfer_audit_split_chains_test.go is the 2026-07-30 dynamic Cash-Hub
-// audit's coverage of CHAINS of splits — split a slice, then split the
+// cash_transfer_audit_split_chains_test.go covers CHAINS of splits — split a slice, then split the
 // spun-off wallet's own slice again, several generations deep — which the
 // mandate flags for verification: does MinTransferMillis inheritance hold
 // generations deep, and does money stay conserved across the whole lineage?

@@ -1,7 +1,7 @@
 package transactions
 
-// Independent Security Engagement B (2026-08-02) — cash_redeem redeem-fee
-// reconciliation, "zero-parent-hub" fallback and defensive-guard angle.
+// This file covers cash_redeem redeem-fee reconciliation's "zero-parent-hub"
+// fallback and defensive-guard angle.
 //
 // reconcileCashRedeemFee (transactions_service.go ~line 1940) had two
 // defensive-guard gaps identified here, both since addressed:

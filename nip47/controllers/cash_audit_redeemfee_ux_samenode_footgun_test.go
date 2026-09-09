@@ -21,7 +21,7 @@ package controllers
 // this SPECIFIC redemption's actual required amount turns out to be, and for
 // a same-node resolution that's the FULL slice amount, not the quoted net.
 //
-// Originally (2026-08-02 UX audit finding H1) this rejection's message never
+// Originally, this rejection's message never
 // named the mechanism — a recipient could see THAT it failed and even the
 // exact math, but not WHY the amount they were quoted stopped applying.
 // cash_redeem_controller.go step 9 was fixed to name the same-node mechanism

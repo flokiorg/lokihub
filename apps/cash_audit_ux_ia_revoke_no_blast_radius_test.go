@@ -13,8 +13,7 @@ import (
 )
 
 // TestIdentityAuthorityManager_Delete_SucceedsEvenWithOutstandingDependentClaims
-// is the UX-audit counterpart to the max_transfers finding, generalized to
-// the Identity Authority registry: revoking an IA is a single, global,
+// covers the Identity Authority registry: revoking an IA is a single, global,
 // irreversible-in-effect action (the registry is instance-wide, not scoped
 // per cash_hub — see IdentityAuthorityManager's own doc comment) that
 // immediately and permanently cuts off every connection_key-mode recipient

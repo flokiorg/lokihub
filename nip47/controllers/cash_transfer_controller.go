@@ -23,7 +23,7 @@ import (
 // cashTransferNewIdentityParam/cashTransferParams below are no longer used to
 // parse the real request (HandleCashTransferEvent decodes straight into
 // github.com/ohstr/nmilat/nipcash's own exported CashTransferRequest now -
-// nmilat migration, PR #90) - they're kept purely as this package's own test
+// nmilat migration) - they're kept purely as this package's own test
 // fixtures. nipcash.CashTransferRequest's own NewIdentity field type is
 // unexported inside nipcash (nmilat's own internal wire-shape detail), so a
 // test can't build one as `nipcash.CashTransferRequest{NewIdentity:
@@ -133,7 +133,7 @@ type cashTransferResponse struct {
 // target, since the caller doesn't choose (or know) a bearer target's value
 // ahead of generating it. iaPubkey is included so a connection_key target's
 // Identity Authority is part of what the signer committed to — omitting it
-// (2026-07-30 audit finding) let a captured proof be resubmitted with a
+// let a captured proof be resubmitted with a
 // DIFFERENT, still-trusted IA swapped in, redirecting who is authoritative to
 // redeem the transferred slice even though identity_value (the connection_key
 // string itself) never changed. Always "" for pubkey/bearer targets, which
@@ -144,8 +144,7 @@ type cashTransferResponse struct {
 // message with a breadcrumb when the slice DOES exist but was already split
 // off into a new dedicated wallet: exactly the situation a client built
 // against the pre-two-wallet-split contract hits on its natural retry for a
-// "remainder" it believes it still holds on this connection (independent
-// audit finding, full-review pass — data/docs/audits/cash-consolidate-2026-08-29/).
+// "remainder" it believes it still holds on this connection.
 // This doesn't fix that client's underlying assumption, but turns a silent
 // dead end into an actionable one. Diagnostic-only: any failure in the lookup
 // itself silently falls back to the generic message rather than affecting
@@ -352,8 +351,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		// new_identity validation) has also passed. A proof that fails one of
 		// those later checks never touched the slice, so burning it here
 		// would force a legitimate caller to sign an entirely new kind-23198
-		// event to retry even though nothing happened (2026-07-30 audit
-		// finding). callerProofPubkey/proofEventID are captured now, while
+		// event to retry even though nothing happened. callerProofPubkey/proofEventID are captured now, while
 		// identityEvent is in scope, but the actual insert happens right
 		// before step 9's split/reassign decision.
 		callerProofPubkey = identityEvent.PubKey
@@ -707,8 +705,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 			// proof is released so the caller isn't permanently burned, but the
 			// source claim is intentionally NOT restored — doing so would let
 			// the caller believe they have the full original amount when the
-			// wallet can't actually pay it out (independent security audit,
-			// Auditor B, finding 2 — data/docs/audits/cash-consolidate-2026-08-29/).
+			// wallet can't actually pay it out.
 			releaseProof()
 			logger.Logger.Error().Uint("app_id", app.ID).
 				Msg("Split-off compensation failed; source slice intentionally left claimed pending manual reconciliation")

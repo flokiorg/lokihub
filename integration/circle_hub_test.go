@@ -84,7 +84,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 	})
 
-	// Fixed 2026-08-31: any max_amount below 1000 mloki (one whole loki) used
+	// Any max_amount below 1000 mloki (one whole loki) used
 	// to floor to a stored budget cap of exactly 0, which the payment layer
 	// treats as "no cap at all" - a silent, complete bypass of the member's
 	// own quoted spend cap. Every value in [0, 999] mloki must now be

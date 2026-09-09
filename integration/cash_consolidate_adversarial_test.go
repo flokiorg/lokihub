@@ -98,8 +98,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		bogus := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef00"
 		var res CashConsolidateResult
 		// No BearerSecret here: bearer sources are rejected outright (BAD_REQUEST)
-		// before the custody lookup this case means to exercise — see S-1 in
-		// data/docs/audits/cash-consolidate-2026-08-29/consolidated-findings.md.
+		// before the custody lookup this case means to exercise.
 		err := callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
 				consolidateSourceFor(t, wpA, callerPriv, callerPub, newPub, happyPathAmountMloki),

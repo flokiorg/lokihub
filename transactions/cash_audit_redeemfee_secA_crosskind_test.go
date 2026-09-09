@@ -1,8 +1,6 @@
 package transactions
 
-// Independent security audit A (2026-08-02) — Cash Hub redeem-fee mechanism.
-//
-// FINDING (Medium, FIXED): db.Transaction.CashRedeemFeeMloki's own doc
+// db.Transaction.CashRedeemFeeMloki's own doc
 // comment states it is "set only on a cash_wallet's own outgoing payout row
 // for a cash_redeem call" — but reconcileCashRedeemFee (transactions_service.go,
 // ~line 1940) did not enforce that: it trusted the presence of a non-nil

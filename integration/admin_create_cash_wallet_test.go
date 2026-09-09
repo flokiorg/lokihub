@@ -4,8 +4,7 @@
 // (api.CreateCashWallet, POST /api/apps/:id/cash-wallets) — a separate code
 // path from the NWC-facing mint_cash method every other fixture in this
 // suite mints through. It had solid mocked-LN unit coverage but zero
-// integration/live-node coverage (security-audit-scope-2026-08-30.md §7,
-// QA/test-coverage finding M-3, circle-cash-audit-2026-08-31 round): the
+// integration/live-node coverage: the
 // real internal-transfer funding step, the real mint_signature LND
 // SignMessage call, and NIP-CASH's "MUST be atomic" guarantee for this path
 // had never been proven against a live node.
@@ -87,7 +86,7 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 }
 
 // TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode proves the
-// admin path's mint_signature field (added 2026-08-30, previously this path
+// admin path's mint_signature field (previously this path
 // had no provenance field at all) produces a token that verifies against the
 // live node's real signing key — mirrors
 // TestCashMintProvenance/SignedTokenVerifiesToAStableNodeIdentity's own

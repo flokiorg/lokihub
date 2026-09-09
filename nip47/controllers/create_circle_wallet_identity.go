@@ -27,7 +27,7 @@ const circleWalletIdentityFreshnessWindow = 5 * time.Minute
 // travels embedded inside an already end-to-end-encrypted NIP-47 request.
 // 23199 sits directly adjacent to NIP-CASH's 23198 and NIP-47's own
 // 23194-23197 block, since NIP-CW depends on NIP-47 too. Aliased to nipcw's
-// own exported constant (nmilat migration, PR #90) rather than a
+// own exported constant (nmilat migration) rather than a
 // re-hardcoded literal, so this value can never drift from the protocol
 // layer's own definition of it.
 const nostrKindCircleIdentityProof = nipcw.KindCircleIdentityProof

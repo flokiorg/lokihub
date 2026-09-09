@@ -15,7 +15,7 @@ import (
 
 // list_recipients' response is github.com/ohstr/nmilat/nipcash's own exported
 // ListRecipientsResult/RecipientStatus — same wire shape, adopted directly
-// instead of maintaining a parallel copy (nmilat migration, PR #90). Two
+// instead of maintaining a parallel copy (nmilat migration). Two
 // accepted, tested differences from this controller's former local types:
 //   - RecipientStatus's numeric fields (AmountMillis, RedeemFeeMillis,
 //     NetRedeemableMillis, MinTransferMillis) are uint64, not int64 - every

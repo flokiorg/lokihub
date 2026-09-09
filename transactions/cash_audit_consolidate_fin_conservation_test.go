@@ -1,7 +1,6 @@
 package transactions
 
-// Financial / economic design review — cash_consolidate + two-wallet split +
-// mint provenance (2026-08-29 round).
+// Covers cash_consolidate + two-wallet split + mint provenance.
 //
 // These are ECONOMIC property tests, not code-correctness tests: they exercise
 // the exact value/fee arithmetic cash_consolidate and the split rewrite rely on
@@ -9,8 +8,8 @@ package transactions
 // int64(total) cast) and pin the conservation / fee-neutrality behavior a
 // reviewer needs to reason about. No existing source file is modified.
 //
-// Prior rounds already covered the SPLIT direction of the fee-rounding gap
-// (cash-hub-redeem-fee-2026-08-02, finding #1: splitting a slice zeroes the
+// cash_audit_redeemfee_fin_split_fragmentation_test.go already covers the
+// SPLIT direction of the fee-rounding gap (splitting a slice zeroes the
 // aggregate fee). This file documents the CONSOLIDATE direction and two
 // consolidate-specific value-integrity edges.
 

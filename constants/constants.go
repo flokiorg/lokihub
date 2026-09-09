@@ -139,7 +139,7 @@ const (
 
 // NIP-47 method names for Cash and Circle Wallet operations. Aliased to
 // nmilat's own exported nipcash/nipcw method-name constants (nmilat
-// migration, PR #90) rather than re-hardcoded literals, so these can never
+// migration) rather than re-hardcoded literals, so these can never
 // drift from the protocol layer's own definition of them.
 const (
 	NIP47MethodMintCash           = nipcash.MethodMintCash

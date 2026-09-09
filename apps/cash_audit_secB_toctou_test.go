@@ -1,14 +1,12 @@
 package apps_test
 
-// Independent security audit B (Cash Hub / lokicash, NIP-CASH). These tests are
-// additive confirmations of the load-bearing double-spend / amount-TOCTOU
-// guards the spec calls out under §Redeeming Funds step 3-4 and §Security
+// These tests confirm the load-bearing double-spend / amount-TOCTOU guards
+// the spec calls out under §Redeeming Funds step 3-4 and §Security
 // Considerations ("A partial split's amount check MUST be re-evaluated against
 // the slice's live state"). They assert the atomic layer (apps.appsService)
 // never lets a redeem/claim commit against a stale, pre-split amount, and that
 // the optimistic (transfer_count + amount_mloki) lock serialises a concurrent
-// split against a claim. Prefixed cash_audit_secB_ to avoid colliding with any
-// other agent's files running against this same tree.
+// split against a claim.
 
 import (
 	"testing"

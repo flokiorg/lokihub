@@ -16,8 +16,7 @@ import (
 )
 
 // TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear is
-// a regression test for a Low-severity finding from the 2026-07-30 Cash Hub
-// audit: a bearer-current caller's partial split has no identity_event to
+// a regression test: a bearer-current caller's partial split has no identity_event to
 // draw a delivery pubkey from (recipientPubkey is ""), so attempting the
 // normal inner-encryption delivery failed outright — the split had already
 // moved real funds into the new wallet by that point, stranding them
@@ -88,8 +87,7 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 }
 
 // TestHandleCashTransferEvent_InPlaceReassignment_LostRace_ReleasesProofGuard
-// is a regression test for a second Low-severity finding from the same
-// audit: a full in-place reassignment that loses its optimistic-lock race
+// is a second regression test: a full in-place reassignment that loses its optimistic-lock race
 // (ReassignCashSliceIdentity returns ErrNotFound because a concurrent
 // operation already claimed/transferred the slice) left the just-inserted
 // db.CashTransferProof row consumed — even though the losing request itself

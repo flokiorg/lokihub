@@ -11,8 +11,7 @@ import (
 )
 
 // TestCreateCashWalletRequest_MintProvenanceReachableFromAdminAPI is the
-// regression guard for a UX/experience-review finding (Cash Hub consolidate/
-// split audit, 2026-08-29; fixed during a later full-review pass): mint
+// regression guard: mint
 // provenance (NIP-CASH §Mint Provenance, opt-in via mint_signature) was fully
 // implemented in the shared engine (cashwallet.Params.SignMint) and exposed
 // on the NWC-facing mint_cash/cash_transfer/cash_consolidate request shapes,

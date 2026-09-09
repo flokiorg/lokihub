@@ -14,8 +14,7 @@ import (
 )
 
 // TestHandleCashTransferEvent_ProofBoundToNewIdentityIAPubkey_SwappedIARejected
-// is a regression test for a High-severity finding from the 2026-07-30 Cash
-// Hub audit: cash_transfer's kind-23198 proof bound new_identity via
+// is a regression test: cash_transfer's kind-23198 proof bound new_identity via
 // new_identity_hash = sha256(identity_type + ":" + identity_value) — it did
 // NOT include new_identity.ia_pubkey anywhere in what the caller signed.
 //

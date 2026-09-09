@@ -381,10 +381,10 @@ func (svc *appsService) SplitCashSliceAmount(walletAppID uint, identityType, ide
 // atomic method's "lost the race" convention) if the row was legitimately
 // claimed/transferred/split again in the window between the failed split's
 // own decrement and this rollback — RowsAffected == 0 is NOT silently
-// treated as success (2026-07-30 audit finding: it used to be, silently
-// stranding the carved-off amount with no matching CashWalletClaim row
-// anywhere, though the real ledger balance stays untouched and is eventually
-// recovered by the expiry sweep regardless). Callers MUST log this case at
+// treated as success (it used to be, silently stranding the carved-off
+// amount with no matching CashWalletClaim row anywhere, though the real
+// ledger balance stays untouched and is eventually recovered by the expiry
+// sweep regardless). Callers MUST log this case at
 // Error level with enough detail to locate and manually sweep the balance
 // immediately rather than waiting on that sweep.
 func (svc *appsService) UndoCashSliceSplit(walletAppID uint, identityType, identityValue string, splitMloki int64) error {

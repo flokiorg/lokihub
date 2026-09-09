@@ -17,8 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// Security Auditor B (independent round, 2026-08-31). FIXED same round
-// (2026-08-31): create_circle_wallet_controller.go now rejects any
+// create_circle_wallet_controller.go now rejects any
 // max_amount below 1000 mloki (one whole loki) outright, before the
 // truncating "/1000" conversion ever runs, so AppPermission.MaxAmountLoki can
 // no longer land on the same sentinel value (0) this codebase uses elsewhere

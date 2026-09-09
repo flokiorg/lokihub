@@ -1,7 +1,7 @@
 //go:build integration
 
-// cash_transfer_audit_connection_key_test.go is the 2026-07-30 dynamic Cash-Hub
-// audit's focused live-fire coverage of the connection_key identity mode
+// cash_transfer_audit_connection_key_test.go is focused live-fire coverage of
+// the connection_key identity mode
 // through the NEW cash_transfer split path — the mode the mandate flags as
 // getting much less coverage than pubkey/bearer. Every scenario drives the
 // real NWC surface over real relay round-trips against the real running

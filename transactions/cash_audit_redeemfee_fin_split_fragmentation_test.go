@@ -1,10 +1,8 @@
 package transactions
 
-// Financial/economic design review (2026-08-02) — Cash Hub redeem fee
-// (redeem_fee_ppm) vs. cash_transfer/Split fragmentation, the same-node
-// exemption's real-world reach, and concurrent-redemption safety.
-//
-// This file is a companion to cash_audit_fin_redeem_fee_test.go (the
+// This file covers redeem_fee_ppm vs. cash_transfer/Split fragmentation, the
+// same-node exemption's real-world reach, and concurrent-redemption safety.
+// It is a companion to cash_audit_fin_redeem_fee_test.go (the
 // original shared-pool stranding finding) and
 // cash_redeem_fee_reconciliation_test.go (the fix's basic delta orderings).
 // It targets exactly the questions the redeem-fee fix's own review brief
@@ -13,8 +11,8 @@ package transactions
 // rounding-to-zero behavior — and is the same-node exemption something more
 // than a hypothetical.
 //
-// FINDING (Low/Informational — a revenue-optimization gap, not a fund-safety
-// bug): cash_transfer/Split is explicitly, deliberately fee-free (NIP-CASH
+// Note (a revenue-optimization gap, not a fund-safety bug):
+// cash_transfer/Split is explicitly, deliberately fee-free (NIP-CASH
 // §The Redeem Fee: "a transfer or split fee MUST NOT exist"), and each
 // resulting child slice inherits its parent's RedeemFeePpm UNCHANGED
 // (cashwallet.Split's SplitParams.RedeemFeePpm — see create.go's Split, and
@@ -134,7 +132,7 @@ func TestCashAuditRedeemFeeFin_DustFragmentRedemption_RealEndToEnd_ZeroFeeCollec
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	const ppm = 100_000           // 10% redeem_fee_ppm — e.g. configured to recover real routing costs
+	const ppm = 100_000              // 10% redeem_fee_ppm — e.g. configured to recover real routing costs
 	const originalSlice = uint64(18) // what the Hub would have quoted/collected on ONE lump redemption
 	const fragmentAmount = uint64(9) // half of it, split off via a (fee-free) cash_transfer
 

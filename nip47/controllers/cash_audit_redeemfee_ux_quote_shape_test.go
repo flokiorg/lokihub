@@ -1,9 +1,8 @@
 package controllers
 
-// UX-audit coverage for the new redeem-fee quote fields on list_recipients
-// (NIP-CASH.md §Listing Recipients, §The Redeem Fee), added under
-// data/docs/audits/cash-hub-redeem-fee-2026-08-02/. This is a follow-on to the
-// prior round's cash_audit_ux_list_recipients_missing_fields_test.go, which
+// Coverage for the redeem-fee quote fields on list_recipients
+// (NIP-CASH.md §Listing Recipients, §The Redeem Fee). This is a follow-on to
+// cash_audit_ux_list_recipients_missing_fields_test.go, which
 // proved min_transfer_millis and expires_at are absent from the wire response
 // — this test proves the OPPOSITE for the redeem fee: the quote a recipient
 // needs (redeem_fee_millis / net_redeemable_millis) genuinely IS present on the
@@ -61,7 +60,7 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T)
 	require.Nil(t, response.Error)
 
 	// Marshal exactly what goes over the wire to a recipient's NWC client —
-	// not the Go struct — same discipline the prior audit round's
+	// not the Go struct — same discipline
 	// cash_audit_ux_list_recipients_missing_fields_test.go used.
 	raw, err := json.Marshal(response.Result)
 	require.NoError(t, err)

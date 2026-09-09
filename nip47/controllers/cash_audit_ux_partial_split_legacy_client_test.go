@@ -35,8 +35,7 @@ type legacyPartialSplitResult struct {
 }
 
 // TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemainder
-// is a UX/experience-review finding (Cash Hub consolidate/split audit,
-// 2026-08-29; partially mitigated during a later full-review pass): a client
+// covers a client
 // built against the OLD partial-split contract — where the remainder stayed
 // on the source connection, under the same identity, decremented in place —
 // loses track of its own change under the NEW two-wallet contract, since the
@@ -54,8 +53,8 @@ type legacyPartialSplitResult struct {
 //  3. Acting on the belief step 1 leaves a legacy client with, it naturally
 //     tries to use the SAME connection/identity again (the only one it has
 //     any handle on) for the remainder. This now fails ERROR_NOT_FOUND, with
-//     a message that DOES include a breadcrumb toward where the value went
-//     (fixed as part of the full-review pass) — a legacy client can't recover
+//     a message that DOES include a breadcrumb toward where the value went —
+//     a legacy client can't recover
 //     automatically from this alone (it wasn't written to parse a breadcrumb
 //     out of an error string), but an operator or a human reading the error
 //     now has an actionable lead instead of a dead end.

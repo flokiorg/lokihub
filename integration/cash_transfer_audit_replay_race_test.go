@@ -1,7 +1,7 @@
 //go:build integration
 
-// cash_transfer_audit_replay_race_test.go is the 2026-07-30 dynamic Cash-Hub
-// audit's coverage of the NEW single-use replay guard (db.CashTransferProof)
+// cash_transfer_audit_replay_race_test.go covers the single-use replay guard
+// (db.CashTransferProof)
 // under real, racing network round-trips, plus a live probe of the
 // cash_transfer rate limit. The existing money-conservation race test
 // (cash_transfer_audit_split_race_test.go) fires DISTINCT proofs each round; it

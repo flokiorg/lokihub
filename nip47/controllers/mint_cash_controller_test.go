@@ -485,8 +485,8 @@ func TestHandleMintCashEvent_BudgetRenewalNever(t *testing.T) {
 }
 
 // TestHandleMintCashEvent_Bearer_HappyPath and
-// TestHandleMintCashEvent_Bearer_RejectsMixedRecipients close a coverage gap
-// flagged by the 2026-08-02 QA audit: the bearer sole-recipient rule (§Bearer
+// TestHandleMintCashEvent_Bearer_RejectsMixedRecipients close a coverage gap:
+// the bearer sole-recipient rule (§Bearer
 // Slices) was already covered at the cashwallet unit layer, the admin HTTP
 // API (api.TestCreateCashWallet_Bearer_*), and the live integration wire, but
 // had no fast, offline test at this controller layer — meaning the

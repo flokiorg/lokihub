@@ -66,9 +66,7 @@ type SplitInTwoResult struct {
 // itself failed, leaving the carved wallet — deliberately NOT deleted in that
 // case — still holding funds the source's restored claim would otherwise
 // double-count. On success (nil error), sourceFundsIntact is meaningless: the
-// source was consumed terminal by design and MUST NOT be restored regardless
-// (independent security audit, Auditor B, finding 2 —
-// data/docs/audits/cash-consolidate-2026-08-29/).
+// source was consumed terminal by design and MUST NOT be restored regardless.
 func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result *SplitInTwoResult, sourceFundsIntact bool, err error) {
 	carved, err := Split(ctx, deps, SplitParams{
 		HubApp:           params.HubApp,

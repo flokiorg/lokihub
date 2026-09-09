@@ -13,8 +13,7 @@ import (
 )
 
 // TestUndoCashSliceSplit_ClaimedFirst_ReturnsNotFoundInsteadOfSilentNoOp is a
-// regression test for a Low-severity finding from the 2026-07-30 Cash Hub
-// audit: when cash_transfer's split path fails AFTER SplitCashSliceAmount's
+// regression test: when cash_transfer's split path fails AFTER SplitCashSliceAmount's
 // atomic decrement has already committed (e.g. the new spun-off wallet's own
 // creation or internal funding transfer subsequently errors — see
 // cashwallet.Split and handleCashTransferSplit's rollback), the controller

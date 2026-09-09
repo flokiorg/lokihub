@@ -42,13 +42,13 @@ const (
 	// (30000-39999) NIP-IC's long-lived claim correctly uses. 23198 sits
 	// directly adjacent to NIP-47's own 23194-23197 block, since this NIP
 	// depends on NIP-47. Aliased to nipcash's own exported constant (nmilat
-	// migration, PR #90) rather than a re-hardcoded literal, so this value
+	// migration) rather than a re-hardcoded literal, so this value
 	// can never drift from the protocol layer's own definition of it.
 	nostrKindClaimProof = nipcash.KindClaimProof
 	// nostrKindIAAttestation is unchanged from the old design: an Identity
 	// Authority's signed attestation that a given nostr pubkey owns a given
 	// connection_key. Only used for identity_type == connection_key. Aliased
-	// to nipIC's own exported constant (nmilat migration, PR #90) — this is
+	// to nipIC's own exported constant (nmilat migration) — this is
 	// genuinely NIP-IC's own kind, not NIP-CASH's, so it borrows nipIC's name
 	// for it directly rather than redeclaring the number.
 	nostrKindIAAttestation = nipIC.KindAttestation
@@ -415,7 +415,7 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // presence, evidence-JSON-object validity) is delegated to
 // nipIC.ParseAttestation — the canonical parser for NIP-IC's own event
 // shape, the same one nmilat's own nipcash.BySigningConnectionKey uses
-// client-side. This is part of the nmilat migration (PR #90); equivalence
+// client-side. This is part of the nmilat migration; equivalence
 // with this codebase's previous hand-rolled check was verified first, in
 // nip47/controllers/nmilat_attestation_equivalence_test.go, before this
 // swap. Two previously-inert gaps are deliberately closed by adopting it,

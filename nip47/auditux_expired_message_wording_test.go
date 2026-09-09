@@ -17,8 +17,8 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary is a
-// UX-audit finding, FIXED same round (2026-08-31): event_handler_test.go
+// TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary:
+// event_handler_test.go
 // already proves (TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired /
 // ...ListRecipients_RejectedWhenWalletExpired) that permissions.HasPermission
 // CORRECTLY fires constants.ERROR_EXPIRED for every method a cash_wallet

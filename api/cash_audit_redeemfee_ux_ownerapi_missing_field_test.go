@@ -1,7 +1,6 @@
 package api
 
-// UX-audit coverage (data/docs/audits/cash-hub-redeem-fee-2026-08-02/) for the
-// HUB OWNER's own side of the new redeem-fee feature. NIP-CASH.md's
+// Coverage for the HUB OWNER's own side of the redeem-fee feature. NIP-CASH.md's
 // §The Redeem Fee promises a slice's redeem_fee_ppm is "fixed at the moment
 // it's created... and does not change afterward, even if the Hub's own
 // default rate later changes" — and the Hub Settings UI copy the owner sees
@@ -15,7 +14,7 @@ package api
 // lets them VERIFY it, the same way it already lets them verify the
 // analogous min_transfer_mloki claim (CashWalletClaimResponse.
 // MinTransferMloki, api/models.go:454, populated at api/api.go:3042 and
-// :3323). FINDING (UX M1, FIXED): RedeemFeePpm was never added to
+// :3323). RedeemFeePpm was never added to
 // CashWalletClaimResponse at all — an owner who changed their Hub's default
 // fee had no way, via this API or the admin frontend it feeds, to see what
 // rate any specific already-issued lokicash actually locked in.

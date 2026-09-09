@@ -1,13 +1,10 @@
 package transactions
 
-// Independent security audit A (2026-08-02) — Cash Hub redeem-fee mechanism.
-//
-// CHECKED, FOUND SOUND (documenting test, not a finding): cash_redeem_controller.go
+// This is a documenting test (checked, found sound): cash_redeem_controller.go
 // step 9 peeks transactions.IsSelfPayment(controller.db, ...) BEFORE calling
 // SendPaymentSync, which independently calls the exact same
 // IsSelfPayment(svc.db, ...) a few lines later (transactions_service.go:407),
-// outside any shared transaction or lock. This test asks the question the
-// audit brief calls out directly: can these two, non-atomic reads of the same
+// outside any shared transaction or lock. This test asks: can these two, non-atomic reads of the same
 // predicate disagree, opening a fee-bypass (peek says external, real
 // determination says same-node — recipient overcharged, Hub pockets a fee it
 // never should have) or fee-overcharge (peek says same-node, real

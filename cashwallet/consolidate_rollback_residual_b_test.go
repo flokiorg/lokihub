@@ -15,11 +15,11 @@ import (
 )
 
 // TestConsolidate_FailedReversal_StrandsSourceFundsInRetainedWallet is Auditor
-// B's independent, source-only substantiation of the fund-side precondition
-// behind their finding 1: after a mid-loop + failed-reversal Consolidate,
+// This is a source-only substantiation of the fund-side precondition:
+// after a mid-loop + failed-reversal Consolidate,
 // source 1's funds have LEFT source 1 (its outgoing leg settled) and were
 // NEVER returned (the reversal failed), so s1's real balance is short by the
-// moved amount. Auditor B's full finding went further, at the controller
+// moved amount. The fuller picture is at the controller
 // layer this cashwallet-package test doesn't reach: the controller's
 // unclaimAll() was restoring every claimed source's slice to its full
 // original amount unconditionally, even for a source in exactly this

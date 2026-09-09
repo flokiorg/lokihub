@@ -1,6 +1,6 @@
 package controllers
 
-// nmilat migration (PR #90): verifyClaimAttestationEvent (kind 35522, IA
+// nmilat migration: verifyClaimAttestationEvent (kind 35522, IA
 // attestation) delegates its structural checks to nipIC.ParseAttestation.
 // Equivalence with the previous hand-rolled check was verified first as a
 // Phase 0 spike before the swap landed; these tests now serve as permanent

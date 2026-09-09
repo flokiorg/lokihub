@@ -1,8 +1,7 @@
 //go:build integration
 
-// cash_transfer_audit_split_race_test.go holds the NEW dynamic (black-box)
-// scenarios written for the 2026-07-30 Cash-Hub dynamic-analysis security
-// audit, focused on the PARTIAL-SPLIT path added alongside the JIT-Wallet ->
+// cash_transfer_audit_split_race_test.go holds dynamic (black-box)
+// scenarios focused on the PARTIAL-SPLIT path added alongside the JIT-Wallet ->
 // Cash-Hub rename (NIP-CASH §Splitting a Slice). Everything here drives ONLY
 // the real NWC surface over real Nostr relay round-trips against a real
 // running instance and real Lightning self-payments, as a malicious or
@@ -356,7 +355,7 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 // Considerations: "a proof MUST NOT be replayable to authorize a DIFFERENT
 // amount_millis than the one it was signed for."
 //
-// Originally written (2026-07-30 dynamic audit) against a build where the
+// Originally written against a build where the
 // proof was NOT bound to amount_millis at all and was NOT single-use — see
 // nip47/controllers/cash_transfer_proof_amount_binding_test.go's
 // TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected and

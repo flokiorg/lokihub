@@ -1933,9 +1933,8 @@ func deriveCircleFeeSkimPaymentHash(sourcePaymentHash string) string {
 // already the fee-REDUCED net payout (not the full slice plus an add-on skim
 // the way a circle_wallet payment is), so folding CashRedeemFeeMloki into
 // FeeSkimMloki here would double-count it in db/queries.GetIsolatedBalance's
-// SQL and silently reopen the exact shared-wallet stranding bug this whole
-// mechanism exists to close (see the audit finding referenced in
-// db.CashWalletClaim.RedeemFeePpm's own doc comment).
+// SQL and silently reopen the shared-wallet stranding bug
+// db.CashWalletClaim.RedeemFeePpm's own doc comment describes.
 //
 // delta = quoted hub fee − real routing fee:
 //   - delta > 0: the quoted fee covered the real cost with some to spare —

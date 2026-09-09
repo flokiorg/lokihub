@@ -14,8 +14,7 @@ import (
 )
 
 // TestHandleCashTransferEvent_NewIdentityValidationFailure_ReleasesProofGuard
-// is a regression test for a Low-severity finding from the 2026-07-30 Cash
-// Hub audit: the db.CashTransferProof single-use replay guard used to be
+// is a regression test: the db.CashTransferProof single-use replay guard used to be
 // inserted right after verifyTransferIdentityEvent succeeded (step 7), but
 // BEFORE new_identity was validated (step 8). Every failure path inside step
 // 9's atomic operation (ReassignCashSliceIdentity/SplitCashSliceAmount)

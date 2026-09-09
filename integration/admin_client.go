@@ -339,8 +339,7 @@ type adminCreateCashWalletResponse struct {
 // mint path a real operator's frontend uses, distinct from the NWC-facing
 // mint_cash method every other fixture in this suite mints through. Exists
 // specifically to give this path — which had unit coverage but zero
-// live-node coverage (security-audit-scope-2026-08-30.md §7, "known-open
-// item") — an integration-level entry point at all.
+// live-node coverage — an integration-level entry point at all.
 func (c *adminClient) createCashWallet(hubAppID uint, req adminCreateCashWalletRequest) (adminCreateCashWalletResponse, error) {
 	var resp adminCreateCashWalletResponse
 	err := c.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/cash-wallets", hubAppID), req, &resp)

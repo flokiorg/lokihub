@@ -1,7 +1,6 @@
 package controllers
 
-// Security Auditor A — independent finding (2026-08-31 circle/cash round).
-// FIXED same round: the dedup guard in cash_consolidate_controller.go is now
+// The dedup guard in cash_consolidate_controller.go is
 // keyed on (wallet, identity), not the wallet alone.
 //
 // NIP-CASH §Consolidating Tokens, `sources` field: "MUST contain at least two
@@ -24,10 +23,9 @@ package controllers
 // together in one call, even though each is a distinct, unredeemed,
 // individually-proven slice exactly as NIP-CASH defines "sources". No funds
 // were ever at risk from this — it was a false rejection / availability gap,
-// not a fund-safety bug. (The 2026-08-29 consolidate round's
-// independent-security-audit-consolidate-2026-08-29b.md reviewed the same
-// line from a double-spend/custody-batching angle and correctly marked it
-// "SAFE" on that axis — this finding was a different angle on the same line.)
+// not a fund-safety bug. The same line was separately reviewed from a
+// double-spend/custody-batching angle and found safe on that axis — this is
+// a different angle on the same line.
 //
 // This file only ADDS regression tests; it does not itself change the guard.
 
@@ -52,8 +50,8 @@ import (
 // Amounts are 123_000/1_000 mloki, not an arbitrary split: cashwallet's own
 // internal-transfer funding step (fundInternal) pays a real bolt11 invoice
 // per source, and MockLn.MakeInvoice ignores its requested-amount argument
-// entirely unless MakeInvoiceQueue is pre-populated (a pre-existing,
-// documented mock limitation — see security-audit-scope-2026-08-30.md §7) —
+// entirely unless MakeInvoiceQueue is pre-populated (a pre-existing mock
+// limitation) —
 // so, exactly like the pre-existing TestConsolidate_HappyPath_RecordsSourceLineage,
 // this test queues two distinct canned invoices (tests.MockInvoice /
 // tests.MockLNClientHoldTransaction.Invoice) whose amounts these claims must

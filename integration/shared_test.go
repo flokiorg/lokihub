@@ -80,8 +80,8 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 // binding that stops an intercepted proof from being redirected to a
 // different new_identity (including a different Identity Authority for a
 // connection_key target — a captured proof used to be replayable with a
-// swapped, still-trusted IA even with identity_value unchanged, fixed
-// 2026-07-30), or replayed for a different amount_millis, than what it was
+// swapped, still-trusted IA even with identity_value unchanged), or replayed
+// for a different amount_millis, than what it was
 // actually signed for (NIP-CASH §Transferring and Splitting a Slice). For a
 // full transfer, pass the slice's exact current amount (never a
 // sentinel/omitted value — the server resolves an omitted request

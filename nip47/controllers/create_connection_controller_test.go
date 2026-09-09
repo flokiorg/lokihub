@@ -314,8 +314,8 @@ func TestHandleCreateConnectionEvent_DoNotAllowCreateConnectionMethod(t *testing
 	assert.Nil(t, publishedResponse.Result)
 }
 
-// Fixed 2026-08-31 (companion to the Circle Wallet fix in
-// create_circle_wallet_controller.go): a nonzero max_amount in [1, 999]
+// Companion to the Circle Wallet fix in
+// create_circle_wallet_controller.go: a nonzero max_amount in [1, 999]
 // mloki used to floor to a stored budget cap of 0, which validateCanPay
 // treats as "no cap at all" - the same silent-bypass shape as the Circle
 // Wallet bug. Unlike create_circle_wallet, max_amount: 0 itself stays legal

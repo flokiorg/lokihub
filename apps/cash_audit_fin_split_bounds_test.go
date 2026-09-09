@@ -1,7 +1,5 @@
 package apps_test
 
-// Financial/economic design review (2026-08-02) — Cash Hub / lokicash.
-//
 // These tests exercise the split arithmetic at the AppsService layer
 // (SplitCashSliceAmount), which is the one atomic guard both the full-split
 // and partial-split cash_transfer outcomes share. They do NOT create or fund
@@ -55,7 +53,7 @@ func countSplitsOfOne(t *testing.T, svc *tests.TestService, walletID uint, idv s
 	}
 }
 
-// FINDING (Medium): with max_transfers removed, the ONLY control that bounds
+// With max_transfers removed, the ONLY control that bounds
 // how many child wallets / DB rows / internal-transfer ledger entries a single
 // funded slice can generate through repeated splitting is min_transfer_mloki
 // (bound = amount / min_transfer_mloki). Its default is 0 (no floor) — which

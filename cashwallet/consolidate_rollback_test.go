@@ -31,8 +31,8 @@ import (
 // embedded payee matching mockLN.Pubkey (see IsSelfPayment). Every canned
 // invoice fixture has a distinct payee baked into its real signature, so no
 // two of them can both settle within one Consolidate call sharing a single
-// mockLN.Pubkey — the same wall the QA audit lead flagged as making these
-// paths hard to unit-test. Deps.FundInternalOverride (see
+// mockLN.Pubkey, which makes these paths hard to unit-test.
+// Deps.FundInternalOverride (see
 // TestConsolidate_MidLoopFailure_RollbackSucceeds_DeletesMergedWallet below)
 // closes that gap without needing more invoice fixtures.
 

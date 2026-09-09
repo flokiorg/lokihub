@@ -51,9 +51,7 @@ func nipCashDocSection(t *testing.T, headingPrefix string) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
-// TestNIPCashDoc_MintSignatureRequestFieldDocumented is the regression guard
-// for a UX/experience-review finding (Cash Hub consolidate/split audit,
-// 2026-08-29; confirmed and fixed during a later full-review pass):
+// TestNIPCashDoc_MintSignatureRequestFieldDocumented is the regression guard:
 // NIP-CASH.md thoroughly documented mint provenance from the TOKEN's point of
 // view (§Mint Provenance -- what TLV types 5/6 mean, what they prove, that
 // it's "optional by default"), but never documented the REQUEST-side opt-in

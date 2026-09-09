@@ -1,7 +1,6 @@
 package controllers
 
-// Experience/UX Reviewer — independent finding (2026-08-31 circle/cash
-// round). FIXED same round: pay_invoice/pay_keysend's response and
+// pay_invoice/pay_keysend's response and
 // list_transactions' per-transaction row now carry an optional
 // fee_skim_mloki field (see payResponse.FeeSkimMloki / nip47/models.
 // Transaction.FeeSkimMloki), populated from the already-correct

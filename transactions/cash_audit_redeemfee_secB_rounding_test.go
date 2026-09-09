@@ -1,7 +1,7 @@
 package transactions
 
-// Independent Security Engagement B (2026-08-02) — cash_redeem redeem-fee
-// reconciliation, rounding/integer-truncation angle.
+// This file covers cash_redeem redeem-fee reconciliation's rounding/
+// integer-truncation angle.
 //
 // CalculateFeeSkimMloki (reused unchanged by this new mechanism, from the
 // pre-existing circle_hub fee-skim code) computes
@@ -49,8 +49,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCashAuditSecB_CalculateFeeSkimMloki_OverflowsAtExtremeAmounts is a
-// FINDING (Low): CalculateFeeSkimMloki's own multiplication —
+// TestCashAuditSecB_CalculateFeeSkimMloki_OverflowsAtExtremeAmounts:
+// CalculateFeeSkimMloki's own multiplication —
 // `amountMloki * uint64(feesPpm)`, transactions_service.go ~line 1541 —
 // is unchecked. uint64's own ceiling (2^64-1 ~= 1.8e19) is crossed whenever
 // amountMloki * feesPpm exceeds it; at the maximum configurable
@@ -80,9 +80,8 @@ import (
 // the code path enforces no ceiling that would prevent it, and this exact
 // function (CalculateFeeSkimMloki) is the one this whole mechanism newly
 // reuses for redeem-fee quoting on top of its pre-existing circle_hub
-// fee-skim use — see the task's own explicit callout of "CalculateFeeSkimMloki
-// reuse" as an audit angle.
-// FIXED same round (2026-08-31): CalculateFeeSkimMloki now computes the full
+// fee-skim use.
+// CalculateFeeSkimMloki now computes the full
 // 128-bit product (math/bits.Mul64) before dividing, so no precision is lost
 // at any amountMloki/feesPpm this system can produce — it no longer silently
 // wraps to a wrong value at the old plain-multiplication overflow boundary.
@@ -148,7 +147,7 @@ func TestCashAuditSecB_ReconcileDelta_RealisticBoundaryValuesNeverOverflow(t *te
 
 	maxPossibleRealFee := CalculateFeeReserveMloki(largeClaimed)
 
-	deltaAllFeeNoReal := int64(maxQuotedFee) - int64(0) //nolint:gosec // this is exactly the check under review
+	deltaAllFeeNoReal := int64(maxQuotedFee) - int64(0)     //nolint:gosec // this is exactly the check under review
 	assert.Equal(t, int64(maxQuotedFee), deltaAllFeeNoReal) //nolint:gosec // this is exactly the check under review
 	assert.Greater(t, deltaAllFeeNoReal, int64(0))
 
