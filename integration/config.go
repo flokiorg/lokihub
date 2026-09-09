@@ -76,6 +76,15 @@ type AdminAPIConfig struct {
 // Config is the top-level shape of config.local.yaml.
 type Config struct {
 	AdminAPI AdminAPIConfig `yaml:"admin_api"`
+	// RelayURL is this instance's own relay (docker-compose.dev.yml's
+	// `relay` service in dev, e.g. "ws://localhost:5500") - the
+	// same one this instance's GeneralRelay setting must include for
+	// circle "following"-policy kind:3 lookups to see anything published
+	// here (see ephemeral_test.go's publishFollowList and
+	// cmd/seedrelay). Deliberately not defaulted to a public relay: this
+	// suite should never depend on real third-party relay infrastructure
+	// being reachable/responsive to pass.
+	RelayURL string `yaml:"relay_url"`
 }
 
 // defaultConfigPath is used when the INTEGRATION_CONFIG env var is unset.

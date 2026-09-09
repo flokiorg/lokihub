@@ -30,9 +30,22 @@ time.
    once it expires.
 
 3. Copy `config.example.yaml` to `config.local.yaml` (gitignored) and fill in
-   `admin_api.base_url`/`admin_api.token`. That's the only thing this file
-   names. `config.local.yaml` is resolved relative to this directory, or
-   point `INTEGRATION_CONFIG` at an absolute path.
+   `admin_api.base_url`/`admin_api.token`/`relay_url`. `config.local.yaml` is
+   resolved relative to this directory, or point `INTEGRATION_CONFIG` at an
+   absolute path.
+
+4. **`relay_url` must be this instance's own relay** (e.g.
+   `docker-compose.dev.yml`'s `relay` service in dev), and that relay must
+   actually be one of this instance's `GeneralRelay` settings (`PATCH
+   /api/settings`, `generalRelay` field) - that's what the backend's
+   "following" circle-policy check (`service/nostr_social_cache.go`)
+   queries kind:3 contact lists from. This suite deliberately never talks to
+   a public/third-party relay for anything - a real relay this suite
+   doesn't control being slow, rate-limited, or unreachable should never be
+   why it fails. Run `just dev seed-relay` (or `just dev reset`, which
+   already calls it) once to publish `testdata/social_graph.json`'s fixed
+   identities' follow list to it - see that file and
+   `cmd/seedrelay/main.go`.
 
 ## Running
 
@@ -75,6 +88,18 @@ just test integration-ratelimits  # just those 2, with real limits temporarily o
 just test integration-all         # both of the above, back to back - zero skips overall
 ```
 
+`just test integration` runs `just dev reset` first (restart relay + backend, no
+volumes touched) so every run starts from the same server-side session/
+subscription baseline, whatever a previous run's own load left behind -
+run `just dev reset` on its own to force the same reset without running the
+suite. `TestAAA_PreflightCleanup` (runs first, see its own doc comment) then
+best-effort-sweeps any ephemeral app/circle identity a prior *interrupted*
+run (Ctrl-C, CI timeout, panic) left behind, so a run's leaked-fixture count
+always starts at zero - this is separate from `TestZZZ_NoLeakedEphemeralFixtures`/
+`TestZZZ_NoLeakedEphemeralCircleIdentities` (run last), which stay strict and
+never auto-clean, so a real broken `t.Cleanup` in the run you're currently
+watching still fails loudly instead of being swept away.
+
 There's no equivalent test for Circle Hub's 3/hour cap — every
 `circle_hub_test.go` scenario except the happy path is rejected by
 validation *before* the rate limiter is even consulted (see
@@ -90,13 +115,36 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   `publishFollowList` (a real signed kind:3 event making a synthetic
   provider "follow" whichever pubkeys a test wants authorized under a
   `following`-policy hub — see its own doc comment for why it must run
-  *before* the hub is created). Every builder registers `t.Cleanup` to
-  reclaim any children it mints and then delete the hub/wallet itself.
-- `zz_leak_check_test.go` — `TestZZZ_NoLeakedEphemeralFixtures` runs last and
-  fails loudly if any ephemeral hub/wallet is still around, catching a
+  *before* the hub is created; publishes to `config.local.yaml`'s
+  `relay_url`, this suite's own dev relay, never a public one). Every
+  builder registers `t.Cleanup` to reclaim any children it mints and then
+  delete the hub/wallet itself.
+- `social_graph_test.go`/`testdata/social_graph.json`/`cmd/seedrelay` — a
+  fixed, real (not synthetic) set of dedicated Nostr identities (one
+  "provider", five "members") this suite generated once for its own use.
+  `just dev seed-relay` (or `dev reset`, which already calls it) publishes
+  the provider's kind:3 follow list once, so a test that wants an
+  already-authorized "following"-policy identity can use
+  `loadFixedSocialGraph(t)`'s pubkeys directly instead of paying for a fresh
+  keypair + a live `publishFollowList` round trip - existing tests weren't
+  migrated to this wholesale, it's available for new/rewritten ones. Any
+  pubkey not in `graph.Members` (e.g. `newTestPrivkey(t)`'s) is a ready-made
+  "not followed" identity for rejection-path tests.
+- `aaa_preflight_cleanup_test.go` — `TestAAA_PreflightCleanup` runs first and
+  best-effort-sweeps any ephemeral app/circle identity left over from a
+  previous run that never got to finish, so every run starts from the same
+  guaranteed-empty baseline. Deliberately non-strict (log-only, never fails)
+  and deliberately separate from the two `zz_leak_check_test.go` checks below.
+- `zz_leak_check_test.go` — `TestZZZ_NoLeakedEphemeralFixtures` and
+  `TestZZZ_NoLeakedEphemeralCircleIdentities` run last and fail loudly if any
+  ephemeral hub/wallet/circle identity is still around, catching a
   missing/failing `t.Cleanup` before it can silently reaccumulate into the
   kind of stale-subscription backlog that once tipped a real relay into
-  rejecting connections with "too many concurrent subscription".
+  rejecting connections with "too many concurrent subscription" (or, for
+  circle identities, into a background refresher endlessly re-querying
+  thousands of leaked identities against the general relays - see
+  `createEphemeralCircleHub`'s own identity-cleanup comment in
+  `ephemeral_test.go`).
 - `jit_hub_test.go` — `create_jit_wallet` happy path, invalid identity_type
   rejection, a shared multi-recipient wallet funded with the SUM of every
   recipient (one connection, `list_recipients` shows both), the total-across-

@@ -36,24 +36,25 @@ const (
 	circlePolicyFollowing = "following"
 )
 
-// generalRelayURL is this lokihub instance's configured Nostr relay - the
-// same one baked into every admin-created app's own pairing URI (see
-// adminCreateAppResponse.PairingUri), and confirmed present in this
-// instance's GetGeneralRelayUrls() setting (config/config.go), which is what
-// the backend's "following" circle-policy check (service/
-// nostr_social_cache.go) actually queries kind:3 from. Hardcoded because
-// there's no admin endpoint to discover it - update this if the instance's
-// own Relay/GeneralRelay settings ever change.
-const generalRelayURL = "wss://relay.ohstr.com"
-
 // publishFollowList publishes a real, signed kind:3 (NIP-02 contact list)
-// event from providerPrivkey naming every one of followedPubkeys, to
-// generalRelayURL - this is the entire authorization mechanism for
-// "following"-policy circle hubs: nostrSocialCache.IsAuthorized treats
-// "following" as "the provider follows the requester" (provider's own
+// event from providerPrivkey naming every one of followedPubkeys, to cfg's
+// own RelayURL (config.local.yaml) - this is the entire authorization
+// mechanism for "following"-policy circle hubs: nostrSocialCache.IsAuthorized
+// treats "following" as "the provider follows the requester" (provider's own
 // kind:3 contains the requester), so publishing this makes followedPubkeys
 // (and only them) authorized under a circle_hub using providerPrivkey's
 // pubkey as its ProviderPubkey.
+//
+// cfg.RelayURL must be one of the relays this lokihub instance's own
+// GetGeneralRelayUrls() setting (config/config.go) names - that's what the
+// backend's "following" circle-policy check (service/nostr_social_cache.go)
+// actually queries kind:3 from. Deliberately never a public/third-party
+// relay (this suite's own dev relay, docker-compose.dev.yml's `relay`
+// service, in dev) - a real relay this suite doesn't control being slow,
+// rate-limiting, or unreachable should never be why this suite fails. See
+// also cmd/seedrelay, which publishes testdata/social_graph.json's fixed
+// "provider"/"members" identities the same way, once, so tests that don't
+// need a fresh per-test identity can skip calling this at all.
 //
 // MUST be called before the circle_hub itself is created. api.CreateApp's
 // AppKindCircleHub branch calls WarmCircleFollowingCache immediately at
@@ -63,8 +64,9 @@ const generalRelayURL = "wss://relay.ohstr.com"
 // until the background refresher eventually runs - so a hub created before
 // this publish would see its members as unauthorized for an indeterminate
 // time, not immediately after this call returns.
-func publishFollowList(t *testing.T, providerPrivkey string, followedPubkeys []string) {
+func publishFollowList(t *testing.T, cfg *Config, providerPrivkey string, followedPubkeys []string) {
 	t.Helper()
+	require.NotEmpty(t, cfg.RelayURL, "config.local.yaml: relay_url must be set - see config.example.yaml")
 
 	tags := make(nostr.Tags, 0, len(followedPubkeys))
 	for _, pubkey := range followedPubkeys {
@@ -79,8 +81,8 @@ func publishFollowList(t *testing.T, providerPrivkey string, followedPubkeys []s
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	relay, err := nostr.RelayConnect(ctx, generalRelayURL)
-	require.NoError(t, err, "connect to %s to publish provider follow list", generalRelayURL)
+	relay, err := nostr.RelayConnect(ctx, cfg.RelayURL)
+	require.NoError(t, err, "connect to %s to publish provider follow list", cfg.RelayURL)
 	defer relay.Close()
 
 	require.NoError(t, relay.Publish(ctx, ev), "publish provider kind:3 follow list")
@@ -171,7 +173,7 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	if policy == circlePolicyFollowing {
 		providerPrivkey := newTestPrivkey(t)
 		req.ProviderPubkey = mustPubkey(t, providerPrivkey)
-		publishFollowList(t, providerPrivkey, authorizedPubkeys)
+		publishFollowList(t, cfg, providerPrivkey, authorizedPubkeys)
 	}
 
 	resp, err := admin.createApp(req)

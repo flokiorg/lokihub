@@ -11,3 +11,10 @@
 admin_api:
   base_url: "http://localhost:1610"
   token: "<jwt from POST /api/unlock>"
+
+# This instance's own relay - must be the same relay named in its
+# "Relay"/"GeneralRelay" settings (config/config.go), and reachable from
+# wherever this suite runs. Used by circle "following"-policy tests to
+# publish/discover kind:3 follow lists - see ephemeral_test.go and
+# cmd/seedrelay. Never point this at a public/third-party relay.
+relay_url: "ws://localhost:5500"

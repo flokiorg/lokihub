@@ -145,6 +145,16 @@ dev subcommand="" *args:
                 docker logs lokihub-dev-backend --since 20s 2>&1 | grep -q "http server started" && break
                 sleep 1
             done
+            just -f "{{justfile()}}" dev seed-relay
+            ;;
+        seed-relay)
+            # Publishes integration/testdata/social_graph.json's fixed
+            # "provider"/"members" identities' kind:3 follow list to the dev
+            # relay (see integration/cmd/seedrelay) - idempotent (kind:3 is
+            # replaceable), so this is safe to run on every `dev reset`, not
+            # just once. Keeps circle "following"-policy integration tests
+            # off any real third-party relay - see integration/README.md.
+            go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
             ;;
         flncli)
             shift
@@ -166,7 +176,8 @@ dev subcommand="" *args:
       restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
       logs [service]        follow logs for the docker dev environment or a specific service
       status                show status of the docker dev environment
-      reset                  restart relay + backend for a clean server-side session/subscription baseline (`just test integration` already does this)
+      reset                  restart relay + backend for a clean server-side session/subscription baseline, then reseed (`just test integration` already does this)
+      seed-relay             publish the fixed integration test identities' follow list to the dev relay (`dev reset` already does this)
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
       wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
 
