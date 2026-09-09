@@ -70,7 +70,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "seedrelay: connect to %s: %v\n", relayURL, err)
 		os.Exit(1)
 	}
-	defer relay.Close()
+	defer func() { _ = relay.Close() }()
 
 	if err := relay.Publish(ctx, ev); err != nil {
 		fmt.Fprintf(os.Stderr, "seedrelay: publish provider kind:3 follow list to %s: %v\n", relayURL, err)
@@ -91,7 +91,7 @@ func loadSocialGraph() (*socialGraph, error) {
 	}
 	path := filepath.Join(filepath.Dir(thisFile), "..", "..", "testdata", "social_graph.json")
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is built from this file's own runtime.Caller location, not external input
 	if err != nil {
 		return nil, err
 	}
