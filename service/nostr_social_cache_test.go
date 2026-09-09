@@ -17,9 +17,8 @@ import (
 )
 
 // Well-formed 64-char lowercase-hex placeholders — apps.CreateCircleIdentity
-// now validates ProviderPubkey's format (see the create_circle_wallet
-// security-audit round), so a short opaque placeholder like the old "aaa1"
-// no longer round-trips through CreateCircleHub.
+// now validates ProviderPubkey's format, so a short opaque placeholder like
+// the old "aaa1" no longer round-trips through CreateCircleHub.
 const (
 	providerPubkey  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	requesterPubkey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

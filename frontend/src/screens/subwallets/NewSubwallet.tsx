@@ -32,7 +32,7 @@ export function NewSubwallet() {
           />
         }
       />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {walletTypes.map(({ to, icon: Icon, title, description }) => (
           <Card
             key={to}

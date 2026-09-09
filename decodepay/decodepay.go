@@ -44,7 +44,7 @@ type Bolt11 struct {
 	Payee           string
 	CreatedAt       int64
 	Expiry          int64
-	MSat            int64
+	AmountMloki     int64
 	Network         string
 	Route           [][]Hop
 }
@@ -83,7 +83,7 @@ func Decode(bolt11 string) (*Bolt11, error) {
 		Payee:           inv.Payee,
 		CreatedAt:       int64(inv.CreatedAt),
 		Expiry:          int64(inv.Expiry),
-		MSat:            int64(inv.MLoki),
+		AmountMloki:     int64(inv.MLoki),
 		Network:         "flokicoin",
 		Route:           routes,
 	}, nil

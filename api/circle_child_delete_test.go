@@ -3,8 +3,8 @@ package api
 // Covers DeleteCircleWalletChild: unlike DeleteCircleHub (which only ever
 // operates on the whole hub at once), this removes a single circle_wallet
 // child in any state — reclaiming any remaining balance back to the hub
-// before deleting the child app, the same way DeleteJITHubAllocation handles
-// a claimed JIT wallet (see service.ReclaimAndDeleteSubWallet).
+// before deleting the child app, the same way DeleteCashHubAllocation handles
+// a claimed Cash wallet (see service.ReclaimAndDeleteSubWallet).
 
 import (
 	"testing"

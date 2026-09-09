@@ -102,25 +102,24 @@
     "budgetRenewal": "Renovación de presupuesto"
   },
   "isolatedKind": {
-    "jit_hub": "Billeteras JIT",
-    "jit_wallet": "Billetera JIT",
+    "cash_hub": "Billeteras de Efectivo",
+    "cash_wallet": "Billetera de Efectivo",
     "circle_hub": "Billeteras de círculo",
     "circle_wallet": "Billetera de círculo",
     "subwallet": "Subbilletera",
     "isolatedApp": "App aislada"
   },
   "circleHub": {
-    "revealConnection": "Revelar conexión",
     "permissionsManagedNote": "Los permisos de esta conexión se gestionan automáticamente y no se pueden cambiar aquí.",
     "budgetManagedNote": "Los permisos solicitados por esta conexión se gestionan automáticamente, pero su presupuesto y caducidad aún se pueden cambiar abajo.",
     "hubSettingsTitle": "Ajustes del hub",
-    "jitHubSettingsDescription": "Los cambios solo se aplican a las billeteras JIT emitidas a partir de ahora y no afectarán a las ya emitidas.",
+    "cashHubSettingsDescription": "Los cambios solo se aplican al Lokicash emitido a partir de ahora y no afectarán al ya emitido.",
     "circleHubSettingsDescription": "Los cambios solo se aplican a las billeteras de círculo creadas a partir de ahora y no afectarán a las ya creadas.",
     "maxWalletBudgetLabel": "Presupuesto máximo de la billetera",
-    "jitMaxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada billetera JIT emitida desde este hub (por defecto: 1000 loki)",
+    "cashMaxWalletBudgetHelper": "Presupuesto máximo que se puede asignar a cada Lokicash emitido desde este hub (por defecto: 1000 loki)",
     "circleMaxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo (por defecto: 1000 loki)",
     "maxWalletExpiryLabel": "Caducidad máxima de la billetera",
-    "jitMaxExpiryHelper": "Vida útil máxima de las billeteras JIT emitidas (por defecto: 1 día)",
+    "cashMaxExpiryHelper": "Vida útil máxima del Lokicash emitido (por defecto: 1 día)",
     "circleMaxExpiryHelper": "Vida útil máxima de las billeteras de círculo emitidas (por defecto: 30 días)",
     "minRenewalLabel": "Renovación mínima",
     "minRenewalHelper": "Período de renovación más corto que un miembro puede solicitar para el presupuesto de su billetera de círculo (por defecto: mensual)",
@@ -129,11 +128,8 @@
     "allowlistTitle": "Lista de permitidos",
     "addMember": "Añadir miembro",
     "circleWalletsTitle": "Billeteras de círculo",
-    "jitWalletsTitle": "Billeteras JIT",
-    "addJitWallet": "Añadir billetera JIT",
-    "errors": {
-      "loadJitConnection": "Error al cargar la conexión de la billetera JIT"
-    }
+    "cashWalletsTitle": "Tokens Lokicash",
+    "addCashWallet": "Acuñar Lokicash"
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",
@@ -163,11 +159,11 @@
     "confirmNewConnection": "Confirmar nueva conexión",
     "lokiGoPermission": "Loki Go obtendrá permiso para crear otras conexiones de aplicaciones que podrán gastar tu saldo.",
     "warningLokiGo": "Advertencia: Loki Go puede crear conexiones con un presupuesto mayor al que se le asignó. Siempre establece un presupuesto.",
-    "warningJitHub": "Advertencia: esta aplicación podrá crear nuevas carteras y pagar directamente a terceros desde su saldo, sin volver a pedirte confirmación cada vez. Puede gastar hasta el saldo que deposites en esta conexión.",
+    "warningCashHub": "Advertencia: esta aplicación podrá crear nuevas carteras y pagar directamente a terceros desde su saldo, sin volver a pedirte confirmación cada vez. Puede gastar hasta el saldo que deposites en esta conexión.",
     "enterUnlockPassword": "Por favor ingresa tu contraseña de desbloqueo para continuar.",
     "unlockPassword": "Contraseña de desbloqueo",
     "specifyWalletPermissions": "Por favor especifica los permisos de la cartera.",
-    "specifyJitHubLimits": "Por favor especifica los límites de presupuesto y caducidad de la cartera JIT.",
+    "specifyCashHubLimits": "Por favor especifica los límites de presupuesto y caducidad de la billetera de efectivo.",
     "appCreated": "Aplicación creada",
     "failedToCreate": "No se pudo crear la aplicación",
     "configure": "Configurar",
@@ -198,6 +194,10 @@
     "continueAnyway": "Continuar de todos modos",
     "appConnected": "Aplicación conectada",
     "revealQR": "Mostrar código QR",
-    "copySecret": "Copiar secreto de conexión"
+    "copySecret": "Copiar secreto de conexión",
+    "copyLokicashToken": "Copiar token Lokicash",
+    "copyBearerSecret": "Copiar secreto al portador",
+    "bearerSecretHelper": "Quien tenga este secreto puede canjear estos fondos — no se necesita ninguna otra prueba. Se muestra una sola vez; compártelo con el destinatario, fuera de banda.",
+    "lokicashTitle": "Lokicash"
   }
 }

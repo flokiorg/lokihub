@@ -101,7 +101,7 @@ export const CircleAllowlist = React.forwardRef<
     openAdd: () => setAddOpen(true),
   }));
 
-  // Mirrors JITHubAllocations: when the allowlist is empty there's no list
+  // Mirrors CashHubAllocations: when the allowlist is empty there's no list
   // to make room for, so the add form is embedded inline instead of behind
   // the modal, and the header's "Add member" button (which only opens that
   // modal) stays hidden while either form is visible.

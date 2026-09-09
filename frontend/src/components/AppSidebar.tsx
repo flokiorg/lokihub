@@ -1,4 +1,5 @@
 import {
+    BanknoteIcon,
     BoxIcon,
     CircleHelp,
     HomeIcon,
@@ -85,6 +86,11 @@ export function AppSidebar() {
         title: t("nav.subWallets"),
         url: "/sub-wallets",
         icon: SquareStack,
+      },
+      {
+        title: t("nav.cashHub"),
+        url: "/cash-hub",
+        icon: BanknoteIcon,
       },
       {
         title: t("nav.connections"),

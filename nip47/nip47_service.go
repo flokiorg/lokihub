@@ -34,8 +34,8 @@ type nip47Service struct {
 	eventPublisher         events.EventPublisher
 	logger                 zerolog.Logger
 	socialCache            controllers.NostrSocialCache
-	jitRateLimiter         controllers.RateLimiter
-	jitClaimLimiter        controllers.RateLimiter
+	cashRateLimiter         controllers.RateLimiter
+	cashClaimLimiter        controllers.RateLimiter
 	circleRateLimiter      controllers.RateLimiter
 	identityAuthorityMgr   *apps.IdentityAuthorityManager
 }
@@ -65,8 +65,8 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 		keys:                   keys,
 		logger:                 logger.Logger.With().Str("component", "nip47").Logger(),
 		socialCache:            socialCache,
-		jitRateLimiter:         controllers.NewRateLimiter(),
-		jitClaimLimiter:        controllers.NewRateLimiter(),
+		cashRateLimiter:         controllers.NewRateLimiter(),
+		cashClaimLimiter:        controllers.NewRateLimiter(),
 		circleRateLimiter:      controllers.NewRateLimiter(),
 		identityAuthorityMgr:   apps.NewIdentityAuthorityManager(db),
 	}

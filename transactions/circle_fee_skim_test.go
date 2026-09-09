@@ -158,7 +158,7 @@ func TestSendPaymentSync_CircleWallet_FeeSkim_QuotaExceeded(t *testing.T) {
 
 // TestSendPaymentSync_CircleWallet_FeeSkim_SelfPayment_NotSkimmed covers the
 // product decision that any same-instance payment is fee-free, not just the
-// hub's own internal_transfer reclaim: every JIT wallet, circle wallet, and
+// hub's own internal_transfer reclaim: every Cash wallet, circle wallet, and
 // generic NWC app hosted by this same lokihub instance settles between each
 // other via the self-payment shortcut (selfPayment=true, hit whenever the
 // invoice being paid was minted by an app on this instance — see
@@ -167,7 +167,7 @@ func TestSendPaymentSync_CircleWallet_FeeSkim_QuotaExceeded(t *testing.T) {
 // unconditionally. Only a payment that genuinely leaves this instance over
 // the real Lightning network is skimmable. Run with and without the
 // internal_transfer metadata flag to prove the flag itself is irrelevant to
-// this decision (it only matters for enforceJITFullDrain, JIT-only).
+// this decision (it only matters for enforceCashFullDrain, Cash-only).
 func TestSendPaymentSync_CircleWallet_FeeSkim_SelfPayment_NotSkimmed(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

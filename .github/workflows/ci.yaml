@@ -107,13 +107,15 @@ jobs:
           version: v2.12.2
 
   security-go:
-    name: govulncheck + gosec
+    name: govulncheck
     needs: build-frontend
     runs-on: ubuntu-latest
-    # Non-blocking initially: the first run surfaced a real, pre-existing
-    # baseline (see docs/audits/security-self-review-2026-07.md / docs/audits/security-audit-scope.md)
-    # that hasn't been triaged yet. Flip continue-on-error to false once that
-    # baseline is either fixed or explicitly accepted.
+    # Non-blocking: govulncheck's result depends on the live vulnerability
+    # database at run time, not just this branch's own code — a new stdlib/
+    # dependency CVE can start failing an otherwise-unrelated PR the day it's
+    # disclosed (this happened in practice: see git history around this
+    # comment). Flip to false only if that noise is judged acceptable to
+    # gate merges on.
     continue-on-error: true
     permissions:
       contents: read
@@ -135,8 +137,16 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-      - name: gosec
-        run: go run github.com/securego/gosec/v2/cmd/gosec@latest ./...
+  # A standalone `gosec ./...` step used to run here too, but bare gosec
+  # doesn't understand this codebase's `//nolint:gosec` suppression comments
+  # (that's golangci-lint's own convention; gosec's native one is `#nosec`),
+  # so it re-flagged ~118 already-reviewed, already-justified findings on
+  # every run with no way to distinguish them from something new. The
+  # `golangci-lint` job below already runs gosec as one of its linters and
+  # correctly respects those same `//nolint:gosec` comments — see its own
+  # config for the enabled linter set. Removed here rather than reconciled,
+  # since maintaining two gosec configs that disagree on the same source is
+  # worse than having one that's already correct.
 
   frontend-lint:
     name: Frontend lint

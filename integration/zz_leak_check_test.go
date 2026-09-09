@@ -22,8 +22,8 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 		t.Skip("skipping: admin_api not configured - see integration/README.md")
 	}
 
-	// jit_wallet children are excluded from this listing entirely (see
-	// listJITWalletClaims's own doc comment on api.ListApps) - this only
+	// cash_wallet children are excluded from this listing entirely (see
+	// listCashWalletClaims's own doc comment on api.ListApps) - this only
 	// catches leaked hubs/circle_wallet/isolated apps, but a leaked hub is
 	// the visible symptom: every child under it was necessarily leaked too.
 	apps, err := admin.listAppsByNamePrefix(ephemeralFixtureNamePrefix)
@@ -36,5 +36,33 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 
 	for _, app := range apps {
 		t.Errorf("leaked ephemeral fixture: app_id=%d wallet_pubkey=%s - a t.Cleanup somewhere didn't tear this down (delete it via the admin API, then find and fix the missing/failing cleanup)", app.ID, app.WalletPubkey)
+	}
+}
+
+// TestZZZ_NoLeakedEphemeralCircleIdentities is zz_leak_check_test.go's
+// second check, for a table TestZZZ_NoLeakedEphemeralFixtures can't see at
+// all: CircleIdentity rows deliberately survive their circle_hub app's own
+// deletion (see TestCreateCircleHub_IdentitySurvivesHubDeletion), so
+// createEphemeralCircleHub's own t.Cleanup must explicitly delete the
+// identity it created too, not just the hub app. A missing/failing identity
+// cleanup here doesn't just bloat the DB - a leaked "following"-policy
+// identity keeps getting re-fetched from the general relays by
+// nostr_social_cache.go's background refresher every
+// socialCacheRefreshInterval, indefinitely, and was found live responsible
+// for hundreds of accumulated identities contributing to "too many
+// concurrent REQs" relay notices/timeouts elsewhere in this suite.
+func TestZZZ_NoLeakedEphemeralCircleIdentities(t *testing.T) {
+	cfg := requireConfig(t)
+	admin, ok := newAdminClient(cfg)
+	if !ok {
+		t.Skip("skipping: admin_api not configured - see integration/README.md")
+	}
+
+	identities, err := admin.listCircleIdentitiesByNamePrefix(ephemeralFixtureNamePrefix)
+	if err != nil {
+		t.Fatalf("failed to list circle identities by ephemeral fixture name prefix: %v", err)
+	}
+	for _, identity := range identities {
+		t.Errorf("leaked ephemeral circle identity: id=%d name=%q - a t.Cleanup somewhere didn't tear this down (delete it via the admin API, then find and fix the missing/failing cleanup)", identity.ID, identity.Name)
 	}
 }

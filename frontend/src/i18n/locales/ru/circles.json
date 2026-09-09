@@ -32,8 +32,9 @@
     "allowlist": "Список разрешённых"
   },
   "identityType": {
-    "pubkey": "Публичный ключ Nostr",
-    "connectionKey": "Ключ подключения"
+    "pubkey": "Личность Nostr",
+    "connectionKey": "Веб-личность",
+    "bearer": "Предъявитель"
   },
   "avatarStack": {
     "more": "+{{count}}"
@@ -74,18 +75,19 @@
     "summary_other": "{{count}} человека будут авторизованы прямо сейчас, и список будет автоматически синхронизироваться по мере того, как эта личность будет подписываться или отписываться."
   },
   "claimBadge": {
-    "claimed": "Получено",
-    "unclaimed": "Не получено"
+    "claimed": "Обменяно",
+    "unclaimed": "Не обменяно",
+    "movedToNewWallet": "Перемещено в новый кошелёк"
   },
   "claimDeadline": {
-    "expired": "Срок получения истёк",
-    "withinMinutes_one": "Получить в течение {{count}} мин",
-    "withinMinutes_few": "Получить в течение {{count}} мин",
-    "withinMinutes_many": "Получить в течение {{count}} мин",
-    "withinMinutes_other": "Получить в течение {{count}} мин",
-    "withinHours": "Получить в течение {{count}} ч",
-    "byDate": "Получить до {{date}}",
-    "none": "Без срока получения"
+    "expired": "Срок обмена истёк",
+    "withinMinutes_one": "Обменять в течение {{count}} мин",
+    "withinMinutes_few": "Обменять в течение {{count}} мин",
+    "withinMinutes_many": "Обменять в течение {{count}} мин",
+    "withinMinutes_other": "Обменять в течение {{count}} мин",
+    "withinHours": "Обменять в течение {{count}} ч",
+    "byDate": "Обменять до {{date}}",
+    "none": "Без срока обмена"
   },
   "circleCard": {
     "member_one": "{{count}} участник",
@@ -95,8 +97,8 @@
   },
   "childIdentityCard": {
     "circleWallet": "Кошелёк круга",
-    "jitWallet": "JIT-кошелёк",
-    "claimedCount": "Получено {{claimed}}/{{total}}",
+    "cashWallet": "Кэш-кошелёк",
+    "claimedCount": "Обменяно {{claimed}}/{{total}}",
     "errors": {
       "loadRecipients": "Не удалось загрузить получателей JIT-кошелька"
     }
@@ -176,9 +178,7 @@
       "removeSelected": "Не удалось удалить выбранные кошельки круга"
     }
   },
-  "jitHubAllocations": {
-    "participantsPair": "{{first}} и {{second}}",
-    "participantsOthers": "{{first}} и ещё {{count}}",
+  "cashHubAllocations": {
     "durationDays_one": "{{count}} день",
     "durationDays_few": "{{count}} дня",
     "durationDays_many": "{{count}} дней",
@@ -194,61 +194,74 @@
     "connectionKeyLabel": "Ключ подключения (hex)",
     "iaPubkeyLabel": "Публичный ключ Центра идентификации (hex)",
     "iaPubkeyHelper": "Должен быть доверенным Центром идентификации (Настройки → Центры идентификации)",
-    "duplicateIdentity": "Эта личность уже используется другим получателем в этом кошельке. Каждому получателю нужна отдельная личность.",
-    "walletBudgetLabel": "Бюджет кошелька",
+    "selectIAPlaceholder": "Выберите Центр идентификации",
+    "savedIAsLabel": "Указаны в настройках",
+    "enterIAManually": "Ввести публичный ключ вручную",
+    "chooseSavedIAInstead": "Выбрать из настроек",
+    "duplicateIdentity": "Эта личность уже используется другим получателем.",
+    "walletBudgetLabel": "Сумма",
     "requestedSummary": "Запрошено {{total}} loki",
     "requestedSummaryWithMax": "Запрошено {{total}} loki из максимального бюджета кошелька этого хаба в {{max}} loki",
-    "claimDeadlineLabel": "Срок получения",
-    "deadlineExceeds": "Превышает максимальный срок получения этого хаба в {{max}}",
-    "deadlineHelp": "Каждый получатель должен получить свою часть в течение этого времени с момента создания",
-    "deadlineHelpWithMax": "Каждый получатель должен получить свою часть в течение этого времени с момента создания (по умолчанию максимум этого хаба: {{max}})",
+    "claimDeadlineLabel": "Срок обмена",
+    "deadlineExceeds": "Превышает максимальный срок обмена этого хаба: {{max}}",
+    "deadlineHelp": "Каждый получатель должен обменять в течение этого времени с момента создания",
+    "deadlineHelpWithMax": "Каждый получатель должен обменять в течение этого времени с момента создания (по умолчанию — максимум этого хаба: {{max}})",
     "addRecipient": "Добавить ещё получателя",
-    "setClaimDeadline": "Установить срок получения",
+    "setClaimDeadline": "Установить срок обмена",
+    "mintSignatureLabel": "Подписать происхождение выпуска",
+    "mintSignatureHelp": "Прикрепить подпись узла, подтверждающую происхождение и сумму этого Lokicash — необязательно, примерно удваивает длину токена",
     "statusAll": "Все",
     "statusExpired": "Просроченные",
     "allocatedSummary": "Выделено {{allocated}} loki на этой странице · {{total}} {{status}}",
     "recipientColumn": "Получатель",
-    "revealConnection": "Показать подключение NWC",
-    "groupSummary_one": "{{count}} получатель · получено {{claimed}}/{{count}}",
+    "revealConnection": "Показать подключение",
     "groupSummary_few": "{{count}} получателя · получено {{claimed}}/{{count}}",
     "groupSummary_many": "{{count}} получателей · получено {{claimed}}/{{count}}",
-    "groupSummary_other": "{{count}} получателя · получено {{claimed}}/{{count}}",
     "selectRecipient": "Выбрать получателя",
     "selectAllInWallet": "Выбрать всех получателей этого кошелька",
     "collapseRecipients": "Свернуть получателей",
     "expandRecipients": "Развернуть получателей",
-    "removeWallet": "Удалить кошелёк",
-    "noneFiltered": "Нет JIT-кошельков со статусом «{{status}}».",
-    "noneOnPage": "На этой странице нет JIT-кошельков.",
-    "addHeading": "Добавить JIT-кошелёк",
-    "createDialogTitle": "Создать JIT-кошелёк",
+    "removeWallet": "Удалить Lokicash",
+    "noneFiltered": "Нет {{status}} Lokicash.",
+    "noneOnPage": "На этой странице нет Lokicash.",
+    "addHeading": "Отчеканить Lokicash",
+    "createDialogTitle": "Отчеканить Lokicash",
     "removeRecipientTitle": "Удалить этого получателя?",
-    "removeRecipientDescription": "Эта личность больше не сможет получить свою часть этого кошелька. Выделенный ей баланс будет переведён обратно в этот хаб. Это необратимо.",
-    "removeWalletTitle": "Удалить этот кошелёк?",
-    "removeWalletDescription": "Оставшийся баланс этого кошелька будет переведён обратно в этот хаб, а его подключение NWC немедленно перестанет работать. Если этот кошелёк обслуживает других получателей, они тоже потеряют доступ — включая тех, кто ещё не получил свою часть. Это необратимо.",
+    "removeRecipientDescription": "Эта личность больше не сможет обменять свою часть. Выделенный ей баланс будет переведён обратно в этот хаб. Это необратимо.",
+    "removeWalletTitle": "Удалить этот Lokicash?",
+    "removeWalletDescription": "Оставшийся баланс этого Lokicash будет переведён обратно в этот хаб, а его подключение NWC немедленно перестанет работать. Если он обслуживает других получателей, они тоже потеряют доступ — включая тех, кто ещё не обменял свою часть. Это необратимо.",
     "removeSelectedTitle_one": "Удалить {{count}} получателя?",
     "removeSelectedTitle_few": "Удалить {{count}} получателей?",
     "removeSelectedTitle_many": "Удалить {{count}} получателей?",
     "removeSelectedTitle_other": "Удалить {{count}} получателя?",
-    "removeSelectedDescription": "Эти личности больше не смогут получить свою часть своих кошельков. Их выделенные балансы будут переведены обратно в этот хаб. Это необратимо.",
-    "createdToast_one": "JIT-кошелёк создан и профинансирован",
+    "removeSelectedDescription": "Эти личности больше не смогут обменять свою часть. Их выделенные балансы будут переведены обратно в этот хаб. Это необратимо.",
+    "createdToast_one": "Lokicash отчеканен и профинансирован",
     "createdToast_few": "JIT-кошелёк создан и профинансирован для {{count}} получателей",
     "createdToast_many": "JIT-кошелёк создан и профинансирован для {{count}} получателей",
-    "createdToast_other": "JIT-кошелёк создан и профинансирован для {{count}} получателей",
-    "recipientRemovedToast": "Получатель JIT-кошелька удалён",
-    "walletRemovedToast": "JIT-кошелёк удалён",
-    "recipientsRemovedToast_one": "Получатель JIT-кошелька удалён",
+    "createdToast_other": "Lokicash отчеканен и профинансирован для {{count}} получателей",
+    "recipientRemovedToast": "Получатель удалён",
+    "walletRemovedToast": "Lokicash удалён",
+    "recipientsRemovedToast_one": "Получатель удалён",
     "recipientsRemovedToast_few": "Удалено {{count}} получателя JIT-кошелька",
     "recipientsRemovedToast_many": "Удалено {{count}} получателей JIT-кошелька",
-    "recipientsRemovedToast_other": "Удалено {{count}} получателя JIT-кошелька",
+    "recipientsRemovedToast_other": "Удалено получателей: {{count}}",
     "errors": {
-      "loadConnection": "Не удалось загрузить подключение JIT-кошелька",
-      "load": "Не удалось загрузить JIT-кошельки",
-      "create": "Не удалось создать JIT-кошелёк",
-      "removeRecipient": "Не удалось удалить получателя JIT-кошелька",
-      "removeWallet": "Не удалось удалить JIT-кошелёк",
+      "loadConnection": "Не удалось загрузить подключение Lokicash",
+      "load": "Не удалось загрузить Lokicash",
+      "create": "Не удалось отчеканить Lokicash",
+      "removeRecipient": "Не удалось удалить получателя",
+      "removeWallet": "Не удалось удалить Lokicash",
       "removeSelected": "Не удалось удалить выбранных получателей"
-    }
+    },
+    "bearerHelper": "Предъявитель: обменять может любой, у кого есть секрет — проверка личности не проводится, и восстановить доступ невозможно в случае потери или перехвата.",
+    "bearerRequiresSoleRecipient": "Предъявитель должен быть единственным получателем",
+    "pubkeyModeHelper": "Обменять может только эта личность Nostr.",
+    "connectionKeyModeHelper": "Обменять может только подтверждённая личность.",
+    "copyLokicash": "Скопировать Lokicash",
+    "tokenStatusUnredeemed": "Не обменяно",
+    "tokenStatusFullyRedeemed": "Полностью обменяно",
+    "tokenStatusPartiallyRedeemed": "Обменяно {{claimed}}/{{count}}",
+    "lokicashBadge": "Lokicash"
   },
   "newCircleHub": {
     "title": "Новый Хаб кошельков круга",
@@ -285,7 +298,7 @@
       "create": "Не удалось создать Хаб кошельков круга"
     }
   },
-  "newJitHub": {
+  "newCashHub": {
     "title": "Новый Хаб JIT-кошельков",
     "description": "Создайте предварительно профинансированный хаб, который выдаёт получателям кошельки только для расходования (JIT)",
     "maxWalletBudgetHelper": "Максимальный бюджет, который можно выделить каждому JIT-кошельку, выданному этим хабом",
@@ -327,7 +340,7 @@
       "delete": "Не удалось удалить круг"
     }
   },
-  "disconnectJitHub": {
+  "disconnectCashHub": {
     "title": "Вы уверены, что хотите удалить этот Хаб JIT-кошельков?",
     "checking": "Проверка выданных JIT-кошельков…",
     "hasOutstanding_one": "У этого хаба всё ещё есть {{count}} доля получателя среди выданных JIT-кошельков. Удалите её из списка JIT-кошельков ниже (или дождитесь истечения срока), прежде чем удалять хаб.",

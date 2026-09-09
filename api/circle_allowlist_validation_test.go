@@ -1,12 +1,9 @@
 package api
 
-// F7 — ReplaceCircleAllowlist stores pubkeys without any format validation.
-// An invalid (non-hex, wrong-length) pubkey silently enters the DB allowlist,
-// potentially causing auth failures or noise downstream.
-//
-// Correct behaviour: pubkeys that are not 64-char lowercase hex must be
-// rejected with an error.  This test FAILS today because the function stores
-// any non-empty string.
+// F7 — fixed; regression test below. ReplaceCircleAllowlist now rejects any
+// pubkey that isn't 64-char lowercase hex, instead of silently storing an
+// invalid (non-hex, wrong-length) value that could cause auth failures or
+// noise downstream.
 
 import (
 	"testing"

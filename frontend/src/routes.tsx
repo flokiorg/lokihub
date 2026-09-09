@@ -51,8 +51,9 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { CashHubList } from "src/screens/subwallets/CashHubList";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
-import { NewJITHub } from "src/screens/subwallets/NewJITHub";
+import { NewCashHub } from "src/screens/subwallets/NewCashHub";
 import { NewSimpleSubwallet } from "src/screens/subwallets/NewSimpleSubwallet";
 import { NewSubwallet } from "src/screens/subwallets/NewSubwallet";
 import { SubwalletCreated } from "src/screens/subwallets/SubwalletCreated";
@@ -304,12 +305,27 @@ const routes: RouteObject[] = [
             element: <NewSimpleSubwallet />,
           },
           {
-            path: "new/jit",
-            element: <NewJITHub />,
-          },
-          {
             path: "new/circle",
             element: <NewCircleHub />,
+          },
+          {
+            path: "created",
+            element: <SubwalletCreated />,
+          },
+        ],
+      },
+      {
+        path: "cash-hub",
+        element: <DefaultRedirect />,
+        handle: { crumb: () => "Cash Hub" },
+        children: [
+          {
+            index: true,
+            element: <CashHubList />,
+          },
+          {
+            path: "new",
+            element: <NewCashHub />,
           },
           {
             path: "created",

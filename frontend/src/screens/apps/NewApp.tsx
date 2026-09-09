@@ -36,8 +36,8 @@ import AppHeader from "src/components/AppHeader";
 import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
 import { InstallApp } from "src/components/connections/InstallApp";
 import {
-  DEFAULT_JIT_MAX_EXP_SECS,
-  DEFAULT_JIT_PER_WALLET_MAX_LOKI,
+  DEFAULT_CASH_MAX_EXP_SECS,
+  DEFAULT_CASH_PER_WALLET_MAX_LOKI,
 } from "src/components/Scopes";
 import { defineStepper } from "src/components/stepper";
 import { Checkbox } from "src/components/ui/checkbox";
@@ -237,13 +237,13 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         : DEFAULT_APP_BUDGET_RENEWAL,
     expiresAt: parseExpiresParam(expiresAtParam),
     // isolated is URL-drivable (deep links from third-party apps rely on
-    // this), but jitHub deliberately never reads from queryParams — it must
+    // this), but cashHub deliberately never reads from queryParams — it must
     // always be an explicit in-page choice, never something a connect link
     // can pre-select for the user.
     isolated: isolatedParam === "" ? true : isolatedParam === "true",
-    jitHub: false,
-    jitPerWalletMaxLoki: DEFAULT_JIT_PER_WALLET_MAX_LOKI,
-    jitMaxExpSecs: DEFAULT_JIT_MAX_EXP_SECS,
+    cashHub: false,
+    cashPerWalletMaxLoki: DEFAULT_CASH_PER_WALLET_MAX_LOKI,
+    cashMaxExpSecs: DEFAULT_CASH_MAX_EXP_SECS,
   });
 
   const { Stepper } = React.useMemo(
@@ -272,19 +272,19 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
       return;
     }
     if (
-      permissions.jitHub &&
-      (!permissions.jitPerWalletMaxLoki || !permissions.jitMaxExpSecs)
+      permissions.cashHub &&
+      (!permissions.cashPerWalletMaxLoki || !permissions.cashMaxExpSecs)
     ) {
-      toast(t("newApp.specifyJitHubLimits", "Please specify JIT wallet budget and expiry limits."));
+      toast(t("newApp.specifyCashHubLimits", "Please specify Cash wallet budget and expiry limits."));
       return;
     }
 
     setLoading(true);
     try {
-      // jitHub always implies isolated server-side (kind "jit_hub" carries
+      // cashHub always implies isolated server-side (kind "cash_hub" carries
       // its own isolated balance unconditionally), so it takes priority here.
-      const kind = permissions.jitHub
-        ? "jit_hub"
+      const kind = permissions.cashHub
+        ? "cash_hub"
         : permissions.isolated
           ? "isolated"
           : "standard";
@@ -297,14 +297,14 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
         scopes: [
           ...permissions.scopes,
           ...(superuser ? ["superuser" satisfies Scope] : []),
-          ...(permissions.jitHub ? ["jit_hub" satisfies Scope] : []),
+          ...(permissions.cashHub ? ["cash_hub" satisfies Scope] : []),
         ] as Scope[],
         expiresAt: permissions.expiresAt?.toISOString(),
         returnTo: returnTo,
         kind,
-        ...(permissions.jitHub && {
-          jitPerWalletMaxMloki: (permissions.jitPerWalletMaxLoki || 0) * 1000,
-          jitMaxExpSecs: permissions.jitMaxExpSecs || 0,
+        ...(permissions.cashHub && {
+          cashPerWalletMaxMloki: (permissions.cashPerWalletMaxLoki || 0) * 1000,
+          cashMaxExpSecs: permissions.cashMaxExpSecs || 0,
         }),
         metadata: {
           app_store_app_id: appStoreApp?.id || (appId ? appId : undefined),
@@ -432,7 +432,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                               unlockPassword={unlockPassword}
                               setUnlockPassword={setUnlockPassword}
                               superuser={superuser}
-                              jitHub={!!permissions.jitHub}
+                              cashHub={!!permissions.cashHub}
                             />
                             {!appStoreApp && (
                               <div className="w-full grid gap-1.5">
@@ -526,7 +526,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                             onClick={
                               step.id === "configure"
                                 ? () =>
-                                    superuser || permissions.jitHub
+                                    superuser || permissions.cashHub
                                       ? setShowConfirmPasswordDialog(true)
                                       : handleCreateApp(methods.next)
                                 : methods.next
@@ -625,14 +625,14 @@ type ConfirmPasswordDialogProps = {
   unlockPassword: string;
   setUnlockPassword: (password: string) => void;
   superuser: boolean;
-  jitHub: boolean;
+  cashHub: boolean;
 };
 
 // Extra unlock-password confirmation gating any connection whose capability
 // goes beyond "spend within its own configured budget" — currently
 // superuser (can create further connections against your balance) and
-// jitHub (can move funds to third parties outside pay_invoice/budget
-// accounting entirely, see JIT Hub security discussion). Both render their
+// cashHub (can move funds to third parties outside pay_invoice/budget
+// accounting entirely, see Cash Hub security discussion). Both render their
 // own warning paragraph; either (or both) can be true at once.
 function ConfirmPasswordDialog({
   open,
@@ -641,7 +641,7 @@ function ConfirmPasswordDialog({
   unlockPassword,
   setUnlockPassword,
   superuser,
-  jitHub,
+  cashHub,
 }: ConfirmPasswordDialogProps) {
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
@@ -670,9 +670,9 @@ function ConfirmPasswordDialog({
                   </>
                 )}
 
-                {jitHub && (
+                {cashHub && (
                   <p className="mt-4">
-                    {t("newApp.warningJitHub", "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.")}
+                    {t("newApp.warningCashHub", "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.")}
                   </p>
                 )}
 

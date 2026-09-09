@@ -1,4 +1,4 @@
-import { CirclePlusIcon, LucideIcon, NetworkIcon, UsersIcon } from "lucide-react";
+import { CirclePlusIcon, LucideIcon, UsersIcon } from "lucide-react";
 import { TFunction } from "i18next";
 
 export type WalletTypeOption = {
@@ -8,6 +8,10 @@ export type WalletTypeOption = {
   description: string;
 };
 
+// Cash Hub is deliberately NOT one of these — it moved out to its own
+// top-level page/route (/cash-hub, /cash-hub/new) rather than being one of
+// the Sub-wallets type choices, so this chooser is left with the two kinds
+// that stayed here.
 export function getWalletTypes(t: TFunction<"wallet">): WalletTypeOption[] {
   return [
     {
@@ -15,12 +19,6 @@ export function getWalletTypes(t: TFunction<"wallet">): WalletTypeOption[] {
       icon: CirclePlusIcon,
       title: t("subwallets.walletTypes.simple.title"),
       description: t("subwallets.walletTypes.simple.description"),
-    },
-    {
-      to: "/sub-wallets/new/jit",
-      icon: NetworkIcon,
-      title: t("subwallets.walletTypes.jit.title"),
-      description: t("subwallets.walletTypes.jit.description"),
     },
     {
       to: "/sub-wallets/new/circle",

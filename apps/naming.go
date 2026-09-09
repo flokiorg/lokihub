@@ -6,7 +6,7 @@ import (
 )
 
 // maxChildAppNameLen caps the display name of an auto-generated child app (a
-// JIT wallet or Circle wallet spawned under a hub) so a long hub name can't
+// Cash wallet or Circle wallet spawned under a hub) so a long hub name can't
 // produce an unwieldy label in app lists.
 const maxChildAppNameLen = 48
 

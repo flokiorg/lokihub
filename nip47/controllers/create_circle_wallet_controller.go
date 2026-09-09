@@ -18,6 +18,8 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 )
 
@@ -41,15 +43,15 @@ var errCircleHubBudgetExceeded = errors.New("circle commitment would exceed the 
 // per-(hub,identity) guard — see the CircleWalletMembership insert below.
 var errCircleMemberAlreadyHasWallet = errors.New("identity already has an active circle wallet under this hub")
 
-type createCircleWalletParams struct {
-	RequesterPubkey string `json:"pubkey"`
-	MaxAmount       uint64 `json:"max_amount"`
-	Expiry          int    `json:"expiry"`
-	BudgetRenewal   string `json:"budget_renewal,omitempty"`
-	// IdentityEvent is the JSON-encoded kind-35521 proof that the caller
-	// controls RequesterPubkey — see verifyCircleWalletIdentityEvent.
-	IdentityEvent string `json:"identity_event"`
-}
+// create_circle_wallet's request is github.com/ohstr/nmilat/nipcw's own
+// exported CreateCircleWalletRequest (Pubkey/MaxAmount/Expiry/BudgetRenewal/
+// IdentityEvent) — same wire shape, field-for-field identical JSON tags to
+// this controller's former local createCircleWalletParams, adopted directly
+// instead of maintaining a parallel copy (nmilat migration). The
+// response stays this controller's own createCircleWalletResponse: nipcw's
+// own wire response type is unexported (it carries a still-NIP-44-encrypted
+// encrypted_pairing_uri nipcw only exposes post-decryption to its own client
+// callers), so there's no exported type to adopt for it.
 
 type createCircleWalletResponse struct {
 	EncryptedPairingURI string `json:"encrypted_pairing_uri"`
@@ -60,7 +62,7 @@ type createCircleWalletResponse struct {
 }
 
 func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
-	params := &createCircleWalletParams{}
+	params := &nipcw.CreateCircleWalletRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, nostr.Tags{})
@@ -69,18 +71,18 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
-		Str("requester", params.RequesterPubkey).
+		Str("requester", params.Pubkey).
 		Msg("Handling create_circle_wallet request")
 
 	// 0. Requester pubkey must be a well-formed 64-char lowercase-hex Nostr
 	// pubkey before it's used anywhere below (allowlist/following lookups,
 	// rate limiting, and slicing into the wallet's display name) — an
 	// unvalidated string here previously risked an out-of-range panic.
-	if len(params.RequesterPubkey) != 64 || params.RequesterPubkey != strings.ToLower(params.RequesterPubkey) {
+	if len(params.Pubkey) != 64 || params.Pubkey != strings.ToLower(params.Pubkey) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "pubkey must be a 64-char lowercase-hex string")
 		return
 	}
-	if _, err := hex.DecodeString(params.RequesterPubkey); err != nil {
+	if _, err := hex.DecodeString(params.Pubkey); err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "pubkey must be a 64-char lowercase-hex string")
 		return
 	}
@@ -101,7 +103,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// 1b. Identity proof: the circle_hub connection is shared/public, so
 	// params.pubkey alone proves nothing — verify the caller actually
-	// controls it via a fresh, per-hub-bound, signed kind-35521 event before
+	// controls it via a fresh, per-hub-bound, signed kind-23199 event before
 	// it's used for anything (allowlist/following lookups, rate limiting).
 	// This also closes the allowlist-membership oracle as a side effect: an
 	// attacker without the target's private key can never reach step 2 below.
@@ -114,7 +116,20 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
 		return
 	}
-	if err := verifyCircleWalletIdentityEvent(&identityEvent, params.RequesterPubkey, app.AppPubkey); err != nil {
+	// The d-tag binds this proof to "the Hub's own pubkey" (NIP-CW's own
+	// wording) — the value in the circle_hub connection's own pairing URI,
+	// i.e. app.WalletPubkey, not app.AppPubkey. AppPubkey is derived from
+	// the connection's secret and never appears anywhere a member holding
+	// only the shared connection string could learn it — checking against
+	// it here made this call unusable by any client that wasn't lokihub's
+	// own test suite (which cheats by deriving it locally). See the
+	// TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt regression test.
+	if app.WalletPubkey == nil {
+		logger.Logger.Error().Uint("app_id", app.ID).Msg("Circle Hub has no wallet pubkey set")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "circle hub is not fully initialized")
+		return
+	}
+	if err := verifyCircleWalletIdentityEvent(&identityEvent, params.Pubkey, *app.WalletPubkey); err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 		return
 	}
@@ -127,7 +142,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	}
 
 	// 2. Authorization: requester must be in the circle's authorized set.
-	authorized, err := controller.socialCache.IsAuthorized(ctx, params.RequesterPubkey, &providerConfig.CircleIdentity, controller.db)
+	authorized, err := controller.socialCache.IsAuthorized(ctx, params.Pubkey, &providerConfig.CircleIdentity, controller.db)
 	if err != nil {
 		if errors.Is(err, constants.ErrSocialCacheWarmingUp) {
 			// Expected right after hub startup, not a bug — the requester just
@@ -135,7 +150,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "hub is starting up, please retry shortly")
 			return
 		}
-		logger.Logger.Error().Err(err).Str("requester", params.RequesterPubkey).Msg("Social cache authorization check failed")
+		logger.Logger.Error().Err(err).Str("requester", params.Pubkey).Msg("Social cache authorization check failed")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "authorization check failed")
 		return
 	}
@@ -150,7 +165,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	// the transaction below (step 7).
 	var existingMembershipCount int64
 	if err := controller.db.Model(&db.CircleWalletMembership{}).
-		Where("circle_hub_app_id = ? AND requester_pubkey = ?", app.ID, params.RequesterPubkey).
+		Where("circle_hub_app_id = ? AND requester_pubkey = ?", app.ID, params.Pubkey).
 		Count(&existingMembershipCount).Error; err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check existing circle wallet membership")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "membership check failed")
@@ -187,6 +202,21 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
+	// 4a2. Reject a max_amount that would floor to 0 whole loki on the /1000
+	// conversion below (any value in [0, 999] mloki). NIP-CW requires
+	// max_amount on every request — there is no "0 means unlimited" wire
+	// convention for this method, unlike other optional ceilings elsewhere
+	// in this codebase — so a value this small can only be an accidental
+	// sub-loki request, never a deliberate "no cap." Silently accepting it
+	// used to store MaxAmountLoki == 0, which validateCanPay treats as no
+	// cap at all: a full, silent bypass of the member's own quoted spend cap
+	// and the Hub's aggregate-exposure accounting.
+	if params.MaxAmount < 1000 {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			fmt.Sprintf("max_amount %d is below the minimum enforceable cap of 1000 mloki (1 loki)", params.MaxAmount))
+		return
+	}
+
 	// 4b. Budget-amount cap: the caller's requested max_amount must not
 	// exceed the hub's per-wallet ceiling (independent of the aggregate
 	// commitment-vs-balance check performed inside the transaction below).
@@ -216,7 +246,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	}
 
 	// 5. Rate limit per requester pubkey.
-	if !controller.circleRateLimiter.Allow(params.RequesterPubkey, controller.cfg.GetEnv().CircleWalletRateLimitPerHour) {
+	if !controller.circleRateLimiter.Allow(params.Pubkey, controller.cfg.GetEnv().CircleWalletRateLimitPerHour) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for create_circle_wallet")
 		return
 	}
@@ -279,7 +309,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		}
 
 		createdApp, secret, err := controller.appsService.CreateAppTx(tx,
-			apps.GenerateChildName(app.Name, params.RequesterPubkey),
+			apps.GenerateChildName(app.Name, params.Pubkey),
 			"",
 			params.MaxAmount/1000,
 			resolvedBudgetRenewal,
@@ -288,7 +318,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			db.AppKindCircleWallet,
 			&app.ID,
 			db.ParentKindCircle,
-			map[string]interface{}{"requester_pubkey": params.RequesterPubkey},
+			map[string]interface{}{"requester_pubkey": params.Pubkey},
 		)
 		if err != nil {
 			return err
@@ -300,7 +330,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// whole transaction, including the App/permission rows just created.
 		if err := tx.Create(&db.CircleWalletMembership{
 			CircleHubAppID:  app.ID,
-			RequesterPubkey: params.RequesterPubkey,
+			RequesterPubkey: params.Pubkey,
 			WalletAppID:     createdApp.ID,
 		}).Error; err != nil {
 			return errCircleMemberAlreadyHasWallet
@@ -341,16 +371,23 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// Encrypt pairing URI for the requester using NIP-44.
 	walletPubkey := *newApp.WalletPubkey
-	pairingURI := buildNWCPairingURI(walletPubkey, controller.cfg.GetRelayUrls(), pairingSecretKey)
+	pairingURI := nmilatnip47.BuildPairingURI(walletPubkey, controller.cfg.GetRelayUrls(), pairingSecretKey, nil)
 
-	circleWalletPrivKey, err := controller.keys.GetAppWalletKey(newApp.ID)
+	// Encrypt with the Hub's own key (app, not newApp): the requester's only
+	// prior trust anchor is the Hub connection they already dialed — the new
+	// child wallet's own pubkey is just a cleartext field inside this same
+	// unauthenticated response (createCircleWalletResponse.WalletPubkey), so
+	// using it as the encryption key would let the response vouch for
+	// itself. Signing with the already-established Hub key is what lets the
+	// requester trust this really came from the Hub they connected to.
+	hubWalletPrivKey, err := controller.keys.GetAppWalletKey(app.ID)
 	if err != nil {
-		logger.Logger.Error().Err(err).Uint("circle_wallet_id", newApp.ID).Msg("Failed to get circle wallet private key")
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to get circle hub private key")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to derive wallet key")
 		return
 	}
 
-	encryptedURI, err := encryptPairingURI(params.RequesterPubkey, circleWalletPrivKey, pairingURI)
+	encryptedURI, err := encryptPairingURI(params.Pubkey, hubWalletPrivKey, pairingURI)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to encrypt pairing URI for circle wallet")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encrypt pairing URI")

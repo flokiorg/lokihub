@@ -469,7 +469,7 @@ const socialCacheRefreshInterval = 5 * time.Minute
 const refresherBatchSize = 200
 
 // maxRefresherBatchesPerTick bounds total work per tick, mirroring
-// maxBatchesPerTick in jit_cleanup_service.go: a large number of following-policy
+// maxBatchesPerTick in cash_cleanup_service.go: a large number of following-policy
 // providers spreads across multiple ticks instead of monopolizing this goroutine.
 const maxRefresherBatchesPerTick = 10
 

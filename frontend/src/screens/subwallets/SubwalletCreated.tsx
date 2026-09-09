@@ -41,6 +41,16 @@ export function SubwalletCreated() {
     connectionSecret += `&lud16=${app.metadata.lud16}`;
   }
 
+  // Default to whichever Hub token is present (docs/nips/NIP-CASH.md /
+  // NIP-CW.md "Recommended presentation") — ConnectAppCard's own toggle lets
+  // the user switch to the classic NWC URI from there.
+  const primaryFormat: "cashhub" | "circlehub" | "nwc" =
+    createAppResponse.cashHubToken
+      ? "cashhub"
+      : createAppResponse.circleHubToken
+        ? "circlehub"
+        : "nwc";
+
 
 
   return (
@@ -128,7 +138,13 @@ export function SubwalletCreated() {
 
               {app && (
                 <div className="flex justify-center">
-                  <ConnectAppCard app={app} pairingUri={connectionSecret} />
+                  <ConnectAppCard
+                    app={app}
+                    pairingUri={connectionSecret}
+                    cashHubToken={createAppResponse.cashHubToken}
+                    circleHubToken={createAppResponse.circleHubToken}
+                    primaryFormat={primaryFormat}
+                  />
                 </div>
               )}
 

@@ -431,7 +431,7 @@ func (svc *swapsService) SwapOut(amount uint64, destination string, autoSwap, us
 
 		err = tx.Model(&dbSwap).Updates(&db.Swap{
 			SwapId:             swap.Id,
-			SendAmount:         uint64(paymentRequest.MSat / 1000), //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range
+			SendAmount:         uint64(paymentRequest.AmountMloki / 1000), //nolint:gosec // invoice-declared mloki amount is always non-negative and far below int64 range
 			Invoice:            swap.Invoice,
 			LockupAddress:      swap.LockupAddress,
 			TimeoutBlockHeight: swap.TimeoutBlockHeight,
@@ -473,8 +473,8 @@ func (svc *swapsService) SwapIn(amount uint64, autoSwap bool) (*SwapResponse, er
 	if !svc.cfg.EnableSwap() {
 		return nil, errors.New("swap feature is disabled")
 	}
-	amountMSat := amount * 1000
-	invoice, err := svc.transactionsService.MakeInvoice(svc.ctx, amountMSat, "On-chain to lightning swap", "", 0, nil, svc.lnClient, nil, nil, nil, nil, nil, nil, nil, nil)
+	amountMloki := amount * 1000
+	invoice, err := svc.transactionsService.MakeInvoice(svc.ctx, amountMloki, "On-chain to lightning swap", "", 0, nil, svc.lnClient, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1035,7 +1035,7 @@ func (svc *swapsService) startSwapInListener(swap *db.Swap) {
 	}
 
 	paymentRequest, _ := decodepay.Decode(swap.Invoice)
-	amount := uint64(paymentRequest.MSat / 1000) //nolint:gosec // invoice-declared msat amount is always non-negative and far below int64 range
+	amount := uint64(paymentRequest.AmountMloki / 1000) //nolint:gosec // invoice-declared mloki amount is always non-negative and far below int64 range
 
 	for {
 		select {

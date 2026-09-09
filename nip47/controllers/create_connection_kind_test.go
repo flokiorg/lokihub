@@ -1,7 +1,7 @@
 package controllers
 
 // F3 — create_connection passes params.Kind verbatim to CreateApp with no
-// allowlist, so a caller can create apps with privileged kinds (jit_hub,
+// allowlist, so a caller can create apps with privileged kinds (cash_hub,
 // circle_hub, etc.) via NWC.
 //
 // Correct behaviour: only user-facing kinds (standard, isolated, …) must be
@@ -25,8 +25,8 @@ import (
 
 // privilegedKinds lists app kinds that must not be creatable via NWC create_connection.
 var privilegedKinds = []string{
-	db.AppKindJITHub,
-	db.AppKindJITWallet,
+	db.AppKindCashHub,
+	db.AppKindCashWallet,
 	db.AppKindCircleHub,
 	db.AppKindCircleWallet,
 }

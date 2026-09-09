@@ -167,10 +167,6 @@
         "title": "简单子钱包",
         "description": "一个拥有独立余额的独立钱包，由您的中心提供资金，具有完整的收发权限。"
       },
-      "jit": {
-        "title": "JIT 钱包中心",
-        "description": "每当没有 Lightning 钱包的接收人需要收款时，自动发放一个仅支持支出的钱包。"
-      },
       "circle": {
         "title": "圈子钱包中心",
         "description": "您 Nostr 圈子中获得授权的成员可以向您申请 Lightning 钱包，系统会根据您的关注列表或允许列表进行验证。"

@@ -136,15 +136,15 @@ func TestSendPayment_WithoutAppId_PassesNilToSendPaymentSync(t *testing.T) {
 
 // TestSendPayment_StripsSpoofedInternalMetadataFlags is the regression test
 // for the admin SendPayment API stripping caller-supplied "internal_transfer"
-// and "jit_claim_slice" metadata keys before they ever reach SendPaymentSync -
-// same spoofing prevention pay_invoice_controller.go and claim_funds_controller.go
+// and "cash_claim_slice" metadata keys before they ever reach SendPaymentSync -
+// same spoofing prevention pay_invoice_controller.go and cash_redeem_controller.go
 // already apply on the NWC-facing side (see transactions_service.go's
 // validateCanPay doc comment: skipBudgetCap/skipFeeReserve are only ever meant
 // to be set by trusted server-side call sites, never from caller-supplied
 // metadata). Before this fix, only "internal_transfer" was stripped here -
-// "jit_claim_slice" was not - so a caller of this admin API could set
-// jit_claim_slice=true on an ordinary send-payment call and bypass both the
-// fee-reserve check and enforceJITFullDrain's "a jit_wallet must drain its
+// "cash_claim_slice" was not - so a caller of this admin API could set
+// cash_claim_slice=true on an ordinary send-payment call and bypass both the
+// fee-reserve check and enforceCashFullDrain's "a cash_wallet must drain its
 // full balance in one payment" rule, which that function's own doc comment
 // says is enforced at this shared layer specifically so the HTTP API can't
 // bypass it.
@@ -160,7 +160,7 @@ func TestSendPayment_StripsSpoofedInternalMetadataFlags(t *testing.T) {
 
 	spoofedMetadata := map[string]interface{}{
 		"internal_transfer": true,
-		"jit_claim_slice":   true,
+		"cash_claim_slice":  true,
 		"note":              "kept",
 	}
 	expectedMetadata := map[string]interface{}{

@@ -8,7 +8,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/jitwallet"
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -32,10 +32,10 @@ type nip47Controller struct {
 	appsService         apps.AppsService
 	keys                keys.Keys
 	socialCache         NostrSocialCache
-	jitRateLimiter      RateLimiter
-	jitClaimLimiter     RateLimiter
+	cashRateLimiter      RateLimiter
+	cashClaimLimiter     RateLimiter
 	circleRateLimiter   RateLimiter
-	iaChecker           jitwallet.IATrustChecker
+	iaChecker           cashwallet.IATrustChecker
 
 	// activeCircleInvoices guards per-app balance cap checks. An entry is held
 	// from just before the balance read until MakeInvoice completes, preventing
@@ -54,11 +54,11 @@ func NewNip47Controller(
 	appsService apps.AppsService,
 	keys keys.Keys,
 	socialCache NostrSocialCache,
-	jitRateLimiter RateLimiter,
-	jitClaimLimiter RateLimiter,
+	cashRateLimiter RateLimiter,
+	cashClaimLimiter RateLimiter,
 	circleRateLimiter RateLimiter,
 	cfg config.Config,
-	iaChecker jitwallet.IATrustChecker) *nip47Controller {
+	iaChecker cashwallet.IATrustChecker) *nip47Controller {
 	return &nip47Controller{
 		lnClient:            lnClient,
 		db:                  db,
@@ -68,8 +68,8 @@ func NewNip47Controller(
 		appsService:         appsService,
 		keys:                keys,
 		socialCache:         socialCache,
-		jitRateLimiter:      jitRateLimiter,
-		jitClaimLimiter:     jitClaimLimiter,
+		cashRateLimiter:      cashRateLimiter,
+		cashClaimLimiter:     cashClaimLimiter,
 		circleRateLimiter:   circleRateLimiter,
 		cfg:                 cfg,
 		iaChecker:           iaChecker,

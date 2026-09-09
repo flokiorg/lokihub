@@ -370,7 +370,7 @@ func TestDoNotMarkFailedTwice(t *testing.T) {
 // gets a chance to run, markPaymentFailed must never flip that row back to
 // FAILED - the funds already left the node, and get_isolated_balance only
 // sums SETTLED rows, so downgrading it would silently drop the paid-out
-// amount from balance accounting and (for a JIT claim) reopen the slice.
+// amount from balance accounting and (for a Cash claim) reopen the slice.
 func TestMarkPaymentFailed_DoesNotDowngradeSettled(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
