@@ -127,6 +127,25 @@ dev subcommand="" *args:
         status)
             {{DOCKER_COMPOSE_DEV}} ps
             ;;
+        reset)
+            # Restarts relay + backend (in that order - backend's own Nostr
+            # pool reconnects fresh against a relay with zero prior
+            # subscription state) so a run starts from the same server-side
+            # baseline every time, instead of whatever session/subscription
+            # state a previous run's own load left behind. `just test
+            # integration` already runs this before every invocation - this
+            # subcommand exists for manually forcing the same reset on
+            # demand (e.g. mid-investigation, without running the suite).
+            # Doesn't touch flnd/frontend/caddy or any volume - flnd's chain
+            # sync and the hub's own DB are untouched.
+            {{DOCKER_COMPOSE_DEV}} restart relay
+            {{DOCKER_COMPOSE_DEV}} restart backend
+            echo "waiting for backend to come back up..."
+            for i in $(seq 1 30); do
+                docker logs lokihub-dev-backend --since 20s 2>&1 | grep -q "http server started" && break
+                sleep 1
+            done
+            ;;
         flncli)
             shift
             docker exec -it lokihub-dev-flnd flncli --network=mainnet --macaroonpath={{FLND_MACAROON_PATH}} "$@"
@@ -147,6 +166,7 @@ dev subcommand="" *args:
       restart [service...]  restart everything, or just the service(s) named (in place - keeps volumes)
       logs [service]        follow logs for the docker dev environment or a specific service
       status                show status of the docker dev environment
+      reset                  restart relay + backend for a clean server-side session/subscription baseline (`just test integration` already does this)
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
       wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
 
@@ -192,6 +212,15 @@ test subcommand="unit" *args:
             # up (`just dev up`) with a real LN backend, and
             # integration/config.local.yaml pointing at an admin API token
             # (see integration/README.md).
+            #
+            # `dev reset` first so every run starts from the same server-side
+            # baseline (fresh relay/backend session and subscription state)
+            # regardless of what a previous run's own load left behind - see
+            # issues.md's "too many concurrent REQs" investigation, where
+            # stale in-memory relay state (on top of a DB-level leak, now
+            # fixed - see aaa_preflight_cleanup_test.go/zz_leak_check_test.go)
+            # made re-running the suite non-reproducible.
+            just -f "{{justfile()}}" dev reset
             go vet -tags integration ./integration/...
             go test -tags integration -count=1 -timeout 8m ./integration/...
             ;;

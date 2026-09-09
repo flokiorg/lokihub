@@ -389,6 +389,72 @@ func (c *adminClient) removeCircleAllowlistMember(hubAppID uint, pubkey string) 
 	return c.do(http.MethodDelete, fmt.Sprintf("/api/apps/%d/circle/allowlist/%s", hubAppID, pubkey), nil)
 }
 
+// adminAppDetail is the subset of api.App this suite needs from GET
+// /api/apps/:id - just enough to resolve a circle_hub app's own
+// CircleIdentity id (getCircleIdentityID), which isn't returned by
+// createApp's response and has no other admin-API lookup by app id.
+type adminAppDetail struct {
+	CircleIdentity *struct {
+		ID uint `json:"id"`
+	} `json:"circleIdentity,omitempty"`
+}
+
+// getCircleIdentityID resolves hubAppID's own CircleIdentity id via GET
+// /api/apps/:id - every circle_hub app has one (createEphemeralCircleHub
+// always sets CircleIdentityName, never reuses an existing id), so a nil
+// CircleIdentity here indicates a caller bug (a non-circle_hub app id), not
+// a legitimate empty case.
+func (c *adminClient) getCircleIdentityID(hubAppID uint) (uint, error) {
+	var app adminAppDetail
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/apps/%d", hubAppID), &app); err != nil {
+		return 0, err
+	}
+	if app.CircleIdentity == nil {
+		return 0, fmt.Errorf("app %d has no circleIdentity in its admin API detail response", hubAppID)
+	}
+	return app.CircleIdentity.ID, nil
+}
+
+// deleteCircleIdentity removes a standalone CircleIdentity (api.DeleteCircleIdentity)
+// - refuses (and so must only be called once nothing references it anymore,
+// i.e. after the circle_hub app itself has already been deleted) if any
+// circle_hub app still references it.
+func (c *adminClient) deleteCircleIdentity(id uint) error {
+	return c.do(http.MethodDelete, fmt.Sprintf("/api/circle-identities/%d", id), nil)
+}
+
+type adminCircleIdentity struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type adminListCircleIdentitiesResponse struct {
+	Identities []adminCircleIdentity `json:"identities"`
+}
+
+// listCircleIdentitiesByNamePrefix returns every CircleIdentity whose name
+// starts with prefix (api.ListCircleIdentities has no server-side name
+// filter, unlike listAppsByNamePrefix's app listing, so this fetches
+// everything and filters client-side). Used by
+// TestZZZ_NoLeakedEphemeralCircleIdentities to catch a circle_hub fixture
+// whose t.Cleanup deleted the app but not its own CircleIdentity (identities
+// deliberately survive circle_hub deletion - see
+// TestCreateCircleHub_IdentitySurvivesHubDeletion - so this doesn't happen
+// on its own).
+func (c *adminClient) listCircleIdentitiesByNamePrefix(prefix string) ([]adminCircleIdentity, error) {
+	var resp adminListCircleIdentitiesResponse
+	if err := c.do(http.MethodGet, "/api/circle-identities?limit=0", &resp); err != nil {
+		return nil, err
+	}
+	var matched []adminCircleIdentity
+	for _, identity := range resp.Identities {
+		if strings.HasPrefix(strings.ToLower(identity.Name), strings.ToLower(prefix)) {
+			matched = append(matched, identity)
+		}
+	}
+	return matched, nil
+}
+
 // listAppsByNamePrefix returns every app whose name starts with prefix
 // (api.ListApps's own name filter: "searching for 'Damus' will return
 // 'Damus' and 'Damus (1)'" - case-insensitive LIKE prefix%). Used by
