@@ -512,7 +512,6 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 		budgetPermission = appPermissions[0]
 	}
 
-	// renewsIn := ""
 	budgetUsage := uint64(0)
 	maxAmount := uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 	if dbApp.Kind == db.AppKindCircleHub {

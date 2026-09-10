@@ -448,7 +448,6 @@ func (api *api) HandleAddLSP(ctx context.Context, req *AddLSPRequest) (*manager.
 		logger.Logger.Warn().Err(err).Str("pubkey", req.Pubkey).Msg("Failed to connect to new LSP")
 	}
 
-	// Return the object
 	return &manager.SettingsLSP{
 		Name:   req.Name,
 		Pubkey: req.Pubkey,
