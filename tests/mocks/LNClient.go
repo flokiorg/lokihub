@@ -38,6 +38,52 @@ func (_m *MockLNClient) EXPECT() *MockLNClient_Expecter {
 	return &MockLNClient_Expecter{mock: &_m.Mock}
 }
 
+// BroadcastTransaction provides a mock function for the type MockLNClient
+func (_mock *MockLNClient) BroadcastTransaction(ctx context.Context, txHex string) error {
+	ret := _mock.Called(ctx, txHex)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTransaction")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = returnFunc(ctx, txHex)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockLNClient_BroadcastTransaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastTransaction'
+type MockLNClient_BroadcastTransaction_Call struct {
+	*mock.Call
+}
+
+// BroadcastTransaction is a helper method to define mock.On call
+//   - ctx
+//   - txHex
+func (_e *MockLNClient_Expecter) BroadcastTransaction(ctx interface{}, txHex interface{}) *MockLNClient_BroadcastTransaction_Call {
+	return &MockLNClient_BroadcastTransaction_Call{Call: _e.mock.On("BroadcastTransaction", ctx, txHex)}
+}
+
+func (_c *MockLNClient_BroadcastTransaction_Call) Run(run func(ctx context.Context, txHex string)) *MockLNClient_BroadcastTransaction_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockLNClient_BroadcastTransaction_Call) Return(err error) *MockLNClient_BroadcastTransaction_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockLNClient_BroadcastTransaction_Call) RunAndReturn(run func(ctx context.Context, txHex string) error) *MockLNClient_BroadcastTransaction_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CancelHoldInvoice provides a mock function for the type MockLNClient
 func (_mock *MockLNClient) CancelHoldInvoice(ctx context.Context, paymentHash string) error {
 	ret := _mock.Called(ctx, paymentHash)
@@ -2103,4 +2149,3 @@ func (_c *MockLNClient_SubscribeChannelAcceptor_Call) RunAndReturn(run func(cont
 	_c.Run(func(ctx context.Context) { run(ctx) })
 	return _c
 }
-

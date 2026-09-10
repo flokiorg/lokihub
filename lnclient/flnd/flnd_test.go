@@ -58,18 +58,6 @@ func TestFLNDConnection(t *testing.T) {
 
 	t.Logf("Connecting to FLND at %s", flndAddress)
 
-	// Debug: Validate cert
-	// certBytes, err := hex.DecodeString(lndCert)
-	// if err != nil {
-	// 	t.Fatalf("Failed to decode cert hex: %v", err)
-	// }
-	// t.Logf("Decoded cert bytes length: %d", len(certBytes))
-	// t.Logf("Decoded cert PEM:\n%s", string(certBytes))
-
-	// cp := x509.NewCertPool()
-	// if !cp.AppendCertsFromPEM(certBytes) {
-	// 	t.Fatal("Failed to append cert from PEM (manual check)")
-	// }
 	t.Log("Skipping cert check and using insecure connection due to cert parsing issues in test env")
 	flndService, err := NewFLNDService(ctx, eventPublisher, flndAddress, "", lndMacaroon)
 	require.NoError(t, err, "NewFLNDService should not error")

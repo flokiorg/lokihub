@@ -120,6 +120,9 @@ func (m *mockLNClientJIT) GetOnchainBalance(ctx context.Context) (*lnclient.Onch
 func (m *mockLNClientJIT) RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (string, error) {
 	return "", nil
 }
+func (m *mockLNClientJIT) BroadcastTransaction(ctx context.Context, txHex string) error {
+	return nil
+}
 func (m *mockLNClientJIT) SendPaymentProbes(ctx context.Context, invoice string) error { return nil }
 func (m *mockLNClientJIT) SendSpontaneousPaymentProbes(ctx context.Context, amountMloki uint64, nodeId string) error {
 	return nil

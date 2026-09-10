@@ -862,8 +862,8 @@ func (svc *swapsService) RefundSwap(swapId, address string, enableRetries bool) 
 		return err
 	}
 
-	// TODO: Replace with LNClient broadcast method to avoid trusting lightz
-	claimTxId, err := svc.lightzApi.BroadcastTransaction(lightz.CurrencyBtc, txHex)
+	claimTxId := refundTransaction.Hash()
+	err = svc.lnClient.BroadcastTransaction(svc.ctx, txHex)
 	if err != nil {
 		svc.logger.Error().Err(err).Str("swap_id", swapId).Msg("Could not broadcast transaction")
 		return err
@@ -1368,10 +1368,9 @@ func (svc *swapsService) startSwapOutListener(swap *db.Swap) {
 					return
 				}
 
-				var claimTxId string
+				claimTxId := claimTransaction.Hash()
 				for attempt := 1; attempt <= 5; attempt++ {
-					// TODO: Replace with LNClient broadcast method to avoid trusting lightz
-					claimTxId, err = svc.lightzApi.BroadcastTransaction(lightz.CurrencyBtc, txHex)
+					err = svc.lnClient.BroadcastTransaction(svc.ctx, txHex)
 					if err != nil {
 						svc.logger.Warn().Err(err).
 							Str("swap_id", swap.SwapId).

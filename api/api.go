@@ -512,7 +512,6 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 		budgetPermission = appPermissions[0]
 	}
 
-	// renewsIn := ""
 	budgetUsage := uint64(0)
 	maxAmount := uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 	if dbApp.Kind == db.AppKindCircleHub {
@@ -743,7 +742,6 @@ func (api *api) GetCircleIdentity(ctx context.Context, id uint) (*CircleIdentity
 }
 
 func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, orderBy string) (*ListAppsResponse, error) {
-	// TODO: join dbApps and permissions
 	dbApps := []db.App{}
 	query := api.db
 
