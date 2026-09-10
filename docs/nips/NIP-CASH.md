@@ -503,10 +503,8 @@ An implementation MUST determine the outcome as follows, in this order:
    - `bearer` → reassigned in place **only if** this wallet has, and has always had, exactly one recipient
      — counting every slice the wallet was ever created or has ever held, not only currently-unclaimed
      ones. Otherwise, this outcome also lands in a brand-new dedicated wallet (§Spinning a Slice Off Into
-     a Dedicated Wallet): a bearer redemption's entire proof is
-     its raw secret, transmitted in the request body, decryptable by anyone who has ever held this
-     connection, claimed or not; handing a bearer note that same connection would hand any former
-     co-recipient everything needed to steal it.
+     a Dedicated Wallet) — see that section's own "Why not just reassign in place?" for why a
+     multi-recipient-history wallet can't take this shortcut.
 
 ```mermaid
 sequenceDiagram
@@ -1071,9 +1069,8 @@ they don't trust, without contacting anyone.
 
 - **What is signed.** The canonical ASCII string `lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_millis>`
   — the token's HRP, wallet pubkey, and committed amount. Binding the amount is only sound because a
-  wallet's amount is immutable for its whole life: no operation ever changes it in place (a partial split
-  consumes its source and mints fresh wallets rather than decrementing — §Splitting a Slice), so the value
-  the signature commits to always matches the wallet it names. Each wallet — freshly minted, split-off, or
+  wallet's amount is immutable for its whole life (§Splitting a Slice, §Spinning a Slice Off Into a
+  Dedicated Wallet), so the value the signature commits to always matches the wallet it names. Each wallet — freshly minted, split-off, or
   consolidated — carries its own signature over its own pubkey and its own fixed amount, independent of
   whether the wallet it split from or was merged out of had one.
 - **The signature is recoverable.** It's a recoverable ECDSA signature over that payload; a verifier
@@ -1346,18 +1343,12 @@ also being shared. `cash_consolidate` MUST reject any bearer source outright (§
 any future many-source operation that accepts a bearer source from a *different* wallet than the calling
 connection's own inherits the identical leak and MUST reject it for the same reason.
 
-**A compensating-saga rollback whose own reversal fails MUST NOT restore the source claim.** Splitting off
-one or two new wallets, or consolidating several into one, both fund the new wallet(s) from an already-
-claimed, terminal source, so a failure partway through a multi-wallet operation can't simply "not have
-happened" the way a single-step failure can — an earlier wallet may already be funded. The implementation
-MUST reverse that funding and, once the reversal is *confirmed*, restore the source claim so the caller can
-retry — but if the reversal itself fails, restoring the claim anyway would let the caller believe the
-source's real balance is its full original amount when it's actually short by whatever didn't come back:
-an over-entitlement, not a safe retry state. The correct response is the opposite of the instinctive one —
-leave the claim terminal and the not-fully-reversed wallet undeleted, rather than trying to make the state
-look clean. This is a narrow, deliberate exception to the "MUST roll back" atomicity rules in §Splitting a
-Slice and §Consolidating Tokens, not a gap in them — see those sections' own Atomicity discussion for the
-full mechanism.
+**A compensating-saga rollback whose own reversal fails MUST NOT restore the source claim.** The correct
+response is the opposite of the instinctive one: restoring the claim anyway would let the caller believe
+their source balance is whole when it's actually short by whatever didn't come back — an over-entitlement,
+not a safe retry state. This is a narrow, deliberate exception to the "MUST roll back" atomicity rules
+`cash_transfer` splits and `cash_consolidate` both follow, not a gap in them — see §Spinning a Slice Off
+Into a Dedicated Wallet and §Consolidating Tokens' own Atomicity/step-7 discussion for the full mechanism.
 
 **IA revocation MUST be checked live at redemption time, not only at wallet-creation time.** A compromised or
 retired Identity Authority needs to be cut off immediately, for every wallet it ever attested for, not
@@ -1391,15 +1382,15 @@ completely" constraint is waived, not ordinary solvency.
 
 **The redeem fee reconciliation MUST run atomically with payout settlement, not as a later, separate
 step.** §The Redeem Fee's invariant — a shared wallet's balance decreases by exactly the redeemed slice's
-amount, never more — depends on the `delta = fee − real` adjustment landing in the same atomic commit as
-the payment being marked settled, for both a synchronous and an asynchronously-settled payment. An
-implementation that instead performs this adjustment from the calling redemption handler, after its own
-payment call has already returned, reopens a real crash window: a failure between the payment settling and
-that second, separate transfer would leave the wallet's balance short by `real` alone, with no fee ever
-recovered and no accounting trail explaining the gap — precisely the stranding failure mode this mechanism
-exists to close, just moved one step later. The reconciliation belongs at whatever single choke point
-already marks a payment settled, covering every path a payment can settle through, not duplicated per
-caller.
+amount, never more — depends on the gap between the quoted fee and the real routing cost being reconciled
+against the Hub in the same atomic commit as the payment being marked settled, for both a synchronous and
+an asynchronously-settled payment. An implementation that instead performs this adjustment from the calling
+redemption handler, after its own payment call has already returned, reopens a real crash window: a failure
+between the payment settling and that second, separate transfer would leave the wallet's balance short by
+the real routing cost alone, with no fee ever recovered and no accounting trail explaining the gap —
+precisely the stranding failure mode this mechanism exists to close, just moved one step later. The
+reconciliation belongs at whatever single choke point already marks a payment settled, covering every path
+a payment can settle through, not duplicated per caller.
 
 **A caller MUST NOT be able to influence which fee rate, or how much fee, applies to their own
 redemption**, beyond the immutable `redeem_fee_ppm` already fixed on the slice they're redeeming
