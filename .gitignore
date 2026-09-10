@@ -44,3 +44,6 @@ tmp/
 
 # archived NIP drafts — internal working copies only, not for history
 docs/nips/archive/
+
+# generated locally by ops/scripts/gen_nip_diff.py — regenerate on demand, never commit
+docs/artifacts/
