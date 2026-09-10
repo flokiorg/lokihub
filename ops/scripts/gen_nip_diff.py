@@ -470,7 +470,7 @@ article .diff-block > :last-child { margin-bottom: 0.6rem; }
 article li.diff-li { margin: 0 -0.6rem; padding: 0.1rem 0.6rem; border-radius: 4px; list-style-position: inside; }
 article li.diff-li.removed { background: var(--del-bg); }
 article li.diff-li.added { background: var(--ins-bg); }
-body:has(#changebar) .page { margin-right: 34px; }
+body:has(#changebar) { padding-right: 22px; }
 #changebar {
   position: fixed; top: 0; right: 0; width: 22px; height: 100vh;
   background: var(--surface); border-left: 1px solid var(--rule); z-index: 100;
