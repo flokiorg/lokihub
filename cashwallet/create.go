@@ -452,6 +452,42 @@ var cashWalletScopes = []string{
 	constants.GET_BALANCE_SCOPE,
 }
 
+// compensatingDeleteMaxAttempts/compensatingDeleteRetryDelay bound
+// deleteAppWithRetry's best-effort cleanup after a failed internal funding
+// transfer. Small on both counts: this is retrying a single local DB delete,
+// not a network call, so a transient failure (e.g. a momentary lock
+// contention) is expected to clear within milliseconds, not seconds.
+const (
+	compensatingDeleteMaxAttempts = 3
+	compensatingDeleteRetryDelay  = 20 * time.Millisecond
+)
+
+// deleteAppWithRetry retries app's compensating delete a bounded number of
+// times instead of attempting it once and discarding the error. If every
+// attempt fails, this leaves an unfunded, claim-less cash_wallet app row
+// stranded — rare (this only runs after the internal funding transfer
+// itself already failed) but, unlike a silently-discarded single attempt,
+// it is now logged clearly enough for an operator to find and clean up
+// manually, rather than becoming invisible.
+func deleteAppWithRetry(deps Deps, app *db.App) {
+	var lastErr error
+	for attempt := 1; attempt <= compensatingDeleteMaxAttempts; attempt++ {
+		if err := deps.AppsService.DeleteApp(app); err != nil {
+			lastErr = err
+			if attempt < compensatingDeleteMaxAttempts {
+				time.Sleep(compensatingDeleteRetryDelay)
+			}
+			continue
+		}
+		return
+	}
+	logger.Logger.Error().Err(lastErr).
+		Uint("cash_wallet_id", app.ID).
+		Int("attempts", compensatingDeleteMaxAttempts).
+		Msg("Cash wallet funding failed and the compensating cleanup delete also failed after retries — " +
+			"an unfunded, claim-less cash_wallet app row is stranded and needs manual operator cleanup")
+}
+
 // Commit creates one spend-only cash_wallet child of resolved.HubApp serving
 // every resolved recipient, and funds it via a single internal transfer sized
 // to their combined total, using values already validated by Resolve. If
@@ -464,55 +500,6 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		sum += r.AmountMloki
 	}
 
-	newApp, _, err := deps.AppsService.CreateApp(
-		apps.GenerateChildName(resolved.HubApp.Name, resolved.Recipients[0].IdentityValue),
-		"", // generate a temporary random keypair; overridden immediately below
-		sum/1000,
-		constants.BUDGET_RENEWAL_NEVER,
-		resolved.ExpiresAt,
-		cashWalletScopes,
-		db.AppKindCashWallet,
-		&resolved.HubApp.ID,
-		db.ParentKindCash,
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Cash wallet app: %w", err)
-	}
-
-	// Everything from here until the transfer below is reversible bookkeeping:
-	// if any of it fails, or the transfer itself fails, this defer undoes it
-	// by deleting the just-created app (and its CashWalletClaim rows, via FK
-	// cascade). The transfer is deliberately the last thing this function
-	// does, specifically so that once fundsTransferred is true there is
-	// nothing left that could fail and leave the wallet in an inconsistent or
-	// invisible state.
-	fundsTransferred := false
-	defer func() {
-		if fundsTransferred {
-			return
-		}
-		_ = deps.AppsService.DeleteApp(newApp)
-	}()
-
-	// Derive the deterministic pairing private key from the app ID (BIP32 branch H+2).
-	// This key never needs to be stored — it can be re-derived any time via
-	// keys.GetCashPairingKey/api.GetCashWalletConnection.
-	pairingSecretKey, err := deps.Keys.GetCashPairingKey(newApp.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
-	}
-	deterministicPubKey, err := nostr.GetPublicKey(pairingSecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing pubkey: %w", err)
-	}
-	if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
-		Update("app_pubkey", deterministicPubKey).Error; err != nil {
-		return nil, fmt.Errorf("failed to register pairing key: %w", err)
-	}
-	newApp.AppPubkey = deterministicPubKey
-	walletPubkey := *newApp.WalletPubkey
-
 	claimRows := make([]db.CashWalletClaim, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
 		claimRows[i] = db.CashWalletClaim{
@@ -524,9 +511,87 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			RedeemFeePpm:     resolved.RedeemFeePpm,
 		}
 	}
-	if err := deps.AppsService.CreateCashWalletClaims(newApp.ID, claimRows); err != nil {
-		return nil, fmt.Errorf("failed to store recipient claims: %w", err)
+
+	// App creation, pairing-key registration, and claim-row insertion all
+	// happen in one DB transaction: if any of them fails, the transaction
+	// rolls back and there is nothing left to compensate for — no partial,
+	// claim-less, or unfunded app row can ever become observable from this
+	// part of wallet creation. This mirrors create_circle_wallet_controller.go's
+	// own CreateAppTx-inside-a-transaction pattern. Every read/write below
+	// MUST go through tx, never deps.DB/svc.db independently — an independent
+	// read against the same underlying DB while this transaction is open can
+	// deadlock (see CreateAppTx's own doc comment; found via exactly this
+	// pattern in the circle-wallet case).
+	var newApp *db.App
+	var pairingSecretKey string
+	var deterministicPubKey string
+	err := deps.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		newApp, _, err = deps.AppsService.CreateAppTx(tx,
+			apps.GenerateChildName(resolved.HubApp.Name, resolved.Recipients[0].IdentityValue),
+			"", // generate a temporary random keypair; overridden immediately below
+			sum/1000,
+			constants.BUDGET_RENEWAL_NEVER,
+			resolved.ExpiresAt,
+			cashWalletScopes,
+			db.AppKindCashWallet,
+			&resolved.HubApp.ID,
+			db.ParentKindCash,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create Cash wallet app: %w", err)
+		}
+
+		// Derive the deterministic pairing private key from the app ID (BIP32
+		// branch H+2). This key never needs to be stored — it can be
+		// re-derived any time via keys.GetCashPairingKey/api.GetCashWalletConnection.
+		pairingSecretKey, err = deps.Keys.GetCashPairingKey(newApp.ID)
+		if err != nil {
+			return fmt.Errorf("failed to derive Cash pairing key: %w", err)
+		}
+		deterministicPubKey, err = nostr.GetPublicKey(pairingSecretKey)
+		if err != nil {
+			return fmt.Errorf("failed to derive Cash pairing pubkey: %w", err)
+		}
+		if err := tx.Model(&db.App{}).Where("id = ?", newApp.ID).
+			Update("app_pubkey", deterministicPubKey).Error; err != nil {
+			return fmt.Errorf("failed to register pairing key: %w", err)
+		}
+
+		if err := deps.AppsService.CreateCashWalletClaimsTx(tx, newApp.ID, claimRows); err != nil {
+			return fmt.Errorf("failed to store recipient claims: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
+	newApp.AppPubkey = deterministicPubKey
+	walletPubkey := *newApp.WalletPubkey
+
+	// The transaction above committed, so the app is now durable and
+	// discoverable — NotifyAppCreated (relay subscription setup etc.) must
+	// only fire after that, never from inside the transaction itself (see
+	// CreateAppTx's own doc comment for why: the event consumer looks the
+	// app up via a separate, non-transactional connection).
+	deps.AppsService.NotifyAppCreated(newApp)
+
+	// From here on, the app+claims already exist durably. The only remaining
+	// step is the internal funding transfer — genuinely irreversible (it's a
+	// real payment), so it deliberately cannot live inside the DB transaction
+	// above. If it fails, the app+claims it already committed need a
+	// compensating delete; unlike the bookkeeping above, that can't be made
+	// unconditionally atomic (the transfer already happened, or didn't, for
+	// real), so a failed delete here is retried a bounded number of times
+	// rather than attempted once and silently discarded.
+	fundsTransferred := false
+	defer func() {
+		if fundsTransferred {
+			return
+		}
+		deleteAppWithRetry(deps, newApp)
+	}()
 
 	// Transfer funds from Cash Hub to Cash wallet. This is the one genuinely
 	// irreversible step in this function, which is why it happens last: by
@@ -773,4 +838,3 @@ func Create(ctx context.Context, deps Deps, params Params) (*Result, error) {
 	}
 	return Commit(ctx, deps, resolved)
 }
-

@@ -98,6 +98,13 @@ type AppsService interface {
 	// of a freshly-created, shared cash_wallet app. Called once by
 	// cashwallet.Commit right after the wallet app itself is created.
 	CreateCashWalletClaims(walletAppID uint, entries []db.CashWalletClaim) error
+	// CreateCashWalletClaimsTx is CreateCashWalletClaims run inside a
+	// caller-provided transaction instead of opening its own — see CreateAppTx's
+	// own doc comment for why this pattern exists. cashwallet.Commit uses this
+	// to make wallet-app creation and claim-row insertion atomic with each
+	// other: either both land, or (on any failure) neither does, no separate
+	// compensating delete needed for this part of wallet creation.
+	CreateCashWalletClaimsTx(tx *gorm.DB, walletAppID uint, entries []db.CashWalletClaim) error
 	// ListClaimsForWallet returns every recipient slice (claimed or not) of a
 	// single cash_wallet app — the roster the list_recipients NIP-47 method
 	// exposes. Ordered by created_at asc.
