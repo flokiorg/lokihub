@@ -370,7 +370,7 @@ func TestAudit_CashTransferBearerTarget_Boundaries(t *testing.T) {
 // "a bearer slice cannot share a wallet with other recipients" rule now holds
 // via spin-off rather than outright rejection at the wire: on a two-recipient
 // wallet, transferring one recipient's slice INTO a bearer identity moves that
-// slice's value into a brand-new dedicated wallet (NIP-JW "Spinning a slice
+// slice's value into a brand-new dedicated wallet (NIP-CASH "Spinning a slice
 // off into a dedicated wallet") instead of converting it in place — a bearer
 // slice never ends up sitting anonymously next to a still-identified sibling,
 // but the recipient isn't stuck either. Full inner-encryption-exclusivity

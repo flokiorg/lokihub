@@ -43,7 +43,7 @@ func onePubkeyRecipient(pubkey string, amountMloki uint64) []CashWalletRecipient
 
 // requireLokicashMatchesPairingURI asserts lokicashToken decodes to the
 // exact same wallet pubkey, secret, and relay set as pairingURI — either
-// string alone is a fully sufficient connection credential (NIP-JW §The
+// string alone is a fully sufficient connection credential (NIP-CASH §The
 // Lokicash Token), so any divergence between them would mean a recipient
 // using one instead of the other lands on a different wallet than intended.
 // Independent of recipient count or identity mode, since cash_token is

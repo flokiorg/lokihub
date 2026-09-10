@@ -2,7 +2,7 @@
 
 // cash_transfer_audit_split_race_test.go holds dynamic (black-box)
 // scenarios focused on the PARTIAL-SPLIT path added alongside the JIT-Wallet ->
-// Cash-Hub rename (NIP-CASH §Splitting a Slice). Everything here drives ONLY
+// Cash-Hub rename (NIP-CASH §Transferring and Splitting a Slice). Everything here drives ONLY
 // the real NWC surface over real Nostr relay round-trips against a real
 // running instance and real Lightning self-payments, as a malicious or
 // compromised holder of a shared cash_wallet connection would.

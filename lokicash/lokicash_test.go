@@ -52,7 +52,7 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 }
 
 func TestEncodeDecode_DifferentHRP(t *testing.T) {
-	// Same TLV layout, different backing-asset prefix (NIP-JW §The Lokicash
+	// Same TLV layout, different backing-asset prefix (NIP-CASH §The Lokicash
 	// Token) — Decode must not assume "lokicash" and must round-trip
 	// whatever HRP it's given.
 	in := Token{
@@ -224,7 +224,7 @@ func TestDecode_RejectsInvalidBech32(t *testing.T) {
 // catches every single-character corruption of a valid token — the
 // guarantee that lets a lokicash token be handed over in a chat message or
 // read aloud without a typo silently pairing the recipient with the wrong
-// wallet or a mangled secret (NIP-JW §The Lokicash Token: "the token
+// wallet or a mangled secret (NIP-CASH §The Cash Token: "the token
 // doesn't need to be kept secret", which only holds if a corrupted token
 // reliably fails instead of decoding into something else that looks valid).
 func TestDecode_SingleCharMutationAlwaysFails(t *testing.T) {

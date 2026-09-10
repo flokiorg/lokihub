@@ -1,7 +1,7 @@
 //go:build integration
 
 // cash_transfer_test.go covers reassigning an unclaimed slice's registered
-// identity without redeeming it (NIP-JW §Transferring a Slice), end to end
+// identity without redeeming it (NIP-CASH §Transferring and Splitting a Slice), end to end
 // over a real Nostr relay against a real running instance — the black-box
 // counterpart to nip47/controllers/cash_transfer_controller_test.go's unit
 // coverage.
@@ -92,7 +92,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		// The caller generates their own bearer secret and submits only its
 		// commitment — the wallet never mints or returns one over this
-		// shared connection (NIP-JW §Bearer Slices).
+		// shared connection (NIP-CASH §Bearer Slices).
 		newSecretHex, newSecretHash := bearerSecretAndHash(t)
 		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
 		var transferResult CashTransferResult

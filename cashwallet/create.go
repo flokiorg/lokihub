@@ -135,7 +135,7 @@ type Params struct {
 // RecipientResult echoes back one recipient's resolved/committed slice.
 // BearerSecret is populated only for a db.CashIdentityBearer recipient,
 // and only this once — it is never retrievable again after this response
-// (NIP-JW §Bearer Slices).
+// (NIP-CASH §Bearer Slices).
 type RecipientResult struct {
 	IdentityType  string
 	IdentityValue string
@@ -415,14 +415,16 @@ func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey stri
 
 // bearerSecretLen is 32 bytes — same size as every other Nostr key/secret in
 // this codebase, and comfortably enough entropy that guessing a bearer
-// secret is infeasible (NIP-JW §Bearer Slices).
+// secret is infeasible (NIP-CASH §Bearer Slices).
 const bearerSecretLen = 32
 
 // GenerateBearerSecret returns a fresh, high-entropy bearer secret (hex) and
 // the hex-encoded SHA-256 hash that gets persisted in its place — the raw
 // secret itself is never written to storage, only ever handed back once, in
-// the response that generated it. Shared by Resolve (mint_cash) and
-// cash_transfer, whenever either mints a new bearer slice.
+// the response that generated it. Called only from Resolve (mint_cash's own
+// bearer-recipient path) — cash_transfer's bearer target never calls this:
+// the caller supplies its own commitment there instead (NIP-CASH §Bearer
+// Slices explains why this asymmetry is load-bearing, not an oversight).
 func GenerateBearerSecret() (secretHex, secretHash string, err error) {
 	var secret [bearerSecretLen]byte
 	if _, err := rand.Read(secret[:]); err != nil {

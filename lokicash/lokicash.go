@@ -1,5 +1,5 @@
 // Package lokicash implements the lokicash1... bech32 token that packages a
-// Cash wallet's NWC pairing data (NIP-JW §The Lokicash Token) as one
+// Cash wallet's NWC pairing data (NIP-CASH §The Cash Token) as one
 // shareable string, NIP-19-style. The TLV layout is shared by any
 // energy-backed coin's variant of this token — only the bech32
 // human-readable prefix changes (lokicash for flokicoin, satscash for a
@@ -61,8 +61,8 @@ const attestedAmountLen = 8
 const LNSignedMessagePrefix = "Flokicoin Lightning Signed Message:"
 
 // Token is the decoded content of a lokicash-family bech32 string: the
-// pieces of NIP-47 pairing data a Cash wallet connection needs (NIP-JW §The
-// Pairing Connection), plus one optional metadata hint (NIP-JW §The Lokicash
+// pieces of NIP-47 pairing data a Cash wallet connection needs (NIP-CASH §The
+// Pairing Connection), plus one optional metadata hint (NIP-CASH §The Lokicash
 // Token → Redemption Metadata).
 //
 // IdentityRequired is a pointer specifically so a caller can tell "this
@@ -85,7 +85,7 @@ type Token struct {
 	// is identity-bound (cash_redeem/cash_transfer need a signed proof); false
 	// means the wallet is a single bearer slice (only its secret is needed —
 	// no proof, no Nostr identity at all). Always uniform across a wallet's
-	// whole recipient set (NIP-JW: a bearer slice is always the wallet's
+	// whole recipient set (NIP-CASH: a bearer slice is always the wallet's
 	// only one), so this is well-defined per wallet, not per slice.
 	IdentityRequired *bool
 	// MintSignature and AttestedAmount are the optional mint-provenance pair

@@ -1,7 +1,7 @@
 //go:build integration
 
 // cash_transfer_spinoff_test.go covers spinning a multi-recipient wallet's
-// slice off into a brand-new, dedicated single-bearer cash_wallet (NIP-JW
+// slice off into a brand-new, dedicated single-bearer cash_wallet (NIP-CASH
 // "Spinning a slice off into a dedicated wallet") end to end over a real
 // Nostr relay against a real running instance — the black-box counterpart to
 // nip47/controllers/cash_transfer_controller_test.go's
@@ -38,7 +38,7 @@ func TestCashTransferSpinOff(t *testing.T) {
 
 // nwcURIFromLokicash mirrors nip47/controllers/pairing.go's
 // buildNWCPairingURI — a real recipient has only the decoded lokicash token,
-// not a ready-made pairing_uri, for a spun-off wallet (see NIP-JW: only the
+// not a ready-made pairing_uri, for a spun-off wallet (see NIP-CASH: only the
 // token travels, nested-encrypted, inside the cash_transfer response).
 func nwcURIFromLokicash(token lokicash.Token) string {
 	var b strings.Builder

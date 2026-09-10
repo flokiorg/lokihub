@@ -258,7 +258,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 }
 
 // TestCashTransferFullTransfer_IdentityBoundTarget_StaysInPlace verifies the
-// design refinement made when generalizing NIP-JW's old bearer-only spin-off
+// design refinement made when generalizing NIP-CASH's old bearer-only spin-off
 // rule for NIP-CASH: a FULL transfer to a pubkey/connection_key target is
 // ALWAYS reassigned in place, unconditional on the wallet's recipient
 // history — unlike a bearer target, an identity-bound transfer always
