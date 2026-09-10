@@ -108,6 +108,16 @@ const maxRecipientsPerWallet = 100
 // amount caps, expiry) already happened in cashwallet.Resolve, so this is a
 // pure insert.
 func (svc *appsService) CreateCashWalletClaims(walletAppID uint, entries []db.CashWalletClaim) error {
+	return svc.CreateCashWalletClaimsTx(svc.db, walletAppID, entries)
+}
+
+// CreateCashWalletClaimsTx is CreateCashWalletClaims run inside a
+// caller-provided transaction — see the AppsService interface doc comment.
+// tx must be the caller's own open transaction handle when called from inside
+// one (never svc.db independently — see CreateAppTx/prepareApp's own doc
+// comment on why an independent read/write against the same underlying DB
+// while a transaction is open can deadlock).
+func (svc *appsService) CreateCashWalletClaimsTx(tx *gorm.DB, walletAppID uint, entries []db.CashWalletClaim) error {
 	if len(entries) == 0 {
 		return fmt.Errorf("%w: recipients list is empty", constants.ErrInvalidParams)
 	}
@@ -118,7 +128,7 @@ func (svc *appsService) CreateCashWalletClaims(walletAppID uint, entries []db.Ca
 	for i := range entries {
 		entries[i].WalletAppID = walletAppID
 	}
-	return svc.db.CreateInBatches(&entries, 50).Error
+	return tx.CreateInBatches(&entries, 50).Error
 }
 
 // ListClaimsForWallet returns every recipient slice of a single cash_wallet,
