@@ -8,8 +8,11 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 )
 
-// circleWalletIdentityFreshnessWindow bounds how old (or how far in the
-// future) a circle wallet identity proof's own timestamp may be. Mirrors
+// circleWalletIdentityFreshnessWindow bounds how old a circle wallet identity
+// proof's own timestamp may be — the future side is deliberately tighter
+// (hardcoded 1 minute below, not this constant): a proof timestamped in the
+// past is ordinary clock skew/latency, but one timestamped in the future has
+// no legitimate explanation, so it gets far less tolerance. Mirrors
 // cashRedeemIdentityFreshnessWindow (cash_redeem_controller.go) — defense in
 // depth on top of the per-hub d-tag binding and the single-use replay guard,
 // not the primary protection.
