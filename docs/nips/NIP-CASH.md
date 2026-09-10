@@ -17,7 +17,7 @@ specially-scoped NWC connection (§The Cash Token).
 
 Send one the way you'd hand over a bill — in a zap, a chat message, read out loud, even to someone offline
 with no wallet set up yet. Redeem it to a Lightning invoice, hand the whole thing on, or split off part of
-it while keeping the rest (§Splitting a Slice) — no Lightning hop, no node of the recipient's own required.
+it while keeping the rest (§Transferring and Splitting a Slice) — no Lightning hop, no node of the recipient's own required.
 
 A wallet owner can mint cash for a whole named list at once, before anyone's ready to receive — a hackathon
 prize list, a group zap, fifty people off a sign-up sheet — and each one redeems whenever they're ready.
@@ -53,7 +53,7 @@ goes to a named identity (`pubkey` or `connection_key`) or to no one in particul
   several recipients' independent shares instead (see the next entry). See §The Cash Token.
 - **Cash Wallet**: the NWC connection a cash token's pairing data decodes to — one connection string, shared
   by every recipient it was created for (or, after a transfer/split, by exactly one recipient — see
-  §Splitting a Slice). This is the custody/transport mechanism a cash token rides on, not a separate
+  §Transferring and Splitting a Slice). This is the custody/transport mechanism a cash token rides on, not a separate
   end-user-facing concept: a recipient interacts with "their cash," never with "their wallet."
 - **Cash Hub**: the wallet owner's own connection for minting cash tokens. It spends from its own
   balance to fund each one.
@@ -73,7 +73,7 @@ goes to a named identity (`pubkey` or `connection_key`) or to no one in particul
   (NIP-IC's own Attestation kind — this document verifies it, it doesn't define it; see §Security
   Considerations), that a `connection_key` belongs to a given Nostr pubkey, or to the Web Identity behind it.
 - **min_transfer_millis**: a floor, in millis, on how small a piece a split may carve off or leave behind
-  (zero = no floor). See §Splitting a Slice.
+  (zero = no floor). See §Transferring and Splitting a Slice.
 - **redeem_fee_ppm**: a parts-per-million rate charged on a slice only when `cash_redeem` resolves to an
   external Lightning payment (zero = free). See §The Redeem Fee.
 - **millis**: this document's amount unit — one-thousandth of whatever base unit the connection's own coin
@@ -114,7 +114,7 @@ A Cash Hub MUST maintain, for itself:
 - a ceiling on, and default value for, how long a Cash Wallet's cash may remain unredeemed. This ceiling
   MAY instead be "never" (no ceiling at all) — a Hub configured this way imposes no expiry on any cash it
   mints unless the `mint_cash` caller requests one of their own (§Minting Cash);
-- a default value for `min_transfer_millis` (§Splitting a Slice), applied to every slice a freshly-minted
+- a default value for `min_transfer_millis` (§Transferring and Splitting a Slice), applied to every slice a freshly-minted
   wallet carries. Zero (no floor) is a valid default;
 - a default value for `redeem_fee_ppm` (§The Redeem Fee), applied to every slice a freshly-minted wallet
   carries. Zero (free) is a valid default;
@@ -127,7 +127,7 @@ For each recipient slice, an implementation MUST track:
 - the identity type and value (§Terminology) currently registered for this slice;
 - the attesting Identity Authority's pubkey, for `connection_key`-mode registered identities;
 - the committed amount, fixed for the slice's whole life — a redemption, a split, or a consolidate
-  consumes the slice entirely; nothing ever rewrites it to a smaller value in place (§Splitting a Slice);
+  consumes the slice entirely; nothing ever rewrites it to a smaller value in place (§Transferring and Splitting a Slice);
 - whether, and when, the slice has been redeemed;
 - this slice's own `min_transfer_millis` floor and `redeem_fee_ppm` rate — fixed when the slice was created,
   from the Hub's default or inherited from the source slice it was split from (§The Redeem Fee);
@@ -305,7 +305,7 @@ sequenceDiagram
   exactly the slice's committed amount minus its own `redeem_fee_ppm` cut (§The Redeem Fee) — or for the
   full committed amount, fee-free, whenever the payment resolves to one the Hub's own node is both sending
   and receiving. A slice pays exactly once, in full — there's no partial or repeated redemption. (To
-  receive only part of a slice's value without redeeming, see §Splitting a Slice instead — that's a
+  receive only part of a slice's value without redeeming, see §Transferring and Splitting a Slice instead — that's a
   different operation from `cash_redeem`, which always resolves the slice's entire current amount in one
   shot.)
 - `proof` — REQUIRED for an identity-bound slice. MUST bind the caller to that slice's *current*
@@ -359,7 +359,7 @@ An implementation MUST decide same-node-ness with the exact same predicate its o
 decide whether to skip real Lightning routing — not a second check that could drift from it and either
 overcharge a same-node redemption or undercharge a genuinely external one.
 
-A slice's `redeem_fee_ppm` and `min_transfer_millis` (§Splitting a Slice) are both fixed the moment the
+A slice's `redeem_fee_ppm` and `min_transfer_millis` (§Transferring and Splitting a Slice) are both fixed the moment the
 slice is created — from the Hub's current default (§Data Model) for a freshly-minted wallet, or inherited
 unchanged from the source slice for one produced by a split — and never change afterward, even if the Hub's
 default later changes or the slice changes hands via `cash_transfer`. A recipient's economics MUST NOT
@@ -372,8 +372,7 @@ provision and pay to maintain. A transfer or split only moves value already comm
 with no Lightning hop, so there's nothing to price. Charging the redeeming recipient's own payout, rather
 than the shared wallet, is what stops one recipient's routing cost from ever coming out of another
 recipient's committed slice — the flaw an exactly-funded, shared multi-recipient wallet would otherwise
-have (§Security Considerations). (`redeem_fee_ppm` reuses the same parts-per-million arithmetic as
-`CircleHubConfig`'s per-payment fee, though not its funds-flow.)
+have (§Security Considerations).
 
 **The fairness invariant.** The redeeming recipient's payout, plus the Hub's settlement-time
 reconciliation, always debits the shared wallet by exactly the redeemed slice's committed amount — never
@@ -441,7 +440,7 @@ sequenceDiagram
   MAY pay out more than `net_redeemable_millis` here (the full `amount_millis`, if same-node); it will never
   pay out less. `redeem_fee_millis` is `0` for a slice whose `redeem_fee_ppm` is `0`, for every recipient,
   same-node or not.
-- `min_transfer_millis` — this slice's own split floor (§Splitting a Slice), fixed at creation. A recipient
+- `min_transfer_millis` — this slice's own split floor (§Transferring and Splitting a Slice), fixed at creation. A recipient
   MUST be able to learn this value here, before attempting a `cash_transfer` split, rather than only from a
   rejected attempt's error text — which also costs a share of the shared `cash_transfer`/`cash_redeem` rate
   limit (§Security Considerations).
@@ -477,8 +476,8 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
   total) off for a target identity. The source slice is consumed whole, and its value re-emerges as **two
   brand-new, dedicated Cash Wallets** — one holding the carved-off `amount_millis` for the target, one
   holding the remainder for the caller's own, unchanged identity. Unlike a full transfer, this genuinely
-  moves value via internal transfers; unlike the old in-place model, the source slice keeps NO residual
-  amount — it becomes terminal exactly like a redemption, and both pieces are reached only through their
+  moves value via internal transfers, and the source slice keeps NO residual amount — it becomes terminal
+  exactly like a redemption, and both pieces are reached only through their
   new connections — the reason both pieces get fresh wallets rather than an in-place rewrite is
   §Spinning a Slice Off Into a Dedicated Wallet's own concern, not repeated here.
 
@@ -633,7 +632,7 @@ On receiving `cash_transfer` for a given slice, the wallet MUST, in order:
 4. If the outcome is a partial split, additionally verify `amount_millis` is at least the slice's own
    `min_transfer_millis` (0 = no floor), and that the remainder it would leave behind (current amount
    minus `amount_millis`) is either exactly zero or itself at least `min_transfer_millis` — a split that
-   would leave unmovable dust behind MUST be rejected rather than silently allowed (§Splitting a Slice).
+   would leave unmovable dust behind MUST be rejected rather than silently allowed (§Transferring and Splitting a Slice).
 5. For an in-place reassignment: atomically transfer the slice. The old registered identity MUST stop
    authorizing `cash_redeem` or `cash_transfer` on this slice from the moment this step completes. The new
    identity becomes the slice's sole registered identity, for the same committed amount, unchanged.
@@ -931,8 +930,8 @@ slice (§Data Model, §Redemption Metadata) — mixing them would let a co-recip
 connection decrypt and steal a bearer secret the moment it's used (§Security Considerations). The Hub MUST
 generate the slice's `bearer_secret` itself, with enough entropy that guessing it is infeasible; a
 caller-supplied secret MUST NOT be accepted, since the caller has no way to prove its entropy. The
-response's matching entry MUST carry that `bearer_secret` in plaintext, exactly once (§Minting a Cash
-Wallet, Response). There MUST be no way to retrieve a bearer slice's secret again after that response.
+response's matching entry MUST carry that `bearer_secret` in plaintext, exactly once (§Minting Cash,
+Response). There MUST be no way to retrieve a bearer slice's secret again after that response.
 Losing it is equivalent to losing the funds — same as losing any bearer ecash note.
 
 ### Redeeming a Bearer Slice
@@ -958,7 +957,7 @@ secret is the opposite. It *is* the entire security of that slice. Storing it in
 access to that storage into a theft of every unredeemed bearer slice on the Hub.
 
 **A bearer redemption MUST still be atomic and race-safe**, exactly like an identity-bound one (§Redeeming
-Funds, step 4). First-redeem-wins is intentional for a bearer slice — that's the whole point — but two
+a Slice, step 4). First-redeem-wins is intentional for a bearer slice — that's the whole point — but two
 concurrent redemptions against the same secret MUST NOT both succeed.
 
 **Guessing MUST be made infeasible, not just unlikely.** A bearer slice has no signature to forge, so an
@@ -1047,8 +1046,8 @@ relay round-trip first, purely as a convenience:
   token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
   `NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
   separate values out of band together — this token, and the `bearer_secret` from the mint response — never
-  one alone; see lokihub's own `ConnectAppCard`/`RevealConnectionDialog` for the reference pattern (two
-  distinct "copy" actions shown side by side, not merged into one string).
+  one alone; an implementation SHOULD present these as two distinct "copy" actions shown side by side,
+  not merged into one string.
 
 **This field is a best-effort hint, snapshotted at whatever moment the token was minted or last
 re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of bearer status via
@@ -1069,7 +1068,7 @@ they don't trust, without contacting anyone.
 
 - **What is signed.** The canonical ASCII string `lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_millis>`
   — the token's HRP, wallet pubkey, and committed amount. Binding the amount is only sound because a
-  wallet's amount is immutable for its whole life (§Splitting a Slice, §Spinning a Slice Off Into a
+  wallet's amount is immutable for its whole life (§Transferring and Splitting a Slice, §Spinning a Slice Off Into a
   Dedicated Wallet), so the value the signature commits to always matches the wallet it names. Each wallet — freshly minted, split-off, or
   consolidated — carries its own signature over its own pubkey and its own fixed amount, independent of
   whether the wallet it split from or was merged out of had one.
@@ -1193,7 +1192,7 @@ the Cash Hub before the connection record is removed.
 
 **Auto-delete on full drain.** An implementation SHOULD delete a Cash Wallet immediately,
 without waiting for the expiry sweep, the moment all of the following hold: a `cash_transfer` split has
-just fully claimed one of its slices (§Splitting a Slice — the source slice's committed amount reached
+just fully claimed one of its slices (§Transferring and Splitting a Slice — the source slice's committed amount reached
 zero), no other slice on that same wallet remains unredeemed, and the wallet's own real balance is exactly
 zero. This is purely a housekeeping optimization — a wallet left in this state and NOT auto-deleted is
 still fully correct, just stale until its natural expiry — so an implementation MAY instead rely solely on
@@ -1311,7 +1310,7 @@ slice that was never meant for them, or replay a captured proof against a differ
 signed for.
 
 **A slice is consumed whole — a claim's win/lose state is the only race, never its amount.** Because a
-slice's committed amount is never rewritten in place (§Splitting a Slice, §Spinning a Slice Off Into a
+slice's committed amount is never rewritten in place (§Transferring and Splitting a Slice, §Spinning a Slice Off Into a
 Dedicated Wallet, §Consolidating Tokens), a racing `cash_redeem`,
 `cash_transfer`, or `cash_consolidate` can only ever find a slice *already claimed* (reject) — never
 silently *shrunk* to a smaller amount than it read a moment earlier. This is by design: it removes the
