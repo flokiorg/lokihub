@@ -48,8 +48,6 @@ func (m *LSPManager) ListLSPs() ([]persist.LSP, error) {
 func (m *LSPManager) AddLSP(name, pubkey, host string, active bool, isCommunity bool) (*persist.LSP, error) {
 	pubkey = strings.ToLower(pubkey)
 
-	// Check if exists
-	// Check if exists
 	var count int64
 	if err := m.db.Model(&persist.LSP{}).Where("pubkey = ?", pubkey).Count(&count).Error; err != nil {
 		return nil, err

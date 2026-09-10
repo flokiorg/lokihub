@@ -92,24 +92,10 @@ func TestJitRetryOnExpiredParams(t *testing.T) {
 			// Instead we can intercept the "waitForEvent" by populating `unclaimedEvents` immediately after call?
 			// No, `waitForEvent` creates a channel.
 
-			// We can intercept the Transport Send calls and inject the Response Event into the queue.
-			// But specific RequestIDs are generated inside.
-			// Actually ClientHandler generates RequestID, sends message, then waits.
-			// We can just bypass ClientHandler for this test and inject Mock Events directly into `unclaimedEvents`
-			// IF we mock the Client methods.
-			// But `LiquidityManager` uses struct fields `lsps2Client`. We can't swap those easily without interface.
-
-			// OK, we must use the Real `lsps2Client` + Mock `transport`.
-			// When `RequestOpeningParams` calls `transport.SendCustomMessage`, we catch it.
-			// In the mock callback, we can parse the request, extract ID, and feed a RESPONSE back via `HandleMessage`.
-
-			// Counter for attempts to verify retry
 			attempts := 0
 
-			// Use .Run() to capture calls instead of CustomHandler
 			mockTransport.On("SendCustomMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 				peer := args.Get(1).(string)
-				// msgType := args.Get(2).(uint32)
 				data := args.Get(3).([]byte)
 
 				if peer != "lsp_pubkey" {

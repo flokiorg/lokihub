@@ -11,6 +11,7 @@ import (
 	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
 	"github.com/flokiorg/flnd/lnrpc/peersrpc"
 	"github.com/flokiorg/flnd/lnrpc/routerrpc"
+	"github.com/flokiorg/flnd/lnrpc/walletrpc"
 	"github.com/flokiorg/flnd/macaroons"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -32,13 +33,14 @@ type FLNDoptions struct {
 }
 
 type FLNDWrapper struct {
-	client         lnrpc.LightningClient
-	routerClient   routerrpc.RouterClient
-	stateClient    lnrpc.StateClient
-	invoicesClient invoicesrpc.InvoicesClient
-	peersClient    peersrpc.PeersClient
-	IdentityPubkey string
-	conn           *grpc.ClientConn
+	client          lnrpc.LightningClient
+	routerClient    routerrpc.RouterClient
+	stateClient     lnrpc.StateClient
+	invoicesClient  invoicesrpc.InvoicesClient
+	peersClient     peersrpc.PeersClient
+	walletKitClient walletrpc.WalletKitClient
+	IdentityPubkey  string
+	conn            *grpc.ClientConn
 }
 
 func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
@@ -102,12 +104,13 @@ func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
 	}
 	lnClient := lnrpc.NewLightningClient(conn)
 	return &FLNDWrapper{
-		client:         lnClient,
-		routerClient:   routerrpc.NewRouterClient(conn),
-		stateClient:    lnrpc.NewStateClient(conn),
-		invoicesClient: invoicesrpc.NewInvoicesClient(conn),
-		peersClient:    peersrpc.NewPeersClient(conn),
-		conn:           conn,
+		client:          lnClient,
+		routerClient:    routerrpc.NewRouterClient(conn),
+		stateClient:     lnrpc.NewStateClient(conn),
+		invoicesClient:  invoicesrpc.NewInvoicesClient(conn),
+		peersClient:     peersrpc.NewPeersClient(conn),
+		walletKitClient: walletrpc.NewWalletKitClient(conn),
+		conn:            conn,
 	}, nil
 }
 
@@ -241,6 +244,10 @@ func (wrapper *FLNDWrapper) SendCoins(ctx context.Context, req *lnrpc.SendCoinsR
 
 func (wrapper *FLNDWrapper) NewAddress(ctx context.Context, req *lnrpc.NewAddressRequest, options ...grpc.CallOption) (*lnrpc.NewAddressResponse, error) {
 	return wrapper.client.NewAddress(ctx, req, options...)
+}
+
+func (wrapper *FLNDWrapper) PublishTransaction(ctx context.Context, req *walletrpc.Transaction, options ...grpc.CallOption) (*walletrpc.PublishResponse, error) {
+	return wrapper.walletKitClient.PublishTransaction(ctx, req, options...)
 }
 
 func (wrapper *FLNDWrapper) GetChanInfo(ctx context.Context, req *lnrpc.ChanInfoRequest, options ...grpc.CallOption) (*lnrpc.ChannelEdge, error) {

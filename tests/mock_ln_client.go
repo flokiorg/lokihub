@@ -211,6 +211,9 @@ func (mln *MockLn) GetOnchainBalance(ctx context.Context) (*lnclient.OnchainBala
 func (mln *MockLn) RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (txId string, err error) {
 	return "", nil
 }
+func (mln *MockLn) BroadcastTransaction(ctx context.Context, txHex string) error {
+	return nil
+}
 func (mln *MockLn) ResetRouter(key string) error {
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
 	"github.com/flokiorg/flnd/lnrpc/peersrpc"
 	"github.com/flokiorg/flnd/lnrpc/routerrpc"
+	"github.com/flokiorg/flnd/lnrpc/walletrpc"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -1520,6 +1521,26 @@ func (svc *FLNDService) RedeemOnchainFunds(ctx context.Context, toAddress string
 }
 
 func (svc *FLNDService) ResetRouter(key string) error {
+	return nil
+}
+
+func (svc *FLNDService) BroadcastTransaction(ctx context.Context, txHex string) error {
+	rawTx, err := hex.DecodeString(txHex)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to decode raw transaction hex")
+		return err
+	}
+
+	resp, err := svc.client.PublishTransaction(ctx, &walletrpc.Transaction{TxHex: rawTx})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to publish transaction")
+		return err
+	}
+	if resp.PublishError != "" {
+		err = errors.New(resp.PublishError)
+		logger.Logger.Error().Err(err).Msg("Node rejected published transaction")
+		return err
+	}
 	return nil
 }
 

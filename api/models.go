@@ -864,7 +864,6 @@ type ListTransactionsResponse struct {
 	Transactions []Transaction `json:"transactions"`
 }
 
-// TODO: camelCase
 type Transaction struct {
 	Type            string      `json:"type"`
 	State           string      `json:"state"`

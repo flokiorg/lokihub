@@ -170,7 +170,6 @@ func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {
 		return fmt.Errorf("received response from unknown peer: %s", peerPubkey)
 	}
 
-	// Check if it's a get_info response
 	peerState.mu.Lock()
 	_, isGetInfo := peerState.PendingGetInfoRequests[resp.ID]
 	if isGetInfo {
@@ -179,7 +178,6 @@ func (h *ClientHandler) HandleMessage(peerPubkey string, data []byte) error {
 		return h.handleGetInfoResponse(peerPubkey, resp.ID, &resp)
 	}
 
-	// Check if it's a buy response
 	jitChannel, isBuy := peerState.PendingBuyRequests[resp.ID]
 	if isBuy {
 		delete(peerState.PendingBuyRequests, resp.ID)
