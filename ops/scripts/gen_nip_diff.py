@@ -1,21 +1,36 @@
 #!/usr/bin/env python3
-"""Generate a local, track-changes-style HTML diff between two text files.
+"""Generate a local HTML page for reading or diffing a doc (e.g. docs/nips/*.md).
 
-Renders removed text struck through in red and added text underlined in green,
-inline in place (word-level within changed lines, full lines for pure
-adds/removes), with long unchanged runs collapsed behind a click-to-expand
-marker. Writes one HTML page per run into an output directory and rebuilds
-that directory's index.html from its manifest.json.
+Two modes, both rendering the file's complete content — nothing is ever
+collapsed, truncated, or hidden behind a click:
 
-This is dev tooling for reviewing prose/spec edits (e.g. docs/nips/*.md)
-before they land — not part of the build. Output is regenerated on demand and
-is not meant to be committed; see docs/artifacts/ in .gitignore.
+  diff mode (--old and --new both given): a track-changes-style view —
+  removed text struck through in red, added text underlined in green,
+  word-level within changed lines.
+
+  read mode (--old omitted): the full current content of --new, plain,
+  numbered, no diff markup — for just reading a NIP end to end.
+
+Writes one HTML page per run into an output directory and rebuilds that
+directory's index.html from its manifest.json.
+
+This is dev tooling for reviewing/reading prose/spec docs before they land —
+not part of the build. Output is regenerated on demand and is not meant to
+be committed; see docs/artifacts/ in .gitignore.
 
 Usage:
+    # diff mode
     python3 ops/scripts/gen_nip_diff.py \
         --old /path/to/before.md --new docs/nips/NIP-CASH.md \
         --title "NIP-CASH.md" --slug nip-cash \
         --summary "Trimmed three repeated rationale passages." \
+        --out-dir docs/artifacts
+
+    # read mode — full current content, no diff
+    python3 ops/scripts/gen_nip_diff.py \
+        --new docs/nips/NIP-CASH.md \
+        --title "NIP-CASH.md" --slug nip-cash-read \
+        --summary "Full current text." \
         --out-dir docs/artifacts
 """
 import argparse
@@ -25,9 +40,6 @@ import json
 import pathlib
 import re
 from datetime import datetime, timezone
-
-CONTEXT_LINES = 3
-COLLAPSE_THRESHOLD = CONTEXT_LINES * 2 + 2
 
 WORD_RE = re.compile(r"\s+|\S+")
 
@@ -54,11 +66,12 @@ def render_word_diff(old_line: str, new_line: str) -> str:
     return "".join(out)
 
 
-def build_rows(old_text: str, new_text: str):
+def build_diff_rows(old_text: str, new_text: str):
     """Line-level diff; changed-line pairs get a nested word-level diff.
 
     Returns (rows, added, removed) where each row is
-    (old_lineno|None, new_lineno|None, css_class, html_content).
+    (old_lineno|None, new_lineno|None, css_class, html_content). Every line
+    of both files is included — nothing is ever collapsed or omitted.
     """
     old_lines = old_text.splitlines()
     new_lines = new_text.splitlines()
@@ -105,31 +118,9 @@ def build_rows(old_text: str, new_text: str):
     return rows, added, removed
 
 
-def collapse_context(rows):
-    """Replace long unchanged runs with a click-to-expand marker that carries
-    the hidden rows along with it, keeping CONTEXT_LINES around each edit."""
-    out = []
-    group_id = 0
-    i, n = 0, len(rows)
-    while i < n:
-        if rows[i][2] != "ctx":
-            out.append(rows[i])
-            i += 1
-            continue
-        j = i
-        while j < n and rows[j][2] == "ctx":
-            j += 1
-        run_len = j - i
-        if run_len <= COLLAPSE_THRESHOLD:
-            out.extend(rows[i:j])
-        else:
-            out.extend(rows[i:i + CONTEXT_LINES])
-            hidden = rows[i + CONTEXT_LINES:j - CONTEXT_LINES]
-            group_id += 1
-            out.append(("collapse", len(hidden), hidden, group_id))
-            out.extend(rows[j - CONTEXT_LINES:j])
-        i = j
-    return out
+def build_read_rows(text: str):
+    """Every line of `text`, plain — no diff, no collapsing."""
+    return [(i + 1, i + 1, "ctx", html.escape(line)) for i, line in enumerate(text.splitlines())]
 
 
 PAGE_CSS = """
@@ -182,34 +173,12 @@ ins {
   color: var(--ins-text); background: var(--ins-bg); text-decoration: underline;
   text-decoration-thickness: 1.5px;
 }
-tr.collapse-marker td.content {
-  color: var(--ink-muted); font-style: italic; cursor: pointer; padding: 0.35rem 0.6rem;
-  border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule);
-}
-tr.collapse-marker:hover td.content { color: var(--ink); }
-tr.hidden-block { display: none; }
-tr.hidden-block.shown { display: table-row; }
 """
 
 
-def render_page(rows, title: str, summary: str, added: int, removed: int) -> str:
+def render_page(rows, title: str, summary: str, stats_html: str) -> str:
     body = []
-    for row in rows:
-        if row[0] == "collapse":
-            _, count, hidden_rows, group_id = row
-            body.append(
-                f'<tr class="collapse-marker" data-target="g{group_id}">'
-                f'<td class="ln" colspan="2"></td>'
-                f'<td class="content">&ctdot; {count} unchanged lines — click to expand &ctdot;</td></tr>'
-            )
-            for old_no, new_no, _css, content in hidden_rows:
-                body.append(
-                    f'<tr class="hidden-block" data-hidden-for="g{group_id}">'
-                    f'<td class="ln">{old_no or ""}</td><td class="ln">{new_no or ""}</td>'
-                    f'<td class="content">{content}</td></tr>'
-                )
-            continue
-        old_no, new_no, css, content = row
+    for old_no, new_no, css, content in rows:
         body.append(
             f'<tr class="{css}"><td class="ln">{old_no or ""}</td><td class="ln">{new_no or ""}</td>'
             f'<td class="content">{content}</td></tr>'
@@ -222,29 +191,19 @@ def render_page(rows, title: str, summary: str, added: int, removed: int) -> str
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} — diff</title>
+<title>{html.escape(title)}</title>
 <style>{PAGE_CSS}</style>
 </head>
 <body>
 <header>
-  <a class="back" href="index.html">&larr; all diffs</a>
+  <a class="back" href="index.html">&larr; all docs</a>
   <h1>{html.escape(title)}</h1>
   <p class="summary">{html.escape(summary)}</p>
-  <p class="stats"><span class="added">+{added}</span> <span class="removed">-{removed}</span> &middot; generated {generated_at}</p>
+  <p class="stats">{stats_html} &middot; generated {generated_at}</p>
 </header>
 <table class="diff"><tbody>
 {"".join(body)}
 </tbody></table>
-<script>
-document.querySelectorAll('.collapse-marker').forEach(function(row) {{
-  row.addEventListener('click', function() {{
-    document.querySelectorAll('[data-hidden-for="' + row.dataset.target + '"]').forEach(function(r) {{
-      r.classList.toggle('shown');
-    }});
-    row.classList.toggle('open');
-  }});
-}});
-</script>
 </body>
 </html>
 """
@@ -253,16 +212,21 @@ document.querySelectorAll('.collapse-marker').forEach(function(row) {{
 def render_index(manifest: list[dict]) -> str:
     items = []
     for entry in sorted(manifest, key=lambda e: e["title"].lower()):
+        if entry["kind"] == "diff":
+            stats = (
+                f'<span class="stats"><span class="added">+{entry["added"]}</span> '
+                f'<span class="removed">-{entry["removed"]}</span></span>'
+            )
+        else:
+            stats = f'<span class="stats">{entry["lines"]} lines</span>'
         items.append(
-            '<li><a href="{slug}.html">{title}</a>'
-            '<span class="stats"><span class="added">+{added}</span> '
-            '<span class="removed">-{removed}</span></span>'
+            '<li><a href="{slug}.html">{title}</a> <span class="kind">{kind}</span>{stats}'
             '<p class="summary">{summary}</p>'
             '<p class="ts">generated {ts}</p></li>'.format(
                 slug=html.escape(entry["slug"]),
                 title=html.escape(entry["title"]),
-                added=entry["added"],
-                removed=entry["removed"],
+                kind=html.escape(entry["kind"]),
+                stats=stats,
                 summary=html.escape(entry["summary"]),
                 ts=html.escape(entry["generated_at"]),
             )
@@ -294,7 +258,12 @@ ul {{ list-style: none; margin: 0; padding: 0; }}
 li {{ border-bottom: 1px solid var(--rule); padding: 1.1rem 0; }}
 li a {{ font-size: 1.05rem; font-weight: 600; color: var(--ink); text-decoration: none; }}
 li a:hover {{ text-decoration: underline; }}
-.stats {{ margin-left: 0.8rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem; }}
+.kind {{
+  margin-left: 0.6rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted);
+  border: 1px solid var(--rule); border-radius: 3px; padding: 0.1rem 0.4rem;
+}}
+.stats {{ margin-left: 0.6rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem; }}
 .stats .added {{ color: var(--ins-text); font-weight: 700; }}
 .stats .removed {{ color: var(--del-text); font-weight: 700; }}
 p.summary {{ margin: 0.35rem 0 0; color: var(--ink-muted); }}
@@ -303,8 +272,8 @@ p.ts {{ margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--ink-muted); opacit
 </head>
 <body>
 <main>
-  <h1>Doc diffs</h1>
-  <p class="lede">Local track-changes view of pending doc edits. Not committed — regenerate with <code>ops/scripts/gen_nip_diff.py</code>.</p>
+  <h1>Doc diffs &amp; readers</h1>
+  <p class="lede">Local view of doc content — full text always, nothing collapsed or truncated. Not committed — regenerate with <code>ops/scripts/gen_nip_diff.py</code>.</p>
   <ul>
   {''.join(items)}
   </ul>
@@ -316,23 +285,32 @@ p.ts {{ margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--ink-muted); opacit
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--old", required=True, type=pathlib.Path)
-    ap.add_argument("--new", required=True, type=pathlib.Path)
+    ap.add_argument("--old", type=pathlib.Path, help="prior version; omit for read mode (full current content, no diff)")
+    ap.add_argument("--new", required=True, type=pathlib.Path, help="current version of the file")
     ap.add_argument("--title", required=True)
     ap.add_argument("--slug", required=True)
     ap.add_argument("--summary", default="")
     ap.add_argument("--out-dir", default="docs/artifacts", type=pathlib.Path)
     args = ap.parse_args()
 
-    old_text = args.old.read_text()
     new_text = args.new.read_text()
 
-    rows, added, removed = build_rows(old_text, new_text)
-    rows = collapse_context(rows)
+    if args.old is not None:
+        old_text = args.old.read_text()
+        rows, added, removed = build_diff_rows(old_text, new_text)
+        kind = "diff"
+        stats_html = f'<span class="added">+{added}</span> <span class="removed">-{removed}</span>'
+        manifest_entry = {"kind": kind, "added": added, "removed": removed}
+    else:
+        rows = build_read_rows(new_text)
+        kind = "read"
+        line_count = len(new_text.splitlines())
+        stats_html = f"{line_count} lines"
+        manifest_entry = {"kind": kind, "lines": line_count}
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / f"{args.slug}.html").write_text(
-        render_page(rows, args.title, args.summary, added, removed)
+        render_page(rows, args.title, args.summary, stats_html)
     )
 
     manifest_path = args.out_dir / "manifest.json"
@@ -342,14 +320,13 @@ def main():
         "slug": args.slug,
         "title": args.title,
         "summary": args.summary,
-        "added": added,
-        "removed": removed,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        **manifest_entry,
     })
     manifest_path.write_text(json.dumps(manifest, indent=2))
     (args.out_dir / "index.html").write_text(render_index(manifest))
 
-    print(f"wrote {args.out_dir / (args.slug + '.html')}  (+{added} -{removed})")
+    print(f"wrote {args.out_dir / (args.slug + '.html')} ({kind})")
     print(f"wrote {args.out_dir / 'index.html'}")
 
 
