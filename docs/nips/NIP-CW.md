@@ -207,7 +207,7 @@ section for the general reasoning, which applies identically here).
 {
   "kind": 23199,
   "pubkey": "<requester pubkey — MUST equal `pubkey` in the request>",
-  "created_at": 1720000000, // ± 5 minute freshness window
+  "created_at": 1720000000, // freshness window: up to 5 minutes in the past, up to 1 minute in the future
   "tags": [
     ["d", "<Circle Wallet Hub's own pubkey>"] // binds proof to THIS Hub; no invoice to bind it to
   ],
