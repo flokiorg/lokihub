@@ -375,20 +375,12 @@ recipient's committed slice — the flaw an exactly-funded, shared multi-recipie
 have (§Security Considerations). (`redeem_fee_ppm` reuses the same parts-per-million arithmetic as
 `CircleHubConfig`'s per-payment fee, though not its funds-flow.)
 
-**The fairness invariant.** Let `claimed` be the slice's committed amount, `fee` the quoted
-`redeem_fee_ppm` cut (zero for a same-node redemption), `net = claimed − fee` the payout, and `real` the
-actual Lightning routing cost (also zero, same-node). The payout debits the shared wallet by `net + real`;
-a settlement-time reconciliation then moves `delta = fee − real` between the wallet and the Hub, so the
-wallet's total debit for the redemption is always:
-
-```
-(net + real) + delta = (claimed − fee + real) + (fee − real) = claimed
-```
-
-— exactly the redeemed slice, never more, whatever the real routing cost turned out to be. Every other
-recipient's not-yet-redeemed slice is untouched. The Hub nets `fee − real` on each external redemption:
-revenue when the rate covers cost, an absorbed loss (recorded either way) when it doesn't — never at any
-recipient's expense.
+**The fairness invariant.** The redeeming recipient's payout, plus the Hub's settlement-time
+reconciliation, always debits the shared wallet by exactly the redeemed slice's committed amount — never
+more, whatever the real routing cost turned out to be — leaving every other recipient's not-yet-redeemed
+slice untouched. The Hub nets the difference between the quoted fee and the real routing cost on each
+external redemption: revenue when the rate covers cost, an absorbed loss (recorded either way) when it
+doesn't — never at any recipient's expense.
 
 ## Listing Recipients (`list_recipients`)
 
@@ -487,8 +479,8 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
   holding the remainder for the caller's own, unchanged identity. Unlike a full transfer, this genuinely
   moves value via internal transfers; unlike the old in-place model, the source slice keeps NO residual
   amount — it becomes terminal exactly like a redemption, and both pieces are reached only through their
-  new connections. This is what keeps a wallet's amount immutable for its whole life (§Mint Provenance):
-  breaking a bill hands you fresh bills, including for your own change, never a rewritten original.
+  new connections — the reason both pieces get fresh wallets rather than an in-place rewrite is
+  §Spinning a Slice Off Into a Dedicated Wallet's own concern, not repeated here.
 
 `new_identity` MAY be `bearer` (§Bearer Slices) as well as `pubkey`/`connection_key`, for either shape.
 
@@ -1321,9 +1313,9 @@ document closes: anyone holding the shared connection, or a cash token, could tr
 slice that was never meant for them, or replay a captured proof against a different amount than it was
 signed for.
 
-**A slice is consumed whole — a claim's win/lose state is the only race, never its amount.** Because no
-operation ever rewrites a slice's committed amount in place (a split consumes the source and re-mints fresh
-wallets, §Splitting a Slice; a consolidate claims every source whole), a racing `cash_redeem`,
+**A slice is consumed whole — a claim's win/lose state is the only race, never its amount.** Because a
+slice's committed amount is never rewritten in place (§Splitting a Slice, §Spinning a Slice Off Into a
+Dedicated Wallet, §Consolidating Tokens), a racing `cash_redeem`,
 `cash_transfer`, or `cash_consolidate` can only ever find a slice *already claimed* (reject) — never
 silently *shrunk* to a smaller amount than it read a moment earlier. This is by design: it removes the
 amount-TOCTOU an in-place-decrement split would otherwise create. The claim itself MUST still be atomic and
