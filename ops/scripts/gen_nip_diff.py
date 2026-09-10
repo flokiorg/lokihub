@@ -470,11 +470,72 @@ article .diff-block > :last-child { margin-bottom: 0.6rem; }
 article li.diff-li { margin: 0 -0.6rem; padding: 0.1rem 0.6rem; border-radius: 4px; list-style-position: inside; }
 article li.diff-li.removed { background: var(--del-bg); }
 article li.diff-li.added { background: var(--ins-bg); }
+body:has(#changebar) .page { margin-right: 34px; }
+#changebar {
+  position: fixed; top: 0; right: 0; width: 22px; height: 100vh;
+  background: var(--surface); border-left: 1px solid var(--rule); z-index: 100;
+}
+#changebar .changebar-label {
+  position: absolute; top: 0.5rem; left: 0; right: 0; text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.62rem; color: var(--ink-muted); writing-mode: vertical-rl;
+  letter-spacing: 0.05em; pointer-events: none;
+}
+.changebar-tick {
+  position: absolute; left: 4px; right: 4px; height: 10px; min-height: 10px;
+  border-radius: 2px; cursor: pointer; transform: translateY(-50%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.changebar-tick.removed { background: var(--del-text); }
+.changebar-tick.added { background: var(--ins-text); }
+.changebar-tick:hover { outline: 2px solid var(--ink); outline-offset: 1px; }
+"""
+
+CHANGEBAR_SCRIPT = """
+(function () {
+  var regions = [];
+  document.querySelectorAll('.diff-block, li.diff-li').forEach(function (el) {
+    regions.push({ el: el, cls: el.classList.contains('removed') ? 'removed' : 'added' });
+  });
+  document.querySelectorAll('article del, article ins').forEach(function (el) {
+    if (el.closest('.diff-block, li.diff-li')) return;
+    regions.push({ el: el, cls: el.tagName.toLowerCase() === 'del' ? 'removed' : 'added' });
+  });
+  if (regions.length === 0) return;
+
+  var bar = document.createElement('div');
+  bar.id = 'changebar';
+  var label = document.createElement('div');
+  label.className = 'changebar-label';
+  label.textContent = regions.length + ' change' + (regions.length === 1 ? '' : 's');
+  bar.appendChild(label);
+  document.body.appendChild(bar);
+
+  function layout() {
+    var docHeight = document.documentElement.scrollHeight;
+    bar.querySelectorAll('.changebar-tick').forEach(function (t) { t.remove(); });
+    regions.forEach(function (r) {
+      var top = r.el.getBoundingClientRect().top + window.scrollY;
+      var pct = docHeight > 0 ? (top / docHeight) * 100 : 0;
+      var tick = document.createElement('div');
+      tick.className = 'changebar-tick ' + r.cls;
+      tick.style.top = pct + '%';
+      tick.title = (r.cls === 'removed' ? 'removed' : 'added') + ' — click to jump here';
+      tick.addEventListener('click', function () {
+        r.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      bar.appendChild(tick);
+    });
+  }
+  layout();
+  window.addEventListener('resize', layout);
+})();
 """
 
 
-def render_page(body_html: str, title: str, summary: str, meta_extra: str) -> str:
+def render_page(body_html: str, title: str, summary: str, meta_extra: str, show_changebar: bool = False) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    script_tag = f"<script>{CHANGEBAR_SCRIPT}</script>" if show_changebar else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -491,6 +552,7 @@ def render_page(body_html: str, title: str, summary: str, meta_extra: str) -> st
 {body_html}
   </article>
 </div>
+{script_tag}
 </body>
 </html>
 """
@@ -595,7 +657,7 @@ def main():
         meta_extra = f"{line_count} lines"
         manifest_entry = {"kind": kind, "lines": line_count}
 
-    page_html = render_page(body_html, args.title, args.summary, meta_extra)
+    page_html = render_page(body_html, args.title, args.summary, meta_extra, show_changebar=(kind == "diff"))
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / f"{args.slug}.html").write_text(page_html)
