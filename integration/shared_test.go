@@ -27,7 +27,7 @@ import (
 
 // bearerSecretAndHash returns a fresh random bearer secret (hex) and the
 // hex-encoded sha256 commitment of it — the value a caller submits as a
-// bearer new_identity's identity_value in cash_transfer (NIP-JW §Bearer
+// bearer new_identity's identity_value in cash_transfer (NIP-CASH §Bearer
 // Slices): the wallet never mints or returns a bearer secret over the
 // shared cash_wallet connection, so the caller always generates their own.
 func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {

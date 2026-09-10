@@ -62,7 +62,7 @@ type ClaimFundsParams struct {
 	IdentityEvent    string  `json:"identity_event,omitempty"`
 	AttestationEvent string  `json:"attestation_event,omitempty"`
 	// BearerSecret redeems a bearer slice in place of every other field
-	// above (NIP-JW §Bearer Slices).
+	// above (NIP-CASH §Bearer Slices).
 	BearerSecret string `json:"bearer_secret,omitempty"`
 }
 
@@ -74,7 +74,7 @@ type ClaimFundsResult struct {
 // --- cash_transfer ---
 //
 // Reassigns an unclaimed slice's registered identity without redeeming it
-// (NIP-JW §Transferring a Slice). Proof scheme mirrors cash_redeem: an
+// (NIP-CASH §Transferring and Splitting a Slice). Proof scheme mirrors cash_redeem: an
 // identity-bound caller proves who they currently are via IdentityEvent
 // (bound to the wallet + the target new_identity, not an invoice); a bearer
 // caller instead presents BearerSecret, since a bearer slice has no
@@ -85,7 +85,7 @@ type ClaimFundsResult struct {
 // The wallet never mints or returns a bearer secret here: this response
 // travels over the shared cash_wallet connection, decryptable by every
 // recipient who ever held it, so a server-generated secret returned in it
-// would leak to all of them (see NIP-JW.md's Security Considerations).
+// would leak to all of them (see NIP-CASH.md's Security Considerations).
 
 type CashTransferNewIdentityParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
@@ -106,13 +106,13 @@ type CashTransferParams struct {
 	// amount, means "transfer it all". A value less than the slice's current
 	// amount splits off exactly that much into a brand-new dedicated
 	// cash_wallet, leaving the remainder behind under the SAME current
-	// identity — see NIP-CASH §Splitting a Slice.
+	// identity — see NIP-CASH §Transferring and Splitting a Slice.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
 }
 
 // NewWalletPubkey/NewWalletToken are populated only when the transfer spun
 // the slice off into a brand-new dedicated cash_wallet, rather than
-// reassigning identity in place — see NIP-JW "Spinning a slice off into a
+// reassigning identity in place — see NIP-CASH "Spinning a slice off into a
 // dedicated wallet". NewWalletToken is a lokicash1... connection token,
 // itself NIP-44 encrypted to the caller's own pubkey (the one that signed
 // this call's IdentityEvent) using the new wallet's own keypair
@@ -131,7 +131,7 @@ type CashTransferResult struct {
 	NewWalletToken        string  `json:"new_wallet_token,omitempty"`
 	// RemainderWalletPubkey/RemainderWalletToken carry the caller's own change,
 	// now in its own fresh dedicated wallet, for a PARTIAL split (NIP-CASH
-	// §Splitting a Slice — the remainder is no longer left on the source
+	// §Transferring and Splitting a Slice — the remainder is no longer left on the source
 	// connection). Delivered the same nested-encrypted way as NewWalletToken.
 	RemainderWalletPubkey string `json:"remainder_wallet_pubkey,omitempty"`
 	RemainderWalletToken  string `json:"remainder_wallet_token,omitempty"`

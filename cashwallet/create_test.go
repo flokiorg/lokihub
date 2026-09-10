@@ -107,7 +107,7 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 // TestCreate_CashTokenMatchesPairingURI is the fund-safety property that
 // matters most for the lokicash token: it must decode to *exactly* the same
 // wallet pubkey, secret, and relay set as PairingURI, since either string
-// alone is a fully sufficient connection credential (NIP-JW §The Lokicash
+// alone is a fully sufficient connection credential (NIP-CASH §The Lokicash
 // Token). If the two ever diverged, a recipient using one but not the other
 // could end up connected to a different wallet than intended.
 func TestCreate_CashTokenMatchesPairingURI(t *testing.T) {

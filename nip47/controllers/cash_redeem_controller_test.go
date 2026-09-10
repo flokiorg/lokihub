@@ -818,7 +818,7 @@ func TestHandleCashRedeemEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClai
 // TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds is
 // the core fund-safety property for a bearer slice: first-redeem-wins is
 // intentional, but two concurrent redemptions against the same secret must
-// never both succeed (NIP-JW §Bearer Slices, Security Considerations).
+// never both succeed (NIP-CASH §Bearer Slices, Security Considerations).
 func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

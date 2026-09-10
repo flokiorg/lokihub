@@ -60,7 +60,7 @@ type cashTransferParams struct {
 	// splits off exactly that much into a brand-new dedicated cash_wallet,
 	// leaving the remainder behind on THIS slice, under the SAME current
 	// identity, otherwise untouched — the "$20 bill, hand over $5, keep $15
-	// in change" model (NIP-CASH §Splitting a Slice). The carved-off amount,
+	// in change" model (NIP-CASH §Transferring and Splitting a Slice). The carved-off amount,
 	// and any nonzero remainder left behind, must each be at least this
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
 	// AppsService.SplitCashSliceAmount.
@@ -118,7 +118,7 @@ type cashTransferResponse struct {
 	NewWalletToken  string `json:"new_wallet_token,omitempty"`
 	// RemainderWalletPubkey/RemainderWalletToken carry the caller's own change,
 	// now in its OWN fresh dedicated wallet, for a PARTIAL split (NIP-CASH
-	// §Splitting a Slice: a partial split consumes the source and mints two
+	// §Transferring and Splitting a Slice: a partial split consumes the source and mints two
 	// wallets — carved for new_identity, remainder for the caller — so a
 	// wallet's committed amount is never rewritten in place). Absent for a full
 	// transfer (no remainder) and for an in-place reassignment. Delivered the
@@ -586,7 +586,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
 	// carve off, or leave behind, unmovable dust is rejected before anything is
-	// claimed (NIP-CASH §Splitting a Slice). The old decrement-based path
+	// claimed (NIP-CASH §Transferring and Splitting a Slice). The old decrement-based path
 	// enforced this inside SplitCashSliceAmount; the terminal-claim path does it
 	// here. claim.AmountMloki is immutable (no operation rewrites it in place),
 	// so this pre-claim read can't be raced smaller underneath the claim below.
@@ -607,7 +607,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// Claim the source slice TERMINAL — the operation's commit point. Its whole
 	// amount re-emerges as one or two fresh dedicated wallets; nothing is ever
 	// decremented in place, so a wallet's committed amount stays immutable for
-	// its life (NIP-CASH §Splitting a Slice). This replaces the old
+	// its life (NIP-CASH §Transferring and Splitting a Slice). This replaces the old
 	// decrement-in-place partial split.
 	claimedFull, err := controller.appsService.ClaimCashSlice(app.ID, currentIdentityType, currentIdentityValue)
 	if err != nil {

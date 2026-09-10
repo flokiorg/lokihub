@@ -384,7 +384,7 @@ type CashWalletRecipient struct {
 	AmountMloki   int64  `json:"amount_mloki"`
 	// BearerSecret is response-only: populated when identity_type == "bearer",
 	// and only in the create_cash_wallet response — it is never retrievable
-	// again afterward (NIP-JW §Bearer Slices). A caller MUST NOT set it on a
+	// again afterward (NIP-CASH §Bearer Slices). A caller MUST NOT set it on a
 	// request; there is nothing for it to mean there.
 	BearerSecret string `json:"bearer_secret,omitempty"`
 }
@@ -477,7 +477,7 @@ type CashWalletClaimResponse struct {
 	// with no matching payment.
 	SpunOffToWalletAppID *uint `json:"spun_off_to_wallet_app_id,omitempty"`
 	// CashToken is the wallet's own connection, packaged as a
-	// lokicash1... string (NIP-JW §The Lokicash Token) — identical for every
+	// lokicash1... string (NIP-CASH §The Cash Token) — identical for every
 	// claim sharing the same WalletAppID. Only ever populated for the page
 	// of results actually being returned (ListCashWalletClaims derives it
 	// after pagination, once per unique wallet on that page, not for every

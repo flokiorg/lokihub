@@ -266,7 +266,7 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	// The wire response's cash_token must decode to the exact same
 	// wallet pubkey and secret as pairing_uri — the fund-safety property
 	// that matters most, since either string alone is a sufficient
-	// connection credential (NIP-JW §The Lokicash Token).
+	// connection credential (NIP-CASH §The Cash Token).
 	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
 	pairingURI, err := url.Parse(result.PairingURI)
 	require.NoError(t, err)
