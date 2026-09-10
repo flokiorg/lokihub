@@ -90,6 +90,9 @@ type LNClient interface {
 	GetOnchainBalance(ctx context.Context) (*OnchainBalanceResponse, error)
 	GetBalances(ctx context.Context, includeInactiveChannels bool) (*BalancesResponse, error)
 	RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (txId string, err error)
+	// BroadcastTransaction publishes a fully signed raw transaction (hex-encoded)
+	// to the network via the node's own wallet, rather than a third-party relay.
+	BroadcastTransaction(ctx context.Context, txHex string) error
 	SendPaymentProbes(ctx context.Context, invoice string) error
 	SendSpontaneousPaymentProbes(ctx context.Context, amountMloki uint64, nodeId string) error
 	ListPeers(ctx context.Context) ([]PeerDetails, error)

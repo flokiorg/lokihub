@@ -743,7 +743,6 @@ func (api *api) GetCircleIdentity(ctx context.Context, id uint) (*CircleIdentity
 }
 
 func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, orderBy string) (*ListAppsResponse, error) {
-	// TODO: join dbApps and permissions
 	dbApps := []db.App{}
 	query := api.db
 

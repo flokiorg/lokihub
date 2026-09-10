@@ -104,7 +104,8 @@ func (m *mockLNClient) GetBalances(ctx context.Context, includeInactiveChannels 
 func (m *mockLNClient) RedeemOnchainFunds(ctx context.Context, toAddress string, amount uint64, feeRate *uint64, sendAll bool) (string, error) {
 	return "", nil
 }
-func (m *mockLNClient) SendPaymentProbes(ctx context.Context, invoice string) error { return nil }
+func (m *mockLNClient) BroadcastTransaction(ctx context.Context, txHex string) error { return nil }
+func (m *mockLNClient) SendPaymentProbes(ctx context.Context, invoice string) error  { return nil }
 func (m *mockLNClient) SendSpontaneousPaymentProbes(ctx context.Context, amountMloki uint64, nodeId string) error {
 	return nil
 }
