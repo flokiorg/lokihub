@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Generate a local HTML page for reading or diffing a doc (e.g. docs/nips/*.md).
 
-Two modes, both rendering the file's complete content — nothing is ever
-collapsed, truncated, or hidden behind a click:
+Both modes render the file as a real markdown preview — headings, tables,
+lists, code blocks — never a raw-source dump, and always the complete
+content: nothing is ever collapsed, truncated, or hidden behind a click.
 
-  diff mode (--old and --new both given): a track-changes-style view —
-  removed text struck through in red, added text underlined in green,
-  word-level within changed lines, raw source line-by-line.
+  diff mode (--old and --new both given): the rendered preview of --new,
+  with a block-level diff against --old overlaid on top of it — a changed
+  paragraph/heading shows word-level <del>/<ins> highlighting inline, a
+  wholly removed block renders (in full) with a red tint, a wholly added
+  block renders (in full) with a green tint. Unchanged blocks render plain.
 
-  read mode (--old omitted): the full current content of --new rendered as
-  a proper markdown preview (headings, tables, lists, code blocks) — for
-  just reading a NIP end to end, not a raw-source dump.
+  read mode (--old omitted): the full current content of --new, rendered,
+  no diff markup at all.
 
 Writes one HTML page per run into an output directory and rebuilds that
 directory's index.html from its manifest.json.
@@ -20,14 +22,14 @@ not part of the build. Output is regenerated on demand and is not meant to
 be committed; see docs/artifacts/ in .gitignore.
 
 Usage:
-    # diff mode
+    # diff mode — rendered preview with an overlaid block/word diff
     python3 ops/scripts/gen_nip_diff.py \
         --old /path/to/before.md --new docs/nips/NIP-CASH.md \
         --title "NIP-CASH.md" --slug nip-cash \
         --summary "Trimmed three repeated rationale passages." \
         --out-dir docs/artifacts
 
-    # read mode — rendered markdown preview of the full current content
+    # read mode — rendered preview of the full current content, no diff
     python3 ops/scripts/gen_nip_diff.py \
         --new docs/nips/NIP-CASH.md \
         --title "NIP-CASH.md" --slug nip-cash-read \
@@ -44,171 +46,19 @@ from datetime import datetime, timezone
 
 WORD_RE = re.compile(r"\s+|\S+")
 
-
-# ---------------------------------------------------------------------------
-# diff mode
-# ---------------------------------------------------------------------------
-
-def word_tokenize(line: str) -> list[str]:
-    return WORD_RE.findall(line)
+# Sentinels used to carry diff boundaries through inline markdown rendering
+# (bold/italic/code/link parsing) without being mistaken for real markup.
+# Control characters: never appear in real prose, untouched by html.escape.
+DEL_OPEN, DEL_CLOSE = "\x01", "\x02"
+INS_OPEN, INS_CLOSE = "\x03", "\x04"
 
 
-def render_word_diff(old_line: str, new_line: str) -> str:
-    old_tokens = word_tokenize(old_line)
-    new_tokens = word_tokenize(new_line)
-    sm = difflib.SequenceMatcher(None, old_tokens, new_tokens, autojunk=False)
-    out = []
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
-        if tag == "equal":
-            out.append(html.escape("".join(old_tokens[i1:i2])))
-        elif tag == "delete":
-            out.append(f'<del>{html.escape("".join(old_tokens[i1:i2]))}</del>')
-        elif tag == "insert":
-            out.append(f'<ins>{html.escape("".join(new_tokens[j1:j2]))}</ins>')
-        elif tag == "replace":
-            out.append(f'<del>{html.escape("".join(old_tokens[i1:i2]))}</del>')
-            out.append(f'<ins>{html.escape("".join(new_tokens[j1:j2]))}</ins>')
-    return "".join(out)
-
-
-def build_diff_rows(old_text: str, new_text: str):
-    """Line-level diff; changed-line pairs get a nested word-level diff.
-
-    Returns (rows, added, removed) where each row is
-    (old_lineno|None, new_lineno|None, css_class, html_content). Every line
-    of both files is included — nothing is ever collapsed or omitted.
-    """
-    old_lines = old_text.splitlines()
-    new_lines = new_text.splitlines()
-    sm = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
-    rows = []
-    oln = nln = 0
-    added = removed = 0
-
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
-        if tag == "equal":
-            for k in range(i1, i2):
-                oln += 1
-                nln += 1
-                rows.append((oln, nln, "ctx", html.escape(old_lines[k])))
-        elif tag == "delete":
-            for k in range(i1, i2):
-                oln += 1
-                removed += 1
-                rows.append((oln, None, "del-line", f"<del>{html.escape(old_lines[k])}</del>"))
-        elif tag == "insert":
-            for k in range(j1, j2):
-                nln += 1
-                added += 1
-                rows.append((None, nln, "ins-line", f"<ins>{html.escape(new_lines[k])}</ins>"))
-        elif tag == "replace":
-            old_block = old_lines[i1:i2]
-            new_block = new_lines[j1:j2]
-            pair_n = min(len(old_block), len(new_block))
-            for k in range(pair_n):
-                oln += 1
-                nln += 1
-                added += 1
-                removed += 1
-                rows.append((oln, nln, "chg-line", render_word_diff(old_block[k], new_block[k])))
-            for k in range(pair_n, len(old_block)):
-                oln += 1
-                removed += 1
-                rows.append((oln, None, "del-line", f"<del>{html.escape(old_block[k])}</del>"))
-            for k in range(pair_n, len(new_block)):
-                nln += 1
-                added += 1
-                rows.append((None, nln, "ins-line", f"<ins>{html.escape(new_block[k])}</ins>"))
-
-    return rows, added, removed
-
-
-DIFF_PAGE_CSS = """
-:root {
-  --bg: #f7f4ee; --surface: #ffffff; --ink: #211d16; --ink-muted: #6b6355;
-  --rule: #ddd4c0; --del-bg: #fbe4e1; --del-text: #8a2318; --ins-bg: #e1f2e2; --ins-text: #1f6b2e;
-  --gutter: #a89c86;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16130e; --surface: #1e1a13; --ink: #ece5d6; --ink-muted: #a89d87;
-    --rule: #332c20; --del-bg: #3a1c17; --del-text: #ff8f7d; --ins-bg: #15321a; --ins-text: #7fd98f;
-    --gutter: #6b6353;
-  }
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  font-size: 13.5px;
-}
-header { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 1.5rem; }
-header .back { color: var(--ink-muted); text-decoration: none; font-size: 0.85rem; }
-header .back:hover { color: var(--ink); }
-h1 {
-  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  font-size: 1.4rem; margin: 0.6rem 0 0.3rem;
-}
-.summary {
-  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  color: var(--ink-muted); margin: 0 0 0.6rem; max-width: 60ch;
-}
-.stats { margin: 0; }
-.stats .added { color: var(--ins-text); font-weight: 700; }
-.stats .removed { color: var(--del-text); font-weight: 700; }
-table.diff { width: 100%; border-collapse: collapse; }
-table.diff td { padding: 0 0.6rem; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
-td.ln {
-  color: var(--gutter); text-align: right; user-select: none; width: 3.2rem;
-  white-space: nowrap; padding-right: 0.8rem;
-}
-tr.ctx td.content { color: var(--ink); }
-tr.del-line { background: var(--del-bg); }
-tr.ins-line { background: var(--ins-bg); }
-del {
-  color: var(--del-text); background: var(--del-bg); text-decoration: line-through;
-  text-decoration-thickness: 1.5px;
-}
-ins {
-  color: var(--ins-text); background: var(--ins-bg); text-decoration: underline;
-  text-decoration-thickness: 1.5px;
-}
-"""
-
-
-def render_diff_page(rows, title: str, summary: str, added: int, removed: int) -> str:
-    body = []
-    for old_no, new_no, css, content in rows:
-        body.append(
-            f'<tr class="{css}"><td class="ln">{old_no or ""}</td><td class="ln">{new_no or ""}</td>'
-            f'<td class="content">{content}</td></tr>'
-        )
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title>
-<style>{DIFF_PAGE_CSS}</style>
-</head>
-<body>
-<header>
-  <a class="back" href="index.html">&larr; all docs</a>
-  <h1>{html.escape(title)}</h1>
-  <p class="summary">{html.escape(summary)}</p>
-  <p class="stats"><span class="added">+{added}</span> <span class="removed">-{removed}</span> &middot; generated {generated_at}</p>
-</header>
-<table class="diff"><tbody>
-{"".join(body)}
-</tbody></table>
-</body>
-</html>
-"""
+def word_tokenize(text: str) -> list[str]:
+    return WORD_RE.findall(text)
 
 
 # ---------------------------------------------------------------------------
-# read mode — real markdown-to-HTML rendering, not a raw-source dump
+# inline rendering — markdown -> HTML for a single logical run of text
 # ---------------------------------------------------------------------------
 
 INLINE_CODE_RE = re.compile(r"`([^`]+)`")
@@ -220,7 +70,8 @@ ITALIC_RE = re.compile(r"(?<!\*)\*(?!\s)([^*\n]+?)(?<!\s)\*(?!\*)")
 def render_inline(text: str) -> str:
     """Inline markdown -> HTML: code spans, bold, italic, links. Escapes
     everything else. Code spans are protected so their contents never get
-    re-interpreted as bold/italic markup."""
+    re-interpreted as bold/italic markup. Diff sentinels (if present) pass
+    through untouched — the caller swaps them for <del>/<ins> afterward."""
     escaped = html.escape(text)
 
     stashed = []
@@ -236,6 +87,43 @@ def render_inline(text: str) -> str:
     escaped = re.sub(r"\x00(\d+)\x00", lambda m: stashed[int(m.group(1))], escaped)
     return escaped
 
+
+def render_inline_diff(old_text: str, new_text: str) -> tuple[str, int, int]:
+    """Word-level diff of two logical text runs, rendered through the same
+    inline markdown pipeline as render_inline. Returns (html, added, removed)
+    word counts."""
+    old_tokens = word_tokenize(old_text)
+    new_tokens = word_tokenize(new_text)
+    sm = difflib.SequenceMatcher(None, old_tokens, new_tokens, autojunk=False)
+    hybrid = []
+    added = removed = 0
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            hybrid.append("".join(old_tokens[i1:i2]))
+        elif tag == "delete":
+            removed += i2 - i1
+            hybrid.append(DEL_OPEN + "".join(old_tokens[i1:i2]) + DEL_CLOSE)
+        elif tag == "insert":
+            added += j2 - j1
+            hybrid.append(INS_OPEN + "".join(new_tokens[j1:j2]) + INS_CLOSE)
+        elif tag == "replace":
+            removed += i2 - i1
+            added += j2 - j1
+            hybrid.append(DEL_OPEN + "".join(old_tokens[i1:i2]) + DEL_CLOSE)
+            hybrid.append(INS_OPEN + "".join(new_tokens[j1:j2]) + INS_CLOSE)
+    rendered = render_inline("".join(hybrid))
+    rendered = (
+        rendered.replace(DEL_OPEN, "<del>")
+        .replace(DEL_CLOSE, "</del>")
+        .replace(INS_OPEN, "<ins>")
+        .replace(INS_CLOSE, "</ins>")
+    )
+    return rendered, added, removed
+
+
+# ---------------------------------------------------------------------------
+# block-level parsing — markdown source -> a list of block records
+# ---------------------------------------------------------------------------
 
 TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
 FENCE_RE = re.compile(r"^```(\w*)\s*$")
@@ -258,17 +146,20 @@ def split_table_row(line: str) -> list[str]:
     return [c.strip() for c in line.split("|")]
 
 
-def render_markdown(text: str) -> str:
+def parse_blocks(text: str) -> list[dict]:
+    """Parse markdown source into block records. Each block has at least
+    `kind` and `raw` (a stable string signature used for block-level
+    diffing); type-specific fields hold what's needed to render it."""
     lines = text.split("\n")
     n = len(lines)
-    blocks = []
+    blocks: list[dict] = []
     paragraph_buf: list[str] = []
     i = 0
 
     def flush_paragraph():
         if paragraph_buf:
             joined = " ".join(l.strip() for l in paragraph_buf)
-            blocks.append(f"<p>{render_inline(joined)}</p>")
+            blocks.append({"kind": "p", "text": joined, "raw": joined})
             paragraph_buf.clear()
 
     while i < n:
@@ -284,9 +175,8 @@ def render_markdown(text: str) -> str:
                 code_lines.append(lines[i])
                 i += 1
             i += 1  # skip closing fence
-            code = html.escape("\n".join(code_lines))
-            cls = f' class="language-{lang}"' if lang else ""
-            blocks.append(f"<pre><code{cls}>{code}</code></pre>")
+            code = "\n".join(code_lines)
+            blocks.append({"kind": "code", "lang": lang, "code": code, "raw": f"```{lang}\n{code}\n```"})
             continue
 
         if line.strip() == "":
@@ -297,11 +187,13 @@ def render_markdown(text: str) -> str:
         if not paragraph_buf and i + 1 < n and line.strip():
             nxt = lines[i + 1]
             if SETEXT_H1_RE.match(nxt):
-                blocks.append(f"<h1>{render_inline(line.strip())}</h1>")
+                t = line.strip()
+                blocks.append({"kind": "h1", "text": t, "raw": t})
                 i += 2
                 continue
             if SETEXT_H2_RE.match(nxt) and not HR_RE.match(line):
-                blocks.append(f"<h2>{render_inline(line.strip())}</h2>")
+                t = line.strip()
+                blocks.append({"kind": "h2", "text": t, "raw": t})
                 i += 2
                 continue
 
@@ -309,13 +201,14 @@ def render_markdown(text: str) -> str:
         if atx:
             flush_paragraph()
             level = len(atx.group(1))
-            blocks.append(f"<h{level}>{render_inline(atx.group(2).strip())}</h{level}>")
+            t = atx.group(2).strip()
+            blocks.append({"kind": f"h{level}", "text": t, "raw": t})
             i += 1
             continue
 
         if HR_RE.match(line):
             flush_paragraph()
-            blocks.append("<hr>")
+            blocks.append({"kind": "hr", "raw": "---"})
             i += 1
             continue
 
@@ -327,12 +220,8 @@ def render_markdown(text: str) -> str:
             while i < n and "|" in lines[i] and lines[i].strip():
                 body_rows.append(split_table_row(lines[i]))
                 i += 1
-            thead = "".join(f"<th>{render_inline(c)}</th>" for c in header)
-            tbody = "".join(
-                "<tr>" + "".join(f"<td>{render_inline(c)}</td>" for c in r) + "</tr>"
-                for r in body_rows
-            )
-            blocks.append(f"<table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>")
+            raw = "\n".join(["|".join(header)] + ["|".join(r) for r in body_rows])
+            blocks.append({"kind": "table", "header": header, "rows": body_rows, "raw": raw})
             continue
 
         if UL_RE.match(line) or OL_RE.match(line):
@@ -354,27 +243,166 @@ def render_markdown(text: str) -> str:
                     item_lines.append(lines[i].strip())
                     i += 1
                 items.append(" ".join(item_lines))
-            tag = "ol" if is_ordered else "ul"
-            lis = "".join(f"<li>{render_inline(it)}</li>" for it in items)
-            blocks.append(f"<{tag}>{lis}</{tag}>")
+            blocks.append({
+                "kind": "ol" if is_ordered else "ul",
+                "items": items,
+                "raw": "\n".join(items),
+            })
             continue
 
         paragraph_buf.append(line)
         i += 1
 
     flush_paragraph()
-    return "\n".join(blocks)
+    return blocks
 
 
-READ_PAGE_CSS = """
+HEADING_KINDS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+def render_block(b: dict) -> str:
+    kind = b["kind"]
+    if kind in HEADING_KINDS:
+        return f"<{kind}>{render_inline(b['text'])}</{kind}>"
+    if kind == "p":
+        return f"<p>{render_inline(b['text'])}</p>"
+    if kind == "hr":
+        return "<hr>"
+    if kind == "code":
+        cls = f' class="language-{b["lang"]}"' if b["lang"] else ""
+        return f"<pre><code{cls}>{html.escape(b['code'])}</code></pre>"
+    if kind == "table":
+        thead = "".join(f"<th>{render_inline(c)}</th>" for c in b["header"])
+        tbody = "".join(
+            "<tr>" + "".join(f"<td>{render_inline(c)}</td>" for c in r) + "</tr>"
+            for r in b["rows"]
+        )
+        return f"<table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>"
+    if kind in ("ul", "ol"):
+        lis = "".join(f"<li>{render_inline(it)}</li>" for it in b["items"])
+        return f"<{kind}>{lis}</{kind}>"
+    raise ValueError(f"unknown block kind {kind!r}")
+
+
+def render_document(text: str) -> str:
+    return "\n".join(render_block(b) for b in parse_blocks(text))
+
+
+# ---------------------------------------------------------------------------
+# block-level diff rendering — same preview, with changes overlaid in place
+# ---------------------------------------------------------------------------
+
+TEXTUAL_KINDS = HEADING_KINDS | {"p"}
+
+
+def render_list_pair_diff(ob: dict, nb: dict) -> tuple[str, int, int]:
+    """Item-level diff between two same-kind (ul/ol) blocks — a changed
+    bullet gets word-level highlighting in place, rather than the whole
+    list showing as one wholesale removal+addition."""
+    added_words = removed_words = 0
+    li_parts = []
+    sm = difflib.SequenceMatcher(None, ob["items"], nb["items"], autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                li_parts.append(f"<li>{render_inline(nb['items'][j1 + k])}</li>")
+        elif tag == "delete":
+            for k in range(i1, i2):
+                removed_words += len(word_tokenize(ob["items"][k]))
+                li_parts.append(f'<li class="diff-li removed">{render_inline(ob["items"][k])}</li>')
+        elif tag == "insert":
+            for k in range(j1, j2):
+                added_words += len(word_tokenize(nb["items"][k]))
+                li_parts.append(f'<li class="diff-li added">{render_inline(nb["items"][k])}</li>')
+        elif tag == "replace":
+            old_items = ob["items"][i1:i2]
+            new_items = nb["items"][j1:j2]
+            pair_n = min(len(old_items), len(new_items))
+            for k in range(pair_n):
+                inner, a, r = render_inline_diff(old_items[k], new_items[k])
+                added_words += a
+                removed_words += r
+                li_parts.append(f"<li>{inner}</li>")
+            for k in range(pair_n, len(old_items)):
+                removed_words += len(word_tokenize(old_items[k]))
+                li_parts.append(f'<li class="diff-li removed">{render_inline(old_items[k])}</li>')
+            for k in range(pair_n, len(new_items)):
+                added_words += len(word_tokenize(new_items[k]))
+                li_parts.append(f'<li class="diff-li added">{render_inline(new_items[k])}</li>')
+    return f"<{nb['kind']}>{''.join(li_parts)}</{nb['kind']}>", added_words, removed_words
+
+
+def render_document_diff(old_text: str, new_text: str) -> tuple[str, int, int]:
+    old_blocks = parse_blocks(old_text)
+    new_blocks = parse_blocks(new_text)
+    old_sigs = [b["raw"] for b in old_blocks]
+    new_sigs = [b["raw"] for b in new_blocks]
+    sm = difflib.SequenceMatcher(None, old_sigs, new_sigs, autojunk=False)
+
+    parts = []
+    added_words = removed_words = 0
+
+    def wrap(html_str: str, cls: str) -> str:
+        return f'<div class="diff-block {cls}">{html_str}</div>'
+
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                parts.append(render_block(new_blocks[j1 + k]))
+        elif tag == "delete":
+            for k in range(i1, i2):
+                removed_words += len(word_tokenize(old_blocks[k]["raw"]))
+                parts.append(wrap(render_block(old_blocks[k]), "removed"))
+        elif tag == "insert":
+            for k in range(j1, j2):
+                added_words += len(word_tokenize(new_blocks[k]["raw"]))
+                parts.append(wrap(render_block(new_blocks[k]), "added"))
+        elif tag == "replace":
+            old_slice = old_blocks[i1:i2]
+            new_slice = new_blocks[j1:j2]
+            pair_n = min(len(old_slice), len(new_slice))
+            for k in range(pair_n):
+                ob, nb = old_slice[k], new_slice[k]
+                if ob["kind"] == nb["kind"] and ob["kind"] in TEXTUAL_KINDS:
+                    inner, a, r = render_inline_diff(ob["text"], nb["text"])
+                    added_words += a
+                    removed_words += r
+                    parts.append(f"<{nb['kind']}>{inner}</{nb['kind']}>" if nb["kind"] != "p" else f"<p>{inner}</p>")
+                elif ob["kind"] == nb["kind"] and ob["kind"] in ("ul", "ol"):
+                    list_html, a, r = render_list_pair_diff(ob, nb)
+                    added_words += a
+                    removed_words += r
+                    parts.append(list_html)
+                else:
+                    removed_words += len(word_tokenize(ob["raw"]))
+                    added_words += len(word_tokenize(nb["raw"]))
+                    parts.append(wrap(render_block(ob), "removed"))
+                    parts.append(wrap(render_block(nb), "added"))
+            for k in range(pair_n, len(old_slice)):
+                removed_words += len(word_tokenize(old_slice[k]["raw"]))
+                parts.append(wrap(render_block(old_slice[k]), "removed"))
+            for k in range(pair_n, len(new_slice)):
+                added_words += len(word_tokenize(new_slice[k]["raw"]))
+                parts.append(wrap(render_block(new_slice[k]), "added"))
+
+    return "\n".join(parts), added_words, removed_words
+
+
+# ---------------------------------------------------------------------------
+# page templates
+# ---------------------------------------------------------------------------
+
+PAGE_CSS = """
 :root {
   --bg: #f7f4ee; --surface: #ffffff; --ink: #211d16; --ink-muted: #6b6355;
   --rule: #ddd4c0; --accent: #a13a1f; --code-bg: #efe9db;
+  --del-bg: #fbe4e1; --del-text: #8a2318; --ins-bg: #e1f2e2; --ins-text: #1f6b2e;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #16130e; --surface: #1e1a13; --ink: #ece5d6; --ink-muted: #a89d87;
     --rule: #332c20; --accent: #e17e56; --code-bg: #241f16;
+    --del-bg: #3a1c17; --del-text: #ff8f7d; --ins-bg: #15321a; --ins-text: #7fd98f;
   }
 }
 * { box-sizing: border-box; }
@@ -393,6 +421,8 @@ a.back:hover { color: var(--ink); }
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color: var(--ink-muted); font-size: 0.82rem; margin: 0.5rem 0 2rem;
 }
+.meta .added { color: var(--ins-text); font-weight: 700; }
+.meta .removed { color: var(--del-text); font-weight: 700; }
 article h1 { font-size: 2rem; margin: 1.4rem 0 0.3rem; line-height: 1.1; }
 article h2 {
   font-size: 1.3rem; margin: 2.4rem 0 0.9rem; padding-bottom: 0.4rem;
@@ -423,10 +453,27 @@ article th, article td {
 article th { background: var(--code-bg); font-weight: 600; }
 article strong { font-weight: 700; }
 article a { color: var(--accent); }
+article del {
+  color: var(--del-text); background: var(--del-bg); text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+article ins {
+  color: var(--ins-text); background: var(--ins-bg); text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+}
+article .diff-block {
+  margin: 0 -1rem 1rem; padding: 0.15rem 1rem; border-radius: 6px;
+}
+article .diff-block.removed { background: var(--del-bg); }
+article .diff-block.added { background: var(--ins-bg); }
+article .diff-block > :last-child { margin-bottom: 0.6rem; }
+article li.diff-li { margin: 0 -0.6rem; padding: 0.1rem 0.6rem; border-radius: 4px; list-style-position: inside; }
+article li.diff-li.removed { background: var(--del-bg); }
+article li.diff-li.added { background: var(--ins-bg); }
 """
 
 
-def render_read_page(body_html: str, title: str, summary: str, line_count: int) -> str:
+def render_page(body_html: str, title: str, summary: str, meta_extra: str) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return f"""<!doctype html>
 <html lang="en">
@@ -434,12 +481,12 @@ def render_read_page(body_html: str, title: str, summary: str, line_count: int) 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
-<style>{READ_PAGE_CSS}</style>
+<style>{PAGE_CSS}</style>
 </head>
 <body>
 <div class="page">
   <a class="back" href="index.html">&larr; all docs</a>
-  <p class="meta">{html.escape(summary)} &middot; {line_count} lines &middot; generated {generated_at}</p>
+  <p class="meta">{html.escape(summary)} &middot; {meta_extra} &middot; generated {generated_at}</p>
   <article>
 {body_html}
   </article>
@@ -448,10 +495,6 @@ def render_read_page(body_html: str, title: str, summary: str, line_count: int) 
 </html>
 """
 
-
-# ---------------------------------------------------------------------------
-# index
-# ---------------------------------------------------------------------------
 
 def render_index(manifest: list[dict]) -> str:
     items = []
@@ -517,7 +560,7 @@ p.ts {{ margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--ink-muted); opacit
 <body>
 <main>
   <h1>Doc diffs &amp; readers</h1>
-  <p class="lede">Local view of doc content — full text always, nothing collapsed or truncated; read pages render as a formatted preview, not raw source. Not committed — regenerate with <code>ops/scripts/gen_nip_diff.py</code>.</p>
+  <p class="lede">Local view of doc content, always rendered as a preview and always in full — nothing collapsed, truncated, or left as raw source. Not committed — regenerate with <code>ops/scripts/gen_nip_diff.py</code>.</p>
   <ul>
   {''.join(items)}
   </ul>
@@ -529,7 +572,7 @@ p.ts {{ margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--ink-muted); opacit
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--old", type=pathlib.Path, help="prior version; omit for read mode (rendered markdown preview, no diff)")
+    ap.add_argument("--old", type=pathlib.Path, help="prior version; omit for read mode (rendered preview, no diff)")
     ap.add_argument("--new", required=True, type=pathlib.Path, help="current version of the file")
     ap.add_argument("--title", required=True)
     ap.add_argument("--slug", required=True)
@@ -541,16 +584,18 @@ def main():
 
     if args.old is not None:
         old_text = args.old.read_text()
-        rows, added, removed = build_diff_rows(old_text, new_text)
+        body_html, added, removed = render_document_diff(old_text, new_text)
         kind = "diff"
-        page_html = render_diff_page(rows, args.title, args.summary, added, removed)
+        meta_extra = f'<span class="added">+{added}</span> <span class="removed">-{removed}</span> words'
         manifest_entry = {"kind": kind, "added": added, "removed": removed}
     else:
-        body_html = render_markdown(new_text)
+        body_html = render_document(new_text)
         line_count = len(new_text.splitlines())
         kind = "read"
-        page_html = render_read_page(body_html, args.title, args.summary, line_count)
+        meta_extra = f"{line_count} lines"
         manifest_entry = {"kind": kind, "lines": line_count}
+
+    page_html = render_page(body_html, args.title, args.summary, meta_extra)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / f"{args.slug}.html").write_text(page_html)
