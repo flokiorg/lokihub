@@ -472,7 +472,7 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
   themselves under a different mode, e.g. converting into `bearer`). No funds move in the Lightning
   sense, and no value is created. Only one thing changes: which identity is authorized to redeem, or
   transfer/split again, that one slice, for the amount it was already funded with.
-- **Split off a piece** — like breaking a bill: carve `amount_millis` (less than the slice's current
+- **Split off a piece** — carve `amount_millis` (less than the slice's current
   total) off for a target identity. The source slice is consumed whole, and its value re-emerges as **two
   brand-new, dedicated Cash Wallets** — one holding the carved-off `amount_millis` for the target, one
   holding the remainder for the caller's own, unchanged identity. Unlike a full transfer, this genuinely
@@ -687,7 +687,7 @@ Second, giving the caller's own remainder a fresh wallet too — rather than dec
 place — is what makes a wallet's committed amount immutable for its whole life (§Mint Provenance): if the
 source could be rewritten to a smaller amount, its mint signature (which commits to that amount) would go
 stale, and a racing `cash_redeem` could read a since-shrunk amount. A source that is always claimed whole,
-never rewritten, closes both. Breaking a bill hands you fresh bills, including for your own change.
+never rewritten, closes both.
 
 **Funding.** Each new wallet MUST be created as a child of the same Cash Hub the old wallet is already a
 child of — not a child of the old wallet — and funded via a single internal transfer of exactly its own
@@ -767,9 +767,8 @@ hub-set default.
 ## Consolidating Tokens (`cash_consolidate`)
 
 The inverse of a split: combine several unredeemed slices the same node custodies into **one** new cash
-token. Like breaking a bill in reverse — hand over a $20, a $5, and three $1s, get back one $25. No value
-is created (the result is exactly the sum of its inputs) and no Lightning hop is involved (funding is
-internal transfers between wallets this node already holds).
+token. No value is created (the result is exactly the sum of its inputs) and no Lightning hop is involved
+(funding is internal transfers between wallets this node already holds).
 
 **What can be consolidated together.** Every source MUST be:
 
