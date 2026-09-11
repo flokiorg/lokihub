@@ -62,12 +62,12 @@ A signature only proves someone controls a key — it doesn't prove that key bel
 owner actually added. Both transports check the sender against the same registered-LSP list before
 acting on anything, on top of verifying the signature.
 
-**Known gap:** for a notification that changes an order's state, the HTTP webhook path additionally
-checks that the sender's key matches the LSP that actually owns *that* order — a registered LSP can't
-forge a state change for somebody else's order over that transport. The Nostr path doesn't carry the
-same check yet: any trusted LSP's signed event is currently accepted regardless of which LSP the order
-actually belongs to. Worth closing, since it's the kind of gap that's easy to miss precisely because the
-webhook path already got it right.
+For a notification that changes an order's state, a registered LSP can't forge a state change for
+somebody else's order — the check that the sender's key matches the LSP that actually owns *that*
+order lives in the one function both transports eventually call (`LiquidityManager.HandleOrderStateUpdate`),
+not duplicated separately per transport. That used to be a real gap: the check only existed as the
+HTTP webhook path's own pre-check, so the Nostr path reached the update with no ownership check at
+all. Moved into the shared function both paths call, closing it for both at once.
 
 A relay is never treated as proof of anything — it's a pipe. Every event's signature is checked
 independently; nothing about a relay's own behavior is trusted as a stand-in for that.

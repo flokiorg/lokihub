@@ -226,7 +226,7 @@ func orderStatePriority(state string) int {
 // The read and write are atomic inside a transaction — a lower-priority state can never overwrite a
 // higher-priority one even under concurrent callers (e.g. PAID → CREATED is silently skipped).
 func (m *LiquidityManager) HandleOrderStateUpdate(orderID, state, lspPubkey string) {
-	applied, err := m.cfg.LSPManager.UpdateOrderStateIfPriority(orderID, state, func(current string) bool {
+	applied, err := m.cfg.LSPManager.UpdateOrderStateIfPriority(orderID, state, lspPubkey, func(current string) bool {
 		if orderStatePriority(current) > orderStatePriority(state) {
 			logger.Logger.Debug().
 				Str("order_id", orderID).
