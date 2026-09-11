@@ -2,6 +2,7 @@ package manager
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -195,13 +196,23 @@ func (m *LSPManager) UpdateOrderState(orderID, state string) error {
 }
 
 // UpdateOrderStateIfPriority atomically reads the current state and applies the update only
-// if allow(currentState) returns true. Returns (true, nil) when applied, (false, nil) when skipped.
-func (m *LSPManager) UpdateOrderStateIfPriority(orderID, newState string, allow func(current string) bool) (bool, error) {
+// if allow(currentState) returns true. lspPubkey MUST match the order's own LSPPubkey — this is
+// the single authoritative ownership guard every caller goes through (HTTP webhook and Nostr
+// notification paths both eventually call this), closing the gap where a trusted-but-wrong LSP
+// could otherwise forge a state change for an order it doesn't own (docs/lokihub-notifications.md's
+// own "Known gap" section). api.UpdateLSPS1OrderState's separate pre-check is a legitimate
+// fast-fail on top of this, not a substitute for it — this check is the one every path actually
+// depends on. Returns (true, nil) when applied, (false, nil) when skipped by allow, and a non-nil
+// error for a genuine ownership mismatch.
+func (m *LSPManager) UpdateOrderStateIfPriority(orderID, newState, lspPubkey string, allow func(current string) bool) (bool, error) {
 	applied := false
 	err := m.db.Transaction(func(tx *gorm.DB) error {
 		var order persist.LSPS1Order
 		if err := tx.First(&order, "order_id = ?", orderID).Error; err != nil {
 			return err
+		}
+		if order.LSPPubkey != lspPubkey {
+			return fmt.Errorf("lsp pubkey %q does not match the LSP that created order %s", lspPubkey, orderID)
 		}
 		if !allow(order.State) {
 			return nil
