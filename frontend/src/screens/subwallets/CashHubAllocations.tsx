@@ -95,11 +95,20 @@ export type CashHubAllocationsHandle = {
 const maxVisiblePills = 5;
 
 let recipientRowCounter = 0;
-function newRecipientRow(amountLoki: number): RecipientRow {
+// identityType defaults to "bearer" — the simplest option, requiring
+// nothing from the recipient — but a row added alongside an existing one
+// (addRow, below) MUST pass "pubkey" explicitly instead: bearer can only
+// ever be a wallet's sole recipient (NIP-CASH §Bearer Slices), so defaulting
+// a second-or-later row to it would start the form in an already-invalid
+// state.
+function newRecipientRow(
+  amountLoki: number,
+  identityType: RecipientRow["identityType"] = "bearer"
+): RecipientRow {
   recipientRowCounter += 1;
   return {
     key: `r${recipientRowCounter}`,
-    identityType: "pubkey",
+    identityType,
     pubkeyValue: "",
     resolvedPubkeyHex: undefined,
     connectionKeyValue: "",
@@ -485,7 +494,7 @@ export const CashHubAllocations = React.forwardRef<
     setRecipients((rows) => rows.filter((r) => r.key !== key));
   };
   const addRow = () => {
-    setRecipients((rows) => [...rows, newRecipientRow(0)]);
+    setRecipients((rows) => [...rows, newRecipientRow(0, "pubkey")]);
   };
 
   // A bearer recipient has no identity, and MUST be the wallet's only
