@@ -54,6 +54,12 @@ export function RevealConnectionDialog({
     recipientCount: number;
     claimedCount: number;
     expiresAtSecs?: number;
+    // isBearer: true when this wallet's one slice is bearer mode (NIP-CASH
+    // §Bearer Slices — a bearer slice's wallet is always single-recipient).
+    // Hides the Recipients row below: "Recipients: 1" doesn't mean anything
+    // for a bearer note presented as a single cash bill, the way it does
+    // for a Cash Hub's shared, identity-bound wallet.
+    isBearer?: boolean;
   };
   mode?: "reveal" | "create";
   // "lokicash": Cash wallets — the dialog title and ConnectAppCard both drop
@@ -123,14 +129,16 @@ export function RevealConnectionDialog({
                 {deadline?.label ?? tj("claimDeadline.none")}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">
-                {t("connectAppCard.recipientsLabel", "Recipients")}
-              </span>
-              <span className="font-medium tabular-nums">
-                {walletSummary.recipientCount}
-              </span>
-            </div>
+            {!walletSummary.isBearer && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {t("connectAppCard.recipientsLabel", "Recipients")}
+                </span>
+                <span className="font-medium tabular-nums">
+                  {walletSummary.recipientCount}
+                </span>
+              </div>
+            )}
           </div>
         )}
         <ConnectAppCard

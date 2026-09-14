@@ -1,5 +1,28 @@
 import i18n from "src/i18n";
 
+// LOKICASH_BEARER_GIFT_SEPARATOR joins a lokicash1... token to its
+// bearer_secret into one copy/QR-able string (NIP-CASH §Bearer Slices →
+// Presenting a Bearer Slice as One String). "#" never appears in a
+// bech32-encoded token (NIP-CASH §Wire Format's charset excludes it), so the
+// join is always unambiguous to split back apart. This is a display-layer
+// convenience only — the token's own wire format and the bearer_secret
+// request parameter are both unchanged; nothing ever decodes this combined
+// string as a single value.
+export const LOKICASH_BEARER_GIFT_SEPARATOR = "#";
+
+// buildLokicashBearerGift packages a freshly-minted bearer slice's token and
+// secret into one string a recipient can redeem from without needing a
+// second, separately-conveyed value — matching how a physical cash bill
+// works: hand over the one thing, it's spendable. Only ever call this with a
+// bearer_secret that just came back from mint_cash's response (it cannot be
+// retrieved again afterward, so there's nothing to rebuild this from later).
+export function buildLokicashBearerGift(
+  token: string,
+  bearerSecret: string
+): string {
+  return `${token}${LOKICASH_BEARER_GIFT_SEPARATOR}${bearerSecret}`;
+}
+
 // Countdown-style claim deadline: minutes/hours when close (where a bare
 // calendar date would hide how urgent the window actually is), a calendar
 // date once it's more than a day out. `title` always carries the exact

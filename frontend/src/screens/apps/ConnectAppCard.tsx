@@ -17,6 +17,7 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { App } from "src/types";
+import { buildLokicashBearerGift } from "src/utils/cashWallet";
 
 export function ConnectAppCard({
   app,
@@ -45,7 +46,12 @@ export function ConnectAppCard({
   // bearerSecret: a Cash wallet's bearer redemption secret, present only
   // right after creating a bearer-mode wallet — the wallet mints it once
   // and never returns it again (NIP-CASH §Bearer Slices), so it has to be
-  // shown here, not just left to a later "reveal".
+  // shown here, not just left to a later "reveal". When set alongside
+  // lokicashToken, the QR and primary copy button present the two joined
+  // into one "<token>#<secret>" gift string (NIP-CASH §Bearer Slices →
+  // Presenting a Bearer Slice as One String) instead of two separate
+  // actions — handing over one thing that's immediately spendable, the way
+  // physical cash works.
   bearerSecret?: string;
   appStoreApp?: AppStoreApp;
   // "create": full Card with header, used on standalone pairing pages.
@@ -92,10 +98,17 @@ export function ConnectAppCard({
         : undefined;
   const showingHubToken = Boolean(hubToken) && !showClassicNwc;
 
+  // bearerGift: only meaningful for primaryFormat "lokicash" — a bearer
+  // secret is Cash-specific (see bearerSecret's own doc comment above).
+  const bearerGift =
+    primaryFormat === "lokicash" && lokicashToken && bearerSecret
+      ? buildLokicashBearerGift(lokicashToken, bearerSecret)
+      : undefined;
+
   const qrValue = showingHubToken
     ? (hubToken ?? "")
     : primaryFormat === "lokicash"
-      ? (lokicashToken ?? "")
+      ? (bearerGift ?? lokicashToken ?? "")
       : pairingUri;
   const copy = () => {
     copyToClipboard(qrValue);
@@ -164,7 +177,9 @@ export function ConnectAppCard({
         {primaryFormat === "lokicash" ? (
           <Button onClick={copy} variant="outline">
             <CopyIcon />
-            {t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
+            {bearerGift
+              ? t("connectAppCard.copyLokicash", "Copy Lokicash")
+              : t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
           </Button>
         ) : showingHubToken ? (
           <Button onClick={copy} variant="outline">
@@ -211,21 +226,12 @@ export function ConnectAppCard({
               : t("connectAppCard.showAsNwc", "Show as classic NWC URI")}
           </Button>
         ) : null}
-        {bearerSecret ? (
-          <Button
-            onClick={() => copyToClipboard(bearerSecret)}
-            variant="outline"
-          >
-            <CopyIcon />
-            {t("connectAppCard.copyBearerSecret", "Copy Bearer Secret")}
-          </Button>
-        ) : null}
       </div>
-      {bearerSecret ? (
+      {bearerGift ? (
         <p className="text-sm text-muted-foreground text-center max-w-sm">
           {t(
-            "connectAppCard.bearerSecretHelper",
-            "This is a bearer secret — anyone who has it can redeem this wallet's funds, with no other proof required. It's shown only this once; hand both this and the connection above to the intended recipient, out of band."
+            "connectAppCard.bearerLokicashHelper",
+            "This Lokicash is bearer cash — whoever has it can redeem the funds, no other proof required. It's shown only this once; hand it to the intended recipient, out of band."
           )}
         </p>
       ) : null}
