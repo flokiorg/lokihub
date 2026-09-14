@@ -820,7 +820,9 @@ sequenceDiagram
     Caller->>Node: cash_consolidate {sources[], proofs[], new_identity}
     Node->>Node: confirm this node custodies every source, all same hub
     Node->>Node: verify caller controls each source slice
+    Node->>Node: validate new_identity, including live IA trust if connection_key
     Node->>Node: sum amounts (overflow-checked), check sum does not exceed hub's per-wallet ceiling
+    Node->>Node: resolve merged terms - earliest expiry, reject if min_transfer/redeem_fee disagree
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
