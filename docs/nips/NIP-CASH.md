@@ -174,7 +174,7 @@ sequenceDiagram
     {"identity_type": "pubkey", "identity_value": "<hex pubkey>", "amount_millis": 21000},
     {"identity_type": "connection_key", "identity_value": "abc123", "ia_pubkey": "<hex IA pubkey>", "amount_millis": 5000}
   ],
-  "expiry": 86400 // OPTIONAL, seconds
+  "expiry": 86400 // seconds
 }
 ```
 
@@ -537,7 +537,7 @@ sequenceDiagram
                 against a different one. Omitted entirely when the current identity is
                 bearer — see bearer_secret below. Exact format out of scope for this
                 document, beyond that binding requirement. */ },
-  "bearer_secret": "<opaque>", // in place of `proof`, iff the current identity is bearer
+  "bearer_secret": "<opaque>",
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"},
   // new_identity MAY instead be
   // {"identity_type": "bearer", "identity_value": "<hex sha256 commitment the caller generated>"}
