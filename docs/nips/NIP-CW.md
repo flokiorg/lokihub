@@ -155,6 +155,7 @@ sequenceDiagram
     Member->>Hub: create_circle_wallet {pubkey, max_amount, expiry, budget_renewal?, identity_event}
     Hub->>Hub: verify identity proof
     Hub->>Hub: authorize requester as a circle member
+    Hub->>Hub: check one active wallet per (Hub, identity)
     Hub->>Hub: validate requested budget and expiry
     Hub->>Hub: check available balance
     Hub->>Wallet: create wallet and record membership, in one transaction
@@ -284,6 +285,24 @@ underlying node. But it's the concrete, everyday benefit a circle is built aroun
 sharing one host gets free, instant payments among themselves, as a side effect of sharing the same
 node.
 
+## Fees
+
+A Circle Wallet Hub MAY apply a forwarding-fee skim to a member's payments — `fees_ppm`
+(parts-per-million), a Hub-level setting reported in `create_circle_wallet`'s own response
+(§Creating a Circle Wallet) so a member knows the rate before they ever pay anything.
+
+- **When it applies.** Only to a payment that genuinely leaves the circle over real Lightning routing.
+  An in-circle transfer, or any other payment settled between apps on the same underlying node
+  (§In-Circle Transfers above), is always fee-free — `fees_ppm` never applies to it.
+- **How much.** `fees_ppm` times the payment amount.
+- **Who pays.** The paying member, on top of the payment amount, out of their own wallet balance —
+  never any other member's, and never the Hub's own underlying balance.
+
+A Hub that charges no fee at all MUST still report `fees_ppm: 0`, not omit the field. Whatever rate a Hub
+advertises, it MUST actually apply that exact rate to every qualifying payment — see §Security
+Considerations for why silently under- or over-charging relative to the advertised rate is a correctness
+defect, not merely cosmetic.
+
 ## Pairing Connection
 
 A Circle Wallet MUST keep a one-time-random pairing secret, never persisted after generation. The owner
@@ -371,10 +390,8 @@ resubmitted repeatedly within its own freshness window.
 **One active wallet per (Hub, identity)**'s two-layer enforcement (§Membership) exists because a pre-check
 alone is a race, not a guarantee — the unique-constraint insert is what makes it authoritative.
 
-**A `fees_ppm` value in a response is informational only.** An implementation MUST NOT advertise a
-non-zero value unless it actually applies the corresponding forwarding-fee skim to payments made from
-the wallet. Advertising a fee that's never charged is a correctness defect, not merely cosmetic —
-callers integrating against this field will assume it's enforced.
+**A `fees_ppm` value in a response is never merely informational.** See §Fees for what it applies to and
+who pays — an implementation MUST actually charge the rate it advertises, not just report it.
 
 **Publish-after-commit ordering.** A new member's relay subscription MUST be published only after its
 creating transaction commits. Publishing from inside a still-open transaction risks the event consumer
