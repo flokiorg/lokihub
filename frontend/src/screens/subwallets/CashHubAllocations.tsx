@@ -830,10 +830,6 @@ export const CashHubAllocations = React.forwardRef<
           }
         >
           <TabsList>
-            <TabsTrigger value="pubkey">{t("identityType.pubkey")}</TabsTrigger>
-            <TabsTrigger value="connection_key">
-              {t("identityType.connectionKey")}
-            </TabsTrigger>
             <TabsTrigger
               value="bearer"
               disabled={recipients.length > 1}
@@ -844,6 +840,10 @@ export const CashHubAllocations = React.forwardRef<
               }
             >
               {t("identityType.bearer")}
+            </TabsTrigger>
+            <TabsTrigger value="pubkey">{t("identityType.pubkey")}</TabsTrigger>
+            <TabsTrigger value="connection_key">
+              {t("identityType.connectionKey")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
