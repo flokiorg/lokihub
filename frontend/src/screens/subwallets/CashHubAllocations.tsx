@@ -290,6 +290,7 @@ export const CashHubAllocations = React.forwardRef<
         recipientCount: number;
         claimedCount: number;
         expiresAtSecs?: number;
+        isBearer?: boolean;
       }
     | undefined
   >(undefined);
@@ -310,6 +311,7 @@ export const CashHubAllocations = React.forwardRef<
       recipientCount: number;
       claimedCount: number;
       expiresAtSecs?: number;
+      isBearer?: boolean;
     }
   ) => {
     setRevealingWalletId(walletAppId);
@@ -652,6 +654,7 @@ export const CashHubAllocations = React.forwardRef<
             recipientCount: result.recipients.length,
             claimedCount: 0,
             expiresAtSecs: result.expires_at || undefined,
+            isBearer: result.recipients[0]?.identity_type === "bearer",
           });
           setRevealMode("create");
         }
@@ -1448,6 +1451,8 @@ export const CashHubAllocations = React.forwardRef<
                               recipientCount: totalCount,
                               claimedCount,
                               expiresAtSecs: group.claims[0].expires_at,
+                              isBearer:
+                                group.claims[0].identity_type === "bearer",
                             });
                           }}
                         >

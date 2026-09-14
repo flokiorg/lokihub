@@ -319,6 +319,7 @@ function CashWalletRecipientsCard({ app }: { app: App }) {
             recipientCount: recipients.length,
             claimedCount,
             expiresAtSecs: recipients[0].expires_at,
+            isBearer: recipients[0].identity_type === "bearer",
           }}
           primaryFormat="lokicash"
           onClose={() => setShowReveal(false)}
