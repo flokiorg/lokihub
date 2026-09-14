@@ -123,21 +123,6 @@ services:
     networks:
       - lokihub-dev
 
-  artifacts:
-    # Plain static file server for docs/artifacts (see
-    # ops/scripts/gen_nip_diff.py) — gitignored, regenerated on demand, not
-    # part of the frontend/Caddy routing. Zero-config nginx: it just serves
-    # whatever's on disk under docs/artifacts, empty or not.
-    image: nginx:alpine
-    container_name: lokihub-dev-artifacts
-    restart: unless-stopped
-    volumes:
-      - ./docs/artifacts:/usr/share/nginx/html:ro
-    ports:
-      - "${ARTIFACTS_PORT:-5620}:80"
-    networks:
-      - lokihub-dev
-
 networks:
   lokihub-dev:
     driver: bridge
