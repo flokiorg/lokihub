@@ -1041,9 +1041,9 @@ also be rejected rather than read out of bounds.
 
 ### Redemption Metadata
 
-Type `3` (identity required) is an OPTIONAL hint, not part of the connection credential itself (§The
-Pairing Connection needs only types `0`–`2`) — it lets a client decide how to attempt a call without a
-relay round-trip first, purely as a convenience:
+Type `3` (identity required) is an OPTIONAL hint, not part of the connection credential itself (only types
+`0`–`2` are REQUIRED — §Wire Format) — it lets a client decide how to attempt a call without a relay
+round-trip first, purely as a convenience:
 
 **Identity required** (`0` = false, `1` = true) reports whether the wallet currently requires a proof at
 all: `false` means the wallet is a single bearer slice (`cash_redeem`/`cash_transfer` need only its
@@ -1136,7 +1136,11 @@ since a Hub connection carries no slice, no expiry, and no provenance:
 | `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
 | `3` | label | a human-readable name, UTF-8 | zero or one, OPTIONAL |
 
-Types `0`–`2` carry the identical meaning §The Cash Token's own table gives them. This format's type
+Types `0`–`2` carry the identical meaning §The Cash Token's own table gives them, with one deliberate
+cardinality difference: a Hub connection's own relay hint MUST appear at least once (a cash token's MAY be
+entirely absent, per the NIP-19 precedent above), since a Hub connection is the only way to reach that
+specific Hub at all — unlike an `nprofile`-style pubkey, it has no other discovery path a relay-less string
+could still fall back on. This format's type
 numbers are scoped to its own HRP and don't need to, and don't, line up with a cash token's types `3`/`5`/
 `6` — identity-required, mint provenance — which describe concepts that don't apply to a Hub connection at
 all. A decoder MUST ignore any TLV entry of an unrecognized type rather than rejecting the string, per the

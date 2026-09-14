@@ -120,12 +120,10 @@ A Circle Wallet Hub MUST maintain, for itself:
   has issued, separate from and in addition to its own real balance.
 
 A member's `max_amount` is a spend cap, not a pre-funded transfer: a Circle Wallet starts at zero
-balance and draws against the Hub's own underlying balance as it spends, up to that cap. Because of
-that, a Circle Wallet Hub MUST verify, before creating a new wallet and atomically with creating it,
-that the sum of `max_amount` across every currently-active wallet it has issued, plus the amount being
-requested, does not exceed the Hub's own current balance. If the Hub has configured the optional
-aggregate ceiling above, that same sum MUST also not exceed it. A wallet's expiry determines when it
-stops counting toward this sum.
+balance and draws against the Hub's own underlying balance as it spends, up to that cap. The Hub MUST
+maintain this cap-vs-balance invariant atomically with every new wallet it creates (§Creating a Circle
+Wallet's own Processing Algorithm, step 7). A wallet's expiry determines when it stops counting toward
+this sum.
 
 For each member who currently holds an active Circle Wallet under a given Hub, an implementation MUST
 be able to determine that fact. §Membership's one-active-wallet-per-member rule is checked against it.
@@ -250,9 +248,7 @@ response cannot be used to probe list membership.
 
 ## Membership
 
-Membership itself — deciding who is currently "in" the circle — is a configuration detail the host
-picks per Hub, not part of what a Circle Wallet offers once someone holds one. A Circle Identity
-supports two admission mechanisms:
+A Circle Identity's admission mechanism (§Terminology) supports two forms:
 
 - **allowlist**: an explicit list of pubkeys the host maintains directly.
 - **following**: whoever the host's own Nostr account currently follows (kind:3 contact list), checked
