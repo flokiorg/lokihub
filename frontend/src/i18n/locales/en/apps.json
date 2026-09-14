@@ -229,6 +229,7 @@
     "amountLabel": "Amount",
     "statusLabel": "Status",
     "expiresLabel": "Expires",
-    "recipientsLabel": "Recipients"
+    "recipientsLabel": "Recipients",
+    "bearerSavedConfirm": "I've saved this — Close"
   }
 }
