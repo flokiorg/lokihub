@@ -1317,8 +1317,8 @@ re-verification against a "live" value that can no longer change under it.
 **A many-source operation MUST take the conservative bound on every inherited term.** `cash_consolidate` is
 the only operation that combines multiple slices, so it is the only place where differing source terms must
 be resolved. It MUST never let a caller pick the favorable one: the merged expiry is the **earliest** of
-the sources (taking the latest would let an about-to-expire bill ride a far-expiry bill's clock, defeating
-the operator's expiry sweep — §Consolidating Tokens), and `min_transfer_millis`/`redeem_fee_ppm` MUST match
+the sources (taking the latest would let an about-to-expire source ride a far-expiry source's clock,
+defeating the operator's expiry sweep — §Consolidating Tokens), and `min_transfer_millis`/`redeem_fee_ppm` MUST match
 across sources rather than silently adopting the loosest. Every future many-source operation MUST follow
 the same rule: resolve to the most restrictive bound, never the most permissive.
 
@@ -1342,7 +1342,8 @@ response is the opposite of the instinctive one: restoring the claim anyway woul
 their source balance is whole when it's actually short by whatever didn't come back — an over-entitlement,
 not a safe retry state. This is a narrow, deliberate exception to the "MUST roll back" atomicity rules
 `cash_transfer` splits and `cash_consolidate` both follow, not a gap in them — see §Spinning a Slice Off
-Into a Dedicated Wallet and §Consolidating Tokens' own Atomicity/step-7 discussion for the full mechanism.
+Into a Dedicated Wallet's own Atomicity discussion for the full mechanism (§Consolidating Tokens' step 7
+follows the same rule).
 
 **IA revocation MUST be checked live at redemption time, not only at wallet-creation time.** A compromised or
 retired Identity Authority needs to be cut off immediately, for every wallet it ever attested for, not
