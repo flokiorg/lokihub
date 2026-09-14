@@ -196,6 +196,30 @@ sequenceDiagram
 the shared Hub connection, including the wallet owner, is able to decrypt a Circle Wallet's connection
 string from the response alone.
 
+### Processing Algorithm
+
+On receiving `create_circle_wallet`, the Hub MUST, in order:
+
+1. Validate `pubkey` is a well-formed 64-character lowercase-hex string.
+2. Verify the kind-23199 identity proof per §Identity Proof: signature, `d`-tag equal to the Hub's own
+   pubkey, signer equal to the requested `pubkey`, and freshness.
+3. Check the proof's event ID against the single-use replay guard. A previously-consumed event ID MUST
+   be rejected, even if otherwise valid and still within its freshness window.
+4. Authorize the requester against the Hub's Circle Identity: an `allowlist`-policy Hub performs a
+   direct lookup, while a `following`-policy Hub checks the provider's live Nostr contact list.
+5. Check the one-active-wallet-per-(Hub, identity) rule (§Membership), rejecting if the identity
+   already holds an active Circle Wallet under this Hub.
+6. Validate `max_amount` against the Hub's own per-wallet ceiling and the resolved `budget_renewal`
+   against the Hub's own renewal floor.
+7. Inside one transaction, verify that the sum of `max_amount` across every currently-active wallet the
+   Hub has issued, plus this request's `max_amount`, does not exceed the Hub's own current balance (and
+   its optional aggregate ceiling, if configured). Then create the Circle Wallet connection and insert
+   its membership row. The membership row's uniqueness constraint is the authoritative guard for step
+   5, so a conflict here, or a balance/ceiling check failing, MUST roll back the entire transaction,
+   including the just-created connection and permission rows.
+8. After the transaction commits, never before, publish the new connection's relay subscription.
+9. Return the encrypted pairing URI and resolved wallet parameters.
+
 ## Identity Proof (kind 23199)
 
 This document's own event kind, defined nowhere else — not NIP-CASH's `23198` (a structurally different
@@ -221,30 +245,6 @@ Verification MUST run before the allowlist/following
 authorization check. This ordering is what closes an allowlist-membership oracle: an attacker who does
 not hold the target's private key MUST NOT be able to reach the authorization check at all, so the
 response cannot be used to probe list membership.
-
-## Processing Algorithm
-
-On receiving `create_circle_wallet`, the Hub MUST, in order:
-
-1. Validate `pubkey` is a well-formed 64-character lowercase-hex string.
-2. Verify the kind-23199 identity proof per §Identity Proof: signature, `d`-tag equal to the Hub's own
-   pubkey, signer equal to the requested `pubkey`, and freshness.
-3. Check the proof's event ID against the single-use replay guard. A previously-consumed event ID MUST
-   be rejected, even if otherwise valid and still within its freshness window.
-4. Authorize the requester against the Hub's Circle Identity: an `allowlist`-policy Hub performs a
-   direct lookup, while a `following`-policy Hub checks the provider's live Nostr contact list.
-5. Check the one-active-wallet-per-(Hub, identity) rule (§Membership), rejecting if the identity
-   already holds an active Circle Wallet under this Hub.
-6. Validate `max_amount` against the Hub's own per-wallet ceiling and the resolved `budget_renewal`
-   against the Hub's own renewal floor.
-7. Inside one transaction, verify that the sum of `max_amount` across every currently-active wallet the
-   Hub has issued, plus this request's `max_amount`, does not exceed the Hub's own current balance (and
-   its optional aggregate ceiling, if configured). Then create the Circle Wallet connection and insert
-   its membership row. The membership row's uniqueness constraint is the authoritative guard for step
-   5, so a conflict here, or a balance/ceiling check failing, MUST roll back the entire transaction,
-   including the just-created connection and permission rows.
-8. After the transaction commits, never before, publish the new connection's relay subscription.
-9. Return the encrypted pairing URI and resolved wallet parameters.
 
 ## Membership
 
