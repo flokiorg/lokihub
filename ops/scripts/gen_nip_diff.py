@@ -562,7 +562,7 @@ MERMAID_SCRIPT = """
 # tokenization reads it fine.
 HIGHLIGHT_SCRIPT = """
 <link id="hljs-theme" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/common.min.js"></script>
 <script>
   document.getElementById('hljs-theme').href = window.matchMedia('(prefers-color-scheme: dark)').matches
     ? 'https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css'
