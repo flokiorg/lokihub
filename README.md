@@ -209,7 +209,7 @@ Example:
 
 #### Client created secret
 
-If the client creates the secret the client only needs to share the public key of that secret for authorization. The user authorized that pubkey and no sensitivate data needs to be shared.
+If the client creates the secret the client only needs to share the public key of that secret for authorization. The user authorizes that pubkey and no sensitive data needs to be shared.
 
 ##### Query parameter options for /new
 
@@ -300,32 +300,31 @@ Internally Lokihub uses a basic implementation of the pubsub messaging pattern w
 
 #### Published Events
 
-    - `nwc_started` - when Lokihub process starts
-    - `nwc_stopped` - when Lokihub process gracefully exits
-    - `nwc_node_started` - when Lokihub successfully starts or connects to the configured LNClient.
-    - `nwc_node_start_failed` - The LNClient failed to sync or could not be connected to (e.g. network error, or incorrect configuration for an external node)
-    - `nwc_node_stopped` the LNClient was gracefully stopped
-    - `nwc_node_stop_failed` - failed to request the node to stop. Ideally this never happens.
-    - `nwc_node_sync_failed` - the node failed to sync onchain, wallet or fee estimates.
-    - `nwc_unlocked` - when user enters correct password (HTTP only)
-    - `nwc_channel_ready` - a new channel is opened, active and ready to use
-    - `nwc_channel_closed` - a channel was closed (could be co-operatively or a force closure)
-    - `nwc_backup_channels` - send a list of channels that can be used as a SCB.
-    - `nwc_outgoing_liquidity_required` - when user tries to pay an invoice more than their current outgoing liquidity across active channels
-    - `nwc_incoming_liquidity_required` - when user tries to creates an invoice more than their current incoming liquidity across active channels
-    - `nwc_permission_denied` - a NIP-47 request was denied - either due to the app connection not having permission for a certain command, or the app does not have insufficient balance or budget to make the payment.
-    - `nwc_payment_failed` - failed to make a Flokicoin Lightning payment
-    - `nwc_payment_sent` - successfully made a Flokicoin Lightning payment
-    - `nwc_payment_received` - received a Flokicoin Lightning payment
-    - `nwc_hold_invoice_accepted` - accepted a Flokicoin Lightning payment, but it needs to be cancelled or settled
-    - `nwc_hold_invoice_canceled` - accepted hold payment was explicitly cancelled
-    - `nwc_budget_warning` - successfully made a Flokicoin Lightning payment, but budget is nearly exceeded
-    - `nwc_app_created` - a new app connection was created
-    - `nwc_app_deleted` - a new app connection was deleted
-    - `nwc_lnclient_*` - underlying LNClient events, consumed only by the transactions service.
-    - `nwc_swap_succeeded` - successfully made a boltz swap
-
-    - `nwc_payment_forwarded` - successfully forwarded a payment and earned routing fees
+- `nwc_started` - when Lokihub process starts
+- `nwc_stopped` - when Lokihub process gracefully exits
+- `nwc_node_started` - when Lokihub successfully starts or connects to the configured LNClient.
+- `nwc_node_start_failed` - The LNClient failed to sync or could not be connected to (e.g. network error, or incorrect configuration for an external node)
+- `nwc_node_stopped` - the LNClient was gracefully stopped
+- `nwc_node_stop_failed` - failed to request the node to stop. Ideally this never happens.
+- `nwc_node_sync_failed` - the node failed to sync onchain, wallet or fee estimates.
+- `nwc_unlocked` - when user enters correct password (HTTP only)
+- `nwc_channel_ready` - a new channel is opened, active and ready to use
+- `nwc_channel_closed` - a channel was closed (could be co-operatively or a force closure)
+- `nwc_backup_channels` - send a list of channels that can be used as a SCB.
+- `nwc_outgoing_liquidity_required` - when user tries to pay an invoice more than their current outgoing liquidity across active channels
+- `nwc_incoming_liquidity_required` - when user tries to creates an invoice more than their current incoming liquidity across active channels
+- `nwc_permission_denied` - a NIP-47 request was denied - either due to the app connection not having permission for a certain command, or the app not having sufficient balance or budget to make the payment.
+- `nwc_payment_failed` - failed to make a Flokicoin Lightning payment
+- `nwc_payment_sent` - successfully made a Flokicoin Lightning payment
+- `nwc_payment_received` - received a Flokicoin Lightning payment
+- `nwc_hold_invoice_accepted` - accepted a Flokicoin Lightning payment, but it needs to be cancelled or settled
+- `nwc_hold_invoice_canceled` - accepted hold payment was explicitly cancelled
+- `nwc_budget_warning` - successfully made a Flokicoin Lightning payment, but budget is nearly exceeded
+- `nwc_app_created` - a new app connection was created
+- `nwc_app_deleted` - an app connection was deleted
+- `nwc_lnclient_*` - underlying LNClient events, consumed only by the transactions service.
+- `nwc_swap_succeeded` - successfully made a boltz swap
+- `nwc_payment_forwarded` - successfully forwarded a payment and earned routing fees
 
 ### NIP-47 Handlers
 
