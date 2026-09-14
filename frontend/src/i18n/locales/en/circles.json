@@ -309,7 +309,8 @@
     "checking": "Checking issued Cash wallets…",
     "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
     "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
-    "safeToDelete": "Connected apps will no longer be able to use this connection. No funds will be lost during this process, the balance will remain in your wallet.",
+    "safeToDelete": "This Cash Hub has no outstanding issued Cash wallets and is safe to delete.",
+    "deletedToast": "Cash Hub deleted",
     "close": "Close",
     "errors": {
       "check": "Failed to check issued Cash wallets"

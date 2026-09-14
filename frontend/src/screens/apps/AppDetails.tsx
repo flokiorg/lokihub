@@ -19,6 +19,7 @@ import {
   InfoIcon,
   PlusIcon,
   SquarePenIcon,
+  Trash2Icon,
   UnplugIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ import { ChildIdentityCard } from "src/components/circles/ChildIdentityCard";
 import { CircleIdentityCard } from "src/components/circles/CircleIdentityCard";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
 import { CurrencyInput } from "src/components/CurrencyInput";
+import { appKindLabel } from "src/utils/appKind";
 import { DisconnectApp } from "src/components/connections/DisconnectApp";
 import { DisconnectCircleHub } from "src/components/connections/DisconnectCircleHub";
 import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
@@ -297,6 +299,18 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     return segments.join(" · ");
   }, [app.name, identityPubkey, identityProfile, t]);
 
+  // Every one of these kinds is deleted from this same dropdown item, but
+  // "Disconnect {{appName}}" only makes sense for a real third-party app or
+  // an isolated sub-wallet — for a hub/wallet you issued yourself, the
+  // action is "delete my own thing," not "revoke someone else's access."
+  const isHubOrWallet = [
+    "cash_hub",
+    "circle_hub",
+    "cash_wallet",
+    "circle_wallet",
+  ].includes(app.kind ?? "");
+  const kindLabel = appKindLabel(app.kind);
+
   const { apps: appStoreApps } = useAppStore();
   const appStoreAppId = app.metadata?.app_store_app_id as string | undefined;
   const appStoreApp: AppStoreApp = React.useMemo(() => {
@@ -469,8 +483,16 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                               className="flex items-center gap-2"
                               onClick={() => setShowDisconnectAppDialog(true)}
                             >
-                              <UnplugIcon className="size-4" />{" "}
-                              {t("connections.disconnect", { appName })}
+                              {isHubOrWallet ? (
+                                <Trash2Icon className="size-4" />
+                              ) : (
+                                <UnplugIcon className="size-4" />
+                              )}{" "}
+                              {isHubOrWallet
+                                ? t("connections.deleteKind", {
+                                    kind: kindLabel,
+                                  })
+                                : t("connections.disconnect", { appName })}
                             </div>
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
@@ -511,10 +533,10 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogTitle>
-                                {t(
-                                  "connections.confirmUpdate",
-                                  "Confirm Update App"
-                                )}
+                                {t("connections.confirmUpdate", {
+                                  kind: kindLabel,
+                                  defaultValue: "Confirm Update {{kind}}",
+                                })}
                               </AlertDialogTitle>
                               <AlertDialogDescription>
                                 <div className="space-y-2">
@@ -669,6 +691,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 budgetReadOnly={budgetReadOnly}
                 expiresAtReadOnly={budgetReadOnly}
                 isNewConnection={false}
+                kindLabel={kindLabel}
                 budgetUsage={app.budgetUsage}
                 showBudgetUsage={isEditingPermissions}
                 showBudgetSection={

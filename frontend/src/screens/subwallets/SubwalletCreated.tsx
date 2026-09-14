@@ -1,6 +1,7 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, InfoIcon } from "lucide-react";
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
@@ -19,9 +20,10 @@ import { useApp } from "src/hooks/useApp";
 import { copyToClipboard } from "src/lib/clipboard";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import { CreateAppResponse } from "src/types";
+import { appKindLabel } from "src/utils/appKind";
 
 export function SubwalletCreated() {
-
+  const { t } = useTranslation("apps");
   const { state } = useLocation();
   const navigate = useNavigate();
   const createAppResponse = state as CreateAppResponse | undefined;
@@ -51,27 +53,49 @@ export function SubwalletCreated() {
         ? "circlehub"
         : "nwc";
 
-
+  // A Cash Hub/Circle Hub is this screen's own thing, not a third-party app
+  // you're pairing with (unlike the "nwc" case below, which covers both a
+  // real connected app and a plain isolated sub-wallet — see
+  // NewSimpleSubwallet.tsx, kind: "isolated" — genuinely meant to be handed
+  // to some other client). Its connection is also deterministically
+  // re-derivable at any time (NIP-CASH §The Pairing Connection, NIP-CW's
+  // equivalent) via that hub's own "reveal" action elsewhere in the app —
+  // unlike a regular app's one-time pairing secret, so the "only visible
+  // now" warning below would be actively wrong for it.
+  const isHub = primaryFormat === "cashhub" || primaryFormat === "circlehub";
+  const kindLabel = appKindLabel(
+    primaryFormat === "cashhub" ? "cash_hub" : "circle_hub"
+  );
 
   return (
     <div className="grid gap-5">
-      <AppHeader title={`Connect ${name}`} description="" />
+      <AppHeader
+        title={
+          isHub
+            ? t("subwalletCreated.hubReadyTitle", { name })
+            : t("subwalletCreated.connectTitle", { name })
+        }
+        description=""
+      />
       <div className="max-w-lg">
         <div className="flex flex-col col-span-3 gap-5 items-start">
           {step === 1 && app && (
             <div className="grid gap-5">
               <div>
-                Configure this sub-wallet by topping it up. That way it's ready to
-                use as soon as it's connected.
+                {isHub
+                  ? t("subwalletCreated.hubTopUpBody", { kind: kindLabel })
+                  : t("subwalletCreated.topUpBody")}
               </div>
               <div className="grid gap-5">
 
                 {app.metadata?.lud16 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Lightning address</CardTitle>
+                      <CardTitle>
+                        {t("subwalletCreated.lightningAddressTitle")}
+                      </CardTitle>
                       <CardDescription>
-                        Your lightning address for this sub-account
+                        {t("subwalletCreated.lightningAddressDescription")}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -87,7 +111,7 @@ export function SubwalletCreated() {
                         size="sm"
                         variant="secondary"
                       >
-                        Copy
+                        {t("subwalletCreated.copy")}
                       </Button>
                     </CardFooter>
                   </Card>
@@ -96,45 +120,65 @@ export function SubwalletCreated() {
                   <CardHeader>
                     <CardTitle>{name}</CardTitle>
                     <CardDescription>
-                      Balance: <FormattedFlokicoinAmount amount={app.balance} />
+                      {t("subwalletCreated.balanceLabel")}:{" "}
+                      <FormattedFlokicoinAmount amount={app.balance} />
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="flex flex-row justify-end">
                     <IsolatedAppTopupDialog appId={app.id}>
                       <Button size="sm" variant="secondary">
-                        Top Up
+                        {t("subwalletCreated.topUp")}
                       </Button>
                     </IsolatedAppTopupDialog>
                   </CardFooter>
                 </Card>
-                <Button onClick={() => setStep(2)}>Next</Button>
+                <Button onClick={() => setStep(2)}>
+                  {t("subwalletCreated.next")}
+                </Button>
               </div>
             </div>
           )}
           {step === 2 && (
             <div className="grid gap-5">
-              <div className="grid gap-2">
-                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                  <li>Open the app you wish to connect to</li>
-                  <li>
-                    Find settings to connect your wallet (may be under Nostr
-                    Wallet Connect or NWC)
-                  </li>
-                  <li>Scan or paste the connection secret</li>
-                </ol>
-              </div>
+              {isHub ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {t("subwalletCreated.hubOwnConnectionIntro", {
+                      kind: kindLabel,
+                    })}
+                  </p>
+                  <Alert>
+                    <InfoIcon className="h-4 w-4" />
+                    <AlertDescription>
+                      {t("subwalletCreated.hubConnectionReminder", {
+                        kind: kindLabel,
+                      })}
+                    </AlertDescription>
+                  </Alert>
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-2">
+                    <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                      <li>{t("newApp.openApp")}</li>
+                      <li>{t("newApp.findSettings")}</li>
+                      <li>{t("newApp.scanOrPaste")}</li>
+                    </ol>
+                  </div>
 
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Important</AlertTitle>
-                <AlertDescription className="inline">
-                  For your security, these connection details are only visible now
-                  and{" "}
-                  <span className="font-semibold">cannot be retrieved later</span>
-                  . If needed, you can store them in a password manager for future
-                  reference.
-                </AlertDescription>
-              </Alert>
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Important</AlertTitle>
+                    <AlertDescription className="inline">
+                      For your security, these connection details are only visible now
+                      and{" "}
+                      <span className="font-semibold">cannot be retrieved later</span>
+                      . If needed, you can store them in a password manager for future
+                      reference.
+                    </AlertDescription>
+                  </Alert>
+                </>
+              )}
 
               {app && (
                 <div className="flex justify-center">
@@ -150,9 +194,11 @@ export function SubwalletCreated() {
 
               <div className="flex gap-2">
                 <Button onClick={() => setStep(1)} variant="secondary">
-                  Back
+                  {t("subwalletCreated.back")}
                 </Button>
-                <LinkButton to="/sub-wallets">Finish</LinkButton>
+                <LinkButton to="/sub-wallets">
+                  {t("subwalletCreated.finish")}
+                </LinkButton>
               </div>
             </div>
           )}

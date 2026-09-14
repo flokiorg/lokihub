@@ -57,13 +57,17 @@ export function DisconnectCashHub({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.id]);
 
-  const { deleteApp, isDeleting } = useDeleteApp(app, () => {
-    navigate(
-      app.metadata?.app_store_app_id !== SUBWALLET_APPSTORE_APP_ID
-        ? "/apps?tab=connected-apps"
-        : "/cash-hub"
-    );
-  });
+  const { deleteApp, isDeleting } = useDeleteApp(
+    app,
+    () => {
+      navigate(
+        app.metadata?.app_store_app_id !== SUBWALLET_APPSTORE_APP_ID
+          ? "/apps?tab=connected-apps"
+          : "/cash-hub"
+      );
+    },
+    { success: t("disconnectCashHub.deletedToast") }
+  );
 
   const isLoading = outstandingCount === null;
   const hasOutstanding = (outstandingCount ?? 0) > 0;
