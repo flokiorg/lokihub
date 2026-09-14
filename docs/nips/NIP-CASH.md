@@ -522,6 +522,7 @@ sequenceDiagram
         Wallet->>Wallet: create + fund one new dedicated wallet for new_identity
         Wallet-->>Caller: {amount, new_wallet_pubkey, new_wallet_token}
     else partial split
+        Wallet->>Wallet: verify split amount and remainder both clear min_transfer_millis (no dust)
         Wallet->>Wallet: claim the source slice terminal, atomically
         Wallet->>Wallet: create + fund two new dedicated wallets (carved + remainder)
         Wallet-->>Caller: {new_wallet_token, remainder_wallet_token, remaining_amount_millis}
@@ -786,7 +787,9 @@ The inverse of a split: combine several unredeemed slices the same node custodie
 token. No value is created (the result is exactly the sum of its inputs) and no Lightning hop is involved
 (funding is internal transfers between wallets this node already holds).
 
-**What can be consolidated together.** Every source MUST be:
+### What Can Be Consolidated Together
+
+Every source MUST be:
 
 - **custodied by this node** — a `cash_wallet` this node itself issued. Custody, not a signature, is the
   gate: a node can only move funds for wallets on its own ledger, so a token another node minted is
@@ -808,7 +811,7 @@ source's own proof is what actually authorizes moving it. A holder of any `cash_
 valid proof for each one — no different in kind from how a `cash_transfer` proof, once captured, can move
 a slice regardless of who's making the call, just applied to N sources at once instead of one. This is
 deliberate, not an oversight: requiring the caller to also own one of the sources would add an arbitrary
-restriction with no security benefit, since custody (§What can be consolidated together, above) is already
+restriction with no security benefit, since custody (§What Can Be Consolidated Together, above) is already
 node-level, not connection-level.
 
 ```mermaid
@@ -1271,7 +1274,7 @@ Unless otherwise noted, everything below assumes an identity-bound slice. A bear
 gated by its secret, not by identity or proof — see §Bearer Slices → Security Considerations for Bearer
 Slices for that case.
 
-**Shared bearer connection, and why that's fine.** Every recipient can decrypt every request sent on the
+**Shared connection, and why that's fine.** Every recipient can decrypt every request sent on the
 same connection. So can anyone else who later sees the connection, or a cash token derived from it.
 That's why neither payout (`cash_redeem`) nor transfer/split (`cash_transfer`) trusts the connection alone.
 Both are gated against a slice's registered identity (§Redeeming a Slice, §Transferring and Splitting a
@@ -1346,9 +1349,8 @@ across sources rather than silently adopting the loosest. Every future many-sour
 the same rule: resolve to the most restrictive bound, never the most permissive.
 
 **A bearer source in a many-source operation leaks its secret to a connection with no claim on it — reject
-it, don't just scope it to the caller's own wallet.** "Shared bearer connection, and why that's fine"
-(above) holds only because, everywhere else in this document, a bearer secret transits over its *own*
-single-recipient wallet's own connection — `cash_transfer`/`cash_redeem` never let a caller name a foreign
+it, don't just scope it to the caller's own wallet.** Everywhere else in this document, a bearer secret
+transits only over its *own* single-recipient wallet's own connection — `cash_transfer`/`cash_redeem` never let a caller name a foreign
 `wallet_pubkey`, so the only connection that ever sees a given wallet's bearer secret is that wallet's own.
 `cash_consolidate` breaks that pattern by construction: it names *multiple* source wallets from a single
 calling connection, and that calling connection can itself be shared by several recipients (§Minting Cash's

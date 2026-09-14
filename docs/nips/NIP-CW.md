@@ -209,8 +209,9 @@ On receiving `create_circle_wallet`, the Hub MUST, in order:
    direct lookup, while a `following`-policy Hub checks the provider's live Nostr contact list.
 5. Check the one-active-wallet-per-(Hub, identity) rule (§Membership), rejecting if the identity
    already holds an active Circle Wallet under this Hub.
-6. Validate `max_amount` against the Hub's own per-wallet ceiling and the resolved `budget_renewal`
-   against the Hub's own renewal floor.
+6. Validate `max_amount` against the Hub's own per-wallet ceiling, the resolved `budget_renewal` against
+   the Hub's own renewal floor, and, if `expiry` was explicitly supplied (non-zero), that it does not
+   exceed the Hub's own expiry ceiling (§Data Model).
 7. Inside one transaction, verify that the sum of `max_amount` across every currently-active wallet the
    Hub has issued, plus this request's `max_amount`, does not exceed the Hub's own current balance (and
    its optional aggregate ceiling, if configured). Then create the Circle Wallet connection and insert
