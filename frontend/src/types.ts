@@ -7,6 +7,7 @@ import {
   HandCoinsIcon,
   InfoIcon,
   LucideIcon,
+  MergeIcon,
   NetworkIcon,
   NotebookTabsIcon,
   PenLineIcon,
@@ -54,7 +55,8 @@ export type Scope =
   | "cash_hub"
   | "circle_wallet"
   | "cash_redeem"
-  | "cash_transfer";
+  | "cash_transfer"
+  | "cash_consolidate";
 
 export type Nip47NotificationType = "payment_received" | "payment_sent";
 
@@ -76,6 +78,7 @@ export const scopeIconMap: ScopeIconMap = {
   circle_wallet: UsersIcon,
   cash_redeem: GiftIcon,
   cash_transfer: ArrowRightLeftIcon,
+  cash_consolidate: MergeIcon,
 };
 
 export type WalletCapabilities = {
@@ -106,6 +109,7 @@ export const scopeDescriptions: Record<Scope, string> = {
   circle_wallet: "Issue wallets to your circle's members",
   cash_redeem: "Claim your allocated share of a shared Cash wallet",
   cash_transfer: "Transfer or split an unclaimed share to someone else",
+  cash_consolidate: "Combine several Cash tokens from the same Hub into one",
 };
 
 export const expiryOptions: Record<string, number> = {

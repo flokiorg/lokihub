@@ -77,7 +77,8 @@
     "cash_hub": "Issue Cash Wallets",
     "circle_wallet": "Issue Circle Wallets",
     "cash_redeem": "Redeem funds",
-    "cash_transfer": "Transfer or split ownership"
+    "cash_transfer": "Transfer or split ownership",
+    "cash_consolidate": "Combine tokens together"
   },
   "disconnectApp": {
     "cancel": "Cancel"
