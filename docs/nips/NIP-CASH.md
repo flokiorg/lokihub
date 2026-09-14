@@ -174,7 +174,7 @@ sequenceDiagram
     {"identity_type": "pubkey", "identity_value": "<hex pubkey>", "amount_millis": 21000},
     {"identity_type": "connection_key", "identity_value": "abc123", "ia_pubkey": "<hex IA pubkey>", "amount_millis": 5000}
   ],
-  "expiry": 86400 // optional, seconds
+  "expiry": 86400 // OPTIONAL, seconds
 }
 ```
 
@@ -217,7 +217,8 @@ separate Cash Hub with its own settings, rather than overriding it per call.
   "wallet_pubkey": "<hex>",
   "pairing_uri": "nostr+walletconnect://...",
   "cash_token": "lokicash1...",
-  "expires_at": 1720000000, // omitted entirely if this wallet never expires — see §Data Model, §Minting Cash
+  "expires_at": 1720000000, // omitted entirely if this wallet never expires — see §Data Model and this
+                             // section's own Processing Algorithm, step 4
   "recipients": [
     {"identity_type": "pubkey", "identity_value": "...", "amount_millis": 21000},
     {"identity_type": "connection_key", "identity_value": "abc123", "amount_millis": 5000}
