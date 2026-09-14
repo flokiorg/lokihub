@@ -800,9 +800,10 @@ Every source MUST be:
   custody is node-level, not hub-level — but is deferred, because differing hubs raise "whose ceiling,
   whose expiry cap, whose fee/floor" questions a single shared hub avoids;
 - **controlled by the caller**, proven per source with a signed proof against each source slice's current
-  registered `pubkey` identity (§Transferring and Splitting a Slice), bound to `new_identity` so a captured
-  proof can't be redirected. **This revision** does not accept a bearer source — see the `sources` field
-  below.
+  registered `pubkey` or `connection_key` identity (§Transferring and Splitting a Slice), bound to
+  `new_identity` so a captured proof can't be redirected — `connection_key` additionally requires a live IA
+  trust check and an `attestation_event`, same as elsewhere. **This revision** does not accept a bearer
+  source — see the `sources` field below.
 
 Authorization is per-source, not per-connection: the calling connection's own identity need not match, or
 even be among, the sources being consolidated — the calling connection is only an entry point, and each
@@ -829,7 +830,7 @@ sequenceDiagram
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
-    Node-->>Caller: {new_wallet_pubkey (clear), new_wallet_token (encrypted), amount_millis}
+    Node-->>Caller: {new_wallet_pubkey (clear), new_wallet_token (encrypted iff pubkey target), amount_millis}
 ```
 
 ### Request
@@ -838,7 +839,9 @@ sequenceDiagram
 {
   "sources": [
     {"wallet_pubkey": "<hex>", "proof": { /* kind-23198, bound to new_identity — §Transferring */ }},
-    {"wallet_pubkey": "<hex>", "proof": { /* ditto */ }}
+    {"wallet_pubkey": "<hex>", "proof": { /* ditto */ },
+     // connection_key source only:
+     "attestation_event": { /* kind-35522, same shape as cash_transfer's — §Transferring */ }}
   ],
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"}
 }
@@ -847,21 +850,20 @@ sequenceDiagram
 - `sources` — MUST contain at least two distinct, unredeemed source slices; the same slice MUST NOT appear
   twice, and an implementation MAY cap the total count (this implementation caps at 100, matching
   `mint_cash`'s recipient-batch limit). Each carries a `proof` (identity-bound), same scheme as
-  `cash_transfer`. **This revision** accepts only `pubkey`-identified sources; a `connection_key` or
-  `bearer` source is rejected. `connection_key` is deferred alongside the cross-hub restriction above,
-  since both raise Identity-Authority questions a first cut sidesteps. `bearer` is rejected for a sharper
-  reason, not just deferred scope: a bearer source's secret has no signature and no binding to the request
-  carrying it — presenting it just *is* the authorization — but unlike `cash_transfer`/`cash_redeem` (which
-  always act on the calling connection's own wallet, so a bearer secret only ever transits over its own
-  single-recipient wallet's own connection), `cash_consolidate` lets a source name *any* wallet this node
-  custodies. Accepting a bearer source here would put that source's secret in plaintext inside a request
-  encrypted only under the *calling* connection's shared key — decryptable by every co-recipient of a
-  shared calling wallet, none of whom have any claim on that foreign bearer note (see §Security
-  Considerations).
-- `new_identity` — REQUIRED. **This revision** requires `pubkey` (the merged wallet is owned by, and its
-  token delivered encrypted to, that pubkey); `connection_key`/`bearer` targets are deferred, so a request
-  naming one is rejected. A future revision MAY widen this to `cash_transfer`'s full
-  `pubkey`/`connection_key`/`bearer` shape set.
+  `cash_transfer`; a `connection_key` source additionally carries an `attestation_event`, validated
+  identically (live IA trust, §Transferring and Splitting a Slice). `bearer` sources are rejected: a
+  bearer secret has no signature and no binding to the request carrying it — presenting it just *is* the
+  authorization — but unlike `cash_transfer`/`cash_redeem` (which always act on the calling connection's
+  own wallet, so a bearer secret only ever transits over its own single-recipient wallet's own
+  connection), `cash_consolidate` lets a source name *any* wallet this node custodies. Accepting a bearer
+  source here would put that source's secret in plaintext inside a request encrypted only under the
+  *calling* connection's shared key — decryptable by every co-recipient of a shared calling wallet, none
+  of whom have any claim on that foreign bearer note (see §Security Considerations).
+- `new_identity` — REQUIRED. `identity_type` of `pubkey`, `connection_key`, or `bearer` — the same shape
+  set `cash_transfer` accepts (§Transferring and Splitting a Slice), validated identically: live IA trust
+  for `connection_key`; a caller-supplied, never wallet-minted, commitment for `bearer` (§Bearer Slices).
+  The merged wallet is owned by, and its token delivered to, this identity — see Response below for how
+  delivery differs by type.
 - `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance) —
   the merged wallet's own signature attests its own pubkey and its total merged amount, independent of
   whether any source wallet had one.
@@ -872,13 +874,19 @@ sequenceDiagram
 {
   "amount_millis": 25000,                       // the sum of every source
   "new_wallet_pubkey": "<clear>",
-  "new_wallet_token": "<lokicash1... , NIP-44 nested-encrypted to the caller — §Spinning a Slice Off>",
+  "new_wallet_token": "<lokicash1... — encoding depends on new_identity's type, see below>",
   "expires_at": 1720000000                      // earliest expiry among the sources; omitted if all never expire
 }
 ```
 
-The token is delivered with the same nested inner encryption a split uses (§Spinning a Slice Off), since
-`cash_consolidate` is called over a shared cash_wallet connection too.
+For a `pubkey` `new_identity`, `new_wallet_token` is NIP-44 encrypted directly to that pubkey using the
+merged wallet's own keypair — a *different* delivery than a split's caller-keyed nested encryption
+(§Spinning a Slice Off), because `new_identity` here need not be the caller at all (the "controlled by
+the caller" requirement, §What Can Be Consolidated Together, binds the *sources*, not the recipient). For
+`connection_key`/`bearer`, there is no real pubkey to encrypt to yet — the token travels in the clear
+inside the response's own ordinary outer encryption, the same way a freshly-`mint_cash`-minted token does.
+Per §Security Considerations, the token doesn't need to be kept secret: holding it only grants the ability
+to dial the wallet's connection, never to redeem it.
 
 ### Processing Algorithm
 
@@ -887,11 +895,12 @@ On receiving `cash_consolidate`, the node MUST, in order:
 1. Locate every source. Each MUST be a `cash_wallet` this node custodies, unredeemed, and distinct. A source
    this node did not issue, or that is already claimed, MUST reject the whole request.
 2. Verify all sources are children of the **same** Cash Hub. Reject otherwise (this revision).
-3. Verify the caller controls each source: a valid `proof` against that slice's current registered `pubkey`
-   identity (bound to `new_identity`). Any failure rejects the whole request. A `bearer_secret` source MUST
-   be rejected (this revision) — see the `sources` field above.
-4. Validate `new_identity` exactly as `mint_cash`/`cash_transfer` do, including live IA trust for
-   `connection_key`.
+3. Verify the caller controls each source: a valid `proof` against that slice's current registered
+   `pubkey` or `connection_key` identity (bound to `new_identity`), plus a live IA trust check and
+   `attestation_event` verification for `connection_key`. Any failure rejects the whole request. A
+   `bearer_secret` source MUST be rejected (this revision) — see the `sources` field above.
+4. Validate `new_identity` exactly as `mint_cash`/`cash_transfer` do: identity shape and live IA trust for
+   `connection_key`, a well-formed caller-supplied commitment for `bearer`.
 5. Sum every source's committed amount with an explicit overflow check, and reject if the sum exceeds the
    shared Hub's own per-wallet ceiling (§Data Model) — the consolidated wallet obeys its Hub's ceiling like
    any other.
@@ -903,7 +912,8 @@ On receiving `cash_consolidate`, the node MUST, in order:
    compensating-saga mechanism as §Spinning a Slice Off's own Atomicity discussion, generalized from up to
    two new wallets to exactly one new wallet funded from as many sources as were named (§Security
    Considerations).
-8. Deliver the consolidated wallet's connection to the caller, nested-encrypted (§Spinning a Slice Off).
+8. Deliver the consolidated wallet's connection: nested-encrypted to `new_identity` for `pubkey`
+   (§Spinning a Slice Off), in the clear for `connection_key`/`bearer` (see Response above).
 
 A request that fails steps 1–6 MUST be rejected before step 7. A rejected `cash_consolidate` never leaves
 any source consumed or partially merged.
