@@ -964,6 +964,33 @@ This `bearer_secret` is the value from §Creating a Bearer Slice's mint response
 type-`2` connection secret; see §The Cash Token's Redemption Metadata for why the two are never
 interchangeable.
 
+### Presenting a Bearer Slice as One String
+
+A bearer slice's token and its `bearer_secret` (§Creating a Bearer Slice) are two independently-generated
+values, conveyed out of band together — never one alone (§Redemption Metadata explains why they can't be
+merged into the token's own wire format). An implementation MAY still present them to the recipient as a
+single copy/QR action, for a bearer slice specifically, by concatenating the two into one string:
+
+```
+<token>#<bearer_secret>
+```
+
+joined with a literal `#`, a character that never appears in a bech32-encoded token (§Wire Format's
+charset excludes it), so the join always splits back apart unambiguously. This is a display-layer
+convenience only, not a new wire format: decoding this combined string means splitting on the first `#`
+before doing anything else, then handling each half exactly as it would be handled alone — the left side
+as an ordinary token (§Wire Format), the right side as `bearer_secret` (§Redeeming a Bearer Slice). A
+client MUST NOT attempt to decode the combined string itself as a token, nor submit it whole as
+`bearer_secret` — either simply fails (a trailing `#<hex>` is invalid bech32; a bech32 token alone was
+never a valid `bearer_secret`, per §Redemption Metadata).
+
+This convention applies only to a bearer slice's own token — the only case where a token has a matching
+secret to combine at all. It's entirely optional: a token with no `#` suffix (every identity-bound token,
+and any bearer token whose client chose not to use this convention) decodes exactly as it always has. An
+implementation MAY instead present the two values separately — e.g. as two distinct "copy" actions shown
+side by side — particularly where the recipient's own client is unknown and can't be assumed to split a
+combined string correctly.
+
 ### Security Considerations for Bearer Slices
 
 **The secret MUST NOT be stored in a form that discloses it.** An implementation MUST persist only
@@ -1062,8 +1089,8 @@ Slice) — it is never encoded in this token and cannot be derived from it. A cl
 token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
 `NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
 separate values out of band together — this token, and the `bearer_secret` from the mint response — never
-one alone; an implementation SHOULD present these as two distinct "copy" actions shown side by side,
-not merged into one string.
+one alone. See §Bearer Slices → Presenting a Bearer Slice as One String for how an implementation may
+package that handoff for the recipient.
 
 **This field is a best-effort hint, snapshotted at whatever moment the token was minted or last
 re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of bearer status via
