@@ -81,6 +81,14 @@ services:
       - ${DEV_DATA_DIR:-./data}/flnd:/flnd-data:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
+      # TEMPORARY, tied to go.mod's own temporary
+      # `replace github.com/ohstr/nmilat => /u/flzpace/xgit/orgs/ohstr/nmilat`
+      # (see cash_consolidate connection_key-sources work, 2026-09-14) — same
+      # absolute host path mounted at the identical path inside the
+      # container so that replace directive resolves in here too. Remove
+      # both together once the nmilat fork change is published and go.mod
+      # points at a real version instead.
+      - /u/flzpace/xgit/orgs/ohstr/nmilat:/u/flzpace/xgit/orgs/ohstr/nmilat:ro
     depends_on:
       flnd:
         condition: service_healthy
