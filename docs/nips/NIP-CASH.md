@@ -542,8 +542,8 @@ sequenceDiagram
   // {"identity_type": "bearer", "identity_value": "<hex sha256 commitment the caller generated>"}
   // — see §Bearer Slices for why identity_value is required, not server-minted, here.
   "amount_millis": 5000 // OPTIONAL — omit, or equal the slice's current amount, to transfer it
-                        // all; a smaller value splits off exactly that much (§Splitting a
-                        // Slice above), leaving the remainder behind on this slice
+                        // all; a smaller value splits off exactly that much (§Which outcome a
+                        // request produces above), leaving the remainder behind on this slice
 }
 ```
 
@@ -804,7 +804,7 @@ sequenceDiagram
     Caller->>Node: cash_consolidate {sources[], proofs[], new_identity}
     Node->>Node: confirm this node custodies every source, all same hub
     Node->>Node: verify caller controls each source slice
-    Node->>Node: sum amounts (overflow-checked), check sum does not exceed hub PerWalletMax
+    Node->>Node: sum amounts (overflow-checked), check sum does not exceed hub's per-wallet ceiling
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
@@ -878,14 +878,10 @@ On receiving `cash_consolidate`, the node MUST, in order:
    only shorten, never extend, an entitlement, §Security Considerations); `min_transfer_millis` and
    `redeem_fee_ppm` MUST be identical across all sources — reject on any disagreement (this revision).
 7. Atomically: claim **every** source slice terminal, create one new `cash_wallet` for `new_identity` as a
-   child of the shared Hub, and fund it via internal transfers summing the sources — a compensating saga,
-   not unconditional two-phase commit: a failure partway through MUST reverse every already-completed
-   source→new transfer and, once each reversal is confirmed, unclaim that source, leaving no source
-   consumed and no wallet created in the ordinary case. If a reversal itself fails (rare, not
-   caller-controllable), that specific source's claim MUST NOT be restored — it stays claimed, terminal,
-   with no usable replacement — and the new wallet MUST be left intact and undeleted rather than discarded,
-   since it is the only record of where that source's funds are; an implementation SHOULD record this
-   durably enough for an operator to find and resolve it without reading logs (§Security Considerations).
+   child of the shared Hub, and fund it via internal transfers summing the sources — the same
+   compensating-saga mechanism as §Spinning a Slice Off's own Atomicity discussion, generalized from up to
+   two new wallets to exactly one new wallet funded from as many sources as were named (§Security
+   Considerations).
 8. Deliver the consolidated wallet's connection to the caller, nested-encrypted (§Spinning a Slice Off).
 
 A request that fails steps 1–6 MUST be rejected before step 7. A rejected `cash_consolidate` never leaves
@@ -1332,8 +1328,8 @@ it, don't just scope it to the caller's own wallet.** "Shared bearer connection,
 single-recipient wallet's own connection — `cash_transfer`/`cash_redeem` never let a caller name a foreign
 `wallet_pubkey`, so the only connection that ever sees a given wallet's bearer secret is that wallet's own.
 `cash_consolidate` breaks that pattern by construction: it names *multiple* source wallets from a single
-calling connection, and that calling connection can itself be shared by several recipients (§Minting a
-Cash Wallet's multi-recipient case). A bearer source's secret would sit in plaintext inside a request
+calling connection, and that calling connection can itself be shared by several recipients (§Minting Cash's
+multi-recipient case). A bearer source's secret would sit in plaintext inside a request
 encrypted only under the *calling* connection's shared key — decryptable by every co-recipient of that
 calling wallet, none of whom have any claim on the foreign bearer note being named. This isn't fixed by
 requiring the bearer source to be the caller's *own* connection: nothing stops that same connection from
