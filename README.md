@@ -155,7 +155,6 @@ The following configuration options can be set as environment variables or in a 
 - `LOKIHUB_STORE_URL`: The URL for Lokihub's App Store.
 - `ESPLORA_SERVER`: The Flokicoin Esplora server URL.
 - `SWAP_SERVICE_URL`: The swap service URL.
-
 - `ENABLE_SWAP`: Enable swap feature (default: true).
 - `MESSAGEBOARD_NWC_URL`: The Nostr Wallet Connect URL for the messageboard.
 - `MEMPOOL_API`: The Flokicoin Explorer API URL.

@@ -503,8 +503,8 @@ An implementation MUST determine the outcome as follows, in this order:
    - `bearer` → reassigned in place **only if** this wallet has, and has always had, exactly one recipient
      — counting every slice the wallet was ever created or has ever held, not only currently-unclaimed
      ones. Otherwise, this outcome also lands in a brand-new dedicated wallet (§Spinning a Slice Off Into
-     a Dedicated Wallet) — see that section's own "Why not just reassign in place?" for why a
-     multi-recipient-history wallet can't take this shortcut.
+     a Dedicated Wallet) — see that section's own "Why Not Reassign in Place, for a Bearer Target on a
+     Shared Wallet?" for why a multi-recipient-history wallet can't take this shortcut.
 
 ```mermaid
 sequenceDiagram
@@ -674,14 +674,18 @@ sequenceDiagram
     Old-->>Caller: {carved + (for a split) remainder wallet_pubkey (clear), wallet_token (encrypted)}
 ```
 
-**Why not just reassign in place, for a bearer target on a shared wallet?** Because the slice's current
-connection is shared with every other recipient the wallet has ever had (§Security Considerations), and a
-bearer redemption transmits its raw secret in the request body. Reassigning in place would hand every
+### Why Not Reassign in Place, for a Bearer Target on a Shared Wallet?
+
+Because the slice's current connection is shared with every other recipient the wallet has ever had
+(§Security Considerations), and a bearer redemption transmits its raw secret in the request body.
+Reassigning in place would hand every
 current and former co-recipient of that connection everything needed to steal the note the moment its
 intended recipient tried to redeem it. The only way to give such a slice a genuinely bearer, cash-like
 existence is to move it off that connection entirely.
 
-**Why fresh wallets for both pieces of a partial split?** Two reasons. First, the carved-off piece is
+### Why Fresh Wallets for Both Pieces of a Partial Split?
+
+Two reasons. First, the carved-off piece is
 going to someone else entirely, so it must never ride the source's possibly-shared connection — that would
 reintroduce the bearer-mixing risk above and hand a stale connection to a new party for no benefit.
 Second, giving the caller's own remainder a fresh wallet too — rather than decrementing the source in
@@ -690,14 +694,18 @@ source could be rewritten to a smaller amount, its mint signature (which commits
 stale, and a racing `cash_redeem` could read a since-shrunk amount. A source that is always claimed whole,
 never rewritten, closes both.
 
-**Funding.** Each new wallet MUST be created as a child of the same Cash Hub the old wallet is already a
+### Funding
+
+Each new wallet MUST be created as a child of the same Cash Hub the old wallet is already a
 child of — not a child of the old wallet — and funded via a single internal transfer of exactly its own
 amount, moved out of the old wallet's own balance (not the Hub's). This mirrors `mint_cash`'s own
 Hub→Wallet funding transfer (§Processing Algorithm), just with the old Cash Wallet standing in as the
 funding source instead of the Hub. A partial split performs two such transfers (carved + remainder), which
 together drain the source slice's whole amount.
 
-**Atomicity — a compensating saga, not unconditional two-phase commit.** The source slice MUST be claimed
+### Atomicity — a Compensating Saga, Not Unconditional Two-Phase Commit
+
+The source slice MUST be claimed
 terminal as a single atomic step **before** any new wallet is created or funded — this is the operation's
 commit point. From this instant the old identity can no longer redeem or transfer this slice; its whole
 amount is now committed to the new wallet(s). If a LATER step fails after an EARLIER wallet already funded
@@ -720,7 +728,9 @@ Once every new wallet has been successfully created and funded (the ordinary cas
 rolled back — an implementation MAY record which new wallet(s) the value moved to, for its own bookkeeping
 (§Data Model), but this is informational only.
 
-**Delivery — nested encryption, not a new channel.** The new wallet's connection MUST NOT be placed in
+### Delivery — Nested Encryption, Not a New Channel
+
+The new wallet's connection MUST NOT be placed in
 this response in a form decryptable by every holder of the old wallet's shared connection — that would
 simply relocate the leak this whole mechanism exists to close. Instead, the response carries, for **each**
 new wallet (one for a full-to-bearer spin-off, both the carved and the remainder wallet for a partial
@@ -729,18 +739,21 @@ split), a matched pair of fields:
 - `*_wallet_pubkey` — that new wallet's own `WalletPubkey`, in the clear. A bare pubkey with no
   accompanying secret grants no spending capability by itself (§The Pairing Connection), so exposing it
   unencrypted is safe — it exists purely so the recipient has a pubkey to derive a decryption key against.
-- `*_wallet_token` — that new wallet's cash token (`lokicash1...`, §The Cash Token), NIP-44
-  encrypted using a **second, inner** encryption layer keyed to (a) the pubkey that authenticated this
-  `cash_transfer` call (the value bound by `proof`, i.e. the caller's own real identity — not the shared
-  connection's client keypair) and (b) that new wallet's own keypair (the private counterpart of its
-  `*_wallet_pubkey`) — not a fresh one-off keypair generated only for this delivery, since the caller
-  would have no way to independently learn such a key. This inner layer sits nested inside the response's
-  own ordinary outer encryption (§Security Considerations), which every holder of the old wallet's shared
-  connection can still decrypt as always — but decrypting the outer layer only reveals the `*_wallet_pubkey`
-  (harmless alone) and an opaque ciphertext neither the outer connection's shared key, nor any other
-  co-recipient's own privkey, can open. Only the caller's own privkey, paired with that `*_wallet_pubkey`,
-  derives the correct inner conversation key. Both tokens of a partial split are delivered to the caller
-  this way — the caller keeps the remainder and hands the carved token to its target out of band.
+- `*_wallet_token` — that new wallet's cash token (`lokicash1...`, §The Cash Token), NIP-44 encrypted
+  using a **second, inner** encryption layer keyed to two values:
+  - the pubkey that authenticated this `cash_transfer` call (the value bound by `proof`, i.e. the
+    caller's own real identity — not the shared connection's client keypair), and
+  - that new wallet's own keypair (the private counterpart of its `*_wallet_pubkey`) — not a fresh
+    one-off keypair generated only for this delivery, since the caller would have no way to
+    independently learn such a key.
+
+  This inner layer sits nested inside the response's own ordinary outer encryption
+  (§Security Considerations), which every holder of the old wallet's shared connection can still decrypt
+  as always — but decrypting the outer layer only reveals the `*_wallet_pubkey` (harmless alone) and an
+  opaque ciphertext neither the outer connection's shared key, nor any other co-recipient's own privkey,
+  can open. Only the caller's own privkey, paired with that `*_wallet_pubkey`, derives the correct inner
+  conversation key. Both tokens of a partial split are delivered to the caller this way — the caller
+  keeps the remainder and hands the carved token to its target out of band.
 
 For a `bearer`-current caller (a bearer slice being split, whether into another bearer target or an
 identity-bound one), there is no signed `identity_event` to draw a delivery pubkey from — the caller's
@@ -755,7 +768,9 @@ An implementation MUST NOT use a bearer redemption's secret-in-body pattern, or 
 one-off key, for this delivery step — see §Security Considerations for the general principle this
 follows, and the ECDH argument for why it holds.
 
-**Eligibility and limits.** Every new wallet a split produces — the carved piece and, for a partial split,
+### Eligibility and Limits
+
+Every new wallet a split produces — the carved piece and, for a partial split,
 the remainder alike — inherits its `min_transfer_millis`, `redeem_fee_ppm`, and expiry from the source
 slice's own configuration, not from the Hub's current config (which only supplies the default for a wallet
 minted directly by `mint_cash`). A split relocates an existing entitlement; it does not grant a fresh one,
@@ -1025,25 +1040,25 @@ Type `3` (identity required) is an OPTIONAL hint, not part of the connection cre
 Pairing Connection needs only types `0`–`2`) — it lets a client decide how to attempt a call without a
 relay round-trip first, purely as a convenience:
 
-- **Identity required** (`0` = false, `1` = true) reports whether the wallet currently requires a proof at
-  all: `false` means the wallet is a single bearer slice (`cash_redeem`/`cash_transfer` need only its
-  `bearer_secret` — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
-  identity-bound (a signed proof is required). This is well-defined per wallet, not per slice, because a
-  bearer slice's wallet is always single-recipient (§Bearer Slices) — there's never a wallet mixing bearer
-  and identity-bound slices for this flag to be ambiguous about.
+**Identity required** (`0` = false, `1` = true) reports whether the wallet currently requires a proof at
+all: `false` means the wallet is a single bearer slice (`cash_redeem`/`cash_transfer` need only its
+`bearer_secret` — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
+identity-bound (a signed proof is required). This is well-defined per wallet, not per slice, because a
+bearer slice's wallet is always single-recipient (§Bearer Slices) — there's never a wallet mixing bearer
+and identity-bound slices for this flag to be ambiguous about.
 
-  **This `bearer_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
-  only the NWC connection secret (§The Pairing Connection) — it lets anyone holding this token dial the
-  wallet and call read-only methods like `list_recipients`, nothing more; mere possession of the
-  connection is explicitly not a spending credential (§The Cash Token's own opening paragraph). The actual
-  spending credential for a bearer slice is a separate, independently-generated
-  value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Bearer
-  Slice) — it is never encoded in this token and cannot be derived from it. A client presenting this
-  token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
-  `NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
-  separate values out of band together — this token, and the `bearer_secret` from the mint response — never
-  one alone; an implementation SHOULD present these as two distinct "copy" actions shown side by side,
-  not merged into one string.
+**This `bearer_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
+only the NWC connection secret (§The Pairing Connection) — it lets anyone holding this token dial the
+wallet and call read-only methods like `list_recipients`, nothing more; mere possession of the
+connection is explicitly not a spending credential (§The Cash Token's own opening paragraph). The actual
+spending credential for a bearer slice is a separate, independently-generated
+value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Bearer
+Slice) — it is never encoded in this token and cannot be derived from it. A client presenting this
+token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
+`NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
+separate values out of band together — this token, and the `bearer_secret` from the mint response — never
+one alone; an implementation SHOULD present these as two distinct "copy" actions shown side by side,
+not merged into one string.
 
 **This field is a best-effort hint, snapshotted at whatever moment the token was minted or last
 re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of bearer status via
@@ -1231,17 +1246,22 @@ flowchart TD
     D3 --> Del
 ```
 
-Reading this against the sections above: the dotted edges are the two in-place `cash_transfer` outcomes
-(§Which outcome a request produces, item 2's `pubkey`/`connection_key` and lifetime-solo-`bearer` cases) —
-the slice never leaves its wallet, so the same set of next actions applies again immediately, however many
-times a recipient chooses to reassign or convert before eventually redeeming, splitting, or consolidating.
-Every other edge consumes the source slice terminally: a split hands off to §Spinning a Slice Off (minting
-one or, for a partial split, two fresh wallets), and a consolidate claims this slice alongside its
-same-hub siblings to fund one merged wallet (§Consolidating Tokens). The double-lined edge is the one place
-this diagram crosses from one Cash Wallet to another — each new wallet re-enters this exact diagram at
-`Funded`, independently, with its own expiry, deletion, and further splits/consolidations ahead of it. A
-wallet can reach `Deleted` from any point in this diagram — including immediately after `Funded`, if every
-recipient's slice is still sitting unclaimed when its expiry sweep runs or the owner deletes it directly.
+Reading this against the sections above, by edge style:
+
+- **Dotted edges** are the two in-place `cash_transfer` outcomes (§Which outcome a request produces,
+  item 2's `pubkey`/`connection_key` and lifetime-solo-`bearer` cases) — the slice never leaves its
+  wallet, so the same set of next actions applies again immediately, however many times a recipient
+  chooses to reassign or convert before eventually redeeming, splitting, or consolidating.
+- **Every other (plain) edge** consumes the source slice terminally: a split hands off to §Spinning a
+  Slice Off (minting one or, for a partial split, two fresh wallets), and a consolidate claims this slice
+  alongside its same-hub siblings to fund one merged wallet (§Consolidating Tokens).
+- **The double-lined edge** is the one place this diagram crosses from one Cash Wallet to another — each
+  new wallet re-enters this exact diagram at `Funded`, independently, with its own expiry, deletion, and
+  further splits/consolidations ahead of it.
+
+A wallet can reach `Deleted` from any point in this diagram — including immediately after `Funded`, if
+every recipient's slice is still sitting unclaimed when its expiry sweep runs or the owner deletes it
+directly.
 
 ## Security Considerations
 
