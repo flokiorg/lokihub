@@ -3,6 +3,13 @@
   "description": "Apps connected to your node via Nostr Wallet Connect",
   "empty": "No apps connected yet",
   "connect": "Connect App",
+  "kindLabel": {
+    "cashHub": "Cash Hub",
+    "circleHub": "Circle Hub",
+    "cashWallet": "Cash Wallet",
+    "circleWallet": "Circle Wallet",
+    "app": "App"
+  },
   "detail": {
     "title": "Connection Details",
     "delete": "Delete Connection",
@@ -31,7 +38,7 @@
     "balance": "View balance",
     "history": "View transaction history",
     "sign": "Sign messages",
-    "authorizedTo": "This app is authorized to:",
+    "authorizedTo": "This {{kind}} is authorized to:",
     "superuserTitle": "This app can create other app connections",
     "superuserDesc": "Make sure to set budgets on connections created by this app."
   },
@@ -81,7 +88,17 @@
     "cash_consolidate": "Combine tokens together"
   },
   "disconnectApp": {
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "appTitle": "Are you sure you want to delete this connection?",
+    "connectedAppsWarning": "Connected apps will no longer be able to use this connection.",
+    "isolatedFundsSafe": "No funds will be lost during this process, the balance will remain in your wallet.",
+    "lightningAddressWarning": "This sub-wallet has a lightning address ({{lud16}}) that will also be deleted.",
+    "walletTitle": "Delete this {{kind}}?",
+    "walletHasBalanceWarning": "This {{kind}} hasn't been claimed yet and still holds:",
+    "walletHasBalanceNote": "Deleting it does not reclaim these funds first — they will be unrecoverable.",
+    "walletEmptyNote": "This {{kind}} has no remaining balance and is safe to delete.",
+    "walletDeletedToast": "{{kind}} deleted"
   },
   "expiry": {
     "title": "Expiry",
@@ -107,7 +124,10 @@
     "addAnother": "Add Another Connection",
     "connectionDetails": "Connection Details",
     "disconnect": "Disconnect {{appName}}",
-    "confirmUpdate": "Confirm Update App",
+    "deleteKind": "Delete {{kind}}",
+    "deleteSuccess": "Connection deleted",
+    "deleteError": "Failed to delete connection",
+    "confirmUpdate": "Confirm Update {{kind}}",
     "isolatedRemoveConfirm": "Are you sure you wish to remove the <1>isolated</1> status from this connection?",
     "payPermissionsConfirm": "Are you sure you wish to give this connection <1>pay permissions</1>?",
     "warningNotice": "⚠️ Warning: This applies to all apps that have this connection secret. Only change this if you know it is safe to do so, otherwise you could potentially lose all funds",
@@ -200,6 +220,22 @@
     "failedToCreate": "Failed to create app",
     "configure": "Configure",
     "finalize": "Finalize"
+  },
+  "subwalletCreated": {
+    "connectTitle": "Connect {{name}}",
+    "hubReadyTitle": "{{name}} is ready",
+    "topUpBody": "Configure this sub-wallet by topping it up. That way it's ready to use as soon as it's connected.",
+    "hubTopUpBody": "Configure your {{kind}} by topping it up. That way it's ready to fund the wallets you issue from it.",
+    "lightningAddressTitle": "Lightning address",
+    "lightningAddressDescription": "Your lightning address for this sub-account",
+    "copy": "Copy",
+    "balanceLabel": "Balance",
+    "topUp": "Top Up",
+    "next": "Next",
+    "back": "Back",
+    "finish": "Finish",
+    "hubOwnConnectionIntro": "This is your {{kind}}'s own connection — you don't need it to mint or manage anything here in Lokihub. Keep it only if you plan to connect another NWC-compatible tool to it directly.",
+    "hubConnectionReminder": "You can view or copy this connection again anytime from your {{kind}}'s own page."
   },
   "cleanup": {
     "title": "Cleanup Unused Apps",

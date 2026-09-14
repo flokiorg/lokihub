@@ -39,6 +39,12 @@ interface PermissionsProps {
   // Optional note rendered directly under the budget field, e.g. to explain
   // what this budget covers for a circle_hub.
   budgetCaption?: React.ReactNode;
+  // Names the thing these permissions belong to in "This {{kind}} is
+  // authorized to:" below — defaults to "App" (NewApp.tsx's case: always a
+  // real third-party connection), but AppDetails.tsx passes the actual
+  // appKindLabel for every kind, since this same component is shown for a
+  // user's own Cash Hub/Circle Hub/Cash Wallet/Circle Wallet too.
+  kindLabel?: string;
 }
 
 const Permissions: React.FC<PermissionsProps> = ({
@@ -54,6 +60,7 @@ const Permissions: React.FC<PermissionsProps> = ({
   showBudgetUsage = true,
   showBudgetSection = permissions.scopes.includes("pay_invoice"),
   budgetCaption,
+  kindLabel,
 }) => {
   const { t } = useTranslation("apps");
   const [showBudgetOptions, setShowBudgetOptions] = React.useState(
@@ -147,7 +154,12 @@ const Permissions: React.FC<PermissionsProps> = ({
         />
       ) : (
         <>
-          <p className="text-sm font-medium mb-2">{t("permissions.authorizedTo")}</p>
+          <p className="text-sm font-medium mb-2">
+            {t("permissions.authorizedTo", {
+              kind: kindLabel ?? t("kindLabel.app"),
+              defaultValue: "This {{kind}} is authorized to:",
+            })}
+          </p>
           <div className="flex flex-wrap gap-2 mb-4">
             {[...permissions.scopes].map((scope) => {
               const PermissionIcon = scopeIconMap[scope];
