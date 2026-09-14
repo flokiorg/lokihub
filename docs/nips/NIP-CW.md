@@ -368,9 +368,8 @@ commitment/balance griefing (minting max-amount wallets "as" real members).
 Without an explicit single-use guard keyed on the proof's event ID, a captured proof could be
 resubmitted repeatedly within its own freshness window.
 
-**One active wallet per (Hub, identity)** MUST be enforced at both the pre-check and the transaction
-layer. A pre-check alone is a race, not a guarantee — the unique-constraint insert is what makes it
-authoritative.
+**One active wallet per (Hub, identity)**'s two-layer enforcement (§Membership) exists because a pre-check
+alone is a race, not a guarantee — the unique-constraint insert is what makes it authoritative.
 
 **A `fees_ppm` value in a response is informational only.** An implementation MUST NOT advertise a
 non-zero value unless it actually applies the corresponding forwarding-fee skim to payments made from

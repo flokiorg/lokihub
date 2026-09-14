@@ -1349,18 +1349,12 @@ across sources rather than silently adopting the loosest. Every future many-sour
 the same rule: resolve to the most restrictive bound, never the most permissive.
 
 **A bearer source in a many-source operation leaks its secret to a connection with no claim on it — reject
-it, don't just scope it to the caller's own wallet.** Everywhere else in this document, a bearer secret
-transits only over its *own* single-recipient wallet's own connection — `cash_transfer`/`cash_redeem` never let a caller name a foreign
-`wallet_pubkey`, so the only connection that ever sees a given wallet's bearer secret is that wallet's own.
-`cash_consolidate` breaks that pattern by construction: it names *multiple* source wallets from a single
-calling connection, and that calling connection can itself be shared by several recipients (§Minting Cash's
-multi-recipient case). A bearer source's secret would sit in plaintext inside a request
-encrypted only under the *calling* connection's shared key — decryptable by every co-recipient of that
-calling wallet, none of whom have any claim on the foreign bearer note being named. This isn't fixed by
-requiring the bearer source to be the caller's *own* connection: nothing stops that same connection from
-also being shared. `cash_consolidate` MUST reject any bearer source outright (§Consolidating Tokens);
-any future many-source operation that accepts a bearer source from a *different* wallet than the calling
-connection's own inherits the identical leak and MUST reject it for the same reason.
+it, don't just scope it to the caller's own wallet.** See the `sources` field's own reasoning above
+(§Consolidating Tokens) for why `cash_consolidate` rejects a bearer source outright. That alone doesn't
+close the general case: this isn't fixed by requiring the bearer source to be the caller's *own*
+connection either, since nothing stops that same connection from also being shared. Any future
+many-source operation that accepts a bearer source from a *different* wallet than the calling connection's
+own inherits the identical leak and MUST reject it for the same reason.
 
 **A compensating-saga rollback whose own reversal fails MUST NOT restore the source claim.** The correct
 response is the opposite of the instinctive one: restoring the claim anyway would let the caller believe
