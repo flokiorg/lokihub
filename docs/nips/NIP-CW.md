@@ -356,7 +356,7 @@ deletion mode, not the per-member path's default.
 
 ## Security Considerations
 
-**Shared bearer connection.** The Circle Wallet Hub's connection is meant to be shared among prospective
+**Shared Hub connection.** The Circle Wallet Hub's connection is meant to be shared among prospective
 members. The requester `pubkey` in a `create_circle_wallet` call
 MUST NOT be trusted bare. Without the identity-proof requirement, anyone holding the connection could
 claim to be any pubkey they merely knew — enabling rate-limit denial-of-service against a real member,
