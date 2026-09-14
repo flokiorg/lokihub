@@ -445,6 +445,7 @@ article pre {
   overflow-x: auto; margin: 0 0 1.2rem;
 }
 article pre code { background: none; padding: 0; font-size: 0.85rem; line-height: 1.5; }
+article pre code.hljs { background: none; padding: 0; }
 article pre.mermaid {
   background: var(--surface); border: 1px solid var(--rule);
   display: flex; justify-content: center; overflow-x: auto;
@@ -552,11 +553,31 @@ MERMAID_SCRIPT = """
 </script>
 """
 
+# Loaded only on pages with a fenced code block (see render_page). Same
+# CDN-hosted rationale as MERMAID_SCRIPT. github/github-dark cover both
+# themes; "jsonc" is the only fence language used in these docs and isn't
+# one of highlight.js's built-in names, so it's aliased to "json" — the
+# `//`-comment/trailing-comma allowances jsonc implies aren't things
+# highlight.js's json grammar enforces against anyway, so plain json
+# tokenization reads it fine.
+HIGHLIGHT_SCRIPT = """
+<link id="hljs-theme" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/highlight.min.js"></script>
+<script>
+  document.getElementById('hljs-theme').href = window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css'
+    : 'https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css';
+  hljs.registerAliases('jsonc', { languageName: 'json' });
+  hljs.highlightAll();
+</script>
+"""
+
 
 def render_page(body_html: str, title: str, summary: str, meta_extra: str, show_changebar: bool = False) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     script_tag = f"<script>{CHANGEBAR_SCRIPT}</script>" if show_changebar else ""
     mermaid_tag = MERMAID_SCRIPT if 'class="mermaid"' in body_html else ""
+    highlight_tag = HIGHLIGHT_SCRIPT if '<code class="language-' in body_html else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -575,6 +596,7 @@ def render_page(body_html: str, title: str, summary: str, meta_extra: str, show_
 </div>
 {script_tag}
 {mermaid_tag}
+{highlight_tag}
 </body>
 </html>
 """
