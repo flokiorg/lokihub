@@ -269,6 +269,8 @@ def render_block(b: dict) -> str:
     if kind == "hr":
         return "<hr>"
     if kind == "code":
+        if b["lang"] == "mermaid":
+            return f'<pre class="mermaid">{html.escape(b["code"])}</pre>'
         cls = f' class="language-{b["lang"]}"' if b["lang"] else ""
         return f"<pre><code{cls}>{html.escape(b['code'])}</code></pre>"
     if kind == "table":
@@ -443,6 +445,10 @@ article pre {
   overflow-x: auto; margin: 0 0 1.2rem;
 }
 article pre code { background: none; padding: 0; font-size: 0.85rem; line-height: 1.5; }
+article pre.mermaid {
+  background: var(--surface); border: 1px solid var(--rule);
+  display: flex; justify-content: center; overflow-x: auto;
+}
 article table {
   border-collapse: collapse; width: 100%; margin: 0 0 1.4rem; font-size: 0.92rem;
   display: block; overflow-x: auto;
@@ -532,10 +538,25 @@ CHANGEBAR_SCRIPT = """
 })();
 """
 
+# Loaded only on pages that actually contain a `pre.mermaid` block (see
+# render_page) — CDN-hosted since this is a local-only dev tool, not
+# distributed content. Theme follows the OS setting the same way PAGE_CSS's
+# custom properties do, so diagrams don't clash with light/dark mode.
+MERMAID_SCRIPT = """
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+  });
+</script>
+"""
+
 
 def render_page(body_html: str, title: str, summary: str, meta_extra: str, show_changebar: bool = False) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     script_tag = f"<script>{CHANGEBAR_SCRIPT}</script>" if show_changebar else ""
+    mermaid_tag = MERMAID_SCRIPT if 'class="mermaid"' in body_html else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -553,6 +574,7 @@ def render_page(body_html: str, title: str, summary: str, meta_extra: str, show_
   </article>
 </div>
 {script_tag}
+{mermaid_tag}
 </body>
 </html>
 """
