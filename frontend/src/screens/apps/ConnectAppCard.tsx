@@ -108,7 +108,13 @@ export function ConnectAppCard({
   const qrValue = showingHubToken
     ? (hubToken ?? "")
     : primaryFormat === "lokicash"
-      ? (bearerGift ?? lokicashToken ?? "")
+      ? // Falls all the way back to the bare bearerSecret if lokicashToken
+        // is unavailable (cashwallet/create.go's encodeCashToken degrades to
+        // an empty token on an encode failure it documents as "can't fail
+        // in practice" — but if it ever does, the secret still has to be
+        // reachable through SOME copy action, or those funds are gone for
+        // good with no recovery path, same as any other lost bearer note).
+        (bearerGift || lokicashToken || bearerSecret || "")
       : pairingUri;
   const copy = () => {
     copyToClipboard(qrValue);
