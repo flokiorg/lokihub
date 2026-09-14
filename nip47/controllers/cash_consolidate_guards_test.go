@@ -96,17 +96,17 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 			wantMsg:  "at least two sources",
 		},
 		{
-			name: "new_identity is not pubkey",
+			name: "new_identity is an unrecognized type",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
-					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: "deadbeef"},
+					NewIdentity: cashTransferNewIdentityParam{IdentityType: "carrier-pigeon", IdentityValue: "deadbeef"},
 				}}
 			},
 			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "must be pubkey",
+			wantMsg:  "must be",
 		},
 		{
 			name: "new_identity value missing",
@@ -119,10 +119,55 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				}}
 			},
 			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "identity_value is required",
+			wantMsg:  "64-character lowercase hex string",
 		},
 		{
-			name: "connection_key source rejected (v1)",
+			name: "new_identity bearer target missing identity_value",
+			build: func(t *testing.T, svc *tests.TestService) built {
+				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+				caller := guardCashWallet(t, svc, hub)
+				return built{caller: caller, params: cashConsolidateParams{
+					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer},
+				}}
+			},
+			wantCode: constants.ERROR_BAD_REQUEST,
+			wantMsg:  "required for a bearer target",
+		},
+		{
+			name: "new_identity bearer target carries ia_pubkey",
+			build: func(t *testing.T, svc *tests.TestService) built {
+				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+				caller := guardCashWallet(t, svc, hub)
+				iaPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+				return built{caller: caller, params: cashConsolidateParams{
+					Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					NewIdentity: cashTransferNewIdentityParam{
+						IdentityType: db.CashIdentityBearer, IdentityValue: tests.RandomHex32(), IAPubkey: iaPub,
+					},
+				}}
+			},
+			wantCode: constants.ERROR_BAD_REQUEST,
+			wantMsg:  "must not carry ia_pubkey",
+		},
+		{
+			name: "new_identity connection_key target untrusted IA",
+			build: func(t *testing.T, svc *tests.TestService) built {
+				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+				caller := guardCashWallet(t, svc, hub)
+				untrustedIA, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+				return built{caller: caller, params: cashConsolidateParams{
+					Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+					NewIdentity: cashTransferNewIdentityParam{
+						IdentityType: db.CashIdentityConnectionKey, IdentityValue: tests.RandomHex32(), IAPubkey: untrustedIA,
+					},
+				}}
+			},
+			wantCode: constants.ERROR_BAD_REQUEST,
+			wantMsg:  "not a trusted Identity Authority",
+		},
+		{
+			name: "connection_key source missing attestation_event",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
@@ -136,7 +181,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				}}
 			},
 			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "connection_key sources are not supported",
+			wantMsg:  "attestation_event is required",
 		},
 		{
 			name: "source not custodied by this node",

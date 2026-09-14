@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -18,12 +19,12 @@ import (
 
 // consolidateSourceParam is one input slice to a consolidation: a signed
 // kind-23198 identity_event proof against the source slice's current
-// registered pubkey identity, plus the wallet_pubkey identifying which
-// cash_wallet the slice lives in. connection_key and bearer sources are both
-// deferred (see the handler) — bearer specifically because its secret would
-// sit in plaintext in a request encrypted only under the CALLING connection's
-// shared key, decryptable by any co-recipient of a shared calling wallet with
-// no claim on that foreign bearer note.
+// registered pubkey or connection_key identity (connection_key additionally
+// carrying an attestation_event), plus the wallet_pubkey identifying which
+// cash_wallet the slice lives in. Bearer sources remain deferred (see the
+// handler) — its secret would sit in plaintext in a request encrypted only
+// under the CALLING connection's shared key, decryptable by any co-recipient
+// of a shared calling wallet with no claim on that foreign bearer note.
 // maxConsolidateSources mirrors mint_cash's/the hub config's own
 // maxRecipientsPerWallet=100 cap (cashwallet/create.go, apps/cash_hub_service.go)
 // — the same "cap every multi-item Cash batch" convention, applied here since
@@ -41,11 +42,12 @@ const maxConsolidateSources = 100
 // own Sources element type is unexported, so a test can't build one in a
 // single struct-literal expression the way this local type allows.
 type consolidateSourceParam struct {
-	WalletPubkey  string `json:"wallet_pubkey"`
-	IdentityType  string `json:"identity_type,omitempty"`
-	IdentityValue string `json:"identity_value,omitempty"`
-	IdentityEvent string `json:"identity_event,omitempty"`
-	BearerSecret  string `json:"bearer_secret,omitempty"`
+	WalletPubkey     string `json:"wallet_pubkey"`
+	IdentityType     string `json:"identity_type,omitempty"`
+	IdentityValue    string `json:"identity_value,omitempty"`
+	IdentityEvent    string `json:"identity_event,omitempty"`
+	AttestationEvent string `json:"attestation_event,omitempty"`
+	BearerSecret     string `json:"bearer_secret,omitempty"`
 }
 
 type cashConsolidateParams struct {
@@ -87,13 +89,17 @@ type resolvedConsolidateSource struct {
 // integration/cash_consolidate_test.go and cash_consolidate_adversarial_test.go,
 // on top of the unit/guard suites in this package and cashwallet.
 //
-// v1 scope: sources MUST be pubkey-identified; new_identity MUST be pubkey
-// (the merged wallet is owned by, and its token delivered encrypted to, that
-// pubkey). connection_key and bearer sources/targets are deferred — bearer
-// specifically because a source's secret would sit in plaintext in a request
-// encrypted only under the CALLING connection's shared key, decryptable by any
-// co-recipient of a shared calling wallet with no claim on that foreign
-// bearer note.
+// Scope: sources MAY be pubkey or connection_key identified (each proven by
+// its own signed identity_event, connection_key additionally requiring a
+// live-trusted attestation_event); new_identity MAY be pubkey, connection_key,
+// or bearer (the merged wallet is owned by, and its token delivered to, that
+// identity — nested-encrypted for pubkey, in the clear within the outer
+// NIP-47 response for connection_key/bearer, which have no real pubkey to
+// ECDH against). Bearer SOURCES remain deferred: unlike connection_key (a
+// signed proof, immune to this), a bearer source's secret has no signature
+// and would sit in plaintext in a request encrypted only under the CALLING
+// connection's shared key, decryptable by any co-recipient of a shared
+// calling wallet with no claim on that foreign bearer note.
 func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
 	params := &nipcash.CashConsolidateRequest{}
 	if resp := decodeRequest(nip47Request, params); resp != nil {
@@ -126,14 +132,14 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			fmt.Sprintf("at most %d sources per consolidate, got %d", maxConsolidateSources, len(params.Sources)))
 		return
 	}
-	// v1: merged wallet is owned by a specific pubkey, and its token is
-	// delivered encrypted to that pubkey.
-	if params.NewIdentity.IdentityType != db.CashIdentityPubkey {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "new_identity.identity_type must be pubkey for cash_consolidate")
-		return
-	}
-	if params.NewIdentity.IdentityValue == "" {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "new_identity.identity_value is required")
+	// The merged wallet's owner: pubkey or connection_key (live IA-trust
+	// validated below, same as mint_cash/cash_transfer), or bearer (caller
+	// supplies their own commitment — see the bearer branch below for why).
+	newIdentityType := params.NewIdentity.IdentityType
+	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityBearer {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
+				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityBearer))
 		return
 	}
 	deps := cashwallet.Deps{
@@ -145,11 +151,30 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		RelayURLs:           controller.cfg.GetRelayUrls(),
 		IAChecker:           controller.iaChecker,
 	}
-	if err := cashwallet.ValidateIdentityShape(deps, params.NewIdentity.IdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
+	// Bearer is validated separately from ValidateIdentityShape (which only
+	// knows pubkey/connection_key — same split cash_transfer's own
+	// new_identity validation already uses): the caller's own commitment MUST
+	// be supplied here rather than generated and returned by the node — see
+	// the bearer-target delivery note below for why — shaped as a 64-char
+	// lowercase hex sha256, exactly like cash_transfer's bearer target.
+	if newIdentityType == db.CashIdentityBearer {
+		if params.NewIdentity.IAPubkey != "" {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"new_identity must not carry ia_pubkey when identity_type is bearer")
+			return
+		}
+		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+				"new_identity.identity_value is required for a bearer target and must be a 64-character lowercase "+
+					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
+					"or returns a bearer secret over the shared connection")
+			return
+		}
+	} else if err := cashwallet.ValidateIdentityShape(deps, newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 		return
 	}
-	targetHash := newIdentityHash(params.NewIdentity.IdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
+	targetHash := newIdentityHash(newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
 
 	// 1. Resolve + authorize every source (read-only), before any claim. Reject
 	// the whole request on the first failure so nothing is ever half-claimed.
@@ -188,9 +213,13 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	var minTransfer int64
 	var redeemFee int
 	proofEventIDs := make([]string, 0, len(params.Sources))
+	// iaTrustCache memoizes IsTrusted per ia_pubkey for this call only — see
+	// resolveConsolidateSource's doc comment for why (TOCTOU: one consistent
+	// trust snapshot across every connection_key source in the batch).
+	iaTrustCache := make(map[string]bool)
 
 	for i := range params.Sources {
-		rs, evID, code, msg := controller.resolveConsolidateSource(params, i, targetHash, custodied)
+		rs, evID, code, msg := controller.resolveConsolidateSource(params, i, targetHash, custodied, iaTrustCache)
 		if code != "" {
 			respondError(publishResponse, nip47Request.Method, code, fmt.Sprintf("source %d: %s", i, msg))
 			return
@@ -384,25 +413,37 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		}
 	}
 
-	// 6. Deliver the merged token, NIP-44 encrypted to new_identity using the
-	// merged wallet's own keypair — the same nested delivery a split uses. Funds
-	// have already moved, so a delivery failure is operator-recoverable, never a
+	// 6. Deliver the merged token. For a pubkey target, NIP-44 encrypted
+	// directly to new_identity using the merged wallet's own keypair — the
+	// same nested delivery a split uses. A bearer or connection_key target has
+	// no real pubkey to ECDH against yet (bearer never has one; connection_key
+	// doesn't until an Identity Authority attests a real pubkey to it later),
+	// so the token travels in the clear within the already end-to-end-
+	// encrypted outer NIP-47 response instead — same as mint_cash's own
+	// bearer/connection_key recipient delivery. Per NIP-CASH, "the token
+	// doesn't need to be kept secret": holding it only lets a reader dial the
+	// new wallet's connection, never redeem it. Funds have already moved
+	// either way, so a delivery failure is operator-recoverable, never a
 	// rollback (the token is recoverable via the admin API).
 	newWalletPubkey := ""
 	if result.WalletApp.WalletPubkey != nil {
 		newWalletPubkey = *result.WalletApp.WalletPubkey
 	}
-	newWalletPrivKey, err := controller.keys.GetAppWalletKey(result.WalletApp.ID)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not derive delivery key")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
-		return
-	}
-	encryptedToken, err := encryptPairingURI(params.NewIdentity.IdentityValue, newWalletPrivKey, result.CashToken)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not encrypt token")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
-		return
+	encryptedToken := result.CashToken
+	if newIdentityType == db.CashIdentityPubkey {
+		newWalletPrivKey, keyErr := controller.keys.GetAppWalletKey(result.WalletApp.ID)
+		if keyErr != nil {
+			logger.Logger.Error().Err(keyErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not derive delivery key")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
+			return
+		}
+		enc, encErr := encryptPairingURI(params.NewIdentity.IdentityValue, newWalletPrivKey, result.CashToken)
+		if encErr != nil {
+			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not encrypt token")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
+			return
+		}
+		encryptedToken = enc
 	}
 
 	var expiresAt *int64
@@ -454,17 +495,19 @@ func (controller *nip47Controller) loadCustodiedSources(sourceWalletPubkeys []st
 }
 
 // resolveConsolidateSource locates a source wallet (from the pre-loaded custody
-// map), verifies its pubkey-identity proof, and returns the resolved slice.
-// code == "" means success; otherwise (code, msg) is the error to surface.
-// evID is the proof's event id, to be replay-guarded by the caller once every
-// source has passed.
-func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.CashConsolidateRequest, i int, targetHash string, custodied map[string]*db.App) (rs *resolvedConsolidateSource, evID, code, msg string) {
+// map), verifies its pubkey or connection_key identity proof, and returns the
+// resolved slice. code == "" means success; otherwise (code, msg) is the error
+// to surface. evID is the proof's event id, to be replay-guarded by the caller
+// once every source has passed. iaTrustCache memoizes IsTrusted per ia_pubkey
+// across the whole batch (see HandleCashConsolidateEvent's call site) so every
+// connection_key source in one request is checked against a single
+// point-in-time trust snapshot, not a fresh live query each — closing a narrow
+// TOCTOU window a per-source live re-check would otherwise leave open across a
+// multi-source batch.
+func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.CashConsolidateRequest, i int, targetHash string, custodied map[string]*db.App, iaTrustCache map[string]bool) (rs *resolvedConsolidateSource, evID, code, msg string) {
 	src := params.Sources[i]
 	if src.WalletPubkey == "" {
 		return nil, "", constants.ERROR_BAD_REQUEST, "wallet_pubkey is required"
-	}
-	if src.IdentityType == db.CashIdentityConnectionKey {
-		return nil, "", constants.ERROR_BAD_REQUEST, "connection_key sources are not supported by cash_consolidate yet"
 	}
 	// A bearer_secret has no signature and no binding to the request that
 	// carries it — presenting it just IS the authorization. Unlike
@@ -477,8 +520,9 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 	// CALLING connection's shared key — decryptable by every co-recipient of a
 	// multi-identity calling wallet, none of whom have any claim on that
 	// foreign bearer note. Rejected outright rather than scoped to
-	// "self only": deferred alongside connection_key, matching the doc's
-	// existing v1-scope style.
+	// "self only": unlike connection_key (a signed proof, immune to this),
+	// bearer genuinely needs a new bound-proof protocol addition to be safe as
+	// a source — see the design doc; still deferred.
 	if src.BearerSecret != "" {
 		return nil, "", constants.ERROR_BAD_REQUEST, "bearer sources are not supported by cash_consolidate yet"
 	}
@@ -489,8 +533,14 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 		return nil, "", constants.ERROR_NOT_FOUND, "no cash_wallet this node custodies matches wallet_pubkey"
 	}
 
-	if src.IdentityType != db.CashIdentityPubkey || src.IdentityValue == "" || src.IdentityEvent == "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "identity_type (pubkey), identity_value, and identity_event are required"
+	if src.IdentityType != db.CashIdentityPubkey && src.IdentityType != db.CashIdentityConnectionKey {
+		return nil, "", constants.ERROR_BAD_REQUEST, "identity_type must be pubkey or connection_key"
+	}
+	if src.IdentityValue == "" || src.IdentityEvent == "" {
+		return nil, "", constants.ERROR_BAD_REQUEST, "identity_type, identity_value, and identity_event are required"
+	}
+	if src.IdentityType == db.CashIdentityConnectionKey && src.AttestationEvent == "" {
+		return nil, "", constants.ERROR_BAD_REQUEST, "attestation_event is required when identity_type is connection_key"
 	}
 	identityType := src.IdentityType
 	identityValue := src.IdentityValue
@@ -507,12 +557,39 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 	if err := json.Unmarshal([]byte(src.IdentityEvent), &identityEvent); err != nil {
 		return nil, "", constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON"
 	}
+
+	var attestationEvent nostr.Event
+	attestationEventID := ""
+	if identityType == db.CashIdentityConnectionKey {
+		if err := json.Unmarshal([]byte(src.AttestationEvent), &attestationEvent); err != nil {
+			return nil, "", constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON"
+		}
+		attestationEventID = attestationEvent.ID
+	}
+
 	// The proof binds to the source's own wallet pubkey (d-tag), the merged
 	// new_identity (targetHash), and the slice's full amount — a consolidate
 	// consumes each source whole.
 	fullAmount := uint64(claim.AmountMloki) //nolint:gosec // non-negative
-	if err := verifyTransferIdentityEvent(&identityEvent, identityType, identityValue, src.WalletPubkey, targetHash, fullAmount, ""); err != nil {
+	if err := verifyTransferIdentityEvent(&identityEvent, identityType, identityValue, src.WalletPubkey, targetHash, fullAmount, attestationEventID); err != nil {
 		return nil, "", constants.ERROR_BAD_REQUEST, err.Error()
+	}
+
+	if identityType == db.CashIdentityConnectionKey {
+		trusted, cached := iaTrustCache[claim.IAPubkey]
+		if !cached {
+			trusted, err = controller.iaChecker.IsTrusted(claim.IAPubkey)
+			if err != nil {
+				return nil, "", constants.ERROR_INTERNAL, "failed to check Identity Authority trust"
+			}
+			iaTrustCache[claim.IAPubkey] = trusted
+		}
+		if !trusted {
+			return nil, "", constants.ERROR_RESTRICTED, "the Identity Authority for this source has been revoked"
+		}
+		if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
+			return nil, "", constants.ERROR_BAD_REQUEST, err.Error()
+		}
 	}
 	evID = identityEvent.ID
 

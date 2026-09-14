@@ -190,6 +190,148 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		require.True(t, ok, "the consolidated token's provenance must verify")
 		require.Len(t, minter, 66)
 	})
+
+	// BearerTargetSecretNotInResponse is the stronger assertion the doc
+	// flagged as missing for cash_transfer's own bearer target: not just that
+	// consolidating to a bearer target succeeds, but that the raw secret the
+	// caller generated locally never appears anywhere in the wire response —
+	// only its commitment hash was ever sent, and the node has no way to
+	// mint/return the secret itself.
+	t.Run("BearerTargetSecretNotInResponse", func(t *testing.T) {
+		wp1, conn1 := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		wp2, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+		callConn := mustConnect(t, conn1)
+
+		bearerSecret, bearerHash := bearerSecretAndHash(t)
+		var res CashConsolidateResult
+		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
+			Sources: []ConsolidateSourceParam{
+				consolidateSourceFor(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+				consolidateSourceFor(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+			},
+			NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
+		}, &res))
+
+		require.NotEmpty(t, res.NewWalletToken)
+		assert.NotContains(t, res.NewWalletToken, bearerSecret,
+			"the wire response must never contain the raw secret the caller generated locally")
+
+		// The delivered token is a plain lokicash1... string (no ECDH target
+		// exists for a bearer commitment), so it must decode directly — no
+		// nested-encryption layer to strip first, unlike a pubkey target.
+		decoded, err := lokicash.Decode(res.NewWalletToken)
+		require.NoError(t, err, "bearer target delivery must be a plain, directly-decodable token")
+		assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
+
+		// The secret actually redeems the merged total, over the bearer
+		// wallet's own connection (the raw token IS the pairing URI; the
+		// secret travels as its own request field, never embedded in the
+		// connection string — same pattern createBearerWallet's callers use).
+		bearerClient := mustConnect(t, res.NewWalletToken)
+		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "bearer target redeem")
+		var rr ClaimFundsResult
+		require.NoError(t, bearerClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			Invoice: mInv.Invoice, BearerSecret: bearerSecret,
+		}, &rr))
+		require.NotEmpty(t, rr.Preimage)
+	})
+
+	// BearerTargetCommitmentReuse_BothSucceed documents the accepted property
+	// flagged in the doc: nothing stops the same commitment hash being
+	// submitted as a bearer new_identity in two unrelated consolidate calls —
+	// harmless, since only the secret's generator ever knows it, and each
+	// resulting wallet is independently funded and independently redeemable.
+	t.Run("BearerTargetCommitmentReuse_BothSucceed", func(t *testing.T) {
+		_, bearerHash := bearerSecretAndHash(t)
+
+		consolidateOnce := func(t *testing.T) CashConsolidateResult {
+			t.Helper()
+			wp1, conn1 := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+			wp2, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
+			callConn := mustConnect(t, conn1)
+			var res CashConsolidateResult
+			require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
+				Sources: []ConsolidateSourceParam{
+					consolidateSourceFor(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+					consolidateSourceFor(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+				},
+				NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
+			}, &res))
+			return res
+		}
+
+		first := consolidateOnce(t)
+		second := consolidateOnce(t)
+		assert.NotEqual(t, first.NewWalletPubkey, second.NewWalletPubkey,
+			"reusing a commitment must produce two independent wallets, not collide")
+	})
+}
+
+// TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected: trust the IA,
+// consolidate to that connection_key target successfully, revoke the IA,
+// attempt redemption, assert it now fails clean — directly exercising the
+// "checked live again at redemption" claim in the doc, not just asserting it
+// in prose. Mirrors TestAudit_CashTransferConnectionKey_RevokedIA_Rejected's
+// admin-client setup in cash_transfer_audit_connection_key_test.go.
+func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
+	cfg := requireConfig(t)
+	admin, ok := newAdminClient(cfg)
+	if !ok {
+		t.Skip("skipping: admin_api not configured")
+	}
+	iaPriv := createEphemeralTrustedIA(t, cfg)
+	iaPub := mustPubkey(t, iaPriv)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "consolidate-connkey-revoked-ia", nil)
+	hubClient := mustConnect(t, hub.Connection)
+
+	callerPriv := newTestPrivkey(t)
+	callerPub := mustPubkey(t, callerPriv)
+	connectionKey := newTestConnectionKey(t)
+	claimantPriv := newTestPrivkey(t)
+	claimantPub := mustPubkey(t, claimantPriv)
+
+	wp1, conn1 := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+	wp2, _ := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+	callConn := mustConnect(t, conn1)
+
+	proof1 := buildTransferProofEvent(t, callerPriv, wp1, "connection_key", connectionKey, iaPub, happyPathAmountMloki, nil, time.Now())
+	proof2 := buildTransferProofEvent(t, callerPriv, wp2, "connection_key", connectionKey, iaPub, happyPathAmountMloki, nil, time.Now())
+
+	var res CashConsolidateResult
+	require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
+		Sources: []ConsolidateSourceParam{
+			{WalletPubkey: wp1, IdentityType: "pubkey", IdentityValue: callerPub, IdentityEvent: eventJSON(t, proof1)},
+			{WalletPubkey: wp2, IdentityType: "pubkey", IdentityValue: callerPub, IdentityEvent: eventJSON(t, proof2)},
+		},
+		NewIdentity: CashTransferNewIdentityParam{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub},
+	}, &res))
+	require.NotEmpty(t, res.NewWalletToken)
+
+	decoded, err := lokicash.Decode(res.NewWalletToken)
+	require.NoError(t, err, "connection_key target delivery must be a plain, directly-decodable token")
+	assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
+
+	// Revoke the IA now that the merge itself has succeeded.
+	require.NoError(t, admin.deleteIdentityAuthority(iaPub))
+	t.Cleanup(func() {
+		// Re-register so any admin-side ephemeral cleanup can still reclaim
+		// funds on the ordinary path (mirrors the sibling transfer test).
+		_ = admin.registerIdentityAuthority(iaPub, ephemeralFixtureNamePrefix+" re-trusted for cleanup")
+	})
+
+	attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
+	mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "revoked ia redeem attempt")
+	redeemProof := buildClaimProofEvent(t, claimantPriv, res.NewWalletPubkey, mInv.PaymentHash,
+		connKeyTransferProofTags(connectionKey, attestation.ID), time.Now())
+
+	mergedClient := mustConnect(t, res.NewWalletToken)
+	var rr ClaimFundsResult
+	err = mergedClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+		Invoice: mInv.Invoice, IdentityType: "connection_key", IdentityValue: connectionKey,
+		IdentityEvent: eventJSON(t, redeemProof), AttestationEvent: eventJSON(t, attestation),
+	}, &rr)
+	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
+	require.ErrorContains(t, err, "revoked")
 }
 
 // TestProvenance_TamperedTokenFailsVerification takes a REAL node-signed token
@@ -222,4 +364,106 @@ func TestProvenance_TamperedTokenFailsVerification(t *testing.T) {
 	recovered, ok := lokicash.VerifyMint(tampered)
 	require.True(t, ok, "recovery still runs on a well-formed 65-byte signature")
 	assert.NotEqual(t, honest, recovered, "a restated denomination must not recover the true minter")
+}
+
+// TestAudit_CashConsolidateConnectionKeySource_HappyPath: a mixed batch (one
+// pubkey source, one connection_key source, both proven live over real relay
+// round-trips) merges into one pubkey-owned wallet, over the real running
+// backend — the black-box counterpart to
+// TestHandleCashConsolidateEvent_ConnectionKeySource_HappyPath's in-process
+// unit coverage.
+func TestAudit_CashConsolidateConnectionKeySource_HappyPath(t *testing.T) {
+	cfg := requireConfig(t)
+	iaPriv := createEphemeralTrustedIA(t, cfg)
+	iaPub := mustPubkey(t, iaPriv)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "consolidate-connkey-source", nil)
+	hubClient := mustConnect(t, hub.Connection)
+
+	callerPriv := newTestPrivkey(t)
+	callerPub := mustPubkey(t, callerPriv)
+	newPub := mustPubkey(t, newTestPrivkey(t))
+
+	wp1, conn1 := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+	callConn := mustConnect(t, conn1)
+
+	connectionKey := newTestConnectionKey(t)
+	_, wp2, claimantPriv, claimantPub := createConnKeyCashWallet(t, hubClient, iaPub, connectionKey, happyPathAmountMloki)
+
+	proof1 := buildTransferProofEvent(t, callerPriv, wp1, "pubkey", newPub, "", happyPathAmountMloki, nil, time.Now())
+	attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
+	proof2 := buildTransferProofEvent(t, claimantPriv, wp2, "pubkey", newPub, "", happyPathAmountMloki,
+		connKeyTransferProofTags(connectionKey, attestation.ID), time.Now())
+
+	var res CashConsolidateResult
+	require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
+		Sources: []ConsolidateSourceParam{
+			{WalletPubkey: wp1, IdentityType: "pubkey", IdentityValue: callerPub, IdentityEvent: eventJSON(t, proof1)},
+			{
+				WalletPubkey: wp2, IdentityType: "connection_key", IdentityValue: connectionKey,
+				IdentityEvent: eventJSON(t, proof2), AttestationEvent: eventJSON(t, attestation),
+			},
+		},
+		NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+	}, &res))
+	assert.EqualValues(t, happyPathAmountMloki*2, res.AmountMillis)
+}
+
+// TestAudit_CashConsolidateConnectionKey_AttestationReplayAcrossBatches_Allowed
+// confirms presenting the same long-lived attestation in two unrelated
+// consolidate calls is accepted both times — documenting the intentional
+// non-single-use property (an attestation proves "this pubkey owns this
+// connection_key", not a one-shot spend authorization) so a future change
+// doesn't accidentally break it thinking it's a bug.
+func TestAudit_CashConsolidateConnectionKey_AttestationReplayAcrossBatches_Allowed(t *testing.T) {
+	cfg := requireConfig(t)
+	iaPriv := createEphemeralTrustedIA(t, cfg)
+	iaPub := mustPubkey(t, iaPriv)
+	hub, _, _ := createEphemeralCashHub(t, cfg, "consolidate-connkey-attestation-reuse", nil)
+	hubClient := mustConnect(t, hub.Connection)
+
+	callerPriv := newTestPrivkey(t)
+	callerPub := mustPubkey(t, callerPriv)
+	connectionKey := newTestConnectionKey(t)
+	_, walletPubkey1, claimantPriv, claimantPub := createConnKeyCashWallet(t, hubClient, iaPub, connectionKey, happyPathAmountMloki)
+	attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
+
+	consolidateOnce := func(t *testing.T, connWalletPubkey string) CashConsolidateResult {
+		t.Helper()
+		wpPubkey, connPubkey := mintPubkeySource(t, hubClient, callerPub, happyPathAmountMloki)
+		callConn := mustConnect(t, connPubkey)
+		newPub := mustPubkey(t, newTestPrivkey(t))
+		proof1 := buildTransferProofEvent(t, callerPriv, wpPubkey, "pubkey", newPub, "", happyPathAmountMloki, nil, time.Now())
+		proof2 := buildTransferProofEvent(t, claimantPriv, connWalletPubkey, "pubkey", newPub, "", happyPathAmountMloki,
+			connKeyTransferProofTags(connectionKey, attestation.ID), time.Now())
+		var res CashConsolidateResult
+		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
+			Sources: []ConsolidateSourceParam{
+				{WalletPubkey: wpPubkey, IdentityType: "pubkey", IdentityValue: callerPub, IdentityEvent: eventJSON(t, proof1)},
+				{
+					WalletPubkey: connWalletPubkey, IdentityType: "connection_key", IdentityValue: connectionKey,
+					IdentityEvent: eventJSON(t, proof2), AttestationEvent: eventJSON(t, attestation),
+				},
+			},
+			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+		}, &res))
+		return res
+	}
+
+	res1 := consolidateOnce(t, walletPubkey1)
+	assert.EqualValues(t, happyPathAmountMloki*2, res1.AmountMillis)
+
+	// A second, unrelated wallet under the SAME connection_key, claimed by the
+	// SAME claimant keypair the attestation vouches for — minted directly
+	// (not via createConnKeyCashWallet, which would generate an unrelated
+	// fresh claimant the existing attestation doesn't cover).
+	var created2 MintCashResult
+	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
+		Recipients: []CashWalletRecipientParam{
+			{IdentityType: "connection_key", IdentityValue: connectionKey, IAPubkey: iaPub, AmountMillis: happyPathAmountMloki},
+		},
+		Expiry: happyPathExpirySecs,
+	}, &created2))
+
+	res2 := consolidateOnce(t, created2.WalletPubkey)
+	assert.EqualValues(t, happyPathAmountMloki*2, res2.AmountMillis)
 }
