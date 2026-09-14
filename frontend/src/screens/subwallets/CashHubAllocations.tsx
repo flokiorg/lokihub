@@ -60,12 +60,14 @@ import { LIST_CASH_ALLOCATIONS_LIMIT } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
 import { useNip05Verification } from "src/hooks/useNip05Verification";
+import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { getAuthToken } from "src/lib/auth";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { formatClaimDeadline } from "src/utils/cashWallet";
+import { decodeNConnection } from "src/utils/nconnection";
 import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
 import { validateHTTPURL } from "src/utils/validation";
 import {
@@ -111,8 +113,11 @@ function newRecipientRow(
     identityType,
     pubkeyValue: "",
     resolvedPubkeyHex: undefined,
-    connectionKeyValue: "",
+    nconnectionValue: "",
+    resolvedConnectionKeyHex: undefined,
+    resolvedConnectionKeyPlatform: undefined,
     iaPubkeyValue: "",
+    resolvedIaPubkeyHex: undefined,
     // Undefined until the operator picks one explicitly — the render layer
     // defaults it to "existing" whenever any Identity Authority is already
     // declared in Settings, "manual" otherwise (see iaModeFor below).
@@ -126,8 +131,21 @@ type RecipientRow = {
   identityType: "pubkey" | "connection_key" | "bearer";
   pubkeyValue: string;
   resolvedPubkeyHex?: string;
-  connectionKeyValue: string;
+  // nconnectionValue: the raw nconnection1... string the operator pasted
+  // (NIP-IC's EncodeNConnection) — never a raw ConnectionKey hex anymore,
+  // so nobody has to compute hex(SHA256(platform + ":" + externalID)) by
+  // hand; whoever minted the connection (a Discord bot, etc.) already
+  // packaged that into one shareable string. resolvedConnectionKeyHex is
+  // decodeNConnection's output, the value actually sent as identity_value.
+  nconnectionValue: string;
+  resolvedConnectionKeyHex?: string;
+  resolvedConnectionKeyPlatform?: string;
   iaPubkeyValue: string;
+  // The hex pubkey NostrPubkeyInput resolved iaPubkeyValue to (hex, npub,
+  // nprofile, or NIP-05 all accepted) — or, on the "existing" branch below,
+  // simply the selected IdentityAuthority's own pubkey. This, not
+  // iaPubkeyValue itself, is what goes on the wire as ia_pubkey.
+  resolvedIaPubkeyHex?: string;
   // "existing" shows a Select sourced from Settings' declared Identity
   // Authorities; "manual" shows the free-text pubkey Input. A row can switch
   // between the two any number of times before submission.
@@ -152,11 +170,9 @@ function recipientIdentityValue(row: RecipientRow): string | undefined {
   if (row.identityType === "bearer") {
     return undefined;
   }
-  const value =
-    row.identityType === "pubkey"
-      ? row.resolvedPubkeyHex
-      : row.connectionKeyValue.trim();
-  return value || undefined;
+  return row.identityType === "pubkey"
+    ? row.resolvedPubkeyHex
+    : row.resolvedConnectionKeyHex;
 }
 
 // A pubkey pill's leading glyph: the recipient's own profile picture when
@@ -203,6 +219,39 @@ function pillIdentityLabel(
     return profile.nip05;
   }
   return shortenMiddle(safeNpubEncode(pubkey) ?? pubkey, 8, 4);
+}
+
+const EMPTY_PROFILE_MAP: Map<string, NostrProfile> = new Map();
+
+// Confirms exactly what will be sent as ia_pubkey once NostrPubkeyInput
+// resolves the operator's free-text entry: a verified nip05 alongside its
+// npub if one exists, otherwise the npub alongside the raw hex — always
+// both forms together (never nip05/npub alone), since this pubkey is a
+// trust anchor an operator may want to double-check against a value they
+// have on hand in either form, and neither form alone is always the one
+// they're holding.
+function IAResolvedIdentity({ hex }: { hex: string }) {
+  const { t } = useTranslation("circles");
+  const { profile } = useNostrProfile(hex);
+  const profileMap = React.useMemo(() => {
+    if (!profile?.nip05) {
+      return EMPTY_PROFILE_MAP;
+    }
+    return new Map([[hex, profile]]);
+  }, [hex, profile]);
+  const { verified } = useNip05Verification(profileMap);
+
+  const npub = shortenMiddle(safeNpubEncode(hex) ?? hex);
+  const identity =
+    verified.has(hex) && profile?.nip05
+      ? `${profile.nip05} (${npub})`
+      : `${npub} (${shortenMiddle(hex)})`;
+
+  return (
+    <p className="text-sm text-muted-foreground">
+      {t("cashHubAllocations.iaResolvedTo", { identity })}
+    </p>
+  );
 }
 
 function formatDurationLabel(
@@ -532,7 +581,7 @@ export const CashHubAllocations = React.forwardRef<
       if (!identityValue) {
         return false;
       }
-      if (r.identityType === "connection_key" && !r.iaPubkeyValue.trim()) {
+      if (r.identityType === "connection_key" && !r.resolvedIaPubkeyHex) {
         return false;
       }
       return true;
@@ -635,7 +684,7 @@ export const CashHubAllocations = React.forwardRef<
           identity_type: r.identityType,
           identity_value: recipientIdentityValue(r),
           ...(r.identityType === "connection_key"
-            ? { ia_pubkey: r.iaPubkeyValue.trim() }
+            ? { ia_pubkey: r.resolvedIaPubkeyHex }
             : {}),
           amount_mloki: r.amountLoki * 1000,
         })),
@@ -895,72 +944,108 @@ export const CashHubAllocations = React.forwardRef<
             <Input
               id={`identityValue-${row.key}`}
               type="text"
-              placeholder={t("common.hexPlaceholder")}
-              value={row.connectionKeyValue}
-              onChange={(e) =>
-                updateRow(row.key, { connectionKeyValue: e.target.value })
-              }
+              placeholder={t("cashHubAllocations.connectionKeyPlaceholder")}
+              value={row.nconnectionValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const decoded = decodeNConnection(raw);
+                updateRow(row.key, {
+                  nconnectionValue: raw,
+                  resolvedConnectionKeyHex: decoded?.connectionKey,
+                  resolvedConnectionKeyPlatform: decoded?.platform,
+                });
+              }}
               required
               autoComplete="off"
             />
+            <p
+              className={cn(
+                "text-sm",
+                !row.resolvedConnectionKeyHex && row.nconnectionValue.trim()
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              )}
+            >
+              {row.resolvedConnectionKeyHex
+                ? t("cashHubAllocations.connectionKeyResolved", {
+                    platform:
+                      row.resolvedConnectionKeyPlatform ||
+                      t("cashHubAllocations.connectionKeyUnknownPlatform"),
+                  })
+                : row.nconnectionValue.trim()
+                  ? t("cashHubAllocations.connectionKeyInvalid")
+                  : t("cashHubAllocations.connectionKeyHelper")}
+            </p>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor={`iaPubkey-${row.key}`}>
-              {t("cashHubAllocations.iaPubkeyLabel")}
-            </Label>
             {identityAuthorities.length > 0 &&
             iaModeFor(row, true) === "existing" ? (
-              <Select
-                value={row.iaPubkeyValue || undefined}
-                onValueChange={(v) => {
-                  if (v === MANUAL_IA_SENTINEL) {
-                    updateRow(row.key, {
-                      iaMode: "manual",
-                      iaPubkeyValue: "",
-                    });
-                  } else {
-                    updateRow(row.key, {
-                      iaMode: "existing",
-                      iaPubkeyValue: v,
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger id={`iaPubkey-${row.key}`} className="w-full">
-                  <SelectValue
-                    placeholder={t("cashHubAllocations.selectIAPlaceholder")}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>
-                      {t("cashHubAllocations.savedIAsLabel")}
-                    </SelectLabel>
-                    {identityAuthorities.map((ia) => (
-                      <SelectItem key={ia.pubkey} value={ia.pubkey}>
-                        {ia.name} ({shortenMiddle(ia.pubkey, 6, 4)})
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                  <SelectSeparator />
-                  <SelectItem value={MANUAL_IA_SENTINEL}>
-                    {t("cashHubAllocations.enterIAManually")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <>
+                <Label htmlFor={`iaPubkey-${row.key}`}>
+                  {t("cashHubAllocations.iaPubkeyLabel")}
+                </Label>
+                <Select
+                  value={row.iaPubkeyValue || undefined}
+                  onValueChange={(v) => {
+                    if (v === MANUAL_IA_SENTINEL) {
+                      updateRow(row.key, {
+                        iaMode: "manual",
+                        iaPubkeyValue: "",
+                        resolvedIaPubkeyHex: undefined,
+                      });
+                    } else {
+                      updateRow(row.key, {
+                        iaMode: "existing",
+                        iaPubkeyValue: v,
+                        // Already a known-good hex pubkey (it's the IA's own
+                        // declared value from Settings) — no resolution step
+                        // needed, unlike the free-text branch below.
+                        resolvedIaPubkeyHex: v,
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger id={`iaPubkey-${row.key}`} className="w-full">
+                    <SelectValue
+                      placeholder={t("cashHubAllocations.selectIAPlaceholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>
+                        {t("cashHubAllocations.savedIAsLabel")}
+                      </SelectLabel>
+                      {identityAuthorities.map((ia) => (
+                        <SelectItem key={ia.pubkey} value={ia.pubkey}>
+                          {ia.name} ({shortenMiddle(ia.pubkey, 6, 4)})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectItem value={MANUAL_IA_SENTINEL}>
+                      {t("cashHubAllocations.enterIAManually")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  {t("cashHubAllocations.iaPubkeyHelper")}
+                </p>
+              </>
             ) : (
               <>
-                <Input
+                <NostrPubkeyInput
                   id={`iaPubkey-${row.key}`}
-                  type="text"
-                  placeholder={t("common.hexPlaceholder")}
                   value={row.iaPubkeyValue}
-                  onChange={(e) =>
-                    updateRow(row.key, { iaPubkeyValue: e.target.value })
+                  onChange={(v) => updateRow(row.key, { iaPubkeyValue: v })}
+                  onResolved={(hex) =>
+                    updateRow(row.key, { resolvedIaPubkeyHex: hex })
                   }
-                  required
-                  autoComplete="off"
+                  label={t("cashHubAllocations.iaPubkeyLabel")}
+                  helperText={t("cashHubAllocations.iaPubkeyHelper")}
                 />
+                {row.resolvedIaPubkeyHex && (
+                  <IAResolvedIdentity hex={row.resolvedIaPubkeyHex} />
+                )}
                 {identityAuthorities.length > 0 && (
                   <button
                     type="button"
@@ -969,6 +1054,7 @@ export const CashHubAllocations = React.forwardRef<
                       updateRow(row.key, {
                         iaMode: "existing",
                         iaPubkeyValue: "",
+                        resolvedIaPubkeyHex: undefined,
                       })
                     }
                   >
@@ -977,9 +1063,6 @@ export const CashHubAllocations = React.forwardRef<
                 )}
               </>
             )}
-            <p className="text-sm text-muted-foreground">
-              {t("cashHubAllocations.iaPubkeyHelper")}
-            </p>
           </div>
         </>
       ) : // Bearer: no identity to collect — the wallet mints its own secret,
