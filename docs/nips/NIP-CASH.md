@@ -665,7 +665,7 @@ sequenceDiagram
     participant New as New Cash Wallet(s) (dedicated)
 
     Caller->>Old: cash_transfer {proof, new_identity, amount_millis?}
-    Old->>Old: verify proof; determine split applies
+    Old->>Old: verify proof, determine split applies
     Old->>Old: atomically claim the source slice TERMINAL
     Old->>New: create + fund via internal transfer(s):<br/>one wallet (full-to-bearer), or two (partial split)
     New-->>Old: lokicash1... token(s) for the new wallet(s)
@@ -804,7 +804,7 @@ sequenceDiagram
     Caller->>Node: cash_consolidate {sources[], proofs[], new_identity}
     Node->>Node: confirm this node custodies every source, all same hub
     Node->>Node: verify caller controls each source slice
-    Node->>Node: sum amounts (overflow-checked); check sum does not exceed hub PerWalletMax
+    Node->>Node: sum amounts (overflow-checked), check sum does not exceed hub PerWalletMax
     Node->>Node: atomically claim EVERY source slice terminal
     Node->>New: create one wallet for new_identity, fund via internal transfers summing sources
     New-->>Node: lokicash1... token for the consolidated wallet
