@@ -21,6 +21,10 @@ import { formatClaimDeadline } from "src/utils/cashWallet";
 //   app (same as NewApp.tsx's FinalizeConnection) and turns on
 //   ConnectAppCard's connection-status block ("Waiting for app to
 //   connect..."/timeout/"App connected").
+// Both the polling and the connection-status block are skipped entirely when
+// primaryFormat is "lokicash", regardless of mode: a Cash token has no NWC
+// pairing handshake for a recipient to "connect" through, so there is
+// nothing to poll for and nothing to report as waiting/connected.
 export function RevealConnectionDialog({
   app,
   pairingUri,
@@ -60,7 +64,11 @@ export function RevealConnectionDialog({
 }) {
   const { t } = useTranslation("apps");
   const { t: tj } = useTranslation("circles");
-  const { data: polledApp } = useApp(mode === "create" ? app.id : undefined, true);
+  const shouldPollForConnection = mode === "create" && primaryFormat !== "lokicash";
+  const { data: polledApp } = useApp(
+    shouldPollForConnection ? app.id : undefined,
+    true
+  );
 
   const deadline = walletSummary?.expiresAtSecs
     ? formatClaimDeadline(walletSummary.expiresAtSecs)
@@ -126,12 +134,12 @@ export function RevealConnectionDialog({
           </div>
         )}
         <ConnectAppCard
-          app={mode === "create" ? (polledApp ?? app) : app}
+          app={shouldPollForConnection ? (polledApp ?? app) : app}
           pairingUri={pairingUri}
           lokicashToken={lokicashToken}
           bearerSecret={bearerSecret}
           variant="reveal"
-          showConnectionStatus={mode === "create"}
+          showConnectionStatus={shouldPollForConnection}
           primaryFormat={primaryFormat}
         />
       </DialogContent>

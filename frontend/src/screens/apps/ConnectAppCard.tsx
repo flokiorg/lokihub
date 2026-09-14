@@ -55,7 +55,11 @@ export function ConnectAppCard({
   // Whether to show the "Waiting for app to connect..."/"App connected"
   // status block. Defaults to variant === "create", but can be set
   // independently — e.g. a Dialog-hosted "reveal" layout for a brand-new,
-  // not-yet-connected wallet still wants this status shown.
+  // not-yet-connected wallet still wants this status shown. Always forced
+  // off for primaryFormat "lokicash": a Cash token is spendable the moment
+  // it's minted, with no NWC-style pairing handshake for a recipient to
+  // "connect" — there is nothing to wait for and nothing this app's
+  // lastUsedAt could truthfully report as "connected".
   showConnectionStatus?: boolean;
   // "nwc" (default): QR + primary copy button both use pairingUri, exactly
   // as every other app connection (regular apps, circle wallets) works.
@@ -77,6 +81,8 @@ export function ConnectAppCard({
   const [showClassicNwc, setShowClassicNwc] = useState(false);
   const logoSrc = useAppLogo(appStoreApp?.id);
   const { t } = useTranslation("apps");
+  const effectiveShowConnectionStatus =
+    primaryFormat === "lokicash" ? false : showConnectionStatus;
 
   const hubToken =
     primaryFormat === "cashhub"
@@ -105,7 +111,7 @@ export function ConnectAppCard({
 
   const content = (
     <>
-      {showConnectionStatus &&
+      {effectiveShowConnectionStatus &&
         (!app.lastUsedAt ? (
           <>
             <div className="flex flex-row items-center gap-2 text-sm z-10">
