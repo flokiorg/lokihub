@@ -3,10 +3,12 @@ import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "src/components/ui/dialog";
 import { Badge } from "src/components/ui/badge";
+import { Button } from "src/components/ui/button";
 import { useApp } from "src/hooks/useApp";
 import { App } from "src/types";
 import { formatClaimDeadline } from "src/utils/cashWallet";
@@ -80,9 +82,40 @@ export function RevealConnectionDialog({
     ? formatClaimDeadline(walletSummary.expiresAtSecs)
     : undefined;
 
+  // A freshly-minted bearer secret is shown exactly this once and can never
+  // be retrieved again (NIP-CASH §Bearer Slices) — the Hub only ever stores
+  // its hash. Dismissing this dialog without having copied it first means
+  // the funds it guards are permanently unredeemable, same as losing a
+  // physical cash bill. Block every accidental-dismiss path (backdrop
+  // click, Escape, the corner "x") and require an explicit acknowledgment
+  // instead, only for this one case — every other use of this dialog shows
+  // a re-derivable connection (§The Pairing Connection), safe to dismiss
+  // freely.
+  const requiresSaveConfirmation = mode === "create" && Boolean(bearerSecret);
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !requiresSaveConfirmation) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!requiresSaveConfirmation}
+        onInteractOutside={(e) => {
+          if (requiresSaveConfirmation) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (requiresSaveConfirmation) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="mb-2">
             {primaryFormat === "lokicash"
@@ -150,6 +183,16 @@ export function RevealConnectionDialog({
           showConnectionStatus={shouldPollForConnection}
           primaryFormat={primaryFormat}
         />
+        {requiresSaveConfirmation && (
+          <DialogFooter>
+            <Button onClick={onClose} className="w-full">
+              {t(
+                "connectAppCard.bearerSavedConfirm",
+                "I've saved this — Close"
+              )}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
