@@ -141,14 +141,16 @@ type CashTransferResult struct {
 //
 // Combines several same-hub slices this node custodies into one new cash token
 // (NIP-CASH §Consolidating Tokens). Each source carries the same proof shapes
-// cash_transfer accepts. v1: pubkey/bearer sources, pubkey new_identity.
+// cash_transfer accepts. Sources: pubkey or connection_key (bearer sources
+// remain rejected). new_identity: pubkey, connection_key, or bearer.
 
 type ConsolidateSourceParam struct {
-	WalletPubkey  string `json:"wallet_pubkey"`
-	IdentityType  string `json:"identity_type,omitempty"`
-	IdentityValue string `json:"identity_value,omitempty"`
-	IdentityEvent string `json:"identity_event,omitempty"`
-	BearerSecret  string `json:"bearer_secret,omitempty"`
+	WalletPubkey     string `json:"wallet_pubkey"`
+	IdentityType     string `json:"identity_type,omitempty"`
+	IdentityValue    string `json:"identity_value,omitempty"`
+	IdentityEvent    string `json:"identity_event,omitempty"`
+	AttestationEvent string `json:"attestation_event,omitempty"`
+	BearerSecret     string `json:"bearer_secret,omitempty"`
 }
 
 type CashConsolidateParams struct {
