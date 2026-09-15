@@ -62,6 +62,24 @@ func consolidateSourceFor(t *testing.T, walletPubkey, proofSignerPriv, callerPub
 	}
 }
 
+// consolidateSourceForBearer is consolidateSourceFor's counterpart for a
+// bearer new_identity target: the proof must bind to identity type "bearer"
+// + the commitment hash (not "pubkey"), matching what the server actually
+// hashes to verify it (nip47/controllers/cash_transfer_controller.go's
+// newIdentityHash) — reusing consolidateSourceFor's hardcoded "pubkey"
+// binding here would sign a proof for the wrong new_identity and always be
+// rejected.
+func consolidateSourceForBearer(t *testing.T, walletPubkey, proofSignerPriv, callerPub, bearerHash string, amount uint64) ConsolidateSourceParam {
+	t.Helper()
+	proof := buildTransferProofEvent(t, proofSignerPriv, walletPubkey, "bearer", bearerHash, "", amount, nil, time.Now())
+	return ConsolidateSourceParam{
+		WalletPubkey:  walletPubkey,
+		IdentityType:  "pubkey",
+		IdentityValue: callerPub,
+		IdentityEvent: eventJSON(t, proof),
+	}
+}
+
 func TestConsolidate_Adversarial(t *testing.T) {
 	cfg := requireConfig(t)
 	hubA, _, _ := createEphemeralCashHub(t, cfg, "consolidate-adv-hubA", nil)
@@ -206,8 +224,8 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		var res CashConsolidateResult
 		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
-				consolidateSourceFor(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
-				consolidateSourceFor(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+				consolidateSourceForBearer(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+				consolidateSourceForBearer(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
 		}, &res))
@@ -224,10 +242,12 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
 		// The secret actually redeems the merged total, over the bearer
-		// wallet's own connection (the raw token IS the pairing URI; the
-		// secret travels as its own request field, never embedded in the
+		// wallet's own connection (built from the decoded token, same as any
+		// other spun-off wallet — nwcclient.Connect needs a
+		// nostr+walletconnect:// URI, not the raw lokicash1... token itself;
+		// the secret travels as its own request field, never embedded in the
 		// connection string — same pattern createBearerWallet's callers use).
-		bearerClient := mustConnect(t, res.NewWalletToken)
+		bearerClient := mustConnect(t, nwcURIFromLokicash(decoded))
 		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "bearer target redeem")
 		var rr ClaimFundsResult
 		require.NoError(t, bearerClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
@@ -252,8 +272,8 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			var res CashConsolidateResult
 			require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 				Sources: []ConsolidateSourceParam{
-					consolidateSourceFor(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
-					consolidateSourceFor(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+					consolidateSourceForBearer(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+					consolidateSourceForBearer(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
 				},
 				NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
 			}, &res))
@@ -324,7 +344,7 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	redeemProof := buildClaimProofEvent(t, claimantPriv, res.NewWalletPubkey, mInv.PaymentHash,
 		connKeyTransferProofTags(connectionKey, attestation.ID), time.Now())
 
-	mergedClient := mustConnect(t, res.NewWalletToken)
+	mergedClient := mustConnect(t, nwcURIFromLokicash(decoded))
 	var rr ClaimFundsResult
 	err = mergedClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 		Invoice: mInv.Invoice, IdentityType: "connection_key", IdentityValue: connectionKey,
