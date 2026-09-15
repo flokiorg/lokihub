@@ -12,7 +12,17 @@ WORKDIR /app
 RUN go install github.com/air-verse/air@latest
 
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+# go.mod's temporary `replace github.com/ohstr/nmilat => /u/.../ohstr/nmilat`
+# (see docker-compose.dev.yml's own comment on the backend service's nmilat
+# volume) points at an absolute host path outside this build's context, so
+# whether BuildKit's RUN step can see it to read its go.mod is not reliable
+# (observed both succeeding and failing across otherwise-identical builds,
+# 2026-09-15) - unlike docker-compose.dev.yml's runtime bind mount, which
+# always provides it. Tolerate failure here: this step is only a build-time
+# cache warm-up (a separate, ephemeral BuildKit cache, not the persistent
+# lokihub-go-mod-cache volume air's own runtime `go build` actually uses),
+# never required for the running container to work.
+RUN --mount=type=cache,target=/go/pkg/mod go mod download || true
 
 # Baseline copy so the image is runnable even without the dev bind mount;
 # docker-compose.dev.yml overlays the live working tree on top of this at
