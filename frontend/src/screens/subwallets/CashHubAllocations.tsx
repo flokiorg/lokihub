@@ -1017,7 +1017,7 @@ export const CashHubAllocations = React.forwardRef<
                       </SelectLabel>
                       {identityAuthorities.map((ia) => (
                         <SelectItem key={ia.pubkey} value={ia.pubkey}>
-                          {ia.name} ({shortenMiddle(ia.pubkey, 6, 4)})
+                          {ia.name} ({shortenMiddle(safeNpubEncode(ia.pubkey) ?? ia.pubkey, 6, 4)})
                         </SelectItem>
                       ))}
                     </SelectGroup>
