@@ -37,8 +37,13 @@ export function nostrProfileCacheKey(pubkey: string, relayUrls: string[]) {
 // re-loading whenever just one member was added or removed. Only pubkeys not
 // already resolved are ever fetched, and previously-resolved profiles are
 // never cleared when the input list changes.
-export function useNostrProfiles(pubkeys: string[]) {
+// extraRelayUrls widens the batch's relay set with directive relays that
+// aren't tied to any single pubkey's outbox (e.g. every listed Identity
+// Authority's own declared relay_urls, unioned together) — see
+// getRelaySetForPubkeys.
+export function useNostrProfiles(pubkeys: string[], extraRelayUrls: string[] = []) {
   const { ndk, relayUrls } = useNdk();
+  const extraRelayUrlsKey = extraRelayUrls.join(",");
   const { mutate } = useSWRConfig();
   const [profiles, setProfiles] = React.useState<Map<string, NostrProfile>>(
     new Map()
@@ -61,7 +66,12 @@ export function useNostrProfiles(pubkeys: string[]) {
     setLoading(true);
     (async () => {
       try {
-        const relaySet = await getRelaySetForPubkeys(ndk, missing, relayUrls);
+        const relaySet = await getRelaySetForPubkeys(
+          ndk,
+          missing,
+          relayUrls,
+          extraRelayUrlsKey ? extraRelayUrlsKey.split(",") : []
+        );
         const events = await ndk.fetchEvents(
           { kinds: [KIND_METADATA], authors: missing },
           {},
@@ -96,7 +106,7 @@ export function useNostrProfiles(pubkeys: string[]) {
     return () => {
       cancelled = true;
     };
-  }, [ndk, relayUrls, missingKey, mutate]);
+  }, [ndk, relayUrls, missingKey, extraRelayUrlsKey, mutate]);
 
   return React.useMemo(() => ({ profiles, isLoading }), [profiles, isLoading]);
 }

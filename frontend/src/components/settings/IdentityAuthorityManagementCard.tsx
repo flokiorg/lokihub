@@ -1,4 +1,4 @@
-import { PlusIcon, ShieldCheckIcon, Trash2 } from "lucide-react";
+import { InfoIcon, PlusIcon, ShieldCheckIcon, Trash2 } from "lucide-react";
 import React from "react";
 import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
@@ -24,11 +24,15 @@ import {
 } from "src/components/ui/card";
 import { Label } from "src/components/ui/label";
 import { Textarea } from "src/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "src/components/ui/tooltip";
+import { useNip05Verification } from "src/hooks/useNip05Verification";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
-import { useNostrProfiles } from "src/hooks/useNostrProfiles";
+import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { cn } from "src/lib/utils";
 import { IdentityAuthority } from "src/types";
 import { primaryProfileLabel } from "src/utils/nostrProfileLabel";
+
+const EMPTY_NIP05_PROFILES: Map<string, NostrProfile> = new Map();
 
 // splitRelayUrls accepts either comma- or newline-separated relay URLs (users
 // naturally reach for whichever separator matches how they copied the list).
@@ -54,7 +58,29 @@ export function IdentityAuthorityManagementCard({
   setLocalAuthorities,
   className,
 }: IdentityAuthorityManagementCardProps) {
-  const { profiles } = useNostrProfiles(localAuthorities.map((a) => a.pubkey));
+  // Each IA's own declared relay_urls are used as directive relay hints for
+  // its profile lookup (name/avatar/NIP-05 for display only) — this is
+  // separate from attestation verification, which never fetches from
+  // relays.
+  const { profiles } = useNostrProfiles(
+    localAuthorities.map((a) => a.pubkey),
+    localAuthorities.flatMap((a) => a.relay_urls ?? [])
+  );
+
+  // A profile's nip05 field is just an unverified claim from its own kind:0
+  // event — only cryptographically-confirmed addresses (nostr.json actually
+  // resolving back to this pubkey) are ever shown, mirroring
+  // CashHubAllocations' pillIdentityLabel/IAResolvedIdentity precedent for
+  // the same reason: an IA's identity is a trust anchor, not just a nicety.
+  const nip05Profiles = React.useMemo(() => {
+    const withNip05 = localAuthorities.filter((a) => profiles.get(a.pubkey)?.nip05);
+    if (withNip05.length === 0) {
+      return EMPTY_NIP05_PROFILES;
+    }
+    return new Map(withNip05.map((a) => [a.pubkey, profiles.get(a.pubkey)!]));
+  }, [localAuthorities, profiles]);
+  const { verified: verifiedNip05, pending: pendingNip05 } =
+    useNip05Verification(nip05Profiles);
 
   const [isAdding, setIsAdding] = React.useState(false);
   const [pubkeyValue, setPubkeyValue] = React.useState("");
@@ -132,7 +158,18 @@ export function IdentityAuthorityManagementCard({
             <div className="rounded-lg border">
               <div className="grid gap-1 p-1">
                 {localAuthorities.map((a) => {
-                  const profile = profiles.get(a.pubkey);
+                  const rawProfile = profiles.get(a.pubkey);
+                  const isNip05Verified =
+                    !!rawProfile?.nip05 && verifiedNip05.has(a.pubkey);
+                  const isNip05Verifying =
+                    !!rawProfile?.nip05 && pendingNip05.has(a.pubkey);
+                  // Strip the unverified nip05 claim rather than just
+                  // hiding the checkmark — otherwise the row would still
+                  // show it as if confirmed.
+                  const profile =
+                    rawProfile?.nip05 && !isNip05Verified
+                      ? { ...rawProfile, nip05: undefined }
+                      : rawProfile;
                   const unredeemedCount = a.unredeemed_slice_count;
                   return (
                     <div
@@ -143,9 +180,40 @@ export function IdentityAuthorityManagementCard({
                         <NostrProfileRow
                           pubkey={a.pubkey}
                           profile={profile}
+                          isVerified={isNip05Verified}
+                          isVerifying={isNip05Verifying}
                           avatarClassName="h-9 w-9"
                         />
                       </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="shrink-0 text-muted-foreground hover:text-foreground cursor-help">
+                            <InfoIcon className="w-3.5 h-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-64">
+                          {a.relay_urls && a.relay_urls.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="font-medium">
+                                Relays used to look up this identity's
+                                profile
+                              </p>
+                              <div className="space-y-0.5">
+                                {a.relay_urls.map((url) => (
+                                  <p key={url} className="font-mono text-[11px] break-all">
+                                    {url}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p>
+                              No relay declared for this identity — using
+                              your default relays to look up its profile.
+                            </p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
                       {unredeemedCount > 0 && (
                         <Badge
                           variant="secondary"
@@ -203,7 +271,22 @@ export function IdentityAuthorityManagementCard({
                   id="ia-pubkey"
                   value={pubkeyValue}
                   onChange={setPubkeyValue}
-                  onResolved={setResolvedPubkeyHex}
+                  onResolved={(hex, relayHints) => {
+                    setResolvedPubkeyHex(hex);
+                    // An nprofile1... (or a NIP-05 .well-known entry) can
+                    // carry its own relay hints — memorize them into the
+                    // field below instead of leaving it for the operator to
+                    // fill in by hand, but never clobber relays they already
+                    // typed themselves.
+                    if (
+                      hex &&
+                      relayHints &&
+                      relayHints.length > 0 &&
+                      relayUrlsValue.trim() === ""
+                    ) {
+                      setRelayUrlsValue(relayHints.join("\n"));
+                    }
+                  }}
                   label="Identity Authority"
                   helperText="Search by name, NIP-05, or paste an npub/hex/nprofile"
                 />
@@ -220,8 +303,11 @@ export function IdentityAuthorityManagementCard({
                     className="text-xs bg-background"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Optional, comma- or newline-separated. Stored for reference
-                    only — attestation verification never fetches from relays.
+                    Optional, comma- or newline-separated. Auto-filled from a
+                    pasted nprofile's relay hints when left blank. Used to
+                    help look up this identity's profile (name, avatar,
+                    NIP-05) for display — attestation verification itself
+                    never fetches from relays.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-1">

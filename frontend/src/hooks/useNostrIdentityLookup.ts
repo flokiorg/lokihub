@@ -14,7 +14,8 @@ const DIRECT_FORMAT_REGEX = /^(npub1|nprofile1)[a-z0-9]+$|^[0-9a-fA-F]{64}$|@/i;
 // input, the member picker's manual-add box) so they behave identically
 // instead of each re-implementing the same direct-vs-search branching.
 export function useNostrIdentityLookup(rawValue: string) {
-  const { hex, isResolving, isInvalid } = useResolvedNostrIdentity(rawValue);
+  const { hex, isResolving, isInvalid, relayHints } =
+    useResolvedNostrIdentity(rawValue);
   const trimmed = rawValue.trim();
   const isSearchCandidate =
     !hex &&
@@ -25,5 +26,13 @@ export function useNostrIdentityLookup(rawValue: string) {
     isSearchCandidate ? trimmed : ""
   );
 
-  return { hex, isResolving, isInvalid, isSearchCandidate, results, isSearching };
+  return {
+    hex,
+    isResolving,
+    isInvalid,
+    relayHints,
+    isSearchCandidate,
+    results,
+    isSearching,
+  };
 }

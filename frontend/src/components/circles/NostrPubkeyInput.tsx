@@ -35,24 +35,35 @@ export function NostrPubkeyInput({
   id: string;
   value: string;
   onChange: (raw: string) => void;
-  onResolved: (hex: string | undefined) => void;
+  // relayHints is the resolved identity's own claimed relays — an
+  // nprofile1...'s embedded list, or a NIP-05 .well-known's "relays" mapping
+  // — undefined when the input was a plain npub/hex or hints weren't
+  // published. Callers that only need the hex can ignore the 2nd argument.
+  onResolved: (hex: string | undefined, relayHints?: string[]) => void;
   label?: string;
   helperText?: string;
 }) {
   const { t } = useTranslation("circles");
   const resolvedLabel = label ?? t("pubkeyInput.defaultLabel");
   const defaultHelperText = helperTextProp ?? t("pubkeyInput.defaultHelper");
-  const { hex, isResolving, isInvalid, isSearchCandidate, results, isSearching } =
-    useNostrIdentityLookup(value);
+  const {
+    hex,
+    isResolving,
+    isInvalid,
+    relayHints,
+    isSearchCandidate,
+    results,
+    isSearching,
+  } = useNostrIdentityLookup(value);
   const [isFocused, setFocused] = React.useState(false);
   const { profile: resolvedProfile } = useNostrProfile(hex);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const refocusAfterClear = React.useRef(false);
 
   React.useEffect(() => {
-    onResolved(hex);
+    onResolved(hex, relayHints);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hex]);
+  }, [hex, relayHints]);
 
   // "Change" clears the value so the input reappears, then refocuses it once
   // that re-render has actually happened — doing it synchronously in the
