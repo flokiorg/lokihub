@@ -15,11 +15,16 @@ function dedupe(urls: string[]): string[] {
 // list. Outbox discovery goes through ndk.outboxTracker (requires
 // enableOutboxModel, see lib/ndk.ts) instead of a standalone lookup, so the
 // result is cached once per pubkey and shared across every caller on this
-// NDK instance rather than re-resolved independently per hook.
+// NDK instance rather than re-resolved independently per hook. `directive`
+// relays — e.g. an Identity Authority's own declared relay_urls, or an
+// nprofile1...'s embedded relay hints — are unioned in uncapped (unlike
+// outbox discovery, this is a small, human-curated list an operator
+// explicitly pointed at, not something that scales with a following list).
 export async function getRelaySetForPubkey(
   ndk: NDK,
   pubkey: string,
-  baseRelayUrls: string[]
+  baseRelayUrls: string[],
+  directiveRelayUrls: string[] = []
 ): Promise<NDKRelaySet> {
   await ndk.outboxTracker?.trackUsers([pubkey]);
   const writeRelays = ndk.outboxTracker?.data.get(pubkey)?.writeRelays;
@@ -27,16 +32,20 @@ export async function getRelaySetForPubkey(
     0,
     MAX_OUTBOX_RELAYS
   );
-  return NDKRelaySet.fromRelayUrls(dedupe([...baseRelayUrls, ...outboxUrls]), ndk);
+  return NDKRelaySet.fromRelayUrls(
+    dedupe([...baseRelayUrls, ...outboxUrls, ...directiveRelayUrls]),
+    ndk
+  );
 }
 
 // Batched variant for multi-author fetches — unions every author's outbox
-// relays (read from the same shared tracker cache) with the base list into
-// a single relay set.
+// relays (read from the same shared tracker cache), the base list, and any
+// directive relays (see getRelaySetForPubkey) into a single relay set.
 export async function getRelaySetForPubkeys(
   ndk: NDK,
   pubkeys: string[],
-  baseRelayUrls: string[]
+  baseRelayUrls: string[],
+  directiveRelayUrls: string[] = []
 ): Promise<NDKRelaySet> {
   await ndk.outboxTracker?.trackUsers(pubkeys);
   const outboxUrls = dedupe(
@@ -44,5 +53,8 @@ export async function getRelaySetForPubkeys(
       Array.from(ndk.outboxTracker?.data.get(pubkey)?.writeRelays ?? [])
     )
   ).slice(0, MAX_OUTBOX_RELAYS);
-  return NDKRelaySet.fromRelayUrls(dedupe([...baseRelayUrls, ...outboxUrls]), ndk);
+  return NDKRelaySet.fromRelayUrls(
+    dedupe([...baseRelayUrls, ...outboxUrls, ...directiveRelayUrls]),
+    ndk
+  );
 }

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { ClaimStateBadge } from "src/components/circles/ClaimStateBadge";
 import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
+import { NostrAvatar } from "src/components/NostrAvatar";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
 import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
@@ -118,6 +119,7 @@ function newRecipientRow(
     resolvedConnectionKeyPlatform: undefined,
     iaPubkeyValue: "",
     resolvedIaPubkeyHex: undefined,
+    resolvedIaRelayHints: undefined,
     // Undefined until the operator picks one explicitly — the render layer
     // defaults it to "existing" whenever any Identity Authority is already
     // declared in Settings, "manual" otherwise (see iaModeFor below).
@@ -146,6 +148,12 @@ type RecipientRow = {
   // simply the selected IdentityAuthority's own pubkey. This, not
   // iaPubkeyValue itself, is what goes on the wire as ia_pubkey.
   resolvedIaPubkeyHex?: string;
+  // Relay hints the manually-entered IA's own nprofile/NIP-05 pointed at
+  // (NostrPubkeyInput's onResolved 2nd argument) — undefined for a saved IA
+  // (already known-good) or when the input carried no hints of its own.
+  // Only widens IAResolvedIdentity's own profile lookup, never sent on the
+  // wire.
+  resolvedIaRelayHints?: string[];
   // "existing" shows a Select sourced from Settings' declared Identity
   // Authorities; "manual" shows the free-text pubkey Input. A row can switch
   // between the two any number of times before submission.
@@ -229,10 +237,18 @@ const EMPTY_PROFILE_MAP: Map<string, NostrProfile> = new Map();
 // both forms together (never nip05/npub alone), since this pubkey is a
 // trust anchor an operator may want to double-check against a value they
 // have on hand in either form, and neither form alone is always the one
-// they're holding.
-function IAResolvedIdentity({ hex }: { hex: string }) {
+// they're holding. The avatar/name are pure recognition aids on top of
+// that — relayHints (an nprofile/NIP-05's own claimed relays) only widens
+// where this lookup searches, it never changes what's trusted.
+function IAResolvedIdentity({
+  hex,
+  relayHints,
+}: {
+  hex: string;
+  relayHints?: string[];
+}) {
   const { t } = useTranslation("circles");
-  const { profile } = useNostrProfile(hex);
+  const { profile, isLoading } = useNostrProfile(hex, relayHints);
   const profileMap = React.useMemo(() => {
     if (!profile?.nip05) {
       return EMPTY_PROFILE_MAP;
@@ -246,11 +262,21 @@ function IAResolvedIdentity({ hex }: { hex: string }) {
     verified.has(hex) && profile?.nip05
       ? `${profile.nip05} (${npub})`
       : `${npub} (${shortenMiddle(hex)})`;
+  const name = profile?.displayName || profile?.name;
 
   return (
-    <p className="text-sm text-muted-foreground">
-      {t("cashHubAllocations.iaResolvedTo", { identity })}
-    </p>
+    <div className="flex items-center gap-2">
+      <NostrAvatar
+        pubkey={hex}
+        profile={profile}
+        isLoading={isLoading}
+        className="h-6 w-6"
+      />
+      <p className="text-sm text-muted-foreground">
+        {name && <span className="font-medium text-foreground">{name} </span>}
+        {t("cashHubAllocations.iaResolvedTo", { identity })}
+      </p>
+    </div>
   );
 }
 
@@ -318,6 +344,34 @@ export const CashHubAllocations = React.forwardRef<
   React.useEffect(() => {
     fetchIdentityAuthorities();
   }, [fetchIdentityAuthorities]);
+
+  // Each IA's own declared relay_urls are directive relay hints for its
+  // profile lookup (name/avatar/NIP-05, display only) — separate from
+  // attestation trust, which is never relay-dependent.
+  const { profiles: iaProfiles } = useNostrProfiles(
+    identityAuthorities.map((ia) => ia.pubkey),
+    identityAuthorities.flatMap((ia) => ia.relay_urls ?? [])
+  );
+  // Mirrors IAResolvedIdentity/pillIdentityLabel: an IA's nip05 is only ever
+  // shown once cryptographically confirmed, never as a bare kind:0 claim.
+  const iaNip05Profiles = React.useMemo(() => {
+    const withNip05 = identityAuthorities.filter(
+      (ia) => iaProfiles.get(ia.pubkey)?.nip05
+    );
+    if (withNip05.length === 0) {
+      return EMPTY_PROFILE_MAP;
+    }
+    return new Map(
+      withNip05.map((ia) => [ia.pubkey, iaProfiles.get(ia.pubkey)!])
+    );
+  }, [identityAuthorities, iaProfiles]);
+  const { verified: verifiedIaNip05 } = useNip05Verification(iaNip05Profiles);
+  const iaDisplayProfile = (pubkey: string): NostrProfile | undefined => {
+    const raw = iaProfiles.get(pubkey);
+    return raw?.nip05 && !verifiedIaNip05.has(pubkey)
+      ? { ...raw, nip05: undefined }
+      : raw;
+  };
 
   // A Cash wallet's connection is deterministically re-derivable (see
   // GetCashWalletConnection on the backend), so it can be revealed inline
@@ -992,6 +1046,7 @@ export const CashHubAllocations = React.forwardRef<
                         iaMode: "manual",
                         iaPubkeyValue: "",
                         resolvedIaPubkeyHex: undefined,
+                        resolvedIaRelayHints: undefined,
                       });
                     } else {
                       updateRow(row.key, {
@@ -1001,6 +1056,7 @@ export const CashHubAllocations = React.forwardRef<
                         // declared value from Settings) — no resolution step
                         // needed, unlike the free-text branch below.
                         resolvedIaPubkeyHex: v,
+                        resolvedIaRelayHints: undefined,
                       });
                     }
                   }}
@@ -1017,7 +1073,15 @@ export const CashHubAllocations = React.forwardRef<
                       </SelectLabel>
                       {identityAuthorities.map((ia) => (
                         <SelectItem key={ia.pubkey} value={ia.pubkey}>
-                          {ia.name} ({shortenMiddle(safeNpubEncode(ia.pubkey) ?? ia.pubkey, 6, 4)})
+                          <div className="flex min-w-0 items-center gap-2">
+                            <NostrProfileRow
+                              pubkey={ia.pubkey}
+                              profile={iaDisplayProfile(ia.pubkey)}
+                              isVerified={verifiedIaNip05.has(ia.pubkey)}
+                              avatarClassName="h-6 w-6"
+                              showCopy={false}
+                            />
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -1037,14 +1101,20 @@ export const CashHubAllocations = React.forwardRef<
                   id={`iaPubkey-${row.key}`}
                   value={row.iaPubkeyValue}
                   onChange={(v) => updateRow(row.key, { iaPubkeyValue: v })}
-                  onResolved={(hex) =>
-                    updateRow(row.key, { resolvedIaPubkeyHex: hex })
+                  onResolved={(hex, relayHints) =>
+                    updateRow(row.key, {
+                      resolvedIaPubkeyHex: hex,
+                      resolvedIaRelayHints: relayHints,
+                    })
                   }
                   label={t("cashHubAllocations.iaPubkeyLabel")}
                   helperText={t("cashHubAllocations.iaPubkeyHelper")}
                 />
                 {row.resolvedIaPubkeyHex && (
-                  <IAResolvedIdentity hex={row.resolvedIaPubkeyHex} />
+                  <IAResolvedIdentity
+                    hex={row.resolvedIaPubkeyHex}
+                    relayHints={row.resolvedIaRelayHints}
+                  />
                 )}
                 {identityAuthorities.length > 0 && (
                   <button
@@ -1055,6 +1125,7 @@ export const CashHubAllocations = React.forwardRef<
                         iaMode: "existing",
                         iaPubkeyValue: "",
                         resolvedIaPubkeyHex: undefined,
+                        resolvedIaRelayHints: undefined,
                       })
                     }
                   >
