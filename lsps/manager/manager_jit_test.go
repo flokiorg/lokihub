@@ -248,6 +248,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	_, req1 := waitForMsg()
 	if req1 == nil {
 		t.Fatal("Timeout waiting for GetInfo")
+		return
 	}
 	assert.Equal(t, lsps2.MethodGetInfo, req1.Method)
 
@@ -268,6 +269,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	_, req2 := waitForMsg()
 	if req2 == nil {
 		t.Fatal("Timeout waiting for Buy")
+		return
 	}
 	assert.Equal(t, lsps2.MethodBuy, req2.Method)
 
@@ -284,6 +286,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	_, req3 := waitForMsg()
 	if req3 == nil {
 		t.Fatal("Timeout waiting for Retry GetInfo")
+		return
 	}
 	assert.Equal(t, lsps2.MethodGetInfo, req3.Method)
 
@@ -297,6 +300,7 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 	_, req4 := waitForMsg()
 	if req4 == nil {
 		t.Fatal("Timeout waiting for Retry Buy")
+		return
 	}
 	assert.Equal(t, lsps2.MethodBuy, req4.Method)
 
