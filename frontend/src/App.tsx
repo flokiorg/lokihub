@@ -7,6 +7,7 @@ import {
 import { ErrorBoundary } from "src/components/ErrorBoundary";
 import { GlobalError } from "src/components/GlobalError";
 import Loading from "src/components/Loading";
+import { TitleBar } from "src/components/TitleBar";
 import { Toaster } from "src/components/ui/sonner";
 import { ThemeProvider } from "src/components/ui/theme-provider";
 import { TouchProvider } from "src/components/ui/tooltip";
@@ -28,26 +29,29 @@ function App() {
   const { data: info, error, isLoading } = useInfo();
 
   return (
-    <Suspense fallback={<Loading />}>
-      <TouchProvider>
-        <ThemeProvider
-          defaultTheme="default"
-          defaultDarkMode="system"
-          storageKey="vite-ui-theme"
-        >
-          {isLoading && <Loading />}
-          {error && <GlobalError error={error} />}
-          {info && (
-            <LSPEventProvider>
-              <ErrorBoundary>
-                <RouterProvider router={router} />
-              </ErrorBoundary>
-            </LSPEventProvider>
-          )}
-          <Toaster position="bottom-right" richColors={true} />
-        </ThemeProvider>
-      </TouchProvider>
-    </Suspense>
+    <>
+      <TitleBar />
+      <Suspense fallback={<Loading />}>
+        <TouchProvider>
+          <ThemeProvider
+            defaultTheme="default"
+            defaultDarkMode="system"
+            storageKey="vite-ui-theme"
+          >
+            {isLoading && <Loading />}
+            {error && <GlobalError error={error} />}
+            {info && (
+              <LSPEventProvider>
+                <ErrorBoundary>
+                  <RouterProvider router={router} />
+                </ErrorBoundary>
+              </LSPEventProvider>
+            )}
+            <Toaster position="bottom-right" richColors={true} />
+          </ThemeProvider>
+        </TouchProvider>
+      </Suspense>
+    </>
   );
 }
 
