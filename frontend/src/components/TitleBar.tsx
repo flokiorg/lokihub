@@ -2,15 +2,26 @@ import { Minus, Square, SquaresIntersect, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "src/lib/utils";
 import { isHttpMode } from "src/utils/isHttpMode";
-import {
-  Environment,
-  Quit,
-  WindowIsMaximised,
-  WindowMinimise,
-  WindowToggleMaximise,
-} from "wailsjs/runtime/runtime";
 
 type WailsPlatform = "windows" | "darwin" | "linux";
+
+// The generated frontend/wailsjs bindings only exist in a `wails build`/
+// `wails dev` output - this same frontend source also ships as the plain
+// web build (yarn build, served by the HTTP backend), which has no such
+// module to import. Wails injects the identical API as window.runtime at
+// runtime instead (see frontend/wailsjs/runtime/runtime.js - every binding
+// is a thin wrapper around exactly this), so call through that directly,
+// matching the existing convention in LSPEventContext.tsx.
+function wailsRuntime() {
+  // @ts-expect-error - runtime is injected by wails
+  return window.runtime as {
+    Environment: () => Promise<{ platform: string }>;
+    Quit: () => void;
+    WindowIsMaximised: () => Promise<boolean>;
+    WindowMinimise: () => void;
+    WindowToggleMaximise: () => void;
+  };
+}
 
 // Reserves top space for the OS-drawn window chrome. On Windows the app is
 // launched Frameless (see wails/wails_app.go), so this bar IS the window
@@ -28,7 +39,9 @@ export function TitleBar() {
     if (isHttpMode()) {
       return;
     }
-    Environment().then((env) => setPlatform(env.platform as WailsPlatform));
+    wailsRuntime()
+      .Environment()
+      .then((env) => setPlatform(env.platform as WailsPlatform));
   }, []);
 
   // The bar itself renders (and so takes up real layout height) for both
@@ -51,7 +64,7 @@ export function TitleBar() {
       return;
     }
     const syncMaximised = () => {
-      WindowIsMaximised().then(setIsMaximised);
+      wailsRuntime().WindowIsMaximised().then(setIsMaximised);
     };
     syncMaximised();
     // Catches double-click-on-drag-region maximize/restore, which bypasses
@@ -78,7 +91,7 @@ export function TitleBar() {
             type="button"
             aria-label="Minimize"
             className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => WindowMinimise()}
+            onClick={() => wailsRuntime().WindowMinimise()}
           >
             <Minus className="h-4 w-4" />
           </button>
@@ -87,7 +100,7 @@ export function TitleBar() {
             aria-label={isMaximised ? "Restore" : "Maximize"}
             className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => {
-              WindowToggleMaximise();
+              wailsRuntime().WindowToggleMaximise();
               setIsMaximised((prev) => !prev);
             }}
           >
@@ -104,7 +117,7 @@ export function TitleBar() {
               "flex h-full w-11 items-center justify-center text-muted-foreground",
               "hover:bg-destructive hover:text-destructive-foreground"
             )}
-            onClick={() => Quit()}
+            onClick={() => wailsRuntime().Quit()}
           >
             <X className="h-4 w-4" />
           </button>
