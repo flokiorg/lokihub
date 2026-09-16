@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	nethttp "net/http"
+	goruntime "runtime"
 	"sync/atomic"
 
 	"github.com/flokiorg/lokihub/api"
@@ -16,6 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"gorm.io/gorm"
 
@@ -108,6 +110,18 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 		},
 		Logger: NewWailsLogger(),
 
+		// Windows has no native equivalent of macOS's inset traffic lights, so
+		// it gets a fully custom, frameless window with the minimal
+		// minimize/maximize/close bar drawn by the frontend (see
+		// frontend/src/components/TitleBar.tsx). macOS keeps its native
+		// window (see Mac.TitleBar below) rather than going frameless there
+		// too, since re-drawing traffic lights in HTML/CSS would look and
+		// behave worse than the real thing. Linux is left with its default
+		// native decorations - window manager behavior/theming varies too
+		// much across distros to give a frameless window a reliably "modern"
+		// look there.
+		Frameless: goruntime.GOOS == "windows",
+
 		OnStartup: func(ctx context.Context) {
 			app.startup(ctx, trayIcon)
 		},
@@ -122,6 +136,18 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 				Title: "Lokihub",
 				Icon:  appIcon,
 			},
+			// Hides the title text/bar and extends content full-size while
+			// keeping the native traffic-light buttons (close/miniaturize/
+			// zoom) - the standard "modern desktop app" look on macOS (used
+			// by e.g. VS Code, Slack). The frontend reserves top padding to
+			// avoid its own content sitting under the inset buttons - see
+			// TitleBar.tsx.
+			TitleBar: mac.TitleBarHiddenInset(),
+		},
+		Windows: &windows.Options{
+			// Keeps the Aero shadow / Windows 11 rounded corners that
+			// Frameless would otherwise also strip.
+			DisableFramelessWindowDecorations: false,
 		},
 		Linux: &linux.Options{
 			Icon: appIcon,
