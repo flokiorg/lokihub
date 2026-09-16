@@ -33,6 +33,7 @@ func TestEventQueue_Enqueue(t *testing.T) {
 
 	if received == nil {
 		t.Fatal("Expected event, got nil")
+		return
 	}
 
 	testEv, ok := received.(*testEvent)
@@ -83,6 +84,7 @@ func TestEventQueue_ContextCancellation(t *testing.T) {
 	_, err := queue.NextEvent(ctx)
 	if err == nil {
 		t.Fatal("Expected context cancellation error")
+		return
 	}
 }
 
