@@ -42,7 +42,7 @@ function AppLayoutInner() {
     <>
       <div
         className={cn(
-          "font-sans min-h-screen w-full flex flex-col",
+          "font-sans min-h-[calc(100vh-var(--app-titlebar-height))] w-full flex flex-col",
           showBanner
             ? "[--header-height:calc(--spacing(9))]" // Banner height is 36px when visible (sidebar hidden on <md width)
             : "[--header-height:0]"

@@ -12,6 +12,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root {
+  /* Height of the custom TitleBar (frontend/src/components/TitleBar.tsx),
+     0 unless it's actually rendering its own window controls (Windows,
+     inside the Wails desktop app - see the component for why). Layouts
+     that size themselves against the viewport (100vh) subtract this so
+     the bar doesn't clip their bottom edge. */
+  --app-titlebar-height: 0px;
+}
+
+html[data-has-custom-titlebar="true"] {
+  --app-titlebar-height: 2rem;
+}
+
 @import "./themes/default.css";
 
 @import "./themes/nostr.css";
