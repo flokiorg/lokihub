@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.2.9
+	github.com/ohstr/nmilat v0.3.0
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.56.0
@@ -245,5 +245,3 @@ require (
 // We want to format raw bytes as hex instead of base64. The forked version
 // allows us to specify that as an option.
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
-
-replace github.com/ohstr/nmilat => /u/flzpace/xgit/orgs/ohstr/nmilat
