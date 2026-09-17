@@ -66,8 +66,13 @@ services:
       - WORK_DIR=/data
       - PORT=1610
       - NETWORK=flokicoin
-      - BASE_URL=http://localhost:${PORT:-1610}
-      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-5173}
+      # No BASE_URL/FRONTEND_URL: both only feed the /logout redirect
+      # (config.GetBaseFrontendUrl), and neither localhost:1610 nor
+      # localhost:5173 is reachable from the browser - this stack is only
+      # ever reached through Caddy's reverse proxy (see Caddyfile.dev),
+      # on whatever host/port/tunnel fronts it. Leaving both unset makes
+      # the handler fall back to a same-origin relative "/" redirect,
+      # which works through the proxy regardless of how it's accessed.
       - LN_BACKEND_TYPE=FLND
       - FLND_ADDRESS=flnd:10005
       # No FLND_CERT_FILE: flnd's flnd/wrapper falls back to
