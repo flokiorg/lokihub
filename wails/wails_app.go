@@ -110,6 +110,14 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 		},
 		Logger: NewWailsLogger(),
 
+		// Matches the default theme's dark `--background` token
+		// (frontend/src/themes/default.css). Wails paints this behind the
+		// WebView before content loads and in the native window's rounded
+		// corners on macOS (e.g. behind the inset traffic lights) - without
+		// it, Wails' own default (white) shows through as a mismatched
+		// patch instead of the app's background.
+		BackgroundColour: options.NewRGB(13, 43, 43),
+
 		// Windows has no native equivalent of macOS's inset traffic lights, so
 		// it gets a fully custom, frameless window with the minimal
 		// minimize/maximize/close bar drawn by the frontend (see
