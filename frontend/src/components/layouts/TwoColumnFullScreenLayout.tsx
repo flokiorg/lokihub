@@ -11,7 +11,7 @@ export default function TwoColumnFullScreenLayout() {
     // dir="ltr" prevents the grid columns from reversing in RTL languages.
     // The form panel re-applies the document direction for its content.
     <div dir="ltr" className="w-full lg:grid lg:h-[calc(100vh-var(--app-titlebar-height))] lg:grid-cols-2 lg:overflow-hidden items-stretch text-background">
-      <div className="hidden lg:flex flex-col bg-muted/20 justify-end p-10 relative overflow-hidden bg-white/100">
+      <div className="hidden lg:flex flex-col justify-end p-10 relative overflow-hidden bg-white/100">
         <img
           src="/images/lokilight.svg"
           alt="Floki Sun Logo"
