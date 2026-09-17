@@ -23,14 +23,10 @@ function wailsRuntime() {
   };
 }
 
-// Reserves top space for the OS-drawn window chrome. On Windows the app is
-// launched Frameless (see wails/wails_app.go), so this bar IS the window
-// chrome - it renders its own minimize/maximize/close buttons. On macOS the
-// window uses mac.TitleBarHiddenInset(), which keeps the native traffic
-// lights but hides the title bar's own height, so this bar exists purely to
-// stop app content from sitting directly under those inset buttons - it
-// renders no buttons of its own there. Linux keeps its native window
-// decorations entirely, so nothing renders there.
+// Windows uses a custom bar in normal flow. On macOS, a transparent drag
+// region overlays the full-size WebView beneath the native traffic lights.
+// Layouts reserve space for controls without pushing their backgrounds down.
+// Linux keeps its native window decorations.
 export function TitleBar() {
   const [platform, setPlatform] = useState<WailsPlatform | null>(null);
   const [isMaximised, setIsMaximised] = useState(false);
@@ -44,20 +40,15 @@ export function TitleBar() {
       .then((env) => setPlatform(env.platform as WailsPlatform));
   }, []);
 
-  // The bar itself renders (and so takes up real layout height) for both
-  // "windows" and "darwin" below - keep this condition in sync with that,
-  // not just with the platform that has buttons in it.
-  const rendersBar = platform === "windows" || platform === "darwin";
-
   useEffect(() => {
-    if (!rendersBar) {
+    if (platform !== "windows" && platform !== "darwin") {
       return;
     }
-    document.documentElement.dataset.hasCustomTitlebar = "true";
+    document.documentElement.dataset.titlebarPlatform = platform;
     return () => {
-      delete document.documentElement.dataset.hasCustomTitlebar;
+      delete document.documentElement.dataset.titlebarPlatform;
     };
-  }, [rendersBar]);
+  }, [platform]);
 
   useEffect(() => {
     if (platform !== "windows") {
@@ -79,7 +70,12 @@ export function TitleBar() {
 
   return (
     <div
-      className="flex h-8 w-full shrink-0 select-none items-center justify-end bg-background"
+      className={cn(
+        "flex h-8 w-full shrink-0 select-none items-center justify-end",
+        platform === "darwin"
+          ? "fixed inset-x-0 top-0 z-40 bg-transparent"
+          : "bg-background"
+      )}
       style={{ ["--wails-draggable" as string]: "drag" }}
     >
       {platform === "windows" && (

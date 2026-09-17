@@ -13,28 +13,32 @@ body {
 }
 
 :root {
-  /* Height of the custom TitleBar (frontend/src/components/TitleBar.tsx),
-     0 unless it's actually taking up space (Windows/macOS, inside the
-     Wails desktop app - see the component for why). Layouts that size
-     themselves against the viewport (100vh) subtract this so the bar
-     doesn't clip their bottom edge. */
+  /* Windows reserves a row; macOS overlays the page background. */
   --app-titlebar-height: 0px;
+  --app-titlebar-overlay-height: 0px;
 }
 
-html[data-has-custom-titlebar="true"] {
+html[data-titlebar-platform="windows"] {
   --app-titlebar-height: 2rem;
 }
 
-/* Sidebar.tsx's desktop container is `fixed inset-y-0` - pinned directly
-   to the raw viewport, so it ignores the TitleBar's reserved space
-   entirely (unlike normal-flow layouts, no sibling placement fixes
-   this). Without this, the sidebar's logo/header renders right under the
-   bar - on macOS specifically, directly under the native inset
-   traffic-light buttons. Overriding just `top` (not the whole
-   `inset-y-0`) keeps `bottom: 0`, so the container's height still
-   shrinks by exactly the reserved amount instead of overflowing it. */
-html[data-has-custom-titlebar="true"] [data-slot="sidebar-container"] {
-  top: var(--app-titlebar-height);
+html[data-titlebar-platform="darwin"] {
+  --app-titlebar-overlay-height: 2rem;
+}
+
+/* Fixed sidebars need explicit sizing below the Windows title bar. */
+html[data-titlebar-platform="windows"] [data-slot="sidebar-container"] {
+  top: calc(var(--app-titlebar-height) + var(--header-height, 0px));
+  height: calc(100svh - var(--app-titlebar-height) - var(--header-height, 0px)) !important;
+}
+
+/* Keep the sidebar's own background behind the native traffic lights. */
+html[data-titlebar-platform="darwin"] [data-slot="sidebar-inner"] {
+  padding-top: var(--app-titlebar-overlay-height);
+}
+
+html[data-titlebar-platform] [data-slot="sidebar-wrapper"] {
+  min-height: calc(100svh - var(--app-titlebar-height) - var(--app-titlebar-overlay-height));
 }
 
 @import "./themes/default.css";
