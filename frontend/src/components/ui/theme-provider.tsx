@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { isHttpMode } from "src/utils/isHttpMode";
 
 export type DarkMode = "system" | "light" | "dark";
 export const Themes = [
@@ -35,6 +36,31 @@ const initialState: ThemeProviderState = {
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+
+// Keeps the native window's own background (see BackgroundColour in
+// wails/wails_app.go) in sync with whichever theme/appearance is active.
+// That colour isn't drawn by our CSS - it's what shows through the native
+// macOS window's rounded corners (e.g. behind the inset traffic lights)
+// and briefly before the WebView paints - so without this it stays frozen
+// on whatever was set at startup even after switching theme or light/dark
+// mode. `body` already resolves `bg-background` (themes/index.css), so
+// reading its computed style picks up the right colour for every theme
+// (including ones added later) without hardcoding a colour table here.
+function syncNativeWindowBackground() {
+  if (isHttpMode()) {
+    return;
+  }
+
+  const rgb = getComputedStyle(document.body)
+    .backgroundColor.match(/[\d.]+/g)
+    ?.map(Number);
+  if (!rgb || rgb.length < 3) {
+    return;
+  }
+
+  // @ts-expect-error - runtime is injected by wails
+  window.runtime.WindowSetBackgroundColour(rgb[0], rgb[1], rgb[2], 255);
+}
 
 export function ThemeProvider({
   children,
@@ -85,6 +111,8 @@ export function ThemeProvider({
     } else {
       classList.remove("dark");
     }
+
+    syncNativeWindowBackground();
   }, [theme, darkMode]);
 
   const value = {
