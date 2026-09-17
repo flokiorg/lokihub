@@ -112,10 +112,8 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 
 		// Matches the default theme's dark `--background` token
 		// (frontend/src/themes/default.css). Wails paints this behind the
-		// WebView before content loads and in the native window's rounded
-		// corners on macOS (e.g. behind the inset traffic lights) - without
-		// it, Wails' own default (white) shows through as a mismatched
-		// patch instead of the app's background.
+		// WebView before content loads. Once loaded, the frontend draws
+		// its backgrounds all the way behind the macOS traffic lights.
 		BackgroundColour: options.NewRGB(13, 43, 43),
 
 		// Windows has no native equivalent of macOS's inset traffic lights, so
@@ -147,8 +145,8 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 			// Hides the title text/bar and extends content full-size while
 			// keeping the native traffic-light buttons (close/miniaturize/
 			// zoom) - the standard "modern desktop app" look on macOS (used
-			// by e.g. VS Code, Slack). The frontend reserves top padding to
-			// avoid its own content sitting under the inset buttons - see
+			// by e.g. VS Code, Slack). The frontend overlays a transparent drag
+			// region and insets interactive content below the buttons - see
 			// TitleBar.tsx.
 			TitleBar: mac.TitleBarHiddenInset(),
 		},
