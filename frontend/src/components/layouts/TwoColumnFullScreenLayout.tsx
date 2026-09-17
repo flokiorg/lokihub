@@ -11,7 +11,7 @@ export default function TwoColumnFullScreenLayout() {
     // dir="ltr" prevents the grid columns from reversing in RTL languages.
     // The form panel re-applies the document direction for its content.
     <div dir="ltr" className="w-full lg:grid lg:h-[calc(100vh-var(--app-titlebar-height))] lg:grid-cols-2 lg:overflow-hidden items-stretch text-background">
-      <div className="hidden lg:flex flex-col justify-end p-10 relative overflow-hidden bg-white/100">
+      <div className="hidden lg:flex flex-col justify-end p-10 pt-[calc(2.5rem+var(--app-titlebar-overlay-height))] relative overflow-hidden bg-white/100">
         <img
           src="/images/lokilight.svg"
           alt="Floki Sun Logo"
@@ -42,10 +42,10 @@ export default function TwoColumnFullScreenLayout() {
       </div>
       <div
         dir={isRTL ? "rtl" : "ltr"}
-        className="flex justify-center py-12 text-foreground relative bg-background min-h-screen lg:min-h-0 lg:h-full lg:overflow-y-auto"
+        className="flex justify-center py-12 pt-[calc(3rem+var(--app-titlebar-overlay-height))] text-foreground relative bg-background min-h-screen lg:min-h-0 lg:h-full lg:overflow-y-auto"
       >
         <Outlet />
-        <div className="absolute top-4 end-4 z-50">
+        <div className="absolute top-[calc(1rem+var(--app-titlebar-overlay-height))] end-4 z-50">
           <CompactLanguageSwitcher showLabel />
         </div>
       </div>
