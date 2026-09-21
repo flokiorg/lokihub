@@ -60,10 +60,11 @@ type cashConsolidateParams struct {
 type cashConsolidateResponse struct {
 	AmountMillis uint64 `json:"amount_millis"`
 	// NewWalletPubkey is the merged wallet's WalletPubkey in the clear; the
-	// recipient derives the decryption key for NewWalletToken from it plus their
+	// caller derives the decryption key for NewWalletToken from it plus their
 	// own privkey (same nested-encryption delivery as a split, §Spinning a Slice
 	// Off). NewWalletToken is the merged lokicash1... token, NIP-44 encrypted to
-	// new_identity.
+	// the caller (not new_identity) when new_identity is a pubkey, or sent in
+	// the clear when it's bearer/connection_key.
 	NewWalletPubkey string `json:"new_wallet_pubkey"`
 	NewWalletToken  string `json:"new_wallet_token"`
 	ExpiresAt       *int64 `json:"expires_at,omitempty"`
@@ -77,6 +78,13 @@ type resolvedConsolidateSource struct {
 	identityType  string
 	identityValue string
 	claim         *db.CashWalletClaim
+	// proofPubkey is the real Nostr pubkey that signed this source's
+	// identity_event — same as cash_transfer_controller.go's
+	// callerProofPubkey. Used to encrypt the merged wallet's delivery to
+	// the caller (see the delivery step below), not identityValue, since
+	// a connection_key source's identityValue is a connection_key hash,
+	// not a pubkey usable for ECDH.
+	proofPubkey string
 }
 
 // HandleCashConsolidateEvent combines several same-hub slices this node
@@ -92,10 +100,11 @@ type resolvedConsolidateSource struct {
 // Scope: sources MAY be pubkey or connection_key identified (each proven by
 // its own signed identity_event, connection_key additionally requiring a
 // live-trusted attestation_event); new_identity MAY be pubkey, connection_key,
-// or bearer (the merged wallet is owned by, and its token delivered to, that
-// identity — nested-encrypted for pubkey, in the clear within the outer
-// NIP-47 response for connection_key/bearer, which have no real pubkey to
-// ECDH against). Bearer SOURCES remain deferred: unlike connection_key (a
+// or bearer (the merged wallet is owned by that identity; its token is
+// delivered encrypted to the CALLER when new_identity is a pubkey — same as
+// cash_transfer — or in the clear within the outer NIP-47 response for
+// connection_key/bearer, which have no real pubkey to ECDH against). Bearer
+// SOURCES remain deferred: unlike connection_key (a
 // signed proof, immune to this), a bearer source's secret has no signature
 // and would sit in plaintext in a request encrypted only under the CALLING
 // connection's shared key, decryptable by any co-recipient of a shared
@@ -413,18 +422,23 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		}
 	}
 
-	// 6. Deliver the merged token. For a pubkey target, NIP-44 encrypted
-	// directly to new_identity using the merged wallet's own keypair — the
-	// same nested delivery a split uses. A bearer or connection_key target has
-	// no real pubkey to ECDH against yet (bearer never has one; connection_key
-	// doesn't until an Identity Authority attests a real pubkey to it later),
-	// so the token travels in the clear within the already end-to-end-
-	// encrypted outer NIP-47 response instead — same as mint_cash's own
-	// bearer/connection_key recipient delivery. Per NIP-CASH, "the token
-	// doesn't need to be kept secret": holding it only lets a reader dial the
-	// new wallet's connection, never redeem it. Funds have already moved
-	// either way, so a delivery failure is operator-recoverable, never a
-	// rollback (the token is recoverable via the admin API).
+	// 6. Deliver the merged token. When new_identity is a pubkey, NIP-44
+	// encrypted to the CALLER's own proof pubkey (resolved[0].proofPubkey) —
+	// same convention as cash_transfer's spin-off delivery, and for the same
+	// reason: this protects the token from a co-recipient of the calling
+	// connection it travels back over, not from new_identity's own owner (a
+	// pubkey-mode token isn't secret to begin with — redeeming one needs a
+	// signature, not just the string; see the bearer/connection_key case
+	// below). The caller decrypts it themselves and hands it to new_identity
+	// out of band, exactly like a cash_transfer gift. A bearer or
+	// connection_key target has no real pubkey to ECDH against yet (bearer
+	// never has one; connection_key doesn't until an Identity Authority
+	// attests a real pubkey to it later), so the token travels in the clear
+	// within the already end-to-end-encrypted outer NIP-47 response instead —
+	// same as mint_cash's own bearer/connection_key recipient delivery.
+	// Funds have already moved either way, so a delivery failure is
+	// operator-recoverable, never a rollback (the token is recoverable via
+	// the admin API).
 	newWalletPubkey := ""
 	if result.WalletApp.WalletPubkey != nil {
 		newWalletPubkey = *result.WalletApp.WalletPubkey
@@ -437,7 +451,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
 			return
 		}
-		enc, encErr := encryptPairingURI(params.NewIdentity.IdentityValue, newWalletPrivKey, result.CashToken)
+		enc, encErr := encryptPairingURI(resolved[0].proofPubkey, newWalletPrivKey, result.CashToken)
 		if encErr != nil {
 			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not encrypt token")
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
@@ -598,5 +612,6 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 		identityType:  identityType,
 		identityValue: identityValue,
 		claim:         claim,
+		proofPubkey:   identityEvent.PubKey,
 	}, evID, "", ""
 }
