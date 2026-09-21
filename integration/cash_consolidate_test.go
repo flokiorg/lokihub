@@ -138,8 +138,9 @@ func TestCashConsolidate(t *testing.T) {
 	require.NotEmpty(t, result.NewWalletPubkey)
 	require.NotEmpty(t, result.NewWalletToken)
 
-	// Decrypt the merged token (nested-encrypted to new_identity) and connect.
-	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, result.NewWalletPubkey, newPriv)
+	// Decrypt the merged token (nested-encrypted to the CALLER, same as
+	// cash_transfer's own spin-off delivery — not to new_identity) and connect.
+	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, result.NewWalletPubkey, callerPriv)
 	require.NoError(t, err)
 	decryptedToken, err := c.Decrypt(result.NewWalletToken)
 	require.NoError(t, err)

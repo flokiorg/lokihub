@@ -175,8 +175,10 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		}, &cr)
 		require.Error(t, reErr, "an already-consolidated source must not be redeemable again")
 
-		// The merged wallet redeems for exactly the full sum.
-		merged := decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, newPriv)
+		// The merged wallet redeems for exactly the full sum. Delivery is
+		// nested-encrypted to the CALLER (same as cash_transfer's own
+		// spin-off delivery), not to new_identity — callerPriv decrypts it.
+		merged := decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, callerPriv)
 		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*3, "consolidated redeem")
 		mProof := buildClaimProofEvent(t, newPriv, res.NewWalletPubkey, mInv.PaymentHash, nil, time.Now())
 		var mcr ClaimFundsResult
@@ -200,7 +202,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			MintSignature: true,
 		}, &res))
 
-		merged := decryptSplitWalletToken(t, res.NewWalletPubkey, res.NewWalletToken, newPriv)
+		merged := decryptSplitWalletToken(t, res.NewWalletPubkey, res.NewWalletToken, callerPriv)
 		require.NotNil(t, merged.MintSignature, "an opted-in consolidated token must carry provenance")
 		require.NotNil(t, merged.AttestedAmount)
 		assert.EqualValues(t, happyPathAmountMloki*2, *merged.AttestedAmount, "provenance must attest the merged sum")
