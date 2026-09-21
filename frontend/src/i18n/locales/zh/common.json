@@ -131,5 +131,10 @@
     "configUpdated": "配置已更新。正在重新加载...",
     "failedToLoad": "加载当前配置失败",
     "failedToUpdate": "更新配置失败"
+  },
+  "startupError": {
+    "title": "Lokihub 无法启动",
+    "description": "启动时出现问题。请关闭 Lokihub 后重试。如果问题持续，请将下方的错误信息发送给技术支持。",
+    "close": "关闭"
   }
 }
