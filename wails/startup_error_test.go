@@ -1,6 +1,7 @@
 package wails
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	nethttp "net/http"
@@ -18,7 +19,8 @@ func TestStartupErrorRoutes(t *testing.T) {
 
 	for _, route := range []string{"/api/info", "/api/apps", "/api/setup/status"} {
 		rec := httptest.NewRecorder()
-		e.ServeHTTP(rec, httptest.NewRequest(nethttp.MethodGet, route, nil))
+		req := httptest.NewRequestWithContext(context.Background(), nethttp.MethodGet, route, nil)
+		e.ServeHTTP(rec, req)
 
 		assert.Equal(t, nethttp.StatusServiceUnavailable, rec.Code, route)
 
