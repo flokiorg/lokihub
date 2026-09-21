@@ -54,7 +54,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc, err := service.NewService(ctx)
 	if err != nil {
-		logger.Logger.Fatal().Err(err).Msg("Failed to create service")
+		// Don't exit silently: the user would just see the app vanish.
+		// Show the error in the window and wait for them to close it.
+		logger.Logger.Error().Err(err).Msg("Failed to create service")
+		wails.LaunchStartupErrorApp(err, assets, appIcon)
+		logger.Logger.Info().Msg("Startup error window closed")
+		cancel()
 		return
 	}
 

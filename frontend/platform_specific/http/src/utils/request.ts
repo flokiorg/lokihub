@@ -1,15 +1,28 @@
 import { getAuthToken } from "src/lib/auth";
 import { ErrorResponse } from "src/types";
 
+// Mirrors StartupErrorCode in wails/startup_error.go — not currently sent by
+// the http backend, but honored here for parity with the wails AppError.
+const STARTUP_ERROR_CODE = "startup_failed";
+
 export class AppError extends Error {
   status?: number;
   url?: string;
+  isStartupError?: boolean;
+  body?: ErrorResponse;
 
-  constructor(message: string, status?: number, url?: string) {
+  constructor(
+    message: string,
+    status?: number,
+    url?: string,
+    body?: ErrorResponse
+  ) {
     super(message);
     this.name = "AppError";
     this.status = status;
     this.url = url;
+    this.body = body;
+    this.isStartupError = body?.code === STARTUP_ERROR_CODE;
   }
 }
 
@@ -50,7 +63,8 @@ export const request = async <T>(
       throw new AppError(
         (body as ErrorResponse)?.message || "Unknown error",
         fetchResponse.status,
-        args[0].toString()
+        args[0].toString(),
+        body as ErrorResponse
       );
     }
     return body;
