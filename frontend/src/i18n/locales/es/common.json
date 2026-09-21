@@ -131,5 +131,10 @@
     "configUpdated": "Configuración actualizada. Recargando...",
     "failedToLoad": "Error al cargar la configuración actual",
     "failedToUpdate": "Error al actualizar la configuración"
+  },
+  "startupError": {
+    "title": "Lokihub no pudo iniciarse",
+    "description": "Algo salió mal durante el inicio. Cierra Lokihub e inténtalo de nuevo. Si vuelve a ocurrir, comparte el error de abajo con soporte.",
+    "close": "Cerrar"
   }
 }

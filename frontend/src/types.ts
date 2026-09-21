@@ -128,6 +128,9 @@ export const budgetOptions: Record<string, number> = {
 
 export interface ErrorResponse {
   message: string;
+  // Set only by the startup-error handler (see STARTUP_ERROR_CODE).
+  code?: string;
+  version?: string;
 }
 
 export interface App {

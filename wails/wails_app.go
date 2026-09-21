@@ -47,6 +47,7 @@ func NewApp(svc service.Service) *WailsApp {
 
 func (app *WailsApp) startup(ctx context.Context, trayIcon []byte) {
 	app.ctx = ctx
+	scheduleDevReload(ctx)
 
 	lokitray.Setup("Lokihub", trayIcon, func() {
 		lokitray.ShowInDock()
@@ -96,17 +97,17 @@ func (app *WailsApp) SelectDirectory() (string, error) {
 	return selection, nil
 }
 
-func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []byte) {
-	// Start background HTTP server ONLY if in 'dev' build mode (see dev_server.go)
-	StartDevServer(app)
-
-	err := wails.Run(&options.App{
+// windowOptions holds the window setup shared by the normal app and the
+// startup-error app, so the frontend's TitleBar and background behave the same
+// in both. Callers add their own lifecycle hooks and bindings.
+func windowOptions(assets embed.FS, appIcon []byte, handler nethttp.Handler) *options.App {
+	return &options.App{
 		Title:  "Lokihub",
 		Width:  1055,
 		Height: 768,
 		AssetServer: &assetserver.Options{
 			Assets:  assets,
-			Handler: NewAssetHandler(app.httpSvc),
+			Handler: handler,
 		},
 		Logger: NewWailsLogger(),
 
@@ -128,15 +129,6 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 		// look there.
 		Frameless: goruntime.GOOS == "windows",
 
-		OnStartup: func(ctx context.Context) {
-			app.startup(ctx, trayIcon)
-		},
-		OnBeforeClose: func(ctx context.Context) bool {
-			return app.onBeforeClose(ctx)
-		},
-		Bind: []interface{}{
-			app,
-		},
 		Mac: &mac.Options{
 			About: &mac.AboutInfo{
 				Title: "Lokihub",
@@ -158,9 +150,23 @@ func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []b
 		Linux: &linux.Options{
 			Icon: appIcon,
 		},
-	})
+	}
+}
 
-	if err != nil {
+func LaunchWailsApp(app *WailsApp, assets embed.FS, appIcon []byte, trayIcon []byte) {
+	// Start background HTTP server ONLY if in 'dev' build mode (see dev_server.go)
+	StartDevServer(app.svc.GetConfig().GetEnv().Port, app.httpSvc.RegisterSharedRoutes)
+
+	opts := windowOptions(assets, appIcon, NewAssetHandler(app.httpSvc))
+	opts.OnStartup = func(ctx context.Context) {
+		app.startup(ctx, trayIcon)
+	}
+	opts.OnBeforeClose = func(ctx context.Context) bool {
+		return app.onBeforeClose(ctx)
+	}
+	opts.Bind = []interface{}{app}
+
+	if err := wails.Run(opts); err != nil {
 		logger.Logger.Error().Err(err).Msg("failed to run Wails app")
 	}
 }

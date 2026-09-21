@@ -158,8 +158,17 @@ func MigrateRenameJITToCash(db *gorm.DB) error {
 		if err := tx.Exec(`UPDATE apps SET kind = 'cash_wallet' WHERE kind = 'jit_wallet'`).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec(`UPDATE apps SET parent_kind = 'cash' WHERE parent_kind = 'jit'`).Error; err != nil {
+		// parent_kind is only added by AutoMigrate (the last step of Migrate),
+		// so a DB upgrading straight from 0.3.0-alpha doesn't have it yet.
+		// Nothing to rewrite there; AutoMigrate creates the column afterwards.
+		var hasParentKind int
+		if err := tx.Raw(`SELECT COUNT(*) FROM pragma_table_info('apps') WHERE name='parent_kind'`).Scan(&hasParentKind).Error; err != nil {
 			return err
+		}
+		if hasParentKind > 0 {
+			if err := tx.Exec(`UPDATE apps SET parent_kind = 'cash' WHERE parent_kind = 'jit'`).Error; err != nil {
+				return err
+			}
 		}
 
 		// -- 5. Add the new split lineage column -----------------------------

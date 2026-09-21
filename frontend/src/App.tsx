@@ -13,7 +13,9 @@ import { ThemeProvider } from "src/components/ui/theme-provider";
 import { TouchProvider } from "src/components/ui/tooltip";
 import { useInfo } from "src/hooks/useInfo";
 import routes from "src/routes.tsx";
+import { StartupError } from "src/screens/StartupError";
 import { isHttpMode } from "src/utils/isHttpMode";
+import { AppError } from "src/utils/request";
 
 const createRouterFunc = isHttpMode() ? createBrowserRouter : createHashRouter;
 const router = createRouterFunc(routes, {
@@ -38,8 +40,17 @@ function App() {
             defaultDarkMode="system"
             storageKey="vite-ui-theme"
           >
-            {isLoading && <Loading />}
-            {error && <GlobalError error={error} />}
+            {isLoading && (
+              <div className="flex items-center justify-center min-h-screen">
+                <Loading />
+              </div>
+            )}
+            {error &&
+              (error instanceof AppError && error.isStartupError ? (
+                <StartupError error={error} />
+              ) : (
+                <GlobalError error={error} />
+              ))}
             {info && (
               <LSPEventProvider>
                 <ErrorBoundary>
