@@ -65,6 +65,31 @@ export default defineConfig(({ command }) => ({
   ],
   server: {
     port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : undefined,
+    // Without an explicit host, Vite's default bind can land on IPv6-only
+    // loopback ([::1]) depending on the Node/OS resolver — observed doing
+    // exactly that here. Wails' dev-mode asset proxy (ExternalAssetHandler)
+    // discovers this server by the "localhost" string Vite prints and
+    // reverse-proxies to it; when that resolves to an address nothing is
+    // actually listening on, proxied requests fail with connection resets/502s,
+    // which is fatal for `wails dev` (the whole frontend is served through
+    // this proxy). Pin to 127.0.0.1 explicitly so it's unambiguous — except
+    // in the Docker dev stack (docker-compose.dev.yml), which needs Vite
+    // reachable from outside the container (via Caddy) rather than loopback-only.
+    host: process.env.VITE_USE_POLLING === "true" ? undefined : "127.0.0.1",
+    // `wails dev` opens the native window the instant this server logs
+    // "ready" and then immediately requests this app's entire module graph
+    // at once (Vite serves unbundled ESM in dev — one request per file, and
+    // this app has a lot of them). Vite is single-threaded and transforms
+    // each file synchronously on first request, so that burst can outrun its
+    // accept queue and get connection resets (surfaced as 502s by Wails'
+    // proxy, which has no retry — and since ESM import failures are fatal,
+    // even one reset blanks the whole page). Warming these up compiles and
+    // caches them in the background during the several-second gap between
+    // Vite's "ready" and the Go app actually finishing its own build/launch,
+    // so the real burst mostly hits cache instead of the transform pipeline.
+    warmup: {
+      clientFiles: ["./src/**/*.{ts,tsx}"],
+    },
     // Bind-mounted source (docker-compose.dev.yml's frontend service) very
     // often doesn't propagate inotify events into the container, so
     // chokidar's default watcher silently never fires HMR there. Polling
@@ -75,12 +100,20 @@ export default defineConfig(({ command }) => ({
       ? { usePolling: true, interval: 300 }
       : undefined,
     proxy: {
+      // VITE_API_URL (Docker dev: points at the `backend` container) wins
+      // when set; otherwise this derives from the same PORT the Go backend
+      // itself reads (config/models.go's envconfig:"PORT"), so setting PORT
+      // once in .env is enough to move both sides off a colliding port.
       "/api": {
-        target: process.env.VITE_API_URL || "http://127.0.0.1:1610",
+        target:
+          process.env.VITE_API_URL ||
+          `http://127.0.0.1:${process.env.PORT || 1610}`,
         secure: false,
       },
       "/logout": {
-        target: process.env.VITE_API_URL || "http://127.0.0.1:1610",
+        target:
+          process.env.VITE_API_URL ||
+          `http://127.0.0.1:${process.env.PORT || 1610}`,
         secure: false,
       },
     },
