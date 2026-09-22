@@ -64,6 +64,11 @@ func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 	// which a per-wallet subscription would have missed.
 	if s.svc.cfg.TrustedNwcRelay() && s.svc.walletRegistry != nil {
 		s.svc.walletRegistry.Add(walletPubKey)
+		logger.Logger.Debug().
+			Uint("app_id", id).
+			Str("wallet", walletPubKey).
+			Int("registry_size", s.svc.walletRegistry.Len()).
+			Msg("Serving a new app's wallet")
 		return
 	}
 

@@ -1,6 +1,29 @@
 package service
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+
+	"github.com/flokiorg/lokihub/logger"
+)
+
+// walletRetentionAfterDelete is how long a deleted app's wallet keeps being
+// served before it is dropped from the registry.
+//
+// Not zero, deliberately. A request that arrives just after its app is
+// deleted must still reach HandleEvent, which answers it with a proper NIP-47
+// error ("no slice registered for this identity"). Dropping the wallet the
+// instant the app goes means that request is silently discarded and the
+// caller waits out its full 30s deadline instead — a hang where there used to
+// be an error, which the cash split/spin-off flows depend on and which is
+// simply worse for a real client whose bill was just spent.
+//
+// The per-wallet subscriptions this replaced had the same window by accident:
+// cancelling a subscription only stops delivery once the relay processes the
+// CLOSE, so requests kept arriving for a moment afterwards. This makes that
+// window explicit and bounded rather than a race that happened to fall the
+// right way.
+const walletRetentionAfterDelete = time.Minute
 
 // walletRegistry is the set of app wallet pubkeys this hub serves.
 //
@@ -71,7 +94,19 @@ func (r *walletRegistry) Add(walletPubkeys ...string) {
 	}
 }
 
-// Remove deregisters a wallet pubkey, as when its app is deleted.
+// RemoveAfterGrace stops serving a wallet once walletRetentionAfterDelete has
+// passed, so a request racing its app's deletion still gets an error response
+// rather than silence. See that constant for why the delay exists.
+func (r *walletRegistry) RemoveAfterGrace(walletPubkey string) {
+	time.AfterFunc(walletRetentionAfterDelete, func() {
+		logger.Logger.Debug().
+			Str("wallet", walletPubkey).
+			Msg("No longer serving a deleted app's wallet")
+		r.Remove(walletPubkey)
+	})
+}
+
+// Remove deregisters a wallet pubkey immediately.
 func (r *walletRegistry) Remove(walletPubkey string) {
 	for {
 		current := r.pubkeys.Load()
