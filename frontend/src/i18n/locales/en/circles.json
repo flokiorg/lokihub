@@ -237,7 +237,7 @@
   },
   "newCircleHub": {
     "title": "New Circle Wallet Hub",
-    "description": "Create a Circle Wallet Hub — a shared wallet pool where authorized members receive their own circle wallet funded from its balance.",
+    "description": "The people you approve request their own wallet on your node, whenever they need one — payments between them are instant and free.",
     "identityModeLabel": "Membership Identity",
     "selectIdentityPlaceholder": "Select an identity",
     "createNewIdentity": "Create new identity",
