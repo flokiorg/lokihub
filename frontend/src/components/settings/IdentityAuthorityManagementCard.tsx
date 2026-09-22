@@ -146,11 +146,10 @@ export function IdentityAuthorityManagementCard({
             Identity Authorities
           </CardTitle>
           <CardDescription>
-            Nostr identities you trust to attest connection_key ownership claims
-            for Cash wallets. An untrusted IA is rejected at wallet creation,
-            but trust is also checked live on every redeem and transfer — so
-            removing one here immediately blocks every unredeemed slice it has
-            ever attested for, not just future wallets.
+            Nostr identities you trust to vouch that an email, a Discord
+            handle, or a domain belongs to its owner — so you can mint Lokicash
+            for recipients who aren't on Nostr. Remove one and every unredeemed
+            slice it vouched for is cut off immediately.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
