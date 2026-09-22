@@ -82,9 +82,8 @@ export function CashHubList() {
           <BanknoteIcon className="size-10 text-muted-foreground" />
           <CardTitle className="text-lg">No Cash Hubs yet</CardTitle>
           <p className="max-w-md text-sm text-muted-foreground">
-            A Cash Hub lets you mint spend-only Lokicash for one or more
-            recipients in one step — they redeem their own share whenever
-            they're ready, or transfer/split it on to someone else.
+            A Cash Hub turns your balance into Lokicash: tokens you hand over
+            like a bill. The holder redeems whenever they're ready.
           </p>
           <ResponsiveLinkButton
             to="/cash-hub/new"
