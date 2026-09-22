@@ -134,6 +134,13 @@ func (svc *service) acceptsRequestEvent(event *nostr.Event) bool {
 
 	if !svc.walletRegistry.Has(walletPubkey) {
 		svc.droppedRequestEvents.Add(1)
+		// Debug, not higher: this runs for every junk event on the relay, and
+		// logging at a level that is on by default would hand an attacker an
+		// amplification path. The minute summary is the operator-facing signal.
+		logger.Logger.Debug().
+			Str("wallet", walletPubkey).
+			Int("registry_size", svc.walletRegistry.Len()).
+			Msg("Discarded a NIP-47 request for a wallet this hub does not serve")
 		return false
 	}
 
