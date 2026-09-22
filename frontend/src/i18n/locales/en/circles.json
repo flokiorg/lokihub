@@ -272,7 +272,7 @@
   },
   "newCashHub": {
     "title": "New Cash Hub",
-    "description": "Create a pre-funded hub that issues spend-only Cash wallets to beneficiaries",
+    "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
     "maxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash wallet issued from this hub",
     "maxExpiryHelper": "Maximum lifetime for issued Cash wallets",
     "submit": "Create Cash Hub",

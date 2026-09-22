@@ -105,7 +105,7 @@ export const scopeDescriptions: Record<Scope, string> = {
   sign_message: "Sign messages",
   notifications: "Receive wallet notifications",
   superuser: "Create other app connections",
-  cash_hub: "Mint spend-only Lokicash on demand to beneficiaries",
+  cash_hub: "Mint Lokicash from your balance",
   circle_wallet: "Issue wallets to your circle's members",
   cash_redeem: "Claim your allocated share of a shared Cash wallet",
   cash_transfer: "Transfer or split an unclaimed share to someone else",

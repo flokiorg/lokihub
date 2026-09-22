@@ -76,7 +76,7 @@ export function CashHubList() {
       <div className="grid gap-4">
         <AppHeader
           title="Cash Hubs"
-          description="Mint spend-only Lokicash for beneficiaries, paid out on demand from your own balance"
+          description="Mint Lokicash and track it through to redemption"
         />
         <Card className="flex flex-col items-center gap-4 p-8 text-center">
           <BanknoteIcon className="size-10 text-muted-foreground" />
@@ -99,7 +99,7 @@ export function CashHubList() {
     <div className="grid gap-4">
       <AppHeader
         title="Cash Hubs"
-        description="Mint spend-only Lokicash for beneficiaries, paid out on demand from your own balance"
+        description="Mint Lokicash and track it through to redemption"
         contentRight={
           <ResponsiveLinkButton
             to="/cash-hub/new"
