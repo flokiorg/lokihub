@@ -64,6 +64,12 @@ func Migrate(gormDB *gorm.DB) error {
 		return err
 	}
 
+	// Rewrite stored cash_wallet_claims.identity_type "bearer" → "cash",
+	// following NIP-CASH's rename of bearer mode to cash mode.
+	if err := MigrateRenameBearerIdentityToCash(gormDB); err != nil {
+		return err
+	}
+
 	// AutoMigrate all core models (adds new columns declared in structs)
 	// Note: LSP model is migrated separately in LSPManager (via manager_db.go)
 	if err := gormDB.AutoMigrate(

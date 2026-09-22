@@ -196,8 +196,8 @@
     "revealQR": "显示二维码",
     "copySecret": "复制连接密钥",
     "copyLokicashToken": "复制 Lokicash 令牌",
-    "copyBearerSecret": "复制无记名密钥",
-    "bearerSecretHelper": "持有此密钥的任何人都可以兑换这些资金，无需其他证明。仅显示一次；请通过带外方式将其交给接收人。",
+    "copyCashSecret": "复制无记名密钥",
+    "cashSecretHelper": "持有此密钥的任何人都可以兑换这些资金，无需其他证明。仅显示一次；请通过带外方式将其交给接收人。",
     "lokicashTitle": "Lokicash"
   }
 }

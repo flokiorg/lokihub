@@ -25,12 +25,12 @@ import (
 	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
-// bearerSecretAndHash returns a fresh random bearer secret (hex) and the
+// cashSecretAndHash returns a fresh random cash secret (hex) and the
 // hex-encoded sha256 commitment of it — the value a caller submits as a
-// bearer new_identity's identity_value in cash_transfer (NIP-CASH §Bearer
-// Slices): the wallet never mints or returns a bearer secret over the
+// cash-mode new_identity's identity_value in cash_transfer (NIP-CASH §Cash-Mode
+// Slices): the wallet never mints or returns a cash secret over the
 // shared cash_wallet connection, so the caller always generates their own.
-func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
+func cashSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	t.Helper()
 	raw := make([]byte, 32)
 	_, err := rand.Read(raw)
@@ -89,7 +89,7 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 // match that exact number). Mirrors buildClaimProofEvent, but bound via
 // new_identity_hash/amount_millis instead of bolt11_hash
 // (nip47/controllers/cash_transfer_controller.go's newIdentityHash).
-// newIdentityValue is "" for a bearer target; newIAPubkey is "" for
+// newIdentityValue is "" for a cash-mode target; newIAPubkey is "" for
 // non-connection_key targets.
 func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdentityType, newIdentityValue, newIAPubkey string, amountMloki uint64, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()

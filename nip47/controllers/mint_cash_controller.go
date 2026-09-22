@@ -134,7 +134,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMillis:  r.AmountMloki,
-			BearerSecret:  r.BearerSecret,
+			CashSecret:    r.CashSecret,
 		}
 	}
 

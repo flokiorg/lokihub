@@ -62,16 +62,16 @@ func consolidateSourceFor(t *testing.T, walletPubkey, proofSignerPriv, callerPub
 	}
 }
 
-// consolidateSourceForBearer is consolidateSourceFor's counterpart for a
-// bearer new_identity target: the proof must bind to identity type "bearer"
+// consolidateSourceForCash is consolidateSourceFor's counterpart for a
+// cash-mode new_identity target: the proof must bind to identity type "cash"
 // + the commitment hash (not "pubkey"), matching what the server actually
 // hashes to verify it (nip47/controllers/cash_transfer_controller.go's
 // newIdentityHash) — reusing consolidateSourceFor's hardcoded "pubkey"
 // binding here would sign a proof for the wrong new_identity and always be
 // rejected.
-func consolidateSourceForBearer(t *testing.T, walletPubkey, proofSignerPriv, callerPub, bearerHash string, amount uint64) ConsolidateSourceParam {
+func consolidateSourceForCash(t *testing.T, walletPubkey, proofSignerPriv, callerPub, cashHash string, amount uint64) ConsolidateSourceParam {
 	t.Helper()
-	proof := buildTransferProofEvent(t, proofSignerPriv, walletPubkey, "bearer", bearerHash, "", amount, nil, time.Now())
+	proof := buildTransferProofEvent(t, proofSignerPriv, walletPubkey, "cash", cashHash, "", amount, nil, time.Now())
 	return ConsolidateSourceParam{
 		WalletPubkey:  walletPubkey,
 		IdentityType:  "pubkey",
@@ -115,7 +115,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		callConn := mustConnect(t, connA)
 		bogus := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef00"
 		var res CashConsolidateResult
-		// No BearerSecret here: bearer sources are rejected outright (BAD_REQUEST)
+		// No CashSecret here: cash-mode sources are rejected outright (BAD_REQUEST)
 		// before the custody lookup this case means to exercise.
 		err := callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
@@ -211,60 +211,60 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		require.Len(t, minter, 66)
 	})
 
-	// BearerTargetSecretNotInResponse is the stronger assertion the doc
-	// flagged as missing for cash_transfer's own bearer target: not just that
-	// consolidating to a bearer target succeeds, but that the raw secret the
+	// CashTargetSecretNotInResponse is the stronger assertion the doc
+	// flagged as missing for cash_transfer's own cash-mode target: not just that
+	// consolidating to a cash-mode target succeeds, but that the raw secret the
 	// caller generated locally never appears anywhere in the wire response —
 	// only its commitment hash was ever sent, and the node has no way to
 	// mint/return the secret itself.
-	t.Run("BearerTargetSecretNotInResponse", func(t *testing.T) {
+	t.Run("CashTargetSecretNotInResponse", func(t *testing.T) {
 		wp1, conn1 := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		wp2, _ := mintPubkeySource(t, clientA, callerPub, happyPathAmountMloki)
 		callConn := mustConnect(t, conn1)
 
-		bearerSecret, bearerHash := bearerSecretAndHash(t)
+		cashSecret, cashHash := cashSecretAndHash(t)
 		var res CashConsolidateResult
 		require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 			Sources: []ConsolidateSourceParam{
-				consolidateSourceForBearer(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
-				consolidateSourceForBearer(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+				consolidateSourceForCash(t, wp1, callerPriv, callerPub, cashHash, happyPathAmountMloki),
+				consolidateSourceForCash(t, wp2, callerPriv, callerPub, cashHash, happyPathAmountMloki),
 			},
-			NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
+			NewIdentity: CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: cashHash},
 		}, &res))
 
 		require.NotEmpty(t, res.NewWalletToken)
-		assert.NotContains(t, res.NewWalletToken, bearerSecret,
+		assert.NotContains(t, res.NewWalletToken, cashSecret,
 			"the wire response must never contain the raw secret the caller generated locally")
 
 		// The delivered token is a plain lokicash1... string (no ECDH target
-		// exists for a bearer commitment), so it must decode directly — no
+		// exists for a cash-mode commitment), so it must decode directly — no
 		// nested-encryption layer to strip first, unlike a pubkey target.
 		decoded, err := lokicash.Decode(res.NewWalletToken)
-		require.NoError(t, err, "bearer target delivery must be a plain, directly-decodable token")
+		require.NoError(t, err, "cash-mode target delivery must be a plain, directly-decodable token")
 		assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
-		// The secret actually redeems the merged total, over the bearer
+		// The secret actually redeems the merged total, over the cash-mode
 		// wallet's own connection (built from the decoded token, same as any
 		// other spun-off wallet — nwcclient.Connect needs a
 		// nostr+walletconnect:// URI, not the raw lokicash1... token itself;
 		// the secret travels as its own request field, never embedded in the
-		// connection string — same pattern createBearerWallet's callers use).
-		bearerClient := mustConnect(t, nwcURIFromLokicash(decoded))
-		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "bearer target redeem")
+		// connection string — same pattern createCashModeWallet's callers use).
+		cashClient := mustConnect(t, nwcURIFromLokicash(decoded))
+		mInv := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki*2, "cash-mode target redeem")
 		var rr ClaimFundsResult
-		require.NoError(t, bearerClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice: mInv.Invoice, BearerSecret: bearerSecret,
+		require.NoError(t, cashClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
+			Invoice: mInv.Invoice, CashSecret: cashSecret,
 		}, &rr))
 		require.NotEmpty(t, rr.Preimage)
 	})
 
-	// BearerTargetCommitmentReuse_BothSucceed documents the accepted property
+	// CashTargetCommitmentReuse_BothSucceed documents the accepted property
 	// flagged in the doc: nothing stops the same commitment hash being
-	// submitted as a bearer new_identity in two unrelated consolidate calls —
+	// submitted as a cash-mode new_identity in two unrelated consolidate calls —
 	// harmless, since only the secret's generator ever knows it, and each
 	// resulting wallet is independently funded and independently redeemable.
-	t.Run("BearerTargetCommitmentReuse_BothSucceed", func(t *testing.T) {
-		_, bearerHash := bearerSecretAndHash(t)
+	t.Run("CashTargetCommitmentReuse_BothSucceed", func(t *testing.T) {
+		_, cashHash := cashSecretAndHash(t)
 
 		consolidateOnce := func(t *testing.T) CashConsolidateResult {
 			t.Helper()
@@ -274,10 +274,10 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			var res CashConsolidateResult
 			require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, CashConsolidateParams{
 				Sources: []ConsolidateSourceParam{
-					consolidateSourceForBearer(t, wp1, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
-					consolidateSourceForBearer(t, wp2, callerPriv, callerPub, bearerHash, happyPathAmountMloki),
+					consolidateSourceForCash(t, wp1, callerPriv, callerPub, cashHash, happyPathAmountMloki),
+					consolidateSourceForCash(t, wp2, callerPriv, callerPub, cashHash, happyPathAmountMloki),
 				},
-				NewIdentity: CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: bearerHash},
+				NewIdentity: CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: cashHash},
 			}, &res))
 			return res
 		}

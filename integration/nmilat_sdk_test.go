@@ -28,7 +28,7 @@ import (
 // nwcclient path: those tests exist to send malformed/adversarial wire
 // payloads (invalid identity_type, tampered proofs, wrong-amount bindings,
 // ...) that nipcash's typed API refuses to construct client-side in the
-// first place (see e.g. ErrMixedBearerAllocation) - the point of those
+// first place (see e.g. ErrMixedCashAllocation) - the point of those
 // tests is exercising the Hub's own server-side rejection, which a
 // well-behaved SDK client can't be coerced into attempting.
 
@@ -72,7 +72,7 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 	// nipIC.NewConnectionKey's platform+externalID hashing, and the
 	// claimant's own separate Nostr keypair signing the per-call proof) —
 	// through nmilat's real client end to end, the one path
-	// MintRedeem_Pubkey/_Bearer above don't touch at all.
+	// MintRedeem_Pubkey/_Cash above don't touch at all.
 	t.Run("MintRedeem_ConnectionKey", func(t *testing.T) {
 		iaPriv := createEphemeralTrustedIA(t, cfg)
 		iaPub := mustPubkey(t, iaPriv)
@@ -160,21 +160,21 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		}
 	})
 
-	t.Run("MintRedeem_Bearer", func(t *testing.T) {
+	t.Run("MintRedeem_Cash", func(t *testing.T) {
 		result, err := hubClient.MintCash(ctxT(t), nipcash.MintCashParams{
 			Recipients: []nipcash.Allocation{nipcash.Send(nipcash.Anyone(), nmilatHappyPathAmountMillis)},
 			Expiry:     nmilatHappyPathExpiry,
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Recipients, 1)
-		secret := result.Recipients[0].BearerSecret
-		require.NotEmpty(t, secret, "the plaintext bearer secret must come back exactly once, here")
+		secret := result.Recipients[0].CashSecret
+		require.NotEmpty(t, secret, "the plaintext cash secret must come back exactly once, here")
 
 		wallet, err := cashclient.Connect(ctxT(t), result.PairingURI)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
-		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk bearer redeem")
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, nmilatHappyPathAmountMillis, "nmilat sdk cash-mode redeem")
 		redeemResult, err := wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{
 			Invoice:    invoice.Invoice,
 			Credential: nipcash.BySecret(secret),

@@ -78,7 +78,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotEmpty(t, newClaimResult.Preimage)
 	})
 
-	t.Run("PubkeyToBearer_ThenRedeemableWithSecret", func(t *testing.T) {
+	t.Run("PubkeyToCash_ThenRedeemableWithSecret", func(t *testing.T) {
 		currentPriv := newTestPrivkey(t)
 		currentPub, err := nostr.GetPublicKey(currentPriv)
 		require.NoError(t, err)
@@ -90,26 +90,26 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &created))
 		shared := mustConnect(t, created.PairingURI)
 
-		// The caller generates their own bearer secret and submits only its
+		// The caller generates their own cash secret and submits only its
 		// commitment — the wallet never mints or returns one over this
-		// shared connection (NIP-CASH §Bearer Slices).
-		newSecretHex, newSecretHash := bearerSecretAndHash(t)
-		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "bearer", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
+		// shared connection (NIP-CASH §Cash-Mode Slices).
+		newSecretHex, newSecretHash := cashSecretAndHash(t)
+		proof := buildTransferProofEvent(t, currentPriv, created.WalletPubkey, "cash", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
 		var transferResult CashTransferResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: currentPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: newSecretHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: newSecretHash},
 		}, &transferResult))
-		require.Equal(t, "bearer", transferResult.IdentityType)
+		require.Equal(t, "cash", transferResult.IdentityType)
 		require.Equal(t, newSecretHash, transferResult.IdentityValue)
 
-		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer to bearer")
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer to cash mode")
 		var claimResult ClaimFundsResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:      invoice.Invoice,
-			BearerSecret: newSecretHex,
+			Invoice:    invoice.Invoice,
+			CashSecret: newSecretHex,
 		}, &claimResult))
 		require.NotEmpty(t, claimResult.Preimage)
 	})

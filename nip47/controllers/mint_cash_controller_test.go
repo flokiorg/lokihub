@@ -484,16 +484,16 @@ func TestHandleMintCashEvent_BudgetRenewalNever(t *testing.T) {
 	assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, perm.BudgetRenewal, "a Cash wallet must never renew, even implicitly")
 }
 
-// TestHandleMintCashEvent_Bearer_HappyPath and
-// TestHandleMintCashEvent_Bearer_RejectsMixedRecipients close a coverage gap:
-// the bearer sole-recipient rule (§Bearer
+// TestHandleMintCashEvent_Cash_HappyPath and
+// TestHandleMintCashEvent_Cash_RejectsMixedRecipients close a coverage gap:
+// the cash-mode sole-recipient rule (§Cash-Mode
 // Slices) was already covered at the cashwallet unit layer, the admin HTTP
-// API (api.TestCreateCashWallet_Bearer_*), and the live integration wire, but
+// API (api.TestCreateCashWallet_Cash_*), and the live integration wire, but
 // had no fast, offline test at this controller layer — meaning the
 // controller's own error-code mapping for the rejection path
 // (mapCashWalletErrorCode(ErrInvalidParams) -> ERROR_BAD_REQUEST) was only
 // proven by the slow live suite.
-func TestHandleMintCashEvent_Bearer_HappyPath(t *testing.T) {
+func TestHandleMintCashEvent_Cash_HappyPath(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestHandleMintCashEvent_Bearer_HappyPath(t *testing.T) {
 	err = json.Unmarshal([]byte(`{
 		"method": "mint_cash",
 		"params": {
-			"recipients": [{"identity_type":"bearer","amount_millis":1000}],
+			"recipients": [{"identity_type":"cash","amount_millis":1000}],
 			"expiry": 1800
 		}
 	}`), nip47Request)
@@ -523,12 +523,12 @@ func TestHandleMintCashEvent_Bearer_HappyPath(t *testing.T) {
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(nipcash.MintCashResult)
 	require.Len(t, result.Recipients, 1)
-	assert.Equal(t, db.CashIdentityBearer, result.Recipients[0].IdentityType)
-	assert.NotEmpty(t, result.Recipients[0].BearerSecret, "the plaintext secret must be returned exactly once")
+	assert.Equal(t, db.CashIdentityCash, result.Recipients[0].IdentityType)
+	assert.NotEmpty(t, result.Recipients[0].CashSecret, "the plaintext secret must be returned exactly once")
 	assert.Empty(t, result.Recipients[0].IdentityValue)
 }
 
-func TestHandleMintCashEvent_Bearer_RejectsMixedRecipients(t *testing.T) {
+func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -545,7 +545,7 @@ func TestHandleMintCashEvent_Bearer_RejectsMixedRecipients(t *testing.T) {
 		"params": {
 			"recipients": [
 				{"identity_type":"pubkey","identity_value":"%s","amount_millis":500},
-				{"identity_type":"bearer","amount_millis":500}
+				{"identity_type":"cash","amount_millis":500}
 			],
 			"expiry": 1800
 		}

@@ -104,17 +104,17 @@ type Deps struct {
 
 // RecipientInput describes one recipient's requested slice of a shared Cash
 // wallet. IAPubkey is only meaningful when IdentityType is
-// db.CashIdentityConnectionKey. For db.CashIdentityBearer, the caller
+// db.CashIdentityConnectionKey. For db.CashIdentityCash, the caller
 // MUST leave IdentityValue and IAPubkey empty — Resolve generates the slice's
 // secret itself and fills in IdentityValue (as the secret's hash) and
-// BearerSecret (the plaintext, populated by Resolve for Commit/the caller to
+// CashSecret (the plaintext, populated by Resolve for Commit/the caller to
 // return exactly once — never read back out of the caller's own input).
 type RecipientInput struct {
-	IdentityType  string // db.CashIdentityPubkey | db.CashIdentityConnectionKey | db.CashIdentityBearer
+	IdentityType  string // db.CashIdentityPubkey | db.CashIdentityConnectionKey | db.CashIdentityCash
 	IdentityValue string
 	IAPubkey      string
 	AmountMloki   uint64
-	BearerSecret  string
+	CashSecret    string
 }
 
 // Params describes the shared wallet to create. MinTransferMloki is
@@ -133,14 +133,14 @@ type Params struct {
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
-// BearerSecret is populated only for a db.CashIdentityBearer recipient,
+// CashSecret is populated only for a db.CashIdentityCash recipient,
 // and only this once — it is never retrievable again after this response
-// (NIP-CASH §Bearer Slices).
+// (NIP-CASH §Cash-Mode Slices).
 type RecipientResult struct {
 	IdentityType  string
 	IdentityValue string
 	AmountMloki   uint64
-	BearerSecret  string
+	CashSecret    string
 }
 
 // Result carries everything a caller needs to build its own protocol-specific
@@ -169,7 +169,7 @@ type Resolved struct {
 	HubApp *db.App
 	// Recipients: amounts already validated. IdentityType/Value are unchanged
 	// from the caller's input for pubkey/connection_key recipients; for a
-	// bearer recipient, IdentityValue and BearerSecret were just generated
+	// cash-mode recipient, IdentityValue and CashSecret were just generated
 	// by Resolve (the caller supplied neither).
 	Recipients []RecipientInput
 	// ExpiresAt is nil when the wallet being created will never expire —
@@ -218,16 +218,16 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		return nil, fmt.Errorf("%w: at most %d recipients per wallet, got %d",
 			constants.ErrInvalidParams, maxRecipientsPerWallet, len(params.Recipients))
 	}
-	// A bearer note is meant to be a self-contained, freely-handed-off
+	// A cash note is meant to be a self-contained, freely-handed-off
 	// object, like cash — whoever it's given to needs nothing else to
-	// redeem it. Mixing a bearer slice into a wallet that also serves other,
-	// identity-bound recipients would break that: redeeming the bearer
+	// redeem it. Mixing a cash-mode slice into a wallet that also serves other,
+	// identity-bound recipients would break that: redeeming the cash-mode
 	// slice requires the wallet's connection too, so handing the note to
 	// someone would also hand them a live channel into a multi-recipient
-	// wallet that isn't theirs. A bearer wallet is always exactly one slice.
+	// wallet that isn't theirs. A cash-mode wallet is always exactly one slice.
 	for i, r := range params.Recipients {
-		if r.IdentityType == db.CashIdentityBearer && len(params.Recipients) != 1 {
-			return nil, fmt.Errorf("%w: recipient %d: a bearer recipient must be the only recipient in this wallet",
+		if r.IdentityType == db.CashIdentityCash && len(params.Recipients) != 1 {
+			return nil, fmt.Errorf("%w: recipient %d: a cash-mode recipient must be the only recipient in this wallet",
 				constants.ErrInvalidParams, i)
 		}
 	}
@@ -282,29 +282,29 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	seen := make(map[string]bool, len(params.Recipients))
 	resolvedRecipients := make([]RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
-		bearerMode := r.IdentityType == db.CashIdentityBearer
+		cashMode := r.IdentityType == db.CashIdentityCash
 		connKeyMode := r.IdentityType == db.CashIdentityConnectionKey
-		if !bearerMode && !connKeyMode && r.IdentityType != db.CashIdentityPubkey {
+		if !cashMode && !connKeyMode && r.IdentityType != db.CashIdentityPubkey {
 			return nil, fmt.Errorf("%w: recipient %d: identity_type must be %q, %q, or %q", constants.ErrInvalidParams,
-				i, db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityBearer)
+				i, db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash)
 		}
 
-		if bearerMode {
-			// The caller supplies no identity for a bearer recipient — the
+		if cashMode {
+			// The caller supplies no identity for a cash-mode recipient — the
 			// Hub is the only party that can vouch for its secret's entropy,
 			// so it generates (and hashes) that secret itself, here.
 			if r.IdentityValue != "" || r.IAPubkey != "" {
-				return nil, fmt.Errorf("%w: recipient %d: bearer mode must not carry identity_value or ia_pubkey",
+				return nil, fmt.Errorf("%w: recipient %d: cash mode must not carry identity_value or ia_pubkey",
 					constants.ErrInvalidParams, i)
 			}
-			secretHex, secretHash, genErr := GenerateBearerSecret()
+			secretHex, secretHash, genErr := GenerateCashSecret()
 			if genErr != nil {
-				return nil, fmt.Errorf("failed to generate bearer secret: %w", genErr)
+				return nil, fmt.Errorf("failed to generate cash secret: %w", genErr)
 			}
 			r.IdentityValue = secretHash
-			r.BearerSecret = secretHex
+			r.CashSecret = secretHex
 			// No dedupe check: a fresh, independently-random secret can't
-			// collide with anything already `seen`, and a bearer recipient
+			// collide with anything already `seen`, and a cash-mode recipient
 			// is already guaranteed to be the only one in this request by
 			// the mixing check above.
 		} else {
@@ -377,8 +377,8 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // Authority. Shared by Resolve's per-recipient validation and cash_transfer's
 // new_identity validation — the only two places this codebase accepts a
 // caller-supplied (identity_type, identity_value, ia_pubkey) triple that
-// isn't a bearer secret. Does not accept db.CashIdentityBearer: a bearer
-// target has no caller-supplied shape to validate — see GenerateBearerSecret.
+// isn't a cash secret. Does not accept db.CashIdentityCash: a cash-mode
+// target has no caller-supplied shape to validate — see GenerateCashSecret.
 func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey string) error {
 	switch identityType {
 	case db.CashIdentityPubkey:
@@ -413,20 +413,20 @@ func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey stri
 	}
 }
 
-// bearerSecretLen is 32 bytes — same size as every other Nostr key/secret in
-// this codebase, and comfortably enough entropy that guessing a bearer
-// secret is infeasible (NIP-CASH §Bearer Slices).
-const bearerSecretLen = 32
+// cashSecretLen is 32 bytes — same size as every other Nostr key/secret in
+// this codebase, and comfortably enough entropy that guessing a cash-mode
+// secret is infeasible (NIP-CASH §Cash-Mode Slices).
+const cashSecretLen = 32
 
-// GenerateBearerSecret returns a fresh, high-entropy bearer secret (hex) and
+// GenerateCashSecret returns a fresh, high-entropy cash secret (hex) and
 // the hex-encoded SHA-256 hash that gets persisted in its place — the raw
 // secret itself is never written to storage, only ever handed back once, in
 // the response that generated it. Called only from Resolve (mint_cash's own
-// bearer-recipient path) — cash_transfer's bearer target never calls this:
-// the caller supplies its own commitment there instead (NIP-CASH §Bearer
+// cash-mode-recipient path) — cash_transfer's cash-mode target never calls this:
+// the caller supplies its own commitment there instead (NIP-CASH §Cash-Mode
 // Slices explains why this asymmetry is load-bearing, not an oversight).
-func GenerateBearerSecret() (secretHex, secretHash string, err error) {
-	var secret [bearerSecretLen]byte
+func GenerateCashSecret() (secretHex, secretHash string, err error) {
+	var secret [cashSecretLen]byte
 	if _, err := rand.Read(secret[:]); err != nil {
 		return "", "", err
 	}
@@ -609,12 +609,12 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			IdentityType: r.IdentityType,
 			AmountMloki:  r.AmountMloki,
 		}
-		if r.IdentityType == db.CashIdentityBearer {
+		if r.IdentityType == db.CashIdentityCash {
 			// r.IdentityValue here is the secret's hash — an internal
 			// storage detail, never meant for the wire response. Only the
 			// plaintext secret is; the hash on its own is useless to a
 			// recipient and would just be a stray, meaningless-looking field.
-			result.BearerSecret = r.BearerSecret
+			result.CashSecret = r.CashSecret
 		} else {
 			result.IdentityValue = r.IdentityValue
 		}
@@ -630,11 +630,11 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// empty token instead; PairingURI alone is still a fully functional
 	// connection string.
 	// Uniform across every recipient by construction (Resolve requires a
-	// bearer recipient to be this request's only one), so the first
+	// cash-mode recipient to be this request's only one), so the first
 	// recipient's identity type speaks for the whole wallet. When SignMint is
 	// set, the token's provenance attests the wallet's total committed amount
 	// (sum), which is immutable for the wallet's life (§Mint Provenance).
-	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityBearer
+	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
 	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, resolved.SignMint, sum)
 
 	logger.Logger.Info().
@@ -671,14 +671,14 @@ type SplitParams struct {
 	AmountMloki uint64
 	// NewIdentityType/NewIdentityValue/NewIAPubkey describe the new wallet's
 	// sole recipient — any identity mode (pubkey, connection_key, or
-	// bearer), not bearer-only: the unified transfer/split model spins off a
+	// cash), not cash-mode-only: the unified transfer/split model spins off a
 	// dedicated wallet for every target type once a wallet's recipient
 	// history rules out a cheap in-place reassignment (see
-	// cash_transfer_controller.go), not only when converting into bearer.
-	// For bearer, NewIdentityValue is the caller-supplied sha256(secret) hex
+	// cash_transfer_controller.go), not only when converting into cash mode.
+	// For cash mode, NewIdentityValue is the caller-supplied sha256(secret) hex
 	// commitment — never a secret this package mints, for the same reason
-	// cash_transfer's in-place bearer path requires a caller-supplied
-	// commitment (see cash_transfer_controller.go's bearer branch doc
+	// cash_transfer's in-place cash-mode path requires a caller-supplied
+	// commitment (see cash_transfer_controller.go's cash-mode branch doc
 	// comment: a server-minted secret would be readable by every co-recipient
 	// of the connection this response travels over before the caller could
 	// ever deliver it — Split exists specifically to give those slices
@@ -810,7 +810,7 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	// that would tell the caller the split failed when it actually
 	// succeeded, leaving a funded wallet with no way to deliver its
 	// connection; the wallet remains recoverable via the admin API either way).
-	identityRequired := params.NewIdentityType != db.CashIdentityBearer
+	identityRequired := params.NewIdentityType != db.CashIdentityCash
 	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.SignMint, params.AmountMloki)
 
 	logger.Logger.Info().

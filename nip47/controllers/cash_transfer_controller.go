@@ -32,25 +32,25 @@ import (
 // (see handleCashTransferFor), which is exactly how a real NWC client's
 // request arrives anyway - so nothing downstream needs to change.
 type cashTransferNewIdentityParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 }
 
 type cashTransferParams struct {
 	// The caller's CURRENT registered identity — mutually exclusive with
-	// BearerSecret. IdentityEvent is the JSON-encoded kind-23198 transfer
+	// CashSecret. IdentityEvent is the JSON-encoded kind-23198 transfer
 	// proof, signed fresh for this call and bound to this wallet + this
 	// specific new_identity (see verifyTransferIdentityEvent).
 	IdentityType     string `json:"identity_type,omitempty"`
 	IdentityValue    string `json:"identity_value,omitempty"`
 	IdentityEvent    string `json:"identity_event,omitempty"`
 	AttestationEvent string `json:"attestation_event,omitempty"`
-	// BearerSecret authenticates as the slice's CURRENT bearer identity, in
-	// place of every field above — a bearer slice has no identity capable
+	// CashSecret authenticates as the slice's CURRENT cash-mode identity, in
+	// place of every field above — a cash-mode slice has no identity capable
 	// of signing a proof event, so presenting its secret is the entire proof
-	// (mirrors cash_redeem's own bearer path).
-	BearerSecret string `json:"bearer_secret,omitempty"`
+	// (mirrors cash_redeem's own cash-mode path).
+	CashSecret string `json:"cash_secret,omitempty"`
 
 	NewIdentity cashTransferNewIdentityParam `json:"new_identity"`
 
@@ -68,7 +68,7 @@ type cashTransferParams struct {
 
 	// MintSignature opts a spun-off wallet's token into mint provenance
 	// (NIP-CASH §Mint Provenance) — only meaningful when this call actually
-	// spins off a dedicated wallet (a split, or a full transfer to bearer on
+	// spins off a dedicated wallet (a split, or a full transfer to cash mode on
 	// a multi-recipient-history wallet); harmless no-op on an in-place
 	// reassignment, which never mints a new token to sign.
 	MintSignature bool `json:"mint_signature,omitempty"`
@@ -76,8 +76,8 @@ type cashTransferParams struct {
 
 // cashTransferResponse never carries a secret of any kind — IdentityValue is
 // always either a public identity (pubkey/connection_key) or a one-way
-// commitment the caller already supplied for a bearer target, deliberately
-// never a value the wallet itself generated (see the bearer branch of
+// commitment the caller already supplied for a cash-mode target, deliberately
+// never a value the wallet itself generated (see the cash-mode branch of
 // HandleCashTransferEvent for why: this response travels over the shared
 // cash_wallet connection, decryptable by every recipient who ever held it).
 type cashTransferResponse struct {
@@ -129,14 +129,14 @@ type cashTransferResponse struct {
 
 // newIdentityHash binds a transfer proof to a specific target identity —
 // the same role bolt11_hash plays for a claim proof (see
-// verifyClaimIdentityEvent's doc comment). identityValue is "" for a bearer
-// target, since the caller doesn't choose (or know) a bearer target's value
+// verifyClaimIdentityEvent's doc comment). identityValue is "" for a cash-mode
+// target, since the caller doesn't choose (or know) a cash-mode target's value
 // ahead of generating it. iaPubkey is included so a connection_key target's
 // Identity Authority is part of what the signer committed to — omitting it
 // let a captured proof be resubmitted with a
 // DIFFERENT, still-trusted IA swapped in, redirecting who is authoritative to
 // redeem the transferred slice even though identity_value (the connection_key
-// string itself) never changed. Always "" for pubkey/bearer targets, which
+// string itself) never changed. Always "" for pubkey/cash-mode targets, which
 // have no ia_pubkey concept, so their hash is unaffected by this field.
 // noSliceRegisteredMessage is the NOT_FOUND message for a claim lookup that
 // found no UNCLAIMED slice for (walletAppID, identityType, identityValue) —
@@ -176,12 +176,12 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		return
 	}
 
-	isBearerCurrent := params.BearerSecret != ""
+	isCashCurrent := params.CashSecret != ""
 
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Str("new_identity_type", params.NewIdentity.IdentityType).
-		Bool("bearer_current", isBearerCurrent).
+		Bool("cash_current", isCashCurrent).
 		Msg("Handling cash_transfer request")
 
 	// 1. cash_transfer only ever makes sense against a cash_wallet.
@@ -191,7 +191,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	// 2. Rate limit — shares cashClaimLimiter (and its budget) with cash_redeem,
-	// deliberately: transferring OUT of a bearer slice is also a
+	// deliberately: transferring OUT of a cash-mode slice is also a
 	// secret-presentation surface with no signature to forge, exactly like
 	// redeeming one. If the two methods had separate budgets, an attacker
 	// could double their effective guess allowance by splitting attempts
@@ -201,22 +201,22 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		return
 	}
 
-	// 3. Determine the caller's current identity. A bearer-secret proof and
+	// 3. Determine the caller's current identity. A cash-secret proof and
 	// an identity-bound one are mutually exclusive param shapes.
 	var currentIdentityType, currentIdentityValue string
-	if isBearerCurrent {
+	if isCashCurrent {
 		if params.IdentityType != "" || params.IdentityValue != "" || params.IdentityEvent != "" || params.AttestationEvent != "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"bearer_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
+				"cash_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
 			return
 		}
-		secretBytes, hexErr := hex.DecodeString(params.BearerSecret)
+		secretBytes, hexErr := hex.DecodeString(params.CashSecret)
 		if hexErr != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "bearer_secret must be hex")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "cash_secret must be hex")
 			return
 		}
 		hash := sha256.Sum256(secretBytes)
-		currentIdentityType = db.CashIdentityBearer
+		currentIdentityType = db.CashIdentityCash
 		currentIdentityValue = hex.EncodeToString(hash[:])
 	} else {
 		if params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
@@ -243,15 +243,15 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// for trust) so the proof-binding hash below reflects exactly what the
 	// caller asked for, independent of whether it turns out to be valid.
 	newIdentityType := params.NewIdentity.IdentityType
-	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityBearer {
+	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityCash {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 			fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
-				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityBearer))
+				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
 		return
 	}
-	// Unlike mint_cash's bearer recipient (identity_value forbidden —
-	// the Hub generates it), a bearer new_identity here MUST carry a
-	// caller-supplied identity_value: see the bearer branch below for why.
+	// Unlike mint_cash's cash-mode recipient (identity_value forbidden —
+	// the Hub generates it), a cash-mode new_identity here MUST carry a
+	// caller-supplied identity_value: see the cash-mode branch below for why.
 	// Shape is validated there, after the proof; this hash binds the proof to
 	// whatever the caller submitted, valid or not (including IAPubkey, "" if
 	// omitted), exactly as it does for every other target type/field.
@@ -305,11 +305,11 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// re-derived later) since it's only available while identityEvent is in
 	// scope. Used only by the split path below, to encrypt that new wallet's
 	// connection to the caller and no one else. Stays empty when
-	// isBearerCurrent, which is fine: a bearer slice's wallet can never be
-	// multi-recipient (see the invariant note in the bearer branch below),
-	// so a bearer-current split (which can only happen via a PARTIAL amount,
-	// since a full bearer-current transfer is always in-place) still only
-	// ever needs the bearer secret itself as proof — there is no signed
+	// isCashCurrent, which is fine: a cash-mode slice's wallet can never be
+	// multi-recipient (see the invariant note in the cash-mode branch below),
+	// so a cash-mode split (which can only happen via a PARTIAL amount,
+	// since a full cash-mode transfer is always in-place) still only
+	// ever needs the cash secret itself as proof — there is no signed
 	// identity_event to pull a caller pubkey from either way, so the
 	// recipient-facing encryption for that case is skipped below.
 	var callerProofPubkey string
@@ -319,9 +319,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// release the single-use replay guard below if the split fails and rolls
 	// back, so a caller who hits a transient failure can retry with the
 	// exact same proof rather than needing a brand-new one. Stays empty for
-	// isBearerCurrent, same as callerProofPubkey.
+	// isCashCurrent, same as callerProofPubkey.
 	var proofEventID string
-	if !isBearerCurrent {
+	if !isCashCurrent {
 		var identityEvent nostr.Event
 		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
@@ -377,20 +377,20 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			}
 		}
 	}
-	// isBearerCurrent: nothing further to verify — step 5's hash-matched
-	// lookup was the entire proof, identical in spirit to a bearer redeem.
+	// isCashCurrent: nothing further to verify — step 5's hash-matched
+	// lookup was the entire proof, identical in spirit to a cash-mode redeem.
 
 	// 8. Validate new_identity now that the caller is authenticated:
 	// pubkey/connection_key shape + live IA trust (reuses exactly the
 	// validation mint_cash applies to a recipient entry — not
-	// duplicated), or shape validation for a bearer target's caller-supplied
+	// duplicated), or shape validation for a cash-mode target's caller-supplied
 	// commitment.
 	var newIdentityValueToStore, newIAPubkeyToStore string
 	switch newIdentityType {
-	case db.CashIdentityBearer:
-		// The bearer secret itself MUST be caller-supplied (as a commitment,
+	case db.CashIdentityCash:
+		// The cash secret itself MUST be caller-supplied (as a commitment,
 		// never the raw secret) rather than generated here and returned in
-		// this response. Unlike mint_cash's bearer response — which
+		// this response. Unlike mint_cash's cash-mode response — which
 		// travels over the Hub's own single-owner connection — this response
 		// travels over the SHARED cash_wallet connection, decryptable by every
 		// recipient who ever held it (NIP-47 response encryption derives its
@@ -402,14 +402,14 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		// connection_key target is already caller-chosen, not server-issued.
 		if params.NewIdentity.IAPubkey != "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity must not carry ia_pubkey when identity_type is bearer")
+				"new_identity must not carry ia_pubkey when identity_type is cash")
 			return
 		}
 		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity.identity_value is required for a bearer target and must be a 64-character lowercase "+
+				"new_identity.identity_value is required for a cash-mode target and must be a 64-character lowercase "+
 					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
-					"or returns a bearer secret over the shared connection")
+					"or returns a cash secret over the shared connection")
 			return
 		}
 		newIdentityValueToStore = params.NewIdentity.IdentityValue
@@ -430,7 +430,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// every step-7/8 check that doesn't touch the slice has already passed,
 	// so a request that fails one of THOSE checks never burns the proof (see
 	// the comment above callerProofPubkey/proofEventID's capture in step 7).
-	// Empty for isBearerCurrent, which has no signed proof to consume.
+	// Empty for isCashCurrent, which has no signed proof to consume.
 	if proofEventID != "" {
 		if err := controller.db.Create(&db.CashTransferProof{AppID: app.ID, EventID: proofEventID}).Error; err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
@@ -455,17 +455,17 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// secret, so reusing the connection is safe regardless of who else has
 	// ever held it.
 	//
-	// A FULL transfer to a BEARER target reassigns in place ONLY if the
+	// A FULL transfer to a CASH target reassigns in place ONLY if the
 	// wallet has (and has always had) exactly one recipient — exactly
-	// today's bearer-mixing rule, unchanged: a bearer redemption/transfer's
+	// today's cash-mixing rule, unchanged: a cash-mode redemption/transfer's
 	// entire proof is its raw secret, transmitted in the request body, so
-	// handing a bearer note a connection any former co-recipient might
+	// handing a cash note a connection any former co-recipient might
 	// still be listening on would hand them everything needed to steal it
-	// the moment it's ever redeemed. Every other bearer-target case (a
+	// the moment it's ever redeemed. Every other cash-mode-target case (a
 	// wallet that has ever had more than one recipient) splits instead —
 	// see handleCashTransferSplit.
 	split := !isFullTransfer
-	if isFullTransfer && newIdentityType == db.CashIdentityBearer {
+	if isFullTransfer && newIdentityType == db.CashIdentityCash {
 		allClaims, err := controller.appsService.ListClaimsForWallet(app.ID)
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list Cash wallet claims")
@@ -473,15 +473,15 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			return
 		}
 		split = len(allClaims) != 1
-		if split && isBearerCurrent {
-			// Structurally unreachable: a bearer slice's wallet can never
+		if split && isCashCurrent {
+			// Structurally unreachable: a cash-mode slice's wallet can never
 			// have more than one recipient (cashwallet.Resolve requires a
-			// bearer recipient to be the wallet's only one at creation, and
+			// cash-mode recipient to be the wallet's only one at creation, and
 			// no later operation ever adds a second claim row to an existing
-			// wallet), so isBearerCurrent implies allClaims is exactly 1.
+			// wallet), so isCashCurrent implies allClaims is exactly 1.
 			// Rejected defensively rather than trusting that invariant blindly.
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED,
-				"a bearer slice's wallet can never have more than one recipient")
+				"a cash-mode slice's wallet can never have more than one recipient")
 			return
 		}
 	}
@@ -540,7 +540,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			Msg("Cash wallet slice transferred")
 
 		// IdentityValue is safe to echo back for every mode, including
-		// bearer: it is always either a public identity (pubkey/
+		// cash: it is always either a public identity (pubkey/
 		// connection_key) or a one-way commitment the caller already
 		// supplied — never a secret the wallet itself generated.
 		publishResponse(&models.Response{
@@ -564,9 +564,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // an in-place reassignment isn't safe or doesn't apply (see that step's own
 // comment for exactly when). newIdentityType/newIdentityValueToStore/
 // newIAPubkeyToStore describe the new wallet's sole recipient (any identity
-// mode, not bearer-only); recipientPubkey is the pubkey that just proved
+// mode, not cash-mode-only); recipientPubkey is the pubkey that just proved
 // ownership of the slice being split (identity_event's signer, empty for a
-// bearer-current caller) — the new wallet's connection is encrypted to this
+// cash-mode caller) — the new wallet's connection is encrypted to this
 // pubkey and no one else, so it never touches the shared connection this
 // response itself travels over.
 //
@@ -718,7 +718,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// deliver returns a new wallet's clear pubkey plus its token — nested-
 	// encrypted to the caller's proof pubkey (so no co-recipient of THIS shared
 	// connection can read it, exactly as before), or in the clear for a
-	// bearer-current caller whose source wallet is structurally single-recipient
+	// cash-mode caller whose source wallet is structurally single-recipient
 	// (there is no co-holder to defend against). Funds have already moved by
 	// this point, so a delivery failure is operator-recoverable, never a
 	// rollback (§Spinning a Slice Off).

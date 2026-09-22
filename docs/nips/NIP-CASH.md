@@ -24,7 +24,7 @@ prize list, a group zap, fifty people off a sign-up sheet — and each one redee
 Every recipient shares one connection safely because a share can optionally be bound to a specific
 identity — a Nostr pubkey, or a web identity vouched for by an Identity Authority — so nobody can grab
 someone else's share (§Data Model). A share meant for exactly one recipient can skip the binding and stay a
-bare secret instead: ordinary bearer ecash (§Bearer Slices).
+bare secret instead: ordinary cash ecash (§Cash-Mode Slices).
 
 ## Motivation
 
@@ -42,8 +42,8 @@ on to someone else, once they're online.
 
 This document doesn't define membership or eligibility policy. A Cash Hub has no concept of "who's
 allowed to receive cash" — the `mint_cash` caller decides, per call, whether each recipient's share
-goes to a named identity (`pubkey` or `connection_key`) or to no one in particular (`bearer` mode,
-§Bearer Slices) — plain cash, redeemable by whoever holds it. Naming a recipient is never mandatory.
+goes to a named identity (`pubkey` or `connection_key`) or to no one in particular (`cash` mode,
+§Cash-Mode Slices) — plain cash, redeemable by whoever holds it. Naming a recipient is never mandatory.
 
 ## Terminology
 
@@ -64,11 +64,18 @@ goes to a named identity (`pubkey` or `connection_key`) or to no one in particul
 - **identity**: an OPTIONAL binding on a slice, checked at redemption instead of trusting mere possession
   of the connection — a raw Nostr `pubkey`, or a `connection_key` (an opaque identifier an Identity
   Authority vouches for, standing in for a Web Identity — a Discord handle, an email, a domain — for a
-  recipient not on Nostr yet). A slice left unbound is `bearer` mode (§Bearer Slices): ordinary ecash,
+  recipient not on Nostr yet). A slice left unbound is `cash` mode (§Cash-Mode Slices): ordinary ecash,
   redeemable by whoever holds its secret. A `connection_key`'s `identity_value` MUST be computed as
   `hex(SHA256(platform + ":" + externalID))` — the same deterministic formula NIP-IC's `ConnectionKey`
   defines — so two independent implementations deriving a connection_key for the same (platform, externalID)
   pair always agree, and a real NIP-IC-issued attestation's own `d`-tag matches without coordination.
+- **cash mode**: the mode a slice is in when it carries no identity binding at all — `identity_type:
+  "cash"` on the wire, with its secret carried as `cash_secret`. An earlier revision of this document
+  called this mode `bearer`, with the secret field named `bearer_secret`; that spelling is gone.
+  Implementations MUST send and accept only `cash`, and MUST reject `bearer` as an unknown identity type.
+  The rename is confined to those two names: a cash-mode slice's `identity_value` is still the SHA-256
+  commitment of its secret, so tokens and secrets issued under the old spelling stay redeemable across the
+  change. See §Cash-Mode Slices.
 - **Identity Authority (IA)**: a third party the wallet owner trusts to attest, via a kind-35522 event
   (NIP-IC's own Attestation kind — this document verifies it, it doesn't define it; see §Security
   Considerations), that a `connection_key` belongs to a given Nostr pubkey, or to the Web Identity behind it.
@@ -89,13 +96,13 @@ and thereafter fixed on that slice and inherited unchanged across splits (§The 
 | Method | Caller | Scope | Purpose |
 |---|---|---|---|
 | `mint_cash` | wallet owner, over the Cash Hub connection | `cash_hub` | Fund and mint cash tokens for one or more recipients |
-| `cash_redeem` | a recipient, over the Cash Wallet connection | `cash_redeem` | Collect one recipient's exact slice — identity-bound or `bearer` (§Bearer Slices) |
+| `cash_redeem` | a recipient, over the Cash Wallet connection | `cash_redeem` | Collect one recipient's exact slice — identity-bound or `cash` (§Cash-Mode Slices) |
 | `cash_transfer` | a recipient, proof-gated against their current registered identity | `cash_transfer` | Reassign an unredeemed slice's identity, or split part of its value off into a new cash token — see §Transferring and Splitting a Slice |
 | `cash_consolidate` | a recipient controlling every source slice, proof-gated against each | `cash_consolidate` | Combine several same-hub slices this node custodies into one new cash token — see §Consolidating Tokens |
 | `list_recipients` | any holder of the Cash Wallet connection | `cash_redeem` | Read-only roster of every recipient on this wallet, including each slice's redeem fee quote — see §Listing Recipients |
 
-`cash_redeem`, `cash_transfer`, and `cash_consolidate` each take a `proof` (or, for a `bearer` slice,
-`bearer_secret`) authenticating the caller against the slice they're acting on. That proof, when present,
+`cash_redeem`, `cash_transfer`, and `cash_consolidate` each take a `proof` (or, for a `cash` slice,
+`cash_secret`) authenticating the caller against the slice they're acting on. That proof, when present,
 MUST be a **kind-23198** event — this document's own event kind, defined nowhere else. It is single-use,
 freshly signed for each call, and never independently published to a relay (it only ever travels embedded
 inside an already end-to-end-encrypted NIP-47 request body) — see each method's own Request section for
@@ -141,8 +148,8 @@ An implementation MUST treat a slice's registered identity as mutable pre-redemp
 reassignment), but its committed amount as immutable, exactly as §Transferring and Splitting a Slice
 describes.
 
-For a `bearer`-mode slice (§Bearer Slices), the above degenerates: there's no registered identity, only a
-secret to verify a redemption against. An implementation MUST be able to verify a presented bearer secret
+For a `cash`-mode slice (§Cash-Mode Slices), the above degenerates: there's no registered identity, only a
+secret to verify a redemption against. An implementation MUST be able to verify a presented cash secret
 without persisting it in any form that discloses it — a one-way commitment, not the secret itself.
 
 A Cash Wallet MUST be created, funded, and made usable in one step. Implementations MUST NOT introduce an
@@ -178,22 +185,22 @@ sequenceDiagram
 }
 ```
 
-A `bearer` recipient MUST instead be the request's only recipient — a bearer slice's wallet is always
-single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second `bearer` entry
-(§Bearer Slices, §Redemption Metadata):
+A `cash` recipient MUST instead be the request's only recipient — a cash-mode slice's wallet is always
+single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second `cash` entry
+(§Cash-Mode Slices, §Redemption Metadata):
 
 ```jsonc
 {
   "recipients": [
-    {"identity_type": "bearer", "amount_millis": 3000}
+    {"identity_type": "cash", "amount_millis": 3000}
   ]
 }
 ```
 
 - `recipients` — MUST contain at least one entry. Each entry's `identity_type` MUST be `pubkey`,
-  `connection_key`, or `bearer`. A `connection_key` entry MUST also carry `ia_pubkey`. A `bearer` entry
-  MUST carry neither `identity_value` nor `ia_pubkey` — the Hub generates its secret (§Bearer Slices). A
-  `bearer` entry MUST be the request's only entry; a request mixing a `bearer` entry with any other entry
+  `connection_key`, or `cash`. A `connection_key` entry MUST also carry `ia_pubkey`. A `cash` entry
+  MUST carry neither `identity_value` nor `ia_pubkey` — the Hub generates its secret (§Cash-Mode Slices). A
+  `cash` entry MUST be the request's only entry; a request mixing a `cash` entry with any other entry
   MUST be rejected in its entirety, not just that one recipient.
 - `expiry` — OPTIONAL. If omitted or zero, it MUST default to the Hub's own expiry ceiling (§Data Model) —
   which itself MAY be "never," in which case an omitted/zero `expiry` here produces a Cash Wallet that
@@ -230,14 +237,14 @@ separate Cash Hub with its own settings, rather than overriding it per call.
 decode to an identical wallet pubkey, secret, and relay set. Either string alone is a fully sufficient
 connection credential; a recipient only ever needs one of them, not both.
 
-For the single-`bearer`-recipient request shape above, the response's `recipients` entry instead carries
+For the single-`cash`-recipient request shape above, the response's `recipients` entry instead carries
 the generated secret:
 
 ```jsonc
-{"identity_type": "bearer", "bearer_secret": "<opaque, high-entropy, shown once>", "amount_millis": 3000}
+{"identity_type": "cash", "cash_secret": "<opaque, high-entropy, shown once>", "amount_millis": 3000}
 ```
 
-A `bearer` recipient's `bearer_secret` appears in this response and nowhere else, ever (§Bearer Slices).
+A `cash` recipient's `cash_secret` appears in this response and nowhere else, ever (§Cash-Mode Slices).
 
 ### Processing Algorithm
 
@@ -250,12 +257,12 @@ On receiving `mint_cash`, the Hub MUST, in order:
 2. Validate every recipient. `amount_millis` MUST be strictly positive. The running sum of all recipients'
    amounts MUST be computed with an explicit overflow check, rejecting before an unsigned wraparound can
    occur, and MUST NOT exceed the Hub's own per-wallet funding ceiling (§Data Model). If any recipient is
-   `bearer`-mode, `recipients` MUST contain exactly that one entry and no other — reject the entire
-   request otherwise (§Bearer Slices, §Redemption Metadata).
+   `cash`-mode, `recipients` MUST contain exactly that one entry and no other — reject the entire
+   request otherwise (§Cash-Mode Slices, §Redemption Metadata).
 3. For each `connection_key`-mode recipient, verify its `ia_pubkey` is on the wallet owner's trusted
    Identity Authority allowlist right now. An untrusted or unknown IA MUST reject the entire request, not
-   just that recipient. For each `bearer`-mode recipient, generate its secret now, with enough entropy
-   that guessing it is infeasible (§Bearer Slices). A caller-supplied `bearer_secret` at this step MUST be
+   just that recipient. For each `cash`-mode recipient, generate its secret now, with enough entropy
+   that guessing it is infeasible (§Cash-Mode Slices). A caller-supplied `cash_secret` at this step MUST be
    rejected — the Hub is the only party that can vouch for the entropy behind it.
 4. Resolve `expiry`. If the Hub's own expiry ceiling is "never," an omitted/zero `expiry` here MUST produce
    a Cash Wallet with no expiry at all — never a zero-duration, already-expired one — and any explicit,
@@ -265,10 +272,10 @@ On receiving `mint_cash`, the Hub MUST, in order:
 5. Verify the Hub's own available balance is at least the sum of all recipients' amounts.
 6. Create the Cash Wallet connection, record one slice per recipient — stamping each with the Hub's
    current `min_transfer_millis` and `redeem_fee_ppm` defaults (§Data Model) and a one-way commitment of
-   the secret for `bearer`-mode slices, never the secret itself — and perform a single internal transfer
+   the secret for `cash`-mode slices, never the secret itself — and perform a single internal transfer
    from the Hub to the new connection for the full sum. This MUST be atomic: a failure at any point after
    this step MUST leave no partial state.
-7. Return the pairing connection string and the resolved recipient list, with each `bearer` slice's
+7. Return the pairing connection string and the resolved recipient list, with each `cash` slice's
    plaintext secret included this one time.
 
 A request that fails any check above MUST be rejected before step 6. No partial wallet, slice, or
@@ -298,7 +305,7 @@ sequenceDiagram
   "invoice": "lnbc...",
   "proof": { /* binds the caller to this specific slice and this specific invoice;
                 the same scheme cash_transfer reuses. exact format out of scope for
-                this document. bearer slices use bearer_secret instead — see §Bearer Slices */ }
+                this document. cash-mode slices use cash_secret instead — see §Cash-Mode Slices */ }
 }
 ```
 
@@ -312,8 +319,8 @@ sequenceDiagram
 - `proof` — REQUIRED for an identity-bound slice. MUST bind the caller to that slice's *current*
   registered identity and to this specific invoice, so a captured proof can't be replayed against a
   different one. For a `connection_key` identity, it MUST also carry, or reference, a currently-trusted
-  Identity Authority's attestation (§Terminology). A `bearer` slice replaces `proof` with `bearer_secret`
-  (§Bearer Slices).
+  Identity Authority's attestation (§Terminology). A `cash` slice replaces `proof` with `cash_secret`
+  (§Cash-Mode Slices).
 
 ### Processing Algorithm
 
@@ -323,7 +330,7 @@ On receiving `cash_redeem`, the wallet MUST, in order:
 2. Verify the caller is authorized to redeem it: for an identity-bound slice, verify `proof` against the
    slice's current registered identity, and, for `connection_key` mode, that the attesting Identity
    Authority is still trusted right now — not just at wallet-creation time (§Security Considerations). For
-   a `bearer` slice, verify the presented `bearer_secret` (§Bearer Slices).
+   a `cash` slice, verify the presented `cash_secret` (§Cash-Mode Slices).
 3. Determine whether this redemption will resolve to a payment the Hub's own node is both sending and
    receiving (§The Redeem Fee) — this determination MUST use the same predicate the wallet's own payment
    path uses internally, not a separate, potentially-divergent check. If so, the required invoice amount
@@ -470,7 +477,7 @@ A recipient who hasn't redeemed their slice MAY ask to move some or all of its v
 touching a Lightning wallet themselves. Two shapes of this exist, unified under one method:
 
 - **Transfer it all** — hand the whole slice to an identity the caller does control (which MAY be
-  themselves under a different mode, e.g. converting into `bearer`). No funds move in the Lightning
+  themselves under a different mode, e.g. converting into `cash`). No funds move in the Lightning
   sense, and no value is created. Only one thing changes: which identity is authorized to redeem, or
   transfer/split again, that one slice, for the amount it was already funded with.
 - **Split off a piece** — carve `amount_millis` (less than the slice's current
@@ -482,7 +489,7 @@ touching a Lightning wallet themselves. Two shapes of this exist, unified under 
   new connections — the reason both pieces get fresh wallets rather than an in-place rewrite is
   §Spinning a Slice Off Into a Dedicated Wallet's own concern, not repeated here.
 
-`new_identity` MAY be `bearer` (§Bearer Slices) as well as `pubkey`/`connection_key`, for either shape.
+`new_identity` MAY be `cash` (§Cash-Mode Slices) as well as `pubkey`/`connection_key`, for either shape.
 
 ### Which outcome a request produces
 
@@ -500,10 +507,10 @@ An implementation MUST determine the outcome as follows, in this order:
      registered identity changes. This is unconditional on the wallet's recipient history — redeeming or
      transferring an identity-bound slice always requires a real signed proof, never just presenting a
      shared secret, so reusing the connection is safe regardless of who else has ever held it.
-   - `bearer` → reassigned in place **only if** this wallet has, and has always had, exactly one recipient
+   - `cash` → reassigned in place **only if** this wallet has, and has always had, exactly one recipient
      — counting every slice the wallet was ever created or has ever held, not only currently-unclaimed
      ones. Otherwise, this outcome also lands in a brand-new dedicated wallet (§Spinning a Slice Off Into
-     a Dedicated Wallet) — see that section's own "Why Not Reassign in Place, for a Bearer Target on a
+     a Dedicated Wallet) — see that section's own "Why Not Reassign in Place, for a Cash-Mode Target on a
      Shared Wallet?" for why a multi-recipient-history wallet can't take this shortcut.
 
 ```mermaid
@@ -514,10 +521,10 @@ sequenceDiagram
     Caller->>Wallet: cash_transfer {proof, new_identity, amount_millis?}
     Wallet->>Wallet: verify proof against current registered identity
     Wallet->>Wallet: validate new identity
-    alt full transfer to pubkey/connection_key, or bearer on a lifetime-solo wallet
+    alt full transfer to pubkey/connection_key, or cash mode on a lifetime-solo wallet
         Wallet->>Wallet: reassign identity in place, atomically
         Wallet-->>Caller: {amount (unchanged), new registered identity}
-    else full transfer to bearer on a multi-recipient-history wallet
+    else full transfer to cash mode on a multi-recipient-history wallet
         Wallet->>Wallet: claim the source slice, atomically
         Wallet->>Wallet: create + fund one new dedicated wallet for new_identity
         Wallet-->>Caller: {amount, new_wallet_pubkey, new_wallet_token}
@@ -536,20 +543,20 @@ sequenceDiagram
   "proof": { /* binds the caller to the slice's *current* registered identity, and to this
                 specific new_identity — a proof captured for one target MUST NOT be usable
                 against a different one. Omitted entirely when the current identity is
-                bearer — see bearer_secret below. Exact format out of scope for this
+                cash — see cash_secret below. Exact format out of scope for this
                 document, beyond that binding requirement. */ },
-  "bearer_secret": "<opaque>",
+  "cash_secret": "<opaque>",
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"},
   // new_identity MAY instead be
-  // {"identity_type": "bearer", "identity_value": "<hex sha256 commitment the caller generated>"}
-  // — see §Bearer Slices for why identity_value is required, not server-minted, here.
+  // {"identity_type": "cash", "identity_value": "<hex sha256 commitment the caller generated>"}
+  // — see §Cash-Mode Slices for why identity_value is required, not server-minted, here.
   "amount_millis": 5000 // OPTIONAL — omit, or equal the slice's current amount, to transfer it
                         // all; a smaller value splits off exactly that much (§Which outcome a
                         // request produces above), leaving the remainder behind on this slice
 }
 ```
 
-- `proof` — REQUIRED unless the slice's current identity is `bearer`. A kind-23198 event, MUST authenticate
+- `proof` — REQUIRED unless the slice's current identity is `cash`. A kind-23198 event, MUST authenticate
   the caller as the slice's *current* registered identity, and bind the proof to this specific
   `new_identity` and this specific `amount_millis` — the same anti-redirection requirement `cash_redeem`'s
   proof has toward its invoice (§Redeeming a Slice). A proof captured for one `new_identity` MUST NOT be
@@ -560,7 +567,7 @@ sequenceDiagram
   - a `d` tag whose value is the wallet's `WalletPubkey` (same as a claim proof);
   - a `new_identity_hash` tag:
     `sha256(new_identity.identity_type + ":" + new_identity.identity_value + ":" + new_identity.ia_pubkey)`,
-    hex-encoded (`identity_value` is `""` for a `bearer` target, since the caller doesn't choose one ahead
+    hex-encoded (`identity_value` is `""` for a `cash` target, since the caller doesn't choose one ahead
     of generating it; `ia_pubkey` is `""` for every target type except `connection_key`). `ia_pubkey` MUST be
     folded into the hash, not just `identity_type`/`identity_value` — omitting it would let a captured proof
     for one `connection_key` target be replayed against the same `identity_value` under a different,
@@ -574,17 +581,17 @@ sequenceDiagram
   The wallet consumes every successfully-verified proof exactly once (tracked by event ID, independent of
   `new_identity`/`amount_millis`) — a proof that failed verification, or whose subsequent operation failed
   and rolled back, is never consumed, so a legitimate caller can always retry with the identical proof.
-- `bearer_secret` — REQUIRED in place of `proof`, if and only if the slice's current identity is
-  `bearer`. A bearer slice has no identity capable of signing a proof; presenting its secret is the
-  entire proof, exactly as it is for `cash_redeem` (§Redeeming a Slice → §Bearer Slices).
-- `new_identity` — REQUIRED. `identity_type` of `pubkey`, `connection_key`, or `bearer`. For `pubkey`/
+- `cash_secret` — REQUIRED in place of `proof`, if and only if the slice's current identity is
+  `cash`. A cash-mode slice has no identity capable of signing a proof; presenting its secret is the
+  entire proof, exactly as it is for `cash_redeem` (§Redeeming a Slice → §Cash-Mode Slices).
+- `new_identity` — REQUIRED. `identity_type` of `pubkey`, `connection_key`, or `cash`. For `pubkey`/
   `connection_key`, same shape as one `recipients[]` entry in `mint_cash` (§Minting Cash), with
-  `ia_pubkey` required for `connection_key`. For `bearer`, `identity_value` is REQUIRED
-  (a caller-generated `sha256` commitment — see §Bearer Slices) and `ia_pubkey` MUST NOT be present.
+  `ia_pubkey` required for `connection_key`. For `cash`, `identity_value` is REQUIRED
+  (a caller-generated `sha256` commitment — see §Cash-Mode Slices) and `ia_pubkey` MUST NOT be present.
 - `amount_millis` — OPTIONAL, as described above. When present, MUST be strictly positive and MUST NOT
   exceed the slice's current committed amount.
 - `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance),
-  meaningful only when this call spins off a dedicated wallet (a split, or a full transfer to `bearer` on a
+  meaningful only when this call spins off a dedicated wallet (a split, or a full transfer to `cash` on a
   multi-recipient-history wallet) — each spun-off wallet signs independently over its own pubkey and its
   own fixed amount. A harmless no-op on an in-place reassignment, which never mints a new token to sign.
 
@@ -596,7 +603,7 @@ sequenceDiagram
   "identity_type": "pubkey",
   "identity_value": "..."
   // for an in-place outcome: nothing further — the response above is complete.
-  // for a full transfer that spins off ONE new wallet (bearer on a multi-recipient-history
+  // for a full transfer that spins off ONE new wallet (cash mode on a multi-recipient-history
   // wallet), additionally:
   //   "new_wallet_pubkey": "<the new wallet's WalletPubkey, in the clear>",
   //   "new_wallet_token": "<lokicash1... token, NIP-44 encrypted — see below>"
@@ -607,7 +614,7 @@ sequenceDiagram
 }
 ```
 
-This response MUST NOT ever carry a bearer secret, nor any other secret capable of moving funds, in a
+This response MUST NOT ever carry a cash secret, nor any other secret capable of moving funds, in a
 form decryptable by every holder of this connection — `identity_value` here is always either a public
 identity or a one-way commitment the caller already supplied, never a value the wallet itself generated.
 The `*_wallet_token` fields, present only for a split outcome, are the one exception that looks like it
@@ -621,13 +628,13 @@ On receiving `cash_transfer` for a given slice, the wallet MUST, in order:
 1. Verify the caller is authorized to act on the slice: for an identity-bound current identity, verify
    `proof` against it, against this specific `new_identity`, and against this specific `amount_millis`
    (treating an omitted `amount_millis` as bound to "the slice's full current amount," not as unbound); for a
-   `bearer` current identity, verify the presented `bearer_secret`. A redeemed slice has no registered
+   `cash` current identity, verify the presented `cash_secret`. A redeemed slice has no registered
    identity left to act on; `cash_transfer` on a redeemed slice MUST be rejected.
 2. Validate `new_identity`: for `pubkey`/`connection_key`, the same rules `mint_cash` applies to
    a recipient entry (§Processing Algorithm) — identity shape, and, for `connection_key` mode, that
-   `ia_pubkey` is on the wallet owner's trusted Identity Authority allowlist right now. For `bearer`,
+   `ia_pubkey` is on the wallet owner's trusted Identity Authority allowlist right now. For `cash`,
    verify `identity_value` is present and is a well-formed commitment — the implementation MUST NOT
-   generate a secret on the wallet's behalf here (§Bearer Slices, §Security Considerations).
+   generate a secret on the wallet's behalf here (§Cash-Mode Slices, §Security Considerations).
 3. Resolve `amount_millis` against the slice's current committed amount (read fresh, not from an earlier
    lookup) and determine the outcome per §Which outcome a request produces above. If `amount_millis` is
    present and exceeds the slice's current amount, reject.
@@ -641,7 +648,7 @@ On receiving `cash_transfer` for a given slice, the wallet MUST, in order:
 6. For a split: follow §Spinning a Slice Off Into a Dedicated Wallet's own algorithm instead. The source
    slice is claimed **terminal** (exactly like a redemption — its committed amount is never rewritten to a
    smaller value), and its value re-emerges as new dedicated wallets: one wallet of `amount_millis` for a
-   full transfer to `bearer`; two wallets (carved `amount_millis` + remainder) for a partial split.
+   full transfer to `cash`; two wallets (carved `amount_millis` + remainder) for a partial split.
 7. Return the slice's resulting amount together with its new registered identity (in-place), or the new
    wallet connection(s) — one for a full-transfer spin-off, two for a partial split — see the Response
    format above and §Spinning a Slice Off Into a Dedicated Wallet.
@@ -655,7 +662,7 @@ Whenever §Transferring and Splitting a Slice's Processing Algorithm (step 3) de
 split, the source slice is claimed terminal and its value re-emerges as one or two brand-new, dedicated,
 single-recipient Cash Wallets, whose connections are delivered to the caller alone:
 
-- a **full transfer to `bearer`** on a wallet whose recipient history rules out an in-place reassignment
+- a **full transfer to `cash`** on a wallet whose recipient history rules out an in-place reassignment
   produces **one** new wallet holding the whole amount, for `new_identity`;
 - a **partial split** produces **two** new wallets — one holding the carved `amount_millis` for
   `new_identity`, one holding the remainder for the caller's own identity.
@@ -669,26 +676,26 @@ sequenceDiagram
     Caller->>Old: cash_transfer {proof, new_identity, amount_millis?}
     Old->>Old: verify proof, determine split applies
     Old->>Old: atomically claim the source slice TERMINAL
-    Old->>New: create + fund via internal transfer(s):<br/>one wallet (full-to-bearer), or two (partial split)
+    Old->>New: create + fund via internal transfer(s):<br/>one wallet (full-to-cash), or two (partial split)
     New-->>Old: lokicash1... token(s) for the new wallet(s)
     Old->>Old: NIP-44 encrypt each token to the caller's own pubkey,<br/>keyed to that new wallet's own keypair
     Old-->>Caller: {carved + (for a split) remainder wallet_pubkey (clear), wallet_token (encrypted)}
 ```
 
-### Why Not Reassign in Place, for a Bearer Target on a Shared Wallet?
+### Why Not Reassign in Place, for a Cash-Mode Target on a Shared Wallet?
 
 Because the slice's current connection is shared with every other recipient the wallet has ever had
-(§Security Considerations), and a bearer redemption transmits its raw secret in the request body.
+(§Security Considerations), and a cash-mode redemption transmits its raw secret in the request body.
 Reassigning in place would hand every
 current and former co-recipient of that connection everything needed to steal the note the moment its
-intended recipient tried to redeem it. The only way to give such a slice a genuinely bearer, cash-like
+intended recipient tried to redeem it. The only way to give such a slice a genuinely cash-like
 existence is to move it off that connection entirely.
 
 ### Why Fresh Wallets for Both Pieces of a Partial Split?
 
 Two reasons. First, the carved-off piece is
 going to someone else entirely, so it must never ride the source's possibly-shared connection — that would
-reintroduce the bearer-mixing risk above and hand a stale connection to a new party for no benefit.
+reintroduce the cash-mixing risk above and hand a stale connection to a new party for no benefit.
 Second, giving the caller's own remainder a fresh wallet too — rather than decrementing the source in
 place — is what makes a wallet's committed amount immutable for its whole life (§Mint Provenance): if the
 source could be rewritten to a smaller amount, its mint signature (which commits to that amount) would go
@@ -734,7 +741,7 @@ rolled back — an implementation MAY record which new wallet(s) the value moved
 The new wallet's connection MUST NOT be placed in
 this response in a form decryptable by every holder of the old wallet's shared connection — that would
 simply relocate the leak this whole mechanism exists to close. Instead, the response carries, for **each**
-new wallet (one for a full-to-bearer spin-off, both the carved and the remainder wallet for a partial
+new wallet (one for a full-to-cash spin-off, both the carved and the remainder wallet for a partial
 split), a matched pair of fields:
 
 - `*_wallet_pubkey` — that new wallet's own `WalletPubkey`, in the clear. A bare pubkey with no
@@ -756,16 +763,16 @@ split), a matched pair of fields:
   conversation key. Both tokens of a partial split are delivered to the caller this way — the caller
   keeps the remainder and hands the carved token to its target out of band.
 
-For a `bearer`-current caller (a bearer slice being split, whether into another bearer target or an
+For a `cash`-current caller (a cash-mode slice being split, whether into another cash-mode target or an
 identity-bound one), there is no signed `identity_event` to draw a delivery pubkey from — the caller's
-"proof" is the bearer secret itself, which carries no pubkey. An implementation MUST NOT deliver any
+"proof" is the cash secret itself, which carries no pubkey. An implementation MUST NOT deliver any
 `*_wallet_token` over the shared connection in this case using any key derivable by another co-holder
-of that connection; in practice this case only arises for a `bearer`-current caller acting on a wallet
-that structurally can only ever have had one recipient (§Bearer Slices), so the "shared with others" risk
+of that connection; in practice this case only arises for a `cash`-current caller acting on a wallet
+that structurally can only ever have had one recipient (§Cash-Mode Slices), so the "shared with others" risk
 this delivery mechanism defends against does not apply, and the token(s) MAY be delivered in the clear the
 same way a freshly-`mint_cash`-minted token is.
 
-An implementation MUST NOT use a bearer redemption's secret-in-body pattern, or any wallet-generated
+An implementation MUST NOT use a cash-mode redemption's secret-in-body pattern, or any wallet-generated
 one-off key, for this delivery step — see §Security Considerations for the general principle this
 follows, and the ECDH argument for why it holds.
 
@@ -802,7 +809,7 @@ Every source MUST be:
 - **controlled by the caller**, proven per source with a signed proof against each source slice's current
   registered `pubkey` or `connection_key` identity (§Transferring and Splitting a Slice), bound to
   `new_identity` so a captured proof can't be redirected — `connection_key` additionally requires a live IA
-  trust check and an `attestation_event`, same as elsewhere. **This revision** does not accept a bearer
+  trust check and an `attestation_event`, same as elsewhere. **This revision** does not accept a cash-mode
   source — see the `sources` field below.
 
 Authorization is per-source, not per-connection: the calling connection's own identity need not match, or
@@ -851,17 +858,17 @@ sequenceDiagram
   twice, and an implementation MAY cap the total count (this implementation caps at 100, matching
   `mint_cash`'s recipient-batch limit). Each carries a `proof` (identity-bound), same scheme as
   `cash_transfer`; a `connection_key` source additionally carries an `attestation_event`, validated
-  identically (live IA trust, §Transferring and Splitting a Slice). `bearer` sources are rejected: a
-  bearer secret has no signature and no binding to the request carrying it — presenting it just *is* the
+  identically (live IA trust, §Transferring and Splitting a Slice). `cash` sources are rejected: a
+  cash secret has no signature and no binding to the request carrying it — presenting it just *is* the
   authorization — but unlike `cash_transfer`/`cash_redeem` (which always act on the calling connection's
-  own wallet, so a bearer secret only ever transits over its own single-recipient wallet's own
-  connection), `cash_consolidate` lets a source name *any* wallet this node custodies. Accepting a bearer
+  own wallet, so a cash secret only ever transits over its own single-recipient wallet's own
+  connection), `cash_consolidate` lets a source name *any* wallet this node custodies. Accepting a cash-mode
   source here would put that source's secret in plaintext inside a request encrypted only under the
   *calling* connection's shared key — decryptable by every co-recipient of a shared calling wallet, none
-  of whom have any claim on that foreign bearer note (see §Security Considerations).
-- `new_identity` — REQUIRED. `identity_type` of `pubkey`, `connection_key`, or `bearer` — the same shape
+  of whom have any claim on that foreign cash note (see §Security Considerations).
+- `new_identity` — REQUIRED. `identity_type` of `pubkey`, `connection_key`, or `cash` — the same shape
   set `cash_transfer` accepts (§Transferring and Splitting a Slice), validated identically: live IA trust
-  for `connection_key`; a caller-supplied, never wallet-minted, commitment for `bearer` (§Bearer Slices).
+  for `connection_key`; a caller-supplied, never wallet-minted, commitment for `cash` (§Cash-Mode Slices).
   The merged wallet is owned by, and its token delivered to, this identity — see Response below for how
   delivery differs by type.
 - `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance) —
@@ -883,7 +890,7 @@ For a `pubkey` `new_identity`, `new_wallet_token` is NIP-44 encrypted directly t
 merged wallet's own keypair — a *different* delivery than a split's caller-keyed nested encryption
 (§Spinning a Slice Off), because `new_identity` here need not be the caller at all (the "controlled by
 the caller" requirement, §What Can Be Consolidated Together, binds the *sources*, not the recipient). For
-`connection_key`/`bearer`, there is no real pubkey to encrypt to yet — the token travels in the clear
+`connection_key`/`cash`, there is no real pubkey to encrypt to yet — the token travels in the clear
 inside the response's own ordinary outer encryption, the same way a freshly-`mint_cash`-minted token does.
 Per §Security Considerations, the token doesn't need to be kept secret: holding it only grants the ability
 to dial the wallet's connection, never to redeem it.
@@ -898,9 +905,9 @@ On receiving `cash_consolidate`, the node MUST, in order:
 3. Verify the caller controls each source: a valid `proof` against that slice's current registered
    `pubkey` or `connection_key` identity (bound to `new_identity`), plus a live IA trust check and
    `attestation_event` verification for `connection_key`. Any failure rejects the whole request. A
-   `bearer_secret` source MUST be rejected (this revision) — see the `sources` field above.
+   `cash_secret` source MUST be rejected (this revision) — see the `sources` field above.
 4. Validate `new_identity` exactly as `mint_cash`/`cash_transfer` do: identity shape and live IA trust for
-   `connection_key`, a well-formed caller-supplied commitment for `bearer`.
+   `connection_key`, a well-formed caller-supplied commitment for `cash`.
 5. Sum every source's committed amount with an explicit overflow check, and reject if the sum exceeds the
    shared Hub's own per-wallet ceiling (§Data Model) — the consolidated wallet obeys its Hub's ceiling like
    any other.
@@ -913,17 +920,17 @@ On receiving `cash_consolidate`, the node MUST, in order:
    two new wallets to exactly one new wallet funded from as many sources as were named (§Security
    Considerations).
 8. Deliver the consolidated wallet's connection: nested-encrypted to `new_identity` for `pubkey`
-   (§Spinning a Slice Off), in the clear for `connection_key`/`bearer` (see Response above).
+   (§Spinning a Slice Off), in the clear for `connection_key`/`cash` (see Response above).
 
 A request that fails steps 1–6 MUST be rejected before step 7. A rejected `cash_consolidate` never leaves
 any source consumed or partially merged.
 
-## Bearer Slices
+## Cash-Mode Slices
 
-A `bearer` slice is ordinary ecash: `identity_type: "bearer"`, no registered identity at all. Whoever
-presents its `bearer_secret` over the Cash Wallet connection first MAY redeem it — no Nostr pubkey, no
+A `cash` slice is ordinary ecash: `identity_type: "cash"`, no registered identity at all. Whoever
+presents its `cash_secret` over the Cash Wallet connection first MAY redeem it — no Nostr pubkey, no
 `connection_key`, no Identity Authority involved. Knowing the secret is both necessary and sufficient to
-redeem it, exactly like a Chaumian note. Handing a bearer slice to someone else is simply telling them its
+redeem it, exactly like a Chaumian note. Handing a cash-mode slice to someone else is simply telling them its
 secret, out of band — that handoff isn't a protocol operation at all; it's no different from the wallet
 owner choosing who to give the slice to in the first place (§Non-Goals).
 
@@ -931,89 +938,89 @@ Every other slice adds an identity binding on top of that bare-secret baseline: 
 proof of a specific registered identity (§Redeeming a Slice), not just the connection — the protection a Cash
 Hub payout needs when the same connection goes out to many recipients at once (§Abstract).
 
-A slice MAY still move into or out of bearer status via `cash_transfer` (§Transferring and Splitting a
-Slice) — either wholly (a full transfer) or partially (a split carves a new bearer note off, while the
+A slice MAY still move into or out of cash-mode status via `cash_transfer` (§Transferring and Splitting a
+Slice) — either wholly (a full transfer) or partially (a split carves a new cash note off, while the
 remainder, if any, stays under the giver's own unchanged identity — that remainder is never itself
-bearer). Moving *out* of bearer status presents the current secret as `cash_transfer`'s proof, the same
-way `cash_redeem` does. Moving *into* bearer status in place — reassigning the current wallet's connection
-to serve a bearer slice — is restricted to a full transfer on a wallet that has **ever** had only one
+cash). Moving *out* of cash-mode status presents the current secret as `cash_transfer`'s proof, the same
+way `cash_redeem` does. Moving *into* cash-mode status in place — reassigning the current wallet's connection
+to serve a cash-mode slice — is restricted to a full transfer on a wallet that has **ever** had only one
 recipient, not merely one still-unclaimed one, for the reasons §Transferring and Splitting a Slice and
 §Spinning a Slice Off Into a Dedicated Wallet both explain. This restriction never strands a
 multi-recipient wallet's slice, though: it always has the split path available instead, whether it wants
-to move all of its value into a bearer note or just part of it.
+to move all of its value into a cash note or just part of it.
 
-Unlike `mint_cash`'s bearer recipient, `cash_transfer`'s bearer target does NOT get a
+Unlike `mint_cash`'s cash-mode recipient, `cash_transfer`'s cash-mode target does NOT get a
 wallet-generated secret. The caller supplies the commitment themselves — an implementation MUST NOT mint
 one and return it in the `cash_transfer` response. This is a deliberate, load-bearing difference from
 creation, not an oversight: see §Security Considerations for why.
 
-### Creating a Bearer Slice
+### Creating a Cash-Mode Slice
 
-A `bearer`-mode entry in `mint_cash`'s `recipients[]` (§Minting Cash) carries no
-`identity_value` and no `ia_pubkey` — only an amount. It MUST also be the request's only entry: a bearer
-slice's wallet is always single-recipient, never mixed with an identity-bound slice or a second bearer
+A `cash`-mode entry in `mint_cash`'s `recipients[]` (§Minting Cash) carries no
+`identity_value` and no `ia_pubkey` — only an amount. It MUST also be the request's only entry: a cash-mode
+slice's wallet is always single-recipient, never mixed with an identity-bound slice or a second cash-mode
 slice (§Data Model, §Redemption Metadata) — mixing them would let a co-recipient on the same shared
-connection decrypt and steal a bearer secret the moment it's used (§Security Considerations). The Hub MUST
-generate the slice's `bearer_secret` itself, with enough entropy that guessing it is infeasible; a
+connection decrypt and steal a cash secret the moment it's used (§Security Considerations). The Hub MUST
+generate the slice's `cash_secret` itself, with enough entropy that guessing it is infeasible; a
 caller-supplied secret MUST NOT be accepted, since the caller has no way to prove its entropy. The
-response's matching entry MUST carry that `bearer_secret` in plaintext, exactly once (§Minting Cash,
-Response). There MUST be no way to retrieve a bearer slice's secret again after that response.
-Losing it is equivalent to losing the funds — same as losing any bearer ecash note.
+response's matching entry MUST carry that `cash_secret` in plaintext, exactly once (§Minting Cash,
+Response). There MUST be no way to retrieve a cash-mode slice's secret again after that response.
+Losing it is equivalent to losing the funds — same as losing any cash-mode ecash note.
 
-### Redeeming a Bearer Slice
+### Redeeming a Cash-Mode Slice
 
-`cash_redeem` (§Redeeming a Slice) on a bearer slice replaces `proof` with the secret itself:
+`cash_redeem` (§Redeeming a Slice) on a cash-mode slice replaces `proof` with the secret itself:
 
 ```jsonc
-{"invoice": "lnbc...", "bearer_secret": "<opaque>"}
+{"invoice": "lnbc...", "cash_secret": "<opaque>"}
 ```
 
 No Identity Authority check, no signature to verify — presenting the correct secret is the entire proof.
 The processing algorithm in §Redeeming a Slice applies unchanged; step 2 becomes a direct secret comparison.
-This `bearer_secret` is the value from §Creating a Bearer Slice's mint response — never the token's own
+This `cash_secret` is the value from §Creating a Cash-Mode Slice's mint response — never the token's own
 type-`2` connection secret; see §The Cash Token's Redemption Metadata for why the two are never
 interchangeable.
 
-### Presenting a Bearer Slice as One String
+### Presenting a Cash-Mode Slice as One String
 
-A bearer slice's token and its `bearer_secret` (§Creating a Bearer Slice) are two independently-generated
+A cash-mode slice's token and its `cash_secret` (§Creating a Cash-Mode Slice) are two independently-generated
 values, conveyed out of band together — never one alone (§Redemption Metadata explains why they can't be
 merged into the token's own wire format). An implementation MAY still present them to the recipient as a
-single copy/QR action, for a bearer slice specifically, by concatenating the two into one string:
+single copy/QR action, for a cash-mode slice specifically, by concatenating the two into one string:
 
 ```
-<token>#<bearer_secret>
+<token>#<cash_secret>
 ```
 
 joined with a literal `#`, a character that never appears in a bech32-encoded token (§Wire Format's
 charset excludes it), so the join always splits back apart unambiguously. This is a display-layer
 convenience only, not a new wire format: decoding this combined string means splitting on the first `#`
 before doing anything else, then handling each half exactly as it would be handled alone — the left side
-as an ordinary token (§Wire Format), the right side as `bearer_secret` (§Redeeming a Bearer Slice). A
+as an ordinary token (§Wire Format), the right side as `cash_secret` (§Redeeming a Cash-Mode Slice). A
 client MUST NOT attempt to decode the combined string itself as a token, nor submit it whole as
-`bearer_secret` — either simply fails (a trailing `#<hex>` is invalid bech32; a bech32 token alone was
-never a valid `bearer_secret`, per §Redemption Metadata).
+`cash_secret` — either simply fails (a trailing `#<hex>` is invalid bech32; a bech32 token alone was
+never a valid `cash_secret`, per §Redemption Metadata).
 
-This convention applies only to a bearer slice's own token — the only case where a token has a matching
+This convention applies only to a cash-mode slice's own token — the only case where a token has a matching
 secret to combine at all. It's entirely optional: a token with no `#` suffix (every identity-bound token,
-and any bearer token whose client chose not to use this convention) decodes exactly as it always has. An
+and any cash-mode token whose client chose not to use this convention) decodes exactly as it always has. An
 implementation MAY instead present the two values separately — e.g. as two distinct "copy" actions shown
 side by side — particularly where the recipient's own client is unknown and can't be assumed to split a
 combined string correctly.
 
-### Security Considerations for Bearer Slices
+### Security Considerations for Cash-Mode Slices
 
 **The secret MUST NOT be stored in a form that discloses it.** An implementation MUST persist only
 something a presented secret can be checked against — a one-way commitment, never the secret itself. A
-slice's `identity_value` is public information for `pubkey` and `connection_key` modes; a bearer slice's
+slice's `identity_value` is public information for `pubkey` and `connection_key` modes; a cash-mode slice's
 secret is the opposite. It *is* the entire security of that slice. Storing it in the clear turns any read
-access to that storage into a theft of every unredeemed bearer slice on the Hub.
+access to that storage into a theft of every unredeemed cash-mode slice on the Hub.
 
-**A bearer redemption MUST still be atomic and race-safe**, exactly like an identity-bound one (§Redeeming
-a Slice, step 4). First-redeem-wins is intentional for a bearer slice — that's the whole point — but two
+**A cash-mode redemption MUST still be atomic and race-safe**, exactly like an identity-bound one (§Redeeming
+a Slice, step 4). First-redeem-wins is intentional for a cash-mode slice — that's the whole point — but two
 concurrent redemptions against the same secret MUST NOT both succeed.
 
-**Guessing MUST be made infeasible, not just unlikely.** A bearer slice has no signature to forge, so an
+**Guessing MUST be made infeasible, not just unlikely.** A cash-mode slice has no signature to forge, so an
 attacker's only path is guessing the secret. Sufficient entropy at generation is necessary but not
 sufficient on its own; an implementation SHOULD also rate-limit or back off repeated failed
 `cash_redeem` attempts against the same wallet, the same way it would for any other credential-guessing
@@ -1083,27 +1090,27 @@ Type `3` (identity required) is an OPTIONAL hint, not part of the connection cre
 round-trip first, purely as a convenience:
 
 **Identity required** (`0` = false, `1` = true) reports whether the wallet currently requires a proof at
-all: `false` means the wallet is a single bearer slice (`cash_redeem`/`cash_transfer` need only its
-`bearer_secret` — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
+all: `false` means the wallet is a single cash-mode slice (`cash_redeem`/`cash_transfer` need only its
+`cash_secret` — no Nostr identity, no signed proof); `true` means every slice the wallet serves is
 identity-bound (a signed proof is required). This is well-defined per wallet, not per slice, because a
-bearer slice's wallet is always single-recipient (§Bearer Slices) — there's never a wallet mixing bearer
+cash-mode slice's wallet is always single-recipient (§Cash-Mode Slices) — there's never a wallet mixing cash-mode
 and identity-bound slices for this flag to be ambiguous about.
 
-**This `bearer_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
+**This `cash_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
 only the NWC connection secret (§The Pairing Connection) — it lets anyone holding this token dial the
 wallet and call read-only methods like `list_recipients`, nothing more; mere possession of the
 connection is explicitly not a spending credential (§The Cash Token's own opening paragraph). The actual
-spending credential for a bearer slice is a separate, independently-generated
-value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Bearer
+spending credential for a cash-mode slice is a separate, independently-generated
+value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Cash-mode
 Slice) — it is never encoded in this token and cannot be derived from it. A client presenting this
-token's type-`2` secret as `bearer_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
-`NOT_FOUND`, not success. Handing a bearer slice to its recipient therefore always means conveying two
-separate values out of band together — this token, and the `bearer_secret` from the mint response — never
-one alone. See §Bearer Slices → Presenting a Bearer Slice as One String for how an implementation may
+token's type-`2` secret as `cash_secret` in a `cash_redeem`/`cash_transfer` call MUST expect
+`NOT_FOUND`, not success. Handing a cash-mode slice to its recipient therefore always means conveying two
+separate values out of band together — this token, and the `cash_secret` from the mint response — never
+one alone. See §Cash-Mode Slices → Presenting a Cash-Mode Slice as One String for how an implementation may
 package that handoff for the recipient.
 
 **This field is a best-effort hint, snapshotted at whatever moment the token was minted or last
-re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of bearer status via
+re-derived — NOT a live guarantee.** A solo wallet's sole slice can move into or out of cash-mode status via
 `cash_transfer` (§Transferring and Splitting a Slice) after a token describing it was already handed out,
 making an earlier token's `identity required` value stale. An implementation that re-derives a token on
 demand (§The Pairing Connection) SHOULD recompute it from the wallet's current claim state each time,
@@ -1214,7 +1221,7 @@ demand, without ever persisting it.
 
 A Cash Wallet connection MUST be granted only:
 
-- `cash_redeem` — the payout method, identity-bound or bearer (§Bearer Slices)
+- `cash_redeem` — the payout method, identity-bound or cash (§Cash-Mode Slices)
 - `cash_transfer` — the proof-gated transfer/split method (§Transferring and Splitting a Slice)
 - `cash_consolidate` — the proof-gated combine method (§Consolidating Tokens)
 - `list_recipients` — the shared, read-only roster (§Listing Recipients), granted alongside `cash_redeem`
@@ -1269,15 +1276,15 @@ flowchart TD
 
     W --> S["A given slice: Unredeemed"]
 
-    S -->|"cash_redeem<br/>identity-bound proof, or bearer secret"| R["Slice: Redeemed (terminal)"]
+    S -->|"cash_redeem<br/>identity-bound proof, or cash secret"| R["Slice: Redeemed (terminal)"]
 
     S -->|"cash_transfer, full transfer,<br/>new_identity = pubkey / connection_key"| T1["Reassigned IN PLACE<br/>(same wallet & connection,<br/>new identity, still Unredeemed)"]
     T1 -.->|"same slice, new owner —<br/>every case above applies again"| S
 
-    S -->|"cash_transfer, full transfer,<br/>new_identity = bearer —<br/>ONLY if this wallet has EVER<br/>had exactly one recipient"| T2["Becomes bearer IN PLACE<br/>(same wallet, still Unredeemed)"]
-    T2 -.->|"same slice, now bearer —<br/>every case above applies again"| S
+    S -->|"cash_transfer, full transfer,<br/>new_identity = cash —<br/>ONLY if this wallet has EVER<br/>had exactly one recipient"| T2["Becomes cash mode IN PLACE<br/>(same wallet, still Unredeemed)"]
+    T2 -.->|"same slice, now cash mode —<br/>every case above applies again"| S
 
-    S -->|"cash_transfer, PARTIAL split<br/>(any new_identity type) — OR full<br/>transfer to bearer on a<br/>multi-recipient-history wallet"| SP["Spin off: atomically claim the<br/>source slice TERMINAL, fund brand-new<br/>dedicated Cash Wallet(s) — two for a<br/>partial split (carved + remainder)"]
+    S -->|"cash_transfer, PARTIAL split<br/>(any new_identity type) — OR full<br/>transfer to cash mode on a<br/>multi-recipient-history wallet"| SP["Spin off: atomically claim the<br/>source slice TERMINAL, fund brand-new<br/>dedicated Cash Wallet(s) — two for a<br/>partial split (carved + remainder)"]
 
     S -->|"cash_consolidate<br/>(this + other same-hub slices<br/>this node custodies)"| SP
 
@@ -1295,7 +1302,7 @@ flowchart TD
 Reading this against the sections above, by edge style:
 
 - **Dotted edges** are the two in-place `cash_transfer` outcomes (§Which outcome a request produces,
-  item 2's `pubkey`/`connection_key` and lifetime-solo-`bearer` cases) — the slice never leaves its
+  item 2's `pubkey`/`connection_key` and lifetime-solo-`cash` cases) — the slice never leaves its
   wallet, so the same set of next actions applies again immediately, however many times a recipient
   chooses to reassign or convert before eventually redeeming, splitting, or consolidating.
 - **Every other (plain) edge** consumes the source slice terminally: a split hands off to §Spinning a
@@ -1311,8 +1318,8 @@ directly.
 
 ## Security Considerations
 
-Unless otherwise noted, everything below assumes an identity-bound slice. A bearer slice's redemption is
-gated by its secret, not by identity or proof — see §Bearer Slices → Security Considerations for Bearer
+Unless otherwise noted, everything below assumes an identity-bound slice. A cash-mode slice's redemption is
+gated by its secret, not by identity or proof — see §Cash-Mode Slices → Security Considerations for Cash-mode
 Slices for that case.
 
 **Shared connection, and why that's fine.** Every recipient can decrypt every request sent on the
@@ -1326,25 +1333,25 @@ sufficient to succeed with one.
 The paragraph above is usually read as being about requests, but the shared connection's decryptability is
 symmetric: every recipient who can decrypt a request on this connection can equally decrypt every
 *response* the wallet ever sends on it, including responses to a different recipient's own call. This is
-why a bearer slice's secret is always caller-generated, never wallet-generated-and-returned, at every
-entry point that shares this connection: `mint_cash` mints a bearer recipient's cash over the Hub's
+why a cash-mode slice's secret is always caller-generated, never wallet-generated-and-returned, at every
+entry point that shares this connection: `mint_cash` mints a cash-mode recipient's cash over the Hub's
 own separate, single-owner connection, so returning a fresh secret there is safe — but `cash_transfer`
 (§Transferring and Splitting a Slice) is called *over the shared cash_wallet connection itself*, so its
-bearer target's `identity_value` MUST be a commitment the caller already generated and kept, never a
+cash-mode target's `identity_value` MUST be a commitment the caller already generated and kept, never a
 secret the implementation mints and hands back in that response. An implementation that generates a
-bearer secret at `cash_transfer` time and returns it lets any other current or former holder of the shared
+cash secret at `cash_transfer` time and returns it lets any other current or former holder of the shared
 connection — including a recipient who already redeemed their own, unrelated slice — decrypt that response
 and redeem the transferred slice before its intended holder ever sees the secret.
 
 **Redeeming doesn't revoke a recipient's hold on the shared connection — "who can still decrypt this
 connection's traffic" is a superset of "who still has an unredeemed slice."** This matters for
-`cash_transfer`'s bearer-eligibility check specifically: it MUST be evaluated against every recipient the
+`cash_transfer`'s cash-mode-eligibility check specifically: it MUST be evaluated against every recipient the
 wallet has **ever** had, not just currently-unclaimed ones. A wallet that started with several recipients, all
 but one of whom have since redeemed and moved on, still has every one of those former recipients holding
-the same shared connection secret indefinitely — nothing about redeeming rotates or revokes it. A bearer
+the same shared connection secret indefinitely — nothing about redeeming rotates or revokes it. A cash-mode
 redeem's proof is its raw secret, transmitted in the request body, which any of those former recipients
 can equally decrypt. Checking only currently-unclaimed slices would let the wallet's last remaining
-recipient convert it to bearer while former co-recipients are still listening, handing them everything
+recipient convert it to cash mode while former co-recipients are still listening, handing them everything
 needed to steal it the moment the note is redeemed.
 
 **A nested inner encryption layer is safe precisely because ECDH is commutative, not because the outer
@@ -1389,12 +1396,12 @@ defeating the operator's expiry sweep — §Consolidating Tokens), and `min_tran
 across sources rather than silently adopting the loosest. Every future many-source operation MUST follow
 the same rule: resolve to the most restrictive bound, never the most permissive.
 
-**A bearer source in a many-source operation leaks its secret to a connection with no claim on it — reject
+**A cash-mode source in a many-source operation leaks its secret to a connection with no claim on it — reject
 it, don't just scope it to the caller's own wallet.** See the `sources` field's own reasoning above
-(§Consolidating Tokens) for why `cash_consolidate` rejects a bearer source outright. That alone doesn't
-close the general case: this isn't fixed by requiring the bearer source to be the caller's *own*
+(§Consolidating Tokens) for why `cash_consolidate` rejects a cash-mode source outright. That alone doesn't
+close the general case: this isn't fixed by requiring the cash-mode source to be the caller's *own*
 connection either, since nothing stops that same connection from also being shared. Any future
-many-source operation that accepts a bearer source from a *different* wallet than the calling connection's
+many-source operation that accepts a cash-mode source from a *different* wallet than the calling connection's
 own inherits the identical leak and MUST reject it for the same reason.
 
 **A compensating-saga rollback whose own reversal fails MUST NOT restore the source claim.** The correct

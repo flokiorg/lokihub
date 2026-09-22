@@ -96,7 +96,7 @@ func TestAuditFin_MaxAmountLoki_FlooredFromMloki_NeverBlocksFullLegitimateRedeem
 	}).Error)
 	require.NoError(t, svc.DB.Create(&db.CashWalletClaim{
 		WalletAppID:   walletID,
-		IdentityType:  db.CashIdentityBearer,
+		IdentityType:  db.CashIdentityCash,
 		IdentityValue: tests.RandomHex32(),
 		AmountMloki:   int64(total), //nolint:gosec // test-only, small constant
 	}).Error)

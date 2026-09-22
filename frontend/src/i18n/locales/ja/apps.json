@@ -196,8 +196,8 @@
     "revealQR": "QRコードを表示",
     "copySecret": "接続シークレットをコピー",
     "copyLokicashToken": "Lokicashトークンをコピー",
-    "copyBearerSecret": "ベアラーシークレットをコピー",
-    "bearerSecretHelper": "このシークレットを持つ人は、他に証明なしでこの資金を引き換えられます。これは一度だけ表示されます。上記の接続情報と一緒に、受取人にオフラインで渡してください。",
+    "copyCashSecret": "ベアラーシークレットをコピー",
+    "cashSecretHelper": "このシークレットを持つ人は、他に証明なしでこの資金を引き換えられます。これは一度だけ表示されます。上記の接続情報と一緒に、受取人にオフラインで渡してください。",
     "lokicashTitle": "Lokicash"
   }
 }

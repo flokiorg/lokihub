@@ -23,7 +23,7 @@ import (
 //     non-negative by construction (same invariant the former int64 fields'
 //     own //nolint:gosec comments already documented).
 //   - RecipientStatus.IdentityValue carries `omitempty`, the former local
-//     type's didn't - a bearer slice's identity_value (always "") is now
+//     type's didn't - a cash-mode slice's identity_value (always "") is now
 //     omitted from the response entirely rather than sent as an empty
 //     string. No existing test asserts the raw JSON shape of this field, and
 //     any reasonable JSON consumer treats an omitted optional field and an

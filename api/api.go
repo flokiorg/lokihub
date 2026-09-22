@@ -3140,7 +3140,7 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			if havePubkey && keyErr == nil {
 				var identityRequired *bool
 				if claim, haveClaim := representativeClaimByWallet[walletAppID]; haveClaim {
-					required := claim.IdentityType != db.CashIdentityBearer
+					required := claim.IdentityType != db.CashIdentityCash
 					identityRequired = &required
 				}
 				token, keyErr = lokicash.Encode(lokicash.Token{
@@ -3282,7 +3282,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 	// Unlike Commit/SpinOff (which know a just-created wallet's identity
 	// requirement directly from the params they were just given), this
 	// endpoint can be called at any later time — after the wallet's sole
-	// recipient may have moved into or out of bearer status via
+	// recipient may have moved into or out of cash-mode status via
 	// cash_transfer — so it re-derives the hint from the wallet's CURRENT
 	// claim rows rather than trusting anything cached at creation time. A
 	// wallet with no claims left (every recipient individually removed) has
@@ -3294,7 +3294,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 		return nil, fmt.Errorf("failed to list cash wallet claims: %w", err)
 	}
 	if len(claims) > 0 {
-		required := claims[0].IdentityType != db.CashIdentityBearer
+		required := claims[0].IdentityType != db.CashIdentityCash
 		identityRequired = &required
 	}
 
@@ -3421,7 +3421,7 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 			IdentityType:  r.IdentityType,
 			IdentityValue: r.IdentityValue,
 			AmountMloki:   int64(r.AmountMloki), //nolint:gosec // mloki amounts are always far below int64 range
-			BearerSecret:  r.BearerSecret,
+			CashSecret:    r.CashSecret,
 		}
 	}
 

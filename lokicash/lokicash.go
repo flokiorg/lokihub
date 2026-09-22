@@ -83,9 +83,9 @@ type Token struct {
 	RelayURLs    []string // in encoded order
 	// IdentityRequired: true means every slice this wallet currently serves
 	// is identity-bound (cash_redeem/cash_transfer need a signed proof); false
-	// means the wallet is a single bearer slice (only its secret is needed —
+	// means the wallet is a single cash-mode slice (only its secret is needed —
 	// no proof, no Nostr identity at all). Always uniform across a wallet's
-	// whole recipient set (NIP-CASH: a bearer slice is always the wallet's
+	// whole recipient set (NIP-CASH: a cash-mode slice is always the wallet's
 	// only one), so this is well-defined per wallet, not per slice.
 	IdentityRequired *bool
 	// MintSignature and AttestedAmount are the optional mint-provenance pair

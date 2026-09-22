@@ -105,7 +105,7 @@ func TestDeleteIdentityAuthority_HappyPath(t *testing.T) {
 // TestListIdentityAuthorities_UnredeemedSliceCount verifies the settings
 // screen's IA-revocation blast-radius count: it must count only currently-
 // unredeemed connection_key slices attesting to THAT specific IA — not
-// already-redeemed ones, not pubkey/bearer slices (which carry no IAPubkey
+// already-redeemed ones, not pubkey/cash-mode slices (which carry no IAPubkey
 // at all), and not another IA's own slices.
 func TestListIdentityAuthorities_UnredeemedSliceCount(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -144,10 +144,10 @@ func TestListIdentityAuthorities_UnredeemedSliceCount(t *testing.T) {
 		// One unredeemed connection_key slice attesting to iaB — a wholly
 		// separate IA's count must not bleed into iaA's, or vice versa.
 		{IdentityType: db.CashIdentityConnectionKey, IdentityValue: tests.RandomHex32(), IAPubkey: iaB, AmountMloki: 1000},
-		// A pubkey and a bearer slice on the SAME wallet, both with no
+		// A pubkey and a cash-mode slice on the SAME wallet, both with no
 		// IAPubkey at all — must never contribute to any IA's count.
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
-		{IdentityType: db.CashIdentityBearer, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
 	}))
 
 	result, err = theAPI.ListIdentityAuthorities()

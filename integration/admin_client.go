@@ -304,18 +304,18 @@ func (c *adminClient) transfer(fromAppID *uint, toAppID uint, amountLoki uint64)
 	return c.doBody(http.MethodPost, "/api/transfers", body, nil)
 }
 
-// adminCashWalletRecipient mirrors api.CashWalletRecipient. BearerSecret is
-// response-only (populated when identity_type == "bearer", only in the
+// adminCashWalletRecipient mirrors api.CashWalletRecipient. CashSecret is
+// response-only (populated when identity_type == "cash", only in the
 // create-cash-wallet response, never retrievable again afterward) — a caller
 // building a request MUST NOT set it, mirroring the real type's own doc
 // comment, but this struct is reused for adminCreateCashWalletResponse's
-// Recipients field too, where a bearer identity_type needs it decoded.
+// Recipients field too, where a cash-mode identity_type needs it decoded.
 type adminCashWalletRecipient struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"`
 	AmountMloki   int64  `json:"amount_mloki"`
-	BearerSecret  string `json:"bearer_secret,omitempty"`
+	CashSecret    string `json:"cash_secret,omitempty"`
 }
 
 // adminCreateCashWalletRequest mirrors api.CreateCashWalletRequest.

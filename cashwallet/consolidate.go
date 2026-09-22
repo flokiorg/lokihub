@@ -209,7 +209,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	// Single-slice by construction, so identity-required follows NewIdentity.
 	// The provenance (when SignMint) attests the merged total, immutable for the
 	// wallet's life.
-	identityRequired := params.NewIdentityType != db.CashIdentityBearer
+	identityRequired := params.NewIdentityType != db.CashIdentityCash
 	token := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.SignMint, total)
 
 	logger.Logger.Info().
