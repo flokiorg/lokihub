@@ -72,6 +72,10 @@ type Config interface {
 	SetUpdate(key string, value string, encryptionKey string) error
 	GetJWTSecret() (string, error)
 	GetRelayUrls() []string
+	// TrustedNwcRelay reports whether the NWC relays in GetRelayUrls are run
+	// by this hub. See config.TrustedNwcRelay for what it turns on and why it
+	// must never be set for a relay the operator does not control.
+	TrustedNwcRelay() bool
 	GetNetwork() string
 	GetMempoolApi() string
 	SetMempoolApi(value string) error

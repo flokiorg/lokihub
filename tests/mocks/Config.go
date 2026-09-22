@@ -1171,6 +1171,50 @@ func (_c *MockConfig_EnableSwap_Call) RunAndReturn(run func() bool) *MockConfig_
 	return _c
 }
 
+// TrustedNwcRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) TrustedNwcRelay() bool {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for TrustedNwcRelay")
+	}
+
+	var r0 bool
+	if returnFunc, ok := ret.Get(0).(func() bool); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
+// MockConfig_TrustedNwcRelay_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TrustedNwcRelay'
+type MockConfig_TrustedNwcRelay_Call struct {
+	*mock.Call
+}
+
+// TrustedNwcRelay is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) TrustedNwcRelay() *MockConfig_TrustedNwcRelay_Call {
+	return &MockConfig_TrustedNwcRelay_Call{Call: _e.mock.On("TrustedNwcRelay")}
+}
+
+func (_c *MockConfig_TrustedNwcRelay_Call) Run(run func()) *MockConfig_TrustedNwcRelay_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_TrustedNwcRelay_Call) Return(b bool) *MockConfig_TrustedNwcRelay_Call {
+	_c.Call.Return(b)
+	return _c
+}
+
+func (_c *MockConfig_TrustedNwcRelay_Call) RunAndReturn(run func() bool) *MockConfig_TrustedNwcRelay_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetMempoolApi provides a mock function for the type MockConfig
 func (_mock *MockConfig) GetMempoolApi() string {
 	ret := _mock.Called()
