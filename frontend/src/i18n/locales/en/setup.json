@@ -167,7 +167,7 @@
     },
     "trustedNwcRelay": {
       "title": "I run these relays",
-      "description": "The hub watches them with one subscription and skips re-checking signatures they already verified. Only safe for relays you operate yourself."
+      "description": "Events from these relays are accepted without checking their signatures. Only safe for relays you operate yourself."
     }
   }
 }
