@@ -164,6 +164,10 @@
       "swapRequired": "Swap Service URL is required when enabled",
       "messageboardRequired": "Messageboard URL is required when enabled",
       "invalidUrl": "{{field}}: invalid URL format"
+    },
+    "trustedNwcRelay": {
+      "title": "I run these relays",
+      "description": "Watch these relays with one subscription instead of one per wallet, and accept their signature checks instead of repeating them. Leave this off for a relay someone else runs: on those, this hub would receive every wallet request the relay carries and stop verifying signatures itself."
     }
   }
 }

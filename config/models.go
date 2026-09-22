@@ -76,6 +76,7 @@ type Config interface {
 	// by this hub. See config.TrustedNwcRelay for what it turns on and why it
 	// must never be set for a relay the operator does not control.
 	TrustedNwcRelay() bool
+	SetTrustedNwcRelay(trusted bool) error
 	GetNetwork() string
 	GetMempoolApi() string
 	SetMempoolApi(value string) error

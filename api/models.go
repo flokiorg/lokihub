@@ -747,6 +747,7 @@ type InfoResponse struct {
 	Relays                      []InfoResponseRelay `json:"relays"`
 	Relay                       string              `json:"relay"`
 	GeneralRelay                string              `json:"generalRelay"`
+	TrustedNwcRelay             bool                `json:"trustedNwcRelay"`
 	SearchRelay                 string              `json:"searchRelay"`
 	NodeAlias                   string              `json:"nodeAlias"`
 	MempoolUrl                  string              `json:"mempoolUrl"`
@@ -799,6 +800,7 @@ type UpdateSettingsRequest struct {
 	SwapServiceUrl         string            `json:"swapServiceUrl"`
 	Relay                  string            `json:"relay"`
 	GeneralRelay           *string           `json:"generalRelay"`
+	TrustedNwcRelay        *bool             `json:"trustedNwcRelay"`
 	SearchRelay            *string           `json:"searchRelay"`
 	MessageboardNwcUrl     string            `json:"messageboardNwcUrl"`
 	MempoolApi             string            `json:"mempoolApi"`
