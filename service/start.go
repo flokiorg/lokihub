@@ -93,6 +93,10 @@ func (svc *service) startNostr(ctx context.Context) error {
 	warmRelays(pool, mergeRelayUrls(svc.cfg.GetRelayUrls(), svc.cfg.GetGeneralRelayUrls()))
 	group.Go(func() error {
 		for {
+			// Re-applied every pass: the pool builds a fresh Relay on
+			// reconnect, which would otherwise lose the trusted flag.
+			svc.applyTrustedRelayOptions(pool)
+
 			svc.relayStatuses = nil
 			for _, relayUrl := range svc.cfg.GetRelayUrls() {
 				normalizedUrl := nostr.NormalizeURL(relayUrl)
@@ -158,6 +162,17 @@ func (svc *service) startNostr(ctx context.Context) error {
 	// register a subscriber for events of "nwc_app_updated" which handles re-publishing of nip47 event info
 	updateAppEventListener := &updateAppConsumer{svc: svc}
 	svc.eventPublisher.RegisterSubscriber(updateAppEventListener)
+
+	// Fresh per startNostr call, like nostrGroup above: ReloadNostr can
+	// re-invoke this while the app runs, and the set must be rebuilt from the
+	// apps that exist now.
+	svc.walletRegistry = newWalletRegistry()
+
+	if svc.cfg.TrustedNwcRelay() {
+		logger.Logger.Warn().
+			Strs("relays", svc.cfg.GetRelayUrls()).
+			Msg("Treating NWC relays as this hub's own: subscribing to every NIP-47 request on them and skipping signature verification for events they deliver. Turn TrustedNwcRelay off if any of these relays is not operated by this hub.")
+	}
 
 	// start each app wallet subscription which have a child derived wallet key
 	svc.startAllExistingAppsWalletSubscriptions(ctx, pool)
@@ -250,6 +265,29 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 	// goroutine — a concurrent ReloadNostr can swap that field to a new group
 	// at any time, and a stale read would register work on the wrong group.
 	group := svc.nostrGroup
+
+	if svc.cfg.TrustedNwcRelay() {
+		pubkeys := make([]string, 0, len(apps))
+		for _, app := range apps {
+			pubkeys = append(pubkeys, *app.WalletPubkey)
+		}
+		svc.walletRegistry.Add(pubkeys...)
+
+		// One consumer for every wallet: with a shared subscription there is
+		// no per-wallet subscription left to cancel on deletion, so the
+		// wallet is dropped from the registry instead.
+		svc.eventPublisher.RegisterSubscriber(&deleteAppConsumer{
+			pool: pool,
+			svc:  svc,
+		})
+
+		logger.Logger.Info().Int("app_count", len(apps)).Msg("Subscribing to all NIP-47 requests (one subscription for every app wallet)")
+		group.Go(func() error {
+			return svc.startTrustedRelaySubscription(ctx, pool, group)
+		})
+		return
+	}
+
 	logger.Logger.Info().Int("app_count", len(apps)).Msg("Subscribing to events for app wallets")
 	for _, app := range apps {
 		group.Go(func() error {
