@@ -670,6 +670,21 @@ func (cfg *config) TrustedNwcRelay() bool {
 	return value == "true"
 }
 
+// SetTrustedNwcRelay records whether the NWC relays are this hub's own. The
+// caller is expected to ReloadNostr afterwards: the subscription shape is
+// chosen in startNostr, so a change only takes effect when nostr restarts.
+func (cfg *config) SetTrustedNwcRelay(trusted bool) error {
+	value := "false"
+	if trusted {
+		value = "true"
+	}
+	if err := cfg.SetUpdate("TrustedNwcRelay", value, ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update TrustedNwcRelay")
+		return err
+	}
+	return nil
+}
+
 func (cfg *config) EnableSwap() bool {
 	value, err := cfg.Get("EnableSwap", "")
 	if err != nil {
