@@ -120,3 +120,18 @@ func TestWalletRegistry_ReadsDuringWrites(t *testing.T) {
 
 	assert.True(t, r.Has("stable"))
 }
+
+// TestWalletRegistry_RemoveAfterGraceKeepsServingBriefly pins the behaviour a
+// deleted app depends on: a request racing the deletion must still be served,
+// so HandleEvent can answer it with a proper NIP-47 error instead of the
+// caller hanging until its deadline. Removing the wallet the instant its app
+// went broke every cash split/spin-off flow in the integration suite.
+func TestWalletRegistry_RemoveAfterGraceKeepsServingBriefly(t *testing.T) {
+	r := newWalletRegistry()
+	r.Add("aa")
+
+	r.RemoveAfterGrace("aa")
+
+	assert.True(t, r.Has("aa"), "the wallet must still be served during the grace period")
+	assert.Positive(t, walletRetentionAfterDelete, "the grace period must not be zero")
+}
