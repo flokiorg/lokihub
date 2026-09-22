@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -16,6 +17,7 @@ import (
 	"github.com/kelseyhightower/envconfig"
 
 	"github.com/flokiorg/lokihub/appstore"
+	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
@@ -23,7 +25,6 @@ import (
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/flokiorg/lokihub/appversion"
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
@@ -46,15 +47,21 @@ type service struct {
 	ctx                 context.Context
 	shutdownGroup       *errgroup.Group
 	nostrGroup          *errgroup.Group
-	nip47Service        nip47.Nip47Service
-	socialCache         *nostrSocialCache
-	lsps5Listener       *lspsnostr.Listener
-	liquidityManager    *manager.LiquidityManager
-	appCancelFn         context.CancelFunc
-	nostrCancelFn       context.CancelFunc
-	keys                keys.Keys
-	relayStatuses       []RelayStatus
-	startupState        string
+	// walletRegistry backs the shared NIP-47 subscription used when
+	// config.TrustedNwcRelay is on; nil when the per-wallet path is in use.
+	walletRegistry *walletRegistry
+	// droppedRequestEvents counts events the gate discarded, summarised on a
+	// timer rather than logged per event.
+	droppedRequestEvents atomic.Int64
+	nip47Service         nip47.Nip47Service
+	socialCache          *nostrSocialCache
+	lsps5Listener        *lspsnostr.Listener
+	liquidityManager     *manager.LiquidityManager
+	appCancelFn          context.CancelFunc
+	nostrCancelFn        context.CancelFunc
+	keys                 keys.Keys
+	relayStatuses        []RelayStatus
+	startupState         string
 }
 
 func NewService(ctx context.Context) (*service, error) {

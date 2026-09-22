@@ -639,6 +639,37 @@ func (cfg *config) SetSearchRelay(value string) error {
 	return nil
 }
 
+// TrustedNwcRelay reports whether the relays in GetRelayUrls are this hub's
+// own. It changes two things, both of which assume the relay is ours:
+//
+//  1. The hub subscribes once for all NIP-47 requests (kind 23194) and
+//     matches the "p" tag locally, instead of opening one subscription per
+//     app wallet. Subscription count then no longer grows with the number of
+//     cash bills in circulation, and a newly created wallet is covered the
+//     instant it exists rather than once its own subscription attaches.
+//  2. Events from those relays skip signature verification (AssumeValid):
+//     the relay already verified them on ingest, so re-checking is duplicate
+//     secp256k1 work that an attacker can trigger cheaply.
+//
+// Neither is safe on a relay the operator does not control: (1) would make
+// the hub a firehose subscriber to strangers' NWC traffic, and (2) would let
+// a hostile relay inject forged events. Defaults to true because a Cash Hub
+// runs its own relay; startNostr logs a warning naming the relays it applies
+// to so an operator who points this elsewhere can see it.
+//
+// It never applies to GetGeneralRelayUrls, which are public by design.
+func (cfg *config) TrustedNwcRelay() bool {
+	value, err := cfg.Get("TrustedNwcRelay", "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch TrustedNwcRelay")
+		return true
+	}
+	if value == "" {
+		return true
+	}
+	return value == "true"
+}
+
 func (cfg *config) EnableSwap() bool {
 	value, err := cfg.Get("EnableSwap", "")
 	if err != nil {

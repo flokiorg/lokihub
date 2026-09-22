@@ -58,6 +58,15 @@ func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		s.svc.nip47Service.EnqueueNip47InfoPublishRequest(id, walletPubKey, walletPrivKey, relayUrl)
 	}
 
+	// With the shared subscription in use, registering the wallet is all that
+	// is needed: the filter never changes, so this app's requests are already
+	// being delivered — including any published before this consumer ran,
+	// which a per-wallet subscription would have missed.
+	if s.svc.cfg.TrustedNwcRelay() && s.svc.walletRegistry != nil {
+		s.svc.walletRegistry.Add(walletPubKey)
+		return
+	}
+
 	// Snapshot svc.nostrGroup synchronously, here, rather than let the spawned
 	// goroutine read the field itself — a concurrent ReloadNostr could swap it
 	// to a new group between now and whenever that goroutine actually runs.
