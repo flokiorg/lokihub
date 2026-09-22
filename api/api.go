@@ -1526,6 +1526,7 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.SwapServiceUrl = api.cfg.GetSwapServiceURL()
 	info.Relay = api.cfg.GetRelay()
 	info.GeneralRelay = api.cfg.GetGeneralRelay()
+	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
 	// Populate selected LSPs
@@ -1635,6 +1636,17 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		}
 		if api.svc.GetSwapsService() != nil {
 			api.svc.GetSwapsService().Reload()
+		}
+	}
+
+	if updateSettingsRequest.TrustedNwcRelay != nil {
+		if err := api.cfg.SetTrustedNwcRelay(*updateSettingsRequest.TrustedNwcRelay); err != nil {
+			return fmt.Errorf("failed to set TrustedNwcRelay: %w", err)
+		}
+		// The subscription shape and whether relay signatures are re-verified
+		// are both decided in startNostr, so the change only lands on reload.
+		if err := api.svc.ReloadNostr(); err != nil {
+			return fmt.Errorf("failed to reload nostr after changing TrustedNwcRelay: %w", err)
 		}
 	}
 

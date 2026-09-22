@@ -6,7 +6,7 @@ import Loading from "src/components/Loading";
 import {
   ServiceConfigForm,
   ServiceConfigState,
-  validateServiceConfig
+  validateServiceConfig,
 } from "src/components/ServiceConfigForm";
 import { IdentityAuthorityManagementCard } from "src/components/settings/IdentityAuthorityManagementCard";
 import SettingsHeader from "src/components/SettingsHeader";
@@ -27,25 +27,30 @@ import { useLSPSManagement } from "src/hooks/useLSPSManagement";
 import { IdentityAuthority, LSP } from "src/types";
 import { request } from "src/utils/request";
 
-
 export function Services() {
   const { data: info, mutate: reloadInfo } = useInfo();
   const { t } = useTranslation("setup");
-  
+
   const [config, setConfig] = useState<ServiceConfigState>({
-      mempoolApi: "",
-      relay: "",
-      generalRelay: "",
-      searchRelay: "",
-      swapServiceUrl: "",
-      messageboardNwcUrl: "",
-      enableSwap: true,
-      enableMessageboardNwc: true,
-      lsps: [],
+    mempoolApi: "",
+    relay: "",
+    trustedNwcRelay: true,
+    generalRelay: "",
+    searchRelay: "",
+    swapServiceUrl: "",
+    messageboardNwcUrl: "",
+    enableSwap: true,
+    enableMessageboardNwc: true,
+    lsps: [],
   });
 
   // LSP Management Hook
-  const { lsps: backendLSPs, fetchLSPs, saveLSPChanges, initialized: lspInitialized } = useLSPSManagement();
+  const {
+    lsps: backendLSPs,
+    fetchLSPs,
+    saveLSPChanges,
+    initialized: lspInitialized,
+  } = useLSPSManagement();
 
   // Identity Authority Management Hook
   const {
@@ -54,22 +59,23 @@ export function Services() {
     saveIdentityAuthorityChanges,
     initialized: authoritiesInitialized,
   } = useIdentityAuthorities();
-  const [localAuthorities, setLocalAuthorities] = useState<IdentityAuthority[]>([]);
+  const [localAuthorities, setLocalAuthorities] = useState<IdentityAuthority[]>(
+    []
+  );
 
   // Track changes for Save button
   const [servicesDirty, setServicesDirty] = useState(false);
   const [savingServices, setSavingServices] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-
-
   useEffect(() => {
     if (info) {
-      setConfig(prev => ({
+      setConfig((prev) => ({
         ...prev,
         swapServiceUrl: info.swapServiceUrl || "",
         messageboardNwcUrl: info.messageboardNwcUrl || "",
         relay: info.relay || "",
+        trustedNwcRelay: info.trustedNwcRelay ?? true,
         generalRelay: info.generalRelay || "",
         searchRelay: info.searchRelay || "",
         mempoolApi: info.mempoolUrl || "",
@@ -97,14 +103,14 @@ export function Services() {
   // We use hasSyncedLSPs to force the initial sync once backend data is ready
   useEffect(() => {
     if (lspInitialized) {
-        if (!hasSyncedLSPs.current) {
-             // First load: force sync
-             setConfig(prev => ({ ...prev, lsps: backendLSPs }));
-             hasSyncedLSPs.current = true;
-        } else if (!servicesDirty) {
-             // Subsequent updates: sync if clean
-             setConfig(prev => ({ ...prev, lsps: backendLSPs }));
-        }
+      if (!hasSyncedLSPs.current) {
+        // First load: force sync
+        setConfig((prev) => ({ ...prev, lsps: backendLSPs }));
+        hasSyncedLSPs.current = true;
+      } else if (!servicesDirty) {
+        // Subsequent updates: sync if clean
+        setConfig((prev) => ({ ...prev, lsps: backendLSPs }));
+      }
     }
   }, [backendLSPs, servicesDirty, lspInitialized]);
 
@@ -112,25 +118,25 @@ export function Services() {
   const hasSyncedAuthorities = useRef(false);
   useEffect(() => {
     if (authoritiesInitialized) {
-        if (!hasSyncedAuthorities.current) {
-            setLocalAuthorities(backendAuthorities);
-            hasSyncedAuthorities.current = true;
-        } else if (!servicesDirty) {
-            setLocalAuthorities(backendAuthorities);
-        }
+      if (!hasSyncedAuthorities.current) {
+        setLocalAuthorities(backendAuthorities);
+        hasSyncedAuthorities.current = true;
+      } else if (!servicesDirty) {
+        setLocalAuthorities(backendAuthorities);
+      }
     }
   }, [backendAuthorities, servicesDirty, authoritiesInitialized]);
-
 
   // Track dirty state
   useEffect(() => {
     if (!info) {
-        return;
+      return;
     }
-    
+
     // Check general settings dirty
     const settingsDirty =
       config.relay !== (info.relay || "") ||
+      config.trustedNwcRelay !== (info.trustedNwcRelay ?? true) ||
       config.generalRelay !== (info.generalRelay || "") ||
       config.searchRelay !== (info.searchRelay || "") ||
       config.mempoolApi !== (info.mempoolUrl || "") ||
@@ -151,22 +157,34 @@ export function Services() {
     // Actually, `mergeLSPs` modifies the objects.
     // So comparing `config.lsps` (merged) with `backendLSPs` (raw) will ALWAYS be different if descriptions are added.
     // We should compare the "Saveable" parts: pubkey, host, name, active.
-    
+
     // Helper to strip extra fields
-    const strip = (lsps: LSP[]) => lsps
-        .map(l => ({ 
-            pubkey: l.pubkey, host: l.host, name: l.name, active: l.active 
-        })).sort((a,b) => a.pubkey.localeCompare(b.pubkey));
-    
-    const lspDirtySmart = JSON.stringify(strip(config.lsps)) !== JSON.stringify(strip(backendLSPs));
+    const strip = (lsps: LSP[]) =>
+      lsps
+        .map((l) => ({
+          pubkey: l.pubkey,
+          host: l.host,
+          name: l.name,
+          active: l.active,
+        }))
+        .sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+
+    const lspDirtySmart =
+      JSON.stringify(strip(config.lsps)) !== JSON.stringify(strip(backendLSPs));
 
     // Check Identity Authorities dirty - compare by pubkey/name/relay_urls, same strip-and-sort approach as LSPs.
-    const stripAuthorities = (authorities: IdentityAuthority[]) => authorities
-        .map(a => ({
-            pubkey: a.pubkey, name: a.name, relay_urls: a.relay_urls ?? []
-        })).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+    const stripAuthorities = (authorities: IdentityAuthority[]) =>
+      authorities
+        .map((a) => ({
+          pubkey: a.pubkey,
+          name: a.name,
+          relay_urls: a.relay_urls ?? [],
+        }))
+        .sort((a, b) => a.pubkey.localeCompare(b.pubkey));
 
-    const authoritiesDirtySmart = JSON.stringify(stripAuthorities(localAuthorities)) !== JSON.stringify(stripAuthorities(backendAuthorities));
+    const authoritiesDirtySmart =
+      JSON.stringify(stripAuthorities(localAuthorities)) !==
+      JSON.stringify(stripAuthorities(backendAuthorities));
 
     const hasChanges = settingsDirty || lspDirtySmart || authoritiesDirtySmart;
 
@@ -176,10 +194,7 @@ export function Services() {
     }
   }, [info, config, backendLSPs, localAuthorities, backendAuthorities]);
 
-
-  async function updateSettings(
-    payload: Record<string, any>
-  ) {
+  async function updateSettings(payload: Record<string, any>) {
     try {
       await request("/api/settings", {
         method: "PATCH",
@@ -201,12 +216,14 @@ export function Services() {
     const errors = validateServiceConfig(config, t);
 
     if (errors.length > 0) {
-        setValidationErrors(errors);
-        setSavingServices(false);
-        setTimeout(() => {
-            document.getElementById("service-config-errors")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 100);
-        return false;
+      setValidationErrors(errors);
+      setSavingServices(false);
+      setTimeout(() => {
+        document
+          .getElementById("service-config-errors")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      return false;
     }
 
     try {
@@ -214,7 +231,7 @@ export function Services() {
       // We pass the ORIGINAL backendLSPs and the NEW config.lsps
       // The hook calculates diffs and issues Add/Delete/Toggle requests
       if (config.lsps && backendLSPs) {
-          await saveLSPChanges(backendLSPs, config.lsps);
+        await saveLSPChanges(backendLSPs, config.lsps);
       }
 
       // 2. Save Identity Authorities via the same diff-based approach
@@ -223,6 +240,7 @@ export function Services() {
       // 3. Save other settings via UpdateSettings
       await updateSettings({
         relay: config.relay,
+        trustedNwcRelay: config.trustedNwcRelay,
         generalRelay: config.generalRelay,
         searchRelay: config.searchRelay,
         mempoolApi: config.mempoolApi,
@@ -234,17 +252,14 @@ export function Services() {
       });
 
       // Reload
-      await Promise.all([
-          reloadInfo(),
-          fetchLSPs()
-      ]);
+      await Promise.all([reloadInfo(), fetchLSPs()]);
       toast.success("Services updated successfully");
 
       setServicesDirty(false);
       return true;
     } catch (e: any) {
-        toast.error("Failed to save services", { description: e.message });
-        return false;
+      toast.error("Failed to save services", { description: e.message });
+      return false;
     } finally {
       setSavingServices(false);
     }
@@ -288,7 +303,6 @@ export function Services() {
       <div className="w-full flex flex-col gap-8">
         {/* Services Section */}
         <div className="space-y-4">
-
           <ServiceConfigForm
             state={config}
             onChange={setConfig}
@@ -311,7 +325,6 @@ export function Services() {
               {savingServices ? "Saving..." : "Save Services"}
             </Button>
           </div>
-
         </div>
       </div>
 
@@ -325,13 +338,17 @@ export function Services() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("services.unsavedChanges.title")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("services.unsavedChanges.title")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {t("services.unsavedChanges.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => blocker.state === "blocked" && blocker.reset()}>
+            <AlertDialogCancel
+              onClick={() => blocker.state === "blocked" && blocker.reset()}
+            >
               {t("services.unsavedChanges.stay")}
             </AlertDialogCancel>
             <Button
@@ -341,8 +358,13 @@ export function Services() {
             >
               {t("services.unsavedChanges.discard")}
             </Button>
-            <AlertDialogAction disabled={savingServices} onClick={handleSaveAndLeave}>
-              {savingServices ? t("services.unsavedChanges.saving") : t("services.unsavedChanges.save")}
+            <AlertDialogAction
+              disabled={savingServices}
+              onClick={handleSaveAndLeave}
+            >
+              {savingServices
+                ? t("services.unsavedChanges.saving")
+                : t("services.unsavedChanges.save")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

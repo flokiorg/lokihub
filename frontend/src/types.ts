@@ -267,6 +267,7 @@ export interface InfoResponse {
   swapServiceUrl: string;
   messageboardNwcUrl: string;
   relay: string;
+  trustedNwcRelay: boolean;
   generalRelay: string;
   searchRelay: string;
   lsps: LSP[];

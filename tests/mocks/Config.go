@@ -1171,6 +1171,55 @@ func (_c *MockConfig_EnableSwap_Call) RunAndReturn(run func() bool) *MockConfig_
 	return _c
 }
 
+// SetTrustedNwcRelay provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetTrustedNwcRelay(trusted bool) error {
+	ret := _mock.Called(trusted)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetTrustedNwcRelay")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(bool) error); ok {
+		r0 = returnFunc(trusted)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetTrustedNwcRelay_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetTrustedNwcRelay'
+type MockConfig_SetTrustedNwcRelay_Call struct {
+	*mock.Call
+}
+
+// SetTrustedNwcRelay is a helper method to define mock.On call
+//   - trusted
+func (_e *MockConfig_Expecter) SetTrustedNwcRelay(trusted interface{}) *MockConfig_SetTrustedNwcRelay_Call {
+	return &MockConfig_SetTrustedNwcRelay_Call{Call: _e.mock.On("SetTrustedNwcRelay", trusted)}
+}
+
+func (_c *MockConfig_SetTrustedNwcRelay_Call) Run(run func(trusted bool)) *MockConfig_SetTrustedNwcRelay_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 bool
+		if args[0] != nil {
+			arg0 = args[0].(bool)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetTrustedNwcRelay_Call) Return(err error) *MockConfig_SetTrustedNwcRelay_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockConfig_SetTrustedNwcRelay_Call) RunAndReturn(run func(trusted bool) error) *MockConfig_SetTrustedNwcRelay_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // TrustedNwcRelay provides a mock function for the type MockConfig
 func (_mock *MockConfig) TrustedNwcRelay() bool {
 	ret := _mock.Called()
