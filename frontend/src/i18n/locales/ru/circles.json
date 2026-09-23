@@ -79,6 +79,33 @@
     "unclaimed": "Не обменяно",
     "movedToNewWallet": "Перемещено в новый кошелёк"
   },
+  "cashStatus": {
+    "legendLabel": "Что означает каждый статус",
+    "unclaimed": {
+      "label": "Не обменяно",
+      "description": "ещё можно обменять"
+    },
+    "redeemed": {
+      "label": "Обменяно",
+      "description": "выплачено через Lightning"
+    },
+    "split": {
+      "label": "Разделено",
+      "description": "перенесено в другую купюру"
+    },
+    "expired": {
+      "label": "Истекло",
+      "description": "срок прошёл, сумма вернулась в этот хаб"
+    },
+    "reclaimed": {
+      "label": "Отозвано",
+      "description": "купюра удалена до истечения срока, сумма возвращена"
+    },
+    "written-off": {
+      "label": "Списано",
+      "description": "сумму не удалось вернуть никуда"
+    }
+  },
   "claimDeadline": {
     "expired": "Срок обмена истёк",
     "withinMinutes_one": "Обменять в течение {{count}} мин",
@@ -225,11 +252,13 @@
     "noneFiltered": "Нет {{status}} Lokicash.",
     "noneOnPage": "На этой странице нет Lokicash.",
     "addHeading": "Отчеканить Lokicash",
+    "mintAction": "Отчеканить",
     "createDialogTitle": "Отчеканить Lokicash",
     "removeRecipientTitle": "Удалить этого получателя?",
-    "removeRecipientDescription": "Эта личность больше не сможет обменять свою часть. Выделенный ей баланс будет переведён обратно в этот хаб. Это необратимо.",
+    "removeRecipientDescription": "Его часть возвращается в этот хаб. Остальные получатели не затрагиваются. Это необратимо.",
+    "removeBillDescription": "Lokicash уничтожается, его сумма возвращается в этот хаб. Это необратимо.",
     "removeWalletTitle": "Удалить этот Lokicash?",
-    "removeWalletDescription": "Оставшийся баланс этого Lokicash будет переведён обратно в этот хаб, а его подключение NWC немедленно перестанет работать. Если он обслуживает других получателей, они тоже потеряют доступ — включая тех, кто ещё не обменял свою часть. Это необратимо.",
+    "removeWalletDescription": "Lokicash уничтожается, остаток возвращается в этот хаб. Все получатели теряют доступ. Это необратимо.",
     "removeSelectedTitle_one": "Удалить {{count}} получателя?",
     "removeSelectedTitle_few": "Удалить {{count}} получателей?",
     "removeSelectedTitle_many": "Удалить {{count}} получателей?",

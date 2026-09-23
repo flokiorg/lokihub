@@ -1,4 +1,5 @@
 import { InfoIcon } from "lucide-react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "src/components/ui/badge";
 import {
@@ -60,19 +61,25 @@ export function CashStatusLegend() {
         >
           <InfoIcon className="h-4 w-4" />
         </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          <ul className="grid gap-1.5 py-1">
+        {/* "surface" because this holds real content: muted description
+            text and the Badges themselves, both of which take their colours
+            from the page palette and are unreadable on the default
+            `bg-primary` bubble. */}
+        <TooltipContent variant="surface" className="max-w-xs">
+          {/* The real Badge, not a bold label — the six colours carry
+              meaning (see VARIANT above) and the legend is the only place
+              that mapping can be learned. A two-column grid keeps the
+              descriptions aligned despite the badges' differing widths. */}
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-2 py-1">
             {CASH_STATUS_ORDER.map((status) => (
-              <li key={status} className="flex items-start gap-2">
-                <span className="font-medium whitespace-nowrap">
-                  {t(`cashStatus.${status}.label`)}
-                </span>
+              <React.Fragment key={status}>
+                <CashStatusBadge status={status} />
                 <span className="text-muted-foreground">
                   {t(`cashStatus.${status}.description`)}
                 </span>
-              </li>
+              </React.Fragment>
             ))}
-          </ul>
+          </div>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

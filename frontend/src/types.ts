@@ -1028,6 +1028,12 @@ export interface CashHubDailyPoint {
   issued_mloki: number;
   redeemed_mloki: number;
   returned_mloki: number;
+  // The other two ways a slice stops being outstanding. returned_mloki is
+  // expired/reclaimed only — write-offs are NOT folded into it, matching what
+  // "Returned" means in the totals. Anything reconstructing the outstanding
+  // curve must subtract all four, or it overstates the curve.
+  split_mloki: number;
+  written_off_mloki: number;
 }
 
 export interface ListCashWalletClaimsResponse {

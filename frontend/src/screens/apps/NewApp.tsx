@@ -571,9 +571,12 @@ function FinalizeConnection({
       toast(t("newApp.connectionEstablished", "Connection established!"), {
         description: t("newApp.canUseApp", "You can now use the app with your Lokihub."),
       });
-      navigate("/apps?tab=connected-apps");
+      // Land on the app that was just connected, not on the Connections
+      // list — same rule the sub-wallet/hub flows follow in
+      // SubwalletCreated.tsx.
+      navigate(`/apps/${createAppResponse.id}`);
     }
-  }, [app?.lastUsedAt, navigate, t]);
+  }, [app?.lastUsedAt, createAppResponse.id, navigate, t]);
 
   if (!createAppResponse) {
     return <Navigate to="/apps/new" />;

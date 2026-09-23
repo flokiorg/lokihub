@@ -77,6 +77,33 @@
     "unclaimed": "Sin canjear",
     "movedToNewWallet": "Movido a nueva billetera"
   },
+  "cashStatus": {
+    "legendLabel": "Qué significa cada estado",
+    "unclaimed": {
+      "label": "Sin canjear",
+      "description": "aún se puede canjear"
+    },
+    "redeemed": {
+      "label": "Canjeado",
+      "description": "pagado por Lightning"
+    },
+    "split": {
+      "label": "Dividido",
+      "description": "trasladado a otro billete"
+    },
+    "expired": {
+      "label": "Caducado",
+      "description": "el plazo venció; el valor volvió a este hub"
+    },
+    "reclaimed": {
+      "label": "Recuperado",
+      "description": "billete eliminado antes de vencer; el valor volvió"
+    },
+    "written-off": {
+      "label": "Dado de baja",
+      "description": "el valor no pudo devolverse a ninguna parte"
+    }
+  },
   "claimDeadline": {
     "expired": "Plazo de canje vencido",
     "withinMinutes_one": "Canjear en {{count}} min",
@@ -197,11 +224,13 @@
     "noneFiltered": "No hay Lokicash {{status}}.",
     "noneOnPage": "No hay Lokicash en esta página.",
     "addHeading": "Acuñar Lokicash",
+    "mintAction": "Acuñar",
     "createDialogTitle": "Acuñar Lokicash",
     "removeRecipientTitle": "¿Eliminar a este destinatario?",
-    "removeRecipientDescription": "Esta identidad ya no podrá canjear su parte. Su saldo asignado se transferirá de vuelta a este hub. Esto no se puede deshacer.",
+    "removeRecipientDescription": "Su parte vuelve a este hub. Los demás destinatarios no se ven afectados. Esto no se puede deshacer.",
+    "removeBillDescription": "El Lokicash se destruye y su valor vuelve a este hub. Esto no se puede deshacer.",
     "removeWalletTitle": "¿Eliminar este Lokicash?",
-    "removeWalletDescription": "El saldo restante de este Lokicash se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Si sirve a otros destinatarios, también perderán el acceso, incluido quien aún no haya canjeado su parte. Esto no se puede deshacer.",
+    "removeWalletDescription": "El Lokicash se destruye y su valor restante vuelve a este hub. Todos los destinatarios pierden el acceso. Esto no se puede deshacer.",
     "removeSelectedTitle_one": "¿Eliminar {{count}} destinatario?",
     "removeSelectedTitle_other": "¿Eliminar {{count}} destinatarios?",
     "removeSelectedDescription": "Estas identidades ya no podrán canjear su parte. Sus saldos asignados se transferirán de vuelta a este hub. Esto no se puede deshacer.",

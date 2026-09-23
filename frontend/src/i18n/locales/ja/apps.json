@@ -38,7 +38,8 @@
     "amount": "予算金額",
     "customAmount": "カスタム予算（{{unit}}）",
     "spent": "使用済み",
-    "remaining": "残高"
+    "remaining": "残高",
+    "cashHubCaption": "このハブ自身の接続を通じて行われる通常の支払いに上限を設けます。鋳造は制限しません — 紙幣は内部送金で賄われ、その大きさはハブ設定のウォレットごとの上限で制限されます。"
   },
   "renewals": {
     "daily": "毎日",
@@ -76,6 +77,11 @@
     "failedToUpdate": "接続の更新に失敗しました",
     "lokiAccount": "Loki アカウント",
     "connections_count": "{{count}} 件の接続",
+    "siblingCashHubs": "{{count}} 件の Cash Hub",
+    "siblingCircles": "{{count}} 件のサークル",
+    "siblingCashBills": "{{count}} 件の Lokicash トークン",
+    "siblingCircleWallets": "{{count}} 件のサークルウォレット",
+    "siblingSubwallets": "{{count}} 件のサブウォレット",
     "connected": "接続済み",
     "addAnother": "別の接続を追加",
     "connectionDetails": "接続の詳細",
@@ -129,7 +135,10 @@
     "addMember": "メンバーを追加",
     "circleWalletsTitle": "サークルウォレット",
     "cashWalletsTitle": "Lokicash トークン",
-    "addCashWallet": "Lokicash を鋳造"
+    "analyticsTitle": "分析",
+    "keepAnalyticsOpen": "開いたままにする",
+    "addCashWallet": "Lokicash を鋳造",
+    "hubExpiryBeforeBillsWarning": "この {{kind}} の接続は、鋳造できる最長の紙幣よりも先に期限切れになります。発行済みの紙幣は自身の期限を保ちますが、接続が期限切れになると新しく鋳造できなくなります。"
   },
   "newApp": {
     "unsupportedApp": "未対応のアプリ",

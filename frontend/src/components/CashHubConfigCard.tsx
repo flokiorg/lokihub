@@ -20,8 +20,11 @@ interface CashHubConfigCardProps {
   // minTransferLoki/onMinTransferLokiChange are optional — omit both to hide
   // the field entirely (used by the lightweight inline "Cash Hub (optional)"
   // escalation in the generic connect-app flow, which keeps only the two
-  // original fields). 0 is a valid, submittable value ("no floor"), unlike
-  // perWalletMaxLoki/maxExpSecs which both require a positive value.
+  // original fields). 0 is a valid, submittable value ("no floor") — as it
+  // is for maxExpSecs, where 0 means "never" (hence allowNever on its
+  // DurationInput below, and NIP-CASH §Data Model's explicit allowance).
+  // Only perWalletMaxLoki genuinely requires a positive value: a per-wallet
+  // cap has no "unlimited" mode.
   minTransferLoki?: number;
   onMinTransferLokiChange?: (loki: number) => void;
   // redeemFeePpm/onRedeemFeePpmChange follow the same optional-pair

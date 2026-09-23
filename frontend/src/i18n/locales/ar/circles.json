@@ -86,6 +86,33 @@
     "unclaimed": "لم يُسترد",
     "movedToNewWallet": "تم النقل إلى محفظة جديدة"
   },
+  "cashStatus": {
+    "legendLabel": "معنى كل حالة",
+    "unclaimed": {
+      "label": "لم يُسترد",
+      "description": "ما زال قابلاً للاسترداد"
+    },
+    "redeemed": {
+      "label": "تم الاسترداد",
+      "description": "تم الدفع عبر لايتنينغ"
+    },
+    "split": {
+      "label": "مقسوم",
+      "description": "نُقل إلى ورقة أخرى"
+    },
+    "expired": {
+      "label": "منتهي الصلاحية",
+      "description": "انقضت المهلة وعادت القيمة إلى هذا المركز"
+    },
+    "reclaimed": {
+      "label": "مُستعاد",
+      "description": "حُذفت الورقة قبل انقضاء مهلتها وعادت القيمة"
+    },
+    "written-off": {
+      "label": "مشطوب",
+      "description": "تعذّرت إعادة القيمة إلى أي جهة"
+    }
+  },
   "claimDeadline": {
     "expired": "انتهت مهلة الاسترداد",
     "withinMinutes_zero": "الاسترداد الآن",
@@ -264,11 +291,13 @@
     "noneFiltered": "لا يوجد Lokicash {{status}}.",
     "noneOnPage": "لا يوجد Lokicash في هذه الصفحة.",
     "addHeading": "سكّ Lokicash",
+    "mintAction": "سكّ",
     "createDialogTitle": "سكّ Lokicash",
     "removeRecipientTitle": "إزالة هذا المستلم؟",
-    "removeRecipientDescription": "لن تتمكن هذه الهوية بعد الآن من استرداد حصتها. سيتم تحويل الرصيد المخصص لها إلى هذا المركز. لا يمكن التراجع عن هذا الإجراء.",
+    "removeRecipientDescription": "تعود حصته إلى هذا المركز. لا يتأثر بقية المستلمين. لا يمكن التراجع.",
+    "removeBillDescription": "يُدمَّر الـ Lokicash وتعود قيمته إلى هذا المركز. لا يمكن التراجع.",
     "removeWalletTitle": "إزالة هذا الـ Lokicash؟",
-    "removeWalletDescription": "سيتم تحويل الرصيد المتبقي لهذا الـ Lokicash إلى هذا المركز، وسيتوقف اتصال NWC الخاص به عن العمل فورًا. إذا كان يخدم مستلمين آخرين، فسيفقدون الوصول إليه أيضًا — بمن فيهم من لم يسترد حصته بعد. لا يمكن التراجع عن هذا الإجراء.",
+    "removeWalletDescription": "يُدمَّر الـ Lokicash وتعود قيمته المتبقية إلى هذا المركز. يفقد جميع المستلمين الوصول. لا يمكن التراجع.",
     "removeSelectedTitle_zero": "لا يوجد مستلمون محددون للإزالة؟",
     "removeSelectedTitle_one": "إزالة مستلم واحد؟",
     "removeSelectedTitle_two": "إزالة مستلمين اثنين؟",

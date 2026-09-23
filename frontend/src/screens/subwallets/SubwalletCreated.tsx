@@ -1,4 +1,4 @@
-import { AlertCircle, InfoIcon } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -57,12 +57,29 @@ export function SubwalletCreated() {
   // you're pairing with (unlike the "nwc" case below, which covers both a
   // real connected app and a plain isolated sub-wallet — see
   // NewSimpleSubwallet.tsx, kind: "isolated" — genuinely meant to be handed
-  // to some other client). Its connection is also deterministically
-  // re-derivable at any time (NIP-CASH §The Pairing Connection, NIP-CW's
-  // equivalent) via that hub's own "reveal" action elsewhere in the app —
-  // unlike a regular app's one-time pairing secret, so the "only visible
-  // now" warning below would be actively wrong for it.
+  // to some other client).
+  //
+  // Its connection is NOT re-derivable, and this screen used to claim the
+  // opposite. NIP-CASH §The Pairing Connection's determinism requirement is
+  // about a Cash WALLET's pairing secret (keys.GetCashPairingKey, re-derived
+  // on demand by /api/apps/:id/cash-connection — the QR in the bills list).
+  // A hub's own secret is an ordinary app secret: random, generated once,
+  // never persisted (see api.GetCashWalletConnection's doc comment). So this
+  // is the only time it is ever shown, and the warning below says so rather
+  // than promising a "view it again later" action that cannot exist.
   const isHub = primaryFormat === "cashhub" || primaryFormat === "circlehub";
+
+  // "Finish" lands on the thing that was just created, never on a list. A
+  // Cash Hub has its own dashboard at /cash-hub/:id (CashHubList.tsx); a
+  // Circle Hub and a plain isolated sub-wallet are both opened at /apps/:id
+  // (CircleCard.tsx, AppCard.tsx). This screen is shared by all three, so
+  // the old hardcoded "/sub-wallets" dropped Cash Hub creators onto the
+  // Sub-wallets list, which doesn't even list Cash Hubs.
+  const finishTo =
+    primaryFormat === "cashhub"
+      ? `/cash-hub/${createAppResponse.id}`
+      : `/apps/${createAppResponse.id}`;
+
   const kindLabel = appKindLabel(
     primaryFormat === "cashhub" ? "cash_hub" : "circle_hub"
   );
@@ -147,10 +164,10 @@ export function SubwalletCreated() {
                       kind: kindLabel,
                     })}
                   </p>
-                  <Alert>
-                    <InfoIcon className="h-4 w-4" />
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      {t("subwalletCreated.hubConnectionReminder", {
+                      {t("subwalletCreated.hubConnectionOneTime", {
                         kind: kindLabel,
                       })}
                     </AlertDescription>
@@ -196,7 +213,7 @@ export function SubwalletCreated() {
                 <Button onClick={() => setStep(1)} variant="secondary">
                   {t("subwalletCreated.back")}
                 </Button>
-                <LinkButton to="/sub-wallets">
+                <LinkButton to={finishTo}>
                   {t("subwalletCreated.finish")}
                 </LinkButton>
               </div>

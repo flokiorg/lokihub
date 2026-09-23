@@ -77,6 +77,33 @@
     "unclaimed": "未兑换",
     "movedToNewWallet": "已转移到新钱包"
   },
+  "cashStatus": {
+    "legendLabel": "各状态的含义",
+    "unclaimed": {
+      "label": "未兑换",
+      "description": "仍可兑换"
+    },
+    "redeemed": {
+      "label": "已兑换",
+      "description": "已通过闪电网络支付"
+    },
+    "split": {
+      "label": "已拆分",
+      "description": "已转入另一张现金券"
+    },
+    "expired": {
+      "label": "已过期",
+      "description": "时限已过，金额已退回本枢纽"
+    },
+    "reclaimed": {
+      "label": "已收回",
+      "description": "现金券在时限前被删除，金额已退回"
+    },
+    "written-off": {
+      "label": "已核销",
+      "description": "金额无法退回任何地方"
+    }
+  },
   "claimDeadline": {
     "expired": "兑换窗口已过期",
     "withinMinutes_one": "需在 {{count}} 分钟内兑换",
@@ -197,11 +224,13 @@
     "noneFiltered": "没有{{status}}的 Lokicash。",
     "noneOnPage": "此页面没有 Lokicash。",
     "addHeading": "铸造 Lokicash",
+    "mintAction": "铸造",
     "createDialogTitle": "铸造 Lokicash",
     "removeRecipientTitle": "移除该接收人？",
-    "removeRecipientDescription": "该身份将无法再兑换其份额。已分配的余额将转回此中心。此操作无法撤销。",
+    "removeRecipientDescription": "其份额将退回此中心。其他接收人不受影响。此操作无法撤销。",
+    "removeBillDescription": "该 Lokicash 将被销毁，金额退回此中心。此操作无法撤销。",
     "removeWalletTitle": "移除此 Lokicash？",
-    "removeWalletDescription": "此 Lokicash 的剩余余额将转回此中心，其 NWC 连接将立即停止工作。如果它服务于其他接收人，他们也将失去访问权限 —— 包括尚未兑换份额的人。此操作无法撤销。",
+    "removeWalletDescription": "该 Lokicash 将被销毁，余额退回此中心。所有接收人将失去访问权限。此操作无法撤销。",
     "removeSelectedTitle_one": "移除 {{count}} 位接收人？",
     "removeSelectedTitle_other": "移除 {{count}} 位接收人？",
     "removeSelectedDescription": "这些身份将无法再兑换其份额。已分配的余额将转回此中心。此操作无法撤销。",

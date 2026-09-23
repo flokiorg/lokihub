@@ -77,6 +77,33 @@
     "unclaimed": "未引き換え",
     "movedToNewWallet": "新しいウォレットへ移動"
   },
+  "cashStatus": {
+    "legendLabel": "各ステータスの意味",
+    "unclaimed": {
+      "label": "未引き換え",
+      "description": "まだ引き換え可能"
+    },
+    "redeemed": {
+      "label": "引き換え済み",
+      "description": "Lightning で支払い済み"
+    },
+    "split": {
+      "label": "分割済み",
+      "description": "別の紙幣へ移動"
+    },
+    "expired": {
+      "label": "期限切れ",
+      "description": "期限が過ぎ、価値はこのハブに戻りました"
+    },
+    "reclaimed": {
+      "label": "回収済み",
+      "description": "期限前に紙幣が削除され、価値が戻りました"
+    },
+    "written-off": {
+      "label": "償却済み",
+      "description": "価値をどこにも返せませんでした"
+    }
+  },
   "claimDeadline": {
     "expired": "引き換え期限が切れました",
     "withinMinutes_one": "{{count}} 分以内に引き換え",
@@ -197,11 +224,13 @@
     "noneFiltered": "{{status}} Lokicash はありません。",
     "noneOnPage": "このページに Lokicash はありません。",
     "addHeading": "Lokicash を鋳造",
+    "mintAction": "鋳造",
     "createDialogTitle": "Lokicash を鋳造",
     "removeRecipientTitle": "この受取人を削除しますか？",
-    "removeRecipientDescription": "このアイデンティティは取り分を引き換えられなくなります。割り当てられた残高はこのハブに払い戻されます。元に戻すことはできません。",
+    "removeRecipientDescription": "その取り分はこのハブに戻ります。他の受取人には影響しません。元に戻せません。",
+    "removeBillDescription": "Lokicash は破棄され、その価値はこのハブに戻ります。元に戻せません。",
     "removeWalletTitle": "この Lokicash を削除しますか？",
-    "removeWalletDescription": "この Lokicash の残高はこのハブに払い戻され、NWC 接続は即座に使用できなくなります。他の受取人にも対応している場合、まだ引き換えていない人も含めてアクセスできなくなります。元に戻すことはできません。",
+    "removeWalletDescription": "Lokicash は破棄され、残高はこのハブに戻ります。すべての受取人がアクセスを失います。元に戻せません。",
     "removeSelectedTitle_one": "{{count}} 人の受取人を削除しますか？",
     "removeSelectedTitle_other": "{{count}} 人の受取人を削除しますか？",
     "removeSelectedDescription": "これらのアイデンティティは取り分を引き換えられなくなります。割り当てられた残高はこのハブに払い戻されます。元に戻すことはできません。",

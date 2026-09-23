@@ -43,7 +43,7 @@ import { ChildIdentityCard } from "src/components/circles/ChildIdentityCard";
 import { CircleIdentityCard } from "src/components/circles/CircleIdentityCard";
 import { ConnectionDetailsModal } from "src/components/connections/ConnectionDetailsModal";
 import { CurrencyInput } from "src/components/CurrencyInput";
-import { appKindLabel } from "src/utils/appKind";
+import { appKindLabel, appKindSiblingsLabel } from "src/utils/appKind";
 import { DisconnectApp } from "src/components/connections/DisconnectApp";
 import { DisconnectCircleHub } from "src/components/connections/DisconnectCircleHub";
 import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
@@ -147,12 +147,6 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
 
-  React.useEffect(() => {
-    const queryParams = new URLSearchParams(location.search);
-    const editMode = queryParams.has("edit");
-    setIsEditingPermissions(editMode);
-  }, [location.search]);
-
   const [name, setName] = React.useState(app.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
     scopes: app.scopes,
@@ -223,6 +217,18 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   // don't offer the control here either.
   const nameReadOnly =
     app.kind === "cash_wallet" || app.kind === "circle_wallet";
+
+  React.useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    // Gated on the same condition that decides whether to offer the Edit
+    // button at all. A cash_wallet/circle_wallet has no editable field —
+    // name, scopes and budget/expiry are all system-managed — so ?edit on
+    // one used to open an editor where every control was read-only and Save
+    // sent an empty PATCH.
+    const editMode = queryParams.has("edit") && !nameReadOnly;
+    setIsEditingPermissions(editMode);
+  }, [location.search, nameReadOnly]);
+
 
   const handleSave = async () => {
     try {
@@ -408,9 +414,16 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     >
                       <DropdownMenuTrigger>
                         <div className="flex items-center gap-1">
-                          {t("connections.connections_count", {
-                            count: connectedApps?.length,
-                          })}{" "}
+                          {/* Named by what the dropdown actually switches
+                              between: sibling hubs for a hub, sibling
+                              wallets under one hub for a child, and only
+                              for a genuine third-party app, connections. */}
+                          {appKindSiblingsLabel(
+                            isSubwalletHub || isSubwalletHubChild
+                              ? app.kind
+                              : undefined,
+                            connectedApps?.length ?? 0
+                          )}{" "}
                           <ChevronDownIcon className="size-3 -mr-1" />
                         </div>
                       </DropdownMenuTrigger>

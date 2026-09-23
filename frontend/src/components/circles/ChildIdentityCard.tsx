@@ -2,7 +2,7 @@ import React from "react";
 import { BanknoteIcon, Copy, CoinsIcon, KeyRound, QrCodeIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { ClaimStateBadge } from "src/components/circles/ClaimStateBadge";
+import { CashStatusBadge } from "src/components/cash/CashStatusBadge";
 import { NostrIdentityHeader } from "src/components/circles/NostrIdentityHeader";
 import { RevealConnectionDialog } from "src/components/connections/RevealConnectionDialog";
 import { Avatar, AvatarFallback } from "src/components/ui/avatar";
@@ -136,7 +136,7 @@ function BeneficiaryProfile({
           <span className="text-sm font-medium">
             {(claim.amount_mloki / 1000).toLocaleString()} loki
           </span>
-          <ClaimStateBadge claim={claim} />
+          <CashStatusBadge status={claim.status} />
         </div>
         <div className="text-xs text-muted-foreground">
           {deadline?.label ?? t("claimDeadline.none")}

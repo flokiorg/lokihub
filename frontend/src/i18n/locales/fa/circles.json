@@ -77,6 +77,33 @@
     "unclaimed": "بازخرید‌نشده",
     "movedToNewWallet": "به کیف پول جدید منتقل شد"
   },
+  "cashStatus": {
+    "legendLabel": "معنای هر وضعیت",
+    "unclaimed": {
+      "label": "بازخرید‌نشده",
+      "description": "هنوز قابل بازخرید است"
+    },
+    "redeemed": {
+      "label": "بازخرید شده",
+      "description": "از طریق لایتنینگ پرداخت شد"
+    },
+    "split": {
+      "label": "تقسیم‌شده",
+      "description": "به اسکناس دیگری منتقل شد"
+    },
+    "expired": {
+      "label": "منقضی‌شده",
+      "description": "مهلت گذشت و ارزش به این هاب بازگشت"
+    },
+    "reclaimed": {
+      "label": "بازپس‌گرفته",
+      "description": "اسکناس پیش از پایان مهلت حذف شد و ارزش بازگشت"
+    },
+    "written-off": {
+      "label": "سوخت‌شده",
+      "description": "ارزش به هیچ‌جا قابل بازگشت نبود"
+    }
+  },
   "claimDeadline": {
     "expired": "مهلت بازخرید به پایان رسیده است",
     "withinMinutes_one": "بازخرید ظرف {{count}} دقیقه",
@@ -197,11 +224,13 @@
     "noneFiltered": "هیچ Lokicash‌ {{status}} وجود ندارد.",
     "noneOnPage": "هیچ Lokicash‌ای در این صفحه نیست.",
     "addHeading": "ضرب Lokicash",
+    "mintAction": "ضرب",
     "createDialogTitle": "ضرب Lokicash",
     "removeRecipientTitle": "این دریافت‌کننده حذف شود؟",
-    "removeRecipientDescription": "این هویت دیگر نمی‌تواند سهم خود را بازخرید کند. موجودی تخصیص‌یافته به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",
+    "removeRecipientDescription": "سهم او به این هاب بازمی‌گردد. دیگر دریافت‌کنندگان بدون تغییر می‌مانند. قابل بازگشت نیست.",
+    "removeBillDescription": "این Lokicash از بین می‌رود و ارزش آن به این هاب بازمی‌گردد. قابل بازگشت نیست.",
     "removeWalletTitle": "این Lokicash حذف شود؟",
-    "removeWalletDescription": "موجودی باقی‌مانده این Lokicash به این هاب بازگردانده می‌شود و اتصال NWC آن بلافاصله از کار می‌افتد. اگر به دریافت‌کنندگان دیگری نیز خدمت می‌کند، آن‌ها نیز دسترسی خود را از دست می‌دهند — از جمله کسانی که هنوز سهم خود را بازخرید نکرده‌اند. این کار قابل بازگشت نیست.",
+    "removeWalletDescription": "این Lokicash از بین می‌رود و ارزش باقی‌مانده‌اش به این هاب بازمی‌گردد. همهٔ دریافت‌کنندگان دسترسی را از دست می‌دهند. قابل بازگشت نیست.",
     "removeSelectedTitle_one": "{{count}} دریافت‌کننده حذف شود؟",
     "removeSelectedTitle_other": "{{count}} دریافت‌کننده حذف شود؟",
     "removeSelectedDescription": "این هویت‌ها دیگر نمی‌توانند سهم خود را بازخرید کنند. موجودی تخصیص‌یافته به آن‌ها به این هاب بازگردانده می‌شود. این کار قابل بازگشت نیست.",

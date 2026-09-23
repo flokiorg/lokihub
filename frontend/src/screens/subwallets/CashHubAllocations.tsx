@@ -16,7 +16,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ClaimStateBadge } from "src/components/circles/ClaimStateBadge";
+import {
+  CashStatusBadge,
+  CashStatusLegend,
+} from "src/components/cash/CashStatusBadge";
 import { NostrProfileRow } from "src/components/circles/NostrProfileRow";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
 import { NostrAvatar } from "src/components/NostrAvatar";
@@ -74,7 +77,7 @@ import { validateHTTPURL } from "src/utils/validation";
 import {
   App,
   CreateCashWalletResponse,
-  CashAllocationStatus,
+  CashSliceStatus,
   CashWalletClaim,
   CashWalletClaimCounts,
   CashWalletConnectionResponse,
@@ -319,9 +322,15 @@ export const CashHubAllocations = React.forwardRef<
     claimed: 0,
     expired: 0,
   });
-  // "" means the "All" tab - kept distinct from CashAllocationStatus so the
+  // "" means the "All" tab - kept distinct from CashSliceStatus so the
   // query param can be omitted rather than sent as an empty string.
-  const [status, setStatus] = React.useState<CashAllocationStatus | "">("");
+  //
+  // The facets are the six-status vocabulary (CashSliceStatus), not the
+  // legacy unclaimed/claimed/expired triple: "claimed" lumped a Lightning
+  // redemption together with value that merely moved into another wallet
+  // (a split or consolidate), which the KPIs and charts on the Cash Hub
+  // dashboard above this list already count separately.
+  const [status, setStatus] = React.useState<CashSliceStatus | "">("");
   const [page, setPage] = React.useState(1);
   const [isLoading, setLoading] = React.useState(false);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -458,14 +467,24 @@ export const CashHubAllocations = React.forwardRef<
   // whole wallet, which may affect other still-unclaimed recipients sharing
   // the same connection — offered as a separate, single-row action below,
   // not through bulk-select.
+  // Archived rows are excluded as well as claimed ones. An archived slice is
+  // unclaimed by definition (expired/reclaimed/written-off), so the claimed
+  // check alone let every one of them offer a delete button and a bulk-select
+  // checkbox for a bill whose app row no longer exists — every such call can
+  // only 404. The six-status facets made this reachable a whole tab at a time.
   const removableIds = React.useMemo(
-    () => new Set(claims.filter((c) => !c.claimed).map((c) => c.id)),
+    () => new Set(claims.filter((c) => !c.claimed && !c.archived).map((c) => c.id)),
     [claims]
   );
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [isRemovingSelected, setRemovingSelected] = React.useState(false);
   const [confirmDeleteClaim, setConfirmDeleteClaim] =
     React.useState<CashWalletClaim | null>(null);
+  // Whether that slice is the bill's only recipient. Removing the last one
+  // doesn't just drop a recipient: the backend then destroys the bill itself
+  // and its connection (api.DeleteCashClaim -> ReclaimAndDeleteSubWallet),
+  // which the old single "Remove this recipient?" copy never mentioned.
+  const [isSoleRecipient, setSoleRecipient] = React.useState(false);
   const [confirmDeleteWallet, setConfirmDeleteWallet] =
     React.useState<CashWalletClaim | null>(null);
   const [isConfirmBulkDeleteOpen, setConfirmBulkDeleteOpen] =
@@ -710,7 +729,7 @@ export const CashHubAllocations = React.forwardRef<
   // Switching tabs changes the underlying filtered set, so the current page
   // number (and any row selection, since rows on the old page may not exist
   // in the new filter) no longer applies.
-  const handleStatusChange = (next: CashAllocationStatus | "") => {
+  const handleStatusChange = (next: CashSliceStatus | "") => {
     setStatus(next);
     setPage(1);
     setSelected(new Set());
@@ -879,20 +898,31 @@ export const CashHubAllocations = React.forwardRef<
   // wallet's first appearance in `claims` (already newest-first from the
   // API); a wallet's beneficiaries can, in principle, straddle a page
   // boundary — grouping only ever affects rows already present on this page.
+  //
+  // Keyed on archived+wallet_app_id, never wallet_app_id alone: a live claim
+  // id and an archive id come from different sequences and WILL collide (see
+  // CashWalletClaim.archived), so a bare id makes a duplicate React key and,
+  // worse, a delete URL pointing at someone else's row.
   const walletGroups = React.useMemo(() => {
-    const order: number[] = [];
-    const byWallet = new Map<number, CashWalletClaim[]>();
+    const order: string[] = [];
+    const byWallet = new Map<string, CashWalletClaim[]>();
     for (const c of claims) {
-      if (!byWallet.has(c.wallet_app_id)) {
-        order.push(c.wallet_app_id);
-        byWallet.set(c.wallet_app_id, []);
+      const key = `${c.archived ? 1 : 0}-${c.wallet_app_id}`;
+      if (!byWallet.has(key)) {
+        order.push(key);
+        byWallet.set(key, []);
       }
-      byWallet.get(c.wallet_app_id)!.push(c);
+      byWallet.get(key)!.push(c);
     }
-    return order.map((walletAppId) => ({
-      walletAppId,
-      claims: byWallet.get(walletAppId)!,
-    }));
+    return order.map((key) => {
+      const groupClaims = byWallet.get(key)!;
+      return {
+        key,
+        walletAppId: groupClaims[0].wallet_app_id,
+        archived: groupClaims[0].archived,
+        claims: groupClaims,
+      };
+    });
   }, [claims]);
 
   // A status filter only ever shows the subset of a wallet's beneficiaries
@@ -907,29 +937,44 @@ export const CashHubAllocations = React.forwardRef<
     if (status === "") {
       return walletGroups;
     }
-    return claims.map((c) => ({ walletAppId: c.wallet_app_id, claims: [c] }));
+    return claims.map((c) => ({
+      key: `${c.archived ? 1 : 0}-${c.wallet_app_id}-${c.id}`,
+      walletAppId: c.wallet_app_id,
+      archived: c.archived,
+      claims: [c],
+    }));
   }, [status, claims, walletGroups]);
 
   const statusTabs: {
-    value: CashAllocationStatus | "";
+    value: CashSliceStatus | "";
     label: string;
     count: number;
   }[] = [
     { value: "", label: t("cashHubAllocations.statusAll"), count: counts.all },
     {
       value: "unclaimed",
-      label: t("claimBadge.unclaimed"),
+      label: t("cashStatus.unclaimed.label"),
       count: counts.unclaimed,
     },
     {
-      value: "claimed",
-      label: t("claimBadge.claimed"),
-      count: counts.claimed,
+      value: "redeemed",
+      label: t("cashStatus.redeemed.label"),
+      count: counts.redeemed,
+    },
+    {
+      value: "split",
+      label: t("cashStatus.split.label"),
+      count: counts.split,
     },
     {
       value: "expired",
-      label: t("cashHubAllocations.statusExpired"),
+      label: t("cashStatus.expired.label"),
       count: counts.expired,
+    },
+    {
+      value: "reclaimed",
+      label: t("cashStatus.reclaimed.label"),
+      count: counts.reclaimed,
     },
   ];
 
@@ -1292,11 +1337,11 @@ export const CashHubAllocations = React.forwardRef<
         // scroll positions for the same content, where scrolling one back
         // to the start doesn't reset the other, leaving the first tab
         // stuck partly offscreen.
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <Tabs
             value={status}
             onValueChange={(v) =>
-              handleStatusChange(v as CashAllocationStatus | "")
+              handleStatusChange(v as CashSliceStatus | "")
             }
           >
             <TabsList>
@@ -1321,6 +1366,8 @@ export const CashHubAllocations = React.forwardRef<
               ))}
             </TabsList>
           </Tabs>
+          {/* Once per view, never per row — see CashStatusLegend. */}
+          <CashStatusLegend />
         </div>
       )}
 
@@ -1422,10 +1469,7 @@ export const CashHubAllocations = React.forwardRef<
                 !isMulti && removableIds.has(group.claims[0].id);
 
               return (
-                <div
-                  key={group.claims[0].id}
-                  className="rounded-md border min-w-0"
-                >
+                <div key={group.key} className="rounded-md border min-w-0">
                   {/* One row shape for every token, whether it has one
                       recipient or several — see the "same UI regardless of
                       recipient count" redesign note above displayGroups.
@@ -1433,8 +1477,18 @@ export const CashHubAllocations = React.forwardRef<
                       GROUP of claims at once, having something to expand)
                       branches on isMulti; everything else renders once. */}
                   <div
-                    className="flex min-w-0 cursor-pointer items-start gap-2 p-2 transition-colors hover:bg-accent/50 sm:items-center sm:gap-3"
-                    onClick={() => navigate(`/apps/${group.walletAppId}`)}
+                    className={cn(
+                      "flex min-w-0 items-start gap-2 p-2 transition-colors sm:items-center sm:gap-3",
+                      // An archived bill's app row is deleted, so there is
+                      // nothing at /apps/:id to open.
+                      !group.archived &&
+                        "cursor-pointer hover:bg-accent/50"
+                    )}
+                    onClick={
+                      group.archived
+                        ? undefined
+                        : () => navigate(`/apps/${group.walletAppId}`)
+                    }
                   >
                     <Checkbox
                       checked={
@@ -1555,6 +1609,15 @@ export const CashHubAllocations = React.forwardRef<
                             <span className="text-sm font-medium">
                               {totalLoki.toLocaleString()} loki
                             </span>
+                            {/* An archived bill no longer exists. Without
+                                this it is indistinguishable from a live one
+                                in a list that now has whole facets of them
+                                (Expired, Reclaimed). */}
+                            {group.archived && (
+                              <Badge variant="outline">
+                                {t("cashBills.archived")}
+                              </Badge>
+                            )}
                             {claimedCount === totalCount ? (
                               <Badge variant="positive">
                                 {t(
@@ -1605,12 +1668,20 @@ export const CashHubAllocations = React.forwardRef<
                           </Button>
                         )}
 
+                        {/* Never for an archived bill: the wallet it names
+                            is deleted, so the call can only fail — and a
+                            lokicash1... for a destroyed bill would look
+                            spendable (NIP-CASH §Archival on Deletion). */}
                         <Button
                           variant="ghost"
                           size="icon"
                           title={t("cashHubAllocations.revealConnection")}
                           aria-label={t("cashHubAllocations.revealConnection")}
-                          disabled={revealingWalletId === group.walletAppId}
+                          className={cn(group.archived && "invisible")}
+                          disabled={
+                            group.archived ||
+                            revealingWalletId === group.walletAppId
+                          }
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRevealConnection(group.walletAppId, {
@@ -1648,6 +1719,14 @@ export const CashHubAllocations = React.forwardRef<
                             if (isMulti) {
                               setConfirmDeleteWallet(group.claims[0]);
                             } else {
+                              // Only the unfiltered tab groups by wallet, so
+                              // only there does a one-claim group really mean
+                              // a one-recipient bill. On a filtered tab every
+                              // group is a single claim by construction (see
+                              // displayGroups), and claiming "this destroys
+                              // the bill" would be wrong for any bill whose
+                              // other recipients the filter hid.
+                              setSoleRecipient(status === "");
                               setConfirmDeleteClaim(group.claims[0]);
                             }
                           }}
@@ -1664,7 +1743,7 @@ export const CashHubAllocations = React.forwardRef<
                         const canRemoveRow = removableIds.has(c.id);
                         return (
                           <div
-                            key={c.id}
+                            key={`${c.archived ? 1 : 0}-${c.id}`}
                             className={cn(
                               "group flex min-w-0 items-start gap-2 rounded-md p-2 transition-colors hover:bg-accent/50 sm:items-center sm:gap-3",
                               selected.has(c.id) && "bg-accent/50"
@@ -1730,7 +1809,7 @@ export const CashHubAllocations = React.forwardRef<
                                   {(c.amount_mloki / 1000).toLocaleString()}{" "}
                                   loki
                                 </span>
-                                <ClaimStateBadge claim={c} />
+                                <CashStatusBadge status={c.status} />
 
                                 <Button
                                   variant="ghost"
@@ -1742,7 +1821,10 @@ export const CashHubAllocations = React.forwardRef<
                                     !canRemoveRow && "invisible"
                                   )}
                                   disabled={!canRemoveRow}
-                                  onClick={() => setConfirmDeleteClaim(c)}
+                                  onClick={() => {
+                                    setSoleRecipient(false);
+                                    setConfirmDeleteClaim(c);
+                                  }}
                                 >
                                   <Trash2Icon className="size-4" />
                                 </Button>
@@ -1786,7 +1868,7 @@ export const CashHubAllocations = React.forwardRef<
               type="submit"
               className="w-fit"
             >
-              {t("common.add")}
+              {t("cashHubAllocations.mintAction")}
             </LoadingButton>
           </form>
         </div>
@@ -1832,7 +1914,7 @@ export const CashHubAllocations = React.forwardRef<
                 disabled={submitDisabled}
                 type="submit"
               >
-                {t("common.add")}
+                {t("cashHubAllocations.mintAction")}
               </LoadingButton>
             </DialogFooter>
           </form>
@@ -1865,10 +1947,16 @@ export const CashHubAllocations = React.forwardRef<
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("cashHubAllocations.removeRecipientTitle")}
+              {isSoleRecipient
+                ? t("cashHubAllocations.removeWalletTitle")
+                : t("cashHubAllocations.removeRecipientTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <p>{t("cashHubAllocations.removeRecipientDescription")}</p>
+              <p>
+                {isSoleRecipient
+                  ? t("cashHubAllocations.removeBillDescription")
+                  : t("cashHubAllocations.removeRecipientDescription")}
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

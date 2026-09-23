@@ -44,25 +44,49 @@ function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+// A tooltip is `bg-primary` by default — a solid brand-coloured chip, right
+// for a one-line hint. "surface" instead gives it the popover surface the
+// app's chart tooltips already use (see CashFlowChart's ChartTooltip), for
+// tooltips holding real content: a list, a definition, anything that needs
+// its own muted text or a Badge. Those inner elements take their colours
+// from the page palette, which is unreadable on `bg-primary` — `muted-
+// foreground` on `primary` is low-contrast grey on a saturated fill.
+//
+// The arrow is dropped in this variant on purpose: the primitive's arrow is
+// a rotated square filled from the bubble's colour, and a bordered bubble
+// would draw that border straight across it.
+export type TooltipSurface = "default" | "surface";
+
+const SURFACE_CLASSES: Record<TooltipSurface, string> = {
+  default: "bg-primary text-primary-foreground",
+  surface: "bg-popover text-popover-foreground border shadow-md",
+};
+
 function TooltipContent({
   className,
   sideOffset = 0,
+  variant = "default",
   children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & {
+  variant?: TooltipSurface;
+}) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit max-w-72 origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",
+          SURFACE_CLASSES[variant],
+          "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit max-w-72 origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",
           className
         )}
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="bg-primary fill-primary z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+        {variant === "default" && (
+          <TooltipPrimitive.Arrow className="bg-primary fill-primary z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+        )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );
@@ -100,21 +124,22 @@ const HybridTooltipTrigger = (
   );
 };
 
-const HybridTooltipContent = (
-  props: TooltipContentProps & PopoverContentProps
-) => {
+const HybridTooltipContent = ({
+  variant = "default",
+  ...props
+}: TooltipContentProps &
+  PopoverContentProps & { variant?: TooltipSurface }) => {
   const isTouch = useTouch();
 
+  // The touch path swaps in a Popover, which has to be told the same
+  // colours — otherwise the variant would silently do nothing on a phone.
   return isTouch ? (
     <PopoverContent
       {...props}
-      className={cn(
-        "bg-primary text-primary-foreground text-sm",
-        props.className
-      )}
+      className={cn(SURFACE_CLASSES[variant], "text-sm", props.className)}
     />
   ) : (
-    <TooltipContent {...props} />
+    <TooltipContent variant={variant} {...props} />
   );
 };
 

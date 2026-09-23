@@ -38,7 +38,8 @@
     "amount": "预算金额",
     "customAmount": "自定义预算金额（{{unit}}）",
     "spent": "已支出",
-    "remaining": "剩余"
+    "remaining": "剩余",
+    "cashHubCaption": "限制通过此中心自身连接进行的普通支付。它不限制铸造——现金券由内部转账提供资金，其额度由中心设置中的每钱包上限决定。"
   },
   "renewals": {
     "daily": "每日",
@@ -76,6 +77,11 @@
     "failedToUpdate": "连接更新失败",
     "lokiAccount": "Loki 账户",
     "connections_count": "{{count}} 个连接",
+    "siblingCashHubs": "{{count}} 个 Cash Hub",
+    "siblingCircles": "{{count}} 个圈子",
+    "siblingCashBills": "{{count}} 个 Lokicash 代币",
+    "siblingCircleWallets": "{{count}} 个圈子钱包",
+    "siblingSubwallets": "{{count}} 个子钱包",
     "connected": "已连接",
     "addAnother": "添加另一个连接",
     "connectionDetails": "连接详情",
@@ -129,7 +135,10 @@
     "addMember": "添加成员",
     "circleWalletsTitle": "圈子钱包",
     "cashWalletsTitle": "Lokicash 代币",
-    "addCashWallet": "铸造 Lokicash"
+    "analyticsTitle": "分析",
+    "keepAnalyticsOpen": "保持展开",
+    "addCashWallet": "铸造 Lokicash",
+    "hubExpiryBeforeBillsWarning": "此 {{kind}} 的连接会在它能铸造的最长现金券之前过期。已发行的现金券保留各自的期限，但连接过期后你将无法铸造新的。"
   },
   "newApp": {
     "unsupportedApp": "不支持的应用程序",
