@@ -441,7 +441,7 @@ func TestGetCashWalletConnection_HappyPath(t *testing.T) {
 // TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims verifies the
 // lokicash token's identity-required hint is re-derived from the wallet's
 // CURRENT claim rows on every call, not cached from creation — necessary
-// because a solo wallet's sole recipient can move into or out of bearer
+// because a solo wallet's sole recipient can move into or out of cash mode
 // status via cash_transfer well after the wallet (and its first-ever token)
 // was created.
 func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T) {
@@ -464,12 +464,12 @@ func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T)
 	require.NotNil(t, decoded.IdentityRequired)
 	assert.True(t, *decoded.IdentityRequired)
 
-	// Flip the sole recipient into bearer status via ReassignCashSliceIdentity
+	// Flip the sole recipient into cash mode status via ReassignCashSliceIdentity
 	// directly (the DB-service layer cash_transfer itself calls) — re-deriving
 	// the connection afterward must reflect the change, not the stale
 	// creation-time value.
 	_, err = svc.AppsService.ReassignCashSliceIdentity(wallet.ID,
-		db.CashIdentityPubkey, pubkey, db.CashIdentityBearer, strings.Repeat("cd", 32), "")
+		db.CashIdentityPubkey, pubkey, db.CashIdentityCash, strings.Repeat("cd", 32), "")
 	require.NoError(t, err)
 
 	connAfter, err := theAPI.GetCashWalletConnection(wallet.ID)
@@ -477,7 +477,7 @@ func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T)
 	decodedAfter, err := lokicash.Decode(connAfter.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decodedAfter.IdentityRequired)
-	assert.False(t, *decodedAfter.IdentityRequired, "the token must reflect the wallet's current bearer status, not its status at creation")
+	assert.False(t, *decodedAfter.IdentityRequired, "the token must reflect the wallet's current cash-mode status, not its status at creation")
 }
 
 // TestGetCashWalletConnection_NoClaims_HintsOmitted verifies a wallet with no

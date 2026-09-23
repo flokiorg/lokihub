@@ -671,10 +671,10 @@ func TestHandleCashRedeemEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
 }
 
-// bearerSecretAndHash returns a fresh random bearer secret (hex) and the
+// cashSecretAndHash returns a fresh random cash secret (hex) and the
 // hex-encoded sha256 hash of it — the value CreateCashWalletClaims stores as
-// IdentityValue for a bearer-mode slice.
-func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
+// IdentityValue for a cash-mode slice.
+func cashSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	t.Helper()
 	raw := make([]byte, 32)
 	_, err := rand.Read(raw)
@@ -683,7 +683,7 @@ func bearerSecretAndHash(t *testing.T) (secretHex, hashHex string) {
 	return hex.EncodeToString(raw), hex.EncodeToString(hash[:])
 }
 
-func TestHandleCashRedeemEvent_Bearer_HappyPath(t *testing.T) {
+func TestHandleCashRedeemEvent_Cash_HappyPath(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -691,27 +691,27 @@ func TestHandleCashRedeemEvent_Bearer_HappyPath(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: secretHex,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: secretHex,
 	})
 
 	require.Nil(t, response.Error)
 	result := response.Result.(payResponse)
 	assert.NotEmpty(t, result.Preimage)
 
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "slice must show as claimed (no longer returned by the unclaimed-only lookup)")
 }
 
-func TestHandleCashRedeemEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Cash_WrongSecret_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -719,28 +719,28 @@ func TestHandleCashRedeemEvent_Bearer_WrongSecret_Rejected(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	_, secretHash := bearerSecretAndHash(t)
+	_, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	wrongSecret, _ := bearerSecretAndHash(t)
+	wrongSecret, _ := cashSecretAndHash(t)
 	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: wrongSecret,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: wrongSecret,
 	})
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
 
 	// The real slice must remain unclaimed — a wrong guess burned nothing.
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.NotNil(t, claim)
 }
 
-func TestHandleCashRedeemEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Cash_NonHexSecret_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -749,16 +749,16 @@ func TestHandleCashRedeemEvent_Bearer_NonHexSecret_Rejected(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: "not-hex!!",
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: "not-hex!!",
 	})
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-func TestHandleCashRedeemEvent_Bearer_MixedParams_Rejected(t *testing.T) {
+func TestHandleCashRedeemEvent_Cash_MixedParams_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -766,17 +766,17 @@ func TestHandleCashRedeemEvent_Bearer_MixedParams_Rejected(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	// A request carrying BOTH bearer_secret and identity_type/value must be
+	// A request carrying BOTH cash_secret and identity_type/value must be
 	// rejected outright, not silently prefer one side.
 	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
 		Amount:        ptrUint64(1000),
-		BearerSecret:  secretHex,
+		CashSecret:    secretHex,
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: tests.RandomHex32(),
 	})
@@ -784,12 +784,12 @@ func TestHandleCashRedeemEvent_Bearer_MixedParams_Rejected(t *testing.T) {
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.NotNil(t, claim, "a rejected mixed request must not have claimed anything")
 }
 
-func TestHandleCashRedeemEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
+func TestHandleCashRedeemEvent_Cash_AmountMismatch_RejectedAndSliceRemainsClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -797,29 +797,29 @@ func TestHandleCashRedeemEvent_Bearer_AmountMismatch_RejectedAndSliceRemainsClai
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(500), // only half the entitled amount
-		BearerSecret: secretHex,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(500), // only half the entitled amount
+		CashSecret: secretHex,
 	})
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	require.NotNil(t, claim, "a bad invoice attempt must not burn the slice")
 }
 
-// TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds is
-// the core fund-safety property for a bearer slice: first-redeem-wins is
+// TestHandleCashRedeemEvent_Cash_ConcurrentRedemptions_OnlyOneSucceeds is
+// the core fund-safety property for a cash-mode slice: first-redeem-wins is
 // intentional, but two concurrent redemptions against the same secret must
-// never both succeed (NIP-CASH §Bearer Slices, Security Considerations).
-func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
+// never both succeed (NIP-CASH §Cash-Mode Slices, Security Considerations).
+func TestHandleCashRedeemEvent_Cash_ConcurrentRedemptions_OnlyOneSucceeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -827,15 +827,15 @@ func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *t
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	params := nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: secretHex,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: secretHex,
 	}
 	controller := NewTestNip47Controller(svc)
 
@@ -856,9 +856,9 @@ func TestHandleCashRedeemEvent_Bearer_ConcurrentRedemptions_OnlyOneSucceeds(t *t
 			successes++
 		}
 	}
-	assert.Equal(t, 1, successes, "exactly one of two concurrent redemptions against the same bearer secret must succeed")
+	assert.Equal(t, 1, successes, "exactly one of two concurrent redemptions against the same cash secret must succeed")
 
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "the slice must end up claimed exactly once")
 }

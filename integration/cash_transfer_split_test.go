@@ -1,16 +1,16 @@
 //go:build integration
 
 // cash_transfer_spinoff_test.go covers spinning a multi-recipient wallet's
-// slice off into a brand-new, dedicated single-bearer cash_wallet (NIP-CASH
+// slice off into a brand-new, dedicated single-cash-mode cash_wallet (NIP-CASH
 // "Spinning a slice off into a dedicated wallet") end to end over a real
 // Nostr relay against a real running instance — the black-box counterpart to
 // nip47/controllers/cash_transfer_controller_test.go's
-// TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet.
+// TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewWallet.
 //
 // This is the scenario the original mixing check used to reject outright: a
 // wallet with a co-tenant (here, one who has already redeemed their own
 // slice and so still holds the shared connection) transferring the OTHER
-// slice to bearer. Rather than reject, cash_transfer now moves that slice's
+// slice to cash mode. Rather than reject, cash_transfer now moves that slice's
 // value into a brand-new wallet whose connection is delivered nested-
 // encrypted to the caller's own pubkey — so the co-tenant, despite still
 // holding the shared connection this response itself travels over, gets
@@ -87,17 +87,17 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotEmpty(t, attackerClaim.Preimage)
 
 		// The victim now spins their still-unclaimed slice off into its own
-		// dedicated wallet, handing it a caller-generated bearer commitment.
-		newSecretHex, newSecretHash := bearerSecretAndHash(t)
-		proof := buildTransferProofEvent(t, victimPriv, created.WalletPubkey, "bearer", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
+		// dedicated wallet, handing it a caller-generated cash-mode commitment.
+		newSecretHex, newSecretHash := cashSecretAndHash(t)
+		proof := buildTransferProofEvent(t, victimPriv, created.WalletPubkey, "cash", newSecretHash, "", happyPathAmountMloki, nil, time.Now())
 		var transferResult CashTransferResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
 			IdentityType:  "pubkey",
 			IdentityValue: victimPub,
 			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "bearer", IdentityValue: newSecretHash},
+			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: newSecretHash},
 		}, &transferResult))
-		require.Equal(t, "bearer", transferResult.IdentityType)
+		require.Equal(t, "cash", transferResult.IdentityType)
 		require.Equal(t, newSecretHash, transferResult.IdentityValue)
 		require.Equal(t, uint64(happyPathAmountMloki), transferResult.AmountMillis)
 		require.NotEmpty(t, transferResult.NewWalletPubkey)
@@ -137,13 +137,13 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		// The decrypted token is a genuinely live, spendable connection: the
 		// new wallet holds exactly the victim's slice amount, redeemable with
-		// the bearer secret the victim generated locally.
+		// the cash secret the victim generated locally.
 		newWalletClient := mustConnect(t, nwcURIFromLokicash(newWalletToken))
 		newWalletInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet redeem")
 		var newWalletClaim ClaimFundsResult
 		require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:      newWalletInvoice.Invoice,
-			BearerSecret: newSecretHex,
+			Invoice:    newWalletInvoice.Invoice,
+			CashSecret: newSecretHex,
 		}, &newWalletClaim))
 		require.NotEmpty(t, newWalletClaim.Preimage)
 
@@ -152,8 +152,8 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 		replayInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet double-redeem")
 		var replayClaim ClaimFundsResult
 		err = newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:      replayInvoice.Invoice,
-			BearerSecret: newSecretHex,
+			Invoice:    replayInvoice.Invoice,
+			CashSecret: newSecretHex,
 		}, &replayClaim)
 		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 	})

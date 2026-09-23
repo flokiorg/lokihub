@@ -88,7 +88,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				caller := guardCashWallet(t, svc, hub)
 				newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 				return built{caller: caller, params: cashConsolidateParams{
-					Sources:     []consolidateSourceParam{{WalletPubkey: *caller.WalletPubkey, BearerSecret: "00"}},
+					Sources:     []consolidateSourceParam{{WalletPubkey: *caller.WalletPubkey, CashSecret: "00"}},
 					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 				}}
 			},
@@ -122,20 +122,20 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 			wantMsg:  "64-character lowercase hex string",
 		},
 		{
-			name: "new_identity bearer target missing identity_value",
+			name: "new_identity cash-mode target missing identity_value",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
-					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer},
+					NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash},
 				}}
 			},
 			wantCode: constants.ERROR_BAD_REQUEST,
-			wantMsg:  "required for a bearer target",
+			wantMsg:  "required for a cash-mode target",
 		},
 		{
-			name: "new_identity bearer target carries ia_pubkey",
+			name: "new_identity cash-mode target carries ia_pubkey",
 			build: func(t *testing.T, svc *tests.TestService) built {
 				hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 				caller := guardCashWallet(t, svc, hub)
@@ -143,7 +143,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
 					NewIdentity: cashTransferNewIdentityParam{
-						IdentityType: db.CashIdentityBearer, IdentityValue: tests.RandomHex32(), IAPubkey: iaPub,
+						IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), IAPubkey: iaPub,
 					},
 				}}
 			},
@@ -464,7 +464,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 		{
 			// Mirrors mint_cash's maxRecipientsPerWallet cap: without an upper
 			// bound, one rate-limited request could bundle an unbounded number of
-			// independent bearer-secret guesses or custody/proof-verification
+			// independent cash-secret guesses or custody/proof-verification
 			// work. Every source here is deliberately bogus (never resolves) —
 			// this guard must fire before any per-source lookup, on count alone.
 			name: "more than maxConsolidateSources sources rejected",
@@ -474,7 +474,7 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 				newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 				sources := make([]consolidateSourceParam, maxConsolidateSources+1)
 				for i := range sources {
-					sources[i] = consolidateSourceParam{WalletPubkey: fmt.Sprintf("bogus-%d", i), BearerSecret: "00"}
+					sources[i] = consolidateSourceParam{WalletPubkey: fmt.Sprintf("bogus-%d", i), CashSecret: "00"}
 				}
 				return built{caller: caller, params: cashConsolidateParams{
 					Sources:     sources,

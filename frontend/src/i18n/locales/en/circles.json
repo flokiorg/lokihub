@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr Identity",
     "connectionKey": "Web Identity",
-    "bearer": "Bearer"
+    "cash": "Cash"
   },
   "avatarStack": {
     "more": "+{{count}} more"
@@ -225,8 +225,8 @@
       "removeWallet": "Failed to remove Lokicash",
       "removeSelected": "Failed to remove selected recipients"
     },
-    "bearerHelper": "Bearer: whoever holds the secret can redeem it — there is no identity check and no recovery if it's lost or intercepted.",
-    "bearerRequiresSoleRecipient": "Bearer must be the only recipient",
+    "cashHelper": "Cash: whoever holds the secret can redeem it — there is no identity check and no recovery if it's lost or intercepted.",
+    "cashRequiresSoleRecipient": "Cash must be the only recipient",
     "pubkeyModeHelper": "Only this Nostr identity can redeem it.",
     "connectionKeyModeHelper": "Only a verified identity can redeem it.",
     "copyLokicash": "Copy Lokicash",

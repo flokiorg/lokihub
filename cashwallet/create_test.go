@@ -52,9 +52,9 @@ func onePubkeyRecipient(amountMloki uint64) []RecipientInput {
 	}
 }
 
-func oneBearerRecipient(amountMloki uint64) []RecipientInput {
+func oneCashRecipient(amountMloki uint64) []RecipientInput {
 	return []RecipientInput{
-		{IdentityType: db.CashIdentityBearer, AmountMloki: amountMloki},
+		{IdentityType: db.CashIdentityCash, AmountMloki: amountMloki},
 	}
 }
 
@@ -143,7 +143,7 @@ func TestCreate_CashTokenMatchesPairingURI(t *testing.T) {
 
 // TestCreate_CashTokenIdentityRequiredHint verifies Commit populates the
 // lokicash token's IdentityRequired hint correctly for both a plain
-// identity-bound wallet and a solo bearer one. Split into two independent
+// identity-bound wallet and a solo cash-mode one. Split into two independent
 // services (rather than two Create calls against one): the mock LN client's
 // payment-hash idempotency is instance-wide, and both calls would otherwise
 // reuse the same default mock invoice, making the second spuriously fail as
@@ -169,7 +169,7 @@ func TestCreate_CashTokenIdentityRequiredHint(t *testing.T) {
 		assert.True(t, *decoded.IdentityRequired)
 	})
 
-	t.Run("bearer", func(t *testing.T) {
+	t.Run("cash", func(t *testing.T) {
 		svc, err := tests.CreateTestService(t)
 		require.NoError(t, err)
 		defer svc.Remove()
@@ -179,7 +179,7 @@ func TestCreate_CashTokenIdentityRequiredHint(t *testing.T) {
 
 		result, err := Create(context.TODO(), newTestDeps(svc), Params{
 			HubApp:     hub,
-			Recipients: oneBearerRecipient(1000),
+			Recipients: oneCashRecipient(1000),
 			ExpirySecs: 1800,
 		})
 		require.NoError(t, err)
@@ -190,10 +190,10 @@ func TestCreate_CashTokenIdentityRequiredHint(t *testing.T) {
 	})
 }
 
-// TestSplit_BearerTarget_CashTokenHints verifies Split's new wallet
-// reports IdentityRequired: false for a bearer target — a split-off bearer
-// wallet is always a single bearer slice, by construction.
-func TestSplit_BearerTarget_CashTokenHints(t *testing.T) {
+// TestSplit_CashTarget_CashTokenHints verifies Split's new wallet
+// reports IdentityRequired: false for a cash-mode target — a split-off cash-mode
+// wallet is always a single cash-mode slice, by construction.
+func TestSplit_CashTarget_CashTokenHints(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -219,7 +219,7 @@ func TestSplit_BearerTarget_CashTokenHints(t *testing.T) {
 		HubApp:           hub,
 		SourceWalletApp:  sourceWallet,
 		AmountMloki:      1000,
-		NewIdentityType:  db.CashIdentityBearer,
+		NewIdentityType:  db.CashIdentityCash,
 		NewIdentityValue: commitment,
 		ExpiresAt:        &splitExpiresAt,
 	})
@@ -232,9 +232,9 @@ func TestSplit_BearerTarget_CashTokenHints(t *testing.T) {
 }
 
 // TestSplit_PubkeyTarget_CashTokenHints verifies Split can mint a
-// dedicated wallet for a non-bearer target too — the unified transfer model
+// dedicated wallet for a identity-bound target too — the unified transfer model
 // spins off for every identity type once a wallet's recipient history rules
-// out a cheap in-place reassignment, not only when converting into bearer.
+// out a cheap in-place reassignment, not only when converting into cash mode.
 func TestSplit_PubkeyTarget_CashTokenHints(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -782,7 +782,7 @@ func TestCreate_ConcurrentCreation_BothIndependentlySucceed(t *testing.T) {
 	_ = childApps
 }
 
-func TestCreate_Bearer_HappyPath(t *testing.T) {
+func TestCreate_Cash_HappyPath(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -792,16 +792,16 @@ func TestCreate_Bearer_HappyPath(t *testing.T) {
 
 	result, err := Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp:     hub,
-		Recipients: oneBearerRecipient(1000),
+		Recipients: oneCashRecipient(1000),
 		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Recipients, 1)
 
 	r := result.Recipients[0]
-	assert.Equal(t, db.CashIdentityBearer, r.IdentityType)
+	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
 	assert.Equal(t, uint64(1000), r.AmountMloki)
-	assert.NotEmpty(t, r.BearerSecret, "the plaintext secret must be returned exactly once")
+	assert.NotEmpty(t, r.CashSecret, "the plaintext secret must be returned exactly once")
 	assert.Empty(t, r.IdentityValue, "the response must never surface the internal secret hash as identity_value")
 
 	var childApps []db.App
@@ -811,23 +811,23 @@ func TestCreate_Bearer_HappyPath(t *testing.T) {
 	var claims []db.CashWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", childApps[0].ID).Find(&claims).Error)
 	require.Len(t, claims, 1)
-	assert.Equal(t, db.CashIdentityBearer, claims[0].IdentityType)
+	assert.Equal(t, db.CashIdentityCash, claims[0].IdentityType)
 	assert.Equal(t, int64(1000), claims[0].AmountMloki)
 
 	// The critical fund-safety property: the DB row must never hold the raw
 	// secret, only its hash. A read of this table (backup leak, SQL
 	// injection, a careless log line) must not by itself be enough to steal
-	// every unclaimed bearer slice on the instance.
-	assert.NotEqual(t, r.BearerSecret, claims[0].IdentityValue,
+	// every unclaimed cash-mode slice on the instance.
+	assert.NotEqual(t, r.CashSecret, claims[0].IdentityValue,
 		"the stored identity_value must be a hash of the secret, never the secret itself")
-	rawSecret, hexErr := hex.DecodeString(r.BearerSecret)
+	rawSecret, hexErr := hex.DecodeString(r.CashSecret)
 	require.NoError(t, hexErr)
 	wantHash := sha256.Sum256(rawSecret)
 	assert.Equal(t, hex.EncodeToString(wantHash[:]), claims[0].IdentityValue,
 		"stored identity_value must be exactly sha256(secret)")
 }
 
-func TestCreate_Bearer_SecretsAreUnique(t *testing.T) {
+func TestCreate_Cash_SecretsAreUnique(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -847,18 +847,18 @@ func TestCreate_Bearer_SecretsAreUnique(t *testing.T) {
 	}
 
 	result1, err := Create(context.TODO(), newTestDeps(svc), Params{
-		HubApp: hub, Recipients: oneBearerRecipient(1000), ExpirySecs: 1800,
+		HubApp: hub, Recipients: oneCashRecipient(1000), ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 	result2, err := Create(context.TODO(), newTestDeps(svc), Params{
-		HubApp: hub, Recipients: oneBearerRecipient(1000), ExpirySecs: 1800,
+		HubApp: hub, Recipients: oneCashRecipient(1000), ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 
-	assert.NotEqual(t, result1.Recipients[0].BearerSecret, result2.Recipients[0].BearerSecret)
+	assert.NotEqual(t, result1.Recipients[0].CashSecret, result2.Recipients[0].CashSecret)
 }
 
-func TestCreate_Bearer_RejectsMixedRecipients(t *testing.T) {
+func TestCreate_Cash_RejectsMixedRecipients(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -871,7 +871,7 @@ func TestCreate_Bearer_RejectsMixedRecipients(t *testing.T) {
 		HubApp: hub,
 		Recipients: []RecipientInput{
 			pubkeyRecipient,
-			{IdentityType: db.CashIdentityBearer, AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})
@@ -883,7 +883,7 @@ func TestCreate_Bearer_RejectsMixedRecipients(t *testing.T) {
 	assert.Empty(t, childApps, "a rejected request must leave no partial wallet behind")
 }
 
-func TestCreate_Bearer_RejectsTwoBearerRecipients(t *testing.T) {
+func TestCreate_Cash_RejectsTwoCashRecipients(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -894,8 +894,8 @@ func TestCreate_Bearer_RejectsTwoBearerRecipients(t *testing.T) {
 	_, err = Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp: hub,
 		Recipients: []RecipientInput{
-			{IdentityType: db.CashIdentityBearer, AmountMloki: 500},
-			{IdentityType: db.CashIdentityBearer, AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})
@@ -903,7 +903,7 @@ func TestCreate_Bearer_RejectsTwoBearerRecipients(t *testing.T) {
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
-func TestCreate_Bearer_RejectsCallerSuppliedIdentityValue(t *testing.T) {
+func TestCreate_Cash_RejectsCallerSuppliedIdentityValue(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -914,7 +914,7 @@ func TestCreate_Bearer_RejectsCallerSuppliedIdentityValue(t *testing.T) {
 	_, err = Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp: hub,
 		Recipients: []RecipientInput{
-			{IdentityType: db.CashIdentityBearer, IdentityValue: tests.RandomHex32(), AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})
@@ -922,7 +922,7 @@ func TestCreate_Bearer_RejectsCallerSuppliedIdentityValue(t *testing.T) {
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
-func TestCreate_Bearer_RejectsCallerSuppliedIAPubkey(t *testing.T) {
+func TestCreate_Cash_RejectsCallerSuppliedIAPubkey(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -933,7 +933,7 @@ func TestCreate_Bearer_RejectsCallerSuppliedIAPubkey(t *testing.T) {
 	_, err = Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp: hub,
 		Recipients: []RecipientInput{
-			{IdentityType: db.CashIdentityBearer, IAPubkey: tests.RandomHex32(), AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, IAPubkey: tests.RandomHex32(), AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})

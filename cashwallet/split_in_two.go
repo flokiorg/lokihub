@@ -29,7 +29,7 @@ type SplitInTwoParams struct {
 
 	// Remainder* describe the wallet the caller keeps their own change in.
 	// RemainderAmountMloki == 0 means a full spin-off (no remainder wallet) —
-	// e.g. a full transfer to bearer on a multi-recipient-history wallet.
+	// e.g. a full transfer to cash mode on a multi-recipient-history wallet.
 	RemainderIdentityType  string
 	RemainderIdentityValue string
 	RemainderIAPubkey      string

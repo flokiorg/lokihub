@@ -98,15 +98,15 @@ export type CashHubAllocationsHandle = {
 const maxVisiblePills = 5;
 
 let recipientRowCounter = 0;
-// identityType defaults to "bearer" — the simplest option, requiring
+// identityType defaults to "cash" — the simplest option, requiring
 // nothing from the recipient — but a row added alongside an existing one
-// (addRow, below) MUST pass "pubkey" explicitly instead: bearer can only
-// ever be a wallet's sole recipient (NIP-CASH §Bearer Slices), so defaulting
+// (addRow, below) MUST pass "pubkey" explicitly instead: cash mode can only
+// ever be a wallet's sole recipient (NIP-CASH §Cash-Mode Slices), so defaulting
 // a second-or-later row to it would start the form in an already-invalid
 // state.
 function newRecipientRow(
   amountLoki: number,
-  identityType: RecipientRow["identityType"] = "bearer"
+  identityType: RecipientRow["identityType"] = "cash"
 ): RecipientRow {
   recipientRowCounter += 1;
   return {
@@ -130,7 +130,7 @@ function newRecipientRow(
 
 type RecipientRow = {
   key: string;
-  identityType: "pubkey" | "connection_key" | "bearer";
+  identityType: "pubkey" | "connection_key" | "cash";
   pubkeyValue: string;
   resolvedPubkeyHex?: string;
   // nconnectionValue: the raw nconnection1... string the operator pasted
@@ -172,10 +172,10 @@ function iaModeFor(
   return row.iaMode ?? (hasSavedIAs ? "existing" : "manual");
 }
 
-// A bearer row has no identity at all — the wallet mints the secret itself
-// (NIP-CASH §Bearer Slices) — so there is no identity_value to send for it.
+// A cash-mode row has no identity at all — the wallet mints the secret itself
+// (NIP-CASH §Cash-Mode Slices) — so there is no identity_value to send for it.
 function recipientIdentityValue(row: RecipientRow): string | undefined {
-  if (row.identityType === "bearer") {
+  if (row.identityType === "cash") {
     return undefined;
   }
   return row.identityType === "pubkey"
@@ -383,13 +383,13 @@ export const CashHubAllocations = React.forwardRef<
     undefined
   );
   // Companion strings for the same connection — lokicashToken is always
-  // derivable alongside pairing_uri (both endpoints return it); bearerSecret
-  // is populated only right after creating a bearer-mode wallet, and only
-  // that once (NIP-CASH §Bearer Slices: it is never retrievable again).
+  // derivable alongside pairing_uri (both endpoints return it); cashSecret
+  // is populated only right after creating a cash-mode wallet, and only
+  // that once (NIP-CASH §Cash-Mode Slices: it is never retrievable again).
   const [revealLokicashToken, setRevealLokicashToken] = React.useState<
     string | undefined
   >(undefined);
-  const [revealBearerSecret, setRevealBearerSecret] = React.useState<
+  const [revealCashSecret, setRevealCashSecret] = React.useState<
     string | undefined
   >(undefined);
   // The wallet's totals shown above the QR in the reveal dialog — the
@@ -402,7 +402,7 @@ export const CashHubAllocations = React.forwardRef<
         recipientCount: number;
         claimedCount: number;
         expiresAtSecs?: number;
-        isBearer?: boolean;
+        isCash?: boolean;
       }
     | undefined
   >(undefined);
@@ -423,7 +423,7 @@ export const CashHubAllocations = React.forwardRef<
       recipientCount: number;
       claimedCount: number;
       expiresAtSecs?: number;
-      isBearer?: boolean;
+      isCash?: boolean;
     }
   ) => {
     setRevealingWalletId(walletAppId);
@@ -438,7 +438,7 @@ export const CashHubAllocations = React.forwardRef<
         setRevealApp(revealedApp);
         setRevealUri(connection.pairing_uri);
         setRevealLokicashToken(connection.cash_token);
-        setRevealBearerSecret(undefined);
+        setRevealCashSecret(undefined);
         setRevealSummary(summary);
         setRevealMode("reveal");
       }
@@ -600,11 +600,11 @@ export const CashHubAllocations = React.forwardRef<
     setRecipients((rows) => [...rows, newRecipientRow(0, "pubkey")]);
   };
 
-  // A bearer recipient has no identity, and MUST be the wallet's only
-  // recipient (NIP-CASH §Bearer Slices — a bearer slice never shares a wallet
+  // A cash-mode recipient has no identity, and MUST be the wallet's only
+  // recipient (NIP-CASH §Cash-Mode Slices — a cash-mode slice never shares a wallet
   // with another recipient, since redeeming one transmits its raw secret in
   // the request body, decryptable by anyone still holding the shared
-  // connection). Switching a row to bearer collapses the form down to just
+  // connection). Switching a row to cash mode collapses the form down to just
   // that row, rather than leaving now-invalid sibling rows for the admin to
   // notice and remove manually.
   const setRowIdentityType = (
@@ -612,23 +612,23 @@ export const CashHubAllocations = React.forwardRef<
     identityType: RecipientRow["identityType"]
   ) => {
     setRecipients((rows) => {
-      if (identityType === "bearer") {
+      if (identityType === "cash") {
         const row = rows.find((r) => r.key === key);
         return row ? [{ ...row, identityType }] : rows;
       }
       return rows.map((r) => (r.key === key ? { ...r, identityType } : r));
     });
   };
-  const hasBearerRow = recipients.some((r) => r.identityType === "bearer");
+  const hasCashRow = recipients.some((r) => r.identityType === "cash");
 
   const allRowsValid =
     recipients.length > 0 &&
-    !(hasBearerRow && recipients.length > 1) &&
+    !(hasCashRow && recipients.length > 1) &&
     recipients.every((r) => {
       if (r.amountLoki <= 0) {
         return false;
       }
-      if (r.identityType === "bearer") {
+      if (r.identityType === "cash") {
         return true;
       }
       const identityValue = recipientIdentityValue(r);
@@ -760,13 +760,13 @@ export const CashHubAllocations = React.forwardRef<
           setRevealApp(createdApp);
           setRevealUri(result.pairing_uri);
           setRevealLokicashToken(result.cash_token);
-          setRevealBearerSecret(result.recipients[0]?.bearer_secret);
+          setRevealCashSecret(result.recipients[0]?.cash_secret);
           setRevealSummary({
             amountLoki: totalRequestedLoki,
             recipientCount: result.recipients.length,
             claimedCount: 0,
             expiresAtSecs: result.expires_at || undefined,
-            isBearer: result.recipients[0]?.identity_type === "bearer",
+            isCash: result.recipients[0]?.identity_type === "cash",
           });
           setRevealMode("create");
         }
@@ -937,21 +937,21 @@ export const CashHubAllocations = React.forwardRef<
           onValueChange={(v) =>
             setRowIdentityType(
               row.key,
-              v as "pubkey" | "connection_key" | "bearer"
+              v as "pubkey" | "connection_key" | "cash"
             )
           }
         >
           <TabsList>
             <TabsTrigger
-              value="bearer"
+              value="cash"
               disabled={recipients.length > 1}
               title={
                 recipients.length > 1
-                  ? t("cashHubAllocations.bearerRequiresSoleRecipient")
+                  ? t("cashHubAllocations.cashRequiresSoleRecipient")
                   : undefined
               }
             >
-              {t("identityType.bearer")}
+              {t("identityType.cash")}
             </TabsTrigger>
             <TabsTrigger value="pubkey">{t("identityType.pubkey")}</TabsTrigger>
             <TabsTrigger value="connection_key">
@@ -978,7 +978,7 @@ export const CashHubAllocations = React.forwardRef<
           ? t("cashHubAllocations.pubkeyModeHelper")
           : row.identityType === "connection_key"
             ? t("cashHubAllocations.connectionKeyModeHelper")
-            : t("cashHubAllocations.bearerHelper")}
+            : t("cashHubAllocations.cashHelper")}
       </p>
       {row.identityType === "pubkey" ? (
         <NostrPubkeyInput
@@ -1136,8 +1136,8 @@ export const CashHubAllocations = React.forwardRef<
             )}
           </div>
         </>
-      ) : // Bearer: no identity to collect — the wallet mints its own secret,
-      // shown once right after creation (NIP-CASH §Bearer Slices). The
+      ) : // Cash mode: no identity to collect — the wallet mints its own secret,
+      // shown once right after creation (NIP-CASH §Cash-Mode Slices). The
       // helper text above already covers this mode; nothing more to show.
       null}
       {isDuplicateRow(row) && (
@@ -1245,7 +1245,7 @@ export const CashHubAllocations = React.forwardRef<
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {!hasBearerRow && (
+        {!hasCashRow && (
           <Button
             type="button"
             variant="secondary"
@@ -1513,14 +1513,14 @@ export const CashHubAllocations = React.forwardRef<
                                 <PillIdentityGlyph
                                   profile={profiles.get(c.identity_value)}
                                 />
-                              ) : c.identity_type === "bearer" ? (
+                              ) : c.identity_type === "cash" ? (
                                 <BanknoteIcon className="h-3 w-3 shrink-0" />
                               ) : (
                                 <KeyRound className="h-3 w-3 shrink-0" />
                               )}
                               <span className="truncate">
-                                {c.identity_type === "bearer"
-                                  ? t("identityType.bearer")
+                                {c.identity_type === "cash"
+                                  ? t("identityType.cash")
                                   : c.identity_type === "pubkey"
                                     ? pillIdentityLabel(
                                         c.identity_value,
@@ -1614,8 +1614,7 @@ export const CashHubAllocations = React.forwardRef<
                               recipientCount: totalCount,
                               claimedCount,
                               expiresAtSecs: group.claims[0].expires_at,
-                              isBearer:
-                                group.claims[0].identity_type === "bearer",
+                              isCash: group.claims[0].identity_type === "cash",
                             });
                           }}
                         >
@@ -1841,7 +1840,7 @@ export const CashHubAllocations = React.forwardRef<
           app={revealApp}
           pairingUri={revealUri}
           lokicashToken={revealLokicashToken}
-          bearerSecret={revealBearerSecret}
+          cashSecret={revealCashSecret}
           walletSummary={revealSummary}
           mode={revealMode}
           primaryFormat="lokicash"
@@ -1849,7 +1848,7 @@ export const CashHubAllocations = React.forwardRef<
             setRevealUri(undefined);
             setRevealApp(undefined);
             setRevealLokicashToken(undefined);
-            setRevealBearerSecret(undefined);
+            setRevealCashSecret(undefined);
             setRevealSummary(undefined);
           }}
         />
