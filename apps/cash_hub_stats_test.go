@@ -59,7 +59,7 @@ func TestGetCashHubStats_TotalsMoneyAcrossLiveAndArchived(t *testing.T) {
 		// Void must not reach any total — no recipient ever saw that bill.
 		{AmountMloki: 99999, Outcome: db.CashSliceStatusVoid, CreatedAt: now.Add(-3 * time.Hour)},
 	} {
-		a.WalletAppID = 500_000 + uint(a.AmountMloki)
+		a.WalletAppID = 500_000 + uint(a.AmountMloki) //nolint:gosec // fixed positive amounts in a test fixture
 		a.HubAppID = hub.ID
 		a.ClaimID = 1
 		a.IdentityType = db.CashIdentityPubkey
