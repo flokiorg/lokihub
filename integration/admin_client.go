@@ -172,6 +172,10 @@ type adminCashWalletClaim struct {
 	WalletAppID   uint   `json:"wallet_app_id"`
 	IdentityValue string `json:"identity_value"`
 	Claimed       bool   `json:"claimed"`
+	// CashToken is this claim's wallet packaged as a lokicash1... string. It
+	// is the only field in this listing that identifies the WALLET rather than
+	// the slice, so it is what requireCashWalletDrainedAway matches on.
+	CashToken string `json:"cash_token"`
 }
 
 type adminListCashWalletClaimsResponse struct {

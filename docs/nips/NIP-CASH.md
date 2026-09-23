@@ -1247,22 +1247,79 @@ stateDiagram-v2
     Deleted --> [*]
 ```
 
-Display state (Unredeemed / Active / Redeemed) MUST be computed from spend fraction
-(`spent = total funded − current balance`), never from a separately-tracked flag. A Cash Wallet is
-spend-only, so this is always well-defined. Reassigning a slice's identity in place via `cash_transfer`
-doesn't change its redemption state — an unredeemed, reassigned slice is still unredeemed. The wallet
-owner MAY delete a Cash Wallet in any redemption state, and any remaining balance MUST be swept back to
-the Cash Hub before the connection record is removed.
+Display state at the WALLET level (Unredeemed / Active / Redeemed) MAY be computed from spend fraction
+(`spent = total funded − current balance`). A Cash Wallet is spend-only, so this is always well-defined.
+Reassigning a slice's identity in place via `cash_transfer` doesn't change its redemption state — an
+unredeemed, reassigned slice is still unredeemed. The wallet owner MAY delete a Cash Wallet in any
+redemption state, and any remaining balance MUST be swept back to the Cash Hub before the connection
+record is removed.
+
+A SLICE's state is not a spend fraction, because a slice is never partially spent: `cash_redeem` pays one
+out whole or rolls back entirely, and `cash_transfer` consumes it terminally. Its state is therefore one
+of the following, derived while the slice is live and stored once it becomes terminal:
+
+| state | meaning |
+|---|---|
+| `unclaimed` | still redeemable |
+| `redeemed` | paid out over Lightning |
+| `split` | value moved into another bill (a split or a consolidate) |
+| `expired` | the redeem window passed unclaimed; value returned to the Hub |
+| `reclaimed` | the wallet was destroyed before the window passed; value returned to the Hub |
+| `written-off` | value could not be returned anywhere, because the parent Hub was gone |
+
+A stored terminal value is NOT the "separately-tracked flag" this section warns against: that prohibition
+is about live rows, where the ledger is the source of truth and a flag could drift from it. A terminal
+slice has no ledger left to drift from — by definition its wallet may already be deleted.
 
 **Auto-delete on full drain.** An implementation SHOULD delete a Cash Wallet immediately,
-without waiting for the expiry sweep, the moment all of the following hold: a `cash_transfer` split has
-just fully claimed one of its slices (§Transferring and Splitting a Slice — the source slice's committed amount reached
-zero), no other slice on that same wallet remains unredeemed, and the wallet's own real balance is exactly
-zero. This is purely a housekeeping optimization — a wallet left in this state and NOT auto-deleted is
-still fully correct, just stale until its natural expiry — so an implementation MAY instead rely solely on
-the expiry sweep if it prefers. The three-way check MUST be conservative: a wallet MUST NOT be deleted
-while any sibling slice is still unclaimed, even if the balance momentarily appears to allow it, since that
-sibling's own future redemption still needs the real funds sitting there.
+without waiting for the expiry sweep, the moment all of the following hold: its last unredeemed slice has
+just reached a terminal state by ANY mechanism — a `cash_redeem` payout, a `cash_transfer` split
+(§Transferring and Splitting a Slice), or a `cash_consolidate` — no other slice on that same wallet remains
+unredeemed, and the wallet's own real balance is exactly zero.
+
+The check MUST be conservative: a wallet MUST NOT be deleted while any sibling slice is still unclaimed,
+even if the balance momentarily appears to allow it, since that sibling's own future redemption still
+needs the real funds sitting there. Leaving a drained wallet in place until its natural expiry remains
+CORRECT — no value is at risk either way — so an implementation MAY rely solely on the expiry sweep.
+
+What an implementation MUST NOT do is apply this to some drain mechanisms and not others. A wallet that no
+longer exists is met with silence, indistinguishable from a pubkey the Hub never served; one that still
+exists answers a request naming a spent slice with an error. Deleting only on a split would therefore make
+that error a reliable signal that this Hub issued this exact bill and that it has been spent — readable by
+anyone who ever saw the token, a co-recipient of a shared bill included. Whichever policy a Hub adopts,
+it MUST be the same for `cash_redeem`, `cash_transfer` and `cash_consolidate`.
+
+### Archival on Deletion
+
+An implementation MAY retain a record of a Cash Wallet and its slices after deleting the wallet, so an
+operator can still account for value that passed through the Hub. If it does:
+
+- The archive MUST NOT be reachable from the NWC surface in any way, and MUST NOT change the silence
+  property: a request naming an archived wallet's pubkey MUST still be met with silence, identical to one
+  naming a pubkey the Hub never served.
+- The archive MUST NOT cause a connection token to be derivable for a deleted wallet. A pairing key that
+  remains deterministically derivable from the wallet's identifier is not licence to mint one: a token for
+  a destroyed bill looks spendable and is not.
+- An archived slice SHOULD carry the terminal state from the table above, and MAY carry the payment facts
+  of its payout (payment hash, preimage, fees). Those facts MUST be recorded at redeem time, since nothing
+  in the ledger links a payout back to the slice that caused it once the wallet is gone.
+- The identity stored is the same value the live slice held. For a cash-mode slice that is already a
+  one-way commitment (§Cash-Mode Slices); the raw secret is never persisted, archived or otherwise.
+
+### Info Events
+
+A Cash Wallet MUST NOT publish a kind-13194 NIP-47 info event.
+
+Such an event is authored by the wallet's own pubkey, so its presence on a relay is a permanent,
+unauthenticated answer to "did this Hub ever serve this pubkey" — and its capability list identifies the
+pubkey as a cash bill specifically. That defeats the deletion above, which exists precisely to make a
+spent bill unfindable. Publishing and later deleting the event is NOT sufficient: relay-side deletion is
+best-effort and may simply fail.
+
+Nothing is lost by omitting it. A Cash Wallet's connection reaches its holder inside the token
+(§The Cash Token), which already carries everything needed to use it; no client discovers a bill by relay
+query. A Cash Hub's own info event is unaffected — a Hub is a public service, and advertising `mint_cash`
+is the point.
 
 ### Full Lifecycle — All Cases
 
