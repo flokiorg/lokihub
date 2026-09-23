@@ -14,6 +14,7 @@
 package integration
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -65,7 +66,7 @@ func splitOffPartial(t *testing.T, shared *nwcclient.Client, curPriv, curPub, wa
 // carve-offs while only debiting one.
 func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-concurrent-partial-splits", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-concurrent-partial-splits", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	const iterations = 15
@@ -135,12 +136,14 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 		require.EqualValues(t, fullAmount, winner.AmountMillis+*winner.RemainingAmountMillis,
 			"CONSERVATION: carved piece + remainder must equal the original slice exactly")
 
-		// The source wallet was consumed by the winning split: its real ledger
-		// balance is now zero (its value moved into the two new wallets).
+		// The source wallet was consumed by the winning split: it was left
+		// holding nothing (its value moved into the two new wallets), so the
+		// hub deleted it and it no longer answers.
 		sharedConn := mustConnect(t, created.PairingURI)
-		var bal GetBalanceResult
-		require.NoError(t, sharedConn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-		require.EqualValues(t, 0, bal.Balance, "the source slice was consumed; its wallet must be drained (no double-spend)")
+		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+			var bal GetBalanceResult
+			return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+		})
 	}
 }
 
@@ -159,7 +162,7 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 // spin a piece of it into a second wallet.
 func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-redeem-vs-partial-split", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-redeem-vs-partial-split", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	// 15, not more: each iteration mints a fresh fullAmount wallet funded
@@ -223,26 +226,34 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 		t.Logf("iter %d: redeemWon=%v (err=%v) splitWon=%v (err=%v)", i, redeemWon, redeemErr, splitWon, splitErr)
 		require.True(t, redeemWon || splitWon, "at least one op should have succeeded on a fresh unclaimed slice")
 
+		// Deliberately not read up front any more: whether this wallet is even
+		// still there depends on which op won — a split drains and deletes it,
+		// a redeem leaves it in place holding nothing.
 		sharedConn := mustConnect(t, created.PairingURI)
-		var bal GetBalanceResult
-		require.NoError(t, sharedConn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
 
 		switch {
 		case redeemWon && splitWon:
 			// This is the catastrophic case the guard must prevent: the wallet
 			// paid out the whole slice AND carved a piece into a new wallet.
 			bothWon++
-			t.Errorf("CRITICAL DOUBLE-SPEND iter %d: cash_redeem paid full %d AND a partial split carved off %d from the same slice; "+
-				"wallet real balance now %d", i, fullAmount, splitRes.AmountMillis, bal.Balance)
+			t.Errorf("CRITICAL DOUBLE-SPEND iter %d: cash_redeem paid full %d AND a partial split carved off %d from the same slice",
+				i, fullAmount, splitRes.AmountMillis)
 		case redeemWon:
 			// Redeem took the whole slice: wallet drained, split must have lost.
+			// A redeem does not delete the wallet the way a split does, so it is
+			// still here to answer — holding nothing.
+			var bal GetBalanceResult
+			require.NoError(t, sharedConn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
 			require.EqualValues(t, 0, bal.Balance, "after a full redeem the wallet must hold nothing")
 			require.NotEmpty(t, redeemRes.Preimage)
 		case splitWon:
-			// The split consumed the source slice entirely: the source wallet is
-			// drained (its value moved into the carved + remainder wallets), and
-			// the racing full redeem lost.
-			require.EqualValues(t, 0, bal.Balance, "after a split consumes the slice, the source wallet is drained")
+			// The split consumed the source slice entirely: the source wallet was
+			// left holding nothing (its value moved into the carved + remainder
+			// wallets) so the hub deleted it, and the racing full redeem lost.
+			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+				var bal GetBalanceResult
+				return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+			})
 			require.EqualValues(t, splitAmount, splitRes.AmountMillis)
 			require.NotNil(t, splitRes.RemainingAmountMillis)
 			require.EqualValues(t, fullAmount-splitAmount, *splitRes.RemainingAmountMillis)
@@ -369,7 +380,7 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 // it remains a valid, if now redundant, regression test.
 func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-split-proof-replay", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-split-proof-replay", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	curPriv := newTestPrivkey(t)
@@ -401,23 +412,19 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 
 	// Under the two-wallet model the first split CONSUMED the source slice
 	// terminally — its value now lives in the carved (30k) and remainder (70k)
-	// wallets. Replaying the SAME proof for ANY amount can no longer even find a
-	// slice registered to curPub on this connection, so the replay is rejected
-	// outright. This is a STRONGER guarantee than the old "each split re-reads
-	// the live balance": there is simply nothing left here to split again.
+	// wallets, and the emptied source wallet was deleted outright. Replaying the
+	// SAME proof for ANY amount reaches no wallet at all, so it goes unanswered.
+	// This is a STRONGER guarantee than the old "each split re-reads the live
+	// balance": there is simply nothing left here to split again.
 	second := uint64(80_000)
 	var res2 CashTransferResult
-	err = shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
-		IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: proofJSON,
-		NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-		AmountMillis: &second,
-	}, &res2)
-	requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
-
-	// The source wallet is drained; its value moved into the two new wallets.
-	var bal GetBalanceResult
-	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, 0, bal.Balance, "source must be drained after its only slice was split away")
+	requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+		return shared.Call(ctx, constants.NIP47MethodCashTransfer, CashTransferParams{
+			IdentityType: "pubkey", IdentityValue: curPub, IdentityEvent: proofJSON,
+			NewIdentity:  CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+			AmountMillis: &second,
+		}, &res2)
+	})
 	require.NotNil(t, res1.RemainingAmountMillis)
 	require.EqualValues(t, fullAmount-first, *res1.RemainingAmountMillis)
 

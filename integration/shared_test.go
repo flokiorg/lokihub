@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/integration/nwcclient"
+	"github.com/flokiorg/lokihub/lokicash"
 )
 
 // cashSecretAndHash returns a fresh random cash secret (hex) and the
@@ -246,6 +247,77 @@ func mustConnect(t *testing.T, pairingURI string) *nwcclient.Client {
 func newTestPrivkey(t *testing.T) string {
 	t.Helper()
 	return nostr.GeneratePrivateKey()
+}
+
+// drainedWalletSilenceWindow is how long a request to a deleted cash wallet is
+// given before its silence counts as the answer. Deliberately short: the hub
+// never answers one, and several call sites sit inside 12-15 iteration loops,
+// so the full request budget here would add minutes to the suite to learn
+// nothing. A live wallet answers these in ~100-200ms, and even if a loaded hub
+// were slow enough to look silent, the deletion check below has already
+// settled the question out-of-band - this half only shows the request path
+// stays quiet.
+const drainedWalletSilenceWindow = 2 * time.Second
+
+// requireCashWalletDrainedAway asserts that a cash wallet whose last slice was
+// just spent no longer exists, and that the hub now says nothing about it.
+//
+// A bill with no value left is deleted (nip47/controllers.
+// maybeAutoDeleteDrainedCashWallet), the way real cash stops existing once it
+// is spent: a cash_transfer that consumes the source slice moves the value
+// into the carved and remainder wallets, leaving the source holding nothing.
+// Requests still naming it are then met with silence rather than an error - a
+// pubkey this hub once served must stay indistinguishable from one it never
+// served, or the hub becomes an oracle for which wallets live here.
+//
+// Both halves are checked, because neither on its own is enough. Silence is
+// also what a merely slow hub looks like, so the deletion is confirmed
+// out-of-band through the admin API first; and the deletion alone would not
+// show that the request path stays quiet. Together they are the stronger form
+// of the "its balance is now zero" assertion these call sites used to make -
+// the hub only deletes once every slice is claimed AND the balance is zero.
+//
+// Pass a nil call to assert the deletion alone.
+func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uint, walletPubkey string, call func(ctx context.Context) error) {
+	t.Helper()
+
+	// apps.ListCashWalletClaims joins apps, so a deleted wallet's slices drop
+	// out of this listing entirely. Matched on the wallet pubkey carried by
+	// each claim's own lokicash token, never on the identity: a split's
+	// remainder wallet inherits the source slice's identity value verbatim, so
+	// that value is still present afterwards, on a different wallet.
+	claims, err := admin.listCashWalletClaims(hubAppID)
+	require.NoError(t, err, "listing this hub's cash wallet claims")
+	require.NotEmpty(t, claims, "the split's own carved and remainder wallets must still be listed under this hub")
+
+	matchable := 0
+	for _, claim := range claims {
+		if claim.CashToken == "" {
+			continue
+		}
+		token, decErr := lokicash.Decode(claim.CashToken)
+		if decErr != nil {
+			continue
+		}
+		matchable++
+		require.NotEqual(t, walletPubkey, token.WalletPubkey,
+			"a fully-drained cash wallet must be deleted, not left behind holding nothing (claim id=%d)", claim.ID)
+	}
+	// Without this the loop above would pass vacuously the day the hub stops
+	// deriving tokens for this listing.
+	require.NotZero(t, matchable, "the claims listing must carry decodable cash tokens for the check above to mean anything")
+
+	if call == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+	defer cancel()
+
+	err = call(ctx)
+	require.Error(t, err, "a deleted cash wallet must not answer")
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey")
 }
 
 // requireNWCErrorCode asserts err is an *nwcclient.NWCError with the given code.

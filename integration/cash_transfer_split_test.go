@@ -18,6 +18,7 @@
 package integration
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -32,8 +33,8 @@ import (
 
 func TestCashTransferSpinOff(t *testing.T) {
 	cfg := requireConfig(t)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "cash-transfer-spinoff-cash-hub", nil)
-	testCashTransferSpinOff(t, cfg, hub)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "cash-transfer-spinoff-cash-hub", nil)
+	testCashTransferSpinOff(t, cfg, hub, hubAppID, admin)
 }
 
 // nwcURIFromLokicash mirrors nip47/controllers/pairing.go's
@@ -51,7 +52,7 @@ func nwcURIFromLokicash(token lokicash.Token) string {
 	return b.String()
 }
 
-func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
+func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAppID uint, admin *adminClient) {
 	hubClient := mustConnect(t, hub.Connection)
 
 	t.Run("ClaimedCotenant_SpinsOffToNewWallet_RedeemableThere_NotDecryptableByCotenant", func(t *testing.T) {
@@ -103,18 +104,21 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotEmpty(t, transferResult.NewWalletPubkey)
 		require.NotEmpty(t, transferResult.NewWalletToken)
 
-		// The OLD identity must no longer be able to redeem or transfer —
-		// its slice's value has moved.
+		// The OLD identity must no longer be able to redeem or transfer — its
+		// slice's value has moved. The co-tenant had already redeemed theirs,
+		// so that spin-off took the last of this wallet: the hub deleted it,
+		// and the redeem below is answered with nothing at all.
 		oldInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff old identity redeem")
 		oldProof := buildClaimProofEvent(t, victimPriv, created.WalletPubkey, oldInvoice.PaymentHash, nil, time.Now())
 		var oldClaimResult ClaimFundsResult
-		err = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:       oldInvoice.Invoice,
-			IdentityType:  "pubkey",
-			IdentityValue: victimPub,
-			IdentityEvent: eventJSON(t, oldProof),
-		}, &oldClaimResult)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+			return shared.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:       oldInvoice.Invoice,
+				IdentityType:  "pubkey",
+				IdentityValue: victimPub,
+				IdentityEvent: eventJSON(t, oldProof),
+			}, &oldClaimResult)
+		})
 
 		// The attacker — despite holding this shared connection and seeing
 		// this exact same plaintext NewWalletPubkey/NewWalletToken — cannot
