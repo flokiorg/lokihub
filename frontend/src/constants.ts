@@ -7,6 +7,11 @@ export const localStorageKeys = {
   appAlertsHiddenUntil: "appAlertsHiddenUntil",
   lokihubLang: "lokihub-lang",
   preferredInputUnit: "lokihub-preferred-input-unit",
+  // Whether a Cash Hub's "Analytics" section starts expanded. Deliberately
+  // one key for every hub rather than one per hub id: it is a preference
+  // about the section, not about a particular hub, and a per-hub key would
+  // leave stale entries behind for every hub ever deleted.
+  cashAnalyticsKeepOpen: "lokihub-cash-analytics-keep-open",
 };
 
 export const ONCHAIN_DUST_LOKI = 1000;

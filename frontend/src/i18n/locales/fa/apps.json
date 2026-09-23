@@ -38,7 +38,8 @@
     "amount": "مقدار بودجه",
     "customAmount": "مقدار بودجه دلخواه ({{unit}})",
     "spent": "هزینه‌شده",
-    "remaining": "باقی‌مانده"
+    "remaining": "باقی‌مانده",
+    "cashHubCaption": "پرداخت‌های عادی انجام‌شده از طریق اتصال خودِ این هاب را محدود می‌کند. ضرب کردن را محدود نمی‌کند — هر اسکناس با انتقال داخلی تأمین می‌شود و اندازه‌اش را بیشینهٔ هر کیف‌پول در تنظیمات هاب محدود می‌کند."
   },
   "renewals": {
     "daily": "روزانه",
@@ -76,6 +77,11 @@
     "failedToUpdate": "به‌روزرسانی اتصال ناموفق بود",
     "lokiAccount": "حساب Loki",
     "connections_count": "{{count}} اتصال",
+    "siblingCashHubs": "{{count}} Cash Hub",
+    "siblingCircles": "{{count}} حلقه",
+    "siblingCashBills": "{{count}} توکن Lokicash",
+    "siblingCircleWallets": "{{count}} کیف‌پول حلقه",
+    "siblingSubwallets": "{{count}} زیرکیف‌پول",
     "connected": "متصل",
     "addAnother": "افزودن اتصال دیگر",
     "connectionDetails": "جزئیات اتصال",
@@ -129,7 +135,10 @@
     "addMember": "افزودن عضو",
     "circleWalletsTitle": "کیف‌پول‌های حلقه",
     "cashWalletsTitle": "توکن‌های Lokicash",
-    "addCashWallet": "ضرب Lokicash"
+    "analyticsTitle": "تحلیل‌ها",
+    "keepAnalyticsOpen": "باز نگه داشتن",
+    "addCashWallet": "ضرب Lokicash",
+    "hubExpiryBeforeBillsWarning": "اتصال این {{kind}} پیش از طولانی‌ترین اسکناسی که می‌تواند ضرب کند منقضی می‌شود. اسکناس‌های صادرشده مهلت خودشان را حفظ می‌کنند، اما پس از انقضای اتصال نمی‌توانید اسکناس تازه‌ای ضرب کنید."
   },
   "newApp": {
     "unsupportedApp": "اپلیکیشن پشتیبانی‌نشده",
