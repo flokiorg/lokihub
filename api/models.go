@@ -556,6 +556,12 @@ type CashHubDailyPointResponse struct {
 	IssuedMloki   int64  `json:"issued_mloki"`
 	RedeemedMloki int64  `json:"redeemed_mloki"`
 	ReturnedMloki int64  `json:"returned_mloki"`
+	// SplitMloki/WrittenOffMloki: the other two ways a slice stops being
+	// outstanding. A client reconstructing the outstanding curve from this
+	// series must subtract all four, or it overstates the curve and its
+	// right-hand end will not meet OutstandingMloki.
+	SplitMloki      int64 `json:"split_mloki"`
+	WrittenOffMloki int64 `json:"written_off_mloki"`
 }
 
 type CashWalletConnectionResponse struct {

@@ -3364,6 +3364,25 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			ts := app.ExpiresAt.Unix()
 			r.ExpiresAt = &ts
 		}
+		// Status, derived exactly as apps.cashClaimUnionSQL's live branch
+		// derives it. Without it this endpoint returned rows whose Status was
+		// the empty string, which is why a bill's own page had to fall back to
+		// a coarser claimed/unclaimed/moved badge while the hub's list showed
+		// the real six-state vocabulary for the same slices, one click apart.
+		//
+		// 'reclaimed' and 'written-off' are deliberately absent: both are
+		// archive-only outcomes, and this endpoint only ever sees the live
+		// rows of a wallet that still exists.
+		switch {
+		case c.ClaimedAt != nil && c.SpunOffToWalletAppID != nil:
+			r.Status = db.CashSliceStatusSplit
+		case c.ClaimedAt != nil:
+			r.Status = db.CashSliceStatusRedeemed
+		case app.ExpiresAt != nil && app.ExpiresAt.Before(time.Now()):
+			r.Status = db.CashSliceStatusExpired
+		default:
+			r.Status = db.CashSliceStatusUnclaimed
+		}
 		result = append(result, r)
 	}
 	return result, nil

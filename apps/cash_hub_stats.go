@@ -55,6 +55,15 @@ type CashHubDailyPoint struct {
 	IssuedMloki   int64
 	RedeemedMloki int64
 	ReturnedMloki int64
+	// SplitMloki and WrittenOffMloki are the two other ways a slice stops
+	// being outstanding. Without them a client reconstructing the outstanding
+	// curve from this series (issued less what left) overstates it by every
+	// split and every write-off, and its right-hand end would not land on the
+	// OutstandingMloki figure above. ReturnedMloki is correspondingly limited
+	// to 'expired'/'reclaimed' here, matching what ReturnedMloki means in the
+	// totals rather than quietly folding write-offs in.
+	SplitMloki      int64
+	WrittenOffMloki int64
 }
 
 // cashStatsWindowDays bounds the daily series and the median sample. A chart
@@ -80,6 +89,17 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 
 	// Live slices: only the unclaimed ones are still a liability. A claimed
 	// live slice has already been counted by its terminal branch below.
+	//
+	// The expiry condition is load-bearing, not belt-and-braces. A slice whose
+	// window has passed but which the sweep has not collected yet is still
+	// live with claimed_at IS NULL, yet it is NOT redeemable — permissions.
+	// HasPermission rejects it on the wallet's own ExpiresAt. Counting it here
+	// would both contradict this figure's own meaning ("value still
+	// redeemable") and double-count it, since the union below already reports
+	// it as 'expired' and it is summed into ReturnedMloki. This condition
+	// mirrors cashClaimUnionSQL's own 'expired' branch exactly, so every slice
+	// lands in exactly one bucket and Issued == Outstanding + Redeemed +
+	// Split + Returned + WrittenOff holds at all times.
 	var liveOutstanding struct {
 		Total int64
 		N     uint64
@@ -89,7 +109,8 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 		FROM cash_wallet_claims c
 		JOIN apps a ON a.id = c.wallet_app_id
 		WHERE a.parent_app_id = ? AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
-		  AND c.claimed_at IS NULL`, hubID).Scan(&liveOutstanding).Error; err != nil {
+		  AND c.claimed_at IS NULL
+		  AND (a.expires_at IS NULL OR a.expires_at >= ?)`, hubID, now).Scan(&liveOutstanding).Error; err != nil {
 		return nil, fmt.Errorf("failed to total outstanding cash for hub %d: %w", hubID, err)
 	}
 	stats.OutstandingMloki = liveOutstanding.Total
@@ -139,7 +160,9 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 	return stats, nil
 }
 
-// fillCashDailySeries buckets issued/redeemed/returned into days.
+// fillCashDailySeries buckets issued/redeemed/returned/split/written-off into
+// days. Every terminal outcome gets its own bucket so the series sums back to
+// the totals GetCashHubStats reports.
 func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, since, now time.Time) error {
 	type event struct {
 		At     time.Time
@@ -159,8 +182,16 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, sin
 		FROM (`+cashClaimUnionSQL+`) u2 WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
 		UNION ALL
 		SELECT claimed_at, amount_mloki, 'returned'
-		FROM (`+cashClaimUnionSQL+`) u3 WHERE status IN ('expired','reclaimed','written-off') AND claimed_at IS NOT NULL AND claimed_at >= ?
+		FROM (`+cashClaimUnionSQL+`) u3 WHERE status IN ('expired','reclaimed') AND claimed_at IS NOT NULL AND claimed_at >= ?
+		UNION ALL
+		SELECT claimed_at, amount_mloki, 'split'
+		FROM (`+cashClaimUnionSQL+`) u4 WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
+		UNION ALL
+		SELECT claimed_at, amount_mloki, 'written-off'
+		FROM (`+cashClaimUnionSQL+`) u5 WHERE status = 'written-off' AND claimed_at IS NOT NULL AND claimed_at >= ?
 	`, now, hubID, hubID, since,
+		now, hubID, hubID, since,
+		now, hubID, hubID, since,
 		now, hubID, hubID, since,
 		now, hubID, hubID, since).Scan(&events).Error; err != nil {
 		return fmt.Errorf("failed to read cash daily series for hub %d: %w", hubID, err)
@@ -184,6 +215,10 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, sin
 			b.RedeemedMloki += e.Amount
 		case "returned":
 			b.ReturnedMloki += e.Amount
+		case "split":
+			b.SplitMloki += e.Amount
+		case "written-off":
+			b.WrittenOffMloki += e.Amount
 		}
 	}
 
