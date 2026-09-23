@@ -33,6 +33,9 @@ func (api *api) GetCashHubStats(appID uint) (*CashHubStatsResponse, error) {
 			IssuedMloki:   p.IssuedMloki,
 			RedeemedMloki: p.RedeemedMloki,
 			ReturnedMloki: p.ReturnedMloki,
+
+			SplitMloki:      p.SplitMloki,
+			WrittenOffMloki: p.WrittenOffMloki,
 		})
 	}
 
