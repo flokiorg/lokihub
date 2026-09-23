@@ -11,6 +11,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -60,7 +61,7 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	cfg := requireConfig(t)
 	iaPriv := createEphemeralTrustedIA(t, cfg)
 	iaPub := mustPubkey(t, iaPriv)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-connkey-partial-split", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-connkey-partial-split", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	const fullAmount = uint64(100_000)
@@ -92,11 +93,13 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NotEmpty(t, res.NewWalletToken, "a connection_key partial split must spin off a carved wallet")
 	require.NotEmpty(t, res.RemainderWalletToken, "the remainder is now its own new wallet, not left on the source")
 
-	// The source slice was consumed: the source wallet is drained (its value
-	// moved into the carved + remainder wallets) — no double-spend.
-	var bal GetBalanceResult
-	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, 0, bal.Balance)
+	// The source slice was consumed: the source wallet was left holding
+	// nothing (its value moved into the carved + remainder wallets) and the hub
+	// deleted it — no double-spend, and nothing left to answer.
+	requireCashWalletDrainedAway(t, admin, hubAppID, walletPubkey, func(ctx context.Context) error {
+		var bal GetBalanceResult
+		return shared.Call(ctx, "get_balance", struct{}{}, &bal)
+	})
 
 	// The remainder is redeemable under the SAME connection_key (fresh
 	// attestation + proof) — now from its OWN new wallet, for exactly the
