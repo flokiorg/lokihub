@@ -235,6 +235,12 @@ func (svc *service) publishAllAppInfoEvents() {
 
 	for _, app := range apps {
 		func(app db.App) {
+			// Skipped for cash bills — see db.PublishesNip47InfoEvent. Without
+			// this, every restart would re-advertise every live bill, undoing
+			// the suppression at creation time.
+			if !db.PublishesNip47InfoEvent(app.Kind) {
+				return
+			}
 			// queue info event publish request for all existing apps
 			walletPrivKey, err := svc.keys.GetAppWalletKey(app.ID)
 			if err != nil {
