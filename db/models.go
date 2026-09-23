@@ -374,6 +374,26 @@ func IsNameImmutableKind(kind string) bool {
 		kind == AppKindCircleWallet
 }
 
+// PublishesNip47InfoEvent reports whether an app of this kind should advertise
+// itself to relays with a kind-13194 NIP-47 info event.
+//
+// Everything does except a cash_wallet. An info event is authored by the app's
+// OWN wallet pubkey, so its presence on a relay is a permanent, unauthenticated
+// answer to "did this hub ever serve this pubkey" — and its capability list
+// (cash_redeem/cash_transfer/...) identifies it as a cash bill specifically.
+// That defeats the hard delete a spent bill relies on (NIP-CASH §Lifecycle and
+// Deletion), which exists precisely so a spent bill becomes indistinguishable
+// from a pubkey the hub never served. Publishing and deleting later is no fix:
+// relay-side deletion is best-effort over the network and can just fail.
+//
+// Not publishing costs a bill's holder nothing. The connection travels inside
+// the lokicash token, which already carries everything needed to use it; a bill
+// is never discovered by relay query. A cash_hub, by contrast, is a public
+// service and advertising mint_cash is the point.
+func PublishesNip47InfoEvent(kind string) bool {
+	return kind != AppKindCashWallet
+}
+
 type AppPermission struct {
 	ID            uint
 	AppId         uint   `validate:"required"`

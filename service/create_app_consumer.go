@@ -54,8 +54,11 @@ func (s *createAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to calculate app wallet pub key")
 		return
 	}
-	for _, relayUrl := range s.svc.cfg.GetRelayUrls() {
-		s.svc.nip47Service.EnqueueNip47InfoPublishRequest(id, walletPubKey, walletPrivKey, relayUrl)
+	// Skipped entirely for a cash bill — see db.PublishesNip47InfoEvent.
+	if db.PublishesNip47InfoEvent(app.Kind) {
+		for _, relayUrl := range s.svc.cfg.GetRelayUrls() {
+			s.svc.nip47Service.EnqueueNip47InfoPublishRequest(id, walletPubKey, walletPrivKey, relayUrl)
+		}
 	}
 
 	// With the shared subscription in use, registering the wallet is all that

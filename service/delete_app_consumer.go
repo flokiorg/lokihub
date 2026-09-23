@@ -74,7 +74,14 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 
 		// try to delete info event from relays (non-critical if it fails)
 		// get nip47 event info for this app wallet key
-		nip47InfoEvent, err := s.svc.GetNip47Service().GetNip47Info(ctx, s.pool, s.walletPubkey)
+		//
+		// Looked up by walletPubKey — the pubkey of the app being deleted — not
+		// s.walletPubkey. The shared consumer's own s.walletPubkey is "", and
+		// GetNip47Info filters on Authors, so passing it matched nothing and
+		// silently skipped every deletion. Since the shared consumer is what
+		// runs whenever TrustedNwcRelay is on (the default), that meant info
+		// events were effectively never deleted for any kind.
+		nip47InfoEvent, err := s.svc.GetNip47Service().GetNip47Info(ctx, s.pool, walletPubKey)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Could not get nip47 info event")
 			return

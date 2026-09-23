@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/nbd-wtf/go-nostr"
@@ -40,7 +41,16 @@ func (s *updateAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 		return
 	}
 
-	if s.svc.keys.GetNostrPublicKey() != walletPubKey {
+	// Kind is needed to decide whether this app advertises itself at all — a
+	// cash bill never does (see db.PublishesNip47InfoEvent), and re-publishing
+	// on update would undo the suppression at creation time.
+	app := db.App{}
+	if err := s.svc.db.First(&app, &db.App{ID: id}).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("id", id).Msg("Failed to find app for id")
+		return
+	}
+
+	if s.svc.keys.GetNostrPublicKey() != walletPubKey && db.PublishesNip47InfoEvent(app.Kind) {
 		// only need to re-publish the nip47 event info if it is not a legacy app connection (shared wallet pubkey)
 		// (legacy app connection can be used for multiple apps - so it cannot be app-specific)
 		for _, relayUrl := range s.svc.cfg.GetRelayUrls() {
