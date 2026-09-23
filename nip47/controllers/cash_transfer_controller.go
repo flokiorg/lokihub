@@ -13,11 +13,14 @@ import (
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
+	"gorm.io/gorm"
 )
 
 // cashTransferNewIdentityParam/cashTransferParams below are no longer used to
@@ -813,28 +816,49 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 // invariant that a cash_wallet's balance always equals the sum of its
 // unclaimed slices' AmountMloki, but defensive rather than trusting that
 // blindly and force-deleting a wallet that still holds real funds).
+// cashDrainGuards wires the ledger reads the drain check needs. db/archive
+// takes them as functions so it can stay a leaf package — see its own comment.
+func cashDrainGuards() archive.DrainGuards {
+	return archive.DrainGuards{
+		IsolatedBalance:    queries.GetIsolatedBalance,
+		HasPendingIncoming: queries.HasPendingIncoming,
+	}
+}
+
 func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App) {
-	claims, err := controller.appsService.ListClaimsForWallet(app.ID)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list claims for Cash wallet auto-delete check")
+	// The guard now runs inside the same transaction as the archive and the
+	// delete, so a concurrent UnclaimCashSlice rollback can no longer restore
+	// an unclaimed slice between the check and the delete.
+	err := controller.db.Transaction(func(tx *gorm.DB) error {
+		return archive.ArchiveAndDeleteDrainedCashBillTx(tx, app, cashDrainGuards(), time.Now())
+	})
+	switch {
+	case errors.Is(err, archive.ErrBillNotDrained):
+		// Expected: another slice is still unclaimed, or the balance is not
+		// zero. Either way the bill legitimately stays alive, and the expiry
+		// sweep remains the fallback.
+		logger.Logger.Debug().Err(err).Uint("app_id", app.ID).
+			Msg("Cash wallet not fully drained; leaving it alive")
+		return
+	case err != nil:
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
+			Msg("Failed to archive and auto-delete fully-drained Cash wallet")
 		return
 	}
-	for _, c := range claims {
-		if c.ClaimedAt == nil {
-			return // another slice is still unclaimed — keep the wallet alive
-		}
-	}
-	balance := queries.GetIsolatedBalance(controller.db, app.ID)
-	if balance != 0 {
-		logger.Logger.Error().Uint("app_id", app.ID).Int64("balance", balance).
-			Msg("Cash wallet has no unclaimed slices left but a nonzero balance; leaving it for the expiry sweep rather than force-deleting")
-		return
-	}
-	if err := controller.appsService.DeleteApp(app); err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to auto-delete fully-drained Cash wallet")
-		return
-	}
-	logger.Logger.Info().Uint("app_id", app.ID).Msg("Auto-deleted Cash wallet after its last slice was fully split away")
+
+	// Published after the commit, so the consumer's own lookup over a separate
+	// connection cannot race the transaction. This is what drops the wallet
+	// from the registry.
+	controller.eventPublisher.Publish(&events.Event{
+		Event: "nwc_app_deleted",
+		Properties: map[string]interface{}{
+			"name": app.Name,
+			"id":   app.ID,
+		},
+	})
+
+	logger.Logger.Info().Uint("app_id", app.ID).
+		Msg("Archived and auto-deleted Cash wallet after its last slice was fully split away")
 }
 
 // verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same

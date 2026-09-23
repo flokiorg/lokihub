@@ -90,6 +90,8 @@ func Migrate(gormDB *gorm.DB) error {
 		&db.CircleWalletMembership{},
 		&db.CashTransferProof{},
 		&db.CashStrandedFund{},
+		&db.CashBillArchive{},
+		&db.CashBillSliceArchive{},
 	); err != nil {
 		return err
 	}

@@ -38,6 +38,12 @@ var expectedTables = []string{
 	"circle_wallet_memberships",
 	"cash_transfer_proofs",
 	"cash_stranded_funds",
+	// The cash bill archive. Retained forever and carried across a migration
+	// like any other table: it is the only record that a spent bill ever
+	// existed, since the bill's own app row is hard-deleted the moment it is
+	// drained.
+	"cash_bill_archives",
+	"cash_bill_slice_archives",
 }
 
 func main() {

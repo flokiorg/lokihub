@@ -198,7 +198,31 @@ type CashWalletClaim struct {
 	// only by callers (e.g. list_recipients) that want to explain *why* a
 	// slice is claimed with no matching payment record.
 	SpunOffToWalletAppID *uint
-	CreatedAt            time.Time
+	// The payout facts for a slice redeemed over Lightning, recorded here at
+	// redeem time rather than looked up later.
+	//
+	// They cannot be reconstructed after the fact: a Transaction carries no
+	// identity, so on a multi-recipient bill there is nothing linking a payout
+	// back to the slice that caused it — and for the common mint_cash shape,
+	// where every recipient gets an equal amount, matching on amount and
+	// timestamp is genuinely ambiguous. Worse, Transaction cascade-deletes with
+	// the wallet app (see Transaction.App), so by the time a spent bill is
+	// archived the ledger rows are already gone.
+	//
+	// All four stay zero for a slice that was split away rather than redeemed
+	// (SpunOffToWalletAppID set), and for rows that predate this column.
+	PaymentHash string `gorm:"index"`
+	Preimage    string
+	// RedeemFeeMloki is the hub's own cut, quoted from RedeemFeePpm and borne
+	// by the recipient (deducted from their payout). RoutingFeeMloki is what
+	// the hub paid the network to deliver it. They are different money moving
+	// in different directions, so an audit record that kept only one would be
+	// misleading — see transactions.reconcileCashRedeemFee, which settles the
+	// difference between them.
+	RedeemFeeMloki  int64
+	RoutingFeeMloki int64
+	SettledAt       *time.Time
+	CreatedAt       time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +
@@ -307,6 +331,169 @@ type CashStrandedFund struct {
 	AmountMloki         uint64 `gorm:"not null"`
 	CreatedAt           time.Time
 	ResolvedAt          *time.Time `gorm:"index"`
+}
+
+// How a cash bill itself ended. Deliberately a different set from the
+// slice-level vocabulary below: a bill whose slices ended differently — one
+// redeemed, one split away — has no single slice value that describes it.
+const (
+	// CashBillOutcomeDrained: every slice reached a terminal state and the
+	// balance hit zero, so the bill was auto-deleted rather than left holding
+	// nothing.
+	CashBillOutcomeDrained = "drained"
+	// CashBillOutcomeExpired: the expiry sweep reclaimed it.
+	CashBillOutcomeExpired = "expired"
+	// CashBillOutcomeDeleted: an operator deleted it through the admin API.
+	CashBillOutcomeDeleted = "deleted"
+	// CashBillOutcomeWrittenOff: the parent hub was gone, so a remaining
+	// balance could not be reclaimed anywhere and was abandoned.
+	CashBillOutcomeWrittenOff = "written-off"
+	// CashBillOutcomeVoid: a rollback of a bill whose funding (or whose
+	// compensating reversal) failed. No recipient ever saw it, so it is kept
+	// for forensics but excluded from listings by default.
+	CashBillOutcomeVoid = "void"
+)
+
+// How one slice ended. This is the vocabulary shared by live and archived
+// rows: a live row derives its value, an archived row stores the terminal one.
+const (
+	CashSliceStatusUnclaimed = "unclaimed" // live only: still redeemable
+	CashSliceStatusRedeemed  = "redeemed"  // paid out over Lightning
+	// CashSliceStatusSplit covers both a cash_transfer split and a
+	// cash_consolidate: both move the value into another bill and are
+	// indistinguishable from the claim row alone, which records only the
+	// forward direction (SpunOffToWalletAppID).
+	CashSliceStatusSplit = "split"
+	// CashSliceStatusExpired: unclaimed when the bill's own window passed;
+	// value reclaimed to the hub by the expiry sweep.
+	CashSliceStatusExpired = "expired"
+	// CashSliceStatusReclaimed: unclaimed when the bill was destroyed for some
+	// other reason (operator delete, drained sibling). Distinct from expired —
+	// the value still went back to the hub, but the window had not passed, so
+	// conflating the two would hide a recipient who was cut off early.
+	CashSliceStatusReclaimed = "reclaimed"
+	// CashSliceStatusWrittenOff: unclaimed, and the value could not be
+	// returned anywhere because the parent hub was gone.
+	CashSliceStatusWrittenOff = "written-off"
+	// CashSliceStatusVoid: belonged to a bill that never came into existence.
+	CashSliceStatusVoid = "void"
+)
+
+// CashBillArchive is the durable record of one cash bill — a cash_wallet app —
+// that has been hard-deleted.
+//
+// A spent bill MUST be hard-deleted: an unknown app is answered with silence
+// (nip47.HandleEvent), which is what makes a spent bill indistinguishable from
+// a pubkey this hub never served. But that delete cascades through
+// CashWalletClaim and Transaction alike, so without this table a bill leaves no
+// trace at all and the operator cannot account for money that passed through.
+//
+// No foreign key to any App row, for the same reason CashStrandedFund has
+// none: every app this record names is already gone by the time it exists, so
+// a constraint could only ever be a liability. Retained forever — this is the
+// only remaining evidence the bill existed.
+//
+// WalletAppID is unique: app IDs are never reused, so it is this table's
+// natural key and what makes a retried delete idempotent rather than
+// double-archiving.
+type CashBillArchive struct {
+	ID uint `gorm:"primaryKey"`
+	// WalletAppID is the id the bill's App row had. Unique — see above.
+	WalletAppID uint `gorm:"not null;uniqueIndex"`
+	// HubAppID scopes every listing query, and is the leading column of the
+	// composite index below.
+	HubAppID uint `gorm:"not null;index:idx_cash_bill_archive_hub_ended,priority:1"`
+	// WalletPubkey is how an operator correlates this row with relay logs, and
+	// what the silence-invariant test looks the bill up by.
+	WalletPubkey string `gorm:"not null;index"`
+	MintedAt     time.Time
+	// EndedAt is when the bill was deleted. Second column of the composite
+	// index so a per-hub listing is index-ordered rather than filesorting a
+	// forever-growing table.
+	EndedAt   time.Time `gorm:"not null;index:idx_cash_bill_archive_hub_ended,priority:2"`
+	ExpiresAt *time.Time
+	// Outcome is one of the CashBillOutcome* values.
+	Outcome string `gorm:"not null;index"`
+	// TotalMloki is the sum of this bill's archived slices, including any
+	// archived earlier by an operator removing a single recipient — so it is
+	// computed after those rows land, not from the claims alive at death.
+	TotalMloki int64 `gorm:"not null"`
+	// FundedMloki is the ledger truth: settled incoming transactions on the
+	// bill, read before the cascade destroys them. Divergence from TotalMloki
+	// is itself an auditable signal, so it is recorded rather than reconciled.
+	FundedMloki int64 `gorm:"not null"`
+	// ReclaimedMloki is what went back to the hub on the way out — non-zero
+	// only for an expiry or operator delete that found a live balance.
+	ReclaimedMloki int64
+	// SplitFromWalletAppID mirrors App.SplitFromWalletAppID so a bill's
+	// lineage survives the app row.
+	SplitFromWalletAppID *uint
+	CreatedAt            time.Time
+}
+
+// CashBillSliceArchive is the durable record of one CashWalletClaim that was
+// destroyed — with its whole bill, or on its own when an operator removed a
+// single recipient.
+//
+// Deliberately NOT a child of CashBillArchive, and FK-free like it. A slice can
+// be archived while its bill is still very much alive (AppsService.
+// DeleteCashClaim), so requiring a parent row would force a half-built bill
+// record at that moment. Each row therefore carries HubAppID and WalletAppID
+// directly and is self-sufficient for the merged listing; join on WalletAppID
+// only when the full picture is wanted.
+//
+// The payout facts are denormalised off the claim rather than copying whole
+// Transaction rows: those cascade away with the app anyway, and duplicating the
+// ledger into an audit table buys nothing.
+type CashBillSliceArchive struct {
+	ID uint `gorm:"primaryKey"`
+	// WalletAppID groups a bill's slices, and is what TotalMloki sums over.
+	WalletAppID uint `gorm:"not null;index"`
+	// HubAppID leads both composite indexes: it scopes every query, while
+	// Outcome (7 values) and CreatedAt are useless as leading columns.
+	HubAppID uint `gorm:"not null;index:idx_cash_slice_archive_hub_created,priority:1;index:idx_cash_slice_archive_hub_outcome,priority:1"`
+	// ClaimID is the original CashWalletClaim.ID, kept only so a log line
+	// naming a claim can still be resolved afterwards. Not unique here: claim
+	// ids and archive ids are separate sequences.
+	ClaimID uint `gorm:"not null"`
+
+	// Identity is stored as-is, unhashed. For a cash-mode slice IdentityValue
+	// is already a one-way commitment; for pubkey/connection_key it is public
+	// information the hub owner could already see while the bill was live.
+	IdentityType  string `gorm:"not null"`
+	IdentityValue string `gorm:"not null;index"`
+	IAPubkey      string
+	AmountMloki   int64 `gorm:"not null"`
+
+	// Outcome is one of the CashSliceStatus* values, derived per slice — never
+	// copied down from the bill, since one bill's slices can end differently.
+	Outcome string `gorm:"not null;index:idx_cash_slice_archive_hub_outcome,priority:2"`
+
+	// CreatedAt is the ORIGINAL claim's CreatedAt, preserved so the merged
+	// listing can sort live and archived rows on one comparable key.
+	CreatedAt  time.Time `gorm:"index:idx_cash_slice_archive_hub_created,priority:2"`
+	ClaimedAt  *time.Time
+	ArchivedAt time.Time `gorm:"not null"`
+
+	// Wallet-level facts denormalised so an archived row needs no join to
+	// render in the listing.
+	WalletPubkey    string
+	WalletExpiresAt *time.Time
+
+	MinTransferMloki int64
+	RedeemFeePpm     int
+
+	// Payout facts, populated only for Outcome == redeemed. RedeemFeeMloki is
+	// the hub's own cut borne by the recipient; RoutingFeeMloki is what the hub
+	// paid the network — see the same fields on CashWalletClaim.
+	PaymentHash     string `gorm:"index"`
+	Preimage        string
+	RedeemFeeMloki  int64
+	RoutingFeeMloki int64
+	SettledAt       *time.Time
+
+	// SpunOffToWalletAppID, for Outcome == split: which bill the value went to.
+	SpunOffToWalletAppID *uint
 }
 
 // CircleWalletMembership enforces at most one *active* circle_wallet per

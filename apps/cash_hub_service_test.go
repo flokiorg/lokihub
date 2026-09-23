@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
@@ -279,7 +281,7 @@ func TestListCashWalletClaims_AcrossMultipleWallets(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(), AmountMloki: 2000},
 	}))
 
-	rows, err := svc.AppsService.ListCashWalletClaims(hub.ID)
+	rows, _, _, err := svc.AppsService.ListCashWalletClaims(apps.CashClaimFilter{HubID: hub.ID, Now: time.Now()})
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
 }
@@ -296,7 +298,7 @@ func TestListCashWalletClaims_IsolatedByHub(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(), AmountMloki: 1000},
 	}))
 
-	rowsB, err := svc.AppsService.ListCashWalletClaims(hubB.ID)
+	rowsB, _, _, err := svc.AppsService.ListCashWalletClaims(apps.CashClaimFilter{HubID: hubB.ID, Now: time.Now()})
 	require.NoError(t, err)
 	assert.Empty(t, rowsB, "hub B must not see hub A's claims")
 }

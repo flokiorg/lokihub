@@ -166,7 +166,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 			}
 		}
 		if allReversed {
-			_ = deps.AppsService.DeleteApp(newApp)
+			_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
 		}
 	}()
 

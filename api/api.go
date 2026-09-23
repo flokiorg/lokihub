@@ -477,7 +477,10 @@ func (api *api) DeleteApp(userApp *db.App) error {
 	// regardless of claim state.
 	if userApp.Kind == db.AppKindCashWallet || userApp.Kind == db.AppKindCircleWallet {
 		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp)
+			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp, service.SubWalletDeletion{
+				Outcome:        db.CashBillOutcomeDeleted,
+				EventPublisher: api.eventPublisher,
+			})
 	}
 
 	return api.appsSvc.DeleteApp(userApp)
@@ -2942,7 +2945,10 @@ func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 	}
 
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-		api.svc.GetTransactionsService(), api.svc.GetLNClient(), child)
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
+			Outcome:        db.CashBillOutcomeDeleted,
+			EventPublisher: api.eventPublisher,
+		})
 }
 
 // DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
@@ -3031,22 +3037,10 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 	return result, nil
 }
 
-// cashClaimStatus buckets a claim row into one of the CashAllocationStatus*
-// values. Unlike the old spend-fraction-based grouping (unavoidable when one
-// wallet == one recipient sharing a balance that could be partially drained),
-// a claim's status is now a plain binary — ClaimedAt set or not — since
-// cash_redeem either pays a slice out completely or rolls back entirely.
-// "expired" only applies to a still-unclaimed row whose wallet's deadline has
-// passed.
-func cashClaimStatus(claimed bool, expiresAt *int64, now time.Time) string {
-	if claimed {
-		return CashAllocationStatusClaimed
-	}
-	if expiresAt != nil && *expiresAt < now.Unix() {
-		return CashAllocationStatusExpired
-	}
-	return CashAllocationStatusUnclaimed
-}
+// A slice's status has no Go-side derivation any more. The live-row CASE in
+// apps.cashClaimUnionSQL IS the derivation, and an archived row carries its
+// terminal value as a stored column — keeping it in exactly one place is what
+// stops live and archived rows from drifting apart.
 
 // ListCashWalletClaims returns a page of a cash_hub's recipient slices (one row
 // per CashWalletClaim, across every cash_wallet child), newest first. limit ==
@@ -3062,24 +3056,51 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 		return nil, 0, CashWalletClaimCounts{}, fmt.Errorf("app is not a cash_hub")
 	}
 
-	rows, err := api.appsSvc.ListCashWalletClaims(appID)
+	rows, totalCount, rawCounts, err := api.appsSvc.ListCashWalletClaims(apps.CashClaimFilter{
+		HubID:  appID,
+		Status: status,
+		Limit:  limit,
+		Offset: offset,
+		// One clock reading for both the counts and the page, so a slice
+		// cannot expire between them and be counted in one but not the other.
+		Now: time.Now(),
+	})
 	if err != nil {
 		return nil, 0, CashWalletClaimCounts{}, err
 	}
+
+	counts := CashWalletClaimCounts{
+		Unclaimed:  rawCounts[db.CashSliceStatusUnclaimed],
+		Redeemed:   rawCounts[db.CashSliceStatusRedeemed],
+		Split:      rawCounts[db.CashSliceStatusSplit],
+		Expired:    rawCounts[db.CashSliceStatusExpired],
+		Reclaimed:  rawCounts[db.CashSliceStatusReclaimed],
+		WrittenOff: rawCounts[db.CashSliceStatusWrittenOff],
+		// Claimed is the legacy umbrella over the two ways a slice's value
+		// leaves. Still emitted so a client that has not been updated keeps
+		// rendering a correct tab across a deploy.
+		Claimed: rawCounts["claimed"],
+	}
+	counts.All = counts.Unclaimed + counts.Redeemed + counts.Split +
+		counts.Expired + counts.Reclaimed + counts.WrittenOff
 
 	result := make([]CashWalletClaimResponse, 0, len(rows))
 	for _, row := range rows {
 		r := CashWalletClaimResponse{
 			ID:                   row.ID,
+			Archived:             row.Archived,
 			WalletAppID:          row.WalletAppID,
+			WalletPubkey:         row.WalletPubkey,
 			IdentityType:         row.IdentityType,
 			IdentityValue:        row.IdentityValue,
 			AmountMloki:          row.AmountMloki,
+			Status:               row.Status,
 			Claimed:              row.ClaimedAt != nil,
 			CreatedAt:            row.CreatedAt.Unix(),
 			MinTransferMloki:     row.MinTransferMloki,
 			RedeemFeePpm:         row.RedeemFeePpm,
 			SpunOffToWalletAppID: row.SpunOffToWalletAppID,
+			PaymentHash:          row.PaymentHash,
 		}
 		if row.ClaimedAt != nil {
 			claimedAt := row.ClaimedAt.Unix()
@@ -3092,78 +3113,50 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 		result = append(result, r)
 	}
 
-	// Counts are taken over the full, unfiltered set - computed before the
-	// status filter below so a UI's tab counts stay accurate regardless of
-	// which tab (if any) is currently selected.
-	now := time.Now()
-	counts := CashWalletClaimCounts{All: uint64(len(result))}
-	for _, r := range result {
-		switch cashClaimStatus(r.Claimed, r.ExpiresAt, now) {
-		case CashAllocationStatusUnclaimed:
-			counts.Unclaimed++
-		case CashAllocationStatusClaimed:
-			counts.Claimed++
-		case CashAllocationStatusExpired:
-			counts.Expired++
-		}
-	}
-
-	if status != "" {
-		filtered := make([]CashWalletClaimResponse, 0, len(result))
-		for _, r := range result {
-			if cashClaimStatus(r.Claimed, r.ExpiresAt, now) == status {
-				filtered = append(filtered, r)
-			}
-		}
-		result = filtered
-	}
-
-	totalCount := uint64(len(result))
-	if limit > 0 {
-		result = paginateSlice(result, limit, offset)
-	}
-
 	// Derive each wallet's lokicash token only for the page actually being
 	// returned, and only once per unique wallet (every claim sharing a
-	// WalletAppID gets the identical value) — deriving it for every claim
-	// across the whole hub, unpaginated, would be wasted work for rows the
-	// caller never sees. Includes the same identity-required hint
-	// GetCashWalletConnection encodes, read off any one claim for that
-	// wallet — uniform across every claim of the same wallet (see
-	// db.CashWalletClaim's own field docs), so which one doesn't matter.
-	walletPubkeyByID := make(map[uint]string, len(rows))
-	representativeClaimByWallet := make(map[uint]apps.CashWalletClaimRow, len(rows))
+	// WalletAppID gets the identical value). Includes the same
+	// identity-required hint GetCashWalletConnection encodes, read off any one
+	// claim for that wallet — uniform across every claim of the same wallet
+	// (see db.CashWalletClaim's own field docs), so which one doesn't matter.
+	//
+	// LIVE rows only. An archived bill's pairing key is still derivable from
+	// its app id, so a token COULD be minted — which is exactly why this has to
+	// be an explicit rule rather than an accident. Handing an operator a
+	// lokicash1... for a destroyed bill would look spendable and embed a wallet
+	// pubkey the hub no longer serves. Archived rows carry WalletPubkey
+	// instead, which is what correlates with logs anyway.
+	representativeByWallet := make(map[uint]apps.CashClaimRow, len(rows))
 	for _, row := range rows {
-		if row.WalletPubkey != nil {
-			walletPubkeyByID[row.WalletAppID] = *row.WalletPubkey
+		if row.Archived {
+			continue
 		}
-		if _, ok := representativeClaimByWallet[row.WalletAppID]; !ok {
-			representativeClaimByWallet[row.WalletAppID] = row
+		if _, ok := representativeByWallet[row.WalletAppID]; !ok {
+			representativeByWallet[row.WalletAppID] = row
 		}
 	}
-	tokenByWallet := make(map[uint]string, len(result))
+	tokenByWallet := make(map[uint]string, len(representativeByWallet))
 	relayUrls := api.cfg.GetRelayUrls()
 	for i := range result {
+		if result[i].Archived {
+			continue
+		}
 		walletAppID := result[i].WalletAppID
 		token, ok := tokenByWallet[walletAppID]
 		if !ok {
-			walletPubkey, havePubkey := walletPubkeyByID[walletAppID]
+			representative, haveClaim := representativeByWallet[walletAppID]
 			pairingSecretKey, keyErr := api.keys.GetCashPairingKey(walletAppID)
-			if havePubkey && keyErr == nil {
-				var identityRequired *bool
-				if claim, haveClaim := representativeClaimByWallet[walletAppID]; haveClaim {
-					required := claim.IdentityType != db.CashIdentityCash
-					identityRequired = &required
-				}
+			if haveClaim && representative.WalletPubkey != "" && keyErr == nil {
+				required := representative.IdentityType != db.CashIdentityCash
 				token, keyErr = lokicash.Encode(lokicash.Token{
 					HRP:              lokicash.HRP,
-					WalletPubkey:     walletPubkey,
+					WalletPubkey:     representative.WalletPubkey,
 					Secret:           pairingSecretKey,
 					RelayURLs:        relayUrls,
-					IdentityRequired: identityRequired,
+					IdentityRequired: &required,
 				})
 			}
-			if !havePubkey || keyErr != nil {
+			if !haveClaim || representative.WalletPubkey == "" || keyErr != nil {
 				logger.Logger.Error().Err(keyErr).Uint("wallet_app_id", walletAppID).
 					Msg("Failed to derive lokicash token for Cash wallet claims list")
 				token = ""
@@ -3234,7 +3227,10 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		return nil
 	}
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet, service.SubWalletDeletion{
+			Outcome:        db.CashBillOutcomeDeleted,
+			EventPublisher: api.eventPublisher,
+		})
 }
 
 // DeleteCashWallet reclaims any remaining balance of a cash_wallet child back
@@ -3260,7 +3256,10 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 	}
 
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet)
+		api.svc.GetTransactionsService(), api.svc.GetLNClient(), wallet, service.SubWalletDeletion{
+			Outcome:        db.CashBillOutcomeDeleted,
+			EventPublisher: api.eventPublisher,
+		})
 }
 
 // GetCashWalletConnection returns the NWC pairing URI for an already-created Cash

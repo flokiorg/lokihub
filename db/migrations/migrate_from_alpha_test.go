@@ -50,6 +50,31 @@ func TestMigrate_FromAlphaSchema(t *testing.T) {
 	require.NoError(t, gormDB.Table("apps").Order("id").Pluck("kind", &kinds).Error)
 	assert.Equal(t, []string{"standard", "isolated"}, kinds)
 
+	// The cash bill archive is created by AutoMigrate alone (no hand-written
+	// migration, same as cash_transfer_proofs/cash_stranded_funds). A bill is
+	// hard-deleted the moment it is spent, so if these tables ever failed to
+	// appear the history would be destroyed silently, with nothing to notice
+	// it until an operator went looking for a bill that no longer exists.
+	for _, table := range []string{"cash_bill_archives", "cash_bill_slice_archives"} {
+		assert.Truef(t, gormDB.Migrator().HasTable(table), "%s missing after migrate", table)
+	}
+
+	// The composite indexes the merged listing depends on. A typo in a gorm
+	// tag drops one silently and nothing fails — it just degrades to a scan of
+	// a table that only ever grows, which is precisely the failure mode the
+	// index was chosen to avoid.
+	assert.True(t, gormDB.Migrator().HasIndex(&db.CashBillArchive{}, "idx_cash_bill_archive_hub_ended"))
+	assert.True(t, gormDB.Migrator().HasIndex(&db.CashBillSliceArchive{}, "idx_cash_slice_archive_hub_created"))
+	assert.True(t, gormDB.Migrator().HasIndex(&db.CashBillSliceArchive{}, "idx_cash_slice_archive_hub_outcome"))
+
+	// The payout facts a redeem records on its slice; the archive copies these
+	// out before the claim cascades away, so a missing column would mean a
+	// redeemed slice archives with no proof of payment.
+	for _, col := range []string{"payment_hash", "preimage", "redeem_fee_mloki", "routing_fee_mloki", "settled_at"} {
+		assert.Truef(t, gormDB.Migrator().HasColumn("cash_wallet_claims", col),
+			"cash_wallet_claims.%s missing after migrate", col)
+	}
+
 	// Running again on the migrated DB must stay a no-op.
 	require.NoError(t, Migrate(gormDB))
 }
