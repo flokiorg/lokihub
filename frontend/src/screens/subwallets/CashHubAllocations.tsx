@@ -312,6 +312,10 @@ export const CashHubAllocations = React.forwardRef<
   const [counts, setCounts] = React.useState<CashWalletClaimCounts>({
     all: 0,
     unclaimed: 0,
+    redeemed: 0,
+    split: 0,
+    reclaimed: 0,
+    written_off: 0,
     claimed: 0,
     expired: 0,
   });

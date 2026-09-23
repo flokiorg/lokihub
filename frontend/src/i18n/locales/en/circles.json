@@ -91,10 +91,10 @@
   },
   "childIdentityCard": {
     "circleWallet": "Circle Wallet",
-    "cashWallet": "Cash Wallet",
+    "cashWallet": "Cash Bill",
     "claimedCount": "{{claimed}}/{{total}} redeemed",
     "errors": {
-      "loadRecipients": "Failed to load Cash wallet recipients"
+      "loadRecipients": "Failed to load cash bill recipients"
     }
   },
   "manageIdentities": {
@@ -273,8 +273,8 @@
   "newCashHub": {
     "title": "New Cash Hub",
     "description": "The wallet you'll mint Lokicash from. Limits you set here apply to every token it issues.",
-    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash wallet issued from this hub",
-    "maxExpiryHelper": "Maximum lifetime for issued Cash wallets",
+    "maxWalletBudgetHelper": "Maximum budget that can be allocated to each cash bill issued from this hub",
+    "maxExpiryHelper": "Maximum lifetime for issued cash bills",
     "submit": "Create Cash Hub",
     "createdToast": "Cash Hub \"{{name}}\" created",
     "errors": {
@@ -306,14 +306,80 @@
   },
   "disconnectCashHub": {
     "title": "Are you sure you want to delete this Cash Hub?",
-    "checking": "Checking issued Cash wallets…",
-    "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
-    "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued Cash wallets. Remove them from the Cash Wallets list below (or wait for them to expire) before deleting the hub.",
-    "safeToDelete": "This Cash Hub has no outstanding issued Cash wallets and is safe to delete.",
+    "checking": "Checking issued cash bills…",
+    "hasOutstanding_one": "This hub still has {{count}} recipient slice across its issued cash bills. Remove them from the Cash Bills list below (or wait for them to expire) before deleting the hub.",
+    "hasOutstanding_other": "This hub still has {{count}} recipient slices across its issued cash bills. Remove them from the Cash Bills list below (or wait for them to expire) before deleting the hub.",
+    "safeToDelete": "This Cash Hub has no outstanding issued cash bills and is safe to delete.",
     "deletedToast": "Cash Hub deleted",
     "close": "Close",
     "errors": {
-      "check": "Failed to check issued Cash wallets"
+      "check": "Failed to check issued cash bills"
     }
+  },
+  "cashStatus": {
+    "legendLabel": "What each status means",
+    "unclaimed": {
+      "label": "Unclaimed",
+      "description": "still redeemable"
+    },
+    "redeemed": {
+      "label": "Redeemed",
+      "description": "paid out over Lightning"
+    },
+    "split": {
+      "label": "Split",
+      "description": "moved into another bill"
+    },
+    "expired": {
+      "label": "Expired",
+      "description": "window passed, value returned to this hub"
+    },
+    "reclaimed": {
+      "label": "Reclaimed",
+      "description": "bill removed before its window passed, value returned"
+    },
+    "written-off": {
+      "label": "Written off",
+      "description": "value could not be returned anywhere"
+    }
+  },
+  "cashKpis": {
+    "outstanding": "Outstanding",
+    "outstandingHint_one": "{{count}} bill still redeemable",
+    "outstandingHint_other": "{{count}} bills still redeemable",
+    "flowTitle": "Flow",
+    "issued": "Issued",
+    "redeemed": "Redeemed",
+    "returned": "Returned",
+    "feesEarned": "Fees earned",
+    "writtenOff": "Written off",
+    "medianTimeToRedeem": "Median time to redeem",
+    "noRedemptionsYet": "nothing redeemed yet",
+    "durationSeconds_one": "{{count}} second",
+    "durationSeconds_other": "{{count}} seconds",
+    "durationMinutes_one": "{{count}} minute",
+    "durationMinutes_other": "{{count}} minutes",
+    "durationHours_one": "{{count}} hour",
+    "durationHours_other": "{{count}} hours",
+    "durationDays_one": "{{count}} day",
+    "durationDays_other": "{{count}} days"
+  },
+  "cashCharts": {
+    "outstandingTitle": "Outstanding over time",
+    "outstandingSeries": "Outstanding",
+    "flowTitle": "Daily flow",
+    "issuedSeries": "Issued",
+    "redeemedSeries": "Redeemed",
+    "returnedSeries": "Returned"
+  },
+  "cashBills": {
+    "dashboardSubtitle": "Cash bills issued from this hub, and where their value went",
+    "recipients_one": "{{count}} recipient",
+    "recipients_other": "{{count}} recipients",
+    "archived": "Archived",
+    "showSlices": "Show recipients",
+    "hideSlices": "Hide recipients",
+    "emptyTitle": "No cash bills yet",
+    "emptyDescription": "Mint a bill and it will appear here, along with everything that happens to it."
   }
 }

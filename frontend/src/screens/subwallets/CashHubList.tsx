@@ -10,14 +10,6 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import { Card, CardTitle } from "src/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "src/components/ui/table";
 import { LIST_APPS_LIMIT, SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useApps } from "src/hooks/useApps";
 import { useInfo } from "src/hooks/useInfo";
@@ -122,53 +114,34 @@ export function CashHubList() {
         </div>
       </div>
 
-      <div ref={appsListRef}>
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-muted-foreground">Hub</TableHead>
-                <TableHead className="text-muted-foreground">
-                  Balance
-                </TableHead>
-                <TableHead className="text-muted-foreground">
-                  Last activity
-                </TableHead>
-                <TableHead className="w-px" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cashHubApps.map((app) => (
-                <TableRow key={app.id} className="cursor-pointer">
-                  <TableCell className="p-0">
-                    <Link
-                      to={`/apps/${app.id}`}
-                      className="flex items-center gap-3 px-4 py-3"
-                    >
-                      <AppAvatar app={app} className="size-8 shrink-0" />
-                      <span className="font-medium">{app.name}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <span className="sensitive">
-                      <FormattedFlokicoinAmount amount={app.balance} />
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {app.lastUsedAt
-                      ? dayjs(app.lastUsedAt).fromNow()
-                      : "Never"}
-                  </TableCell>
-                  <TableCell>
-                    <Link to={`/apps/${app.id}`}>
-                      <ChevronRightIcon className="size-4 text-muted-foreground" />
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+      {/*
+        Borderless rows rather than a bordered table, matching TransactionsList:
+        no Card or Table wrapper, just mapped rows with a hairline between
+        them. Each row is the whole link target, so the chevron is decoration
+        rather than the only clickable thing.
+      */}
+      <div ref={appsListRef} className="flex flex-col flex-1">
+        {cashHubApps.map((app) => (
+          <Link
+            key={app.id}
+            to={`/cash-hub/${app.id}`}
+            className="flex items-center gap-3 border-b last:border-b-0 py-3 hover:bg-accent/40 transition-colors px-1 min-w-0"
+          >
+            <AppAvatar app={app} className="size-8 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate">{app.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {app.lastUsedAt
+                  ? dayjs(app.lastUsedAt).fromNow()
+                  : "Never used"}
+              </p>
+            </div>
+            <span className="sensitive slashed-zero shrink-0">
+              <FormattedFlokicoinAmount amount={app.balance} />
+            </span>
+            <ChevronRightIcon className="size-4 text-muted-foreground shrink-0" />
+          </Link>
+        ))}
       </div>
 
       {/* totalCount is the unfiltered sub-wallet total (the admin API has no
