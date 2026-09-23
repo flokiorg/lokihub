@@ -9,6 +9,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -56,21 +57,28 @@ func testCashHubPayments(t *testing.T, hub CashHubConfig) {
 		payResult := claimFullSlice(t, cashChild, invoice)
 		require.NotEmpty(t, payResult.Preimage)
 
-		var childBalance GetBalanceResult
-		require.NoError(t, cashChild.Client.Call(ctxT(t), "get_balance", struct{}{}, &childBalance))
-		require.LessOrEqual(t, childBalance.Balance, int64(0), "the child's slice must be fully drained in one shot")
+		// Drained in one shot means the bill is now empty, and an empty bill is
+		// deleted -- so it stops answering rather than reporting a zero.
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var childBalance GetBalanceResult
+			return cashChild.Client.Call(ctx, "get_balance", struct{}{}, &childBalance)
+		})
 
 		// A second claim attempt (same identity, same wallet) must be rejected
 		// — the atomic claim guard prevents any double-payout, replay or not.
 		secondProof := buildClaimProofEvent(t, cashChild.BeneficiaryPrivkey, cashChild.WalletPubkey, invoice.PaymentHash, nil, time.Now())
-		var secondResult ClaimFundsResult
-		err := cashChild.Client.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:       invoice.Invoice,
-			IdentityType:  "pubkey",
-			IdentityValue: cashChild.BeneficiaryPubkey,
-			IdentityEvent: eventJSON(t, secondProof),
-		}, &secondResult)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		// The first claim emptied this single-slice bill, so it is gone and the
+		// replay reaches nothing. Silence is the stronger guard against a
+		// double-payout: there is no longer a slice, or a bill, to pay from.
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var secondResult ClaimFundsResult
+			return cashChild.Client.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:       invoice.Invoice,
+				IdentityType:  "pubkey",
+				IdentityValue: cashChild.BeneficiaryPubkey,
+				IdentityEvent: eventJSON(t, secondProof),
+			}, &secondResult)
+		})
 	})
 
 	t.Run("ClaimFunds_AmountMismatch_Rejected", func(t *testing.T) {

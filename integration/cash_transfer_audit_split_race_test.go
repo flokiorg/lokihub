@@ -239,12 +239,13 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			t.Errorf("CRITICAL DOUBLE-SPEND iter %d: cash_redeem paid full %d AND a partial split carved off %d from the same slice",
 				i, fullAmount, splitRes.AmountMillis)
 		case redeemWon:
-			// Redeem took the whole slice: wallet drained, split must have lost.
-			// A redeem does not delete the wallet the way a split does, so it is
-			// still here to answer — holding nothing.
-			var bal GetBalanceResult
-			require.NoError(t, sharedConn.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-			require.EqualValues(t, 0, bal.Balance, "after a full redeem the wallet must hold nothing")
+			// Redeem took the whole slice, so the bill is empty and the split
+			// lost. A redeem now deletes a drained bill exactly as a split
+			// does, so this branch asserts the same disappearance.
+			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
+				var bal GetBalanceResult
+				return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+			})
 			require.NotEmpty(t, redeemRes.Preimage)
 		case splitWon:
 			// The split consumed the source slice entirely: the source wallet was

@@ -273,8 +273,8 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 		// TestCrossHub_HubBalance_DecreasesWhenChildMinted probes get_balance -
 		// granting all three upfront means those tests exercise the real
 		// path instead of skipping for a missing scope.
-		Scopes:               []string{constants.CASH_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.MAKE_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
-		Kind:                 "cash_hub",
+		Scopes:                []string{constants.CASH_HUB_SCOPE, constants.PAY_INVOICE_SCOPE, constants.MAKE_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
+		Kind:                  "cash_hub",
 		CashPerWalletMaxMloki: 10_000_000,
 		CashMaxExpSecs:        3600,
 	}
