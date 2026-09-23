@@ -122,7 +122,7 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 			}
 			return nil, false, fmt.Errorf("failed to spin off the remainder: %w", err)
 		}
-		if derr := deps.AppsService.DeleteApp(carved.WalletApp); derr != nil {
+		if derr := deps.AppsService.DeleteCashBill(carved.WalletApp, db.CashBillOutcomeVoid); derr != nil {
 			logger.Logger.Error().Err(derr).Uint("carved_wallet_id", carved.WalletApp.ID).
 				Msg("Reversed the carved spin-off but failed to delete the emptied wallet; harmless but leaves a zero-balance app")
 		}

@@ -472,7 +472,7 @@ const (
 func deleteAppWithRetry(deps Deps, app *db.App) {
 	var lastErr error
 	for attempt := 1; attempt <= compensatingDeleteMaxAttempts; attempt++ {
-		if err := deps.AppsService.DeleteApp(app); err != nil {
+		if err := deps.AppsService.DeleteCashBill(app, db.CashBillOutcomeVoid); err != nil {
 			lastErr = err
 			if attempt < compensatingDeleteMaxAttempts {
 				time.Sleep(compensatingDeleteRetryDelay)
@@ -759,7 +759,7 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 		if fundsTransferred {
 			return
 		}
-		_ = deps.AppsService.DeleteApp(newApp)
+		_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
 	}()
 
 	pairingSecretKey, err := deps.Keys.GetCashPairingKey(newApp.ID)

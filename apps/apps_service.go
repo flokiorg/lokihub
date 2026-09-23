@@ -112,11 +112,18 @@ type AppsService interface {
 	// ListCashHubWalletChildren returns every cash_wallet app that is a child of
 	// hubID, queried directly from apps. Ordered by created_at asc.
 	ListCashHubWalletChildren(hubID uint) ([]db.App, error)
-	// ListCashWalletClaims returns every CashWalletClaim belonging to any
-	// cash_wallet child of hubID, joined with its wallet's ExpiresAt, newest
-	// first, unfiltered/unpaginated — the caller applies status filtering,
-	// counts, and pagination in memory.
-	ListCashWalletClaims(hubID uint) ([]CashWalletClaimRow, error)
+	// ListCashWalletClaims returns one page of a hub's slices — live claims and
+	// archived ones merged into a single newest-first set — plus the count
+	// matching the filter and the counts over the whole unfiltered set.
+	// Filtering, counting and paging all happen in SQL, since the archive is
+	// retained forever.
+	ListCashWalletClaims(f CashClaimFilter) ([]CashClaimRow, uint64, map[string]uint64, error)
+	// GetCashHubStats totals one hub's cash activity in money rather than row
+	// counts — outstanding liability, issued/redeemed/returned, fees earned,
+	// median time to redeem, and a bounded daily series. Spans live and
+	// archived slices alike, which is only possible because a spent bill's
+	// history outlives its deletion.
+	GetCashHubStats(hubID uint, now time.Time) (*CashHubStats, error)
 	// GetCashWalletClaim is a read-only lookup of one recipient's still-unclaimed
 	// slice, used by cash_redeem to verify identity/attestation proof (which
 	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the
@@ -191,6 +198,18 @@ type AppsService interface {
 	// (see db.CashWalletClaim.SpunOffToWalletAppID) — call only after the
 	// new wallet has been created and funded.
 	SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error
+	// SetCashSliceRedeemPayment records the payout facts for a slice just
+	// redeemed over Lightning — the redeem-side mirror of
+	// SetCashSliceSplitTarget, and equally informational. Call only after
+	// SendPaymentSync has returned a settled transaction.
+	SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error
+	// DeleteCashBill archives a cash bill's history and hard-deletes it in one
+	// transaction, then publishes nwc_app_deleted. This is the ONLY way to
+	// delete a cash_wallet — DeleteApp refuses that kind — so no delete path
+	// can quietly destroy a bill's history. outcome is a db.CashBillOutcome*
+	// value. Callers that must first reclaim a balance should go through
+	// service.ReclaimAndDeleteSubWallet, which delegates here.
+	DeleteCashBill(app *db.App, outcome string) error
 	// SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 	// source cash_wallet it was split from — purely informational (see
 	// db.App.SplitFromWalletAppID), the reverse of SetCashSliceSplitTarget.
@@ -238,6 +257,20 @@ type CashSliceSplitResult struct {
 	// RedeemFeePpm is likewise the SOURCE slice's own value, for the caller
 	// to pass into cashwallet.Split so the new wallet inherits it unchanged.
 	RedeemFeePpm int
+}
+
+// CashSliceRedeemPayment carries the payout facts SetCashSliceRedeemPayment
+// stores on a just-redeemed slice. Grouped into a struct rather than passed as
+// five positional arguments because two of them are fees that differ only in
+// who bore them, and a caller swapping those silently would be invisible.
+type CashSliceRedeemPayment struct {
+	PaymentHash string
+	Preimage    string
+	// RedeemFeeMloki is the hub's own cut, deducted from the recipient's
+	// payout. RoutingFeeMloki is what the hub paid the network to deliver it.
+	RedeemFeeMloki  int64
+	RoutingFeeMloki int64
+	SettledAt       *time.Time
 }
 
 // CashWalletClaimRow is one row of ListCashWalletClaims' result — a
@@ -519,6 +552,15 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 	switch app.Kind {
 	case db.AppKindCircleHub, db.AppKindCashHub:
 		err = svc.deleteHubAppTx(app)
+	case db.AppKindCashWallet:
+		// A cash bill is hard-deleted the instant it is spent, which is what
+		// makes it indistinguishable from a pubkey this hub never served. That
+		// is only safe because its history is archived in the same transaction;
+		// a plain delete here would destroy the only record it ever existed,
+		// silently. Refusing outright means a delete path added later fails
+		// loudly the first time it runs instead of quietly losing data.
+		return fmt.Errorf("%w: a cash bill must be deleted via DeleteCashBill or service.ReclaimAndDeleteSubWallet so its history is archived",
+			constants.ErrInvalidParams)
 	default:
 		err = svc.db.Delete(app).Error
 	}

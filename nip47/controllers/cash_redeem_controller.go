@@ -14,6 +14,7 @@ import (
 	"github.com/ohstr/nmilat/nipIC"
 	"github.com/ohstr/nmilat/nipcash"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	decodepay "github.com/flokiorg/lokihub/decodepay"
@@ -326,6 +327,22 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 
+	// Record the payout facts on the slice itself. Best-effort and never
+	// load-bearing: the money has already moved and the caller's response does
+	// not depend on this, so a failure is logged and the redeem still succeeds.
+	// It has to happen here, though — nothing links a Transaction back to the
+	// slice that caused it, and these rows cascade away with the wallet app.
+	if err := controller.appsService.SetCashSliceRedeemPayment(app.ID, identityType, identityValue, apps.CashSliceRedeemPayment{
+		PaymentHash:     transaction.PaymentHash,
+		Preimage:        *transaction.Preimage,
+		RedeemFeeMloki:  int64(hubFeeMloki), //nolint:gosec // a quoted ppm cut of a positive amount
+		RoutingFeeMloki: int64(transaction.FeeMloki),
+		SettledAt:       transaction.SettledAt,
+	}); err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
+			Msg("Failed to record cash_redeem payout facts on the slice")
+	}
+
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Str("identity_type", identityType).
@@ -344,6 +361,22 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 			FeesPaid: hubFeeMloki,
 		},
 	}, tags)
+
+	// A redeem that took the bill's last slice leaves it holding nothing, so
+	// it is archived and deleted here exactly as a fully-splitting
+	// cash_transfer is (cash_transfer_controller.go).
+	//
+	// This is what makes a spent bill uniformly silent. Before, only the split
+	// path deleted: a redeemed-to-zero bill lingered until its expiry and kept
+	// answering "no slice registered for this identity", which told anyone who
+	// had ever seen its token that this hub issued that bill and it had been
+	// spent — the very oracle the deletion exists to close. The cost is that a
+	// legitimate holder replaying a redeem now gets silence instead of an
+	// error, which is the same trade already accepted for splits.
+	//
+	// Best-effort and after the response, so it can never delay or fail the
+	// caller's redeem; the expiry sweep remains the fallback.
+	controller.maybeAutoDeleteDrainedCashWallet(app)
 }
 
 // verifyClaimIdentityEvent checks a kind-23198 claim proof: valid signature;

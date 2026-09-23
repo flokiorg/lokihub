@@ -189,11 +189,11 @@ func TestListCashWalletClaims_StatusAndCounts(t *testing.T) {
 	assert.EqualValues(t, 1, counts.Unclaimed)
 	assert.EqualValues(t, 1, counts.Claimed)
 
-	unclaimedOnly, _, _, err := theAPI.ListCashWalletClaims(hub.ID, 0, 0, CashAllocationStatusUnclaimed)
+	unclaimedOnly, _, _, err := theAPI.ListCashWalletClaims(hub.ID, 0, 0, db.CashSliceStatusUnclaimed)
 	require.NoError(t, err)
 	assert.Len(t, unclaimedOnly, 1)
 
-	claimedOnly, _, _, err := theAPI.ListCashWalletClaims(hub.ID, 0, 0, CashAllocationStatusClaimed)
+	claimedOnly, _, _, err := theAPI.ListCashWalletClaims(hub.ID, 0, 0, "claimed")
 	require.NoError(t, err)
 	assert.Len(t, claimedOnly, 1)
 }

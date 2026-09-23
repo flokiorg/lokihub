@@ -19,6 +19,7 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -160,6 +161,162 @@ func TestHandleCashRedeemEvent_HappyPath_PubkeyMode(t *testing.T) {
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err)
 	assert.Nil(t, claim, "slice must show as claimed (no longer returned by the unclaimed-only lookup)")
+}
+
+// TestHandleCashRedeemEvent_RecordsPayoutFactsOnSlice pins that a redeem writes
+// its payment facts onto the slice it paid out.
+//
+// This has to happen at redeem time or not at all: a Transaction carries no
+// identity, so on a multi-recipient bill nothing links a payout back to the
+// slice that caused it — and those transaction rows cascade away with the
+// wallet app, so by the time a spent bill is archived there is nothing left to
+// read. Without this, an archived redeemed slice could never show proof of
+// payment.
+func TestHandleCashRedeemEvent_RecordsPayoutFactsOnSlice(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 1000)
+
+	claimantPrivkey := nostr.GeneratePrivateKey()
+	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+	}))
+
+	// Captured before the redeem: the slice starts with no payment facts, so
+	// the assertions below can't pass on pre-existing data.
+	before := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, claimantPubkey)
+	require.Empty(t, before.PaymentHash)
+	require.Nil(t, before.SettledAt)
+
+	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
+
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
+		Invoice:       tests.MockZeroAmountInvoice,
+		Amount:        ptrUint64(1000),
+		IdentityType:  db.CashIdentityPubkey,
+		IdentityValue: claimantPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+	})
+	require.Nil(t, response.Error)
+	result := response.Result.(payResponse)
+
+	claim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, claimantPubkey)
+	require.NotNil(t, claim.ClaimedAt, "the slice is terminally claimed by a successful redeem")
+	assert.Equal(t, tests.MockZeroAmountPaymentHash, claim.PaymentHash,
+		"the payout's payment hash identifies which payment settled this slice")
+	assert.Equal(t, result.Preimage, claim.Preimage,
+		"the stored preimage must be the same one handed to the recipient — it is the proof of payment")
+	assert.NotNil(t, claim.SettledAt, "a settled payout must record when it settled")
+
+	// A redeem is not a split, so the spin-off column stays clear. The two are
+	// the only ways ClaimedAt gets set, and the archive derives a slice's
+	// outcome by telling them apart.
+	assert.Nil(t, claim.SpunOffToWalletAppID)
+}
+
+// TestHandleCashRedeemEvent_DrainedBillIsArchivedAndDeleted pins the behaviour
+// change that makes a spent bill uniformly silent.
+//
+// Before, only a fully-splitting cash_transfer deleted its source; a
+// redeemed-to-zero bill lingered until expiry and kept answering "no slice
+// registered for this identity". That answer told anyone who had ever seen the
+// token that this hub issued the bill and it was spent — exactly the oracle
+// hard-deleting exists to close. Now both paths end the same way.
+func TestHandleCashRedeemEvent_DrainedBillIsArchivedAndDeleted(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+
+	// Funded to EXACTLY the slice total, unlike newFundedCashWallet, which
+	// adds fee-reserve headroom. A real bill is funded to the sum of its
+	// slices and settles back to exactly zero (the routing fee is the hub's,
+	// reconciled by transactions.reconcileCashRedeemFee) — and zero is what
+	// the drain guard requires, so headroom would mean nothing ever deletes.
+	const sliceMloki = 1000
+	wallet, _, err := svc.AppsService.CreateApp(
+		"cash-wallet", "", sliceMloki, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
+		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
+	)
+	require.NoError(t, err)
+	tests.FundApp(svc, wallet.ID, sliceMloki, tests.RandomHex32())
+
+	claimantPrivkey := nostr.GeneratePrivateKey()
+	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: sliceMloki},
+	}))
+
+	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
+		Invoice:       tests.MockZeroAmountInvoice,
+		Amount:        ptrUint64(sliceMloki),
+		IdentityType:  db.CashIdentityPubkey,
+		IdentityValue: claimantPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+	})
+	require.Nil(t, response.Error)
+	require.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID),
+		"a redeem of the whole slice must settle the bill back to exactly zero")
+
+	var live int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", wallet.ID).Count(&live).Error)
+	assert.Zero(t, live, "a bill with nothing left must be deleted, so requests to it get silence")
+
+	var archived db.CashBillArchive
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&archived).Error)
+	assert.Equal(t, db.CashBillOutcomeDrained, archived.Outcome)
+
+	var slices []db.CashBillSliceArchive
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).Find(&slices).Error)
+	require.Len(t, slices, 1)
+	assert.Equal(t, db.CashSliceStatusRedeemed, slices[0].Outcome,
+		"paid out over Lightning, not moved into another bill")
+	assert.Equal(t, tests.MockZeroAmountPaymentHash, slices[0].PaymentHash,
+		"the payout's proof must survive into the archive — the transaction row it came from is gone")
+}
+
+// TestHandleCashRedeemEvent_KeepsBillAliveForSiblingSlice: redeeming one
+// recipient's slice must never destroy a bill that still backs another's.
+func TestHandleCashRedeemEvent_KeepsBillAliveForSiblingSlice(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	wallet := newFundedCashWallet(t, svc, hub, 3000)
+
+	claimantPrivkey := nostr.GeneratePrivateKey()
+	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
+	siblingPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: siblingPubkey, AmountMloki: 2000},
+	}))
+
+	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
+	response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
+		Invoice:       tests.MockZeroAmountInvoice,
+		Amount:        ptrUint64(1000),
+		IdentityType:  db.CashIdentityPubkey,
+		IdentityValue: claimantPubkey,
+		IdentityEvent: mustMarshal(t, proof),
+	})
+	require.Nil(t, response.Error)
+
+	var live int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", wallet.ID).Count(&live).Error)
+	assert.EqualValues(t, 1, live, "the sibling's slice is still unclaimed, so the bill must survive")
+
+	var archivedBills int64
+	require.NoError(t, svc.DB.Model(&db.CashBillArchive{}).Where("wallet_app_id = ?", wallet.ID).Count(&archivedBills).Error)
+	assert.Zero(t, archivedBills, "nothing is archived while the bill is still alive")
 }
 
 func TestHandleCashRedeemEvent_HappyPath_ConnectionKeyMode(t *testing.T) {

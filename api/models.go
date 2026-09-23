@@ -161,6 +161,9 @@ type API interface {
 	// always reflect the full, unfiltered set so a UI can show per-tab totals
 	// regardless of which tab is selected.
 	ListCashWalletClaims(appID uint, limit uint64, offset uint64, status string) ([]CashWalletClaimResponse, uint64, CashWalletClaimCounts, error)
+	// GetCashHubStats totals a cash_hub's activity in money rather than row
+	// counts, spanning live and archived slices alike.
+	GetCashHubStats(appID uint) (*CashHubStatsResponse, error)
 	// CreateCashWallet creates, funds, and reveals a shared Cash wallet serving
 	// every recipient in the request in one shot — the admin equivalent of a
 	// hub owner calling mint_cash over NWC.
@@ -423,21 +426,28 @@ type ListCashWalletClaimsResponse struct {
 	Counts     CashWalletClaimCounts     `json:"counts"`
 }
 
-// Cash claim status filter values, accepted by ListCashWalletClaims' status
-// param and returned by cashClaimStatus.
-const (
-	CashAllocationStatusUnclaimed = "unclaimed"
-	CashAllocationStatusClaimed   = "claimed"
-	CashAllocationStatusExpired   = "expired"
-)
+// The status vocabulary itself lives in db (db.CashSliceStatus*), because it
+// is shared by the SQL that derives it, the archive column that stores it, and
+// this wire format — putting it here would mean db importing api.
 
-// CashWalletClaimCounts totals a hub's claim rows by status, over the full
-// unfiltered set — meant for a UI's per-tab counts.
+// CashWalletClaimCounts totals a hub's slices by status, over the full
+// unfiltered set — meant for a UI's per-facet counts.
 type CashWalletClaimCounts struct {
 	All       uint64 `json:"all"`
 	Unclaimed uint64 `json:"unclaimed"`
-	Claimed   uint64 `json:"claimed"`
+	Redeemed  uint64 `json:"redeemed"`
+	Split     uint64 `json:"split"`
 	Expired   uint64 `json:"expired"`
+	// Reclaimed is an unclaimed slice whose bill was destroyed before its
+	// window passed — the value went back to the hub, but the recipient was
+	// cut off rather than timing out. WrittenOff is one whose value could not
+	// be returned anywhere because the parent hub was gone.
+	Reclaimed  uint64 `json:"reclaimed"`
+	WrittenOff uint64 `json:"written_off"`
+	// Claimed is the legacy umbrella over Redeemed+Split, from before the
+	// vocabulary distinguished how a slice's value left. Still emitted so a
+	// client that has not been updated keeps rendering across a deploy.
+	Claimed uint64 `json:"claimed"`
 }
 
 // CashWalletClaimResponse represents one recipient's slice of a cash_wallet.
@@ -483,6 +493,69 @@ type CashWalletClaimResponse struct {
 	// after pagination, once per unique wallet on that page, not for every
 	// claim across the whole hub).
 	CashToken string `json:"cash_token,omitempty"`
+	// Status is a db.CashSliceStatus* value. Previously the client re-derived
+	// display state from Claimed and SpunOffToWalletAppID, which cannot
+	// express the terminal states an archived slice carries.
+	Status string `json:"status"`
+	// Archived means this slice's bill no longer exists; the row comes from
+	// the archive. Load-bearing rather than cosmetic: live claim ids and
+	// archive ids come from different sequences and WILL collide, so a client
+	// keying on ID alone — a dedupe map, a delete URL — must pair it with
+	// this, and must not offer to delete an archived row.
+	Archived bool `json:"archived"`
+	// WalletPubkey identifies the bill itself. Populated for every row, and
+	// the only identifier an archived row has: CashToken is deliberately left
+	// empty there, since a token for a destroyed bill would look spendable.
+	WalletPubkey string `json:"wallet_pubkey,omitempty"`
+	// PaymentHash is the payout's proof for a redeemed slice, carried through
+	// from the claim (and into the archive, since the transaction row it came
+	// from cascades away with the bill).
+	PaymentHash string `json:"payment_hash,omitempty"`
+}
+
+// CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has
+// flowed through it, and how fast bills come back.
+//
+// Amounts are mloki. A count accompanies every amount because a figure like
+// "outstanding" means different things as money and as a number of unredeemed
+// bills, and an operator watches both.
+type CashHubStatsResponse struct {
+	// OutstandingMloki is the hub's live liability — value still redeemable.
+	// The headline figure, and one nothing surfaced before the archive existed.
+	OutstandingMloki int64  `json:"outstanding_mloki"`
+	OutstandingCount uint64 `json:"outstanding_count"`
+
+	IssuedMloki   int64  `json:"issued_mloki"`
+	IssuedCount   uint64 `json:"issued_count"`
+	RedeemedMloki int64  `json:"redeemed_mloki"`
+	RedeemedCount uint64 `json:"redeemed_count"`
+	// SplitMloki moved into another bill rather than leaving the hub — churn,
+	// deliberately not counted as an outflow.
+	SplitMloki int64  `json:"split_mloki"`
+	SplitCount uint64 `json:"split_count"`
+	// ReturnedMloki came back because a bill expired or was deleted unclaimed.
+	ReturnedMloki int64  `json:"returned_mloki"`
+	ReturnedCount uint64 `json:"returned_count"`
+	// WrittenOffMloki could not be returned anywhere — a loss, not a recovery,
+	// so it is never folded into ReturnedMloki.
+	WrittenOffMloki int64  `json:"written_off_mloki"`
+	WrittenOffCount uint64 `json:"written_off_count"`
+
+	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
+
+	// MedianTimeToRedeemSecs is null until something has been redeemed.
+	MedianTimeToRedeemSecs *int64 `json:"median_time_to_redeem_secs"`
+
+	Daily []CashHubDailyPointResponse `json:"daily"`
+}
+
+// CashHubDailyPointResponse is one day of flow, oldest first. Every day in the
+// window is present even when nothing happened, so a chart has no gaps.
+type CashHubDailyPointResponse struct {
+	Date          string `json:"date"` // YYYY-MM-DD, UTC
+	IssuedMloki   int64  `json:"issued_mloki"`
+	RedeemedMloki int64  `json:"redeemed_mloki"`
+	ReturnedMloki int64  `json:"returned_mloki"`
 }
 
 type CashWalletConnectionResponse struct {

@@ -480,6 +480,19 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			ExpiresAt:       expiresAt,
 		},
 	}, tags)
+
+	// A consolidate drains its sources exactly as a full split does — their
+	// value now lives in the new wallet — so each one that has nothing left
+	// gets the same archive-and-delete treatment.
+	//
+	// Uniformity is the point, not tidiness. A bill the hub deleted is met
+	// with silence; one it kept answers a request naming a spent slice with an
+	// error. If consolidate alone left its sources behind, that error would
+	// tell anyone who had ever seen those tokens that this hub issued them and
+	// that they were spent (NIP-CASH §Lifecycle and Deletion).
+	for _, source := range sources {
+		controller.maybeAutoDeleteDrainedCashWallet(source.WalletApp)
+	}
 }
 
 // loadCustodiedSources resolves every source's wallet_pubkey to the cash_wallet

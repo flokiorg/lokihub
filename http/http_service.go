@@ -245,6 +245,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
+	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId/claims/:claimId", httpSvc.cashWalletClaimDeleteHandler)
@@ -2173,6 +2174,27 @@ func (httpSvc *HttpService) cashWalletClaimsListHandler(c echo.Context) error {
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusOK, api.ListCashWalletClaimsResponse{Claims: claims, TotalCount: totalCount, Counts: counts})
+}
+
+// cashHubStatsHandler returns a cash_hub's dashboard totals: outstanding
+// liability, what has flowed through, fees earned, and a daily series.
+func (httpSvc *HttpService) cashHubStatsHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
+	}
+
+	stats, statsErr := httpSvc.api.GetCashHubStats(dbApp.ID)
+	if statsErr != nil {
+		httpSvc.logger.Error().Err(statsErr).Uint("hub_id", dbApp.ID).
+			Msg("Failed to load Cash hub stats")
+		code, msg := mapCashAllocError(statsErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, stats)
 }
 
 // cashWalletsCreateHandler creates, funds, and reveals a shared Cash wallet

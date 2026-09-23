@@ -882,6 +882,12 @@ func TestMaybeAutoDeleteDrainedCashWallet_DeletesWhenFullyDrained(t *testing.T) 
 	}))
 	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 1000)
 	require.NoError(t, err)
+	// The real split path records the spin-off target right after funding the
+	// new wallet (see handleCashTransferSplit). Mirrored here because the
+	// archive derives a slice's outcome from it — without it a split slice is
+	// indistinguishable from one redeemed over Lightning.
+	const spunOffTo = uint(987654)
+	require.NoError(t, svc.AppsService.SetCashSliceSplitTarget(wallet.ID, db.CashIdentityPubkey, pubkey, spunOffTo))
 
 	controller := NewTestNip47Controller(svc)
 	controller.maybeAutoDeleteDrainedCashWallet(wallet)
@@ -889,6 +895,21 @@ func TestMaybeAutoDeleteDrainedCashWallet_DeletesWhenFullyDrained(t *testing.T) 
 	var count int64
 	svc.DB.Model(&db.App{}).Where("id = ?", wallet.ID).Count(&count)
 	assert.Equal(t, int64(0), count, "a fully-drained wallet with no unclaimed slices must be auto-deleted")
+
+	// Deleted AND archived, in the same transaction. The delete is what makes
+	// the bill silent; the archive is what stops that silence from also
+	// destroying the operator's record of it.
+	var archived db.CashBillArchive
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&archived).Error)
+	assert.Equal(t, db.CashBillOutcomeDrained, archived.Outcome)
+	assert.Equal(t, hub.ID, archived.HubAppID)
+
+	var slices []db.CashBillSliceArchive
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).Find(&slices).Error)
+	require.Len(t, slices, 1)
+	assert.Equal(t, db.CashSliceStatusSplit, slices[0].Outcome,
+		"the slice was split away into a new wallet, not redeemed over Lightning")
+	assert.EqualValues(t, 1000, slices[0].AmountMloki)
 }
 
 func TestMaybeAutoDeleteDrainedCashWallet_KeepsAliveWithOtherUnclaimedSlice(t *testing.T) {
@@ -1363,7 +1384,13 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 // integration suite's TestAudit_CashTransferVsRedeem_NeverBothSucceed
 // (integration/audit_dynamic_test.go).
 func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound(t *testing.T) {
-	const trials = 15
+	// The race is not a fair coin: the transfer reaches its claim first most of
+	// the time, so at 15 trials the "transfer never lost" guard below fired on
+	// roughly one run in eight, failing the test without the NOT_FOUND
+	// contract itself ever being violated. Raised rather than relaxed — the
+	// guard is worth keeping, since a test that silently stops exercising the
+	// losing path proves nothing.
+	const trials = 60
 	sawTransferLoss := false
 
 	for trial := 0; trial < trials; trial++ {

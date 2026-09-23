@@ -8,7 +8,9 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
@@ -17,11 +19,37 @@ import (
 
 const cashCleanupInterval = 5 * time.Minute
 
+// SubWalletDeletion is the caller-supplied context for a reclaim-and-delete.
+// Grouped rather than passed positionally because both fields are easy to get
+// silently wrong: an omitted publisher leaves a deleted wallet in the serving
+// registry, and a wrong Outcome mislabels an audit record that is kept forever.
+type SubWalletDeletion struct {
+	// Outcome is a db.CashBillOutcome* value recorded on the archive when the
+	// app is a cash bill; ignored for every other kind. Note the written-off
+	// case overrides it — only ReclaimAndDeleteSubWallet can detect that the
+	// parent hub is gone.
+	Outcome string
+	// EventPublisher receives nwc_app_deleted once the delete has committed.
+	// Optional, but omitting it means the wallet keeps being served until the
+	// next restart rebuilds the registry from the apps table.
+	EventPublisher events.EventPublisher
+}
+
+// resetCleanupInProgress releases the per-row cleanup mutex after a failure, so
+// the wallet stays visible to the next sweep and to manual retries.
+func resetCleanupInProgress(gormDB *gorm.DB, appID uint) {
+	if err := gormDB.Model(&db.App{}).Where("id = ?", appID).
+		Update("cleanup_in_progress", false).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", appID).
+			Msg("Cash cleanup: failed to release the cleanup flag; this wallet will be skipped until it is cleared")
+	}
+}
+
 // StartCashCleanupService runs a background goroutine that periodically reclaims
 // funds from expired Cash and circle_child sub-wallets back to their parent app.
 // getLNClient is called each tick so the service works even when the client
 // starts after the goroutine is launched.
-func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient) {
+func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher) {
 	go func() {
 		ticker := time.NewTicker(cashCleanupInterval)
 		defer ticker.Stop()
@@ -34,7 +62,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				if lnClient == nil {
 					continue
 				}
-				runCashCleanup(ctx, gormDB, transactionsSvc, lnClient)
+				runCashCleanup(ctx, gormDB, transactionsSvc, lnClient, eventPublisher)
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneStaleCashTransferProofs(gormDB)
@@ -56,7 +84,7 @@ const cleanupBatchSize = 200
 // this loop forever within a single tick.
 const maxBatchesPerTick = 10
 
-func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient) {
+func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient, eventPublisher events.EventPublisher) {
 	for batchNum := 0; batchNum < maxBatchesPerTick; batchNum++ {
 		var batch []db.App
 		err := gormDB.Where(
@@ -71,7 +99,12 @@ func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transa
 			return
 		}
 		for _, app := range batch {
-			if err := ReclaimAndDeleteSubWallet(ctx, gormDB, transactionsSvc, lnClient, app); err != nil {
+			if err := ReclaimAndDeleteSubWallet(ctx, gormDB, transactionsSvc, lnClient, app, SubWalletDeletion{
+				// The sweep only ever picks up apps whose own expires_at has
+				// passed, so "expired" is always the right label here.
+				Outcome:        db.CashBillOutcomeExpired,
+				EventPublisher: eventPublisher,
+			}); err != nil {
 				if errors.Is(err, constants.ErrInvalidParams) {
 					// Expected, transient deferral (pending incoming settlement, or
 					// already claimed by a concurrent tick/manual delete) — the next
@@ -139,7 +172,7 @@ func pruneStaleCashTransferProofs(gormDB *gorm.DB) {
 // deferrals (a payment still settling in, or another caller already
 // reclaiming this wallet) that callers may retry; any other error is a real
 // failure.
-func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient, app db.App) error {
+func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient, app db.App, opts SubWalletDeletion) error {
 	if app.ParentAppID == nil {
 		return fmt.Errorf("app %d has no parent app to reclaim balance into", app.ID)
 	}
@@ -208,23 +241,72 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		}
 	}
 
-	if err := gormDB.Delete(&db.App{}, app.ID).Error; err != nil {
-		return fmt.Errorf("failed to delete sub-wallet: %w", err)
+	now := time.Now()
+	if app.Kind == db.AppKindCashWallet {
+		// A cash bill is archived and deleted atomically, so it can never
+		// disappear unrecorded. Deliberately AFTER the reclaim above: that is a
+		// real Lightning payment and cannot sit inside a DB transaction, and
+		// reversing the order would mean a failed reclaim with no app row left
+		// to pay from. A crash in between is safe — the funds are already at
+		// the hub, the bill still exists, and the next sweep finds a zero
+		// balance and skips straight to archiving.
+		reclaimed := int64(0)
+		outcome := opts.Outcome
+		if writtenOff {
+			// The caller cannot know this: only the parent-exists check above
+			// does, so it overrides whatever label was passed in.
+			outcome = db.CashBillOutcomeWrittenOff
+		} else {
+			reclaimed = balance
+		}
+		if err := gormDB.Transaction(func(tx *gorm.DB) error {
+			return archive.ArchiveAndDeleteCashBillTx(tx, &app, outcome, reclaimed, now)
+		}); err != nil {
+			resetCleanupInProgress(gormDB, app.ID)
+			return fmt.Errorf("failed to archive and delete cash bill: %w", err)
+		}
+	} else {
+		if err := gormDB.Delete(&db.App{}, app.ID).Error; err != nil {
+			// Without this reset the wallet is excluded from the sweep query
+			// AND from any manual retry (both require cleanup_in_progress =
+			// false) — stranding it forever, with its funds already reclaimed,
+			// while it goes on blocking its hub's child-count delete guard.
+			resetCleanupInProgress(gormDB, app.ID)
+			return fmt.Errorf("failed to delete sub-wallet: %w", err)
+		}
+		// If this wallet was the retained side of a failed compensating-saga
+		// reversal (cashwallet.Consolidate/SplitInTwo — see db.CashStrandedFund),
+		// its balance has just been correctly reclaimed to the parent hub above
+		// (or written off, if the parent no longer exists — still no funds left
+		// behind in this now-deleted app). Resolve the reconciliation record so
+		// an operator's query doesn't show a permanently "unresolved" entry
+		// pointing at a wallet that no longer exists and whose funds are already
+		// accounted for. Best-effort: must never fail the cleanup itself.
+		//
+		// The cash-bill branch above does this inside its own transaction
+		// instead, so a crash cannot separate the two.
+		if err := gormDB.Model(&db.CashStrandedFund{}).
+			Where("retained_wallet_app_id = ? AND resolved_at IS NULL", app.ID).
+			Update("resolved_at", now).Error; err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).
+				Msg("Cash cleanup: failed to auto-resolve a stranded-fund reconciliation record for a reclaimed wallet")
+		}
 	}
-	// If this wallet was the retained side of a failed compensating-saga
-	// reversal (cashwallet.Consolidate/SplitInTwo — see db.CashStrandedFund),
-	// its balance has just been correctly reclaimed to the parent hub above
-	// (or written off, if the parent no longer exists — still no funds left
-	// behind in this now-deleted app). Resolve the reconciliation record so
-	// an operator's query doesn't show a permanently "unresolved" entry
-	// pointing at a wallet that no longer exists and whose funds are already
-	// accounted for. Best-effort: must never fail the cleanup itself.
-	if err := gormDB.Model(&db.CashStrandedFund{}).
-		Where("retained_wallet_app_id = ? AND resolved_at IS NULL", app.ID).
-		Update("resolved_at", time.Now()).Error; err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-			Msg("Cash cleanup: failed to auto-resolve a stranded-fund reconciliation record for a reclaimed wallet")
+
+	// Published after the delete commits. This is what drops the wallet from
+	// the registry and removes any info event it still has on the relays —
+	// neither happened on this path before, so swept wallets lingered in the
+	// registry until the next restart.
+	if opts.EventPublisher != nil {
+		opts.EventPublisher.Publish(&events.Event{
+			Event: "nwc_app_deleted",
+			Properties: map[string]interface{}{
+				"name": app.Name,
+				"id":   app.ID,
+			},
+		})
 	}
+
 	if writtenOff {
 		logger.Logger.Info().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).Msg("sub-wallet balance written off and app deleted")
 	} else {
