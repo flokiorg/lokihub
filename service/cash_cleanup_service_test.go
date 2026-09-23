@@ -64,7 +64,7 @@ func TestRunCashCleanup_NotExpired_AppNotCleaned(t *testing.T) {
 	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeFutureTime())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
@@ -84,7 +84,7 @@ func TestRunCashCleanup_ZeroBalance_AppDeleted(t *testing.T) {
 	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
@@ -111,7 +111,7 @@ func TestRunCashCleanup_CleanupInProgress_Skipped(t *testing.T) {
 	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Update("cleanup_in_progress", true)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	// App must still exist because cleanup_in_progress = true excluded it from the query.
 	var found db.App
@@ -143,7 +143,7 @@ func TestRunCashCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	assert.Equal(t, int64(fundedMloki), queries.GetIsolatedBalance(svc.DB, child.ID))
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	// Child must be deleted.
 	var found db.App
@@ -169,7 +169,7 @@ func TestRunCashCleanup_CircleChild_NoMakeInvoice(t *testing.T) {
 
 	// Zero balance — cleanup must delete without calling Transfer.
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	var found db.App
 	err = svc.DB.First(&found, child.ID).Error
@@ -202,7 +202,7 @@ func TestRunCashCleanup_CircleChild_PendingIncoming_DeferredNotDeleted(t *testin
 	require.NoError(t, svc.DB.Create(&pendingTx).Error)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	var found db.App
 	require.NoError(t, svc.DB.First(&found, child.ID).Error, "wallet with a pending incoming payment must not be deleted")
@@ -242,7 +242,7 @@ func TestRunCashCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 	require.NoError(t, svc.DB.Delete(&db.App{}, parent.ID).Error)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	// Child must be deleted despite the missing parent — no infinite retry, no FK error.
 	var found db.App
@@ -275,7 +275,7 @@ func TestRunCashCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
 	mockLN.PayInvoiceErrors = []error{errors.New("lightning payment failed")}
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	// App must still exist (not deleted because transfer failed).
 	var found db.App
@@ -313,7 +313,7 @@ func TestRunCashCleanup_ReclaimsStrandedWallet_ResolvesReconciliationRecord(t *t
 	require.Len(t, unresolvedBefore, 1)
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient)
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
 	// The sweep deletes the zero-balance retained wallet exactly as it would
 	// any other expired child...

@@ -7,6 +7,8 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/archive"
+	"github.com/flokiorg/lokihub/events"
 	"gorm.io/gorm"
 )
 
@@ -148,23 +150,6 @@ func (svc *appsService) ListCashHubWalletChildren(hubID uint) ([]db.App, error) 
 		Order("created_at asc").
 		Find(&children).Error
 	return children, err
-}
-
-// ListCashWalletClaims returns every CashWalletClaim belonging to any
-// cash_wallet child of hubID, joined with that wallet's ExpiresAt, newest
-// first. Unfiltered and unpaginated — the caller (api.ListCashWalletClaims)
-// applies status filtering, counts, and pagination in memory, mirroring how
-// the old merged allocations+children list worked.
-func (svc *appsService) ListCashWalletClaims(hubID uint) ([]CashWalletClaimRow, error) {
-	var rows []CashWalletClaimRow
-	err := svc.db.Model(&db.CashWalletClaim{}).
-		Joins("JOIN apps ON apps.id = cash_wallet_claims.wallet_app_id").
-		Where("apps.parent_app_id = ? AND apps.parent_kind = ? AND apps.kind = ?",
-			hubID, db.ParentKindCash, db.AppKindCashWallet).
-		Select("cash_wallet_claims.*, apps.expires_at AS wallet_expires_at, apps.wallet_pubkey AS wallet_pubkey").
-		Order("cash_wallet_claims.created_at desc").
-		Scan(&rows).Error
-	return rows, err
 }
 
 // GetCashWalletClaim is a read-only lookup of one recipient's still-unclaimed
@@ -427,6 +412,33 @@ func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, 
 		Update("spun_off_to_wallet_app_id", newWalletAppID).Error
 }
 
+// SetCashSliceRedeemPayment records the payout facts for a slice that was just
+// redeemed over Lightning — purely informational (see the payment-fact fields
+// on db.CashWalletClaim), and the redeem-side mirror of
+// SetCashSliceSplitTarget.
+//
+// Recorded here, at redeem time, because it cannot be recovered later: a
+// Transaction carries no identity, so nothing links a payout back to its slice
+// on a multi-recipient bill, and the transaction rows cascade away with the
+// wallet app long before a spent bill is archived.
+//
+// Called only after SendPaymentSync has returned a settled transaction, so the
+// guard is defensive rather than load-bearing — the slice is already terminally
+// claimed by then, and a failed payment is rolled back by UnclaimCashSlice
+// instead of reaching here.
+func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error {
+	return svc.db.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
+			walletAppID, identityType, identityValue, "").
+		Updates(map[string]interface{}{
+			"payment_hash":      payment.PaymentHash,
+			"preimage":          payment.Preimage,
+			"redeem_fee_mloki":  payment.RedeemFeeMloki,
+			"routing_fee_mloki": payment.RoutingFeeMloki,
+			"settled_at":        payment.SettledAt,
+		}).Error
+}
+
 // SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 // source cash_wallet it was split from — purely informational (see
 // db.App.SplitFromWalletAppID doc comment), the reverse of
@@ -436,6 +448,35 @@ func (svc *appsService) SetCashWalletSplitSource(newWalletAppID, sourceWalletApp
 	return svc.db.Model(&db.App{}).
 		Where("id = ? AND split_from_wallet_app_id IS NULL", newWalletAppID).
 		Update("split_from_wallet_app_id", sourceWalletAppID).Error
+}
+
+// DeleteCashBill archives a cash bill's history and hard-deletes it, in one
+// transaction, then announces the deletion.
+//
+// This is the only way to delete a cash_wallet: AppsService.DeleteApp refuses
+// that kind outright, so a delete path added later cannot silently skip the
+// archive and destroy a bill's history without anyone noticing.
+//
+// outcome is a db.CashBillOutcome* value describing how the bill ended. Callers
+// that first reclaim a balance should use service.ReclaimAndDeleteSubWallet
+// instead — it does that reclaim (which cannot sit inside a transaction) before
+// delegating here.
+func (svc *appsService) DeleteCashBill(app *db.App, outcome string) error {
+	if err := svc.db.Transaction(func(tx *gorm.DB) error {
+		return archive.ArchiveAndDeleteCashBillTx(tx, app, outcome, 0, time.Now())
+	}); err != nil {
+		return err
+	}
+	// After the commit: the consumer looks the app up over its own connection,
+	// so announcing mid-transaction would race it.
+	svc.eventPublisher.Publish(&events.Event{
+		Event: "nwc_app_deleted",
+		Properties: map[string]interface{}{
+			"name": app.Name,
+			"id":   app.ID,
+		},
+	})
+	return nil
 }
 
 // DeleteCashClaim removes an unclaimed slice. The caller is responsible
@@ -461,13 +502,30 @@ func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint) (*db.Cas
 	if claim.ClaimedAt != nil {
 		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
 	}
-	result := svc.db.Where("id = ? AND claimed_at IS NULL", claim.ID).Delete(&db.CashWalletClaim{})
-	if result.Error != nil {
-		return nil, result.Error
+
+	var wallet db.App
+	if err := svc.db.First(&wallet, walletAppID).Error; err != nil {
+		return nil, fmt.Errorf("failed to read cash bill %d: %w", walletAppID, err)
 	}
-	if result.RowsAffected == 0 {
-		// Lost a race against a concurrent claim between the read above and this delete.
-		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
+
+	// Archive the slice in the same transaction that destroys it. The bill
+	// itself lives on, so the bill-death archive would never see this
+	// recipient — without this they would vanish with no record that they were
+	// ever owed anything, which is exactly the gap an operator later needs
+	// explained. "reclaimed", not "expired": their window had not passed, they
+	// were cut off.
+	if err := svc.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("id = ? AND claimed_at IS NULL", claim.ID).Delete(&db.CashWalletClaim{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// Lost a race against a concurrent claim between the read above and this delete.
+			return fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
+		}
+		return archive.ArchiveCashSliceTx(tx, &wallet, claim, db.CashSliceStatusReclaimed, time.Now())
+	}); err != nil {
+		return nil, err
 	}
 	return &claim, nil
 }

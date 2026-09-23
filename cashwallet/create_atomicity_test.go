@@ -16,7 +16,7 @@ import (
 )
 
 // failingCommitAppsService wraps a real apps.AppsService and can be told to
-// fail CreateCashWalletClaimsTx and/or DeleteApp a bounded number of times.
+// fail CreateCashWalletClaimsTx and/or DeleteCashBill a bounded number of times.
 // Used to prove two things about Commit()'s atomicity fix:
 //   - a failure while creating the wallet app/claims (before any funds move)
 //     can no longer strand a partial row, even if the (now unreachable, for
@@ -39,12 +39,15 @@ func (f *failingCommitAppsService) CreateCashWalletClaimsTx(tx *gorm.DB, walletA
 	return f.AppsService.CreateCashWalletClaimsTx(tx, walletAppID, entries)
 }
 
-func (f *failingCommitAppsService) DeleteApp(app *db.App) error {
+// DeleteCashBill, not DeleteApp: a cash bill must be archived as it is
+// deleted, so AppsService.DeleteApp now refuses that kind outright and the
+// compensating delete goes through here instead.
+func (f *failingCommitAppsService) DeleteCashBill(app *db.App, outcome string) error {
 	f.deleteCallCount++
 	if f.deleteCallCount <= f.failDeleteNTimes {
 		return errors.New("injected: compensating delete failed")
 	}
-	return f.AppsService.DeleteApp(app)
+	return f.AppsService.DeleteCashBill(app, outcome)
 }
 
 func countCashWalletAppsAndClaims(t *testing.T, svc *tests.TestService) (apps int64, claims int64) {
