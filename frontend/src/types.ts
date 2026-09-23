@@ -107,7 +107,7 @@ export const scopeDescriptions: Record<Scope, string> = {
   superuser: "Create other app connections",
   cash_hub: "Mint Lokicash from your balance",
   circle_wallet: "Issue wallets to your circle's members",
-  cash_redeem: "Claim your allocated share of a shared Cash wallet",
+  cash_redeem: "Claim your allocated share of a shared cash bill",
   cash_transfer: "Transfer or split an unclaimed share to someone else",
   cash_consolidate: "Combine several Cash tokens from the same Hub into one",
 };
@@ -933,17 +933,101 @@ export interface CashWalletClaim {
   spun_off_to_wallet_app_id?: number;
   // The wallet's own connection, packaged as a lokicash1... string —
   // identical for every claim sharing the same wallet_app_id. Only
-  // populated for the page of results actually returned.
+  // populated for the page of results actually returned, and never for an
+  // archived row: a token for a destroyed bill would look spendable.
   cash_token?: string;
+  // How this slice ended. Previously the client re-derived display state from
+  // claimed + spun_off_to_wallet_app_id, which cannot express the terminal
+  // states an archived slice carries.
+  status: CashSliceStatus;
+  // This slice's bill no longer exists; the row comes from the archive.
+  //
+  // Load-bearing, not cosmetic: live claim ids and archive ids come from
+  // different sequences and WILL collide, so anything keyed on id alone — a
+  // dedupe map, a delete URL — must pair it with this, and an archived row
+  // must never offer a delete action.
+  archived: boolean;
+  // The bill's own pubkey. Present on every row, and the only identifier an
+  // archived one has (see cash_token above).
+  wallet_pubkey?: string;
+  // Proof of payment for a redeemed slice, carried into the archive because
+  // the transaction row it came from is deleted with the bill.
+  payment_hash?: string;
 }
 
+// How a cash slice ended. "unclaimed" is the only live-only value; the rest
+// are terminal and are what an archived row carries.
+//
+//   unclaimed    still redeemable
+//   redeemed     paid out over Lightning
+//   split        moved into another bill (a split or a consolidate)
+//   expired      window passed, value reclaimed to the hub
+//   reclaimed    bill destroyed before the window passed, value back to the hub
+//   written-off  hub gone, value could not be returned anywhere
+export type CashSliceStatus =
+  | "unclaimed"
+  | "redeemed"
+  | "split"
+  | "expired"
+  | "reclaimed"
+  | "written-off";
+
+// CashAllocationStatus is the legacy filter vocabulary, where "claimed" was a
+// single umbrella over redeemed and split. Still accepted by the API.
 export type CashAllocationStatus = "unclaimed" | "claimed" | "expired";
 
 export interface CashWalletClaimCounts {
   all: number;
   unclaimed: number;
-  claimed: number;
+  redeemed: number;
+  split: number;
   expired: number;
+  reclaimed: number;
+  written_off: number;
+  // Legacy umbrella: redeemed + split.
+  claimed: number;
+}
+
+// CashHubStats is a hub's dashboard data: what it owes, what has flowed
+// through it, and how fast bills come back. Amounts are mloki.
+//
+// These figures span bills that no longer exist — only possible because a
+// spent bill's history outlives its deletion.
+export interface CashHubStats {
+  // The hub's live liability: value still redeemable. The headline figure.
+  outstanding_mloki: number;
+  outstanding_count: number;
+
+  issued_mloki: number;
+  issued_count: number;
+  redeemed_mloki: number;
+  redeemed_count: number;
+  // Value that moved into another bill rather than leaving the hub — churn,
+  // deliberately not an outflow.
+  split_mloki: number;
+  split_count: number;
+  // Came back because a bill expired or was deleted unclaimed.
+  returned_mloki: number;
+  returned_count: number;
+  // Could not be returned anywhere — a loss, never folded into returned.
+  written_off_mloki: number;
+  written_off_count: number;
+
+  fees_earned_mloki: number;
+
+  // null until something has been redeemed.
+  median_time_to_redeem_secs: number | null;
+
+  daily: CashHubDailyPoint[];
+}
+
+// One day of flow, oldest first. Every day in the window is present even when
+// nothing happened, so a chart has no gaps.
+export interface CashHubDailyPoint {
+  date: string; // YYYY-MM-DD, UTC
+  issued_mloki: number;
+  redeemed_mloki: number;
+  returned_mloki: number;
 }
 
 export interface ListCashWalletClaimsResponse {

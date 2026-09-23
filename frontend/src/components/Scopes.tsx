@@ -316,7 +316,7 @@ const Scopes: React.FC<ScopesProps> = ({
               checked={cashHub}
             />
             <Label htmlFor="cashHub" className="cursor-pointer">
-              Also allow this app to create Cash wallets, paying third
+              Also allow this app to create cash bills, paying third
               parties directly from its balance
             </Label>
           </div>
@@ -324,9 +324,9 @@ const Scopes: React.FC<ScopesProps> = ({
             <div className="mt-3">
               <CashHubConfigCard
                 budgetLabel="Max Wallet Budget"
-                budgetHelper="Maximum cash that can be minted into each Cash wallet from this connection"
+                budgetHelper="Maximum cash that can be minted into each cash bill from this connection"
                 expiryLabel="Max Wallet Expiry"
-                expiryHelper="Maximum lifetime for a Cash wallet's minted cash"
+                expiryHelper="Maximum lifetime for a cash bill's minted cash"
                 perWalletMaxLoki={cashPerWalletMaxLoki}
                 onPerWalletMaxLokiChange={(perWalletMaxLoki) =>
                   onCashHubConfigChanged({ perWalletMaxLoki })

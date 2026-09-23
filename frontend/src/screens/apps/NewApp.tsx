@@ -275,7 +275,7 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
       permissions.cashHub &&
       (!permissions.cashPerWalletMaxLoki || !permissions.cashMaxExpSecs)
     ) {
-      toast(t("newApp.specifyCashHubLimits", "Please specify Cash wallet budget and expiry limits."));
+      toast(t("newApp.specifyCashHubLimits", "Please specify cash bill budget and expiry limits."));
       return;
     }
 

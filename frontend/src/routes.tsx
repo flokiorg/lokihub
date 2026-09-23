@@ -51,6 +51,7 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
 import { CashHubList } from "src/screens/subwallets/CashHubList";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
 import { NewCashHub } from "src/screens/subwallets/NewCashHub";
@@ -330,6 +331,14 @@ const routes: RouteObject[] = [
           {
             path: "created",
             element: <SubwalletCreated />,
+          },
+          {
+            // One hub's own dashboard. A hub row used to lead to /apps/:id,
+            // where the cash list sat below three unrelated cards with no
+            // room for totals or charts. Last, so it cannot shadow the
+            // literal "new"/"created" siblings above.
+            path: ":id",
+            element: <CashHubDashboard />,
           },
         ],
       },
