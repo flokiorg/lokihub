@@ -38,7 +38,8 @@
     "amount": "Monto del presupuesto",
     "customAmount": "Monto de presupuesto personalizado ({{unit}})",
     "spent": "Gastado",
-    "remaining": "Restante"
+    "remaining": "Restante",
+    "cashHubCaption": "Limita los pagos ordinarios hechos a través de la propia conexión de este hub. No limita la acuñación: un billete se financia por transferencia interna y su tamaño lo limita el máximo por billetera en Ajustes del Hub."
   },
   "renewals": {
     "daily": "Diario",
@@ -76,6 +77,11 @@
     "failedToUpdate": "No se pudo actualizar la conexión",
     "lokiAccount": "Cuenta Loki",
     "connections_count": "{{count}} conexión(es)",
+    "siblingCashHubs": "{{count}} Cash Hubs",
+    "siblingCircles": "{{count}} círculos",
+    "siblingCashBills": "{{count}} tokens Lokicash",
+    "siblingCircleWallets": "{{count}} billeteras de círculo",
+    "siblingSubwallets": "{{count}} subcarteras",
     "connected": "Conectado",
     "addAnother": "Agregar otra conexión",
     "connectionDetails": "Detalles de la conexión",
@@ -129,7 +135,10 @@
     "addMember": "Añadir miembro",
     "circleWalletsTitle": "Billeteras de círculo",
     "cashWalletsTitle": "Tokens Lokicash",
-    "addCashWallet": "Acuñar Lokicash"
+    "analyticsTitle": "Analíticas",
+    "keepAnalyticsOpen": "Mantener abierto",
+    "addCashWallet": "Acuñar Lokicash",
+    "hubExpiryBeforeBillsWarning": "La conexión de este {{kind}} caduca antes que el billete de mayor duración que puede acuñar. Los billetes ya emitidos conservan su propio plazo, pero no podrás acuñar nuevos una vez que caduque la conexión."
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",

@@ -43,7 +43,8 @@
     "spent": "المُنفَق",
     "remaining": "المتبقي",
     "set": "تعيين ميزانية",
-    "used": "مستخدم"
+    "used": "مستخدم",
+    "cashHubCaption": "يحدّ من المدفوعات العادية التي تتم عبر اتصال هذا المركز. لا يحدّ من السكّ — تُموَّل الورقة بتحويل داخلي، ويحدّ حجمَها الحدُّ الأقصى لكل محفظة في إعدادات المركز."
   },
   "renewals": {
     "daily": "يومياً",
@@ -97,6 +98,11 @@
     "failedToUpdate": "فشل تحديث الاتصال",
     "lokiAccount": "حساب Loki",
     "connections_count": "{{count}} اتصال",
+    "siblingCashHubs": "{{count}} Cash Hub",
+    "siblingCircles": "{{count}} دائرة",
+    "siblingCashBills": "{{count}} رمز Lokicash",
+    "siblingCircleWallets": "{{count}} محفظة دائرة",
+    "siblingSubwallets": "{{count}} محفظة فرعية",
     "connected": "متصل",
     "addAnother": "إضافة اتصال آخر",
     "connectionDetails": "تفاصيل الاتصال",
@@ -150,7 +156,10 @@
     "addMember": "إضافة عضو",
     "circleWalletsTitle": "محافظ الدائرة",
     "cashWalletsTitle": "رموز Lokicash",
-    "addCashWallet": "سكّ Lokicash"
+    "analyticsTitle": "التحليلات",
+    "keepAnalyticsOpen": "إبقاؤه مفتوحًا",
+    "addCashWallet": "سكّ Lokicash",
+    "hubExpiryBeforeBillsWarning": "ينتهي اتصال هذا الـ {{kind}} قبل أطول ورقة يمكنه سكّها. تحتفظ الأوراق الصادرة بمهلتها الخاصة، لكن لن تتمكن من سكّ أوراق جديدة بعد انتهاء الاتصال."
   },
   "newApp": {
     "unsupportedApp": "تطبيق غير مدعوم",

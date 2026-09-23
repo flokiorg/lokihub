@@ -38,7 +38,8 @@
     "amount": "Сумма бюджета",
     "customAmount": "Пользовательская сумма бюджета ({{unit}})",
     "spent": "Потрачено",
-    "remaining": "Остаток"
+    "remaining": "Остаток",
+    "cashHubCaption": "Ограничивает обычные платежи, совершаемые через собственное подключение этого хаба. Чеканку он не ограничивает — купюра финансируется внутренним переводом, а её размер ограничен максимумом на кошелёк в настройках хаба."
   },
   "renewals": {
     "daily": "Ежедневно",
@@ -76,6 +77,11 @@
     "failedToUpdate": "Не удалось обновить подключение",
     "lokiAccount": "Loki Account",
     "connections_count": "Подключений: {{count}}",
+    "siblingCashHubs": "Cash Hub: {{count}}",
+    "siblingCircles": "Кругов: {{count}}",
+    "siblingCashBills": "Токенов Lokicash: {{count}}",
+    "siblingCircleWallets": "Кошельков круга: {{count}}",
+    "siblingSubwallets": "Субкошельков: {{count}}",
     "connected": "Подключено",
     "addAnother": "Добавить ещё одно подключение",
     "connectionDetails": "Сведения о подключении",
@@ -129,7 +135,10 @@
     "addMember": "Добавить участника",
     "circleWalletsTitle": "Кошельки круга",
     "cashWalletsTitle": "Токены Lokicash",
-    "addCashWallet": "Отчеканить Lokicash"
+    "analyticsTitle": "Аналитика",
+    "keepAnalyticsOpen": "Оставлять открытым",
+    "addCashWallet": "Отчеканить Lokicash",
+    "hubExpiryBeforeBillsWarning": "Подключение этого {{kind}} истекает раньше, чем самая долгая купюра, которую он может отчеканить. Уже выпущенные купюры сохраняют свой срок, но после истечения подключения вы не сможете чеканить новые."
   },
   "newApp": {
     "title": "Подключить новое приложение",

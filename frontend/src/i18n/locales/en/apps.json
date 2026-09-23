@@ -51,7 +51,8 @@
     "remaining": "Remaining",
     "set": "Set budget",
     "used": "used",
-    "circleSharedCaption": "Shared by all wallets in this circle."
+    "circleSharedCaption": "Shared by all wallets in this circle.",
+    "cashHubCaption": "Caps ordinary payments made over this hub's own connection. It does not limit minting — a bill is funded by internal transfer, and its size is capped by the per-wallet maximum in Hub Settings."
   },
   "renewals": {
     "daily": "Daily",
@@ -120,6 +121,11 @@
     "failedToUpdate": "Failed to update connection",
     "lokiAccount": "Loki Account",
     "connections_count": "{{count}} Connections",
+    "siblingCashHubs": "{{count}} Cash Hubs",
+    "siblingCircles": "{{count}} Circles",
+    "siblingCashBills": "{{count}} Cash Bills",
+    "siblingCircleWallets": "{{count}} Circle Wallets",
+    "siblingSubwallets": "{{count}} Sub-wallets",
     "connected": "Connected",
     "addAnother": "Add Another Connection",
     "connectionDetails": "Connection Details",
@@ -176,7 +182,10 @@
     "addMember": "Add member",
     "circleWalletsTitle": "Circle Wallets",
     "cashWalletsTitle": "Cash Bills",
-    "addCashWallet": "Mint Lokicash"
+    "analyticsTitle": "Analytics",
+    "keepAnalyticsOpen": "Keep open",
+    "addCashWallet": "Mint Lokicash",
+    "hubExpiryBeforeBillsWarning": "This {{kind}}'s connection expires before the longest bill it can mint. Bills already issued keep their own deadline, but you won't be able to mint new ones once the connection expires."
   },
   "newApp": {
     "title": "Connect a New App",
@@ -235,7 +244,7 @@
     "back": "Back",
     "finish": "Finish",
     "hubOwnConnectionIntro": "This is your {{kind}}'s own connection — you don't need it to mint or manage anything here in Lokihub. Keep it only if you plan to connect another NWC-compatible tool to it directly.",
-    "hubConnectionReminder": "You can view or copy this connection again anytime from your {{kind}}'s own page."
+    "hubConnectionOneTime": "This connection is shown only now — it isn't stored anywhere and can't be retrieved later. Copy it if you plan to connect another tool. You don't need it to mint or manage this {{kind}} here."
   },
   "cleanup": {
     "title": "Cleanup Unused Apps",

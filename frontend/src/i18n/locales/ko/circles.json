@@ -77,6 +77,33 @@
     "unclaimed": "미교환",
     "movedToNewWallet": "새 지갑으로 이동됨"
   },
+  "cashStatus": {
+    "legendLabel": "각 상태의 의미",
+    "unclaimed": {
+      "label": "미교환",
+      "description": "아직 교환할 수 있음"
+    },
+    "redeemed": {
+      "label": "교환됨",
+      "description": "라이트닝으로 지급됨"
+    },
+    "split": {
+      "label": "분할됨",
+      "description": "다른 지폐로 이동됨"
+    },
+    "expired": {
+      "label": "만료됨",
+      "description": "기간이 지나 금액이 이 허브로 반환됨"
+    },
+    "reclaimed": {
+      "label": "회수됨",
+      "description": "기간 전에 지폐가 삭제되어 금액이 반환됨"
+    },
+    "written-off": {
+      "label": "상각됨",
+      "description": "금액을 어디로도 반환할 수 없음"
+    }
+  },
   "claimDeadline": {
     "expired": "교환 기한이 만료되었습니다",
     "withinMinutes_one": "{{count}}분 이내 교환",
@@ -197,11 +224,13 @@
     "noneFiltered": "{{status}} Lokicash가 없습니다.",
     "noneOnPage": "이 페이지에 Lokicash가 없습니다.",
     "addHeading": "Lokicash 발행",
+    "mintAction": "발행",
     "createDialogTitle": "Lokicash 발행",
     "removeRecipientTitle": "이 수령인을 제거하시겠습니까?",
-    "removeRecipientDescription": "이 아이덴티티는 더 이상 몫을 교환할 수 없습니다. 할당된 잔액은 이 허브로 반환됩니다. 되돌릴 수 없습니다.",
+    "removeRecipientDescription": "해당 몫은 이 허브로 반환됩니다. 다른 수령인에게는 영향이 없습니다. 되돌릴 수 없습니다.",
+    "removeBillDescription": "Lokicash가 삭제되고 금액은 이 허브로 반환됩니다. 되돌릴 수 없습니다.",
     "removeWalletTitle": "이 Lokicash를 제거하시겠습니까?",
-    "removeWalletDescription": "이 Lokicash의 남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 다른 수령인에게도 사용되는 경우, 아직 교환하지 않은 사람을 포함해 모두 접근 권한을 잃게 됩니다. 되돌릴 수 없습니다.",
+    "removeWalletDescription": "Lokicash가 삭제되고 남은 금액은 이 허브로 반환됩니다. 모든 수령인이 접근 권한을 잃습니다. 되돌릴 수 없습니다.",
     "removeSelectedTitle_one": "수령인 {{count}}명을 제거하시겠습니까?",
     "removeSelectedTitle_other": "수령인 {{count}}명을 제거하시겠습니까?",
     "removeSelectedDescription": "이 아이덴티티들은 더 이상 몫을 교환할 수 없습니다. 할당된 잔액은 이 허브로 반환됩니다. 되돌릴 수 없습니다.",
