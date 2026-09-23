@@ -51,7 +51,7 @@ func seedMergedHub(t *testing.T, svc *tests.TestService) (*db.App, *db.App) {
 		{AmountMloki: 4000, Outcome: db.CashSliceStatusSplit, CreatedAt: now.Add(-3 * time.Minute)},
 		{AmountMloki: 5000, Outcome: db.CashSliceStatusVoid, CreatedAt: now.Add(-1 * time.Minute)},
 	} {
-		a.WalletAppID = 999_000 + uint(a.AmountMloki)
+		a.WalletAppID = 999_000 + uint(a.AmountMloki) //nolint:gosec // fixed positive amounts in a test fixture
 		a.HubAppID = hub.ID
 		a.ClaimID = 1
 		a.IdentityType = db.CashIdentityPubkey

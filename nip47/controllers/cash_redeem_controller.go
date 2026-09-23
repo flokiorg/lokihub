@@ -335,8 +335,8 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	if err := controller.appsService.SetCashSliceRedeemPayment(app.ID, identityType, identityValue, apps.CashSliceRedeemPayment{
 		PaymentHash:     transaction.PaymentHash,
 		Preimage:        *transaction.Preimage,
-		RedeemFeeMloki:  int64(hubFeeMloki), //nolint:gosec // a quoted ppm cut of a positive amount
-		RoutingFeeMloki: int64(transaction.FeeMloki),
+		RedeemFeeMloki:  int64(hubFeeMloki),          //nolint:gosec // a quoted ppm cut of a positive amount
+		RoutingFeeMloki: int64(transaction.FeeMloki), //nolint:gosec // a routing fee the node reports, far below int64's range
 		SettledAt:       transaction.SettledAt,
 	}); err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
