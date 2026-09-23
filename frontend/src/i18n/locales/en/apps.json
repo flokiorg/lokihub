@@ -6,7 +6,7 @@
   "kindLabel": {
     "cashHub": "Cash Hub",
     "circleHub": "Circle Hub",
-    "cashWallet": "Cash Wallet",
+    "cashWallet": "Cash Bill",
     "circleWallet": "Circle Wallet",
     "app": "App"
   },
@@ -81,7 +81,7 @@
     "sign_message": "Sign messages",
     "notifications": "Receive wallet notifications",
     "superuser": "Create other app connections",
-    "cash_hub": "Issue Cash Wallets",
+    "cash_hub": "Issue Cash Bills",
     "circle_wallet": "Issue Circle Wallets",
     "cash_redeem": "Redeem funds",
     "cash_transfer": "Transfer or split ownership",
@@ -149,8 +149,8 @@
     "budgetRenewal": "Budget renewal"
   },
   "isolatedKind": {
-    "cash_hub": "Cash Wallets",
-    "cash_wallet": "Cash Wallet",
+    "cash_hub": "Cash Bills",
+    "cash_wallet": "Cash Bill",
     "circle_hub": "Circle Wallets",
     "circle_wallet": "Circle Wallet",
     "subwallet": "Sub-wallet",
@@ -160,13 +160,13 @@
     "permissionsManagedNote": "Permissions for this connection are managed automatically and can't be changed here.",
     "budgetManagedNote": "This connection's requested permissions are managed automatically, but its budget and expiry can still be changed below.",
     "hubSettingsTitle": "Hub Settings",
-    "cashHubSettingsDescription": "Changes only apply to Cash Wallets issued from now on and won't affect ones already issued.",
+    "cashHubSettingsDescription": "Changes only apply to Cash Bills issued from now on and won't affect ones already issued.",
     "circleHubSettingsDescription": "Changes only apply to circle wallets created from now on and won't affect wallets already created.",
     "maxWalletBudgetLabel": "Max Wallet Budget",
-    "cashMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash Wallet issued from this hub (default: 1,000 loki)",
+    "cashMaxWalletBudgetHelper": "Maximum budget that can be allocated to each Cash Bill issued from this hub (default: 1,000 loki)",
     "circleMaxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet (default: 1,000 loki)",
     "maxWalletExpiryLabel": "Max Wallet Expiry",
-    "cashMaxExpiryHelper": "Maximum lifetime for issued Cash Wallets (default: 1 day)",
+    "cashMaxExpiryHelper": "Maximum lifetime for issued Cash Bills (default: 1 day)",
     "circleMaxExpiryHelper": "Maximum lifetime for issued circle wallets (default: 30 days)",
     "minRenewalLabel": "Min Renewal",
     "minRenewalHelper": "Shortest renewal period a member may request for their circle wallet's budget (default: monthly)",
@@ -175,7 +175,7 @@
     "allowlistTitle": "Allowlist",
     "addMember": "Add member",
     "circleWalletsTitle": "Circle Wallets",
-    "cashWalletsTitle": "Cash Wallets",
+    "cashWalletsTitle": "Cash Bills",
     "addCashWallet": "Mint Lokicash"
   },
   "newApp": {
@@ -215,7 +215,7 @@
     "enterUnlockPassword": "Please enter your unlock password to continue.",
     "unlockPassword": "Unlock Password",
     "specifyWalletPermissions": "Please specify wallet permissions.",
-    "specifyCashHubLimits": "Please specify Cash wallet budget and expiry limits.",
+    "specifyCashHubLimits": "Please specify cash bill budget and expiry limits.",
     "appCreated": "App created",
     "failedToCreate": "Failed to create app",
     "configure": "Configure",
