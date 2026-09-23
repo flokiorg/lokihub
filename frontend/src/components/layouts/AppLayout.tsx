@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, ScrollRestoration } from "react-router-dom";
 
 import { AppSidebar } from "src/components/AppSidebar";
 import { Banner } from "src/components/Banner";
@@ -40,6 +40,17 @@ function AppLayoutInner() {
 
   return (
     <>
+      {/*
+        React Router does not reset scroll on navigation by default, so without
+        this the window kept its previous offset across a route change —
+        scroll halfway down Transactions, click Node, land halfway down Node.
+        The built-in does the right thing per navigation type: top on a new
+        navigation, restore on back/forward, and honour a hash anchor.
+
+        It manages WINDOW scroll only. TwoColumnFullScreenLayout scrolls its
+        own panel and resets that itself.
+      */}
+      <ScrollRestoration />
       <div
         className={cn(
           "font-sans min-h-[calc(100vh-var(--app-titlebar-height))] w-full flex flex-col pt-[var(--app-titlebar-overlay-height)]",

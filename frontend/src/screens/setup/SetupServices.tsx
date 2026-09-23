@@ -39,9 +39,6 @@ export function SetupServices() {
 
   // Fetch default values and community options
   useEffect(() => {
-    // Scroll to top on mount
-    window.scrollTo(0, 0);
-
     async function fetchServices() {
       try {
         setLoading(true);
