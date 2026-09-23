@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 )
 
 // cashSecretAndHash returns a fresh random cash secret (hex) and the
@@ -259,6 +258,11 @@ func newTestPrivkey(t *testing.T) string {
 // stays quiet.
 const drainedWalletSilenceWindow = 2 * time.Second
 
+// drainedWalletDeleteWindow is how long the bill is given to actually
+// disappear. The hub deletes it after answering, so a short wait is expected;
+// anything longer than this means it is not being deleted at all.
+const drainedWalletDeleteWindow = 10 * time.Second
+
 // requireCashWalletDrainedAway asserts that a cash wallet whose last slice was
 // just spent no longer exists, and that the hub now says nothing about it.
 //
@@ -281,31 +285,56 @@ const drainedWalletSilenceWindow = 2 * time.Second
 func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uint, walletPubkey string, call func(ctx context.Context) error) {
 	t.Helper()
 
-	// apps.ListCashWalletClaims joins apps, so a deleted wallet's slices drop
-	// out of this listing entirely. Matched on the wallet pubkey carried by
-	// each claim's own lokicash token, never on the identity: a split's
-	// remainder wallet inherits the source slice's identity value verbatim, so
-	// that value is still present afterwards, on a different wallet.
-	claims, err := admin.listCashWalletClaims(hubAppID)
-	require.NoError(t, err, "listing this hub's cash wallet claims")
-	require.NotEmpty(t, claims, "the split's own carved and remainder wallets must still be listed under this hub")
+	// Proven from the archive rather than from an absence. Matching on the
+	// wallet pubkey, never the identity: a split's remainder wallet inherits
+	// the source slice's identity value verbatim, so that value is still
+	// present afterwards on a different bill.
+	//
+	// An earlier version asserted only that no LIVE row named the bill, with a
+	// guard requiring at least one decodable token so the check could not pass
+	// vacuously. That guard was wrong: when a redeem empties a hub's only bill
+	// there are no live rows left at all, and no tokens to decode. Asserting
+	// the archived row EXISTS is both non-vacuous and a stronger statement --
+	// it is the archive itself under test.
+	// Polled rather than read once: the hub archives and deletes a drained
+	// bill AFTER publishing its response (deliberately -- the cleanup must
+	// never delay or fail a caller's request), so the response can legitimately
+	// arrive before the delete has committed. Asserting on a single read races
+	// that window and fails for a bill that is about to disappear.
+	var live, archived int
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		claims, err := admin.listCashWalletClaims(hubAppID)
+		require.NoError(t, err, "listing this hub's cash wallet claims")
 
-	matchable := 0
-	for _, claim := range claims {
-		if claim.CashToken == "" {
-			continue
+		live, archived = 0, 0
+		for _, claim := range claims {
+			if claim.WalletPubkey != walletPubkey {
+				continue
+			}
+			if claim.Archived {
+				archived++
+			} else {
+				live++
+			}
 		}
-		token, decErr := lokicash.Decode(claim.CashToken)
-		if decErr != nil {
-			continue
+		// Polled: the hub archives and deletes a drained bill AFTER publishing
+		// its response, deliberately, so the cleanup can never delay or fail a
+		// caller's request. A single read races that window.
+		if archived > 0 && live == 0 {
+			break
 		}
-		matchable++
-		require.NotEqual(t, walletPubkey, token.WalletPubkey,
-			"a fully-drained cash wallet must be deleted, not left behind holding nothing (claim id=%d)", claim.ID)
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
-	// Without this the loop above would pass vacuously the day the hub stops
-	// deriving tokens for this listing.
-	require.NotZero(t, matchable, "the claims listing must carry decodable cash tokens for the check above to mean anything")
+
+	require.Zero(t, live,
+		"a fully-drained cash bill must be deleted, not left behind holding nothing (waited %s)",
+		drainedWalletDeleteWindow)
+	require.NotZero(t, archived,
+		"a deleted bill must leave its slices in the archive -- deletion without a record is the thing this replaced")
 
 	if call == nil {
 		return
@@ -314,10 +343,48 @@ func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uin
 	ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
 	defer cancel()
 
-	err = call(ctx)
+	err := call(ctx)
 	require.Error(t, err, "a deleted cash wallet must not answer")
 	require.ErrorIs(t, err, context.DeadlineExceeded,
 		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey")
+}
+
+// requireSpentBillSilent asserts that a bill which has just been spent in full
+// stops answering.
+//
+// It replaces two older assertions: reading a zero balance off the bill, and
+// expecting NOT_FOUND from a replayed redeem. Both assumed a bill outlives its
+// last slice. It no longer does -- a bill with nothing left is deleted, and a
+// deleted bill is met with silence, so that a spent bill is indistinguishable
+// from a pubkey this hub never served (NIP-CASH, Lifecycle and Deletion).
+//
+// Retried rather than asserted once, because the hub deletes the bill AFTER
+// answering the request that emptied it: for a moment afterwards the bill is
+// still there and still replies. Asserting immediately would be flaky in the
+// opposite direction to requireCashWalletDrainedAway's own poll.
+//
+// Where a test has admin access, prefer requireCashWalletDrainedAway: it also
+// proves the bill is genuinely gone rather than merely quiet.
+func requireSpentBillSilent(t *testing.T, call func(ctx context.Context) error) {
+	t.Helper()
+
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+		err := call(ctx)
+		cancel()
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Fail(t,
+				"a spent bill must stop answering",
+				"still replying %s after its last slice was spent; answering tells a caller this hub once served that pubkey (last result: %v)",
+				drainedWalletDeleteWindow, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 // requireNWCErrorCode asserts err is an *nwcclient.NWCError with the given code.

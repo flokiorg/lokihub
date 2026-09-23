@@ -154,11 +154,14 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 		// And exactly once: a second redeem attempt against the same secret
 		// must fail now that it's spent.
 		replayInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet double-redeem")
-		var replayClaim ClaimFundsResult
-		err = newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:    replayInvoice.Invoice,
-			CashSecret: newSecretHex,
-		}, &replayClaim)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		// The spun-off bill held one slice, which the redeem above paid out, so
+		// the bill itself is deleted and the replay reaches nothing.
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var replayClaim ClaimFundsResult
+			return newWalletClient.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:    replayInvoice.Invoice,
+				CashSecret: newSecretHex,
+			}, &replayClaim)
+		})
 	})
 }

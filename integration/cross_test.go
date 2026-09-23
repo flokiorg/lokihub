@@ -8,6 +8,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -143,9 +144,11 @@ func TestCrossHub_ClaimFunds_CashChildClaimsAgainstCircleChildInvoice(t *testing
 	payResult := claimFullSlice(t, cashChild, invoice)
 	require.NotEmpty(t, payResult.Preimage)
 
-	var cashBalance GetBalanceResult
-	require.NoError(t, cashChild.Client.Call(ctxT(t), "get_balance", struct{}{}, &cashBalance))
-	require.LessOrEqual(t, cashBalance.Balance, int64(0), "the Cash child's slice must be fully drained in one shot")
+	// Fully drained, so the bill is deleted and no longer answers.
+	requireSpentBillSilent(t, func(ctx context.Context) error {
+		var cashBalance GetBalanceResult
+		return cashChild.Client.Call(ctx, "get_balance", struct{}{}, &cashBalance)
+	})
 
 	var circleBalance GetBalanceResult
 	require.NoError(t, circleChild.Call(ctxT(t), "get_balance", struct{}{}, &circleBalance))

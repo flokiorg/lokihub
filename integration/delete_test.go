@@ -378,8 +378,15 @@ func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 
 		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
-		require.Len(t, claims, 1, "the listing must still show the wallet - it still has a live recipient")
-		require.Equal(t, pub2, claims[0].IdentityValue)
+		live := liveCashClaims(claims)
+		require.Len(t, live, 1, "the listing must still show the wallet - it still has a live recipient")
+		require.Equal(t, pub2, live[0].IdentityValue)
+
+		// The removed recipient is not simply gone: removing them archives the
+		// slice, so the operator keeps a record that they were once owed it.
+		archived := archivedCashClaims(claims)
+		require.Len(t, archived, 1, "a removed recipient must leave an archived slice behind")
+		require.Equal(t, pub1, archived[0].IdentityValue)
 
 		err = admin.deleteApp(hubAppID)
 		require.Error(t, err, "the hub must still refuse deletion - one recipient is still live")
@@ -394,7 +401,10 @@ func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 
 		claimsAfter, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
-		require.Empty(t, claimsAfter, "the listing must show nothing once every recipient is gone")
+		require.Empty(t, liveCashClaims(claimsAfter),
+			"no live recipient may remain once every one has been removed")
+		require.Len(t, archivedCashClaims(claimsAfter), 2,
+			"both removed recipients stay in the archive - the wallet is gone, its history is not")
 
 		require.NoError(t, admin.deleteApp(hubAppID),
 			"once the wallet's last recipient is removed, the hub must be immediately deletable - proving the "+

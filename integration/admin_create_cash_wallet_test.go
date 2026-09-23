@@ -11,6 +11,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -80,9 +81,13 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 	}, &result))
 	require.NotEmpty(t, result.Preimage, "cash_redeem against an admin-minted wallet must actually pay out")
 
-	var balanceAfter GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balanceAfter))
-	require.EqualValues(t, 0, balanceAfter.Balance, "the slice must be fully drained after redemption")
+	// The bill held one slice and that slice has just been paid out, so it is
+	// deleted rather than left holding nothing -- there is no zero balance to
+	// read back any more.
+	requireSpentBillSilent(t, func(ctx context.Context) error {
+		var balanceAfter GetBalanceResult
+		return child.Call(ctx, "get_balance", struct{}{}, &balanceAfter)
+	})
 }
 
 // TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode proves the
