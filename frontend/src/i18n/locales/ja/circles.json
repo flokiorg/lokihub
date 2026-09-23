@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr アイデンティティ",
     "connectionKey": "ウェブアイデンティティ",
-    "bearer": "ベアラー"
+    "cash": "ベアラー"
   },
   "avatarStack": {
     "more": "他 {{count}} 人"
@@ -219,8 +219,8 @@
       "removeWallet": "Lokicash の削除に失敗しました",
       "removeSelected": "選択した受取人の削除に失敗しました"
     },
-    "bearerHelper": "ベアラー: シークレットを持つ人なら誰でも引き換えできます — 本人確認はなく、紛失または盗まれても復旧できません。",
-    "bearerRequiresSoleRecipient": "ベアラーは唯一の受取人である必要があります",
+    "cashHelper": "ベアラー: シークレットを持つ人なら誰でも引き換えできます — 本人確認はなく、紛失または盗まれても復旧できません。",
+    "cashRequiresSoleRecipient": "ベアラーは唯一の受取人である必要があります",
     "pubkeyModeHelper": "この Nostr アイデンティティのみが引き換え可能です。",
     "connectionKeyModeHelper": "検証済みのアイデンティティのみが引き換え可能です。",
     "copyLokicash": "Lokicash をコピー",

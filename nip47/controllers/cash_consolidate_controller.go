@@ -21,10 +21,10 @@ import (
 // kind-23198 identity_event proof against the source slice's current
 // registered pubkey or connection_key identity (connection_key additionally
 // carrying an attestation_event), plus the wallet_pubkey identifying which
-// cash_wallet the slice lives in. Bearer sources remain deferred (see the
+// cash_wallet the slice lives in. Cash-mode sources remain deferred (see the
 // handler) — its secret would sit in plaintext in a request encrypted only
 // under the CALLING connection's shared key, decryptable by any co-recipient
-// of a shared calling wallet with no claim on that foreign bearer note.
+// of a shared calling wallet with no claim on that foreign cash note.
 // maxConsolidateSources mirrors mint_cash's/the hub config's own
 // maxRecipientsPerWallet=100 cap (cashwallet/create.go, apps/cash_hub_service.go)
 // — the same "cap every multi-item Cash batch" convention, applied here since
@@ -47,7 +47,7 @@ type consolidateSourceParam struct {
 	IdentityValue    string `json:"identity_value,omitempty"`
 	IdentityEvent    string `json:"identity_event,omitempty"`
 	AttestationEvent string `json:"attestation_event,omitempty"`
-	BearerSecret     string `json:"bearer_secret,omitempty"`
+	CashSecret       string `json:"cash_secret,omitempty"`
 }
 
 type cashConsolidateParams struct {
@@ -64,7 +64,7 @@ type cashConsolidateResponse struct {
 	// own privkey (same nested-encryption delivery as a split, §Spinning a Slice
 	// Off). NewWalletToken is the merged lokicash1... token, NIP-44 encrypted to
 	// the caller (not new_identity) when new_identity is a pubkey, or sent in
-	// the clear when it's bearer/connection_key.
+	// the clear when it's cash/connection_key.
 	NewWalletPubkey string `json:"new_wallet_pubkey"`
 	NewWalletToken  string `json:"new_wallet_token"`
 	ExpiresAt       *int64 `json:"expires_at,omitempty"`
@@ -100,15 +100,15 @@ type resolvedConsolidateSource struct {
 // Scope: sources MAY be pubkey or connection_key identified (each proven by
 // its own signed identity_event, connection_key additionally requiring a
 // live-trusted attestation_event); new_identity MAY be pubkey, connection_key,
-// or bearer (the merged wallet is owned by that identity; its token is
+// or cash (the merged wallet is owned by that identity; its token is
 // delivered encrypted to the CALLER when new_identity is a pubkey — same as
 // cash_transfer — or in the clear within the outer NIP-47 response for
-// connection_key/bearer, which have no real pubkey to ECDH against). Bearer
+// connection_key/cash, which have no real pubkey to ECDH against). Cash-mode
 // SOURCES remain deferred: unlike connection_key (a
-// signed proof, immune to this), a bearer source's secret has no signature
+// signed proof, immune to this), a cash-mode source's secret has no signature
 // and would sit in plaintext in a request encrypted only under the CALLING
 // connection's shared key, decryptable by any co-recipient of a shared
-// calling wallet with no claim on that foreign bearer note.
+// calling wallet with no claim on that foreign cash note.
 func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
 	params := &nipcash.CashConsolidateRequest{}
 	if resp := decodeRequest(nip47Request, params); resp != nil {
@@ -126,7 +126,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		return
 	}
 	// Shares the claim limiter with cash_redeem/cash_transfer: a captured proof
-	// (or, on those other methods, a bearer secret) is a presentation surface
+	// (or, on those other methods, a cash secret) is a presentation surface
 	// worth rate-limiting even without a signature to forge.
 	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_consolidate")
@@ -142,13 +142,13 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		return
 	}
 	// The merged wallet's owner: pubkey or connection_key (live IA-trust
-	// validated below, same as mint_cash/cash_transfer), or bearer (caller
-	// supplies their own commitment — see the bearer branch below for why).
+	// validated below, same as mint_cash/cash_transfer), or cash (caller
+	// supplies their own commitment — see the cash-mode branch below for why).
 	newIdentityType := params.NewIdentity.IdentityType
-	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityBearer {
+	if newIdentityType != db.CashIdentityPubkey && newIdentityType != db.CashIdentityConnectionKey && newIdentityType != db.CashIdentityCash {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 			fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
-				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityBearer))
+				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
 		return
 	}
 	deps := cashwallet.Deps{
@@ -160,23 +160,23 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		RelayURLs:           controller.cfg.GetRelayUrls(),
 		IAChecker:           controller.iaChecker,
 	}
-	// Bearer is validated separately from ValidateIdentityShape (which only
+	// Cash mode is validated separately from ValidateIdentityShape (which only
 	// knows pubkey/connection_key — same split cash_transfer's own
 	// new_identity validation already uses): the caller's own commitment MUST
 	// be supplied here rather than generated and returned by the node — see
-	// the bearer-target delivery note below for why — shaped as a 64-char
-	// lowercase hex sha256, exactly like cash_transfer's bearer target.
-	if newIdentityType == db.CashIdentityBearer {
+	// the cash-mode-target delivery note below for why — shaped as a 64-char
+	// lowercase hex sha256, exactly like cash_transfer's cash-mode target.
+	if newIdentityType == db.CashIdentityCash {
 		if params.NewIdentity.IAPubkey != "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity must not carry ia_pubkey when identity_type is bearer")
+				"new_identity must not carry ia_pubkey when identity_type is cash")
 			return
 		}
 		if decoded, decErr := hex.DecodeString(params.NewIdentity.IdentityValue); decErr != nil || len(decoded) != 32 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"new_identity.identity_value is required for a bearer target and must be a 64-character lowercase "+
+				"new_identity.identity_value is required for a cash-mode target and must be a 64-character lowercase "+
 					"hex commitment (sha256 of a secret you generate and keep yourself) — the wallet never mints "+
-					"or returns a bearer secret over the shared connection")
+					"or returns a cash secret over the shared connection")
 			return
 		}
 	} else if err := cashwallet.ValidateIdentityShape(deps, newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey); err != nil {
@@ -428,14 +428,14 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	// reason: this protects the token from a co-recipient of the calling
 	// connection it travels back over, not from new_identity's own owner (a
 	// pubkey-mode token isn't secret to begin with — redeeming one needs a
-	// signature, not just the string; see the bearer/connection_key case
+	// signature, not just the string; see the cash/connection_key case
 	// below). The caller decrypts it themselves and hands it to new_identity
-	// out of band, exactly like a cash_transfer gift. A bearer or
-	// connection_key target has no real pubkey to ECDH against yet (bearer
+	// out of band, exactly like a cash_transfer gift. A cash-mode or
+	// connection_key target has no real pubkey to ECDH against yet (cash-mode
 	// never has one; connection_key doesn't until an Identity Authority
 	// attests a real pubkey to it later), so the token travels in the clear
 	// within the already end-to-end-encrypted outer NIP-47 response instead —
-	// same as mint_cash's own bearer/connection_key recipient delivery.
+	// same as mint_cash's own cash/connection_key recipient delivery.
 	// Funds have already moved either way, so a delivery failure is
 	// operator-recoverable, never a rollback (the token is recoverable via
 	// the admin API).
@@ -523,22 +523,22 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 	if src.WalletPubkey == "" {
 		return nil, "", constants.ERROR_BAD_REQUEST, "wallet_pubkey is required"
 	}
-	// A bearer_secret has no signature and no binding to the request that
+	// A cash_secret has no signature and no binding to the request that
 	// carries it — presenting it just IS the authorization. Unlike
 	// cash_transfer/cash_redeem (which never name a foreign wallet_pubkey and
-	// always act on the calling connection's own app, so a bearer secret only
+	// always act on the calling connection's own app, so a cash secret only
 	// ever transits over its own single-recipient wallet's connection),
 	// cash_consolidate lets a source name ANY wallet this node custodies. If
-	// that source were a bearer wallet OTHER than the caller's own connection,
+	// that source were a cash-mode wallet OTHER than the caller's own connection,
 	// its secret would sit in plaintext in a request encrypted only under the
 	// CALLING connection's shared key — decryptable by every co-recipient of a
 	// multi-identity calling wallet, none of whom have any claim on that
-	// foreign bearer note. Rejected outright rather than scoped to
+	// foreign cash note. Rejected outright rather than scoped to
 	// "self only": unlike connection_key (a signed proof, immune to this),
-	// bearer genuinely needs a new bound-proof protocol addition to be safe as
+	// cash mode genuinely needs a new bound-proof protocol addition to be safe as
 	// a source — see the design doc; still deferred.
-	if src.BearerSecret != "" {
-		return nil, "", constants.ERROR_BAD_REQUEST, "bearer sources are not supported by cash_consolidate yet"
+	if src.CashSecret != "" {
+		return nil, "", constants.ERROR_BAD_REQUEST, "cash-mode sources are not supported by cash_consolidate yet"
 	}
 
 	// Custody: the source MUST be a cash_wallet this node itself issued.

@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr 아이덴티티",
     "connectionKey": "웹 아이덴티티",
-    "bearer": "베어러"
+    "cash": "베어러"
   },
   "avatarStack": {
     "more": "외 {{count}}명"
@@ -219,8 +219,8 @@
       "removeWallet": "Lokicash를 제거하지 못했습니다",
       "removeSelected": "선택한 수령인을 제거하지 못했습니다"
     },
-    "bearerHelper": "베어러: 비밀 값을 가진 사람은 누구나 교환할 수 있습니다 — 신원 확인이 없으며, 분실하거나 탈취당해도 복구할 수 없습니다.",
-    "bearerRequiresSoleRecipient": "베어러는 유일한 수신자여야 합니다",
+    "cashHelper": "베어러: 비밀 값을 가진 사람은 누구나 교환할 수 있습니다 — 신원 확인이 없으며, 분실하거나 탈취당해도 복구할 수 없습니다.",
+    "cashRequiresSoleRecipient": "베어러는 유일한 수신자여야 합니다",
     "pubkeyModeHelper": "이 Nostr 아이덴티티만 교환할 수 있습니다.",
     "connectionKeyModeHelper": "검증된 아이덴티티만 교환할 수 있습니다.",
     "copyLokicash": "Lokicash 복사",

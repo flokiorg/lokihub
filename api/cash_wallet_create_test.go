@@ -175,7 +175,7 @@ func TestCreateCashWallet_HappyPath_MultipleRecipients_OneSharedWallet(t *testin
 	require.Len(t, claims, 2)
 }
 
-func TestCreateCashWallet_Bearer_HappyPath(t *testing.T) {
+func TestCreateCashWallet_Cash_HappyPath(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -186,7 +186,7 @@ func TestCreateCashWallet_Bearer_HappyPath(t *testing.T) {
 	theAPI := newTestAPIWithService(t, svc)
 	result, err := theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
 		Recipients: []CashWalletRecipient{
-			{IdentityType: db.CashIdentityBearer, AmountMloki: 1000},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 1000},
 		},
 		ExpirySecs: 1800,
 	})
@@ -194,12 +194,12 @@ func TestCreateCashWallet_Bearer_HappyPath(t *testing.T) {
 	require.Len(t, result.Recipients, 1)
 
 	r := result.Recipients[0]
-	assert.Equal(t, db.CashIdentityBearer, r.IdentityType)
-	assert.NotEmpty(t, r.BearerSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
+	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
+	assert.NotEmpty(t, r.CashSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
 	assert.Empty(t, r.IdentityValue, "the admin HTTP API must not surface the internal secret hash either")
 }
 
-func TestCreateCashWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
+func TestCreateCashWallet_Cash_RejectsMixedRecipients(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -212,7 +212,7 @@ func TestCreateCashWallet_Bearer_RejectsMixedRecipients(t *testing.T) {
 	_, err = theAPI.CreateCashWallet(hub.ID, &CreateCashWalletRequest{
 		Recipients: []CashWalletRecipient{
 			{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 500},
-			{IdentityType: db.CashIdentityBearer, AmountMloki: 500},
+			{IdentityType: db.CashIdentityCash, AmountMloki: 500},
 		},
 		ExpirySecs: 1800,
 	})

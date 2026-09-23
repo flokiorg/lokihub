@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "هوية Nostr",
     "connectionKey": "هوية ويب",
-    "bearer": "الحامل"
+    "cash": "الحامل"
   },
   "avatarStack": {
     "more_zero": "+{{count}}",
@@ -298,8 +298,8 @@
       "removeWallet": "فشلت إزالة Lokicash",
       "removeSelected": "فشلت إزالة المستلمين المحددين"
     },
-    "bearerHelper": "الحامل: يمكن لمن يملك السر استرداده — لا يوجد تحقق من الهوية ولا إمكانية للاسترجاع في حال ضياعه أو اعتراضه.",
-    "bearerRequiresSoleRecipient": "يجب أن يكون الحامل هو المستلم الوحيد",
+    "cashHelper": "الحامل: يمكن لمن يملك السر استرداده — لا يوجد تحقق من الهوية ولا إمكانية للاسترجاع في حال ضياعه أو اعتراضه.",
+    "cashRequiresSoleRecipient": "يجب أن يكون الحامل هو المستلم الوحيد",
     "pubkeyModeHelper": "يمكن لهذه الهوية على Nostr فقط استرداده.",
     "connectionKeyModeHelper": "يمكن لهوية موثّقة فقط استرداده.",
     "copyLokicash": "نسخ Lokicash",

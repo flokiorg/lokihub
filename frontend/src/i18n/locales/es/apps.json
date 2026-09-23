@@ -196,8 +196,8 @@
     "revealQR": "Mostrar código QR",
     "copySecret": "Copiar secreto de conexión",
     "copyLokicashToken": "Copiar token Lokicash",
-    "copyBearerSecret": "Copiar secreto al portador",
-    "bearerSecretHelper": "Quien tenga este secreto puede canjear estos fondos — no se necesita ninguna otra prueba. Se muestra una sola vez; compártelo con el destinatario, fuera de banda.",
+    "copyCashSecret": "Copiar secreto al portador",
+    "cashSecretHelper": "Quien tenga este secreto puede canjear estos fondos — no se necesita ninguna otra prueba. Se muestra una sola vez; compártelo con el destinatario, fuera de banda.",
     "lokicashTitle": "Lokicash"
   }
 }

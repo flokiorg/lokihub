@@ -115,7 +115,7 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToPubkey(t *testing.T) {
 	assert.EqualValues(t, 1, newClaim.TransferCount)
 }
 
-func TestHandleCashTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *testing.T) {
+func TestHandleCashTransferEvent_HappyPath_PubkeyToCash_SingleSliceWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -130,23 +130,23 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *t
 	}))
 
 	// The CALLER generates their own secret and submits only its commitment —
-	// the wallet never mints or returns a bearer secret over the shared
+	// the wallet never mints or returns a cash secret over the shared
 	// connection: a server-generated secret returned here would be
 	// decryptable by every other holder of this shared cash_wallet
 	// connection.
-	newSecretHex, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	newSecretHex, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result := response.Result.(cashTransferResponse)
-	assert.Equal(t, db.CashIdentityBearer, result.IdentityType)
+	assert.Equal(t, db.CashIdentityCash, result.IdentityType)
 	assert.Equal(t, newSecretHash, result.IdentityValue, "echoing the caller's own commitment back is safe — it's not a secret")
 
 	oldClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, currentPubkey)
@@ -155,14 +155,14 @@ func TestHandleCashTransferEvent_HappyPath_PubkeyToBearer_SingleSliceWallet(t *t
 
 	// End-to-end: the secret the caller chose actually redeems the slice.
 	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: newSecretHex,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: newSecretHex,
 	})
 	require.Nil(t, redeemResponse.Error)
 }
 
-func TestHandleCashTransferEvent_HappyPath_BearerToPubkey(t *testing.T) {
+func TestHandleCashTransferEvent_HappyPath_CashToPubkey(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -170,15 +170,15 @@ func TestHandleCashTransferEvent_HappyPath_BearerToPubkey(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		BearerSecret: secretHex,
-		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
+		CashSecret:  secretHex,
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 
 	require.Nil(t, response.Error)
@@ -186,13 +186,13 @@ func TestHandleCashTransferEvent_HappyPath_BearerToPubkey(t *testing.T) {
 	assert.Equal(t, db.CashIdentityPubkey, result.IdentityType)
 	assert.Equal(t, newPubkey, result.IdentityValue)
 
-	// The old bearer secret must no longer redeem or transfer anything.
-	oldClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	// The old cash secret must no longer redeem or transfer anything.
+	oldClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, oldClaim)
 }
 
-func TestHandleCashTransferEvent_HappyPath_BearerToBearer_CallerSuppliedNewSecret(t *testing.T) {
+func TestHandleCashTransferEvent_HappyPath_CashToCash_CallerSuppliedNewSecret(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -200,40 +200,40 @@ func TestHandleCashTransferEvent_HappyPath_BearerToBearer_CallerSuppliedNewSecre
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	// Rotating to a new bearer secret still requires the CALLER to generate
+	// Rotating to a new cash secret still requires the CALLER to generate
 	// and submit the new commitment — the wallet has no secret to mint and
 	// hand back over this shared connection.
-	newSecretHex, newSecretHash := bearerSecretAndHash(t)
+	newSecretHex, newSecretHash := cashSecretAndHash(t)
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		BearerSecret: secretHex,
-		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		CashSecret:  secretHex,
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result := response.Result.(cashTransferResponse)
-	assert.Equal(t, db.CashIdentityBearer, result.IdentityType)
+	assert.Equal(t, db.CashIdentityCash, result.IdentityType)
 	assert.Equal(t, newSecretHash, result.IdentityValue)
 
 	// The old secret must be dead.
-	oldClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityBearer, secretHash)
+	oldClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)
 	require.NoError(t, err)
 	assert.Nil(t, oldClaim)
 
 	// The new secret must actually redeem the slice.
 	redeemResponse := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
-		Invoice:      tests.MockZeroAmountInvoice,
-		Amount:       ptrUint64(1000),
-		BearerSecret: newSecretHex,
+		Invoice:    tests.MockZeroAmountInvoice,
+		Amount:     ptrUint64(1000),
+		CashSecret: newSecretHex,
 	})
 	require.Nil(t, redeemResponse.Error)
 }
 
-func TestHandleCashTransferEvent_ToBearer_MissingIdentityValue_Rejected(t *testing.T) {
+func TestHandleCashTransferEvent_ToCash_MissingIdentityValue_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -247,15 +247,15 @@ func TestHandleCashTransferEvent_ToBearer_MissingIdentityValue_Rejected(t *testi
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
 	}))
 
-	// No identity_value supplied for the bearer target — MUST be rejected,
+	// No identity_value supplied for the cash-mode target — MUST be rejected,
 	// not silently minted server-side (that's the exact vulnerability this
 	// design was changed to close).
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, "", "", 1000, nil, time.Now())
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, "", "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash},
 	})
 
 	require.NotNil(t, response.Error)
@@ -266,7 +266,7 @@ func TestHandleCashTransferEvent_ToBearer_MissingIdentityValue_Rejected(t *testi
 	assert.NotNil(t, claim, "a rejected transfer must not have touched the slice")
 }
 
-func TestHandleCashTransferEvent_ToBearer_MalformedIdentityValue_Rejected(t *testing.T) {
+func TestHandleCashTransferEvent_ToCash_MalformedIdentityValue_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -281,19 +281,19 @@ func TestHandleCashTransferEvent_ToBearer_MalformedIdentityValue_Rejected(t *tes
 	}))
 
 	const malformed = "not-a-valid-hex-commitment"
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, malformed, "", 1000, nil, time.Now())
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, malformed, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: malformed},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: malformed},
 	})
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-func TestHandleCashTransferEvent_ToBearer_IAPubkeySupplied_Rejected(t *testing.T) {
+func TestHandleCashTransferEvent_ToCash_IAPubkeySupplied_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -307,15 +307,15 @@ func TestHandleCashTransferEvent_ToBearer_IAPubkeySupplied_Rejected(t *testing.T
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
 	}))
 
-	_, newSecretHash := bearerSecretAndHash(t)
+	_, newSecretHash := cashSecretAndHash(t)
 	stray, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity: cashTransferNewIdentityParam{
-			IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash, IAPubkey: stray,
+			IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash, IAPubkey: stray,
 		},
 	})
 
@@ -503,15 +503,15 @@ func TestHandleCashTransferEvent_WrongSignature_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
 }
 
-// TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet
+// TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet
 // covers a multi-recipient wallet where every OTHER slice is still
 // unclaimed — the mixing check used to reject this outright; now it spins
 // the slice off into its own dedicated wallet instead (see
-// TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet
+// TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewWallet
 // for the full inner-encryption-exclusivity assertions this test doesn't
 // repeat). The one thing worth checking here specifically: the untouched
 // cotenant's own slice must be completely unaffected.
-func TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet(t *testing.T) {
+func TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -532,13 +532,13 @@ func TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToN
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: otherPubkey, AmountMloki: 1000},
 	}))
 
-	_, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	_, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
@@ -558,14 +558,14 @@ func TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToN
 }
 
 // TestHandleCashTransferEvent_FullTransfer_PubkeyTarget_MultiRecipientWallet_StaysInPlace
-// verifies the design refinement made when generalizing the old bearer-only
+// verifies the design refinement made when generalizing the old cash-mode-only
 // spin-off rule: a FULL transfer to a pubkey/connection_key target is ALWAYS
 // reassigned in place, unconditional on the wallet's recipient history —
-// unlike a bearer target, an identity-bound transfer always requires a real
+// unlike a cash-mode target, an identity-bound transfer always requires a real
 // signed proof, never just presenting a shared secret, so reusing the
-// connection is safe regardless of who else has ever held it. Only a bearer
+// connection is safe regardless of who else has ever held it. Only a cash-mode
 // target on a historically-multi-recipient wallet forces a split (see
-// TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet
+// TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet
 // immediately above).
 func TestHandleCashTransferEvent_FullTransfer_PubkeyTarget_MultiRecipientWallet_StaysInPlace(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -614,7 +614,7 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 	defer svc.Remove()
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	// Funded generously (mirrors TestSplit_BearerTarget_CashTokenHints):
+	// Funded generously (mirrors TestSplit_CashTarget_CashTokenHints):
 	// the mock invoice used for the internal-transfer funding payment below
 	// is a fixed, pre-encoded bolt11 string (tests.MockInvoice) whose own
 	// baked-in amount is what the mock LN client actually treats as "paid" —
@@ -987,7 +987,7 @@ func TestHandleCashTransferEvent_AlreadyClaimedSlice_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
 }
 
-func TestHandleCashTransferEvent_BearerCurrent_WrongSecret_Rejected(t *testing.T) {
+func TestHandleCashTransferEvent_CashCurrent_WrongSecret_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -995,23 +995,23 @@ func TestHandleCashTransferEvent_BearerCurrent_WrongSecret_Rejected(t *testing.T
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	_, secretHash := bearerSecretAndHash(t)
+	_, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
-	wrongSecret, _ := bearerSecretAndHash(t)
+	wrongSecret, _ := cashSecretAndHash(t)
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		BearerSecret: wrongSecret,
-		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
+		CashSecret:  wrongSecret,
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
 }
 
-func TestHandleCashTransferEvent_BearerCurrent_MixedParams_Rejected(t *testing.T) {
+func TestHandleCashTransferEvent_CashCurrent_MixedParams_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -1019,14 +1019,14 @@ func TestHandleCashTransferEvent_BearerCurrent_MixedParams_Rejected(t *testing.T
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 1000},
 	}))
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		BearerSecret:  secretHex,
+		CashSecret:    secretHex,
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: tests.RandomHex32(),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
@@ -1103,13 +1103,13 @@ func TestHandleCashTransferEvent_ConcurrentTransfers_OnlyOneSucceeds(t *testing.
 	assert.Equal(t, 1, successes, "exactly one of two concurrent transfers of the same slice must succeed")
 }
 
-// TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet
-// is a regression test: a bearer slice used to be safe only when no other party had ever held the
-// wallet's shared NWC connection, because a bearer redeem transmits the raw
+// TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewWallet
+// is a regression test: a cash-mode slice used to be safe only when no other party had ever held the
+// wallet's shared NWC connection, because a cash-mode redeem transmits the raw
 // secret in the request body — decryptable by every party that ever received
 // the (single, shared) pairing secret, whether or not they've since claimed
 // their own slice and moved on.
-// TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet
+// TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet
 // covers the still-unclaimed-cotenant case (also spun off, same as this one
 // — the mixing check no longer distinguishes claimed from unclaimed
 // cotenants, since spin-off leaves the shared connection entirely either
@@ -1121,7 +1121,7 @@ func TestHandleCashTransferEvent_ConcurrentTransfers_OnlyOneSucceeds(t *testing.
 // whose connection is delivered nested-encrypted to the victim's own pubkey
 // — so the attacker, despite still holding the shared connection this
 // response itself travels over, gets nothing usable out of it.
-func TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNewWallet(t *testing.T) {
+func TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -1169,23 +1169,23 @@ func TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNe
 	childrenBefore, err := svc.AppsService.ListCashHubWalletChildren(hub.ID)
 	require.NoError(t, err)
 
-	// The victim now transfers their still-unclaimed slice into a bearer
+	// The victim now transfers their still-unclaimed slice into a cash-mode
 	// note to hand it off as cash.
-	_, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	_, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, victimPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: victimPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error, "a claimed co-tenant must no longer block spinning a slice off into its own wallet")
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 	assert.Equal(t, uint64(1000), result.AmountMillis)
-	assert.Equal(t, db.CashIdentityBearer, result.IdentityType)
+	assert.Equal(t, db.CashIdentityCash, result.IdentityType)
 	assert.Equal(t, newSecretHash, result.IdentityValue)
 	require.NotEmpty(t, result.NewWalletToken, "spin-off must deliver the new wallet's connection")
 
@@ -1211,9 +1211,9 @@ func TestHandleCashTransferEvent_TransferIntoBearer_ClaimedCotenant_SpinsOffToNe
 	assert.Equal(t, *newWallet.WalletPubkey, result.NewWalletPubkey, "the plaintext pubkey the response hands the caller must be the real new wallet's own")
 
 	// The new wallet is funded with exactly the victim's slice amount and
-	// holds one unclaimed bearer slice for the caller-supplied commitment.
+	// holds one unclaimed cash-mode slice for the caller-supplied commitment.
 	assert.Equal(t, int64(1000), queries.GetIsolatedBalance(svc.DB, newWallet.ID))
-	newClaim, err := svc.AppsService.GetCashWalletClaim(newWallet.ID, db.CashIdentityBearer, newSecretHash)
+	newClaim, err := svc.AppsService.GetCashWalletClaim(newWallet.ID, db.CashIdentityCash, newSecretHash)
 	require.NoError(t, err)
 	require.NotNil(t, newClaim)
 	assert.Equal(t, int64(1000), newClaim.AmountMloki)
@@ -1288,11 +1288,11 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 	controller := NewTestNip47Controller(svc)
 
-	secret1Hex, secret1Hash := bearerSecretAndHash(t)
+	secret1Hex, secret1Hash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secret1Hash, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secret1Hash, AmountMloki: 1000},
 	}))
-	_, secret2Hash := bearerSecretAndHash(t)
+	_, secret2Hash := cashSecretAndHash(t)
 
 	var redeemResp, transferResp *models.Response
 	var wg sync.WaitGroup
@@ -1300,16 +1300,16 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 	go func() {
 		defer wg.Done()
 		redeemResp = handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
-			Invoice:      tests.MockZeroAmountInvoice,
-			Amount:       ptrUint64(1000),
-			BearerSecret: secret1Hex,
+			Invoice:    tests.MockZeroAmountInvoice,
+			Amount:     ptrUint64(1000),
+			CashSecret: secret1Hex,
 		})
 	}()
 	go func() {
 		defer wg.Done()
 		transferResp = handleCashTransferFor(t, svc, controller, wallet, cashTransferParams{
-			BearerSecret: secret1Hex,
-			NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: secret2Hash},
+			CashSecret:  secret1Hex,
+			NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secret2Hash},
 		})
 	}()
 	wg.Wait()
@@ -1342,9 +1342,9 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 		// invoice here would spuriously fail as "already paid" even though
 		// no payment for it ever went through.
 		oldRedeemResp := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
-			Invoice:      tests.MockInvoice,
-			Amount:       ptrUint64(1000),
-			BearerSecret: secret1Hex,
+			Invoice:    tests.MockInvoice,
+			Amount:     ptrUint64(1000),
+			CashSecret: secret1Hex,
 		})
 		require.NotNil(t, oldRedeemResp.Error, "the pre-transfer secret must no longer redeem")
 	}
@@ -1374,11 +1374,11 @@ func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound
 		wallet := newFundedCashWallet(t, svc, hub, 1000)
 		controller := NewTestNip47Controller(svc)
 
-		secret1Hex, secret1Hash := bearerSecretAndHash(t)
+		secret1Hex, secret1Hash := cashSecretAndHash(t)
 		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-			{IdentityType: db.CashIdentityBearer, IdentityValue: secret1Hash, AmountMloki: 1000},
+			{IdentityType: db.CashIdentityCash, IdentityValue: secret1Hash, AmountMloki: 1000},
 		}))
-		_, secret2Hash := bearerSecretAndHash(t)
+		_, secret2Hash := cashSecretAndHash(t)
 
 		var redeemResp, transferResp *models.Response
 		var wg sync.WaitGroup
@@ -1386,16 +1386,16 @@ func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound
 		go func() {
 			defer wg.Done()
 			redeemResp = handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
-				Invoice:      tests.MockZeroAmountInvoice,
-				Amount:       ptrUint64(1000),
-				BearerSecret: secret1Hex,
+				Invoice:    tests.MockZeroAmountInvoice,
+				Amount:     ptrUint64(1000),
+				CashSecret: secret1Hex,
 			})
 		}()
 		go func() {
 			defer wg.Done()
 			transferResp = handleCashTransferFor(t, svc, controller, wallet, cashTransferParams{
-				BearerSecret: secret1Hex,
-				NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: secret2Hash},
+				CashSecret:  secret1Hex,
+				NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secret2Hash},
 			})
 		}()
 		wg.Wait()
@@ -1451,13 +1451,13 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 	childrenBefore, err := svc.AppsService.ListCashHubWalletChildren(hub.ID)
 	require.NoError(t, err)
 
-	_, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	_, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.NotNil(t, response.Error)
@@ -1479,12 +1479,12 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
 		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-retry", Amount: 1000},
 	}
-	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	retryResponse := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, retryProof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 	require.Nil(t, retryResponse.Error, "a retry after a rolled-back spin-off must succeed")
 }

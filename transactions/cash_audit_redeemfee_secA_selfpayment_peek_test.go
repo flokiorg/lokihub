@@ -50,7 +50,7 @@ import (
 )
 
 // mockInvoicePayeePubkey is tests.MockInvoice's own embedded payee pubkey —
-// the same value TestSecA_BearerInPlace_RedeemedCoRecipientStillCounted
+// the same value TestSecA_CashInPlace_RedeemedCoRecipientStillCounted
 // (nip47/controllers/cash_audit_secA_lifetime_solo_test.go) sets as
 // mockLN.Pubkey to make tests.MockInvoice resolve as a same-node payment.
 const mockInvoicePayeePubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"

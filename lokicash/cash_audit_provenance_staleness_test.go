@@ -20,7 +20,7 @@ import (
 // full amount whether the underlying slice is still worth that much or has since
 // been redeemed / split / consolidated to zero on the node.
 //
-// Economic consequence: a recipient handed such a token (a bearer lokicash most
+// Economic consequence: a recipient handed such a token (a cash-mode lokicash most
 // acutely, where possession is meant to equal value) can verify origin and
 // denomination offline, but the attested amount can be economically STALE — the
 // token cannot signal that its value was already collected. This matches the

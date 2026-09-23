@@ -18,7 +18,7 @@ import "github.com/flokiorg/lokihub/nip47/models"
 // channel the hub itself is using.
 
 type CashWalletRecipientParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMillis  uint64 `json:"amount_millis"`
@@ -35,7 +35,7 @@ type CashWalletRecipientResult struct {
 	IdentityType  string `json:"identity_type"`
 	IdentityValue string `json:"identity_value,omitempty"`
 	AmountMillis  uint64 `json:"amount_millis"`
-	BearerSecret  string `json:"bearer_secret,omitempty"`
+	CashSecret    string `json:"cash_secret,omitempty"`
 }
 
 type MintCashResult struct {
@@ -61,9 +61,9 @@ type ClaimFundsParams struct {
 	IdentityValue    string  `json:"identity_value,omitempty"`
 	IdentityEvent    string  `json:"identity_event,omitempty"`
 	AttestationEvent string  `json:"attestation_event,omitempty"`
-	// BearerSecret redeems a bearer slice in place of every other field
-	// above (NIP-CASH §Bearer Slices).
-	BearerSecret string `json:"bearer_secret,omitempty"`
+	// CashSecret redeems a cash-mode slice in place of every other field
+	// above (NIP-CASH §Cash-Mode Slices).
+	CashSecret string `json:"cash_secret,omitempty"`
 }
 
 type ClaimFundsResult struct {
@@ -76,19 +76,19 @@ type ClaimFundsResult struct {
 // Reassigns an unclaimed slice's registered identity without redeeming it
 // (NIP-CASH §Transferring and Splitting a Slice). Proof scheme mirrors cash_redeem: an
 // identity-bound caller proves who they currently are via IdentityEvent
-// (bound to the wallet + the target new_identity, not an invoice); a bearer
-// caller instead presents BearerSecret, since a bearer slice has no
+// (bound to the wallet + the target new_identity, not an invoice); a cash-mode
+// caller instead presents CashSecret, since a cash-mode slice has no
 // identity capable of signing a proof event.
 //
-// A bearer NewIdentity's IdentityValue is REQUIRED and caller-supplied — the
+// A cash-mode NewIdentity's IdentityValue is REQUIRED and caller-supplied — the
 // commitment (sha256) of a secret the caller generates and keeps locally.
-// The wallet never mints or returns a bearer secret here: this response
+// The wallet never mints or returns a cash secret here: this response
 // travels over the shared cash_wallet connection, decryptable by every
 // recipient who ever held it, so a server-generated secret returned in it
 // would leak to all of them (see NIP-CASH.md's Security Considerations).
 
 type CashTransferNewIdentityParam struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"`
 }
@@ -98,7 +98,7 @@ type CashTransferParams struct {
 	IdentityValue    string `json:"identity_value,omitempty"`
 	IdentityEvent    string `json:"identity_event,omitempty"`
 	AttestationEvent string `json:"attestation_event,omitempty"`
-	BearerSecret     string `json:"bearer_secret,omitempty"`
+	CashSecret       string `json:"cash_secret,omitempty"`
 
 	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
 
@@ -141,8 +141,8 @@ type CashTransferResult struct {
 //
 // Combines several same-hub slices this node custodies into one new cash token
 // (NIP-CASH §Consolidating Tokens). Each source carries the same proof shapes
-// cash_transfer accepts. Sources: pubkey or connection_key (bearer sources
-// remain rejected). new_identity: pubkey, connection_key, or bearer.
+// cash_transfer accepts. Sources: pubkey or connection_key (cash-mode sources
+// remain rejected). new_identity: pubkey, connection_key, or cash.
 
 type ConsolidateSourceParam struct {
 	WalletPubkey     string `json:"wallet_pubkey"`
@@ -150,7 +150,7 @@ type ConsolidateSourceParam struct {
 	IdentityValue    string `json:"identity_value,omitempty"`
 	IdentityEvent    string `json:"identity_event,omitempty"`
 	AttestationEvent string `json:"attestation_event,omitempty"`
-	BearerSecret     string `json:"bearer_secret,omitempty"`
+	CashSecret       string `json:"cash_secret,omitempty"`
 }
 
 type CashConsolidateParams struct {

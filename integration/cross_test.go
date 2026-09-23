@@ -61,7 +61,7 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 // Client is already connected via the wallet's one shared PairingURI, and
 // BeneficiaryPrivkey/Pubkey are the recipient's own identity, needed
 // separately to sign a cash_redeem proof (distinct from the connection's own
-// bearer credential — see nip47/controllers/cash_redeem_controller.go).
+// cash credential — see nip47/controllers/cash_redeem_controller.go).
 type cashChildFixture struct {
 	Client             *nwcclient.Client
 	WalletPubkey       string

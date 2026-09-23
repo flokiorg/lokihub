@@ -17,7 +17,7 @@ import { LinkButton } from "src/components/ui/custom/link-button";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { App } from "src/types";
-import { buildLokicashBearerGift } from "src/utils/cashWallet";
+import { buildLokicashCashGift } from "src/utils/cashWallet";
 
 export function ConnectAppCard({
   app,
@@ -25,7 +25,7 @@ export function ConnectAppCard({
   lokicashToken,
   cashHubToken,
   circleHubToken,
-  bearerSecret,
+  cashSecret,
   appStoreApp,
   variant = "create",
   showConnectionStatus = variant === "create",
@@ -43,16 +43,16 @@ export function ConnectAppCard({
   // "cashhub"/"circlehub" below), unlike lokicashToken's fixed dual-display.
   cashHubToken?: string;
   circleHubToken?: string;
-  // bearerSecret: a Cash wallet's bearer redemption secret, present only
-  // right after creating a bearer-mode wallet — the wallet mints it once
-  // and never returns it again (NIP-CASH §Bearer Slices), so it has to be
+  // cashSecret: a Cash wallet's cash redemption secret, present only
+  // right after creating a cash-mode wallet — the wallet mints it once
+  // and never returns it again (NIP-CASH §Cash-Mode Slices), so it has to be
   // shown here, not just left to a later "reveal". When set alongside
   // lokicashToken, the QR and primary copy button present the two joined
-  // into one "<token>#<secret>" gift string (NIP-CASH §Bearer Slices →
-  // Presenting a Bearer Slice as One String) instead of two separate
+  // into one "<token>#<secret>" gift string (NIP-CASH §Cash-Mode Slices →
+  // Presenting a Cash-Mode Slice as One String) instead of two separate
   // actions — handing over one thing that's immediately spendable, the way
   // physical cash works.
-  bearerSecret?: string;
+  cashSecret?: string;
   appStoreApp?: AppStoreApp;
   // "create": full Card with header, used on standalone pairing pages.
   // "reveal": bare content (no Card wrapper) for showing a secret inside a
@@ -98,23 +98,23 @@ export function ConnectAppCard({
         : undefined;
   const showingHubToken = Boolean(hubToken) && !showClassicNwc;
 
-  // bearerGift: only meaningful for primaryFormat "lokicash" — a bearer
-  // secret is Cash-specific (see bearerSecret's own doc comment above).
-  const bearerGift =
-    primaryFormat === "lokicash" && lokicashToken && bearerSecret
-      ? buildLokicashBearerGift(lokicashToken, bearerSecret)
+  // cashGift: only meaningful for primaryFormat "lokicash" — a cash-mode
+  // secret is Cash-specific (see cashSecret's own doc comment above).
+  const cashGift =
+    primaryFormat === "lokicash" && lokicashToken && cashSecret
+      ? buildLokicashCashGift(lokicashToken, cashSecret)
       : undefined;
 
   const qrValue = showingHubToken
     ? (hubToken ?? "")
     : primaryFormat === "lokicash"
-      ? // Falls all the way back to the bare bearerSecret if lokicashToken
+      ? // Falls all the way back to the bare cashSecret if lokicashToken
         // is unavailable (cashwallet/create.go's encodeCashToken degrades to
         // an empty token on an encode failure it documents as "can't fail
         // in practice" — but if it ever does, the secret still has to be
         // reachable through SOME copy action, or those funds are gone for
-        // good with no recovery path, same as any other lost bearer note).
-        (bearerGift || lokicashToken || bearerSecret || "")
+        // good with no recovery path, same as any other lost cash note).
+        (cashGift || lokicashToken || cashSecret || "")
       : pairingUri;
   const copy = () => {
     copyToClipboard(qrValue);
@@ -183,7 +183,7 @@ export function ConnectAppCard({
         {primaryFormat === "lokicash" ? (
           <Button onClick={copy} variant="outline">
             <CopyIcon />
-            {bearerGift
+            {cashGift
               ? t("connectAppCard.copyLokicash", "Copy Lokicash")
               : t("connectAppCard.copyLokicashToken", "Copy Lokicash Token")}
           </Button>
@@ -233,11 +233,11 @@ export function ConnectAppCard({
           </Button>
         ) : null}
       </div>
-      {bearerGift ? (
+      {cashGift ? (
         <p className="text-sm text-muted-foreground text-center max-w-sm">
           {t(
-            "connectAppCard.bearerLokicashHelper",
-            "This Lokicash is bearer cash — whoever has it can redeem the funds, no other proof required. It's shown only this once; hand it to the intended recipient, out of band."
+            "connectAppCard.cashLokicashHelper",
+            "This Lokicash is cash-mode cash — whoever has it can redeem the funds, no other proof required. It's shown only this once; hand it to the intended recipient, out of band."
           )}
         </p>
       ) : null}

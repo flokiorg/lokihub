@@ -80,7 +80,7 @@ func TestEncodeDecode_RoundTrip_IdentityRequired(t *testing.T) {
 		identityRequired *bool
 	}{
 		{"unset (old-token-shaped)", nil},
-		{"bearer", boolPtr(false)},
+		{"cash", boolPtr(false)},
 		{"identity-bound", boolPtr(true)},
 	}
 	for _, tc := range cases {

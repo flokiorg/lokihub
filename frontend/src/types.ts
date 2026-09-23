@@ -906,12 +906,12 @@ export interface LSPS2BuyResponse {
 export interface CashWalletClaim {
   id: number;
   wallet_app_id: number;
-  // "bearer" has no identity at all — identity_value is a one-way
+  // "cash" has no identity at all — identity_value is a one-way
   // commitment (sha256 of a secret only the recipient holds), never an
   // actual identity, and there is always exactly one claim row per wallet
-  // when this is "bearer" (NIP-CASH §Bearer Slices: a bearer slice never
+  // when this is "cash" (NIP-CASH §Cash-Mode Slices: a cash-mode slice never
   // shares a wallet with another recipient).
-  identity_type: "pubkey" | "connection_key" | "bearer";
+  identity_type: "pubkey" | "connection_key" | "cash";
   identity_value: string;
   amount_mloki: number;
   expires_at?: number;
@@ -952,19 +952,19 @@ export interface ListCashWalletClaimsResponse {
 }
 
 // CashWalletRecipient describes one recipient's requested slice when
-// creating a (possibly shared) Cash wallet. For identity_type === "bearer",
+// creating a (possibly shared) Cash wallet. For identity_type === "cash",
 // the caller MUST NOT set identity_value or ia_pubkey — the wallet mints the
-// bearer secret itself, and a bearer recipient MUST be the request's only
-// one (NIP-CASH §Bearer Slices).
+// cash secret itself, and a cash-mode recipient MUST be the request's only
+// one (NIP-CASH §Cash-Mode Slices).
 export interface CashWalletRecipient {
-  identity_type: "pubkey" | "connection_key" | "bearer";
+  identity_type: "pubkey" | "connection_key" | "cash";
   identity_value?: string;
   ia_pubkey?: string; // required iff identity_type === "connection_key"
   amount_mloki: number;
-  // bearer_secret is response-only: populated when identity_type ===
-  // "bearer", and only in the create_cash_wallet response — it is never
-  // retrievable again afterward (NIP-CASH §Bearer Slices).
-  bearer_secret?: string;
+  // cash_secret is response-only: populated when identity_type ===
+  // "cash", and only in the create_cash_wallet response — it is never
+  // retrievable again afterward (NIP-CASH §Cash-Mode Slices).
+  cash_secret?: string;
 }
 
 export interface CreateCashWalletResponse {

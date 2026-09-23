@@ -243,41 +243,41 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 	})
 
-	t.Run("CreateWallet_Bearer_HappyPath_RedeemWithSecret", func(t *testing.T) {
+	t.Run("CreateWallet_Cash_HappyPath_RedeemWithSecret", func(t *testing.T) {
 		var result MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "bearer", AmountMillis: happyPathAmountMloki},
+				{IdentityType: "cash", AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result))
 		require.Len(t, result.Recipients, 1)
-		require.NotEmpty(t, result.Recipients[0].BearerSecret, "the plaintext secret must come back exactly once, here")
+		require.NotEmpty(t, result.Recipients[0].CashSecret, "the plaintext secret must come back exactly once, here")
 		require.Empty(t, result.Recipients[0].IdentityValue, "the internal secret hash must never be surfaced on the wire")
 		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
 		child := mustConnect(t, result.PairingURI)
 
-		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration bearer redemption")
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash-mode redemption")
 		var claimResult ClaimFundsResult
 		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:      invoice.Invoice,
-			BearerSecret: result.Recipients[0].BearerSecret,
+			Invoice:    invoice.Invoice,
+			CashSecret: result.Recipients[0].CashSecret,
 		}, &claimResult))
 		require.NotEmpty(t, claimResult.Preimage)
 
 		// A second redemption with the same (now-spent) secret must fail —
 		// first-redeem-wins, not repeatable.
-		invoice2 := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration bearer redemption replay")
+		invoice2 := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash-mode redemption replay")
 		var replayResult ClaimFundsResult
 		err := child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:      invoice2.Invoice,
-			BearerSecret: result.Recipients[0].BearerSecret,
+			Invoice:    invoice2.Invoice,
+			CashSecret: result.Recipients[0].CashSecret,
 		}, &replayResult)
 		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 	})
 
-	t.Run("CreateWallet_Bearer_RejectsMixedRecipients", func(t *testing.T) {
+	t.Run("CreateWallet_Cash_RejectsMixedRecipients", func(t *testing.T) {
 		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
 
@@ -285,7 +285,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		err = hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: []CashWalletRecipientParam{
 				{IdentityType: "pubkey", IdentityValue: beneficiaryPub, AmountMillis: happyPathAmountMloki},
-				{IdentityType: "bearer", AmountMillis: happyPathAmountMloki},
+				{IdentityType: "cash", AmountMillis: happyPathAmountMloki},
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result)

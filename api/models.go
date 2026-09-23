@@ -378,15 +378,15 @@ type CreateLightningAddressRequest struct {
 // a (possibly shared) Cash wallet — a wallet may serve several recipients at
 // once, each with their own amount, all sharing the wallet's one expiry.
 type CashWalletRecipient struct {
-	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "bearer"
+	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
 	IdentityValue string `json:"identity_value,omitempty"`
 	IAPubkey      string `json:"ia_pubkey,omitempty"` // required iff identity_type == connection_key
 	AmountMloki   int64  `json:"amount_mloki"`
-	// BearerSecret is response-only: populated when identity_type == "bearer",
+	// CashSecret is response-only: populated when identity_type == "cash",
 	// and only in the create_cash_wallet response — it is never retrievable
-	// again afterward (NIP-CASH §Bearer Slices). A caller MUST NOT set it on a
+	// again afterward (NIP-CASH §Cash-Mode Slices). A caller MUST NOT set it on a
 	// request; there is nothing for it to mean there.
-	BearerSecret string `json:"bearer_secret,omitempty"`
+	CashSecret string `json:"cash_secret,omitempty"`
 }
 
 // CreateCashWalletRequest's split floor (MinTransferMloki) is NOT a request

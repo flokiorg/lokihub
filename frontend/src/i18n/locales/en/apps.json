@@ -261,11 +261,11 @@
     "copySecret": "Copy Connection Secret",
     "copyLokicashToken": "Copy Lokicash Token",
     "copyLokicash": "Copy Lokicash",
-    "bearerLokicashHelper": "This Lokicash is bearer cash — whoever has it can redeem the funds, no other proof required. It's shown only this once; hand it to the intended recipient, out of band.",
+    "cashLokicashHelper": "This Lokicash is cash — whoever has it can redeem the funds, no other proof required. It's shown only this once; hand it to the intended recipient, out of band.",
     "amountLabel": "Amount",
     "statusLabel": "Status",
     "expiresLabel": "Expires",
     "recipientsLabel": "Recipients",
-    "bearerSavedConfirm": "I've saved this — Close"
+    "cashSavedConfirm": "I've saved this — Close"
   }
 }

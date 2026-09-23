@@ -78,10 +78,10 @@ function ConnectionKeyAvatarRow({ identityValue }: { identityValue: string }) {
   );
 }
 
-// A bearer slice has no identity at all — identity_value here is a one-way
-// commitment to the minted secret (NIP-CASH §Bearer Slices), not something
+// A cash-mode slice has no identity at all — identity_value here is a one-way
+// commitment to the minted secret (NIP-CASH §Cash-Mode Slices), not something
 // to display or let an admin copy as if it identified a recipient.
-function BearerAvatarRow() {
+function CashAvatarRow() {
   const { t } = useTranslation("circles");
   return (
     <div className="flex items-center gap-3">
@@ -91,7 +91,7 @@ function BearerAvatarRow() {
         </AvatarFallback>
       </Avatar>
       <span className="text-sm text-muted-foreground">
-        {t("identityType.bearer")}
+        {t("identityType.cash")}
       </span>
     </div>
   );
@@ -123,8 +123,8 @@ function BeneficiaryProfile({
     >
       {claim.identity_type === "pubkey" ? (
         <NostrIdentityHeader pubkey={claim.identity_value} />
-      ) : claim.identity_type === "bearer" ? (
-        <BearerAvatarRow />
+      ) : claim.identity_type === "cash" ? (
+        <CashAvatarRow />
       ) : (
         <ConnectionKeyAvatarRow identityValue={claim.identity_value} />
       )}
@@ -319,7 +319,7 @@ function CashWalletRecipientsCard({ app }: { app: App }) {
             recipientCount: recipients.length,
             claimedCount,
             expiresAtSecs: recipients[0].expires_at,
-            isBearer: recipients[0].identity_type === "bearer",
+            isCash: recipients[0].identity_type === "cash",
           }}
           primaryFormat="lokicash"
           onClose={() => setShowReveal(false)}

@@ -28,11 +28,11 @@ import (
 // request's response.
 //
 // This was originally an exploit
-// path: cash_transfer used to mint a fresh bearer secret server-side and
+// path: cash_transfer used to mint a fresh cash secret server-side and
 // return it in this exact response shape — decryptable by any co-recipient,
 // who could then redeem the slice before its intended holder. The fix
 // (cash_transfer_controller.go) is to never put a secret in a response on
-// this channel: a bearer target's identity_value is now a caller-supplied
+// this channel: a cash-mode target's identity_value is now a caller-supplied
 // commitment the caller generated and kept themselves, never something the
 // wallet reveals here. This test keeps the underlying property under test —
 // any secret placed in a response on this channel WILL leak — so that
@@ -61,7 +61,7 @@ func TestSharedConnectionSecret_AnyHolderCanDecryptAnyResponse(t *testing.T) {
 	const hypotheticalSecret = "b8f2c1a09d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f10" //nolint:gosec // test fixture string, not a real credential
 	responseJSON, err := json.Marshal(map[string]any{
 		"amount_mloki":  100000,
-		"identity_type": "bearer",
+		"identity_type": "cash",
 		"secret":        hypotheticalSecret,
 	})
 	require.NoError(t, err)

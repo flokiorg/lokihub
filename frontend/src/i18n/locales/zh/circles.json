@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Nostr 身份",
     "connectionKey": "网络身份",
-    "bearer": "持有人"
+    "cash": "持有人"
   },
   "avatarStack": {
     "more": "还有 {{count}} 位"
@@ -219,8 +219,8 @@
       "removeWallet": "移除 Lokicash 失败",
       "removeSelected": "移除所选接收人失败"
     },
-    "bearerHelper": "持有人：任何持有密钥的人都可以兑换 — 没有身份验证，一旦丢失或被截获也无法找回。",
-    "bearerRequiresSoleRecipient": "持有人必须是唯一的接收人",
+    "cashHelper": "持有人：任何持有密钥的人都可以兑换 — 没有身份验证，一旦丢失或被截获也无法找回。",
+    "cashRequiresSoleRecipient": "持有人必须是唯一的接收人",
     "pubkeyModeHelper": "只有此 Nostr 身份可以兑换。",
     "connectionKeyModeHelper": "只有已验证的身份可以兑换。",
     "copyLokicash": "复制 Lokicash",

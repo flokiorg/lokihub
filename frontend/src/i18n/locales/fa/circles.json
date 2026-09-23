@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "هویت Nostr",
     "connectionKey": "هویت وب",
-    "bearer": "حامل"
+    "cash": "حامل"
   },
   "avatarStack": {
     "more": "+{{count}} نفر دیگر"
@@ -219,8 +219,8 @@
       "removeWallet": "حذف Lokicash ناموفق بود",
       "removeSelected": "حذف دریافت‌کنندگان انتخاب‌شده ناموفق بود"
     },
-    "bearerHelper": "حامل: هر کس رمز را داشته باشد می‌تواند آن را بازخرید کند — هیچ بررسی هویتی وجود ندارد و در صورت گم شدن یا دزدیده شدن، امکان بازیابی نیست.",
-    "bearerRequiresSoleRecipient": "حامل باید تنها گیرنده باشد",
+    "cashHelper": "حامل: هر کس رمز را داشته باشد می‌تواند آن را بازخرید کند — هیچ بررسی هویتی وجود ندارد و در صورت گم شدن یا دزدیده شدن، امکان بازیابی نیست.",
+    "cashRequiresSoleRecipient": "حامل باید تنها گیرنده باشد",
     "pubkeyModeHelper": "فقط این هویت Nostr می‌تواند آن را بازخرید کند.",
     "connectionKeyModeHelper": "فقط یک هویت تأییدشده می‌تواند آن را بازخرید کند.",
     "copyLokicash": "کپی Lokicash",

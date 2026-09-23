@@ -82,12 +82,12 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 
-	isBearer := params.BearerSecret != ""
+	isCash := params.CashSecret != ""
 
 	logger.Logger.Info().
 		Uint("app_id", app.ID).
 		Str("identity_type", params.IdentityType).
-		Bool("bearer", isBearer).
+		Bool("cash", isCash).
 		Msg("Handling cash_redeem request")
 
 	// 1. cash_redeem only ever makes sense against a cash_wallet — reject
@@ -100,36 +100,36 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	// 2. Rate limit per connection. Since this connection may be shared by
 	// several recipients, this throttles the wallet as a whole, not any one
 	// caller specifically — intentional, given the connection itself may be
-	// widely held. This is also the ONLY throttle standing between a bearer
-	// slice and an attacker who's guessing at its secret, since a bearer
+	// widely held. This is also the ONLY throttle standing between a cash-mode
+	// slice and an attacker who's guessing at its secret, since a cash-mode
 	// redemption has no signature to forge — only a secret to guess.
 	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_redeem")
 		return
 	}
 
-	// 3. Basic param validation. A bearer redemption and an identity-bound
+	// 3. Basic param validation. A cash-mode redemption and an identity-bound
 	// one are mutually exclusive param shapes, not two optional variants of
 	// the same one — mixing them is rejected rather than picking one side to
 	// honor.
 	var identityType, identityValue string
-	if isBearer {
+	if isCash {
 		if params.IdentityType != "" || params.IdentityValue != "" || params.IdentityEvent != "" || params.AttestationEvent != "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"bearer_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
+				"cash_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
 			return
 		}
 		if params.Invoice == "" {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "invoice is required")
 			return
 		}
-		secretBytes, hexErr := hex.DecodeString(params.BearerSecret)
+		secretBytes, hexErr := hex.DecodeString(params.CashSecret)
 		if hexErr != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "bearer_secret must be hex")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "cash_secret must be hex")
 			return
 		}
 		hash := sha256.Sum256(secretBytes)
-		identityType = db.CashIdentityBearer
+		identityType = db.CashIdentityCash
 		identityValue = hex.EncodeToString(hash[:])
 	} else {
 		if params.Invoice == "" || params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
@@ -176,12 +176,12 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	}
 
 	// 6. Parse and verify the kind-23198 claim proof — identity-bound slices
-	// only. A bearer slice's entire proof is the hash-matched lookup in step
+	// only. A cash-mode slice's entire proof is the hash-matched lookup in step
 	// 5 above: presenting the correct secret is necessary and sufficient, so
 	// there is nothing further to verify here.
 	var identityEvent nostr.Event
 	var attestationEvent nostr.Event
-	if !isBearer {
+	if !isCash {
 		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
 			return

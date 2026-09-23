@@ -34,7 +34,7 @@
   "identityType": {
     "pubkey": "Identidad Nostr",
     "connectionKey": "Identidad Web",
-    "bearer": "Portador"
+    "cash": "Portador"
   },
   "avatarStack": {
     "more": "+{{count}} más"
@@ -219,8 +219,8 @@
       "removeWallet": "Error al eliminar Lokicash",
       "removeSelected": "Error al eliminar los destinatarios seleccionados"
     },
-    "bearerHelper": "Portador: quien tenga el secreto puede canjearlo — no hay verificación de identidad ni forma de recuperarlo si se pierde o es interceptado.",
-    "bearerRequiresSoleRecipient": "El portador debe ser el único destinatario",
+    "cashHelper": "Portador: quien tenga el secreto puede canjearlo — no hay verificación de identidad ni forma de recuperarlo si se pierde o es interceptado.",
+    "cashRequiresSoleRecipient": "El portador debe ser el único destinatario",
     "pubkeyModeHelper": "Solo esta identidad Nostr puede canjearlo.",
     "connectionKeyModeHelper": "Solo una identidad verificada puede canjearlo.",
     "copyLokicash": "Copiar Lokicash",

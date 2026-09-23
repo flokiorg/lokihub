@@ -3,7 +3,7 @@
 // cash_transfer_audit_connection_key_test.go is focused live-fire coverage of
 // the connection_key identity mode
 // through the NEW cash_transfer split path — the mode the mandate flags as
-// getting much less coverage than pubkey/bearer. Every scenario drives the
+// getting much less coverage than pubkey/cash. Every scenario drives the
 // real NWC surface over real relay round-trips against the real running
 // backend, exercising the Identity-Authority attestation + live-trust re-check
 // that gate a connection_key slice's transfer/split, as a malicious or

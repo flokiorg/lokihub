@@ -31,7 +31,7 @@ export function RevealConnectionDialog({
   app,
   pairingUri,
   lokicashToken,
-  bearerSecret,
+  cashSecret,
   walletSummary,
   mode = "reveal",
   primaryFormat = "nwc",
@@ -43,10 +43,10 @@ export function RevealConnectionDialog({
   // single lokicash1... string (NIP-CASH §The Lokicash Token) — optional
   // since not every app kind this dialog is reused for has one.
   lokicashToken?: string;
-  // bearerSecret: only ever present right after creating a bearer-mode Cash
+  // cashSecret: only ever present right after creating a cash-mode Cash
   // wallet (mode === "create") — the wallet mints it once and never returns
-  // it again (NIP-CASH §Bearer Slices), so there is no "reveal" path for it.
-  bearerSecret?: string;
+  // it again (NIP-CASH §Cash-Mode Slices), so there is no "reveal" path for it.
+  cashSecret?: string;
   // walletSummary: a Cash wallet's totals — shown above the QR whenever
   // primaryFormat is "lokicash". Callers already have this from the claims
   // list they fetched to render their own row/card, so it's passed in
@@ -56,12 +56,12 @@ export function RevealConnectionDialog({
     recipientCount: number;
     claimedCount: number;
     expiresAtSecs?: number;
-    // isBearer: true when this wallet's one slice is bearer mode (NIP-CASH
-    // §Bearer Slices — a bearer slice's wallet is always single-recipient).
+    // isCash: true when this wallet's one slice is cash mode (NIP-CASH
+    // §Cash-Mode Slices — a cash-mode slice's wallet is always single-recipient).
     // Hides the Recipients row below: "Recipients: 1" doesn't mean anything
-    // for a bearer note presented as a single cash bill, the way it does
+    // for a cash note presented as a single cash bill, the way it does
     // for a Cash Hub's shared, identity-bound wallet.
-    isBearer?: boolean;
+    isCash?: boolean;
   };
   mode?: "reveal" | "create";
   // "lokicash": Cash wallets — the dialog title and ConnectAppCard both drop
@@ -82,8 +82,8 @@ export function RevealConnectionDialog({
     ? formatClaimDeadline(walletSummary.expiresAtSecs)
     : undefined;
 
-  // A freshly-minted bearer secret is shown exactly this once and can never
-  // be retrieved again (NIP-CASH §Bearer Slices) — the Hub only ever stores
+  // A freshly-minted cash secret is shown exactly this once and can never
+  // be retrieved again (NIP-CASH §Cash-Mode Slices) — the Hub only ever stores
   // its hash. Dismissing this dialog without having copied it first means
   // the funds it guards are permanently unredeemable, same as losing a
   // physical cash bill. Block every accidental-dismiss path (backdrop
@@ -91,7 +91,7 @@ export function RevealConnectionDialog({
   // instead, only for this one case — every other use of this dialog shows
   // a re-derivable connection (§The Pairing Connection), safe to dismiss
   // freely.
-  const requiresSaveConfirmation = mode === "create" && Boolean(bearerSecret);
+  const requiresSaveConfirmation = mode === "create" && Boolean(cashSecret);
 
   return (
     <Dialog
@@ -162,7 +162,7 @@ export function RevealConnectionDialog({
                 {deadline?.label ?? tj("claimDeadline.none")}
               </span>
             </div>
-            {!walletSummary.isBearer && (
+            {!walletSummary.isCash && (
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
                   {t("connectAppCard.recipientsLabel", "Recipients")}
@@ -178,7 +178,7 @@ export function RevealConnectionDialog({
           app={shouldPollForConnection ? (polledApp ?? app) : app}
           pairingUri={pairingUri}
           lokicashToken={lokicashToken}
-          bearerSecret={bearerSecret}
+          cashSecret={cashSecret}
           variant="reveal"
           showConnectionStatus={shouldPollForConnection}
           primaryFormat={primaryFormat}
@@ -187,7 +187,7 @@ export function RevealConnectionDialog({
           <DialogFooter>
             <Button onClick={onClose} className="w-full">
               {t(
-                "connectAppCard.bearerSavedConfirm",
+                "connectAppCard.cashSavedConfirm",
                 "I've saved this — Close"
               )}
             </Button>

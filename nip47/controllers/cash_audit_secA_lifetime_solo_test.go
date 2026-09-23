@@ -13,9 +13,9 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestSecA_BearerInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection
+// TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection
 // demonstrates independent-audit-A Finding: cash_transfer's "convert a slice to
-// bearer in place" eligibility check counts the wallet's *current* claim rows
+// cash mode in place" eligibility check counts the wallet's *current* claim rows
 // (AppsService.ListClaimsForWallet) instead of the wallet's *lifetime*
 // recipient set, as NIP-CASH §"Which outcome a request produces" and
 // §Security Considerations both require ("evaluated against every recipient the
@@ -28,19 +28,19 @@ import (
 // wallet", api.DeleteCashClaim / apps.DeleteCashClaim). After that admin action,
 // the wallet's live claim count drops below its true lifetime recipient count,
 // and the check wrongly treats a historically-multi-recipient wallet as
-// lifetime-solo — allowing an in-place bearer reassignment onto a connection
+// lifetime-solo — allowing an in-place cash-mode reassignment onto a connection
 // the removed co-recipient STILL holds (the connection secret is deterministic
 // and was broadcast at creation; deleting a slice never rotates it).
 //
-// The removed co-recipient can then decrypt the eventual bearer cash_redeem
+// The removed co-recipient can then decrypt the eventual cash-mode cash_redeem
 // request (its raw secret travels in the request body over that shared
 // connection) and front-run the redemption — exactly the theft the
 // spin-off-to-a-dedicated-wallet rule exists to prevent.
 //
 // This test proves the insecure PATH is reachable: it asserts the transfer is
-// resolved in place (no NewWalletToken minted, bearer slice lands on the SAME
+// resolved in place (no NewWalletToken minted, cash-mode slice lands on the SAME
 // formerly-shared wallet) rather than spun off into a fresh dedicated wallet.
-func TestSecA_BearerInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t *testing.T) {
+func TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -74,43 +74,43 @@ func TestSecA_BearerInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t 
 	require.NoError(t, err)
 	require.Len(t, claimsAfter, 1, "the count the eligibility check relies on has dropped below the true lifetime count")
 
-	// A converts their slice to bearer via a FULL transfer. Because the live
+	// A converts their slice to cash mode via a FULL transfer. Because the live
 	// claim count is now 1, the controller treats this as a lifetime-solo
 	// wallet and reassigns IN PLACE instead of spinning off a dedicated wallet.
-	_, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, aPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	_, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, aPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: aPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 
-	// THE VULNERABILITY: the bearer note was reassigned in place onto the SAME
+	// THE VULNERABILITY: the cash note was reassigned in place onto the SAME
 	// wallet whose connection B still holds — not spun off into a fresh,
 	// never-shared dedicated wallet. A spec-correct implementation would return
-	// a NewWalletToken here (spin-off) and would NOT leave the bearer slice on
+	// a NewWalletToken here (spin-off) and would NOT leave the cash-mode slice on
 	// this shared wallet.
 	assert.Empty(t, result.NewWalletToken,
-		"SECURITY: bearer conversion resolved IN PLACE on a connection a removed co-recipient still holds")
-	bearerSliceOnSharedWallet := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityBearer, newSecretHash)
-	require.NotNil(t, bearerSliceOnSharedWallet,
-		"SECURITY: the bearer slice now lives on the formerly-shared wallet; the removed co-recipient B can decrypt its future cash_redeem and steal the secret")
-	assert.Nil(t, bearerSliceOnSharedWallet.ClaimedAt)
+		"SECURITY: cash-mode conversion resolved IN PLACE on a connection a removed co-recipient still holds")
+	cashSliceOnSharedWallet := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityCash, newSecretHash)
+	require.NotNil(t, cashSliceOnSharedWallet,
+		"SECURITY: the cash-mode slice now lives on the formerly-shared wallet; the removed co-recipient B can decrypt its future cash_redeem and steal the secret")
+	assert.Nil(t, cashSliceOnSharedWallet.ClaimedAt)
 }
 
-// TestSecA_BearerInPlace_RedeemedCoRecipientStillCounted is the paired
+// TestSecA_CashInPlace_RedeemedCoRecipientStillCounted is the paired
 // CONFIRMED-SAFE case: a co-recipient who REDEEMED (rather than being deleted
 // by the admin) keeps their claim row, so the lifetime-count check still sees
-// them and correctly forces a spin-off rather than an in-place bearer
+// them and correctly forces a spin-off rather than an in-place cash-mode
 // reassignment. This isolates the gap above to the DeleteCashClaim path
 // specifically, and confirms the ordinary "co-recipient redeemed and moved on"
 // case the spec calls out is handled correctly.
-func TestSecA_BearerInPlace_RedeemedCoRecipientStillCounted(t *testing.T) {
+func TestSecA_CashInPlace_RedeemedCoRecipientStillCounted(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -118,7 +118,7 @@ func TestSecA_BearerInPlace_RedeemedCoRecipientStillCounted(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	// Funded generously and with a queued mock invoice so the spin-off path's
 	// internal funding transfer can actually succeed (mirrors
-	// TestHandleCashTransferEvent_TransferIntoBearer_MultiSliceWallet_SpinsOffToNewWallet).
+	// TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet).
 	wallet := newFundedCashWallet(t, svc, hub, 200_000)
 	mockLN := svc.LNClient.(*tests.MockLn)
 	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
@@ -143,20 +143,20 @@ func TestSecA_BearerInPlace_RedeemedCoRecipientStillCounted(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, claimsAfter, 2, "a redeemed co-recipient's row persists and is still counted")
 
-	// A converts to bearer — must NOT reassign in place, because the wallet's
+	// A converts to cash mode — must NOT reassign in place, because the wallet's
 	// lifetime recipient count is (correctly) still 2.
-	_, newSecretHash := bearerSecretAndHash(t)
-	proof := buildTransferProofEvent(t, aPrivkey, *wallet.WalletPubkey, db.CashIdentityBearer, newSecretHash, "", 1000, nil, time.Now())
+	_, newSecretHash := cashSecretAndHash(t)
+	proof := buildTransferProofEvent(t, aPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: aPubkey,
 		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityBearer, IdentityValue: newSecretHash},
+		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 
 	require.Nil(t, response.Error)
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 	assert.NotEmpty(t, result.NewWalletToken,
-		"a redeemed co-recipient is still counted, so bearer conversion correctly spins off a dedicated wallet")
+		"a redeemed co-recipient is still counted, so cash-mode conversion correctly spins off a dedicated wallet")
 }

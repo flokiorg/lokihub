@@ -15,17 +15,17 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear is
-// a regression test: a bearer-current caller's partial split has no identity_event to
+// TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear is
+// a regression test: a cash-mode caller's partial split has no identity_event to
 // draw a delivery pubkey from (recipientPubkey is ""), so attempting the
 // normal inner-encryption delivery failed outright — the split had already
 // moved real funds into the new wallet by that point, stranding them
 // undeliverable. NIP-CASH "Spinning a Slice Off Into a Dedicated Wallet"
 // explicitly permits delivering new_wallet_token in the clear for exactly
-// this case, since a bearer slice's wallet is structurally single-recipient
+// this case, since a cash-mode slice's wallet is structurally single-recipient
 // (no co-holder the encryption defends against). Fixed by skipping the inner
 // encryption entirely when recipientPubkey == "".
-func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(t *testing.T) {
+func TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -46,42 +46,42 @@ func TestHandleCashTransferEvent_BearerCurrentPartialSplit_DeliversTokenInClear(
 		{Type: "incoming", Invoice: tests.MockLNClientHoldTransaction.Invoice, PaymentHash: tests.MockLNClientHoldTransaction.PaymentHash, Preimage: "preimage-remainder", Amount: 3000},
 	}
 
-	secretHex, secretHash := bearerSecretAndHash(t)
+	secretHex, secretHash := cashSecretAndHash(t)
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityBearer, IdentityValue: secretHash, AmountMloki: 5000},
+		{IdentityType: db.CashIdentityCash, IdentityValue: secretHash, AmountMloki: 5000},
 	}))
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	amount := uint64(2000)
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		BearerSecret: secretHex,
+		CashSecret:   secretHex,
 		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 		AmountMillis: &amount,
 	})
 
-	require.Nil(t, response.Error, "a bearer-current partial split must succeed and deliver its token, not strand funds")
+	require.Nil(t, response.Error, "a cash-mode partial split must succeed and deliver its token, not strand funds")
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 	require.NotEmpty(t, result.NewWalletToken)
 
 	// Both tokens (carved + remainder) must be PLAIN lokicash1... strings —
 	// decodable directly, no NIP-44 decryption involved (there is no co-holder
-	// to encrypt against for a bearer-current caller, whose source wallet is
+	// to encrypt against for a cash-mode caller, whose source wallet is
 	// structurally single-recipient).
 	tok, err := lokicash.Decode(result.NewWalletToken)
-	require.NoError(t, err, "bearer-current carved delivery must be a plain, directly-decodable lokicash token")
+	require.NoError(t, err, "cash-mode carved delivery must be a plain, directly-decodable lokicash token")
 	assert.Equal(t, result.NewWalletPubkey, tok.WalletPubkey)
 
 	require.NotEmpty(t, result.RemainderWalletToken, "the remainder is now its own new dedicated wallet")
 	remTok, err := lokicash.Decode(result.RemainderWalletToken)
-	require.NoError(t, err, "bearer-current remainder delivery must also be a plain token")
+	require.NoError(t, err, "cash-mode remainder delivery must also be a plain token")
 	assert.Equal(t, result.RemainderWalletPubkey, remTok.WalletPubkey)
 	require.NotNil(t, result.RemainingAmountMillis)
 	assert.EqualValues(t, 3000, *result.RemainingAmountMillis)
 
-	// The source bearer slice is consumed whole (terminal) — its value re-emerged
-	// as the two new bearer/pubkey wallets above, never decremented in place.
-	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityBearer, secretHash)
+	// The source cash-mode slice is consumed whole (terminal) — its value re-emerged
+	// as the two new cash/pubkey wallets above, never decremented in place.
+	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityCash, secretHash)
 	require.NotNil(t, sourceClaim)
 	require.NotNil(t, sourceClaim.ClaimedAt)
 }

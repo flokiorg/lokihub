@@ -196,8 +196,8 @@
     "revealQR": "QR 코드 표시",
     "copySecret": "연결 시크릿 복사",
     "copyLokicashToken": "Lokicash 토큰 복사",
-    "copyBearerSecret": "무기명 비밀 값 복사",
-    "bearerSecretHelper": "이 비밀 값을 가진 사람은 다른 증명 없이 이 자금을 교환할 수 있습니다. 이는 한 번만 표시됩니다. 대역 외 채널로 수령인에게 전달하세요.",
+    "copyCashSecret": "무기명 비밀 값 복사",
+    "cashSecretHelper": "이 비밀 값을 가진 사람은 다른 증명 없이 이 자금을 교환할 수 있습니다. 이는 한 번만 표시됩니다. 대역 외 채널로 수령인에게 전달하세요.",
     "lokicashTitle": "Lokicash"
   }
 }
