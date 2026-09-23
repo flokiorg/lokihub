@@ -11,6 +11,10 @@ nwc.db
 .idea
 .claude
 
+# local-only Go workspace pinning an absolute path to a sibling checkout
+go.work
+go.work.sum
+
 frontend/dist
 frontend/node_modules
 frontend/wailsjs
