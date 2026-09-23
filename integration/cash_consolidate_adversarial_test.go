@@ -9,6 +9,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -157,12 +158,14 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		}, &res))
 		require.EqualValues(t, happyPathAmountMloki*3, res.AmountMillis)
 
-		// Both source connections drained (their slices were consumed).
+		// Both sources were consumed, so both bills are deleted and neither
+		// answers any more.
 		for _, c := range []string{conn1, conn2} {
 			src := mustConnect(t, c)
-			var bal GetBalanceResult
-			require.NoError(t, src.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-			assert.EqualValues(t, 0, bal.Balance, "a consolidated source must be drained")
+			requireSpentBillSilent(t, func(ctx context.Context) error {
+				var bal GetBalanceResult
+				return src.Call(ctx, "get_balance", struct{}{}, &bal)
+			})
 		}
 
 		// Redeeming an already-consolidated source must fail (no double-spend).

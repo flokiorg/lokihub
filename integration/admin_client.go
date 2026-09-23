@@ -174,8 +174,39 @@ type adminCashWalletClaim struct {
 	Claimed       bool   `json:"claimed"`
 	// CashToken is this claim's wallet packaged as a lokicash1... string. It
 	// is the only field in this listing that identifies the WALLET rather than
-	// the slice, so it is what requireCashWalletDrainedAway matches on.
+	// the slice, so it is what requireCashWalletDrainedAway matches on. Empty
+	// for an archived row, deliberately: a token for a destroyed bill would
+	// look spendable.
 	CashToken string `json:"cash_token"`
+	// Archived marks a slice whose bill no longer exists. The listing merges
+	// live and archived rows, so a test asserting on live state must filter.
+	Archived bool   `json:"archived"`
+	Status   string `json:"status"`
+	// WalletPubkey identifies the bill itself. Present on every row, and the
+	// only identifier an archived one has.
+	WalletPubkey string `json:"wallet_pubkey"`
+}
+
+// liveCashClaims filters a listing down to slices whose bill still exists.
+func liveCashClaims(claims []adminCashWalletClaim) []adminCashWalletClaim {
+	live := make([]adminCashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		if !c.Archived {
+			live = append(live, c)
+		}
+	}
+	return live
+}
+
+// archivedCashClaims is liveCashClaims' complement.
+func archivedCashClaims(claims []adminCashWalletClaim) []adminCashWalletClaim {
+	archived := make([]adminCashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		if c.Archived {
+			archived = append(archived, c)
+		}
+	}
+	return archived
 }
 
 type adminListCashWalletClaimsResponse struct {

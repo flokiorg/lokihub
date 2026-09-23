@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
@@ -269,12 +270,16 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		// A second redemption with the same (now-spent) secret must fail —
 		// first-redeem-wins, not repeatable.
 		invoice2 := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash-mode redemption replay")
-		var replayResult ClaimFundsResult
-		err := child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-			Invoice:    invoice2.Invoice,
-			CashSecret: result.Recipients[0].CashSecret,
-		}, &replayResult)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		// The first redemption emptied this single-slice bill, so it is gone.
+		// A replay is met with silence rather than NOT_FOUND: an error would
+		// confirm to anyone holding the spent secret that this hub issued it.
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var replayResult ClaimFundsResult
+			return child.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+				Invoice:    invoice2.Invoice,
+				CashSecret: result.Recipients[0].CashSecret,
+			}, &replayResult)
+		})
 	})
 
 	t.Run("CreateWallet_Cash_RejectsMixedRecipients", func(t *testing.T) {

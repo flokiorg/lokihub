@@ -9,6 +9,7 @@
 package integration
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -137,13 +138,16 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 			// transfer lost — secret2 (the would-be new owner) must never have
 			// been registered, since the transfer never took effect.
 			probeInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit loser-probe-secret2")
-			var probeRes ClaimFundsResult
-			probeErr := redeemClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
-				Invoice:    probeInvoice.Invoice,
-				CashSecret: secret2Hex,
-			}, &probeRes)
-			require.Error(t, probeErr, "CRITICAL DOUBLE-SPEND: the losing transfer's target secret redeemed a slice already paid out")
-			requireNWCErrorCode(t, probeErr, constants.ERROR_NOT_FOUND)
+			// The redeem won and emptied the bill, so it has been deleted. The
+			// losing transfer's target secret must therefore reach nothing at
+			// all -- silence here is still proof of no double-spend.
+			requireSpentBillSilent(t, func(ctx context.Context) error {
+				var probeRes ClaimFundsResult
+				return redeemClient.Call(ctx, constants.NIP47MethodCashRedeem, ClaimFundsParams{
+					Invoice:    probeInvoice.Invoice,
+					CashSecret: secret2Hex,
+				}, &probeRes)
+			})
 		} else {
 			// transfer won — the pre-transfer secret1 must never redeem again;
 			// only secret2 (the new registered identity) may.

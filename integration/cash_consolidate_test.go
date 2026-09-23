@@ -10,6 +10,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -155,12 +156,14 @@ func TestCashConsolidate(t *testing.T) {
 	require.NoError(t, merged.Call(ctxT(t), "get_balance", struct{}{}, &mergedBalance))
 	assert.EqualValues(t, sum, mergedBalance.Balance)
 
-	// Every source is drained to zero.
+	// Every source is drained -- and a drained bill is deleted, so each one
+	// stops answering rather than reporting a zero balance.
 	for _, s := range sources {
 		srcConn := mustConnect(t, s.conn)
-		var b GetBalanceResult
-		require.NoError(t, srcConn.Call(ctxT(t), "get_balance", struct{}{}, &b))
-		assert.EqualValues(t, 0, b.Balance, "source wallet must be drained after consolidation")
+		requireSpentBillSilent(t, func(ctx context.Context) error {
+			var b GetBalanceResult
+			return srcConn.Call(ctx, "get_balance", struct{}{}, &b)
+		})
 	}
 
 	// The merged wallet redeems for the full sum — the funds really moved.
