@@ -3101,6 +3101,11 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			RedeemFeePpm:         row.RedeemFeePpm,
 			SpunOffToWalletAppID: row.SpunOffToWalletAppID,
 			PaymentHash:          row.PaymentHash,
+			RedeemFeeMloki:       row.RedeemFeeMloki,
+		}
+		if row.SettledAt != nil {
+			settledAt := row.SettledAt.Unix()
+			r.SettledAt = &settledAt
 		}
 		if row.ClaimedAt != nil {
 			claimedAt := row.ClaimedAt.Unix()
@@ -3355,6 +3360,12 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			MinTransferMloki:     c.MinTransferMloki,
 			RedeemFeePpm:         c.RedeemFeePpm,
 			SpunOffToWalletAppID: c.SpunOffToWalletAppID,
+			PaymentHash:          c.PaymentHash,
+			RedeemFeeMloki:       c.RedeemFeeMloki,
+		}
+		if c.SettledAt != nil {
+			settledAt := c.SettledAt.Unix()
+			r.SettledAt = &settledAt
 		}
 		if c.ClaimedAt != nil {
 			claimedAt := c.ClaimedAt.Unix()
