@@ -138,7 +138,10 @@
     "analyticsTitle": "Analíticas",
     "keepAnalyticsOpen": "Mantener abierto",
     "addCashWallet": "Acuñar Lokicash",
-    "hubExpiryBeforeBillsWarning": "La conexión de este {{kind}} caduca antes que el billete de mayor duración que puede acuñar. Los billetes ya emitidos conservan su propio plazo, pero no podrás acuñar nuevos una vez que caduque la conexión."
+    "hubExpiryBeforeBillsWarning": "La conexión de este {{kind}} caduca antes que el billete de mayor duración que puede acuñar. Los billetes ya emitidos conservan su propio plazo, pero no podrás acuñar nuevos una vez que caduque la conexión.",
+    "advancedTitle": "Avanzado",
+    "spentRetentionLabel": "Responder sobre billetes gastados durante",
+    "spentRetentionHelper": "Cuánto tiempo sigue el hub informando a un titular de que su billete se gastó, antes de callar. Sin esto, un billete gastado y un hub inaccesible se ven igual. Desactivado significa callar de inmediato."
   },
   "newApp": {
     "unsupportedApp": "Aplicación no compatible",

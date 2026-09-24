@@ -138,7 +138,10 @@
     "analyticsTitle": "分析",
     "keepAnalyticsOpen": "保持展开",
     "addCashWallet": "铸造 Lokicash",
-    "hubExpiryBeforeBillsWarning": "此 {{kind}} 的连接会在它能铸造的最长现金券之前过期。已发行的现金券保留各自的期限，但连接过期后你将无法铸造新的。"
+    "hubExpiryBeforeBillsWarning": "此 {{kind}} 的连接会在它能铸造的最长现金券之前过期。已发行的现金券保留各自的期限，但连接过期后你将无法铸造新的。",
+    "advancedTitle": "高级",
+    "spentRetentionLabel": "对已花费现金券的应答时长",
+    "spentRetentionHelper": "中心在沉默之前，会持续告知持有者其现金券已被花费多长时间。没有它，已花费的现金券与无法访问的中心看起来完全相同。禁用表示立即沉默。"
   },
   "newApp": {
     "unsupportedApp": "不支持的应用程序",

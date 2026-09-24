@@ -186,6 +186,11 @@ export interface App {
   cashMaxExpSecs?: number;
   cashMinTransferMloki?: number;
   cashRedeemFeePpm?: number;
+  // cashSpentRetentionSecs is how long the hub keeps answering cash_status
+  // about a bill it has destroyed, with a "spent" tombstone, before falling
+  // silent again. 0 disables it. Without it a spent bill and an unreachable
+  // hub are the same timeout, so a client has to guess which.
+  cashSpentRetentionSecs?: number;
   // circleMaxExpSecs/circleFeesPpm/circlePerWalletMaxMloki/circleMinBudgetRenewal
   // are set only for circle_hub apps, for the same reason as above.
   circleMaxExpSecs?: number;
@@ -377,6 +382,9 @@ export interface CreateAppRequest {
   cashMaxExpSecs?: number;
   cashMinTransferMloki?: number;
   cashRedeemFeePpm?: number;
+  // Omitted means the hub's default retention, NOT disabled — 0 is the
+  // explicit opt-out. See App.cashSpentRetentionSecs.
+  cashSpentRetentionSecs?: number;
   circleMaxExpSecs?: number;
   circleFeesPpm?: number;
   circlePerWalletMaxMloki?: number;
@@ -446,6 +454,7 @@ export type UpdateAppRequest = {
   cashMaxExpSecs?: number;
   cashMinTransferMloki?: number;
   cashRedeemFeePpm?: number;
+  cashSpentRetentionSecs?: number;
   // circle_hub only
   circleMaxExpSecs?: number;
   circleFeesPpm?: number;
