@@ -128,6 +128,11 @@ type AppsService interface {
 	// archived slices alike, which is only possible because a spent bill's
 	// history outlives its deletion.
 	GetCashHubStats(hubID uint, now time.Time) (*CashHubStats, error)
+	// GetAllCashHubStats is the same figures across every cash hub on the
+	// node, for the Cash Hubs list's own overview.
+	GetAllCashHubStats(now time.Time) (*CashHubStats, error)
+	// GetCircleHubStats totals one circle_hub's member activity.
+	GetCircleHubStats(hubID uint, now time.Time) (*CircleHubStats, error)
 	// GetCashWalletClaim is a read-only lookup of one recipient's still-unclaimed
 	// slice, used by cash_redeem to verify identity/attestation proof (which
 	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the

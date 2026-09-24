@@ -46,7 +46,7 @@ function TooltipTrigger({
 
 // A tooltip is `bg-primary` by default — a solid brand-coloured chip, right
 // for a one-line hint. "surface" instead gives it the popover surface the
-// app's chart tooltips already use (see CashFlowChart's ChartTooltip), for
+// app's chart tooltips already use (see CashMonitorCharts' RichTooltip), for
 // tooltips holding real content: a list, a definition, anything that needs
 // its own muted text or a Badge. Those inner elements take their colours
 // from the page palette, which is unreadable on `bg-primary` — `muted-

@@ -12,6 +12,12 @@ export const localStorageKeys = {
   // about the section, not about a particular hub, and a per-hub key would
   // leave stale entries behind for every hub ever deleted.
   cashAnalyticsKeepOpen: "lokihub-cash-analytics-keep-open",
+  // Its own key, not shared with the per-hub dashboard's: the two answer
+  // different questions ("do I want every hub's chart on the list page" vs
+  // "do I want this hub's"), and one operator can reasonably want one open
+  // and the other closed.
+  cashHubsAnalyticsKeepOpen: "lokihub-cash-hubs-analytics-keep-open",
+  circleAnalyticsKeepOpen: "lokihub-circle-analytics-keep-open",
 };
 
 export const ONCHAIN_DUST_LOKI = 1000;
@@ -23,7 +29,6 @@ export const LIST_APPS_LIMIT = 20;
 export const LIST_CIRCLE_CHILDREN_LIMIT = 20;
 export const LIST_CIRCLE_ALLOWLIST_LIMIT = 20;
 export const LIST_CASH_ALLOCATIONS_LIMIT = 20;
-
 
 export const SUBWALLET_APPSTORE_APP_ID = "lokies";
 export const LOKI_ACCOUNT_APP_NAME = "loki-account";

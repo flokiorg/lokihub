@@ -15,9 +15,11 @@ import { toast } from "sonner";
 import AppAvatar from "src/components/AppAvatar";
 import AppHeader from "src/components/AppHeader";
 import {
-  CashFlowChart,
+  CashCoverage,
+  CashDailyFlow,
+  CashExpiryRunway,
   CashOutstandingChart,
-} from "src/components/cash/CashFlowChart";
+} from "src/components/cash/CashMonitorCharts";
 import { CashHubOverview } from "src/components/cash/CashHubOverview";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { AppTransactionList } from "src/components/connections/AppTransactionList";
@@ -538,49 +540,63 @@ function CashHubDashboardInternal({
             </CardContent>
           </Card>
 
-          {/* An expandable card, matching the cards around it — the charts
-              inside render bare (see ChartFrame) so this is the only box. */}
-          <Card>
-            <Accordion
-              type="single"
-              collapsible
-              value={isAnalyticsOpen ? "analytics" : ""}
-              onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
-            >
-              <AccordionItem value="analytics" className="border-b-0">
-                {/* The checkbox is a sibling of the trigger, not a child:
-                    the trigger is a <button>, and a second control nested
-                    inside it could not be clicked without also toggling
-                    the section. Shown only while open, since "keep open"
-                    is a decision you make looking at the thing. */}
-                <div className="flex items-center gap-3 px-6">
-                  <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
-                    {t("circleHub.analyticsTitle")}
-                  </AccordionTrigger>
-                  {isAnalyticsOpen && (
-                    <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
-                      <Checkbox
-                        checked={keepAnalyticsOpen}
-                        onCheckedChange={(checked) =>
-                          toggleKeepAnalyticsOpen(checked === true)
-                        }
-                      />
-                      {t("circleHub.keepAnalyticsOpen")}
-                    </label>
-                  )}
-                </div>
-                <AccordionContent className="px-6 pt-4 pb-0">
-                  <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-                    <CashOutstandingChart
+          {/* The section is not a card: each chart brings its own, and a
+              card inside a card just draws a second border around the same
+              content. The trigger row carries the heading instead. */}
+          <Accordion
+            type="single"
+            collapsible
+            value={isAnalyticsOpen ? "analytics" : ""}
+            onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
+          >
+            <AccordionItem value="analytics" className="border-b-0">
+              {/* The checkbox is a sibling of the trigger, not a child: the
+                  trigger is a <button>, and a second control nested inside it
+                  could not be clicked without also toggling the section.
+                  Shown only while open, since "keep open" is a decision you
+                  make looking at the thing. */}
+              <div className="flex items-center gap-3 px-1">
+                <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
+                  {t("circleHub.analyticsTitle")}
+                </AccordionTrigger>
+                {isAnalyticsOpen && (
+                  <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
+                    <Checkbox
+                      checked={keepAnalyticsOpen}
+                      onCheckedChange={(checked) =>
+                        toggleKeepAnalyticsOpen(checked === true)
+                      }
+                    />
+                    {t("circleHub.keepAnalyticsOpen")}
+                  </label>
+                )}
+              </div>
+              <AccordionContent className="pt-4 pb-0">
+                {/* Same four questions as the Cash Hubs list, scoped to this
+                    hub — can it honour what it owes, what happens to that
+                    next, how it got here, and what moved each day. The
+                    balance comes off the hub's own App row; a single hub's
+                    stats response does not carry one. */}
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {/* Same rule as the Cash Hubs list: a card that is a few
+                      figures rather than a plot takes the whole row instead
+                      of sitting half-empty beside one, and the two time
+                      series go wide, where a 30-day axis is readable. */}
+                  <CashCoverage
+                    className="lg:col-span-2"
+                    balanceMloki={hub.balance}
+                    outstandingMloki={stats.outstanding_mloki}
+                  />
+                  <CashExpiryRunway className="lg:col-span-2" stats={stats} />
+                  <CashOutstandingChart
                     daily={stats.daily}
                     outstandingMloki={stats.outstanding_mloki}
                   />
-                    <CashFlowChart daily={stats.daily} />
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </Card>
+                  <CashDailyFlow daily={stats.daily} />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
 
           <AppTransactionList appId={hub.id} />
 

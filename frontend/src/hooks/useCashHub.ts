@@ -18,3 +18,13 @@ export function useCashHubStats(hubId: number | undefined, poll = true) {
     { refreshInterval: poll ? CASH_REFRESH_INTERVAL_MS : 0 }
   );
 }
+
+// Node-wide totals for the Cash Hubs list: the same figures as one hub's
+// dashboard, summed across every hub. Fetched from the server rather than by
+// summing each hub's own stats in the client, which would be one request per
+// hub and could not produce a correct median anyway.
+export function useAllCashHubStats(poll = true) {
+  return useSWR<CashHubStats>("/api/cash-hubs/stats", swrFetcher, {
+    refreshInterval: poll ? CASH_REFRESH_INTERVAL_MS : 0,
+  });
+}
