@@ -28,6 +28,11 @@ func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki 
 	if config.RedeemFeePpm < 0 || config.RedeemFeePpm > constants.MAX_FEES_PPM {
 		return nil, "", fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
 	}
+	// 0 is meaningful here (tombstone disabled — go silent the moment a bill
+	// is destroyed), so only a negative or overflowing value is rejected.
+	if config.SpentRetentionSecs < 0 || config.SpentRetentionSecs > constants.MAX_EXPIRY_SECS {
+		return nil, "", fmt.Errorf("%w: spent_retention_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+	}
 
 	app, secret, err := svc.CreateApp(name, pubkey, maxAmountLoki, budgetRenewal, expiresAt, scopes,
 		db.AppKindCashHub, nil, "", metadata)
@@ -52,7 +57,7 @@ func (svc *appsService) GetCashHubConfig(appID uint) (*db.CashHubConfig, error) 
 	return &cfg, nil
 }
 
-func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int) error {
+func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, spentRetentionSecs *int) error {
 	updates := map[string]interface{}{}
 	if perWalletMaxMloki != nil {
 		if *perWalletMaxMloki <= 0 {
@@ -84,6 +89,13 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 			return fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
 		}
 		updates["redeem_fee_ppm"] = *redeemFeePpm
+	}
+	if spentRetentionSecs != nil {
+		// As on create: 0 means "no tombstone", not "unset".
+		if *spentRetentionSecs < 0 || *spentRetentionSecs > constants.MAX_EXPIRY_SECS {
+			return fmt.Errorf("%w: spent_retention_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+		}
+		updates["spent_retention_secs"] = *spentRetentionSecs
 	}
 	if len(updates) == 0 {
 		return nil

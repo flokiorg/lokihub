@@ -236,10 +236,14 @@ type App struct {
 	// external redemption — see db.CashHubConfig.RedeemFeePpm. CashMaxExpSecs
 	// of 0 means "never" — no ceiling on how long an issued wallet may
 	// remain unredeemed; see db.CashHubConfig.MaxExpSecs.
-	CashPerWalletMaxMloki *int   `json:"cashPerWalletMaxMloki,omitempty"`
-	CashMaxExpSecs        *int   `json:"cashMaxExpSecs,omitempty"`
-	CashMinTransferMloki  *int64 `json:"cashMinTransferMloki,omitempty"`
-	CashRedeemFeePpm      *int   `json:"cashRedeemFeePpm,omitempty"`
+	CashPerWalletMaxMloki *int `json:"cashPerWalletMaxMloki,omitempty"`
+	CashMaxExpSecs        *int `json:"cashMaxExpSecs,omitempty"`
+	// CashSpentRetentionSecs is how long this Hub keeps answering cash_status
+	// for a bill it has destroyed, before returning to silence. 0 disables the
+	// tombstone. See db.CashHubConfig.SpentRetentionSecs.
+	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs,omitempty"`
+	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki,omitempty"`
+	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm,omitempty"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// are set only for circle_hub apps — the hub-wide defaults set at
 	// creation time, for the same reason as above.
@@ -322,10 +326,13 @@ type UpdateAppRequest struct {
 	// CashPerWalletMaxMloki/CashMaxExpSecs/CashMinTransferMloki/CashRedeemFeePpm
 	// update a cash_hub's CashHubConfig; nil leaves the corresponding field
 	// unchanged. Ignored for other app kinds.
-	CashPerWalletMaxMloki *int   `json:"cashPerWalletMaxMloki"`
-	CashMaxExpSecs        *int   `json:"cashMaxExpSecs"`
-	CashMinTransferMloki  *int64 `json:"cashMinTransferMloki"`
-	CashRedeemFeePpm      *int   `json:"cashRedeemFeePpm"`
+	CashPerWalletMaxMloki *int `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs        *int `json:"cashMaxExpSecs"`
+	// CashSpentRetentionSecs: see CreateAppRequest's own field. 0 disables the
+	// spent-bill tombstone; nil leaves the stored value unchanged.
+	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs"`
+	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// update a circle_hub's CircleHubConfig; nil leaves the
 	// corresponding field unchanged. Ignored for other app kinds.
@@ -342,24 +349,32 @@ type TransferRequest struct {
 }
 
 type CreateAppRequest struct {
-	Name                    string   `json:"name"`
-	Pubkey                  string   `json:"pubkey"`
-	MaxAmountLoki           uint64   `json:"maxAmount"`
-	BudgetRenewal           string   `json:"budgetRenewal"`
-	ExpiresAt               string   `json:"expiresAt"`
-	Scopes                  []string `json:"scopes"`
-	ReturnTo                string   `json:"returnTo"`
-	Kind                    string   `json:"kind"`
-	Metadata                Metadata `json:"metadata,omitempty"`
-	UnlockPassword          string   `json:"unlockPassword"`
-	CashPerWalletMaxMloki   int      `json:"cashPerWalletMaxMloki"`
-	CashMaxExpSecs          int      `json:"cashMaxExpSecs"`
-	CashMinTransferMloki    int64    `json:"cashMinTransferMloki"`
-	CashRedeemFeePpm        int      `json:"cashRedeemFeePpm"`
-	CircleMaxExpSecs        int      `json:"circleMaxExpSecs"`
-	CircleFeesPpm           int      `json:"circleFeesPpm"`
-	CirclePerWalletMaxMloki int      `json:"circlePerWalletMaxMloki"`
-	CircleMinBudgetRenewal  string   `json:"circleMinBudgetRenewal"`
+	Name                  string   `json:"name"`
+	Pubkey                string   `json:"pubkey"`
+	MaxAmountLoki         uint64   `json:"maxAmount"`
+	BudgetRenewal         string   `json:"budgetRenewal"`
+	ExpiresAt             string   `json:"expiresAt"`
+	Scopes                []string `json:"scopes"`
+	ReturnTo              string   `json:"returnTo"`
+	Kind                  string   `json:"kind"`
+	Metadata              Metadata `json:"metadata,omitempty"`
+	UnlockPassword        string   `json:"unlockPassword"`
+	CashPerWalletMaxMloki int      `json:"cashPerWalletMaxMloki"`
+	CashMaxExpSecs        int      `json:"cashMaxExpSecs"`
+	CashMinTransferMloki  int64    `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm      int      `json:"cashRedeemFeePpm"`
+	// CashSpentRetentionSecs: how long this Hub answers cash_status about a
+	// destroyed bill before returning to silence.
+	//
+	// A pointer, unlike its sibling ints above, because 0 is a meaningful
+	// value here — it disables the tombstone — and must stay distinguishable
+	// from the field being omitted, which means
+	// constants.DEFAULT_CASH_SPENT_RETENTION_SECS.
+	CashSpentRetentionSecs  *int   `json:"cashSpentRetentionSecs,omitempty"`
+	CircleMaxExpSecs        int    `json:"circleMaxExpSecs"`
+	CircleFeesPpm           int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki int    `json:"circlePerWalletMaxMloki"`
+	CircleMinBudgetRenewal  string `json:"circleMinBudgetRenewal"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`

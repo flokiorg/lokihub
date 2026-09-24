@@ -131,6 +131,21 @@ type CashHubConfig struct {
 	// inherited from there on. Same validation/semantics as
 	// CircleHubConfig.FeesPpm (0 <= x <= constants.MAX_FEES_PPM).
 	RedeemFeePpm int
+	// SpentRetentionSecs is how long after a bill is destroyed this Hub keeps
+	// answering cash_status for it with a "spent" tombstone instead of going
+	// silent. Measured from the spend, not from the bill's expiry, so a
+	// never-expiring bill is covered too.
+	//
+	// It exists because silence alone cannot be told apart from a Hub that is
+	// slow or unreachable, which forces every client to pick a wrong answer:
+	// "retryable" makes a genuinely spent bill retry forever, "gone" tells
+	// someone their funds are lost when the Hub is merely down.
+	//
+	// 0 disables the tombstone entirely — the bill is archived and the Hub
+	// goes silent immediately, which is the behaviour that predates this
+	// field. Past the deadline the Hub returns to silence either way, so the
+	// tombstone is never wrong, only absent for old bills.
+	SpentRetentionSecs int
 }
 
 // Cash allocation identity types.

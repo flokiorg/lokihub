@@ -83,6 +83,16 @@ func NewAPI(svc service.Service, gormDB *gorm.DB, config config.Config, keys key
 	}
 }
 
+// cashSpentRetentionOrDefault distinguishes an omitted retention (nil — a
+// caller that predates the field, which should still get a working tombstone)
+// from an explicit 0, which is the opt-out.
+func cashSpentRetentionOrDefault(secs *int) int {
+	if secs == nil {
+		return constants.DEFAULT_CASH_SPENT_RETENTION_SECS
+	}
+	return *secs
+}
+
 func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error) {
 	if slices.Contains(createAppRequest.Scopes, constants.SUPERUSER_SCOPE) {
 		if !api.cfg.CheckUnlockPassword(createAppRequest.UnlockPassword) {
@@ -125,6 +135,10 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				MaxExpSecs:        createAppRequest.CashMaxExpSecs,
 				MinTransferMloki:  createAppRequest.CashMinTransferMloki,
 				RedeemFeePpm:      createAppRequest.CashRedeemFeePpm,
+				// Omitted means the default, not "disabled": a caller that
+				// never heard of this field should get a working tombstone,
+				// and 0 is the explicit opt-out.
+				SpentRetentionSecs: cashSpentRetentionOrDefault(createAppRequest.CashSpentRetentionSecs),
 			},
 		)
 	case db.AppKindCircleHub:
@@ -445,10 +459,12 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 
 	if userApp.Kind == db.AppKindCashHub &&
 		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
-			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil) {
+			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
+			updateAppRequest.CashSpentRetentionSecs != nil) {
 		if err := api.appsSvc.UpdateCashHubConfig(userApp.ID,
 			updateAppRequest.CashPerWalletMaxMloki, updateAppRequest.CashMaxExpSecs,
-			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm); err != nil {
+			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm,
+			updateAppRequest.CashSpentRetentionSecs); err != nil {
 			return err
 		}
 	}
@@ -582,6 +598,7 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CashMaxExpSecs = &cfg.MaxExpSecs
 			response.CashMinTransferMloki = &cfg.MinTransferMloki
 			response.CashRedeemFeePpm = &cfg.RedeemFeePpm
+			response.CashSpentRetentionSecs = &cfg.SpentRetentionSecs
 		}
 	}
 
