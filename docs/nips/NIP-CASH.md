@@ -99,7 +99,7 @@ and thereafter fixed on that slice and inherited unchanged across splits (§The 
 | `cash_redeem` | a recipient, over the Cash Wallet connection | `cash_redeem` | Collect one recipient's exact slice — identity-bound or `cash` (§Cash-Mode Slices) |
 | `cash_transfer` | a recipient, proof-gated against their current registered identity | `cash_transfer` | Reassign an unredeemed slice's identity, or split part of its value off into a new cash token — see §Transferring and Splitting a Slice |
 | `cash_consolidate` | a recipient controlling every source slice, proof-gated against each | `cash_consolidate` | Combine several same-hub slices this node custodies into one new cash token — see §Consolidating Tokens |
-| `list_recipients` | any holder of the Cash Wallet connection | `cash_redeem` | Read-only roster of every recipient on this wallet, including each slice's redeem fee quote — see §Listing Recipients |
+| `cash_status` | any holder of the Cash Wallet connection | `cash_redeem` | The bill's state: the read-only roster of every recipient, including each slice's redeem fee quote, or a tombstone for a destroyed bill — see §Cash Status |
 
 `cash_redeem`, `cash_transfer`, and `cash_consolidate` each take a `proof` (or, for a `cash` slice,
 `cash_secret`) authenticating the caller against the slice they're acting on. That proof, when present,
@@ -360,7 +360,7 @@ A `cash_redeem` MAY carry a fee; `cash_transfer` (§Transferring and Splitting a
   fee ever applies to `cash_transfer`.
 - **How much.** `redeem_fee_ppm` (parts-per-million) times the slice's own committed amount.
 - **Who pays.** The redeeming recipient, deducted from their own payout — never charged against another,
-  not-yet-redeemed slice. `list_recipients` (§Listing Recipients) quotes the exact fee and net amount up
+  not-yet-redeemed slice. `cash_status` (§Cash Status) quotes the exact fee and net amount up
   front, so a recipient always knows what `cash_redeem` will pay out before they call it.
 
 An implementation MUST decide same-node-ness with the exact same predicate its own payment path uses to
@@ -389,25 +389,34 @@ slice untouched. The Hub nets the difference between the quoted fee and the real
 external redemption: revenue when the rate covers cost, an absorbed loss (recorded either way) when it
 doesn't — never at any recipient's expense.
 
-## Listing Recipients (`list_recipients`)
+## Cash Status (`cash_status`)
 
-Any holder of a Cash Wallet connection MAY call `list_recipients` to see the full roster of recipients it
-was created for — a read-only, shared view, matching the transparency model `get_balance` already has on
-this same connection type (§Scope Surface), not a caller-scoped one.
+Any holder of a Cash Wallet connection MAY call `cash_status` to ask what state the bill is in. It is the
+only read method a bill has, and it answers one of two ways: the full roster of recipients the bill was
+created for, or — for a bill the Hub has already destroyed — a tombstone saying so (§Answering About a
+Destroyed Bill).
+
+**The name does not imply a caller-scoped answer.** The roster is a read-only, shared view: every holder
+of the connection sees every recipient's row, matching the transparency model `get_balance` already has on
+this same connection type (§Scope Surface). An implementation MUST NOT filter it to the caller's own slice.
+
+This method was called `list_recipients` in an earlier revision. A Hub SHOULD keep accepting that name for
+one release so a client can be updated independently of the Hub it talks to; the two are otherwise
+identical.
 
 ```mermaid
 sequenceDiagram
     participant Caller as Any recipient
     participant Wallet as Cash Wallet
 
-    Caller->>Wallet: list_recipients {}
+    Caller->>Wallet: cash_status {}
     Wallet->>Wallet: load every slice on this wallet
     Wallet-->>Caller: {recipients[]}
 ```
 
 ### Request
 
-`list_recipients` takes no parameters.
+`cash_status` takes no parameters.
 
 ### Response
 
@@ -442,7 +451,7 @@ sequenceDiagram
 - `recipients` — every slice this wallet was ever created or split into, in no particular guaranteed
   order, including already-claimed ones (`claimed_at` distinguishes them).
 - `redeem_fee_millis` / `net_redeemable_millis` — this slice's own `redeem_fee_ppm` (§The Redeem Fee) applied
-  to `amount_millis`, and what's left after it. This is necessarily the worst-case quote: `list_recipients`
+  to `amount_millis`, and what's left after it. This is necessarily the worst-case quote: `cash_status`
   has no invoice in hand to know in advance whether a given future `cash_redeem` call will resolve to a
   same-node payment, which stays fee-free regardless of the configured rate. A slice's eventual `cash_redeem`
   MAY pay out more than `net_redeemable_millis` here (the full `amount_millis`, if same-node); it will never
@@ -450,8 +459,9 @@ sequenceDiagram
   same-node or not.
 - `min_transfer_millis` — this slice's own split floor (§Transferring and Splitting a Slice), fixed at creation. A recipient
   MUST be able to learn this value here, before attempting a `cash_transfer` split, rather than only from a
-  rejected attempt's error text — which also costs a share of the shared `cash_transfer`/`cash_redeem` rate
-  limit (§Security Considerations).
+  rejected attempt's error text — which also costs a share of whatever rate limiting the Hub applies to
+  `cash_transfer`/`cash_redeem` (§Security Considerations recommends backing off repeated failed attempts;
+  this document does not otherwise specify a limit).
 - `expires_at` — the wallet's own redemption deadline (§Data Model). Every recipient shares one wallet-level
   deadline, so this value is identical on every row above, not a per-slice figure — it's repeated per
   recipient rather than hoisted to a single top-level field, so a consumer processing one row never needs to
@@ -460,7 +470,7 @@ sequenceDiagram
 
 ### Processing Algorithm
 
-On receiving `list_recipients`, the wallet MUST, in order:
+On receiving `cash_status` for a bill that still exists, the wallet MUST, in order:
 
 1. Load every slice ever recorded for this wallet, claimed or not.
 2. Resolve the wallet's own `expires_at` once (§Data Model) — omitted if the wallet never expires.
@@ -470,6 +480,55 @@ On receiving `list_recipients`, the wallet MUST, in order:
    include the wallet's `expires_at` from step 2, identical on every row.
 4. Return the full roster. This method MUST NOT be scoped to only the caller's own slice — every recipient
    sees every other recipient's row, identity and amount included (§Privacy Considerations).
+
+### Answering About a Destroyed Bill
+
+A Hub deletes a bill once nothing is left on it (§Lifecycle and Deletion) and then, by default, answers
+nothing about it. That silence is what makes a spent bill indistinguishable from a pubkey the Hub never
+served — but it is also indistinguishable from a Hub that is slow, or down, or reached over the wrong
+relay. A caller cannot honestly report either: treating the timeout as retryable makes a genuinely spent
+bill retry forever, and treating it as "gone" tells someone their funds are lost when the Hub is merely
+unreachable. Both failures happen in practice, against bills that are perfectly fine.
+
+A Hub therefore MAY keep answering `cash_status` about a bill it destroyed, for a **retention window** of
+its own choosing, with a tombstone in place of the roster:
+
+```jsonc
+{
+  "error": "spent",              // this bill existed, was spent, and is gone
+  "retained_until": 1758800000   // unix seconds; past this the Hub returns to silence
+}
+```
+
+This gives three outcomes where there were two:
+
+| response | meaning |
+|---|---|
+| roster | the bill is live |
+| `spent` + `retained_until` | definitive — the bill is gone |
+| no answer | indeterminate — retry; MUST NOT be reported as spent |
+
+- The window is measured **from the spend, not from the bill's expiry**, so a bill that never expires is
+  covered too. Its length is the Hub's choice, and a Hub MAY set it to zero, which is exactly today's
+  behaviour: silence from the moment the bill is destroyed. Past `retained_until` the Hub returns to
+  silence either way, so a tombstone is never wrong — only absent for old bills.
+- A Hub answering a tombstone MUST verify that the requester holds the bill's own connection, by comparing
+  the request's author pubkey against the one derived from that bill's pairing key (§The Pairing
+  Connection). **Decryption is not authentication**: under NIP-47 anyone may encrypt a request to a
+  wallet pubkey using a freshly generated key, and the Hub would encrypt its reply straight back to them.
+  A Hub that skips this check answers anyone, and since wallet pubkeys travel in clear-text `p` tags, that
+  turns the Hub into a queryable index of every bill it ever issued. For a live bill this check is
+  implicit — the connection record names the authorized pubkey — but a destroyed bill has no record left,
+  so it MUST be performed explicitly.
+- A request naming a pubkey the Hub never served, or one past its retention window, MUST still be met with
+  silence.
+- Only `cash_status` answers this way. `cash_redeem`, `cash_transfer` and `cash_consolidate` naming a
+  destroyed bill MUST remain silent: a status read is a question about existence, where those are attempts
+  to move value, and answering them would widen what a past holder of a spent secret can confirm.
+
+**A client MUST NOT report a bill as spent or expired on the strength of a timeout alone**, whether or not
+the Hub it is talking to implements this. Silence is indeterminate by construction, and a client that
+treats it as definitive will tell users their money is gone during an ordinary outage.
 
 ## Transferring and Splitting a Slice (`cash_transfer`)
 
@@ -1070,7 +1129,7 @@ decoder written before they existed correctly ignores them if present. Type `4` 
 assigned a new meaning — a decoder ignores it as an unrecognized type on any token that carries it, per the
 general rule above. (A future revision MAY add a `min_transfer_millis` hint type following the same
 convention; this document doesn't define one, since it's a best-effort hint an implementation MAY choose to
-surface via `list_recipients` instead.)
+surface via `cash_status` instead.)
 
 Types `5` and `6` are a matched pair: a token carrying one MUST carry the other, since the signature
 commits to the amount and cannot be verified without it. A decoder that finds one without the other MUST
@@ -1098,7 +1157,7 @@ and identity-bound slices for this flag to be ambiguous about.
 
 **This `cash_secret` is NOT the same value as this token's own type-`2` secret above.** Type `2` is
 only the NWC connection secret (§The Pairing Connection) — it lets anyone holding this token dial the
-wallet and call read-only methods like `list_recipients`, nothing more; mere possession of the
+wallet and call read-only methods like `cash_status`, nothing more; mere possession of the
 connection is explicitly not a spending credential (§The Cash Token's own opening paragraph). The actual
 spending credential for a cash-mode slice is a separate, independently-generated
 value that exists *only* in `mint_cash`'s own response, returned exactly once (§Creating a Cash-mode
@@ -1224,7 +1283,7 @@ A Cash Wallet connection MUST be granted only:
 - `cash_redeem` — the payout method, identity-bound or cash (§Cash-Mode Slices)
 - `cash_transfer` — the proof-gated transfer/split method (§Transferring and Splitting a Slice)
 - `cash_consolidate` — the proof-gated combine method (§Consolidating Tokens)
-- `list_recipients` — the shared, read-only roster (§Listing Recipients), granted alongside `cash_redeem`
+- `cash_status` — the bill's state: shared read-only roster, or a destroyed-bill tombstone (§Cash Status), granted alongside `cash_redeem`
 - `get_balance`
 - `get_info` (an always-granted handshake method under NIP-47)
 
@@ -1287,16 +1346,20 @@ longer exists is met with silence, indistinguishable from a pubkey the Hub never
 exists answers a request naming a spent slice with an error. Deleting only on a split would therefore make
 that error a reliable signal that this Hub issued this exact bill and that it has been spent — readable by
 anyone who ever saw the token, a co-recipient of a shared bill included. Whichever policy a Hub adopts,
-it MUST be the same for `cash_redeem`, `cash_transfer` and `cash_consolidate`.
+it MUST be the same for `cash_redeem`, `cash_transfer`, `cash_consolidate` and `cash_status` — the last
+included because a Hub answering a status read for one drain mechanism and not another would rebuild the
+same oracle this rule exists to close.
 
 ### Archival on Deletion
 
 An implementation MAY retain a record of a Cash Wallet and its slices after deleting the wallet, so an
 operator can still account for value that passed through the Hub. If it does:
 
-- The archive MUST NOT be reachable from the NWC surface in any way, and MUST NOT change the silence
-  property: a request naming an archived wallet's pubkey MUST still be met with silence, identical to one
-  naming a pubkey the Hub never served.
+- The archive MUST NOT be reachable from the NWC surface in any way. A request naming an archived
+  wallet's pubkey MUST be met with silence, identical to one naming a pubkey the Hub never served — with
+  exactly one exception, the `cash_status` tombstone described in §Answering About a Destroyed Bill, which
+  is answered only to a caller proving it holds that bill's own connection and only inside the Hub's
+  retention window. Nothing else about an archived bill is readable over NWC, at any time, by anyone.
 - The archive MUST NOT cause a connection token to be derivable for a deleted wallet. A pairing key that
   remains deterministically derivable from the wallet's identifier is not licence to mint one: a token for
   a destroyed bill looks spendable and is not.
@@ -1468,6 +1531,16 @@ not a safe retry state. This is a narrow, deliberate exception to the "MUST roll
 `cash_transfer` splits and `cash_consolidate` both follow, not a gap in them — see §Spinning a Slice Off
 Into a Dedicated Wallet's own Atomicity discussion for the full mechanism (§Consolidating Tokens' step 7
 follows the same rule).
+
+**A destroyed bill's tombstone MUST be gated on the requester holding that bill's connection, not merely on
+the request decrypting.** Under NIP-47 anyone may encrypt a request to a wallet pubkey using a freshly
+generated key, and the Hub encrypts its reply back to whoever asked — so "it decrypted" proves nothing about
+entitlement. Wallet pubkeys also travel in clear-text `p` tags, so an observer can harvest targets from
+ordinary relay traffic without ever holding a token. A Hub that answers `cash_status` for a destroyed bill
+without checking the author pubkey against that bill's own pairing key therefore becomes a queryable index of
+every bill it ever issued, rebuilt from public data — which is precisely what deleting the bill was meant to
+prevent. For a live bill the connection record enforces this implicitly; a destroyed bill has no record, so
+the check MUST be explicit (§Answering About a Destroyed Bill).
 
 **IA revocation MUST be checked live at redemption time, not only at wallet-creation time.** A compromised or
 retired Identity Authority needs to be cut off immediately, for every wallet it ever attested for, not
