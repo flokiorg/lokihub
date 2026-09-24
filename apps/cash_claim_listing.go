@@ -2,6 +2,7 @@ package apps
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -47,6 +48,17 @@ type CashClaimRow struct {
 	SpunOffToWalletAppID *uint
 	WalletExpiresAt      *time.Time
 	WalletPubkey         string
+	// CashToken is the bill's own lokicash1... string, read from storage on
+	// both branches: db.App.CashToken while the bill lives, and
+	// db.CashBillArchive.CashToken once it is destroyed. Stored rather than
+	// re-derived because the token embeds the relay hints in effect at mint
+	// time, so a token minted later could differ from the one its holder
+	// actually holds — and matching a string from a support ticket against
+	// the archive needs the literal one that was issued.
+	//
+	// Empty for a bill minted before the column existed, which is why every
+	// consumer keeps a fallback.
+	CashToken string
 	// Status is a db.CashSliceStatus* value: derived in SQL for a live row,
 	// read straight off the stored column for an archived one.
 	Status string
@@ -68,7 +80,9 @@ type CashClaimRow struct {
 //
 // Two dialect traps are deliberately avoided. Every column is a real column of
 // a matching type on both branches, since a bare NULL types as "unknown" on
-// Postgres and is rejected in a UNION. And the archived flag is an integer 0/1,
+// Postgres and is rejected in a UNION — which is why cash_token is wrapped in
+// COALESCE on both sides rather than selected bare, the archived side coming
+// through a LEFT JOIN that can legitimately miss. And the archived flag is an integer 0/1,
 // not TRUE/FALSE, because sqlite has no boolean type.
 //
 // Placeholder order: now, hubID (live branch), then hubID (archived branch).
@@ -88,6 +102,7 @@ SELECT
   c.spun_off_to_wallet_app_id AS spun_off_to_wallet_app_id,
   a.expires_at AS wallet_expires_at,
   COALESCE(a.wallet_pubkey, '') AS wallet_pubkey,
+  COALESCE(a.cash_token, '') AS cash_token,
   CASE
     WHEN c.claimed_at IS NOT NULL AND c.spun_off_to_wallet_app_id IS NOT NULL THEN 'split'
     WHEN c.claimed_at IS NOT NULL THEN 'redeemed'
@@ -111,11 +126,28 @@ SELECT
   s.claimed_at, s.created_at,
   s.min_transfer_mloki, s.redeem_fee_ppm, s.spun_off_to_wallet_app_id,
   s.wallet_expires_at, COALESCE(s.wallet_pubkey, ''),
+  COALESCE(b.cash_token, ''),
   s.outcome,
   s.payment_hash, s.preimage, s.redeem_fee_mloki, s.routing_fee_mloki, s.settled_at
 FROM cash_bill_slice_archives s
+LEFT JOIN cash_bill_archives b ON b.wallet_app_id = s.wallet_app_id
 WHERE s.hub_app_id = ? AND s.outcome <> 'void'
 `
+
+// allHubsCashClaimUnionSQL is cashClaimUnionSQL scoped to every cash hub on
+// the node rather than one, for the node-wide totals behind the Cash Hubs
+// list.
+//
+// Derived from the same string by removing its two hub predicates, never
+// written out a second time. A copy of a query this fiddly — a UNION with
+// dialect traps in both branches — is exactly the kind of thing that goes
+// stale silently when only one of the two is edited. cashClaimUnionSQL stays
+// the single source, and TestAllHubsCashClaimUnionSQL_IsDerivedNotStale fails
+// loudly if a rename ever stops these replacements matching.
+var allHubsCashClaimUnionSQL = strings.NewReplacer(
+	"WHERE a.parent_app_id = ? AND ", "WHERE ",
+	"WHERE s.hub_app_id = ? AND ", "WHERE ",
+).Replace(cashClaimUnionSQL)
 
 // cashStatusFilterValues maps a requested status onto the values it matches.
 // "claimed" is the legacy value, from before the vocabulary distinguished how

@@ -332,6 +332,7 @@
     "pubkeyModeHelper": "يمكن لهذه الهوية على Nostr فقط استرداده.",
     "connectionKeyModeHelper": "يمكن لهوية موثّقة فقط استرداده.",
     "copyLokicash": "نسخ Lokicash",
+    "copyDestroyedLokicash": "نسخ Lokicash لهذه الورقة المتلفة",
     "tokenStatusUnredeemed": "لم يُسترد",
     "tokenStatusFullyRedeemed": "تم استرداده بالكامل",
     "tokenStatusPartiallyRedeemed": "تم استرداد {{claimed}}/{{count}}",

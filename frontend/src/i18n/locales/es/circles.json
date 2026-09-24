@@ -253,6 +253,7 @@
     "pubkeyModeHelper": "Solo esta identidad Nostr puede canjearlo.",
     "connectionKeyModeHelper": "Solo una identidad verificada puede canjearlo.",
     "copyLokicash": "Copiar Lokicash",
+    "copyDestroyedLokicash": "Copiar el Lokicash de este billete destruido",
     "tokenStatusUnredeemed": "Sin canjear",
     "tokenStatusFullyRedeemed": "Totalmente canjeado",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} canjeados",

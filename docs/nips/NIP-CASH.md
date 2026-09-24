@@ -1360,9 +1360,22 @@ operator can still account for value that passed through the Hub. If it does:
   exactly one exception, the `cash_status` tombstone described in §Answering About a Destroyed Bill, which
   is answered only to a caller proving it holds that bill's own connection and only inside the Hub's
   retention window. Nothing else about an archived bill is readable over NWC, at any time, by anyone.
-- The archive MUST NOT cause a connection token to be derivable for a deleted wallet. A pairing key that
-  remains deterministically derivable from the wallet's identifier is not licence to mint one: a token for
-  a destroyed bill looks spendable and is not.
+- A Hub MUST NOT mint a fresh connection token for a deleted wallet. A pairing key that remains
+  deterministically derivable from the wallet's identifier is not licence to issue one, and a token
+  produced after the fact would not even match what the holder has: the string embeds the relay hints in
+  effect at mint time.
+- The archive MAY retain, and an operator-facing surface MAY display, the wallet's own token exactly as it
+  was issued. Reading it back is not minting one, and it is what matches a string from a support ticket
+  or an offline record against the archived bill. It is a record at that point, not a credential: the
+  wallet is deleted, so the token moves no value, and a caller who presents it over NWC gets the
+  `cash_status` tombstone inside the retention window and silence outside it — never funds. This applies
+  to operator surfaces only; the NWC rule above is absolute and unaffected.
+  Two properties are worth being explicit about rather than leaving to be rediscovered. The token still
+  carries the connection secret, so anyone who obtains it can decrypt that bill's recorded request and
+  response traffic after the fact — it reveals history, never money. And once the retention window closes
+  the tombstone stops answering, so a copy that outlives the window is once again indistinguishable from
+  a Hub that is simply unreachable. Operators SHOULD treat a displayed token as they would any other
+  audit record.
 - An archived slice SHOULD carry the terminal state from the table above, and MAY carry the payment facts
   of its payout (payment hash, preimage, fees). Those facts MUST be recorded at redeem time, since nothing
   in the ledger links a payout back to the slice that caused it once the wallet is gone.

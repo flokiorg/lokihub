@@ -253,6 +253,7 @@
     "pubkeyModeHelper": "فقط این هویت Nostr می‌تواند آن را بازخرید کند.",
     "connectionKeyModeHelper": "فقط یک هویت تأییدشده می‌تواند آن را بازخرید کند.",
     "copyLokicash": "کپی Lokicash",
+    "copyDestroyedLokicash": "کپی Lokicash این اسکناس نابودشده",
     "tokenStatusUnredeemed": "بازخرید‌نشده",
     "tokenStatusFullyRedeemed": "کاملاً بازخرید شده",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} بازخرید شده",

@@ -3120,6 +3120,12 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			PaymentHash:          row.PaymentHash,
 			RedeemFeeMloki:       row.RedeemFeeMloki,
 		}
+		if row.Archived {
+			// An archived bill's own token, as it was issued. The live
+			// branch below mints its token instead, so this is the only
+			// place an archived row gets one.
+			r.CashToken = row.CashToken
+		}
 		if row.SettledAt != nil {
 			settledAt := row.SettledAt.Unix()
 			r.SettledAt = &settledAt
@@ -3142,12 +3148,20 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 	// claim for that wallet — uniform across every claim of the same wallet
 	// (see db.CashWalletClaim's own field docs), so which one doesn't matter.
 	//
-	// LIVE rows only. An archived bill's pairing key is still derivable from
-	// its app id, so a token COULD be minted — which is exactly why this has to
-	// be an explicit rule rather than an accident. Handing an operator a
-	// lokicash1... for a destroyed bill would look spendable and embed a wallet
-	// pubkey the hub no longer serves. Archived rows carry WalletPubkey
-	// instead, which is what correlates with logs anyway.
+	// LIVE rows only, because an archived row already has its token: the
+	// literal string issued at mint, read out of the archive above rather
+	// than minted again here. Re-deriving one would be wrong even though the
+	// pairing key is still derivable — the token embeds the relay hints in
+	// effect at mint time, so a fresh one could differ from what its holder
+	// actually holds, and matching a string from a support ticket is the
+	// whole point of keeping it.
+	//
+	// Showing it costs nothing an operator did not already have. The bill is
+	// deleted, so the token moves no money; anyone reaching it over NWC gets
+	// the "spent" tombstone inside the retention window and silence after it
+	// (NIP-CASH §Cash Status); and the operator can already derive it from
+	// the database anyway. What it buys is an audit trail an operator can
+	// actually read.
 	representativeByWallet := make(map[uint]apps.CashClaimRow, len(rows))
 	for _, row := range rows {
 		if row.Archived {

@@ -253,6 +253,7 @@
     "pubkeyModeHelper": "この Nostr アイデンティティのみが引き換え可能です。",
     "connectionKeyModeHelper": "検証済みのアイデンティティのみが引き換え可能です。",
     "copyLokicash": "Lokicash をコピー",
+    "copyDestroyedLokicash": "破棄された紙幣の Lokicash をコピー",
     "tokenStatusUnredeemed": "未引き換え",
     "tokenStatusFullyRedeemed": "全て引き換え済み",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} 件引き換え済み",

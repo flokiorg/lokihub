@@ -287,6 +287,7 @@
     "pubkeyModeHelper": "Обменять может только эта личность Nostr.",
     "connectionKeyModeHelper": "Обменять может только подтверждённая личность.",
     "copyLokicash": "Скопировать Lokicash",
+    "copyDestroyedLokicash": "Скопировать Lokicash уничтоженной купюры",
     "tokenStatusUnredeemed": "Не обменяно",
     "tokenStatusFullyRedeemed": "Полностью обменяно",
     "tokenStatusPartiallyRedeemed": "Обменяно {{claimed}}/{{count}}",

@@ -1541,10 +1541,30 @@ export const CashHubAllocations = React.forwardRef<
                             to copy directly; no separate copy button, which
                             would just be the same action twice. */}
                         {lokicashToken ? (
+                          // Shown for an archived bill too, muted rather than
+                          // withheld. There it is a record, not a credential:
+                          // the bill is destroyed, so the string moves no
+                          // money, and a caller who tries it over NWC gets the
+                          // "spent" tombstone inside the retention window and
+                          // silence after it (NIP-CASH §Cash Status). Hiding
+                          // it only cost the operator the one identifier that
+                          // matches this row against a support ticket or an
+                          // offline record — which is why the archive keeps
+                          // the string at all. The row's own "archived" badge
+                          // is what says it is dead; the muted styling keeps
+                          // it from reading as a live token at a glance.
                           <button
                             type="button"
-                            className="block max-w-full truncate rounded font-mono text-sm font-medium hover:underline"
-                            title={t("cashHubAllocations.copyLokicash")}
+                            className={`block max-w-full truncate rounded font-mono text-sm hover:underline ${
+                              group.archived
+                                ? "text-muted-foreground"
+                                : "font-medium"
+                            }`}
+                            title={
+                              group.archived
+                                ? t("cashHubAllocations.copyDestroyedLokicash")
+                                : t("cashHubAllocations.copyLokicash")
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
                               copyToClipboard(lokicashToken);
@@ -1553,18 +1573,10 @@ export const CashHubAllocations = React.forwardRef<
                             {shortenMiddle(lokicashToken, 14, 6)}
                           </button>
                         ) : (
-                          // An archived bill has no cash token, deliberately:
-                          // one for a destroyed bill would look spendable and
-                          // embed a pubkey the hub no longer serves (NIP-CASH
-                          // §Archival on Deletion). The literal "lokicash1…"
-                          // that used to sit here implied there was still a
-                          // token to reveal. Its own pubkey is what an
-                          // operator correlates with logs, and is the only
-                          // identifier an archived row carries — shown as an
-                          // npub, never raw hex, and never as a lokicash1...
-                          // token: deriving one for a deleted wallet is
-                          // forbidden precisely because it would look
-                          // spendable.
+                          // Only a bill archived before the token was stored
+                          // reaches this fallback. Its pubkey is the single
+                          // identifier such a row still carries — shown as an
+                          // npub, never raw hex.
                           <button
                             type="button"
                             className="block max-w-full truncate rounded font-mono text-sm text-muted-foreground hover:underline"

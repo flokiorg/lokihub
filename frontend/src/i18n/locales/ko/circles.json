@@ -253,6 +253,7 @@
     "pubkeyModeHelper": "이 Nostr 아이덴티티만 교환할 수 있습니다.",
     "connectionKeyModeHelper": "검증된 아이덴티티만 교환할 수 있습니다.",
     "copyLokicash": "Lokicash 복사",
+    "copyDestroyedLokicash": "폐기된 지폐의 Lokicash 복사",
     "tokenStatusUnredeemed": "미교환",
     "tokenStatusFullyRedeemed": "전부 교환됨",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} 교환됨",
