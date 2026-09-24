@@ -35,6 +35,9 @@ import {
   CircleAllowlistHandle,
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
+import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
+import { CircleHubOverview } from "src/components/circles/CircleHubOverview";
+import { useCircleHubStats } from "src/hooks/useCircleHubStats";
 import {
   CashHubAllocations,
   CashHubAllocationsHandle,
@@ -136,6 +139,10 @@ type AppInternalProps = {
 function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   const location = useLocation();
   const circleAllowlistRef = React.useRef<CircleAllowlistHandle>(null);
+  // Only fetched for a circle hub; the hook no-ops on a falsy key.
+  const { data: circleStats } = useCircleHubStats(
+    app?.kind === "circle_hub" ? app.id : undefined
+  );
   const cashHubAllocationsRef = React.useRef<CashHubAllocationsHandle>(null);
   const [isCashFormOpen, setCashFormOpen] = React.useState(false);
   const [isAllowlistFormOpen, setAllowlistFormOpen] = React.useState(false);
@@ -648,10 +655,24 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   <AppLinksCard appStoreApp={appStoreApp} />
                 </div>
               )}
-              <AppUsage
-                key={`${app.id}-${app.updatedAt}-${app.balance}`}
-                app={app}
-              />
+              {/* A circle hub gets its own overview instead of the generic
+                  usage card. AppUsage says nothing about the circle — not how
+                  many members, not how much of the hub's money is sitting in
+                  their wallets, not what the host earned — and it derives its
+                  two figures by walking every transaction the hub ever had, a
+                  page at a time, which the stats endpoint answers in one
+                  request. */}
+              {app.kind === "circle_hub" && circleStats ? (
+                <>
+                  <CircleHubOverview hub={app} stats={circleStats} />
+                  <CircleAnalytics hub={app} stats={circleStats} />
+                </>
+              ) : (
+                <AppUsage
+                  key={`${app.id}-${app.updatedAt}-${app.balance}`}
+                  app={app}
+                />
+              )}
             </>
           )}
           {isEditingPermissions &&

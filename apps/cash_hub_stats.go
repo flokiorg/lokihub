@@ -45,9 +45,46 @@ type CashHubStats struct {
 	// when nothing has been redeemed yet.
 	MedianTimeToRedeemSecs *int64
 
+	// ExpiryBuckets is filled for both scopes — the runway is as much a
+	// per-hub question as a node-wide one. PerHub is node-wide only: splitting
+	// one hub by hub says nothing.
+	ExpiryBuckets []CashExpiryBucket
+	PerHub        []CashHubOutstanding
+
 	// Daily is a newest-last series for charting flow.
 	Daily []CashHubDailyPoint
 }
+
+// CashExpiryBucket is outstanding value grouped by how soon it stops being
+// redeemable — the runway an operator has before a bill either comes back as
+// a reclaim or is written off.
+//
+// The buckets partition exactly the same slices OutstandingMloki totals, so
+// they sum back to it. Anything else would be read as money appearing or
+// vanishing between two figures on one screen.
+type CashExpiryBucket struct {
+	// Key is "24h" | "7d" | "30d" | "later" | "never", in that order.
+	Key   string
+	Mloki int64
+	Count uint64
+}
+
+// CashHubOutstanding is one hub's share of the node's liability. Every cash
+// hub appears, including those owing nothing: "which hub is carrying this" is
+// only answerable if the ones carrying none are visible too.
+type CashHubOutstanding struct {
+	HubAppID         uint
+	Name             string
+	OutstandingMloki int64
+	OutstandingCount uint64
+	// BalanceMloki is filled by the api layer, which owns the canonical
+	// balance arithmetic.
+	BalanceMloki int64
+}
+
+// cashExpiryBucketKeys is the bucket order, shared with the caller so a
+// renderer never has to re-derive it.
+var cashExpiryBucketKeys = []string{"24h", "7d", "30d", "later", "never"}
 
 // CashHubDailyPoint is one day's flow. Date is midnight UTC.
 type CashHubDailyPoint struct {
@@ -84,7 +121,69 @@ const medianSampleLimit = 1000
 // instead, deliberately: date bucketing has no portable spelling across sqlite
 // and Postgres, and the alternative — a dialect branch in a money query — is a
 // worse thing to maintain than a loop over a bounded window.
+// cashStatsScope selects which hubs a stats query covers: one hub's dashboard,
+// or every cash hub on the node for the Cash Hubs list.
+//
+// It exists so the two share one implementation. The alternative — totalling
+// each hub separately and summing in Go — would issue a query per hub, and
+// worse, could not produce a correct median: the median of a set of medians is
+// not the median of the set.
+type cashStatsScope struct {
+	// hubID is 0 for the node-wide scope, which is not a valid app id.
+	hubID uint
+}
+
+func forCashHub(hubID uint) cashStatsScope { return cashStatsScope{hubID: hubID} }
+func allCashHubs() cashStatsScope          { return cashStatsScope{} }
+
+func (s cashStatsScope) allHubs() bool { return s.hubID == 0 }
+
+// String makes the scope readable in the error messages these queries return.
+func (s cashStatsScope) String() string {
+	if s.allHubs() {
+		return "all cash hubs"
+	}
+	return fmt.Sprintf("hub %d", s.hubID)
+}
+
+func (s cashStatsScope) union() string {
+	if s.allHubs() {
+		return allHubsCashClaimUnionSQL
+	}
+	return cashClaimUnionSQL
+}
+
+// unionArgs returns the placeholder values the union takes, in order: `now`
+// for the live branch's expiry test, then the hub id once per branch — absent
+// entirely for the node-wide variant, whose two hub predicates were removed.
+func (s cashStatsScope) unionArgs(now time.Time) []any {
+	if s.allHubs() {
+		return []any{now}
+	}
+	return []any{now, s.hubID, s.hubID}
+}
+
+// hubPredicate is the per-hub filter for the two queries that do not go
+// through the union, returned with its own argument so callers cannot pair
+// the wrong one.
+func (s cashStatsScope) hubPredicate(column string) (string, []any) {
+	if s.allHubs() {
+		return "", nil
+	}
+	return column + " = ? AND ", []any{s.hubID}
+}
+
+// GetAllCashHubStats totals every cash hub on the node, for the Cash Hubs
+// list's own overview. Same figures as one hub's dashboard, same meanings.
+func (svc *appsService) GetAllCashHubStats(now time.Time) (*CashHubStats, error) {
+	return svc.cashHubStats(allCashHubs(), now)
+}
+
 func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStats, error) {
+	return svc.cashHubStats(forCashHub(hubID), now)
+}
+
+func (svc *appsService) cashHubStats(scope cashStatsScope, now time.Time) (*CashHubStats, error) {
 	stats := &CashHubStats{}
 
 	// Live slices: only the unclaimed ones are still a liability. A claimed
@@ -104,14 +203,16 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 		Total int64
 		N     uint64
 	}
+	hubWhere, hubArgs := scope.hubPredicate("a.parent_app_id")
 	if err := svc.db.Raw(`
 		SELECT COALESCE(SUM(c.amount_mloki), 0) AS total, COUNT(*) AS n
 		FROM cash_wallet_claims c
 		JOIN apps a ON a.id = c.wallet_app_id
-		WHERE a.parent_app_id = ? AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
+		WHERE `+hubWhere+`a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
 		  AND c.claimed_at IS NULL
-		  AND (a.expires_at IS NULL OR a.expires_at >= ?)`, hubID, now).Scan(&liveOutstanding).Error; err != nil {
-		return nil, fmt.Errorf("failed to total outstanding cash for hub %d: %w", hubID, err)
+		  AND (a.expires_at IS NULL OR a.expires_at >= ?)`,
+		append(append([]any{}, hubArgs...), now)...).Scan(&liveOutstanding).Error; err != nil {
+		return nil, fmt.Errorf("failed to total outstanding cash for %s: %w", scope, err)
 	}
 	stats.OutstandingMloki = liveOutstanding.Total
 	stats.OutstandingCount = liveOutstanding.N
@@ -129,9 +230,9 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 	if err := svc.db.Raw(`
 		SELECT status, COALESCE(SUM(amount_mloki), 0) AS total, COUNT(*) AS n,
 		       COALESCE(SUM(redeem_fee_mloki), 0) AS fees
-		FROM (`+cashClaimUnionSQL+`) u
-		GROUP BY status`, now, hubID, hubID).Scan(&totals).Error; err != nil {
-		return nil, fmt.Errorf("failed to total cash outcomes for hub %d: %w", hubID, err)
+		FROM (`+scope.union()+`) u
+		GROUP BY status`, scope.unionArgs(now)...).Scan(&totals).Error; err != nil {
+		return nil, fmt.Errorf("failed to total cash outcomes for %s: %w", scope, err)
 	}
 	for _, t := range totals {
 		stats.IssuedMloki += t.Total
@@ -150,11 +251,20 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 		}
 	}
 
-	since := now.AddDate(0, 0, -cashStatsWindowDays).Truncate(24 * time.Hour)
-	if err := svc.fillCashDailySeries(stats, hubID, since, now); err != nil {
+	if err := svc.fillCashExpiryBuckets(stats, scope, now); err != nil {
 		return nil, err
 	}
-	if err := svc.fillCashMedianTimeToRedeem(stats, hubID); err != nil {
+	if scope.allHubs() {
+		if err := svc.fillCashPerHubOutstanding(stats, now); err != nil {
+			return nil, err
+		}
+	}
+
+	since := now.AddDate(0, 0, -cashStatsWindowDays).Truncate(24 * time.Hour)
+	if err := svc.fillCashDailySeries(stats, scope, since, now); err != nil {
+		return nil, err
+	}
+	if err := svc.fillCashMedianTimeToRedeem(stats, scope); err != nil {
 		return nil, err
 	}
 	return stats, nil
@@ -163,7 +273,7 @@ func (svc *appsService) GetCashHubStats(hubID uint, now time.Time) (*CashHubStat
 // fillCashDailySeries buckets issued/redeemed/returned/split/written-off into
 // days. Every terminal outcome gets its own bucket so the series sums back to
 // the totals GetCashHubStats reports.
-func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, since, now time.Time) error {
+func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStatsScope, since, now time.Time) error {
 	type event struct {
 		At     time.Time
 		Amount int64
@@ -174,27 +284,32 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, sin
 	// Issued is keyed on when the slice was created, redeemed on when its
 	// payout settled, returned on when its bill was archived — each the moment
 	// the money actually moved, not when the row happened to be written.
+	// The union appears five times, so its arguments do too — built rather
+	// than written out, since the per-hub and node-wide variants take a
+	// different number of them.
+	union := scope.union()
+	var args []any
+	for range 5 {
+		args = append(args, scope.unionArgs(now)...)
+		args = append(args, since)
+	}
 	if err := svc.db.Raw(`
 		SELECT created_at AS at, amount_mloki AS amount, 'issued' AS kind
-		FROM (`+cashClaimUnionSQL+`) u WHERE created_at >= ?
+		FROM (`+union+`) u WHERE created_at >= ?
 		UNION ALL
 		SELECT settled_at, amount_mloki, 'redeemed'
-		FROM (`+cashClaimUnionSQL+`) u2 WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
+		FROM (`+union+`) u2 WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
 		UNION ALL
 		SELECT claimed_at, amount_mloki, 'returned'
-		FROM (`+cashClaimUnionSQL+`) u3 WHERE status IN ('expired','reclaimed') AND claimed_at IS NOT NULL AND claimed_at >= ?
+		FROM (`+union+`) u3 WHERE status IN ('expired','reclaimed') AND claimed_at IS NOT NULL AND claimed_at >= ?
 		UNION ALL
 		SELECT claimed_at, amount_mloki, 'split'
-		FROM (`+cashClaimUnionSQL+`) u4 WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
+		FROM (`+union+`) u4 WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
 		UNION ALL
 		SELECT claimed_at, amount_mloki, 'written-off'
-		FROM (`+cashClaimUnionSQL+`) u5 WHERE status = 'written-off' AND claimed_at IS NOT NULL AND claimed_at >= ?
-	`, now, hubID, hubID, since,
-		now, hubID, hubID, since,
-		now, hubID, hubID, since,
-		now, hubID, hubID, since,
-		now, hubID, hubID, since).Scan(&events).Error; err != nil {
-		return fmt.Errorf("failed to read cash daily series for hub %d: %w", hubID, err)
+		FROM (`+union+`) u5 WHERE status = 'written-off' AND claimed_at IS NOT NULL AND claimed_at >= ?
+	`, args...).Scan(&events).Error; err != nil {
+		return fmt.Errorf("failed to read cash daily series for %s: %w", scope, err)
 	}
 
 	buckets := map[time.Time]*CashHubDailyPoint{}
@@ -230,29 +345,113 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, hubID uint, sin
 	return nil
 }
 
+// fillCashExpiryBuckets groups the outstanding liability by time left to
+// redeem it.
+//
+// The WHERE clause is deliberately identical to the outstanding total's own,
+// so the buckets are a partition of that figure rather than a second,
+// slightly different population. Bucketing happens in Go: the boundaries are
+// relative to now, and expressing that in SQL means date arithmetic that
+// differs between sqlite and Postgres for no benefit.
+func (svc *appsService) fillCashExpiryBuckets(stats *CashHubStats, scope cashStatsScope, now time.Time) error {
+	var rows []struct {
+		AmountMloki int64
+		ExpiresAt   *time.Time
+	}
+	hubWhere, hubArgs := scope.hubPredicate("a.parent_app_id")
+	if err := svc.db.Raw(`
+		SELECT c.amount_mloki AS amount_mloki, a.expires_at AS expires_at
+		FROM cash_wallet_claims c
+		JOIN apps a ON a.id = c.wallet_app_id
+		WHERE `+hubWhere+`a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
+		  AND c.claimed_at IS NULL
+		  AND (a.expires_at IS NULL OR a.expires_at >= ?)`,
+		append(append([]any{}, hubArgs...), now)...).Scan(&rows).Error; err != nil {
+		return fmt.Errorf("failed to bucket outstanding cash by expiry for %s: %w", scope, err)
+	}
+
+	byKey := map[string]*CashExpiryBucket{}
+	for _, k := range cashExpiryBucketKeys {
+		byKey[k] = &CashExpiryBucket{Key: k}
+	}
+	for _, r := range rows {
+		key := "never"
+		if r.ExpiresAt != nil {
+			switch left := r.ExpiresAt.Sub(now); {
+			case left < 24*time.Hour:
+				key = "24h"
+			case left < 7*24*time.Hour:
+				key = "7d"
+			case left < 30*24*time.Hour:
+				key = "30d"
+			default:
+				key = "later"
+			}
+		}
+		byKey[key].Mloki += r.AmountMloki
+		byKey[key].Count++
+	}
+
+	stats.ExpiryBuckets = make([]CashExpiryBucket, 0, len(cashExpiryBucketKeys))
+	for _, k := range cashExpiryBucketKeys {
+		stats.ExpiryBuckets = append(stats.ExpiryBuckets, *byKey[k])
+	}
+	return nil
+}
+
+// fillCashPerHubOutstanding splits the liability by hub.
+//
+// Driven from the apps table rather than from claims, so a hub owing nothing
+// still appears: on a list page the question is "which hub is carrying this",
+// and a hub that drops out of the answer looks deleted rather than settled.
+func (svc *appsService) fillCashPerHubOutstanding(stats *CashHubStats, now time.Time) error {
+	var rows []CashHubOutstanding
+	if err := svc.db.Raw(`
+		SELECT h.id AS hub_app_id, h.name AS name,
+		       COALESCE(SUM(CASE WHEN c.id IS NOT NULL THEN c.amount_mloki ELSE 0 END), 0) AS outstanding_mloki,
+		       COALESCE(SUM(CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END), 0) AS outstanding_count
+		FROM apps h
+		LEFT JOIN apps a
+		       ON a.parent_app_id = h.id AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
+		      AND (a.expires_at IS NULL OR a.expires_at >= ?)
+		LEFT JOIN cash_wallet_claims c
+		       ON c.wallet_app_id = a.id AND c.claimed_at IS NULL
+		WHERE h.kind = 'cash_hub'
+		GROUP BY h.id, h.name
+		ORDER BY outstanding_mloki DESC, h.id`, now).Scan(&rows).Error; err != nil {
+		return fmt.Errorf("failed to split outstanding cash by hub: %w", err)
+	}
+	stats.PerHub = rows
+	return nil
+}
+
 // fillCashMedianTimeToRedeem measures mint-to-payout over a bounded sample of
 // the most recent redemptions.
-func (svc *appsService) fillCashMedianTimeToRedeem(stats *CashHubStats, hubID uint) error {
+func (svc *appsService) fillCashMedianTimeToRedeem(stats *CashHubStats, scope cashStatsScope) error {
 	type span struct {
 		CreatedAt time.Time
 		SettledAt time.Time
 	}
 	var spans []span
+	archivedWhere, archivedArgs := scope.hubPredicate("s.hub_app_id")
+	liveWhere, liveArgs := scope.hubPredicate("a.parent_app_id")
+	args := append(append([]any{}, archivedArgs...), liveArgs...)
+	args = append(args, medianSampleLimit)
 	if err := svc.db.Raw(`
 		SELECT created_at, settled_at FROM (
 			SELECT s.created_at AS created_at, s.settled_at AS settled_at
 			FROM cash_bill_slice_archives s
-			WHERE s.hub_app_id = ? AND s.outcome = 'redeemed' AND s.settled_at IS NOT NULL
+			WHERE `+archivedWhere+`s.outcome = 'redeemed' AND s.settled_at IS NOT NULL
 			UNION ALL
 			SELECT c.created_at, c.settled_at
 			FROM cash_wallet_claims c
 			JOIN apps a ON a.id = c.wallet_app_id
-			WHERE a.parent_app_id = ? AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
+			WHERE `+liveWhere+`a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
 			  AND c.settled_at IS NOT NULL
 		) r
 		ORDER BY settled_at DESC
-		LIMIT ?`, hubID, hubID, medianSampleLimit).Scan(&spans).Error; err != nil {
-		return fmt.Errorf("failed to sample cash redeem times for hub %d: %w", hubID, err)
+		LIMIT ?`, args...).Scan(&spans).Error; err != nil {
+		return fmt.Errorf("failed to sample cash redeem times for %s: %w", scope, err)
 	}
 	if len(spans) == 0 {
 		return nil

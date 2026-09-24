@@ -246,6 +246,8 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
+	fullAccessApiGroup.GET("/cash-hubs/stats", httpSvc.allCashHubStatsHandler)
+	fullAccessApiGroup.GET("/apps/:id/circle-stats", httpSvc.circleHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId/claims/:claimId", httpSvc.cashWalletClaimDeleteHandler)
@@ -2193,6 +2195,42 @@ func (httpSvc *HttpService) cashHubStatsHandler(c echo.Context) error {
 			Msg("Failed to load Cash hub stats")
 		code, msg := mapCashAllocError(statsErr)
 		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, stats)
+}
+
+// allCashHubStatsHandler returns the same totals as cashHubStatsHandler but
+// across every cash_hub on the node, for the Cash Hubs list's overview.
+//
+// A node with no cash hubs is not an error here: it answers zeroes and a full
+// window of empty days, which is what the list renders before the operator has
+// created anything.
+func (httpSvc *HttpService) allCashHubStatsHandler(c echo.Context) error {
+	stats, err := httpSvc.api.GetAllCashHubStats()
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to load Cash hub totals")
+		code, msg := mapCashAllocError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, stats)
+}
+
+// circleHubStatsHandler returns a circle_hub's dashboard totals: how much is
+// allocated to members, what they have spent and received, and who.
+func (httpSvc *HttpService) circleHubStatsHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCircleHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a circle_hub"})
+	}
+
+	stats, statsErr := httpSvc.api.GetCircleHubStats(dbApp.ID)
+	if statsErr != nil {
+		httpSvc.logger.Error().Err(statsErr).Uint("hub_id", dbApp.ID).
+			Msg("Failed to load Circle hub stats")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: statsErr.Error()})
 	}
 	return c.JSON(http.StatusOK, stats)
 }

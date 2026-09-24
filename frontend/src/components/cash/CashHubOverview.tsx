@@ -37,7 +37,9 @@ function durationParts(secs: number): {
   return { unit: "Days", count: Math.round(secs / 86400) };
 }
 
-function MedianDuration({ secs }: { secs: number }) {
+// Exported so the Cash Hubs list can render the same figures for every hub
+// at once without a second, drifting copy of them.
+export function MedianDuration({ secs }: { secs: number }) {
   const { t } = useTranslation("circles");
   const { unit, count } = durationParts(secs);
   switch (unit) {
@@ -57,7 +59,7 @@ function MedianDuration({ secs }: { secs: number }) {
 // "Returned", "Split") only make sense once you know which slice — so the
 // definition travels with the number rather than living in docs. Same
 // affordance as CashStatusLegend, which explains the six bill statuses.
-function MetricInfo({ text }: { text: string }) {
+export function MetricInfo({ text }: { text: string }) {
   return (
     <TooltipProvider>
       <Tooltip>
@@ -80,7 +82,7 @@ function MetricInfo({ text }: { text: string }) {
 // as one grid rather than two unrelated blocks. `sensitive` opts the figure
 // into the app's balance-hiding, `slashed-zero` (on the Card) keeps digits
 // legible.
-function Stat({
+export function Stat({
   label,
   info,
   amountMloki,

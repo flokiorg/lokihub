@@ -1002,6 +1002,58 @@ export interface CashWalletClaimCounts {
 //
 // These figures span bills that no longer exist — only possible because a
 // spent bill's history outlives its deletion.
+export interface CircleHubDailyPoint {
+  date: string; // YYYY-MM-DD, UTC
+  spent_mloki: number;
+  received_mloki: number;
+}
+
+export interface CircleMemberActivity {
+  wallet_app_id: number;
+  name: string;
+  spent_mloki: number;
+  balance_mloki: number;
+  // The member's own budget cap; 0 when uncapped.
+  max_amount_mloki: number;
+}
+
+// A circle hub's money question mirrors a cash hub's. A cash hub owes value it
+// handed out as bearer bills; a circle hub has ALLOCATED value into wallets
+// its members still hold and it can reclaim. So the headline is an allocation
+// rather than a liability, and the risk is drift — budgets filling up, one
+// member outspending the rest — rather than insolvency.
+export interface CircleHubStats {
+  members_count: number;
+  // null for a "following"-policy circle, whose eligible set is the host's
+  // live contact list rather than anything the hub stores. null means "not
+  // knowable here", never zero.
+  eligible_count: number | null;
+  allocated_mloki: number;
+  spent_mloki: number;
+  spent_count: number;
+  received_mloki: number;
+  received_count: number;
+  fees_earned_mloki: number;
+  daily: CircleHubDailyPoint[];
+  per_member: CircleMemberActivity[];
+}
+
+export type CashExpiryBucketKey = "24h" | "7d" | "30d" | "later" | "never";
+
+export interface CashExpiryBucket {
+  key: CashExpiryBucketKey;
+  mloki: number;
+  count: number;
+}
+
+export interface CashHubOutstanding {
+  hub_app_id: number;
+  name: string;
+  outstanding_mloki: number;
+  outstanding_count: number;
+  balance_mloki: number;
+}
+
 export interface CashHubStats {
   // The hub's live liability: value still redeemable. The headline figure.
   outstanding_mloki: number;
@@ -1023,6 +1075,17 @@ export interface CashHubStats {
   written_off_count: number;
 
   fees_earned_mloki: number;
+
+  // Node-wide only (the Cash Hubs list). All four are empty/0 on a single
+  // hub's response, which already has the first two on its own App row.
+  hubs_count: number;
+  balance_mloki: number;
+  // Partitions outstanding_mloki by how long is left to redeem it, already
+  // ordered soonest-first. Sums back to outstanding_mloki exactly.
+  expiry_buckets: CashExpiryBucket[];
+  // Splits outstanding_mloki by hub, ordered largest-first. Includes hubs
+  // owing nothing.
+  per_hub: CashHubOutstanding[];
 
   // null until something has been redeemed.
   median_time_to_redeem_secs: number | null;

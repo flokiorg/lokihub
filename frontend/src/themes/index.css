@@ -52,6 +52,26 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
 
+  /* Categorical series colours for charts.
+   *
+   * --chart-1..5 are a SEQUENTIAL ramp, not a palette: in claymorphism every
+   * stop is hue ~277 and varies only in lightness, and default reuses gold at
+   * both 1 and 5. That is the right encoding for ordered magnitude and the
+   * wrong one for telling independent series apart — adjacent series come out
+   * nearly identical, which is exactly how the first cash charts read.
+   *
+   * These five are chosen for hue separation instead, and are deliberately
+   * theme-independent: a series keeps its meaning (green covered, red lost)
+   * whichever theme is on, and two themes do not define --positive/--warning
+   * at all, so those could not be relied on either. Mid-tone and saturated, so
+   * they hold up on both light and dark backgrounds.
+   */
+  --color-series-covered: hsl(142 66% 40%);
+  --color-series-owed: hsl(38 92% 48%);
+  --color-series-urgent: hsl(0 78% 57%);
+  --color-series-info: hsl(205 85% 48%);
+  --color-series-muted: hsl(240 5% 58%);
+
   --animate-spin-slow: spin 3s linear infinite;
   --animate-highlight: pulse 1s 2 cubic-bezier(0.4, 0, 0.6, 1);
 }

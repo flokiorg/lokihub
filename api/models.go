@@ -164,6 +164,11 @@ type API interface {
 	// GetCashHubStats totals a cash_hub's activity in money rather than row
 	// counts, spanning live and archived slices alike.
 	GetCashHubStats(appID uint) (*CashHubStatsResponse, error)
+	// GetAllCashHubStats is the same totals across every cash_hub on the
+	// node, for the Cash Hubs list.
+	GetAllCashHubStats() (*CashHubStatsResponse, error)
+	// GetCircleHubStats totals one circle_hub's member activity.
+	GetCircleHubStats(appID uint) (*CircleHubStatsResponse, error)
 	// CreateCashWallet creates, funds, and reveals a shared Cash wallet serving
 	// every recipient in the request in one shot — the admin equivalent of a
 	// hub owner calling mint_cash over NWC.
@@ -507,6 +512,12 @@ type CashWalletClaimResponse struct {
 	// of results actually being returned (ListCashWalletClaims derives it
 	// after pagination, once per unique wallet on that page, not for every
 	// claim across the whole hub).
+	//
+	// Populated for an archived row too, read verbatim from the archive
+	// rather than minted again. It is a record there, not a credential: the
+	// bill is destroyed, so it moves no money, and a caller who tries it over
+	// NWC gets the "spent" tombstone or silence. Empty for a bill minted
+	// before the archive stored it.
 	CashToken string `json:"cash_token,omitempty"`
 	// Status is a db.CashSliceStatus* value. Previously the client re-derived
 	// display state from Claimed and SpunOffToWalletAppID, which cannot
@@ -519,8 +530,8 @@ type CashWalletClaimResponse struct {
 	// this, and must not offer to delete an archived row.
 	Archived bool `json:"archived"`
 	// WalletPubkey identifies the bill itself. Populated for every row, and
-	// the only identifier an archived row has: CashToken is deliberately left
-	// empty there, since a token for a destroyed bill would look spendable.
+	// the identifier to correlate with relay logs — and the fallback label
+	// for an archived bill old enough that no token was stored for it.
 	WalletPubkey string `json:"wallet_pubkey,omitempty"`
 	// PaymentHash is the payout's proof for a redeemed slice, carried through
 	// from the claim (and into the archive, since the transaction row it came
@@ -567,10 +578,89 @@ type CashHubStatsResponse struct {
 
 	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
 
+	// HubsCount and BalanceMloki are the node-wide endpoint's own two
+	// figures and are zero on a single hub's response, which already has
+	// both on its own App row. Filled by GetAllCashHubStats rather than by
+	// the apps service — see the note there.
+	HubsCount    uint64 `json:"hubs_count"`
+	BalanceMloki int64  `json:"balance_mloki"`
+
 	// MedianTimeToRedeemSecs is null until something has been redeemed.
 	MedianTimeToRedeemSecs *int64 `json:"median_time_to_redeem_secs"`
 
 	Daily []CashHubDailyPointResponse `json:"daily"`
+
+	// ExpiryBuckets partitions OutstandingMloki by how long is left to redeem
+	// it, and PerHub splits it by hub. Both are node-wide only, and both are
+	// empty on a single hub's response.
+	ExpiryBuckets []CashExpiryBucketResponse   `json:"expiry_buckets"`
+	PerHub        []CashHubOutstandingResponse `json:"per_hub"`
+}
+
+// CircleHubStatsResponse is a circle hub's dashboard data.
+//
+// A circle hub's money question is the mirror of a cash hub's: a cash hub owes
+// value it handed out as bearer bills, a circle hub has allocated value into
+// wallets its members still hold and it can reclaim. So the headline is an
+// allocation rather than a liability, and the risk is drift — budgets filling
+// up, or one member spending far more than the rest — rather than insolvency.
+type CircleHubStatsResponse struct {
+	MembersCount uint64 `json:"members_count"`
+	// EligibleCount is null for a "following"-policy circle, whose eligible
+	// set is the host's live contact list rather than anything this hub
+	// stores. Null means "not knowable here", never zero.
+	EligibleCount *uint64 `json:"eligible_count"`
+	// AllocatedMloki is what members currently hold between them.
+	AllocatedMloki int64 `json:"allocated_mloki"`
+
+	SpentMloki    int64  `json:"spent_mloki"`
+	SpentCount    uint64 `json:"spent_count"`
+	ReceivedMloki int64  `json:"received_mloki"`
+	ReceivedCount uint64 `json:"received_count"`
+	// FeesEarnedMloki is the hub's forwarding cut on member payments.
+	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
+
+	Daily     []CircleHubDailyPointResponse  `json:"daily"`
+	PerMember []CircleMemberActivityResponse `json:"per_member"`
+}
+
+// CircleHubDailyPointResponse is one day of member activity, oldest first.
+// Every day in the window is present even when nothing happened.
+type CircleHubDailyPointResponse struct {
+	Date          string `json:"date"` // YYYY-MM-DD, UTC
+	SpentMloki    int64  `json:"spent_mloki"`
+	ReceivedMloki int64  `json:"received_mloki"`
+}
+
+// CircleMemberActivityResponse is one member's share, ordered biggest spender
+// first. Every member appears, including those who have never spent.
+type CircleMemberActivityResponse struct {
+	WalletAppID  uint   `json:"wallet_app_id"`
+	Name         string `json:"name"`
+	SpentMloki   int64  `json:"spent_mloki"`
+	BalanceMloki int64  `json:"balance_mloki"`
+	// MaxAmountMloki is the member's own budget cap, 0 when uncapped.
+	MaxAmountMloki int64 `json:"max_amount_mloki"`
+}
+
+// CashExpiryBucketResponse is one slice of the expiry runway. The buckets sum
+// back to OutstandingMloki exactly — they partition the same population.
+type CashExpiryBucketResponse struct {
+	// Key is "24h" | "7d" | "30d" | "later" | "never", already in order.
+	Key   string `json:"key"`
+	Mloki int64  `json:"mloki"`
+	Count uint64 `json:"count"`
+}
+
+// CashHubOutstandingResponse is one hub's share of the node's liability,
+// alongside what that hub holds to cover it. Every cash hub appears, including
+// those owing nothing.
+type CashHubOutstandingResponse struct {
+	HubAppID         uint   `json:"hub_app_id"`
+	Name             string `json:"name"`
+	OutstandingMloki int64  `json:"outstanding_mloki"`
+	OutstandingCount uint64 `json:"outstanding_count"`
+	BalanceMloki     int64  `json:"balance_mloki"`
 }
 
 // CashHubDailyPointResponse is one day of flow, oldest first. Every day in the
