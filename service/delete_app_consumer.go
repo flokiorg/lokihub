@@ -63,7 +63,7 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 				Uint("app_id", id).
 				Str("wallet", walletPubKey).
 				Msg("Scheduling a deleted app's wallet to stop being served")
-			registry.RemoveAfterGrace(walletPubKey)
+			registry.RemoveAfter(walletPubKey, s.svc.spentBillRetention(walletPubKey))
 		}
 
 		// remove this consumer as subscriber in eventPublisher — except the
