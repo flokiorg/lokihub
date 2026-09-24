@@ -63,7 +63,19 @@ func (s *deleteAppConsumer) ConsumeEvent(ctx context.Context, event *events.Even
 				Uint("app_id", id).
 				Str("wallet", walletPubKey).
 				Msg("Scheduling a deleted app's wallet to stop being served")
-			registry.RemoveAfter(walletPubKey, s.svc.spentBillRetention(walletPubKey))
+			// A destroyed cash bill inside its hub's retention window stays
+			// registered with no timer at all: its deadline already lives in
+			// the archive (CashBillArchive.EndedAt), so a timer would be a
+			// second, weaker copy of that state — lost on restart and useless
+			// at 15-day horizons. The periodic sweep prunes it instead.
+			if s.svc.spentBillRetained(walletPubKey) {
+				logger.Logger.Debug().
+					Uint("app_id", id).
+					Str("wallet", walletPubKey).
+					Msg("Keeping a spent cash bill's wallet served for its retention window")
+			} else {
+				registry.RemoveAfterGrace(walletPubKey)
+			}
 		}
 
 		// remove this consumer as subscriber in eventPublisher — except the
