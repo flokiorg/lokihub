@@ -511,6 +511,15 @@ type CashWalletClaimResponse struct {
 	// from the claim (and into the archive, since the transaction row it came
 	// from cascades away with the bill).
 	PaymentHash string `json:"payment_hash,omitempty"`
+	// SettledAt and RedeemFeeMloki complete the payout record a Hub owner
+	// needs to account for a bill after it is gone: when the payment actually
+	// settled, and what the Hub actually charged for it. RedeemFeePpm above is
+	// only the agreed *rate*; this is the amount taken. Both are already
+	// carried into the archive for exactly this reason, and were simply never
+	// exposed — leaving the archive readable in the database but not in the
+	// UI that exists to account for it.
+	SettledAt      *int64 `json:"settled_at,omitempty"`
+	RedeemFeeMloki int64  `json:"redeem_fee_mloki,omitempty"`
 }
 
 // CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has
