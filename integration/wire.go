@@ -189,6 +189,12 @@ type RecipientStatus struct {
 
 type CashStatusResult struct {
 	Recipients []RecipientStatus `json:"recipients"`
+	// Error/RetainedUntil carry the spent-bill tombstone instead of a roster:
+	// a bill this hub has destroyed, still inside its retention window,
+	// answers {"error":"spent","retained_until":<unix>} rather than falling
+	// silent (NIP-CASH §Cash Status). Both are absent on a roster response.
+	Error         string `json:"error,omitempty"`
+	RetainedUntil *int64 `json:"retained_until,omitempty"`
 }
 
 // --- create_circle_wallet ---
