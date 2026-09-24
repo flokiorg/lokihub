@@ -1560,7 +1560,11 @@ export const CashHubAllocations = React.forwardRef<
                           // that used to sit here implied there was still a
                           // token to reveal. Its own pubkey is what an
                           // operator correlates with logs, and is the only
-                          // identifier an archived row carries.
+                          // identifier an archived row carries — shown as an
+                          // npub, never raw hex, and never as a lokicash1...
+                          // token: deriving one for a deleted wallet is
+                          // forbidden precisely because it would look
+                          // spendable.
                           <button
                             type="button"
                             className="block max-w-full truncate rounded font-mono text-sm text-muted-foreground hover:underline"
@@ -1571,7 +1575,9 @@ export const CashHubAllocations = React.forwardRef<
                             }}
                           >
                             {shortenMiddle(
-                              group.claims[0].wallet_pubkey ?? "",
+                              safeNpubEncode(
+                                group.claims[0].wallet_pubkey ?? ""
+                              ) ?? (group.claims[0].wallet_pubkey ?? ""),
                               10,
                               6
                             )}
@@ -1747,9 +1753,19 @@ export const CashHubAllocations = React.forwardRef<
                           }
                           className={cn(
                             "text-muted-foreground hover:text-destructive",
-                            !isMulti && !canRemoveSingle && "invisible"
+                            (group.archived ||
+                              (!isMulti && !canRemoveSingle)) &&
+                              "invisible"
                           )}
-                          disabled={!isMulti && !canRemoveSingle}
+                          // group.archived is checked on its own, ahead of
+                          // the single-row rule: canRemoveSingle only ever
+                          // governs a one-claim group, so a MULTI archived
+                          // group fell through both halves of the old
+                          // expression and kept a live delete pointed at a
+                          // wallet row that no longer exists.
+                          disabled={
+                            group.archived || (!isMulti && !canRemoveSingle)
+                          }
                           onClick={(e) => {
                             e.stopPropagation();
                             if (isMulti) {
