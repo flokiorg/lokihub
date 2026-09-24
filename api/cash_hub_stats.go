@@ -27,7 +27,58 @@ func (api *api) GetCashHubStats(appID uint) (*CashHubStatsResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cashHubStatsResponse(stats), nil
+	resp := cashHubStatsResponse(stats)
+	if err := api.fillCashBacking(resp, &appID); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// fillCashBacking computes what the issued bills actually hold, and whether
+// any individual bill is underfunded. hubID nil means every cash hub.
+//
+// Per bill, deliberately. The whole point is that an aggregate cannot answer
+// it: a hub sitting on a large unminted balance would hide one bill whose own
+// ledger had fallen below its unclaimed slices, which is the exact failure a
+// solvency reading exists to catch. Only deficits are summed, so a bill
+// holding more than it owes never offsets one holding less.
+func (api *api) fillCashBacking(resp *CashHubStatsResponse, hubID *uint) error {
+	type billRow struct {
+		AppID          uint
+		UnclaimedMloki int64
+	}
+	var bills []billRow
+	q := api.db.Table("apps a").
+		Select("a.id AS app_id, COALESCE(SUM(CASE WHEN c.claimed_at IS NULL THEN c.amount_mloki ELSE 0 END), 0) AS unclaimed_mloki").
+		Joins("LEFT JOIN cash_wallet_claims c ON c.wallet_app_id = a.id").
+		Where("a.parent_kind = ? AND a.kind = ?", db.ParentKindCash, db.AppKindCashWallet).
+		Group("a.id")
+	if hubID != nil {
+		q = q.Where("a.parent_app_id = ?", *hubID)
+	}
+	if err := q.Scan(&bills).Error; err != nil {
+		return fmt.Errorf("failed to list live cash bills: %w", err)
+	}
+	if len(bills) == 0 {
+		return nil
+	}
+
+	ids := make([]uint, 0, len(bills))
+	for _, b := range bills {
+		ids = append(ids, b.AppID)
+	}
+	balances, err := queries.GetIsolatedBalancesByAppIDs(api.db, ids)
+	if err != nil {
+		return fmt.Errorf("failed to total cash bill balances: %w", err)
+	}
+	for _, b := range bills {
+		balance := balances[b.AppID]
+		resp.BackingMloki += balance
+		if short := b.UnclaimedMloki - balance; short > 0 {
+			resp.ShortfallMloki += short
+		}
+	}
+	return nil
 }
 
 // GetAllCashHubStats totals every cash_hub on the node, for the Cash Hubs
@@ -43,6 +94,9 @@ func (api *api) GetAllCashHubStats() (*CashHubStatsResponse, error) {
 		return nil, err
 	}
 	resp := cashHubStatsResponse(stats)
+	if err := api.fillCashBacking(resp, nil); err != nil {
+		return nil, err
+	}
 
 	// The hub count and their combined balance are filled here rather than in
 	// the apps service, because the canonical balance arithmetic lives in

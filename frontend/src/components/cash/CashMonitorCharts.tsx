@@ -42,34 +42,45 @@ const BUCKET_COLOR: Record<CashExpiryBucketKey, string> = {
 };
 
 // CashCoverage answers the one question that can actually hurt an operator:
-// is there enough on hand to honour what has been promised?
+// is every issued bill actually funded?
 //
-// Balance and outstanding were already both on the page, as two tiles several
-// inches apart, leaving the subtraction to the reader. A hub whose liability
-// has quietly grown past its balance cannot redeem every bill it issued, and
-// that should be visible without arithmetic.
+// It used to compare the hub's own balance against what was outstanding, and
+// that was wrong in both directions. Minting is not bookkeeping inside the
+// hub — cashwallet.Commit does a real internal transfer — so backing money
+// leaves the hub's ledger the instant a bill is minted and lives in that
+// bill's own app row. A hub that has minted its whole balance is perfectly
+// solvent with a hub balance of zero, and the old comparison reported that
+// healthy end state as "Short — cannot cover every bill". Worse, because it
+// only ever read aggregates, a large unminted balance could mask one bill
+// whose own ledger had fallen below its unclaimed slices — false assurance on
+// exactly the failure this card exists to catch.
+//
+// So it now compares backing (what the bills themselves hold) against
+// outstanding (what those bills owe), which are the same pool of money, and
+// reports shortfall computed per bill with only deficits summed. Unminted
+// capacity is shown alongside as what it is: room to issue more, not cover.
 export function CashCoverage({
-  balanceMloki,
+  backingMloki,
   outstandingMloki,
+  shortfallMloki,
+  capacityMloki,
   className,
 }: {
-  className?: string;
-  // Passed explicitly rather than read off CashHubStats: the node-wide
-  // response carries a balance, a single hub's does not (it already has one
-  // on its App row). Taking both as arguments lets the same card serve the
-  // Cash Hubs list and one hub's dashboard without either page pretending to
-  // be the other.
-  balanceMloki: number;
+  backingMloki: number;
   outstandingMloki: number;
+  shortfallMloki: number;
+  // The hub's own balance: what is left to mint against. Complementary to
+  // the pair above, never compared with them.
+  capacityMloki: number;
+  className?: string;
 }) {
   const { t } = useTranslation("circles");
 
   const owed = outstandingMloki;
-  const balance = balanceMloki;
-  // Nothing owed is full coverage, not a division by zero.
-  const ratio = owed > 0 ? balance / owed : null;
-  const covered = owed > 0 ? Math.min(balance / owed, 1) : 1;
-  const short = owed > balance;
+  const short = shortfallMloki > 0;
+  // Nothing owed is fully funded, not a division by zero.
+  const ratio = owed > 0 ? backingMloki / owed : null;
+  const funded = owed > 0 ? Math.min(backingMloki / owed, 1) : 1;
 
   return (
     <ChartCard
@@ -92,21 +103,17 @@ export function CashCoverage({
         </span>
       }
     >
-      {/* A single proportional bar rather than a chart: there is one
-          comparison to make and a plot would dress it up without adding
-          anything. The shortfall is drawn in the urgent colour so it reads
-          as a problem, not as a second neutral category. */}
       <div className="bg-muted h-3 w-full overflow-hidden rounded-full">
         <div
           className="h-full rounded-full transition-[width] duration-500"
           style={{
-            width: `${covered * 100}%`,
+            width: `${funded * 100}%`,
             background: short ? SERIES.urgent : SERIES.covered,
           }}
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-4">
+      <div className="mt-3 grid grid-cols-3 gap-4">
         <div className="min-w-0">
           <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
             <span
@@ -114,10 +121,10 @@ export function CashCoverage({
               className="size-2 shrink-0 rounded-[2px]"
               style={{ background: short ? SERIES.urgent : SERIES.covered }}
             />
-            {t("cashCharts.coverageBalance")}
+            {t("cashCharts.coverageBacking")}
           </p>
           <p className="balance sensitive font-semibold tabular-nums">
-            <FormattedFlokicoinAmount amount={balance} />
+            <FormattedFlokicoinAmount amount={backingMloki} />
           </p>
         </div>
         <div className="min-w-0">
@@ -133,7 +140,26 @@ export function CashCoverage({
             <FormattedFlokicoinAmount amount={owed} />
           </p>
         </div>
+        <div className="min-w-0">
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{ background: SERIES.muted }}
+            />
+            {t("cashCharts.coverageCapacity")}
+          </p>
+          <p className="balance sensitive font-semibold tabular-nums">
+            <FormattedFlokicoinAmount amount={capacityMloki} />
+          </p>
+        </div>
       </div>
+
+      {short && (
+        <p className="text-destructive mt-3 text-xs">
+          {t("cashCharts.coverageShortDetail")}
+        </p>
+      )}
     </ChartCard>
   );
 }

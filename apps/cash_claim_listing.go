@@ -130,7 +130,8 @@ SELECT
   s.outcome,
   s.payment_hash, s.preimage, s.redeem_fee_mloki, s.routing_fee_mloki, s.settled_at
 FROM cash_bill_slice_archives s
-LEFT JOIN cash_bill_archives b ON b.wallet_app_id = s.wallet_app_id
+LEFT JOIN cash_bill_archives b
+       ON b.wallet_app_id = s.wallet_app_id AND b.hub_app_id = s.hub_app_id
 WHERE s.hub_app_id = ? AND s.outcome <> 'void'
 `
 

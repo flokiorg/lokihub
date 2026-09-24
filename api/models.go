@@ -578,6 +578,25 @@ type CashHubStatsResponse struct {
 
 	FeesEarnedMloki int64 `json:"fees_earned_mloki"`
 
+	// BackingMloki is what the issued bills themselves hold: the sum of every
+	// live cash_wallet's own isolated balance.
+	//
+	// This, not the hub's balance, is what OutstandingMloki is a claim on.
+	// Minting is not bookkeeping inside the hub — cashwallet.Commit does a
+	// real internal transfer, so the backing money physically leaves the
+	// hub's ledger and lives in the bill's own app row from that moment.
+	// A hub that has minted its whole balance is fully solvent with a hub
+	// balance of zero, and comparing those two figures reports the healthy
+	// end state of ordinary operation as a shortfall.
+	//
+	// ShortfallMloki is the figure that actually means insolvency: summed
+	// per bill, how much any individual bill's unclaimed slices exceed that
+	// same bill's own balance. Aggregates cannot show this — a large unminted
+	// balance would mask one underfunded bill — so it is computed per bill
+	// and only the deficits are summed.
+	BackingMloki   int64 `json:"backing_mloki"`
+	ShortfallMloki int64 `json:"shortfall_mloki"`
+
 	// HubsCount and BalanceMloki are the node-wide endpoint's own two
 	// figures and are zero on a single hub's response, which already has
 	// both on its own App row. Filled by GetAllCashHubStats rather than by

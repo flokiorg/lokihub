@@ -284,13 +284,34 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 	// Issued is keyed on when the slice was created, redeemed on when its
 	// payout settled, returned on when its bill was archived — each the moment
 	// the money actually moved, not when the row happened to be written.
-	// The union appears five times, so its arguments do too — built rather
-	// than written out, since the per-hub and node-wide variants take a
-	// different number of them.
+	// Issued, redeemed and split come off the union, keyed on the moment the
+	// money moved.
+	//
+	// Returned and written-off deliberately do NOT. Those two used to be read
+	// from the union gated on `claimed_at IS NOT NULL`, which can never match:
+	// DeriveSliceOutcome only ever assigns expired/reclaimed/written-off in
+	// the branch where ClaimedAt is nil — by construction, a slice that
+	// expired or was written off was never claimed, which is exactly what
+	// distinguishes it from redeemed/split. Both buckets were therefore
+	// structurally always zero, on every hub, forever, while the headline
+	// totals beside them were correct. On this node alone that silently hid
+	// 3,849 real slices.
+	//
+	// They are archive-only events by nature — value comes back when the bill
+	// is destroyed, not when a recipient acts — so they are read straight from
+	// the slice archive and keyed on archived_at, the moment the value
+	// actually returned. A LIVE slice showing status 'expired' has not
+	// returned anything yet: its window has passed but the sweep has not
+	// collected it, so it correctly contributes nothing here.
 	union := scope.union()
 	var args []any
-	for range 5 {
+	for range 3 {
 		args = append(args, scope.unionArgs(now)...)
+		args = append(args, since)
+	}
+	archivedWhere, archivedArgs := scope.hubPredicate("s.hub_app_id")
+	for range 2 {
+		args = append(args, archivedArgs...)
 		args = append(args, since)
 	}
 	if err := svc.db.Raw(`
@@ -300,14 +321,16 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 		SELECT settled_at, amount_mloki, 'redeemed'
 		FROM (`+union+`) u2 WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
 		UNION ALL
-		SELECT claimed_at, amount_mloki, 'returned'
-		FROM (`+union+`) u3 WHERE status IN ('expired','reclaimed') AND claimed_at IS NOT NULL AND claimed_at >= ?
-		UNION ALL
 		SELECT claimed_at, amount_mloki, 'split'
 		FROM (`+union+`) u4 WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
 		UNION ALL
-		SELECT claimed_at, amount_mloki, 'written-off'
-		FROM (`+union+`) u5 WHERE status = 'written-off' AND claimed_at IS NOT NULL AND claimed_at >= ?
+		SELECT s.archived_at, s.amount_mloki, 'returned'
+		FROM cash_bill_slice_archives s
+		WHERE `+archivedWhere+`s.outcome IN ('expired','reclaimed') AND s.archived_at >= ?
+		UNION ALL
+		SELECT s.archived_at, s.amount_mloki, 'written-off'
+		FROM cash_bill_slice_archives s
+		WHERE `+archivedWhere+`s.outcome = 'written-off' AND s.archived_at >= ?
 	`, args...).Scan(&events).Error; err != nil {
 		return fmt.Errorf("failed to read cash daily series for %s: %w", scope, err)
 	}

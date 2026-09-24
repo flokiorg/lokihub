@@ -82,17 +82,28 @@ func TestGetCashHubStats_DailySeriesSeparatesSplitAndWrittenOff(t *testing.T) {
 	hub := newCashHub(t, svc, 1_000_000, 3600)
 	day := now.AddDate(0, 0, -1)
 
+	// ClaimedAt is set ONLY on the split row, and that is load-bearing rather
+	// than incidental. DeriveSliceOutcome assigns written-off and expired
+	// exclusively in its ClaimedAt == nil branch — by construction a slice
+	// that expired or was written off was never claimed, which is what
+	// distinguishes it from redeemed/split.
+	//
+	// This fixture previously set ClaimedAt on all three, a state production
+	// cannot produce, and it was the only reason the assertions below passed:
+	// the daily series read those two buckets through a `claimed_at IS NOT
+	// NULL` filter that never matched real rows, so both were structurally
+	// zero on every hub while this test reported them working. Keep the
+	// fixture honest and the test keeps its meaning.
 	for _, a := range []db.CashBillSliceArchive{
-		{AmountMloki: 4000, Outcome: db.CashSliceStatusSplit, CreatedAt: day, ClaimedAt: &day},
-		{AmountMloki: 1500, Outcome: db.CashSliceStatusWrittenOff, CreatedAt: day, ClaimedAt: &day},
-		{AmountMloki: 900, Outcome: db.CashSliceStatusExpired, CreatedAt: day, ClaimedAt: &day},
+		{AmountMloki: 4000, Outcome: db.CashSliceStatusSplit, CreatedAt: day, ClaimedAt: &day, ArchivedAt: now},
+		{AmountMloki: 1500, Outcome: db.CashSliceStatusWrittenOff, CreatedAt: day, ArchivedAt: day},
+		{AmountMloki: 900, Outcome: db.CashSliceStatusExpired, CreatedAt: day, ArchivedAt: day},
 	} {
 		a.WalletAppID = 900_000 + uint(a.AmountMloki) //nolint:gosec // fixed positive test amounts
 		a.HubAppID = hub.ID
 		a.ClaimID = 1
 		a.IdentityType = db.CashIdentityPubkey
 		a.IdentityValue = randomHex32()
-		a.ArchivedAt = now
 		require.NoError(t, svc.DB.Create(&a).Error)
 	}
 
@@ -109,4 +120,10 @@ func TestGetCashHubStats_DailySeriesSeparatesSplitAndWrittenOff(t *testing.T) {
 	assert.EqualValues(t, 1500, point.WrittenOffMloki, "a write-off gets its own bucket")
 	assert.EqualValues(t, 900, point.ReturnedMloki,
 		"returned is expired/reclaimed only — write-offs are no longer folded in")
+
+	// The regression guard: these two are keyed on archived_at, the moment the
+	// value actually came back, and must be non-zero for a real (unclaimed)
+	// expired or written-off slice. Both were permanently zero before.
+	assert.NotZero(t, point.WrittenOffMloki, "a write-off must reach the series at all")
+	assert.NotZero(t, point.ReturnedMloki, "a return must reach the series at all")
 }
