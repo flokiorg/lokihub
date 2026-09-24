@@ -205,6 +205,13 @@ const MAX_FEES_PPM = PPM_DIVISOR
 // a legitimate "effectively never expires" request.
 const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
 
+// DEFAULT_CASH_SPENT_RETENTION_SECS is a new Cash Hub's default window for
+// answering cash_status about a bill it has already destroyed
+// (db.CashHubConfig.SpentRetentionSecs). 15 days is long enough to cover the
+// gap between a bill being spent and its holder next opening a wallet, without
+// the Hub answering for bills nobody is still asking about. 0 disables it.
+const DEFAULT_CASH_SPENT_RETENTION_SECS = 15 * 24 * 60 * 60
+
 // DefaultGeneralRelays seeds the "GeneralRelay" config key on first run.
 // These relays are used to fetch general Nostr social data — profiles,
 // notes, and events, including Circle contact lists (kind:0/kind:1/kind:3) —
