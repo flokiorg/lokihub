@@ -182,7 +182,7 @@ func TestRequestMethodToScope_CashHub(t *testing.T) {
 // cash_status (the read-only roster), since anyone allowed to attempt a claim
 // may reasonably see the roster first.
 //
-// Both names for the roster are advertised while list_recipients remains
+// Both names for the roster are advertised while cash_status remains
 // accepted on the wire, so a client that looks for the old one in get_info
 // keeps finding it.
 func TestScopeToRequestMethods_CashClaimFunds(t *testing.T) {
@@ -200,7 +200,7 @@ func TestRequestMethodToScope_ClaimFunds(t *testing.T) {
 	assert.Equal(t, constants.CASH_REDEEM_SCOPE, scope)
 }
 
-func TestRequestMethodToScope_ListRecipients(t *testing.T) {
+func TestRequestMethodToScope_CashStatus(t *testing.T) {
 	scope, err := RequestMethodToScope(constants.NIP47MethodListRecipients)
 	require.NoError(t, err)
 	assert.Equal(t, constants.CASH_REDEEM_SCOPE, scope)
@@ -210,7 +210,7 @@ func TestAllScopes_IncludesCashClaimFunds(t *testing.T) {
 	assert.Contains(t, AllScopes(), constants.CASH_REDEEM_SCOPE)
 }
 
-// GetPermittedMethods must include cash_redeem/list_recipients for a
+// GetPermittedMethods must include cash_redeem/cash_status for a
 // cash_wallet regardless of what the (mock) LN client's own
 // GetSupportedNIP47Methods() advertises — these are app-level abstractions
 // over pay_invoice, not real LN-backend methods, mirroring how

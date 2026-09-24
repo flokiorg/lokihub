@@ -5,7 +5,7 @@ package controllers
 // test plays out the exact scenario a well-behaved, spec-following recipient
 // client would follow:
 //
-//  1. Call list_recipients, read net_redeemable_millis for your own slice —
+//  1. Call cash_status, read net_redeemable_millis for your own slice —
 //     the value NIP-CASH explicitly tells a client to build its invoice from
 //     ("so a recipient always knows precisely what cash_redeem will pay out
 //     before they call it" — §The Redeem Fee).
@@ -48,7 +48,7 @@ import (
 // TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSameNode
 // is the concrete "did the spec's documented ceiling behavior turn into a
 // footgun" test the audit asked for. A recipient who did everything the spec
-// tells them to do — quote via list_recipients, build the invoice for the
+// tells them to do — quote via cash_status, build the invoice for the
 // quoted net_redeemable_millis — still gets a hard rejection when this
 // specific redemption happens to resolve same-node; this confirms the
 // rejection message now explains why.
@@ -78,20 +78,20 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	// 10% redeem fee: list_recipients will quote redeem_fee_millis=100,
+	// 10% redeem fee: cash_status will quote redeem_fee_millis=100,
 	// net_redeemable_millis=900 for this slice.
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000, RedeemFeePpm: 100_000},
 	}))
 
-	// Step 1: the recipient calls list_recipients, exactly as NIP-CASH's
+	// Step 1: the recipient calls cash_status, exactly as NIP-CASH's
 	// §The Redeem Fee tells them to, and reads their own net_redeemable_millis.
 	controller := NewTestNip47Controller(svc)
 	var listResp *models.Response
-	controller.HandleListRecipientsEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
+	controller.HandleCashStatusEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
 		func(r *models.Response, _ nostr.Tags) { listResp = r })
 	require.Nil(t, listResp.Error)
-	quoted := listResp.Result.(nipcash.ListRecipientsResult).Recipients[0]
+	quoted := listResp.Result.(nipcash.CashStatusResult).Recipients[0]
 	require.Equal(t, claimantPubkey, quoted.IdentityValue)
 	require.Equal(t, uint64(900), quoted.NetRedeemableMillis, "sanity: this is the exact figure a spec-following client would build its invoice from")
 
@@ -102,7 +102,7 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
 	response := handleClaimFundsFor(t, svc, controller, wallet, nipcash.CashRedeemRequest{
 		Invoice:       tests.MockZeroAmountInvoice,
-		Amount:        ptrUint64(uint64(quoted.NetRedeemableMillis)), //nolint:gosec // test-controlled positive value — exactly what list_recipients quoted
+		Amount:        ptrUint64(uint64(quoted.NetRedeemableMillis)), //nolint:gosec // test-controlled positive value — exactly what cash_status quoted
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: claimantPubkey,
 		IdentityEvent: mustMarshal(t, proof),
@@ -110,7 +110,7 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 
 	require.NotNil(t, response.Error, "a spec-following recipient's invoice, built for the exact quoted net_redeemable_millis, is REJECTED outright rather than paid out for more")
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
-	t.Logf("actual cash_redeem rejection a recipient sees after following list_recipients' own quote: %q", response.Error.Message)
+	t.Logf("actual cash_redeem rejection a recipient sees after following cash_status' own quote: %q", response.Error.Message)
 
 	// The message must now explain WHY the fee dropped to 0 this time (this
 	// redemption resolves same-node) and what to do about it (present the

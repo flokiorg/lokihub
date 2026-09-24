@@ -151,7 +151,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		child := mustConnect(t, result.PairingURI)
 
-		var recipients ListRecipientsResult
+		var recipients CashStatusResult
 		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 2, "one shared connection must show both recipients' slices")
 

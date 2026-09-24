@@ -3,7 +3,7 @@
 // cash_redeem_fee_test.go covers the Cash Hub redeem fee (NIP-CASH.md §The
 // Redeem Fee) end to end, over real NWC/Nostr, against a real running
 // instance: a Hub-configured redeem_fee_ppm is quoted upfront via
-// list_recipients, and cash_redeem's own same-node exemption (transactions.
+// cash_status, and cash_redeem's own same-node exemption (transactions.
 // IsSelfPayment) waives the fee entirely for a redemption that resolves to a
 // payment this same node is both sending and receiving — every redemption
 // this test suite's mintInvoiceFromSimpleWallet helper can produce, since it
@@ -19,7 +19,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 )
 
-func TestCashRedeemFee_SameNodeExemptAndListRecipientsQuote(t *testing.T) {
+func TestCashRedeemFee_SameNodeExemptAndCashStatusQuote(t *testing.T) {
 	cfg := requireConfig(t)
 	admin, ok := newAdminClient(cfg)
 	if !ok {
@@ -70,14 +70,14 @@ func TestCashRedeemFee_SameNodeExemptAndListRecipientsQuote(t *testing.T) {
 	}, &created))
 	shared := mustConnect(t, created.PairingURI)
 
-	t.Run("ListRecipients_QuotesWorstCaseFee", func(t *testing.T) {
-		var recipients ListRecipientsResult
+	t.Run("CashStatus_QuotesWorstCaseFee", func(t *testing.T) {
+		var recipients CashStatusResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 1)
 		r := recipients.Recipients[0]
 
 		wantFee := int64(happyPathAmountMloki) * redeemFeePpm / 1_000_000
-		require.EqualValues(t, wantFee, r.RedeemFeeMillis, "list_recipients must quote this slice's own redeem_fee_ppm cut")
+		require.EqualValues(t, wantFee, r.RedeemFeeMillis, "cash_status must quote this slice's own redeem_fee_ppm cut")
 		require.EqualValues(t, happyPathAmountMloki-wantFee, r.NetRedeemableMillis)
 	})
 

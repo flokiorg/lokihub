@@ -63,7 +63,7 @@ import (
 // redeem_fee_ppm that would keep a hub operator away from this boundary.
 // A slice minted at or beyond it gets a silently WRONG (wrapped, not
 // saturated or rejected) quoted fee from both cash_redeem's own
-// authorization check (step 9) and list_recipients' displayed quote —
+// authorization check (step 9) and cash_status' displayed quote —
 // the same corrupted value on both call sites, since both call this exact
 // function, so the two stay internally consistent with each other, but both
 // diverge from the operator's actual configured rate.

@@ -152,7 +152,7 @@ func scopeToRequestMethods(scope string) []string {
 		return []string{constants.NIP47MethodCreateCircleWallet}
 	case constants.CASH_REDEEM_SCOPE:
 		// Both names are advertised for the deprecation window: the wire
-		// still accepts list_recipients, so a client that looks for it in
+		// still accepts cash_status, so a client that looks for it in
 		// get_info must keep finding it. Drop the old one when the alias goes.
 		return []string{
 			constants.NIP47MethodCashRedeem,

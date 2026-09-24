@@ -232,7 +232,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	// 8. Atomically claim the slice — guards the actual payout against races
 	// and replays. RowsAffected==0 here means a concurrent redeem/transfer won
 	// since step 5's lookup. Reported with a distinct message from step 5's
-	// "never existed" case — list_recipients already discloses claimed/
+	// "never existed" case — cash_status already discloses claimed/
 	// claimed_at to any holder of this shared connection, so naming "already
 	// redeemed" here protects nothing that isn't already visible one method
 	// over, while sparing a legitimate recipient who was in fact paid from
@@ -252,7 +252,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	// SendPaymentSync itself evaluates moments later — lets the recipient's
 	// invoice be checked against the RIGHT expected amount before payment is
 	// even attempted, rather than discovering after the fact that they built
-	// it for the wrong one. See list_recipients (redeem_fee_millis/
+	// it for the wrong one. See cash_status (redeem_fee_millis/
 	// net_redeemable_millis) for the quote a client should build this invoice
 	// from in the first place.
 	resolvedAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
@@ -270,7 +270,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after amount mismatch")
 		}
 		// The generic message below is correct on its own, but a recipient
-		// who followed list_recipients' own advice (build the invoice for
+		// who followed cash_status' own advice (build the invoice for
 		// net_redeemable_millis, the WORST-CASE quote) and presented exactly
 		// that fee-reduced amount, only to have this specific redemption
 		// resolve same-node (fee-free, full amount required), would read

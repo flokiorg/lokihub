@@ -244,4 +244,11 @@ require (
 
 // We want to format raw bytes as hex instead of base64. The forked version
 // allows us to specify that as an option.
+// TEMPORARY, REMOVE BEFORE TAGGING A RELEASE. Develops the cash_status rename
+// and the spent-bill tombstone against a local nmilat worktree. The path is
+// relative and inside this tree on purpose: the dev backend container mounts
+// only `.:/app`, so a replace pointing outside it would build on the host and
+// fail in the container.
+replace github.com/ohstr/nmilat => ./.claude/worktrees/nmilat-cash-status
+
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display

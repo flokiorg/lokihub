@@ -142,6 +142,6 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 	assert.Equal(t, constants.ERROR_NOT_FOUND, retry.Error.Code)
 	assert.Contains(t, retry.Error.Message, "split off into a new dedicated wallet",
 		"the failure message must give a forwarding hint toward the new wallet the value actually moved to")
-	assert.Contains(t, retry.Error.Message, "list_recipients")
+	assert.Contains(t, retry.Error.Message, "cash_status")
 	t.Logf("legacy client's follow-up call failed with: %q (breadcrumb present)", retry.Error.Message)
 }

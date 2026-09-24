@@ -20,9 +20,9 @@ import (
 // TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary:
 // event_handler_test.go
 // already proves (TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired /
-// ...ListRecipients_RejectedWhenWalletExpired) that permissions.HasPermission
+// ...CashStatus_RejectedWhenWalletExpired) that permissions.HasPermission
 // CORRECTLY fires constants.ERROR_EXPIRED for every method a cash_wallet
-// grants (cash_redeem, cash_transfer, cash_consolidate, list_recipients, and
+// grants (cash_redeem, cash_transfer, cash_consolidate, cash_status, and
 // get_balance) once the wallet's own AppPermission.ExpiresAt has passed —
 // well BEFORE service.runCashCleanup's periodic sweep actually deletes the
 // row (see cash_audit_ux_unknown_app_silent_drop_test.go's own doc comment

@@ -170,7 +170,7 @@ type CashConsolidateResult struct {
 	ExpiresAt       int64  `json:"expires_at,omitempty"`
 }
 
-// --- list_recipients ---
+// --- cash_status ---
 
 type RecipientStatus struct {
 	IdentityType  string `json:"identity_type"`
@@ -187,7 +187,7 @@ type RecipientStatus struct {
 	ExpiresAt           *int64 `json:"expires_at,omitempty"`
 }
 
-type ListRecipientsResult struct {
+type CashStatusResult struct {
 	Recipients []RecipientStatus `json:"recipients"`
 }
 

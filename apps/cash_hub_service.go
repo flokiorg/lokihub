@@ -146,7 +146,7 @@ func (svc *appsService) CreateCashWalletClaimsTx(tx *gorm.DB, walletAppID uint, 
 }
 
 // ListClaimsForWallet returns every recipient slice of a single cash_wallet,
-// claimed or not — the roster list_recipients exposes.
+// claimed or not — the roster cash_status exposes.
 func (svc *appsService) ListClaimsForWallet(walletAppID uint) ([]db.CashWalletClaim, error) {
 	var claims []db.CashWalletClaim
 	err := svc.db.Where("wallet_app_id = ?", walletAppID).Order("created_at asc").Find(&claims).Error

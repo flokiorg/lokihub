@@ -15,11 +15,11 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller
+// TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller
 // confirms the deliberately shared/transparent model: any holder of the
 // connection sees the FULL roster, not just their own row — matching the
 // model already accepted for get_balance.
-func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t *testing.T) {
+func TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -38,12 +38,12 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(nipcash.ListRecipientsResult)
+	result := response.Result.(nipcash.CashStatusResult)
 	require.Len(t, result.Recipients, 2)
 
 	byIdentity := map[string]nipcash.RecipientStatus{}
@@ -58,7 +58,7 @@ func TestHandleListRecipientsEvent_HappyPath_ShowsAllRecipientsRegardlessOfCalle
 	assert.Equal(t, uint64(2000), byIdentity[pkUnclaimed].AmountMillis)
 }
 
-func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {
+func TestHandleCashStatusEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -67,7 +67,7 @@ func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, hub, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, hub, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 
@@ -75,7 +75,7 @@ func TestHandleListRecipientsEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
 }
 
-func TestHandleListRecipientsEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
+func TestHandleCashStatusEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -85,11 +85,11 @@ func TestHandleListRecipientsEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 
 	require.Nil(t, response.Error)
-	result := response.Result.(nipcash.ListRecipientsResult)
+	result := response.Result.(nipcash.CashStatusResult)
 	assert.Empty(t, result.Recipients)
 }

@@ -11,13 +11,13 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 )
 
-// TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt is the live-node
+// TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt is the live-node
 // counterpart to the unit-level fix
-// (TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt):
-// list_recipients now carries both a slice's min_transfer_millis floor and the
+// (TestHandleCashStatusEvent_SurfacesMinTransferMlokiAndExpiresAt):
+// cash_status now carries both a slice's min_transfer_millis floor and the
 // shared wallet's own expires_at deadline, over the real wire, not just in
 // the Go struct.
-func TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
+func TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 	cfg := requireConfig(t)
 	admin, ok := newAdminClient(cfg)
 	if !ok {
@@ -69,7 +69,7 @@ func TestListRecipients_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 
 	shared := mustConnect(t, created.PairingURI)
 
-	var recipients ListRecipientsResult
+	var recipients CashStatusResult
 	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
 	require.Len(t, recipients.Recipients, 1)
 	recipient := recipients.Recipients[0]

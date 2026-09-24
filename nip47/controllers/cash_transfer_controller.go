@@ -91,7 +91,7 @@ type cashTransferResponse struct {
 	// split path (see NewWalletPubkey/NewWalletToken below): 0 for a full
 	// split, >0 for a partial one — so the caller's own client can update
 	// its cached view of what's left on THIS connection without a separate
-	// list_recipients round-trip. Never populated for an in-place
+	// cash_status round-trip. Never populated for an in-place
 	// reassignment (nothing was carved off; the whole slice just changed
 	// hands, still for its original, unchanged amount).
 	RemainingAmountMillis *uint64 `json:"remaining_amount_millis,omitempty"`
@@ -163,7 +163,7 @@ func (controller *nip47Controller) noSliceRegisteredMessage(walletAppID uint, id
 		return generic
 	}
 	return generic + " — its value was already split off into a new dedicated wallet by an earlier call; " +
-		"check list_recipients or that earlier call's own response for the new connection, this one no longer holds it"
+		"check cash_status or that earlier call's own response for the new connection, this one no longer holds it"
 }
 
 func newIdentityHash(identityType, identityValue, iaPubkey string) string {
