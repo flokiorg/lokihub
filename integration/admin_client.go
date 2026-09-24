@@ -287,6 +287,12 @@ type adminCreateAppRequest struct {
 	// CashRedeemFeePpm is optional (0 = free - also its zero-value default
 	// when omitted here) - see apps.CreateCashHub, NIP-CASH.md §The Redeem Fee.
 	CashRedeemFeePpm int `json:"cashRedeemFeePpm,omitempty"`
+	// CashSpentRetentionSecs is how long the hub keeps answering cash_status
+	// about a bill it has destroyed. A pointer because 0 is meaningful
+	// ("answer nothing, fall silent the moment the bill is gone") and has to
+	// stay distinguishable from the field being omitted, which means the
+	// server's own default - see api.CreateAppRequest's own field.
+	CashSpentRetentionSecs *int `json:"cashSpentRetentionSecs,omitempty"`
 	// The remaining fields configure a new circle_hub (Kind == "circle_hub")
 	// and its brand-new CircleIdentity - see apps.CreateCircleHub and
 	// apps.CircleIdentityRef. CircleIdentityName/CirclePolicy/ProviderPubkey
