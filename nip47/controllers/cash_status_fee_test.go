@@ -1,6 +1,6 @@
 package controllers
 
-// Test coverage for list_recipients' new redeem_fee_millis/net_redeemable_millis
+// Test coverage for cash_status' new redeem_fee_millis/net_redeemable_millis
 // fields (NIP-CASH.md §Listing Recipients) — the quote a recipient uses to
 // know exactly what cash_redeem will pay out before calling it.
 
@@ -19,7 +19,7 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-func TestHandleListRecipientsEvent_RedeemFeeQuoteFields(t *testing.T) {
+func TestHandleCashStatusEvent_RedeemFeeQuoteFields(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -38,12 +38,12 @@ func TestHandleListRecipientsEvent_RedeemFeeQuoteFields(t *testing.T) {
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(nipcash.ListRecipientsResult)
+	result, ok := response.Result.(nipcash.CashStatusResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 2)
 
@@ -63,13 +63,13 @@ func TestHandleListRecipientsEvent_RedeemFeeQuoteFields(t *testing.T) {
 	assert.Equal(t, uint64(3000), r2.NetRedeemableMillis)
 }
 
-// TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling proves the
+// TestHandleCashStatusEvent_RedeemFeeQuote_IsWorstCaseCeiling proves the
 // documented "ceiling, never a floor" property: the quote reflects the
 // EXTERNAL-case fee even though this exact wallet/claim, once actually
 // redeemed, might resolve to a fee-free same-node payment instead — list_
 // recipients has no invoice to check that in advance (NIP-CASH.md §Listing
 // Recipients), so it always quotes the worst case.
-func TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.T) {
+func TestHandleCashStatusEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -84,12 +84,12 @@ func TestHandleListRecipientsEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.Nil(t, response.Error)
 
-	result := response.Result.(nipcash.ListRecipientsResult)
+	result := response.Result.(nipcash.CashStatusResult)
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(250), result.Recipients[0].RedeemFeeMillis)
 	assert.Equal(t, uint64(750), result.Recipients[0].NetRedeemableMillis)

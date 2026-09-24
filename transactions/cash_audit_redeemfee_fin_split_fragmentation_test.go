@@ -60,7 +60,7 @@ import (
 // TestCashAuditRedeemFeeFin_SplitFragmentation_ZeroesFeeMath is a pure,
 // DB-free proof of the arithmetic underlying the finding above, exercised
 // directly against CalculateFeeSkimMloki — the exact function
-// cash_redeem_controller.go step 9 and list_recipients_controller.go both
+// cash_redeem_controller.go step 9 and cash_status_controller.go both
 // call.
 func TestCashAuditRedeemFeeFin_SplitFragmentation_ZeroesFeeMath(t *testing.T) {
 	const ppm = 100_000 // 10% — a plausible real redeem_fee_ppm

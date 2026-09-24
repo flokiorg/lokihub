@@ -110,7 +110,7 @@ type AppsService interface {
 	// compensating delete needed for this part of wallet creation.
 	CreateCashWalletClaimsTx(tx *gorm.DB, walletAppID uint, entries []db.CashWalletClaim) error
 	// ListClaimsForWallet returns every recipient slice (claimed or not) of a
-	// single cash_wallet app — the roster the list_recipients NIP-47 method
+	// single cash_wallet app — the roster the cash_status NIP-47 method
 	// exposes. Ordered by created_at asc.
 	ListClaimsForWallet(walletAppID uint) ([]db.CashWalletClaim, error)
 	// ListCashHubWalletChildren returns every cash_wallet app that is a child of
@@ -133,7 +133,7 @@ type AppsService interface {
 	// needs the row's IAPubkey for connection_key mode) BEFORE attempting the
 	// atomic claim — so an invalid/unverifiable proof never touches the atomic
 	// slot at all, which would otherwise let anyone who merely knows a
-	// recipient's identity_value (exposed via list_recipients) briefly grief a
+	// recipient's identity_value (exposed via cash_status) briefly grief a
 	// legitimate concurrent claimer without ever proving ownership. Returns
 	// nil, nil if no unclaimed row matches.
 	GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error)

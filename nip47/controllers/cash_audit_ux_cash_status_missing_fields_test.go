@@ -17,8 +17,8 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt:
-// `list_recipients` — the ONLY NIP-47 method a recipient can call
+// TestHandleCashStatusEvent_SurfacesMinTransferMlokiAndExpiresAt:
+// `cash_status` — the ONLY NIP-47 method a recipient can call
 // to introspect their own slice's state over the shared cash_wallet
 // connection — now surfaces both pieces of state NIP-CASH says a recipient
 // needs to act correctly, which it used to omit entirely:
@@ -35,7 +35,7 @@ import (
 //     recipient could lock out every other co-recipient sharing this wallet).
 //  2. the wallet's own expiry (ExpiresAt) — a recipient used to have no
 //     protocol-level way to learn when their lokicash stops being
-//     redeemable. Neither list_recipients nor the lokicash1... token itself
+//     redeemable. Neither cash_status nor the lokicash1... token itself
 //     (lokicash/lokicash.go TLV types 0-3: wallet pubkey, relay, secret,
 //     identity_required — no expiry field) carries it. NIP-CASH's own
 //     §Lifecycle and Deletion promises an expiry-driven sweep, but nowhere
@@ -47,9 +47,9 @@ import (
 // OWNER via the admin HTTP API (api.CashWalletClaimResponse carries both) and
 // rendered in the owner-facing frontend (CashHubAllocations.tsx's deadline
 // column, RevealConnectionDialog's "Expires" row) — this test only concerns
-// the actual RECIPIENT-facing protocol surface, list_recipients, which was
+// the actual RECIPIENT-facing protocol surface, cash_status, which was
 // the one place this state was still invisible.
-func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
+func TestHandleCashStatusEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -72,12 +72,12 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(nipcash.ListRecipientsResult)
+	result, ok := response.Result.(nipcash.CashStatusResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 1)
 	recipient := result.Recipients[0]
@@ -95,15 +95,15 @@ func TestHandleListRecipientsEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testi
 	assert.Contains(t, rawStr, `"min_transfer_millis":500`)
 	assert.Contains(t, rawStr, `"expires_at":`)
 
-	t.Logf("actual list_recipients wire response: %s", rawStr)
+	t.Logf("actual cash_status wire response: %s", rawStr)
 }
 
-// TestHandleListRecipientsEvent_ExpiresAtOmittedForNeverExpiringWallet proves
+// TestHandleCashStatusEvent_ExpiresAtOmittedForNeverExpiringWallet proves
 // the "never expires" ceiling (db.App.ExpiresAt == nil) round-trips as an
 // OMITTED field, not a zero/null timestamp that could be misread as "already
 // expired" — the same nil-safe convention every other cash_wallet-adjacent
 // response already uses (mint_cash_controller.go's own ExpiresAt field).
-func TestHandleListRecipientsEvent_ExpiresAtOmittedForNeverExpiringWallet(t *testing.T) {
+func TestHandleCashStatusEvent_ExpiresAtOmittedForNeverExpiringWallet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -119,12 +119,12 @@ func TestHandleListRecipientsEvent_ExpiresAtOmittedForNeverExpiringWallet(t *tes
 
 	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
 	var response *models.Response
-	NewTestNip47Controller(svc).HandleListRecipientsEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
+	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.Nil(t, response.Error)
 
-	result, ok := response.Result.(nipcash.ListRecipientsResult)
+	result, ok := response.Result.(nipcash.CashStatusResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 1)
 	assert.Nil(t, result.Recipients[0].ExpiresAt)

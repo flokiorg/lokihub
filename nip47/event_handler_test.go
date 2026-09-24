@@ -777,10 +777,10 @@ func TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.
 	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
 }
 
-// TestHandleEvent_CashWallet_ListRecipients_RejectedWhenWalletExpired covers
+// TestHandleEvent_CashWallet_CashStatus_RejectedWhenWalletExpired covers
 // the read-only sibling method under the same cash_redeem scope —
 // expiry must block roster visibility too, not just the payout call.
-func TestHandleEvent_CashWallet_ListRecipients_RejectedWhenWalletExpired(t *testing.T) {
+func TestHandleEvent_CashWallet_CashStatus_RejectedWhenWalletExpired(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()

@@ -25,7 +25,7 @@ import (
 // (service.runCashCleanup, every 5 minutes — see
 // service/cash_cleanup_service.go) once its ExpiresAt has passed. In the
 // window between ExpiresAt and the sweep actually running, a recipient's
-// cash_redeem/cash_transfer/list_recipients call against that wallet
+// cash_redeem/cash_transfer/cash_status call against that wallet
 // correctly gets a clear, actionable constants.ERROR_EXPIRED ("This app has
 // expired") — see permissions.HasPermission and
 // TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired in

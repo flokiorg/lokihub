@@ -123,10 +123,10 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		require.NotEmpty(t, redeemResult.Preimage)
 	})
 
-	// ListRecipients exercises the one migrated method the rest of this file
+	// CashStatus exercises the one migrated method the rest of this file
 	// never calls at all — a multi-recipient roster read, through nmilat's
 	// real client.
-	t.Run("ListRecipients", func(t *testing.T) {
+	t.Run("CashStatus", func(t *testing.T) {
 		pubA := mustPubkey(t, newTestPrivkey(t))
 		pubB := mustPubkey(t, newTestPrivkey(t))
 
@@ -143,7 +143,7 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
-		roster, err := wallet.ListRecipients(ctxT(t))
+		roster, err := wallet.CashStatus(ctxT(t))
 		require.NoError(t, err)
 		require.Len(t, roster.Recipients, 2)
 		for _, r := range roster.Recipients {

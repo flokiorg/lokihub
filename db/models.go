@@ -220,7 +220,7 @@ type CashWalletClaim struct {
 	// AppsService.SplitCashSliceAmount. Purely informational: every atomic
 	// guard elsewhere already treats ClaimedAt != nil as terminal regardless
 	// of which mechanism set it, so this column is never read by any guard,
-	// only by callers (e.g. list_recipients) that want to explain *why* a
+	// only by callers (e.g. cash_status) that want to explain *why* a
 	// slice is claimed with no matching payment record.
 	SpunOffToWalletAppID *uint
 	// The payout facts for a slice redeemed over Lightning, recorded here at

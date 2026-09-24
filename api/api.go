@@ -3346,7 +3346,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 }
 
 // GetCashWalletRecipients returns every recipient slice of a single
-// cash_wallet, claimed or not — the admin-API counterpart of list_recipients
+// cash_wallet, claimed or not — the admin-API counterpart of cash_status
 // (which is scoped to whoever holds the wallet's NWC connection), used by a
 // cash_wallet's own AppDetails page. A wallet can serve more than one
 // beneficiary now, so this can return more than one row.

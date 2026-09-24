@@ -13,8 +13,8 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// list_recipients' response is github.com/ohstr/nmilat/nipcash's own exported
-// ListRecipientsResult/RecipientStatus — same wire shape, adopted directly
+// cash_status' response is github.com/ohstr/nmilat/nipcash's own exported
+// CashStatusResult/RecipientStatus — same wire shape, adopted directly
 // instead of maintaining a parallel copy (nmilat migration). Two
 // accepted, tested differences from this controller's former local types:
 //   - RecipientStatus's numeric fields (AmountMillis, RedeemFeeMillis,
@@ -29,16 +29,16 @@ import (
 //     any reasonable JSON consumer treats an omitted optional field and an
 //     empty one identically.
 //
-// HandleListRecipientsEvent returns the full roster of a shared cash_wallet's
+// HandleCashStatusEvent returns the full roster of a shared cash_wallet's
 // recipients — identity, entitled amount, and claimed status only. This is
 // deliberately a transparent, shared-view method (any holder of the
 // connection sees every recipient's row, not just their own) rather than a
 // caller-scoped one, matching the model already accepted for get_balance —
 // but it never includes invoice/preimage/payment detail, since a cash_wallet
 // carries no list_transactions grant at all.
-func (controller *nip47Controller) HandleListRecipientsEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
+func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
 	if app.Kind != db.AppKindCashWallet {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "list_recipients requires a cash_wallet app")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_status requires a cash_wallet app")
 		return
 	}
 
@@ -77,6 +77,6 @@ func (controller *nip47Controller) HandleListRecipientsEvent(ctx context.Context
 
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result:     nipcash.ListRecipientsResult{Recipients: recipients},
+		Result:     nipcash.CashStatusResult{Recipients: recipients},
 	}, nostr.Tags{})
 }

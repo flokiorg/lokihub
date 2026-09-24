@@ -81,7 +81,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &result0))
 		require.NotEmpty(t, result0.Preimage)
 
-		var recipientsAfter0 ListRecipientsResult
+		var recipientsAfter0 CashStatusResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipientsAfter0))
 		require.Len(t, recipientsAfter0.Recipients, 3)
 		for _, r := range recipientsAfter0.Recipients {
@@ -106,7 +106,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotEmpty(t, result1.Preimage)
 
 		// Recipient 2's slice must still be fully intact.
-		var recipientsAfter1 ListRecipientsResult
+		var recipientsAfter1 CashStatusResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipientsAfter1))
 		for _, r := range recipientsAfter1.Recipients {
 			if r.IdentityValue == recipients[2].pubkey {
@@ -261,7 +261,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
-	t.Run("ListRecipients_ShowsClaimedAndUnclaimedStatus", func(t *testing.T) {
+	t.Run("CashStatus_ShowsClaimedAndUnclaimedStatus", func(t *testing.T) {
 		claimedPriv := newTestPrivkey(t)
 		claimedPub, err := nostr.GetPublicKey(claimedPriv)
 		require.NoError(t, err)
@@ -278,7 +278,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &created))
 		shared := mustConnect(t, created.PairingURI)
 
-		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration list_recipients status test")
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash_status status test")
 		proof := buildClaimProofEvent(t, claimedPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
 		var claimResult ClaimFundsResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
@@ -288,7 +288,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent: eventJSON(t, proof),
 		}, &claimResult))
 
-		var recipients ListRecipientsResult
+		var recipients CashStatusResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 2)
 		for _, r := range recipients.Recipients {

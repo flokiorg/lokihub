@@ -114,7 +114,7 @@ const (
 	// Circle Wallet scope — grants create_circle_wallet on a circle_admin wallet
 	CIRCLE_WALLET_SCOPE = "circle_wallet"
 	// Cash Redeem scope — granted on cash_wallet children only. Covers
-	// cash_redeem (pay out a recipient's proven slice) and list_recipients
+	// cash_redeem (pay out a recipient's proven slice) and cash_status
 	// (read-only roster of a shared wallet's recipients/claim status).
 	// Deliberately does NOT cover pay_invoice/lookup_invoice/list_transactions:
 	// a cash_wallet's connection may be widely shared, so its method surface is
