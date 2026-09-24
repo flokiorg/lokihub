@@ -1,4 +1,3 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -13,10 +12,9 @@ import {
   AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
 import { SUBWALLET_APPSTORE_APP_ID } from "src/constants";
+import { useApps } from "src/hooks/useApps";
 import { useDeleteApp } from "src/hooks/useDeleteApp";
-import { App, ListCashWalletClaimsResponse } from "src/types";
-import { handleRequestError } from "src/utils/handleRequestError";
-import { request } from "src/utils/request";
+import { App } from "src/types";
 
 // Unlike a circle_hub (DisconnectCircleHub), a cash_hub has no partial-delete
 // mode — apps.DeleteApp refuses outright if any cash_wallet child still
@@ -35,27 +33,24 @@ export function DisconnectCashHub({
   const { t } = useTranslation("circles");
   const { t: tc } = useTranslation("common");
   const navigate = useNavigate();
-  const [outstandingCount, setOutstandingCount] = React.useState<
-    number | null
-  >(null);
-
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const data = await request<ListCashWalletClaimsResponse>(
-          `/api/apps/${app.id}/cash-wallets?limit=1`
-        );
-        setOutstandingCount(data?.counts?.all ?? 0);
-      } catch (error) {
-        handleRequestError(t("disconnectCashHub.errors.check"), error);
-        // Fail open to the pre-existing behavior (attempt the delete, let
-        // the backend guard reject it) rather than blocking deletion of an
-        // otherwise-empty hub just because this check failed.
-        setOutstandingCount(0);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.id]);
+  // Count the hub's LIVE bills, which is the backend's own predicate
+  // (apps.deleteHubAppTx counts child app rows with this parent).
+  //
+  // Deliberately NOT the claim counts this used to read: those are a union of
+  // live and archived slices, so a hub whose every bill had been reclaimed or
+  // deleted still reported its whole history and could never be deleted — the
+  // guard blocked on records of bills rather than on bills. An archived bill
+  // has no app row at all, so it can orphan nothing and the backend never
+  // refuses over one.
+  const { data: liveBills, error: liveBillsError } = useApps(1, 1, {
+    parentAppId: app.id,
+  });
+  // Fail open on error, matching the previous behaviour: let the backend
+  // guard reject the delete rather than blocking an otherwise-empty hub
+  // because this count failed.
+  const outstandingCount = liveBillsError
+    ? 0
+    : (liveBills?.totalCount ?? null);
 
   const { deleteApp, isDeleting } = useDeleteApp(
     app,
