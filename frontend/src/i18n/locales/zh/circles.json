@@ -256,7 +256,8 @@
     "tokenStatusUnredeemed": "未兑换",
     "tokenStatusFullyRedeemed": "已全部兑换",
     "tokenStatusPartiallyRedeemed": "已兑换 {{claimed}}/{{count}}",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "复制现金券公钥"
   },
   "newCircleHub": {
     "title": "新建圈子钱包中心",

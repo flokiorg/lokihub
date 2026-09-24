@@ -256,7 +256,8 @@
     "tokenStatusUnredeemed": "بازخرید‌نشده",
     "tokenStatusFullyRedeemed": "کاملاً بازخرید شده",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} بازخرید شده",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "کپی کلید عمومی اسکناس"
   },
   "newCircleHub": {
     "title": "هاب کیف‌پول حلقه جدید",

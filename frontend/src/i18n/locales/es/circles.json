@@ -256,7 +256,8 @@
     "tokenStatusUnredeemed": "Sin canjear",
     "tokenStatusFullyRedeemed": "Totalmente canjeado",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} canjeados",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "Copiar pubkey del billete"
   },
   "newCircleHub": {
     "title": "Nuevo Hub de Billetera de Círculo",

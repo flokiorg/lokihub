@@ -330,7 +330,11 @@ export const CashHubAllocations = React.forwardRef<
   // redemption together with value that merely moved into another wallet
   // (a split or consolidate), which the KPIs and charts on the Cash Hub
   // dashboard above this list already count separately.
-  const [status, setStatus] = React.useState<CashSliceStatus | "">("");
+  // Unclaimed by default, not "All". The unredeemed bills are the ones an
+  // operator can still act on; "All" buried them under every bill the hub
+  // ever issued, archived ones included.
+  const [status, setStatus] =
+    React.useState<CashSliceStatus | "">("unclaimed");
   const [page, setPage] = React.useState(1);
   const [isLoading, setLoading] = React.useState(false);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -925,25 +929,18 @@ export const CashHubAllocations = React.forwardRef<
     });
   }, [claims]);
 
-  // A status filter only ever shows the subset of a wallet's beneficiaries
-  // matching that status — grouping here would display a misleading partial
-  // aggregate (e.g. a wallet reading "0/1 claimed" because its one other,
-  // already-claimed beneficiary was filtered out of view entirely, not
-  // because the wallet only ever had one recipient). Wallet grouping is only
-  // meaningful when the full membership is visible, i.e. the unfiltered
-  // "All" tab — every other tab lists claims flat, one row per beneficiary,
-  // even when several of them happen to share a wallet.
-  const displayGroups = React.useMemo(() => {
-    if (status === "") {
-      return walletGroups;
-    }
-    return claims.map((c) => ({
-      key: `${c.archived ? 1 : 0}-${c.wallet_app_id}-${c.id}`,
-      walletAppId: c.wallet_app_id,
-      archived: c.archived,
-      claims: [c],
-    }));
-  }, [status, claims, walletGroups]);
+  // Grouped by bill on every tab, filtered ones included.
+  //
+  // A filter shows only the subset of a bill's recipients matching that
+  // status, so the one thing a filtered group cannot state honestly is a
+  // whole-bill aggregate — "0/1 redeemed" when the other, already-redeemed
+  // recipient was filtered out of view. That badge is suppressed while
+  // filtered (isFullMembership) rather than the grouping being thrown away:
+  // dropping the grouping costs the bill row itself — its token, its expand,
+  // its QR, and a delete that knows it is removing a bill and not just one
+  // recipient — which matters far more now that the default tab is filtered.
+  const displayGroups = walletGroups;
+  const isFullMembership = status === "";
 
   const statusTabs: {
     value: CashSliceStatus | "";
@@ -1545,9 +1542,29 @@ export const CashHubAllocations = React.forwardRef<
                             {shortenMiddle(lokicashToken, 14, 6)}
                           </button>
                         ) : (
-                          <span className="block truncate font-mono text-sm text-muted-foreground">
-                            lokicash1…
-                          </span>
+                          // An archived bill has no cash token, deliberately:
+                          // one for a destroyed bill would look spendable and
+                          // embed a pubkey the hub no longer serves (NIP-CASH
+                          // §Archival on Deletion). The literal "lokicash1…"
+                          // that used to sit here implied there was still a
+                          // token to reveal. Its own pubkey is what an
+                          // operator correlates with logs, and is the only
+                          // identifier an archived row carries.
+                          <button
+                            type="button"
+                            className="block max-w-full truncate rounded font-mono text-sm text-muted-foreground hover:underline"
+                            title={t("cashHubAllocations.copyBillPubkey")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(group.claims[0].wallet_pubkey ?? "");
+                            }}
+                          >
+                            {shortenMiddle(
+                              group.claims[0].wallet_pubkey ?? "",
+                              10,
+                              6
+                            )}
+                          </button>
                         )}
                         {/* Identity pills — a small icon (or, for a pubkey
                             with a set profile picture, the recipient's own
@@ -1618,27 +1635,32 @@ export const CashHubAllocations = React.forwardRef<
                                 {t("cashBills.archived")}
                               </Badge>
                             )}
-                            {claimedCount === totalCount ? (
-                              <Badge variant="positive">
-                                {t(
-                                  "cashHubAllocations.tokenStatusFullyRedeemed"
-                                )}
-                              </Badge>
-                            ) : claimedCount === 0 ? (
-                              <Badge variant="secondary">
-                                {t("cashHubAllocations.tokenStatusUnredeemed")}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">
-                                {t(
-                                  "cashHubAllocations.tokenStatusPartiallyRedeemed",
-                                  {
-                                    claimed: claimedCount,
-                                    count: totalCount,
-                                  }
-                                )}
-                              </Badge>
-                            )}
+                            {/* Whole-bill aggregate, so only while the whole
+                                bill is on screen. Under a filter these counts
+                                describe the rows that survived it, not the
+                                bill. */}
+                            {isFullMembership &&
+                              (claimedCount === totalCount ? (
+                                <Badge variant="positive">
+                                  {t(
+                                    "cashHubAllocations.tokenStatusFullyRedeemed"
+                                  )}
+                                </Badge>
+                              ) : claimedCount === 0 ? (
+                                <Badge variant="secondary">
+                                  {t("cashHubAllocations.tokenStatusUnredeemed")}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">
+                                  {t(
+                                    "cashHubAllocations.tokenStatusPartiallyRedeemed",
+                                    {
+                                      claimed: claimedCount,
+                                      count: totalCount,
+                                    }
+                                  )}
+                                </Badge>
+                              ))}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {deadline?.label ?? t("claimDeadline.none")}
@@ -1668,18 +1690,20 @@ export const CashHubAllocations = React.forwardRef<
                           </Button>
                         )}
 
-                        {/* Never for an archived bill: the wallet it names
-                            is deleted, so the call can only fail — and a
+                        {/* Not rendered at all for an archived bill, rather
+                            than hidden in place: the wallet it names is
+                            deleted, so the call could only fail, and a
                             lokicash1... for a destroyed bill would look
-                            spendable (NIP-CASH §Archival on Deletion). */}
+                            spendable (NIP-CASH §Archival on Deletion). An
+                            invisible placeholder just left a gap that read
+                            as a missing button. */}
+                        {!group.archived && (
                         <Button
                           variant="ghost"
                           size="icon"
                           title={t("cashHubAllocations.revealConnection")}
                           aria-label={t("cashHubAllocations.revealConnection")}
-                          className={cn(group.archived && "invisible")}
                           disabled={
-                            group.archived ||
                             revealingWalletId === group.walletAppId
                           }
                           onClick={(e) => {
@@ -1695,6 +1719,7 @@ export const CashHubAllocations = React.forwardRef<
                         >
                           <QrCodeIcon className="size-4" />
                         </Button>
+                        )}
 
                         <Button
                           variant="ghost"
