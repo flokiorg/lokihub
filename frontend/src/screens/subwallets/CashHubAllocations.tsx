@@ -229,7 +229,18 @@ function pillIdentityLabel(
   if (isVerifiedNip05 && profile?.nip05) {
     return profile.nip05;
   }
-  return shortenMiddle(safeNpubEncode(pubkey) ?? pubkey, 8, 4);
+  // A display name or an unverified nip05 still beats a short npub for
+  // recognising who a slice is for. They rank BELOW a verified nip05 and
+  // are never presented as equivalent to one: only the verified case gets
+  // the check glyph, and an unverified nip05 carries a title saying so.
+  // Anyone can write any nip05 into their own kind:0, so it is a claim
+  // until the .well-known lookup resolves back to this pubkey.
+  return (
+    profile?.displayName ||
+    profile?.name ||
+    profile?.nip05 ||
+    shortenMiddle(safeNpubEncode(pubkey) ?? pubkey, 8, 4)
+  );
 }
 
 const EMPTY_PROFILE_MAP: Map<string, NostrProfile> = new Map();
