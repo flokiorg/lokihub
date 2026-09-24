@@ -256,7 +256,8 @@
     "tokenStatusUnredeemed": "未引き換え",
     "tokenStatusFullyRedeemed": "全て引き換え済み",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} 件引き換え済み",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "紙幣の公開鍵をコピー"
   },
   "newCircleHub": {
     "title": "新しいサークルウォレットハブ",

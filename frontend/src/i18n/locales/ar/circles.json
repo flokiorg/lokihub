@@ -335,7 +335,8 @@
     "tokenStatusUnredeemed": "لم يُسترد",
     "tokenStatusFullyRedeemed": "تم استرداده بالكامل",
     "tokenStatusPartiallyRedeemed": "تم استرداد {{claimed}}/{{count}}",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "نسخ مفتاح الورقة"
   },
   "newCircleHub": {
     "title": "مركز محفظة دائرة جديد",

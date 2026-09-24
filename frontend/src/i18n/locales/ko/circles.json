@@ -256,7 +256,8 @@
     "tokenStatusUnredeemed": "미교환",
     "tokenStatusFullyRedeemed": "전부 교환됨",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} 교환됨",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "지폐 공개키 복사"
   },
   "newCircleHub": {
     "title": "새 서클 지갑 허브",

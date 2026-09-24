@@ -290,7 +290,8 @@
     "tokenStatusUnredeemed": "Не обменяно",
     "tokenStatusFullyRedeemed": "Полностью обменяно",
     "tokenStatusPartiallyRedeemed": "Обменяно {{claimed}}/{{count}}",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "Скопировать pubkey купюры"
   },
   "newCircleHub": {
     "title": "Новый Хаб кошельков круга",

@@ -235,7 +235,8 @@
     "tokenStatusUnredeemed": "Unredeemed",
     "tokenStatusFullyRedeemed": "Fully redeemed",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} redeemed",
-    "lokicashBadge": "Lokicash"
+    "lokicashBadge": "Lokicash",
+    "copyBillPubkey": "Copy bill pubkey"
   },
   "newCircleHub": {
     "title": "New Circle Wallet Hub",
