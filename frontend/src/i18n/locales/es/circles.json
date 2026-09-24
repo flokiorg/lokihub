@@ -403,7 +403,7 @@
     "durationDays_other": "{{count}} días",
     "balanceInfo": "Lo que este hub tiene ahora mismo. Los billetes nuevos se acuñan contra ello.",
     "outstandingInfo": "Valor ya acuñado en billetes que nadie ha reclamado todavía: lo que este hub debe ahora mismo.",
-    "issuedInfo": "Todo lo que este hub ha acuñado alguna vez, contando billetes vivos y archivados.",
+    "issuedInfo": "Cada porción que este hub ha creado, vivas y archivadas juntas. Una división completa convierte un billete en otro, así que el valor dividido se cuenta más de una vez aquí: no es una medida del valor puesto en circulación.",
     "redeemedInfo": "Pagado a un destinatario por Lightning.",
     "returnedInfo": "Volvió a este hub porque un billete venció o se eliminó antes de que nadie lo reclamara.",
     "feesEarnedInfo": "La parte que este hub se queda de los canjes anteriores, según su tarifa de canje.",

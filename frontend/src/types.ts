@@ -1080,6 +1080,13 @@ export interface CashHubStats {
   // hub's response, which already has the first two on its own App row.
   hubs_count: number;
   balance_mloki: number;
+  // What the issued bills themselves hold, and how much any individual bill
+  // falls short of its own unclaimed slices. backing_mloki — not
+  // balance_mloki — is what outstanding_mloki is a claim on: minting moves
+  // the backing out of the hub's ledger into the bill's own. Present on both
+  // the per-hub and node-wide responses.
+  backing_mloki: number;
+  shortfall_mloki: number;
   // Partitions outstanding_mloki by how long is left to redeem it, already
   // ordered soonest-first. Sums back to outstanding_mloki exactly.
   expiry_buckets: CashExpiryBucket[];

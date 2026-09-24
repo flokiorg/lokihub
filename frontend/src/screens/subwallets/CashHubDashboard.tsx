@@ -584,8 +584,10 @@ function CashHubDashboardInternal({
                       series go wide, where a 30-day axis is readable. */}
                   <CashCoverage
                     className="lg:col-span-2"
-                    balanceMloki={hub.balance}
+                    backingMloki={stats.backing_mloki}
                     outstandingMloki={stats.outstanding_mloki}
+                    shortfallMloki={stats.shortfall_mloki}
+                    capacityMloki={hub.balance}
                   />
                   <CashExpiryRunway className="lg:col-span-2" stats={stats} />
                   <CashOutstandingChart

@@ -185,8 +185,10 @@ export function CashHubList() {
                       series goes wide, where a 30-day axis is readable. */}
                   <CashCoverage
                     className="lg:col-span-2"
-                    balanceMloki={stats.balance_mloki}
+                    backingMloki={stats.backing_mloki}
                     outstandingMloki={stats.outstanding_mloki}
+                    shortfallMloki={stats.shortfall_mloki}
+                    capacityMloki={stats.balance_mloki}
                   />
                   <CashExpiryRunway stats={stats} />
                   <CashHubBreakdown stats={stats} />
