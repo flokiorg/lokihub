@@ -278,6 +278,11 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 			pubkeys = append(pubkeys, *app.WalletPubkey)
 		}
 		svc.walletRegistry.Add(pubkeys...)
+		// Destroyed cash bills still inside their hub's retention window: the
+		// relay gate has to let their requests through for the handler to
+		// answer "spent" (nip47.tryReplySpentBill). Their timers did not
+		// survive this restart, so the set is rebuilt from the archive.
+		svc.walletRegistry.Add(svc.retainedSpentBillPubkeys()...)
 
 		// One consumer for every wallet: with a shared subscription there is
 		// no per-wallet subscription left to cancel on deletion, so the
