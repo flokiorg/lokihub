@@ -49,7 +49,10 @@ func resetCleanupInProgress(gormDB *gorm.DB, appID uint) {
 // funds from expired Cash and circle_child sub-wallets back to their parent app.
 // getLNClient is called each tick so the service works even when the client
 // starts after the goroutine is launched.
-func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher) {
+// pruneRetainedWallets is called on every sweep to drop spent-bill wallets
+// whose retention window has passed. Optional so tests and non-trusted-relay
+// setups can pass nil.
+func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, pruneRetainedWallets func()) {
 	go func() {
 		ticker := time.NewTicker(cashCleanupInterval)
 		defer ticker.Stop()
@@ -66,6 +69,9 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneStaleCashTransferProofs(gormDB)
+				if pruneRetainedWallets != nil {
+					pruneRetainedWallets()
+				}
 			}
 		}
 	}()

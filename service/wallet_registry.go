@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -99,27 +98,15 @@ func (r *walletRegistry) Add(walletPubkeys ...string) {
 // RemoveAfterGrace stops serving a wallet once walletRetentionAfterDelete has
 // passed, so a request racing its app's deletion still gets an error response
 // rather than silence. See that constant for why the delay exists.
-func (r *walletRegistry) RemoveAfterGrace(walletPubkey string) {
-	r.RemoveAfter(walletPubkey, walletRetentionAfterDelete)
-}
-
-// RemoveAfter is RemoveAfterGrace with a caller-chosen window, for a destroyed
-// cash bill whose hub still answers "spent" about it
-// (db.CashHubConfig.SpentRetentionSecs). The gate has to stay open that long or
-// the request never reaches the handler that would answer it.
 //
-// The timer is best-effort and deliberately not the source of truth: it is lost
-// on restart (the registry is then reseeded from the archive), and an entry
-// that outlives its window costs nothing, because the handler re-checks the
-// deadline against the archive before answering. Erring toward keeping the
-// gate open only ever means a request is let through to be met with silence —
-// which is what it would have got anyway.
-func (r *walletRegistry) RemoveAfter(walletPubkey string, d time.Duration) {
-	if d <= 0 {
-		r.Remove(walletPubkey)
-		return
-	}
-	time.AfterFunc(d, func() {
+// Only for wallets with nothing left to answer. A destroyed cash bill still
+// inside its hub's retention window is deliberately NOT scheduled here: its
+// deadline lives in the archive (CashBillArchive.EndedAt), and a timer would
+// be a weaker second copy of that state — lost on restart, and unreasonable to
+// hold open at 15-day horizons. The periodic sweep prunes those instead
+// (service.PruneExpiredSpentBills).
+func (r *walletRegistry) RemoveAfterGrace(walletPubkey string) {
+	time.AfterFunc(walletRetentionAfterDelete, func() {
 		logger.Logger.Debug().
 			Str("wallet", walletPubkey).
 			Msg("No longer serving a deleted app's wallet")
@@ -158,64 +145,82 @@ func (r *walletRegistry) Len() int {
 	return len(*current)
 }
 
-// spentBillRetention is how long this wallet's pubkey must keep being served
-// after its app row is gone: the hub's own spent-bill retention window when the
-// deleted app was a cash bill, and the ordinary post-delete grace otherwise.
+// spentBillRetained reports whether walletPubkey belongs to a destroyed cash
+// bill its hub still answers "spent" about.
 //
-// Falls back to the grace on every unexpected shape — a missing archive row, a
-// hub that is itself gone, retention disabled — so the worst case is today's
-// behaviour rather than a wallet served forever.
-func (svc *service) spentBillRetention(walletPubkey string) time.Duration {
+// The archive is the only source of truth: CashBillArchive.EndedAt plus the
+// hub's SpentRetentionSecs. Nothing about the window is held in memory, so a
+// restart resumes it exactly where it left off.
+//
+// walletRetentionAfterDelete acts as a floor, not an alternative: every deleted
+// wallet is served for at least that long so a request racing the delete still
+// gets an error rather than silence, and a bill with retention configured is
+// served for as long as its hub says.
+func (svc *service) spentBillRetained(walletPubkey string) bool {
 	if svc.db == nil {
-		return walletRetentionAfterDelete
+		return false
 	}
 	var bill db.CashBillArchive
 	if err := svc.db.Where("wallet_pubkey = ?", walletPubkey).First(&bill).Error; err != nil {
-		return walletRetentionAfterDelete
+		return false
 	}
 	var cfg db.CashHubConfig
 	if err := svc.db.Where("app_id = ?", bill.HubAppID).First(&cfg).Error; err != nil {
-		return walletRetentionAfterDelete
+		return false
 	}
 	if cfg.SpentRetentionSecs <= 0 {
-		return walletRetentionAfterDelete
+		return false
 	}
-	remaining := time.Until(bill.EndedAt.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second))
-	if remaining < walletRetentionAfterDelete {
-		return walletRetentionAfterDelete
+	deadline := bill.EndedAt.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second)
+	if floor := bill.EndedAt.Add(walletRetentionAfterDelete); deadline.Before(floor) {
+		deadline = floor
 	}
-	return remaining
+	return time.Now().Before(deadline)
 }
 
 // retainedSpentBillPubkeys lists the wallet pubkeys of destroyed cash bills
-// whose hub still answers "spent" about them, so a restart does not close a
-// gate that has days left to run.
-//
-// The join is done in SQL rather than per row: a hub that has been minting for
-// months can have a large archive, and only the rows still inside their own
-// hub's window matter.
+// whose hub still answers "spent" about them — used to rebuild the set on
+// startup, since the window lives in the archive rather than in memory.
 func (svc *service) retainedSpentBillPubkeys() []string {
 	if svc.db == nil {
 		return nil
 	}
-	var pubkeys []string
+	var candidates []string
 	err := svc.db.Model(&db.CashBillArchive{}).
 		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
 		Where("cash_hub_configs.spent_retention_secs > 0").
-		Where("cash_bill_archives.ended_at > ?", time.Now().Add(-time.Duration(constants.MAX_EXPIRY_SECS)*time.Second)).
-		Pluck("cash_bill_archives.wallet_pubkey", &pubkeys).Error
+		Pluck("cash_bill_archives.wallet_pubkey", &candidates).Error
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to reload retained spent-bill wallets")
 		return nil
 	}
-	// The per-hub deadline is re-checked in Go: expressing
+	// The per-hub deadline is re-checked in Go rather than in SQL: expressing
 	// ended_at + spent_retention_secs portably across sqlite and Postgres is
-	// not worth a dialect branch here, and the handler re-checks it anyway.
-	retained := pubkeys[:0]
-	for _, pk := range pubkeys {
-		if svc.spentBillRetention(pk) > walletRetentionAfterDelete {
+	// not worth a dialect branch in a money-adjacent query.
+	retained := candidates[:0]
+	for _, pk := range candidates {
+		if svc.spentBillRetained(pk) {
 			retained = append(retained, pk)
 		}
 	}
 	return retained
+}
+
+// PruneExpiredSpentBills drops registry entries whose retention window has
+// passed. Called from the periodic cash sweep, so the set converges on the
+// archive without any long-lived timer.
+func (svc *service) PruneExpiredSpentBills() {
+	if svc.db == nil || svc.walletRegistry == nil {
+		return
+	}
+	var candidates []string
+	if err := svc.db.Model(&db.CashBillArchive{}).
+		Pluck("wallet_pubkey", &candidates).Error; err != nil {
+		return
+	}
+	for _, pk := range candidates {
+		if !svc.spentBillRetained(pk) {
+			svc.walletRegistry.Remove(pk)
+		}
+	}
 }
