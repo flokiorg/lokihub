@@ -154,9 +154,20 @@ const (
 	// NIP47MethodCashConsolidate combines several same-hub slices this node
 	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
 	NIP47MethodCashConsolidate = nipcash.MethodCashConsolidate
-	// NIP47MethodListRecipients is a read-only roster of a shared cash_wallet's
-	// recipients (identity, entitled amount, claimed status) — no invoice or
-	// preimage detail, since a cash_wallet has no list_transactions grant.
+	// NIP47MethodCashStatus asks a bill for its state. It answers with the
+	// full roster of that bill's recipients (identity, entitled amount,
+	// claimed status) — no invoice or preimage detail, since a cash_wallet has
+	// no list_transactions grant — or, for a bill this hub has destroyed, with
+	// a "spent" tombstone (see nip47.tryReplySpentBill).
+	//
+	// Despite the name it is NOT scoped to the caller's own slice: every
+	// holder of the connection sees every row (NIP-CASH §Cash Status).
+	NIP47MethodCashStatus = nipcash.MethodCashStatus
+	// NIP47MethodListRecipients is the former name of NIP47MethodCashStatus,
+	// still accepted on the wire so a client can be updated independently of
+	// the hub it talks to.
+	//
+	// Deprecated: use NIP47MethodCashStatus.
 	NIP47MethodListRecipients = nipcash.MethodListRecipients
 )
 

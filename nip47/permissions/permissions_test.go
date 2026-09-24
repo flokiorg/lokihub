@@ -179,11 +179,19 @@ func TestRequestMethodToScope_CashHub(t *testing.T) {
 
 // Cash Claim Funds scope: bidirectional mapping. Granted on cash_wallet
 // children instead of pay_invoice — covers both cash_redeem (the payout) and
-// list_recipients (the read-only roster), since anyone allowed to attempt a
-// claim may reasonably see the roster first.
+// cash_status (the read-only roster), since anyone allowed to attempt a claim
+// may reasonably see the roster first.
+//
+// Both names for the roster are advertised while list_recipients remains
+// accepted on the wire, so a client that looks for the old one in get_info
+// keeps finding it.
 func TestScopeToRequestMethods_CashClaimFunds(t *testing.T) {
 	methods := scopeToRequestMethods(constants.CASH_REDEEM_SCOPE)
-	assert.ElementsMatch(t, []string{constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients}, methods)
+	assert.ElementsMatch(t, []string{
+		constants.NIP47MethodCashRedeem,
+		constants.NIP47MethodCashStatus,
+		constants.NIP47MethodListRecipients,
+	}, methods)
 }
 
 func TestRequestMethodToScope_ClaimFunds(t *testing.T) {

@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/keys"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -32,8 +32,8 @@ type nip47Controller struct {
 	appsService         apps.AppsService
 	keys                keys.Keys
 	socialCache         NostrSocialCache
-	cashRateLimiter      RateLimiter
-	cashClaimLimiter     RateLimiter
+	cashRateLimiter     RateLimiter
+	cashClaimLimiter    RateLimiter
 	circleRateLimiter   RateLimiter
 	iaChecker           cashwallet.IATrustChecker
 
@@ -68,8 +68,8 @@ func NewNip47Controller(
 		appsService:         appsService,
 		keys:                keys,
 		socialCache:         socialCache,
-		cashRateLimiter:      cashRateLimiter,
-		cashClaimLimiter:     cashClaimLimiter,
+		cashRateLimiter:     cashRateLimiter,
+		cashClaimLimiter:    cashClaimLimiter,
 		circleRateLimiter:   circleRateLimiter,
 		cfg:                 cfg,
 		iaChecker:           iaChecker,

@@ -97,6 +97,7 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 			requestMethod == constants.NIP47MethodCashRedeem ||
 			requestMethod == constants.NIP47MethodCashTransfer ||
 			requestMethod == constants.NIP47MethodCashConsolidate ||
+			requestMethod == constants.NIP47MethodCashStatus ||
 			requestMethod == constants.NIP47MethodListRecipients {
 			return true
 		}
@@ -150,7 +151,14 @@ func scopeToRequestMethods(scope string) []string {
 	case constants.CIRCLE_WALLET_SCOPE:
 		return []string{constants.NIP47MethodCreateCircleWallet}
 	case constants.CASH_REDEEM_SCOPE:
-		return []string{constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients}
+		// Both names are advertised for the deprecation window: the wire
+		// still accepts list_recipients, so a client that looks for it in
+		// get_info must keep finding it. Drop the old one when the alias goes.
+		return []string{
+			constants.NIP47MethodCashRedeem,
+			constants.NIP47MethodCashStatus,
+			constants.NIP47MethodListRecipients,
+		}
 	case constants.CASH_TRANSFER_SCOPE:
 		return []string{constants.NIP47MethodCashTransfer}
 	case constants.CASH_CONSOLIDATE_SCOPE:
@@ -200,7 +208,7 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CASH_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodCashRedeem, constants.NIP47MethodListRecipients:
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
 		return constants.CASH_REDEEM_SCOPE, nil
 	case constants.NIP47MethodCashTransfer:
 		return constants.CASH_TRANSFER_SCOPE, nil

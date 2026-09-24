@@ -508,7 +508,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodCashConsolidate:
 		controller.
 			HandleCashConsolidateEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
-	case constants.NIP47MethodListRecipients:
+	case constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
 		controller.
 			HandleListRecipientsEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
 	case constants.NIP47MethodCreateCircleWallet:
