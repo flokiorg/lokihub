@@ -185,7 +185,10 @@
     "analyticsTitle": "Analytics",
     "keepAnalyticsOpen": "Keep open",
     "addCashWallet": "Mint Lokicash",
-    "hubExpiryBeforeBillsWarning": "This {{kind}}'s connection expires before the longest bill it can mint. Bills already issued keep their own deadline, but you won't be able to mint new ones once the connection expires."
+    "hubExpiryBeforeBillsWarning": "This {{kind}}'s connection expires before the longest bill it can mint. Bills already issued keep their own deadline, but you won't be able to mint new ones once the connection expires.",
+    "advancedTitle": "Advanced",
+    "spentRetentionLabel": "Answer about spent bills for",
+    "spentRetentionHelper": "How long the hub keeps telling a holder their bill was spent, before falling silent. Without it, a spent bill and an unreachable hub look identical. Disabled means it falls silent immediately."
   },
   "newApp": {
     "title": "Connect a New App",

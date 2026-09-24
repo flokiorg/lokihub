@@ -53,6 +53,7 @@ import {
 } from "src/components/ui/dropdown-menu";
 import { Input } from "src/components/ui/input";
 import {
+  DEFAULT_CASH_SPENT_RETENTION_SECS,
   localStorageKeys,
   SUBWALLET_APPSTORE_APP_ID,
 } from "src/constants";
@@ -183,6 +184,11 @@ function CashHubDashboardInternal({
   const [cashRedeemFeePpm, setCashRedeemFeePpm] = React.useState(
     hub.cashRedeemFeePpm ?? 0
   );
+  // ?? the default rather than 0: a hub created before this field existed
+  // reports it absent, and 0 would silently mean "disabled" instead.
+  const [cashSpentRetentionSecs, setCashSpentRetentionSecs] = React.useState(
+    hub.cashSpentRetentionSecs ?? DEFAULT_CASH_SPENT_RETENTION_SECS
+  );
 
   const kindLabel = appKindLabel("cash_hub");
 
@@ -238,6 +244,7 @@ function CashHubDashboardInternal({
         cashMaxExpSecs,
         cashMinTransferMloki: cashMinTransferLoki * 1000,
         cashRedeemFeePpm,
+        cashSpentRetentionSecs,
       };
 
       await request(`/api/apps/${hub.id}`, {
@@ -273,6 +280,9 @@ function CashHubDashboardInternal({
       hub.cashMinTransferMloki ? hub.cashMinTransferMloki / 1000 : 0
     );
     setCashRedeemFeePpm(hub.cashRedeemFeePpm ?? 0);
+    setCashSpentRetentionSecs(
+      hub.cashSpentRetentionSecs ?? DEFAULT_CASH_SPENT_RETENTION_SECS
+    );
     setIsEditing(false);
   };
 
@@ -498,6 +508,8 @@ function CashHubDashboardInternal({
           onMinTransferLokiChange={setCashMinTransferLoki}
           redeemFeePpm={cashRedeemFeePpm}
           onRedeemFeePpmChange={setCashRedeemFeePpm}
+          spentRetentionSecs={cashSpentRetentionSecs}
+          onSpentRetentionSecsChange={setCashSpentRetentionSecs}
         />
       )}
 

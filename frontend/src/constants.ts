@@ -46,6 +46,11 @@ export const FLOKICOIN_DISPLAY_FORMAT_AUTO = "auto";
 
 // WEEK_SCALE_PRESETS is for DurationInput callers on a longer timescale than
 // Cash Hub's hour/day-scale default (e.g. a Circle Hub's max wallet expiry).
+// DEFAULT_CASH_SPENT_RETENTION_SECS mirrors the backend's
+// constants.DEFAULT_CASH_SPENT_RETENTION_SECS: how long a new Cash Hub keeps
+// answering about a bill it destroyed before falling silent. 0 disables it.
+export const DEFAULT_CASH_SPENT_RETENTION_SECS = 15 * 86400;
+
 export const WEEK_SCALE_PRESETS: { label: string; seconds: number }[] = [
   { label: "1 week", seconds: 7 * 86400 },
   { label: "1 month", seconds: 30 * 86400 },

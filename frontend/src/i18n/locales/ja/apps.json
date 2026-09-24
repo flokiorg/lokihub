@@ -138,7 +138,10 @@
     "analyticsTitle": "分析",
     "keepAnalyticsOpen": "開いたままにする",
     "addCashWallet": "Lokicash を鋳造",
-    "hubExpiryBeforeBillsWarning": "この {{kind}} の接続は、鋳造できる最長の紙幣よりも先に期限切れになります。発行済みの紙幣は自身の期限を保ちますが、接続が期限切れになると新しく鋳造できなくなります。"
+    "hubExpiryBeforeBillsWarning": "この {{kind}} の接続は、鋳造できる最長の紙幣よりも先に期限切れになります。発行済みの紙幣は自身の期限を保ちますが、接続が期限切れになると新しく鋳造できなくなります。",
+    "advancedTitle": "詳細設定",
+    "spentRetentionLabel": "使用済み紙幣について応答する期間",
+    "spentRetentionHelper": "紙幣が使用済みであることをハブが保持者に伝え続ける期間で、その後は沈黙します。これがないと、使用済みの紙幣と到達できないハブは見分けがつきません。無効はただちに沈黙することを意味します。"
   },
   "newApp": {
     "unsupportedApp": "未対応のアプリ",

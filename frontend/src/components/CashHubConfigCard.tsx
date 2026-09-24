@@ -1,9 +1,17 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { CurrencyInput } from "src/components/CurrencyInput";
 import { DurationInput } from "src/components/DurationInput";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "src/components/ui/accordion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
+import { WEEK_SCALE_PRESETS } from "src/constants";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 
 interface CashHubConfigCardProps {
@@ -33,6 +41,16 @@ interface CashHubConfigCardProps {
   // original fields; the full NewCashHub/Hub Settings flows always pass it).
   redeemFeePpm?: number;
   onRedeemFeePpmChange?: (ppm: number) => void;
+  // spentRetentionSecs/onSpentRetentionSecsChange follow the same optional-pair
+  // convention again, and additionally gate the whole Advanced disclosure:
+  // omit them and the section does not render at all, which is what the
+  // lightweight inline escalation in NewApp wants.
+  //
+  // 0 is meaningful ("Disabled" — the hub falls silent the moment a bill is
+  // destroyed, the behaviour that predates the tombstone), which is why the
+  // DurationInput below is given allowNever.
+  spentRetentionSecs?: number;
+  onSpentRetentionSecsChange?: (seconds: number) => void;
 }
 
 // Shared per-wallet-cap / max-expiry / min-transfer fields for a Cash Hub —
@@ -56,7 +74,10 @@ export function CashHubConfigCard({
   onMinTransferLokiChange,
   redeemFeePpm,
   onRedeemFeePpmChange,
+  spentRetentionSecs,
+  onSpentRetentionSecsChange,
 }: CashHubConfigCardProps) {
+  const { t } = useTranslation("apps");
   const { scaleInputAmount, parseInputAmount } = useUnit();
   const [inputUnit, setInputUnit] = useInputUnit(perWalletMaxLoki);
 
@@ -135,6 +156,36 @@ export function CashHubConfigCard({
             or on a redemption into another wallet on this same node.
           </p>
         </div>
+      )}
+      {onSpentRetentionSecsChange && (
+        // Advanced, because it changes what the hub says about bills it has
+        // already destroyed rather than how it mints new ones — the default
+        // is right for almost everyone.
+        <Accordion type="single" collapsible>
+          <AccordionItem value="advanced" className="border-b-0">
+            <AccordionTrigger className="py-2 text-sm font-medium">
+              {t("circleHub.advancedTitle")}
+            </AccordionTrigger>
+            <AccordionContent className="pb-0">
+              <div className="w-full grid gap-1.5">
+                <Label htmlFor="cashSpentRetentionSecs">
+                  {t("circleHub.spentRetentionLabel")}
+                </Label>
+                <DurationInput
+                  id="cashSpentRetentionSecs"
+                  seconds={spentRetentionSecs ?? 0}
+                  onChange={onSpentRetentionSecsChange}
+                  min={60}
+                  presets={WEEK_SCALE_PRESETS}
+                  allowNever
+                />
+                <p className="text-muted-foreground text-sm">
+                  {t("circleHub.spentRetentionHelper")}
+                </p>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
+import { DEFAULT_CASH_SPENT_RETENTION_SECS } from "src/constants";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -22,6 +23,11 @@ export function NewCashHub() {
   const [maxExpSecs, setMaxExpSecs] = React.useState(86400);
   const [minTransferLoki, setMinTransferLoki] = React.useState(0);
   const [redeemFeePpm, setRedeemFeePpm] = React.useState(0);
+  // Seeded with the backend's own default so the form shows what a hub would
+  // get anyway, rather than looking unset.
+  const [spentRetentionSecs, setSpentRetentionSecs] = React.useState(
+    DEFAULT_CASH_SPENT_RETENTION_SECS
+  );
   const [isLoading, setLoading] = React.useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -45,6 +51,7 @@ export function NewCashHub() {
         cashMaxExpSecs: maxExpSecs,
         cashMinTransferMloki: minTransferLoki * 1000,
         cashRedeemFeePpm: redeemFeePpm,
+        cashSpentRetentionSecs: spentRetentionSecs,
         metadata: { app_store_app_id: SUBWALLET_APPSTORE_APP_ID },
       };
       const response = await createApp(req);
@@ -88,6 +95,8 @@ export function NewCashHub() {
           onMinTransferLokiChange={setMinTransferLoki}
           redeemFeePpm={redeemFeePpm}
           onRedeemFeePpmChange={setRedeemFeePpm}
+          spentRetentionSecs={spentRetentionSecs}
+          onSpentRetentionSecsChange={setSpentRetentionSecs}
         />
         <div className="flex gap-3">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>
