@@ -3,11 +3,9 @@ package nip47
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -47,27 +45,13 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 		return false
 	}
 
+	retainedUntil, ok := db.SpentBillRetainedUntil(svc.db, walletPubkey)
+	if !ok || !time.Now().Before(retainedUntil) {
+		return false
+	}
+
 	var bill db.CashBillArchive
 	if err := svc.db.Where("wallet_pubkey = ?", walletPubkey).First(&bill).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			logger.Logger.Error().Err(err).
-				Str("walletPubkey", walletPubkey).
-				Msg("Failed to look up archived cash bill for a spent-bill reply")
-		}
-		return false
-	}
-
-	var cfg db.CashHubConfig
-	if err := svc.db.Where("app_id = ?", bill.HubAppID).First(&cfg).Error; err != nil {
-		// The hub itself is gone, so there is no retention policy to honour.
-		return false
-	}
-	if cfg.SpentRetentionSecs <= 0 {
-		return false
-	}
-
-	retainedUntil := bill.EndedAt.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second)
-	if !time.Now().Before(retainedUntil) {
 		return false
 	}
 

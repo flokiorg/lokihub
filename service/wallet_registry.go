@@ -152,30 +152,15 @@ func (r *walletRegistry) Len() int {
 // hub's SpentRetentionSecs. Nothing about the window is held in memory, so a
 // restart resumes it exactly where it left off.
 //
-// walletRetentionAfterDelete acts as a floor, not an alternative: every deleted
-// wallet is served for at least that long so a request racing the delete still
-// gets an error rather than silence, and a bill with retention configured is
-// served for as long as its hub says.
+// Deliberately NOT floored by walletRetentionAfterDelete. That grace is about
+// the relay gate — keeping an in-flight request reachable — and is applied at
+// the gate, by the RemoveAfterGrace branch a false answer here falls back to.
+// Conflating the two is what let this function and the handler disagree about
+// the same deadline, so the answering window now has exactly one definition
+// (db.SpentBillRetainedUntil), which is also the retained_until a caller is
+// told.
 func (svc *service) spentBillRetained(walletPubkey string) bool {
-	if svc.db == nil {
-		return false
-	}
-	var bill db.CashBillArchive
-	if err := svc.db.Where("wallet_pubkey = ?", walletPubkey).First(&bill).Error; err != nil {
-		return false
-	}
-	var cfg db.CashHubConfig
-	if err := svc.db.Where("app_id = ?", bill.HubAppID).First(&cfg).Error; err != nil {
-		return false
-	}
-	if cfg.SpentRetentionSecs <= 0 {
-		return false
-	}
-	deadline := bill.EndedAt.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second)
-	if floor := bill.EndedAt.Add(walletRetentionAfterDelete); deadline.Before(floor) {
-		deadline = floor
-	}
-	return time.Now().Before(deadline)
+	return db.SpentBillStillAnswerable(svc.db, walletPubkey, time.Now())
 }
 
 // retainedSpentBillPubkeys lists the wallet pubkeys of destroyed cash bills
