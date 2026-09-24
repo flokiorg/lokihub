@@ -233,7 +233,19 @@ test subcommand="unit" *args:
             # made re-running the suite non-reproducible.
             just -f "{{justfile()}}" dev reset
             go vet -tags integration ./integration/...
-            go test -tags integration -count=1 -timeout 8m ./integration/...
+            # 20m, not 8m. The timeout is a safety net against a hung test,
+            # not a performance budget — but at 8m it was the budget: three
+            # consecutive full runs took 387s, 435s and 477s against a 480s
+            # cap, and a fourth died at exactly 480.033s inside a test that
+            # deliberately sleeps. Nothing had failed; the suite simply ran
+            # out of clock. A cap that close to the real runtime fires on
+            # ordinary variance instead of on hangs, which is the opposite of
+            # what it is for, and turns a green suite red at random.
+            #
+            # Six concurrency/race tests account for roughly three quarters of
+            # the runtime (the slowest alone is ~137s), and they are meant to
+            # be slow. Speeding the suite up is a separate piece of work.
+            go test -tags integration -count=1 -timeout 20m ./integration/...
             ;;
         integration-ratelimits)
             # Runs only the 2 rate-limit tests, with dev's NWC rate limits
