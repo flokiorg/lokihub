@@ -2,6 +2,7 @@ package nip47
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -102,9 +103,33 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 		return false
 	}
 
+	// Only the status read gets a tombstone. A cash_redeem or cash_transfer
+	// naming a destroyed bill keeps today's silence: the agreed design is
+	// three outcomes on the STATUS method, and answering the others would both
+	// return a result_type that does not match the request and widen the
+	// oracle past what was asked for — the existing replay tests spell out why
+	// silence matters there.
+	//
+	// The method only becomes visible once the request is decrypted, which is
+	// why this check sits below the cipher rather than at the top.
+	payload, err := nip47Cipher.Decrypt(event.Content)
+	if err != nil {
+		return false
+	}
+	nip47Request := &models.Request{}
+	if err := json.Unmarshal([]byte(payload), nip47Request); err != nil {
+		return false
+	}
+	if nip47Request.Method != nipcash.MethodCashStatus &&
+		nip47Request.Method != nipcash.MethodListRecipients {
+		return false
+	}
+
 	deadline := retainedUntil.Unix()
 	resp, err := svc.CreateResponse(event, &models.Response{
-		ResultType: nipcash.MethodCashStatus,
+		// Echo the method the caller actually used, so a client still on the
+		// old name gets a result_type it recognises.
+		ResultType: nip47Request.Method,
 		Result: nipcash.CashStatusResult{
 			Error:         nipcash.ErrorSpent,
 			RetainedUntil: &deadline,
