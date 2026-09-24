@@ -86,6 +86,14 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	err = query.First(&app).Error
 	if err != nil {
+		// No app row. Usually that is a pubkey this hub never served, and the
+		// answer is silence. But a cash bill this hub destroyed also lands
+		// here, and for a bounded window its holder gets a definitive "spent"
+		// instead — see tryReplySpentBill for the three gates that keep this
+		// from becoming an existence oracle.
+		if svc.tryReplySpentBill(ctx, pool, event, &requestEvent, walletPubkey) {
+			return
+		}
 		logger.Logger.Error().Err(err).
 			Str("appPubkey", event.PubKey).
 			Str("walletPubkey", walletPubkey).
