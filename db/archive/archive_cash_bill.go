@@ -108,8 +108,12 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 	}
 
 	bill := db.CashBillArchive{
-		WalletAppID:          live.ID,
-		WalletPubkey:         derefString(live.WalletPubkey),
+		WalletAppID:  live.ID,
+		WalletPubkey: derefString(live.WalletPubkey),
+		// Copied, not re-derived: this is the exact string the bill was issued
+		// with (App.CashToken, stored at mint). Empty for a bill minted before
+		// that column existed.
+		CashToken:            live.CashToken,
 		MintedAt:             live.CreatedAt,
 		EndedAt:              now,
 		ExpiresAt:            live.ExpiresAt,
