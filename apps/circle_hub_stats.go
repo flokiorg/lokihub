@@ -2,6 +2,7 @@ package apps
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -68,6 +69,21 @@ type CircleMemberActivity struct {
 	// BalanceMloki and MaxAmountMloki are filled by the api layer.
 	BalanceMloki   int64
 	MaxAmountMloki int64
+}
+
+// scaleLokiToMloki converts a loki amount to mloki, saturating rather than
+// wrapping. Only reachable with a stored cap above ~9.2e15, which is
+// administrative bad data rather than anything a member can cause — but a
+// silent wrap turns that into a negative budget, and a negative budget reads
+// as a real fact about a real person.
+func scaleLokiToMloki(loki int64) int64 {
+	if loki > math.MaxInt64/1000 {
+		return math.MaxInt64
+	}
+	if loki < math.MinInt64/1000 {
+		return math.MinInt64
+	}
+	return loki * 1000
 }
 
 // GetCircleHubStats totals one circle_hub's activity for its dashboard.
@@ -148,7 +164,11 @@ func (svc *appsService) GetCircleHubStats(hubID uint, now time.Time) (*CircleHub
 			SpentMloki:  spentByMember[m.ID],
 			// The App row stores its cap in loki, unlike every amount
 			// around it — scaled once here so only one unit reaches the UI.
-			MaxAmountMloki: m.MaxAmountLoki * 1000,
+			// Guarded because the multiplication is the one place this
+			// conversion can wrap: an absurd stored cap would otherwise
+			// surface as a negative budget, which reads as a member who has
+			// overspent rather than as bad data.
+			MaxAmountMloki: scaleLokiToMloki(m.MaxAmountLoki),
 		})
 	}
 	sort.Slice(stats.PerMember, func(i, j int) bool {

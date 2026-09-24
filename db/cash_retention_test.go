@@ -127,3 +127,25 @@ func TestSpentBillRetention_HubGoneFallsBackToSilence(t *testing.T) {
 	_, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
 	assert.False(t, ok, "no hub config means no retention policy, not a default one")
 }
+
+// The retention deadline is inclusive, and this pins the instant.
+//
+// That exact moment is quoted to the caller as retained_until, so a request
+// landing on it must still be answered — silence there would contradict the
+// figure the hub itself published. Deterministic rather than clock-driven:
+// the deadline is computed, then probed at one tick either side of it.
+func TestSpentBillStillAnswerable_DeadlineIsInclusive(t *testing.T) {
+	gormDB := retentionTestDB(t)
+	pubkey := randomHex30(t)
+	seedSpentBill(t, gormDB, pubkey, time.Now().Add(-time.Hour), 3600)
+
+	deadline, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	require.True(t, ok, "the fixture must be inside a real retention policy")
+
+	assert.True(t, db.SpentBillStillAnswerable(gormDB, pubkey, deadline.Add(-time.Nanosecond)),
+		"a moment before the deadline is plainly inside the window")
+	assert.True(t, db.SpentBillStillAnswerable(gormDB, pubkey, deadline),
+		"the deadline itself is inside the window — it is the instant the hub promised")
+	assert.False(t, db.SpentBillStillAnswerable(gormDB, pubkey, deadline.Add(time.Nanosecond)),
+		"a moment after it, the hub returns to silence")
+}

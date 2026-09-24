@@ -54,5 +54,9 @@ func SpentBillRetainedUntil(tx *gorm.DB, walletPubkey string) (time.Time, bool) 
 // Hub's retention window right now.
 func SpentBillStillAnswerable(tx *gorm.DB, walletPubkey string, now time.Time) bool {
 	deadline, ok := SpentBillRetainedUntil(tx, walletPubkey)
-	return ok && now.Before(deadline)
+	// Inclusive of the deadline itself. That instant is quoted to the caller
+	// as retained_until, and "retained until T" answering at T is what the
+	// word says; a request landing exactly on it getting silence would
+	// contradict the figure the hub published.
+	return ok && !now.After(deadline)
 }

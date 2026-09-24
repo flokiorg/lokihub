@@ -1370,12 +1370,21 @@ operator can still account for value that passed through the Hub. If it does:
   wallet is deleted, so the token moves no value, and a caller who presents it over NWC gets the
   `cash_status` tombstone inside the retention window and silence outside it — never funds. This applies
   to operator surfaces only; the NWC rule above is absolute and unaffected.
-  Two properties are worth being explicit about rather than leaving to be rediscovered. The token still
-  carries the connection secret, so anyone who obtains it can decrypt that bill's recorded request and
-  response traffic after the fact — it reveals history, never money. And once the retention window closes
-  the tombstone stops answering, so a copy that outlives the window is once again indistinguishable from
-  a Hub that is simply unreachable. Operators SHOULD treat a displayed token as they would any other
-  audit record.
+  Three properties are worth being explicit about rather than leaving to be rediscovered, because the
+  token is a credential even though the wallet behind it is gone.
+  First, it still carries the connection secret, so anyone who obtains it can decrypt that bill's
+  recorded request and response traffic after the fact. NIP-44 to a static key has no forward secrecy,
+  so this reaches back over every exchange an observer happened to record.
+  Second, the capability is not only passive: while the retention window is open, a holder of the string
+  can compose a fresh, validly signed `cash_status` request and be answered. What stops them taking value
+  is that the wallet has been deleted, not that the key is unavailable — a pairing key stays
+  deterministically derivable from its wallet identifier, so deletion, not secrecy, is the control doing
+  the work here. An implementation MUST NOT rely on the token being unguessable for any property it
+  cares about.
+  Third, once the retention window closes the tombstone stops answering, so a copy that outlives the
+  window is once again indistinguishable from a Hub that is simply unreachable.
+  Operators SHOULD treat a displayed token as a live credential for the length of the retention window,
+  and as an audit record thereafter.
 - An archived slice SHOULD carry the terminal state from the table above, and MAY carry the payment facts
   of its payout (payment hash, preimage, fees). Those facts MUST be recorded at redeem time, since nothing
   in the ledger links a payout back to the slice that caused it once the wallet is gone.
