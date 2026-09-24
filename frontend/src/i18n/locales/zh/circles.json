@@ -253,6 +253,7 @@
     "pubkeyModeHelper": "只有此 Nostr 身份可以兑换。",
     "connectionKeyModeHelper": "只有已验证的身份可以兑换。",
     "copyLokicash": "复制 Lokicash",
+    "copyDestroyedLokicash": "复制此已销毁现金券的 Lokicash",
     "tokenStatusUnredeemed": "未兑换",
     "tokenStatusFullyRedeemed": "已全部兑换",
     "tokenStatusPartiallyRedeemed": "已兑换 {{claimed}}/{{count}}",
