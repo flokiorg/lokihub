@@ -637,6 +637,20 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
 	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, resolved.SignMint, sum)
 
+	// Persist the token verbatim so the archive can keep the exact string this
+	// bill was issued with once it is destroyed (db.App.CashToken). Re-deriving
+	// it later is not equivalent: the token embeds the relay hints in effect
+	// right now, and config can change. Best-effort — a bill that is otherwise
+	// fully minted and funded must not fail over its own audit copy.
+	if lokicashToken != "" {
+		if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
+			Update("cash_token", lokicashToken).Error; err != nil {
+			logger.Logger.Warn().Err(err).
+				Uint("cash_wallet_id", newApp.ID).
+				Msg("Failed to store Cash bill token for the audit archive")
+		}
+	}
+
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).
 		Uint("parent_app_id", resolved.HubApp.ID).

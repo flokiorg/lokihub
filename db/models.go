@@ -66,11 +66,21 @@ type App struct {
 	// app_pubkey-only case (no p-tag) uses it as a prefix too.
 	AppPubkey    string  `validate:"required" gorm:"not null;index:idx_apps_pubkey_lookup,priority:1"`
 	WalletPubkey *string `gorm:"index:idx_apps_pubkey_lookup,priority:2"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	LastUsedAt   *time.Time
-	Kind         string `gorm:"not null;default:'standard'"`
-	Metadata     datatypes.JSON
+	// CashToken is a cash_wallet's own lokicash1... string, stored verbatim at
+	// mint so the archive can keep the exact string that was issued when the
+	// bill is destroyed (CashBillArchive.CashToken). Empty for every other
+	// kind.
+	//
+	// Operator-side only: it is deliberately absent from api.App, so no REST
+	// listing or NWC response ever carries it. Storing it grants no capability
+	// that did not already exist — a cash bill's pairing key is
+	// deterministically derivable from its app id (keys.GetCashPairingKey).
+	CashToken  string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	LastUsedAt *time.Time
+	Kind       string `gorm:"not null;default:'standard'"`
+	Metadata   datatypes.JSON
 
 	// Sub-wallet lineage (Cash and circle children)
 	ParentAppID *uint  `gorm:"index:idx_apps_parent,priority:1"`
@@ -406,7 +416,24 @@ type CashBillArchive struct {
 	// WalletPubkey is how an operator correlates this row with relay logs, and
 	// what the silence-invariant test looks the bill up by.
 	WalletPubkey string `gorm:"not null;index"`
-	MintedAt     time.Time
+	// CashToken is the bill's own lokicash1... string, copied verbatim off the
+	// App row (db.App.CashToken) that held it in life, for the operator's
+	// audit trail — matching a token from a support ticket or an offline
+	// record against the archive needs the literal string that was issued.
+	//
+	// Verbatim matters: the token embeds the relay hints in effect at mint
+	// time, so re-deriving one later could produce a different string from the
+	// one its holder actually has.
+	//
+	// Stored, never rendered and never returned over NWC. Keeping it grants no
+	// capability that did not already exist: a cash bill's pairing key is
+	// deterministically derivable from its app id (keys.GetCashPairingKey), so
+	// anyone with database access could already reconstruct this. NIP-CASH
+	// §Archival on Deletion's rule is against *presenting* a token for a
+	// destroyed bill — one that looks spendable and is not — which is why this
+	// column is excluded from every listing response.
+	CashToken string
+	MintedAt  time.Time
 	// EndedAt is when the bill was deleted. Second column of the composite
 	// index so a per-hub listing is index-ordered rather than filesorting a
 	// forever-growing table.
