@@ -1,7 +1,6 @@
 package db
 
 import (
-	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -21,6 +20,18 @@ import (
 // disabled (0). The deadline is measured from the spend, not from the bill's
 // expiry, so a never-expiring bill is covered too.
 //
+// One statement. The deadline itself comes from the materialised
+// CashBillArchive.RetainedUntil, while whether a policy exists at all is still
+// read live, through the join — so disabling retention or deleting a Hub stops
+// tombstones at once, with no column to keep in step for those two cases. What
+// the join cannot see is a retention value that merely CHANGED, which is why
+// apps.UpdateCashHubConfig recomputes the column.
+//
+// One indexed read of CashBillArchive.RetainedUntil, which is maintained at
+// archive time and recomputed when a Hub's SpentRetentionSecs changes. It used
+// to join cash_hub_configs and add the interval here, on every call; see that
+// field for why that could not stay.
+//
 // No floor is applied here, deliberately: this exact instant is what the
 // caller is told as retained_until, so honouring it is the honest thing. The
 // post-delete grace that keeps an in-flight request reachable is a separate
@@ -30,24 +41,21 @@ func SpentBillRetainedUntil(tx *gorm.DB, walletPubkey string) (time.Time, bool) 
 		return time.Time{}, false
 	}
 
-	var bill CashBillArchive
-	if err := tx.Where("wallet_pubkey = ?", walletPubkey).First(&bill).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return time.Time{}, false
-		}
+	var retainedUntil *time.Time
+	err := tx.Table("cash_bill_archives").
+		Select("cash_bill_archives.retained_until").
+		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
+		Where("cash_bill_archives.wallet_pubkey = ?", walletPubkey).
+		Where("cash_hub_configs.spent_retention_secs > 0").
+		Limit(1).
+		Scan(&retainedUntil).Error
+	if err != nil || retainedUntil == nil {
+		// No row, no hub config, retention disabled, or a row predating the
+		// column — all of which mean no tombstone applies.
 		return time.Time{}, false
 	}
 
-	var cfg CashHubConfig
-	if err := tx.Where("app_id = ?", bill.HubAppID).First(&cfg).Error; err != nil {
-		// The Hub itself is gone, so there is no retention policy to honour.
-		return time.Time{}, false
-	}
-	if cfg.SpentRetentionSecs <= 0 {
-		return time.Time{}, false
-	}
-
-	return bill.EndedAt.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second), true
+	return *retainedUntil, true
 }
 
 // SpentBillStillAnswerable reports whether a destroyed bill is still inside its

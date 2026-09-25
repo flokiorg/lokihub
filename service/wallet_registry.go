@@ -210,54 +210,67 @@ func (svc *service) spentBillRetained(walletPubkey string) bool {
 // retainedSpentBillPubkeys lists the wallet pubkeys of destroyed cash bills
 // whose hub still answers "spent" about them — used to rebuild the set on
 // startup, since the window lives in the archive rather than in memory.
+//
+// One statement, whatever the archive holds. It used to pluck every candidate
+// and then call spentBillRetained per row, which is two more queries each:
+// 2N+1 in total, measured at 100,001 statements and 15.6 s on postgres for 50k
+// archived bills, all of it before the hub answers anything. A request arriving
+// in that window meets silence, which a caller cannot distinguish from a spent
+// bill or a dead hub — the exact ambiguity the tombstone exists to remove.
+//
+// The deadline comes from the materialised retained_until; whether a policy
+// exists at all still comes from the join, so a hub whose retention was disabled
+// or whose config is gone drops out live. Same shape as db.SpentBillRetainedUntil,
+// deliberately: one definition of "still answerable", expressed once in SQL.
 func (svc *service) retainedSpentBillPubkeys() []string {
 	if svc.db == nil {
 		return nil
 	}
-	var candidates []string
-	err := svc.db.Model(&db.CashBillArchive{}).
+	var pubkeys []string
+	err := svc.db.Table("cash_bill_archives").
 		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
 		Where("cash_hub_configs.spent_retention_secs > 0").
-		Pluck("cash_bill_archives.wallet_pubkey", &candidates).Error
+		Where("cash_bill_archives.retained_until > ?", time.Now()).
+		Pluck("cash_bill_archives.wallet_pubkey", &pubkeys).Error
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to reload retained spent-bill wallets")
 		return nil
 	}
-	// The per-hub deadline is re-checked in Go rather than in SQL: expressing
-	// ended_at + spent_retention_secs portably across sqlite and Postgres is
-	// not worth a dialect branch in a money-adjacent query.
-	retained := candidates[:0]
-	for _, pk := range candidates {
-		if svc.spentBillRetained(pk) {
-			retained = append(retained, pk)
-		}
-	}
-	return retained
+	return pubkeys
 }
+
+// pruneExpiredSpentBillsBatch is how many expired wallets one pass deregisters.
+// Bounded for the same reason the cash cleanup sweep is: a tick should do a
+// known amount of work, not however much has accumulated.
+const pruneExpiredSpentBillsBatch = 500
 
 // PruneExpiredSpentBills drops registry entries whose retention window has
 // passed. Called from the periodic cash sweep, so the set converges on the
 // archive without any long-lived timer.
+//
+// Bounded and indexed: it asks only for wallets that have actually expired,
+// rather than reading every archive row and re-deriving each one's deadline. The
+// old shape was 2N+1 statements per tick — 100,001 and 26.2 s on postgres at 50k
+// archived bills, extrapolating past the five-minute tick interval at a million,
+// so the sweep could never finish before the next one began.
 func (svc *service) PruneExpiredSpentBills() {
 	if svc.db == nil || svc.walletRegistry == nil {
 		return
 	}
-	var candidates []string
-	if err := svc.db.Model(&db.CashBillArchive{}).
-		Pluck("wallet_pubkey", &candidates).Error; err != nil {
+
+	var expired []string
+	err := svc.db.Table("cash_bill_archives").
+		Where("retained_until IS NOT NULL AND retained_until <= ?", time.Now()).
+		Limit(pruneExpiredSpentBillsBatch).
+		Pluck("wallet_pubkey", &expired).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to query expired spent-bill wallets")
+		return
+	}
+	if len(expired) == 0 {
 		return
 	}
 
-	// Collected and removed in one call, never one at a time: Remove copies
-	// the whole registry, so per-pubkey removal is O(expired * registry) and
-	// falls over exactly when a hub is large enough for it to matter.
-	expired := make([]string, 0, len(candidates))
-	for _, pk := range candidates {
-		if !svc.spentBillRetained(pk) {
-			expired = append(expired, pk)
-		}
-	}
-	if len(expired) > 0 {
-		svc.walletRegistry.Remove(expired...)
-	}
+	// One call, so the registry is touched once for the whole batch.
+	svc.walletRegistry.Remove(expired...)
 }
