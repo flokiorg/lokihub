@@ -135,3 +135,64 @@ func TestWalletRegistry_RemoveAfterGraceKeepsServingBriefly(t *testing.T) {
 	assert.True(t, r.Has("aa"), "the wallet must still be served during the grace period")
 	assert.Positive(t, walletRetentionAfterDelete, "the grace period must not be zero")
 }
+
+// TestWalletRegistry_RemoveBatchCopiesOnce is the property the variadic
+// signature exists for: one copy for the whole batch, not one per pubkey. A
+// sweep dropping expired bills from a large registry is where the difference
+// stops being academic.
+func TestWalletRegistry_RemoveBatchCopiesOnce(t *testing.T) {
+	r := newWalletRegistry()
+	r.Add("aa", "bb", "cc", "dd")
+	before := r.pubkeys.Load()
+
+	r.Remove("aa", "cc")
+
+	assert.False(t, r.Has("aa"))
+	assert.False(t, r.Has("cc"))
+	assert.True(t, r.Has("bb"), "an untouched wallet must survive the batch")
+	assert.True(t, r.Has("dd"))
+	assert.Equal(t, 2, r.Len())
+
+	after := r.pubkeys.Load()
+	assert.NotSame(t, before, after, "a batch that removes something must swap the map")
+}
+
+// TestWalletRegistry_RemoveBatchAllUnknownIsNoop keeps the allocation-free
+// path honest: a sweep that finds nothing expired must not copy the map at
+// all, which is the common outcome on every tick.
+func TestWalletRegistry_RemoveBatchAllUnknownIsNoop(t *testing.T) {
+	r := newWalletRegistry()
+	r.Add("aa", "bb")
+	before := r.pubkeys.Load()
+
+	r.Remove("yy", "zz")
+
+	assert.Equal(t, 2, r.Len())
+	assert.Same(t, before, r.pubkeys.Load(), "removing only unknown wallets must not copy the map")
+}
+
+// TestWalletRegistry_RemoveEmptyIsNoop guards the degenerate call a batched
+// caller makes when its batch is empty.
+func TestWalletRegistry_RemoveEmptyIsNoop(t *testing.T) {
+	r := newWalletRegistry()
+	r.Add("aa")
+	before := r.pubkeys.Load()
+
+	r.Remove()
+
+	assert.Equal(t, 1, r.Len())
+	assert.Same(t, before, r.pubkeys.Load(), "an empty batch must not copy the map")
+}
+
+// TestWalletRegistry_RemoveBatchPartiallyKnown covers the mixed batch a real
+// sweep produces, where only some candidates are still registered.
+func TestWalletRegistry_RemoveBatchPartiallyKnown(t *testing.T) {
+	r := newWalletRegistry()
+	r.Add("aa", "bb")
+
+	r.Remove("aa", "zz")
+
+	assert.False(t, r.Has("aa"))
+	assert.True(t, r.Has("bb"))
+	assert.Equal(t, 1, r.Len())
+}

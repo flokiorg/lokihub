@@ -114,17 +114,46 @@ func (r *walletRegistry) RemoveAfterGrace(walletPubkey string) {
 	})
 }
 
-// Remove deregisters a wallet pubkey immediately.
-func (r *walletRegistry) Remove(walletPubkey string) {
+// Remove deregisters wallet pubkeys immediately.
+//
+// Variadic to mirror Add, and for the same reason it matters more on this
+// side: every call copies the whole map, so removing k wallets one at a time
+// costs k full copies of a set that holds every app this hub serves. A sweep
+// dropping a few hundred expired bills from a large registry is the case that
+// made this quadratic — see PruneExpiredSpentBills, which passes its whole
+// batch in one call.
+func (r *walletRegistry) Remove(walletPubkeys ...string) {
+	if len(walletPubkeys) == 0 {
+		return
+	}
+
 	for {
 		current := r.pubkeys.Load()
-		if _, exists := (*current)[walletPubkey]; !exists {
+
+		// Cheapest first: if none of them are registered there is nothing to
+		// copy. This is the common outcome for a sweep that finds no expired
+		// wallets, and it keeps that case allocation-free.
+		present := false
+		for _, pk := range walletPubkeys {
+			if _, exists := (*current)[pk]; exists {
+				present = true
+				break
+			}
+		}
+		if !present {
 			return
+		}
+
+		// A set rather than a linear scan per entry: the caller may be
+		// removing hundreds, and this loop runs once per registered wallet.
+		doomed := make(map[string]struct{}, len(walletPubkeys))
+		for _, pk := range walletPubkeys {
+			doomed[pk] = struct{}{}
 		}
 
 		next := make(map[string]struct{}, len(*current))
 		for pk := range *current {
-			if pk != walletPubkey {
+			if _, drop := doomed[pk]; !drop {
 				next[pk] = struct{}{}
 			}
 		}
@@ -203,9 +232,17 @@ func (svc *service) PruneExpiredSpentBills() {
 		Pluck("wallet_pubkey", &candidates).Error; err != nil {
 		return
 	}
+
+	// Collected and removed in one call, never one at a time: Remove copies
+	// the whole registry, so per-pubkey removal is O(expired * registry) and
+	// falls over exactly when a hub is large enough for it to matter.
+	expired := make([]string, 0, len(candidates))
 	for _, pk := range candidates {
 		if !svc.spentBillRetained(pk) {
-			svc.walletRegistry.Remove(pk)
+			expired = append(expired, pk)
 		}
+	}
+	if len(expired) > 0 {
+		svc.walletRegistry.Remove(expired...)
 	}
 }
