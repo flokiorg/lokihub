@@ -125,6 +125,16 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 	}
 	if live.ParentAppID != nil {
 		bill.HubAppID = *live.ParentAppID
+
+		// Materialise the tombstone deadline from the Hub's current policy.
+		// Read inside this transaction so it cannot disagree with a concurrent
+		// config change, and left NULL when retention is disabled (0) or the
+		// Hub has no config row — both mean "no tombstone".
+		var cfg db.CashHubConfig
+		if err := tx.Where("app_id = ?", bill.HubAppID).First(&cfg).Error; err == nil && cfg.SpentRetentionSecs > 0 {
+			retainedUntil := now.Add(time.Duration(cfg.SpentRetentionSecs) * time.Second)
+			bill.RetainedUntil = &retainedUntil
+		}
 	}
 	if err := tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "wallet_app_id"}},

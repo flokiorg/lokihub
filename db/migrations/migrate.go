@@ -98,5 +98,11 @@ func Migrate(gormDB *gorm.DB) error {
 
 	// Partial index on apps(expires_at) for sub-wallets awaiting cleanup.
 	// Runs after AutoMigrate since it indexes parent_app_id/cleanup_in_progress, which AutoMigrate adds.
-	return MigrateCleanupIndex(gormDB)
+	if err := MigrateCleanupIndex(gormDB); err != nil {
+		return err
+	}
+
+	// Backfills cash_bill_archives.retained_until, which AutoMigrate has just
+	// added as an empty column.
+	return MigrateCashArchiveRetainedUntil(gormDB)
 }
