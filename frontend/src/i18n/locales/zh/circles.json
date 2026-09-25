@@ -373,7 +373,7 @@
     "holds": "持有",
     "spent": "已花费",
     "received": "已收到",
-    "capFooter": "预算上限 {{cap}} loki",
+    "capFooter": "本期已用 {{used}} / {{cap}} loki",
     "uncapped": "无预算上限",
     "flowTitle": "每日流水",
     "flowHint": "收到的在线上方，花费的在下方。",

@@ -139,6 +139,7 @@ export function CircleMemberBreakdown({
     balanceMloki: m.balance_mloki,
     spentMloki: m.spent_mloki,
     capMloki: m.max_amount_mloki,
+    budgetUsedMloki: m.budget_used_mloki,
   }));
   if (rest.length) {
     const balanceMloki = rest.reduce((n, m) => n + m.balance_mloki, 0);
@@ -152,6 +153,7 @@ export function CircleMemberBreakdown({
       // Caps do not add up into anything meaningful across members, so the
       // aggregated bar reports none rather than a sum nobody asked for.
       capMloki: 0,
+      budgetUsedMloki: 0,
     });
   }
 
@@ -200,9 +202,18 @@ export function CircleMemberBreakdown({
                   rows={rows}
                   // A cap of 0 means uncapped, not "a budget of nothing", so
                   // the footer is omitted rather than claiming 0 remaining.
+                  // The cap is shown against THIS PERIOD's spend, never the
+                  // all-time total in the bar above it. A cap renews; an
+                  // all-time figure does not, so putting them side by side
+                  // would invite a comparison that means nothing — a member a
+                  // year into a monthly cap would look like a repeat offender
+                  // while being inside it every single month.
                   footer={
                     point.capMloki > 0
                       ? t("circleCharts.capFooter", {
+                          used: Math.round(
+                            point.budgetUsedMloki / 1000
+                          ).toLocaleString(),
                           cap: Math.round(
                             point.capMloki / 1000
                           ).toLocaleString(),

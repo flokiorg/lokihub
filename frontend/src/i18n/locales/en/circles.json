@@ -448,7 +448,7 @@
     "holds": "Holds",
     "spent": "Spent",
     "received": "Received",
-    "capFooter": "Budget cap {{cap}} loki",
+    "capFooter": "{{used}} of {{cap}} loki this period",
     "uncapped": "No budget cap",
     "flowTitle": "Daily flow",
     "flowHint": "Received above the line, spent below it.",

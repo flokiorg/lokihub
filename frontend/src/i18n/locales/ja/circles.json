@@ -373,7 +373,7 @@
     "holds": "保有",
     "spent": "支出",
     "received": "受取",
-    "capFooter": "予算上限 {{cap}} loki",
+    "capFooter": "今期 {{cap}} loki 中 {{used}} loki",
     "uncapped": "予算上限なし",
     "flowTitle": "日次フロー",
     "flowHint": "受取は線の上、支出は線の下。",

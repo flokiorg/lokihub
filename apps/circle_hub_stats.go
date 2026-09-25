@@ -66,9 +66,16 @@ type CircleMemberActivity struct {
 	WalletAppID uint
 	Name        string
 	SpentMloki  int64
-	// BalanceMloki and MaxAmountMloki are filled by the api layer.
+	// BalanceMloki, MaxAmountMloki and BudgetUsedMloki are filled by the api
+	// layer, which owns the canonical balance and budget arithmetic.
 	BalanceMloki   int64
 	MaxAmountMloki int64
+	// BudgetUsedMloki is spend within the member's CURRENT budget period,
+	// computed the same way the payment path enforces the cap. SpentMloki
+	// beside it is all-time, and the two must not be confused: a cap renews,
+	// so an all-time total placed next to it invites a comparison that says
+	// nothing.
+	BudgetUsedMloki int64
 }
 
 // scaleLokiToMloki converts a loki amount to mloki, saturating rather than
