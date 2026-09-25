@@ -4,12 +4,9 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-)
 
-// retainedUntilBackfillBatch is how many archive rows one backfill pass reads
-// and writes. Bounded because the table can hold millions of rows, and a single
-// unbounded pass would hold locks and memory for the duration.
-const retainedUntilBackfillBatch = 1000
+	dbpkg "github.com/flokiorg/lokihub/db"
+)
 
 // MigrateCashArchiveRetainedUntil populates CashBillArchive.RetainedUntil for
 // rows that predate the column: ended_at plus the bill's Hub's
@@ -36,8 +33,10 @@ func MigrateCashArchiveRetainedUntil(db *gorm.DB) error {
 		return nil
 	}
 
-	// Retention per Hub, read once: a Hub has far fewer rows than the archive
-	// does, so this avoids a join per batch.
+	// Per Hub, reusing the same helper a live retention change uses, so the
+	// backfilled value and the recomputed one can never be computed two
+	// different ways. onlyMissing, since this fills a new column rather than
+	// applying a policy change.
 	type hubRetention struct {
 		AppID              uint
 		SpentRetentionSecs int
@@ -49,58 +48,13 @@ func MigrateCashArchiveRetainedUntil(db *gorm.DB) error {
 		Scan(&hubs).Error; err != nil {
 		return err
 	}
-	if len(hubs) == 0 {
-		return nil
-	}
-	retentionByHub := make(map[uint]time.Duration, len(hubs))
-	hubIDs := make([]uint, 0, len(hubs))
-	for _, h := range hubs {
-		retentionByHub[h.AppID] = time.Duration(h.SpentRetentionSecs) * time.Second
-		hubIDs = append(hubIDs, h.AppID)
-	}
 
-	// Walked by primary key, so each pass makes progress whatever happens to an
-	// individual row. A loop keyed on "still NULL" would spin forever on any row
-	// the arithmetic could not fill, hanging startup.
-	type archiveRow struct {
-		ID       uint
-		HubAppID uint
-		EndedAt  time.Time
-	}
-	lastID := uint(0)
-	for {
-		var batch []archiveRow
-		err := db.Table("cash_bill_archives").
-			Select("id, hub_app_id, ended_at").
-			Where("id > ? AND retained_until IS NULL AND hub_app_id IN ?", lastID, hubIDs).
-			Order("id").
-			Limit(retainedUntilBackfillBatch).
-			Scan(&batch).Error
-		if err != nil {
+	for _, hub := range hubs {
+		retention := time.Duration(hub.SpentRetentionSecs) * time.Second
+		if err := dbpkg.RecomputeSpentRetention(db, hub.AppID, retention, true); err != nil {
 			return err
 		}
-		if len(batch) == 0 {
-			return nil
-		}
-
-		if err := db.Transaction(func(tx *gorm.DB) error {
-			for _, row := range batch {
-				retention, ok := retentionByHub[row.HubAppID]
-				if !ok {
-					continue
-				}
-				deadline := row.EndedAt.Add(retention)
-				if err := tx.Table("cash_bill_archives").
-					Where("id = ?", row.ID).
-					Update("retained_until", deadline).Error; err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		lastID = batch[len(batch)-1].ID
 	}
+
+	return nil
 }

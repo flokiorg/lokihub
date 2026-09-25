@@ -163,6 +163,11 @@ func (svc *service) startNostr(ctx context.Context) error {
 	updateAppEventListener := &updateAppConsumer{svc: svc}
 	svc.eventPublisher.RegisterSubscriber(updateAppEventListener)
 
+	// Keeps the relay gate in step when a Cash Hub's spent-bill retention
+	// changes: raising it brings wallets back into range that the sweep has
+	// already dropped.
+	svc.eventPublisher.RegisterSubscriber(&cashRetentionConsumer{svc: svc})
+
 	// Fresh per startNostr call, like nostrGroup above: ReloadNostr can
 	// re-invoke this while the app runs, and the set must be rebuilt from the
 	// apps that exist now.
