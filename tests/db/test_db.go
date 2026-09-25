@@ -27,7 +27,11 @@ func GetTestDatabaseURI() string {
 	return ret
 }
 
-func NewDB(t *testing.T) (*gorm.DB, error) {
+// NewDB opens a migrated test database.
+//
+// Takes testing.TB rather than *testing.T so benchmarks can use it too;
+// pgtestdb's own TB interface is satisfied by both.
+func NewDB(t testing.TB) (*gorm.DB, error) {
 	dbUri := GetTestDatabaseURI()
 
 	if dbUri == defaultTestDB {
@@ -42,7 +46,7 @@ func NewDB(t *testing.T) (*gorm.DB, error) {
 	return NewDBWithURI(t, dbUri)
 }
 
-func NewDBWithURI(t *testing.T, uri string) (*gorm.DB, error) {
+func NewDBWithURI(t testing.TB, uri string) (*gorm.DB, error) {
 	if db.IsPostgresURI(uri) {
 		parsedURI, err := url.Parse(uri)
 		if err != nil {
