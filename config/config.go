@@ -26,6 +26,12 @@ type config struct {
 	cache      map[string]map[string]string // key -> encryptionKeyHash -> value
 	cacheMutex sync.Mutex
 	jwtSecret  string
+	// jwtSecretMutex guards jwtSecret. Two requests can reach the unlock path
+	// at once — /api/start and /api/unlock both take it — and without this
+	// each could observe no stored secret, generate its own and write it,
+	// leaving every token already signed with the loser's secret silently
+	// invalid.
+	jwtSecretMutex sync.Mutex
 }
 
 const (
@@ -122,6 +128,9 @@ func (cfg *config) SetupCompleted() bool {
 }
 
 func (cfg *config) GetJWTSecret() (string, error) {
+	cfg.jwtSecretMutex.Lock()
+	defer cfg.jwtSecretMutex.Unlock()
+
 	if cfg.jwtSecret == "" {
 		return "", errors.New("config not unlocked")
 	}
@@ -129,9 +138,21 @@ func (cfg *config) GetJWTSecret() (string, error) {
 	return cfg.jwtSecret, nil
 }
 
-func (cfg *config) Unlock(encryptionKey string) error {
-	if !cfg.CheckUnlockPassword(encryptionKey) {
-		return errors.New("incorrect password")
+// loadJWTSecret reads the stored JWT secret, generating one on first use, and
+// is safe to call from several requests at once.
+//
+// Idempotent on purpose: if a secret is already loaded it returns immediately.
+// Unlock is reachable concurrently (/api/start and /api/unlock both take it,
+// and a reconnecting browser will fire both), and without the early return two
+// callers could each find nothing stored, each generate a secret, and each
+// write it — whichever lost would have already signed tokens that no longer
+// validate, logging that session out for no visible reason.
+func (cfg *config) loadJWTSecret(encryptionKey string) error {
+	cfg.jwtSecretMutex.Lock()
+	defer cfg.jwtSecretMutex.Unlock()
+
+	if cfg.jwtSecret != "" {
+		return nil
 	}
 
 	// TODO: remove encryptedJwtSecret check after 2027-01-01
@@ -154,13 +175,23 @@ func (cfg *config) Unlock(encryptionKey string) error {
 		jwtSecret = hexSecret
 		logger.Logger.Info().Msg("Generated new JWT secret")
 
-		err = cfg.SetUpdate("JWTSecret", jwtSecret, encryptionKey)
-		if err != nil {
+		if err := cfg.SetUpdate("JWTSecret", jwtSecret, encryptionKey); err != nil {
 			logger.Logger.Error().Err(err).Msg("failed to save JWT secret")
 			return err
 		}
 	}
 	cfg.jwtSecret = jwtSecret
+	return nil
+}
+
+func (cfg *config) Unlock(encryptionKey string) error {
+	if !cfg.CheckUnlockPassword(encryptionKey) {
+		return errors.New("incorrect password")
+	}
+
+	if err := cfg.loadJWTSecret(encryptionKey); err != nil {
+		return err
+	}
 
 	// Seed the default General relay list on first run only. SetIgnore is a
 	// no-op if "GeneralRelay" already exists, even if the user has since
@@ -396,7 +427,9 @@ func (cfg *config) ChangeUnlockPassword(currentUnlockPassword string, newUnlockP
 	}
 
 	// JWT secret will be set on config unlock (required after password change)
+	cfg.jwtSecretMutex.Lock()
 	cfg.jwtSecret = ""
+	cfg.jwtSecretMutex.Unlock()
 	return nil
 }
 
