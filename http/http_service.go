@@ -214,7 +214,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	readOnlyApiGroup.GET("/swaps/:swapId", httpSvc.lookupSwapHandler)
 	readOnlyApiGroup.GET("/swaps/out/info", httpSvc.getSwapOutInfoHandler)
 	readOnlyApiGroup.GET("/swaps/in/info", httpSvc.getSwapInInfoHandler)
-	readOnlyApiGroup.GET("/swaps/mnemonic", httpSvc.swapMnemonicHandler)
+
 	readOnlyApiGroup.GET("/autoswap", httpSvc.getAutoSwapConfigHandler)
 	readOnlyApiGroup.GET("/forwards", httpSvc.forwardsHandler)
 	readOnlyApiGroup.GET("/appstore/apps", httpSvc.getAppStoreAppsHandler)
@@ -258,6 +258,12 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/identity-authorities/:pubkey", httpSvc.identityAuthoritiesDeleteHandler)
 
 	fullAccessApiGroup.POST("/mnemonic", httpSvc.mnemonicHandler)
+	// Full access, not read-only. This returns a BIP39 seed controlling swap
+	// funds: anyone holding it can sweep them with no further help from this
+	// hub, so it is spending material and "readonly" is precisely the tier
+	// that must not reach it. The node's own mnemonic one line up sets the
+	// standard — full access, and the password re-entered.
+	fullAccessApiGroup.GET("/swaps/mnemonic", httpSvc.swapMnemonicHandler)
 	fullAccessApiGroup.PATCH("/backup-reminder", httpSvc.backupReminderHandler)
 	fullAccessApiGroup.POST("/channels", httpSvc.openChannelHandler)
 
