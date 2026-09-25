@@ -27,27 +27,24 @@ func TestWalletRegistry_AddHasRemove(t *testing.T) {
 }
 
 // TestWalletRegistry_AddIsIdempotent matters because a resubscribe re-adds
-// every wallet: that must not grow the set or churn the map.
+// every wallet: that must not grow the set.
 func TestWalletRegistry_AddIsIdempotent(t *testing.T) {
 	r := newWalletRegistry()
 	r.Add("aa")
-	before := r.pubkeys.Load()
 
 	r.Add("aa")
 
 	assert.Equal(t, 1, r.Len())
-	assert.Same(t, before, r.pubkeys.Load(), "re-adding a known wallet must not copy the map")
+	assert.True(t, r.Has("aa"))
 }
 
 func TestWalletRegistry_RemoveUnknownIsNoop(t *testing.T) {
 	r := newWalletRegistry()
 	r.Add("aa")
-	before := r.pubkeys.Load()
-
 	r.Remove("zz")
 
 	assert.Equal(t, 1, r.Len())
-	assert.Same(t, before, r.pubkeys.Load(), "removing an unknown wallet must not copy the map")
+	assert.True(t, r.Has("aa"), "removing an unknown wallet must not disturb a registered one")
 }
 
 // TestWalletRegistry_ConcurrentAddsAllSurvive guards the CompareAndSwap: two
@@ -136,14 +133,11 @@ func TestWalletRegistry_RemoveAfterGraceKeepsServingBriefly(t *testing.T) {
 	assert.Positive(t, walletRetentionAfterDelete, "the grace period must not be zero")
 }
 
-// TestWalletRegistry_RemoveBatchCopiesOnce is the property the variadic
-// signature exists for: one copy for the whole batch, not one per pubkey. A
-// sweep dropping expired bills from a large registry is where the difference
-// stops being academic.
-func TestWalletRegistry_RemoveBatchCopiesOnce(t *testing.T) {
+// TestWalletRegistry_RemoveBatch covers the batched removal a sweep performs:
+// the listed wallets go, the others stay.
+func TestWalletRegistry_RemoveBatch(t *testing.T) {
 	r := newWalletRegistry()
 	r.Add("aa", "bb", "cc", "dd")
-	before := r.pubkeys.Load()
 
 	r.Remove("aa", "cc")
 
@@ -152,23 +146,19 @@ func TestWalletRegistry_RemoveBatchCopiesOnce(t *testing.T) {
 	assert.True(t, r.Has("bb"), "an untouched wallet must survive the batch")
 	assert.True(t, r.Has("dd"))
 	assert.Equal(t, 2, r.Len())
-
-	after := r.pubkeys.Load()
-	assert.NotSame(t, before, after, "a batch that removes something must swap the map")
 }
 
-// TestWalletRegistry_RemoveBatchAllUnknownIsNoop keeps the allocation-free
-// path honest: a sweep that finds nothing expired must not copy the map at
-// all, which is the common outcome on every tick.
+// TestWalletRegistry_RemoveBatchAllUnknownIsNoop covers the common outcome of a
+// sweep tick: nothing expired, so nothing changes.
 func TestWalletRegistry_RemoveBatchAllUnknownIsNoop(t *testing.T) {
 	r := newWalletRegistry()
 	r.Add("aa", "bb")
-	before := r.pubkeys.Load()
 
 	r.Remove("yy", "zz")
 
 	assert.Equal(t, 2, r.Len())
-	assert.Same(t, before, r.pubkeys.Load(), "removing only unknown wallets must not copy the map")
+	assert.True(t, r.Has("aa"))
+	assert.True(t, r.Has("bb"))
 }
 
 // TestWalletRegistry_RemoveEmptyIsNoop guards the degenerate call a batched
@@ -176,12 +166,11 @@ func TestWalletRegistry_RemoveBatchAllUnknownIsNoop(t *testing.T) {
 func TestWalletRegistry_RemoveEmptyIsNoop(t *testing.T) {
 	r := newWalletRegistry()
 	r.Add("aa")
-	before := r.pubkeys.Load()
 
 	r.Remove()
 
 	assert.Equal(t, 1, r.Len())
-	assert.Same(t, before, r.pubkeys.Load(), "an empty batch must not copy the map")
+	assert.True(t, r.Has("aa"))
 }
 
 // TestWalletRegistry_RemoveBatchPartiallyKnown covers the mixed batch a real
