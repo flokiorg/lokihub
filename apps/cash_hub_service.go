@@ -108,6 +108,33 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("cash hub config not found for app %d", appID)
 	}
+
+	// A retention change must reach bills this Hub has ALREADY destroyed, not
+	// only future ones, so the materialised deadline on each archive row is
+	// rewritten to match. Lowering therefore shortens windows already quoted to
+	// callers as retained_until, and raising can make an expired bill answerable
+	// again — the price of retention being live policy rather than a figure
+	// frozen at destruction time.
+	//
+	// Batched, but synchronous: an operator changing this should not get a
+	// success back while some of their bills still answer under the old policy.
+	if spentRetentionSecs != nil {
+		retention := time.Duration(*spentRetentionSecs) * time.Second
+		if err := db.RecomputeSpentRetention(svc.db, appID, retention, false); err != nil {
+			return fmt.Errorf("failed to apply new spent retention to archived bills: %w", err)
+		}
+
+		// Tells the service layer to re-sync its relay gate: raising retention
+		// brings wallets back into range that the sweep has already dropped, and
+		// nothing else would notice until a restart.
+		svc.eventPublisher.Publish(&events.Event{
+			Event: "nwc_cash_retention_changed",
+			Properties: map[string]interface{}{
+				"id": appID,
+			},
+		})
+	}
+
 	return nil
 }
 

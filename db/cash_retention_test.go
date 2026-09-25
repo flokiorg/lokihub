@@ -160,3 +160,92 @@ func TestSpentBillStillAnswerable_DeadlineIsInclusive(t *testing.T) {
 	assert.False(t, db.SpentBillStillAnswerable(gormDB, pubkey, deadline.Add(time.Nanosecond)),
 		"a moment after it, the hub returns to silence")
 }
+
+// TestRecomputeSpentRetention_LoweringShortensExistingBills is the behaviour the
+// materialised column exists to preserve: retention is live policy, so lowering
+// it must apply to bills the Hub has already destroyed — even though that
+// shortens a window already quoted to a caller as retained_until.
+func TestRecomputeSpentRetention_LoweringShortensExistingBills(t *testing.T) {
+	gormDB := retentionTestDB(t)
+	endedAt := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	pubkey := "a1" + randomHex30(t)
+	seedSpentBill(t, gormDB, pubkey, endedAt, 15*24*60*60)
+
+	before, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	require.True(t, ok)
+	assert.Equal(t, endedAt.Add(15*24*time.Hour).Unix(), before.Unix())
+
+	var bill db.CashBillArchive
+	require.NoError(t, gormDB.Where("wallet_pubkey = ?", pubkey).First(&bill).Error)
+	require.NoError(t, db.RecomputeSpentRetention(gormDB, bill.HubAppID, time.Hour, false))
+
+	after, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	require.True(t, ok, "the bill still has a policy, just a shorter one")
+	assert.Equal(t, endedAt.Add(time.Hour).Unix(), after.Unix(),
+		"lowering retention must move an already-destroyed bill's deadline")
+
+	// Two hours after the spend with a one-hour window: it is now past.
+	assert.False(t, db.SpentBillStillAnswerable(gormDB, pubkey, time.Now()),
+		"a window that has been lowered past the present must stop answering")
+}
+
+// TestRecomputeSpentRetention_RaisingRevivesExpiredBills is the other direction,
+// and the one that needs the service layer to re-register the wallet: a bill
+// whose window had passed becomes answerable again.
+func TestRecomputeSpentRetention_RaisingRevivesExpiredBills(t *testing.T) {
+	gormDB := retentionTestDB(t)
+	endedAt := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	pubkey := "a2" + randomHex30(t)
+	seedSpentBill(t, gormDB, pubkey, endedAt, 60)
+
+	require.False(t, db.SpentBillStillAnswerable(gormDB, pubkey, time.Now()),
+		"a one-minute window two hours ago has passed")
+
+	var bill db.CashBillArchive
+	require.NoError(t, gormDB.Where("wallet_pubkey = ?", pubkey).First(&bill).Error)
+	require.NoError(t, db.RecomputeSpentRetention(gormDB, bill.HubAppID, 15*24*time.Hour, false))
+
+	assert.True(t, db.SpentBillStillAnswerable(gormDB, pubkey, time.Now()),
+		"raising retention must bring an expired bill back inside its window")
+}
+
+// TestRecomputeSpentRetention_ZeroClearsTheDeadline pins that disabling
+// retention removes the tombstone outright rather than leaving a stale deadline.
+func TestRecomputeSpentRetention_ZeroClearsTheDeadline(t *testing.T) {
+	gormDB := retentionTestDB(t)
+	endedAt := time.Now().Add(-time.Minute).Truncate(time.Second)
+	pubkey := "a3" + randomHex30(t)
+	seedSpentBill(t, gormDB, pubkey, endedAt, 3600)
+
+	var bill db.CashBillArchive
+	require.NoError(t, gormDB.Where("wallet_pubkey = ?", pubkey).First(&bill).Error)
+	require.NoError(t, db.RecomputeSpentRetention(gormDB, bill.HubAppID, 0, false))
+
+	var after db.CashBillArchive
+	require.NoError(t, gormDB.Where("wallet_pubkey = ?", pubkey).First(&after).Error)
+	assert.Nil(t, after.RetainedUntil, "no retention means no deadline on the row")
+
+	_, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	assert.False(t, ok)
+}
+
+// TestRecomputeSpentRetention_OnlyMissingLeavesSetDeadlines is what the backfill
+// migration relies on: it fills a new column without rewriting anything a live
+// policy change has already set.
+func TestRecomputeSpentRetention_OnlyMissingLeavesSetDeadlines(t *testing.T) {
+	gormDB := retentionTestDB(t)
+	endedAt := time.Now().Add(-time.Minute).Truncate(time.Second)
+	pubkey := "a4" + randomHex30(t)
+	seedSpentBill(t, gormDB, pubkey, endedAt, 3600)
+
+	var bill db.CashBillArchive
+	require.NoError(t, gormDB.Where("wallet_pubkey = ?", pubkey).First(&bill).Error)
+	require.NotNil(t, bill.RetainedUntil)
+
+	require.NoError(t, db.RecomputeSpentRetention(gormDB, bill.HubAppID, 99*time.Hour, true))
+
+	after, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	require.True(t, ok)
+	assert.Equal(t, endedAt.Add(time.Hour).Unix(), after.Unix(),
+		"onlyMissing must not rewrite a deadline that is already set")
+}
