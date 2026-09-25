@@ -25,14 +25,25 @@ func seedSpentBill(t *testing.T, gormDB *gorm.DB, pubkey string, endedAt time.Ti
 		PerWalletMaxMloki:  10_000,
 		SpentRetentionSecs: retentionSecs,
 	}).Error)
+	// RetainedUntil is set here for the same reason archive.CashBill sets it in
+	// production: the deadline is materialised on the row, so a fixture that
+	// leaves it nil is a bill with no tombstone, not one whose window gets
+	// derived on read. Retention 0 stays nil, which is what "no tombstone"
+	// means.
+	var retainedUntil *time.Time
+	if retentionSecs > 0 {
+		deadline := endedAt.Add(time.Duration(retentionSecs) * time.Second)
+		retainedUntil = &deadline
+	}
 	require.NoError(t, gormDB.Create(&db.CashBillArchive{
-		WalletAppID:  hub.ID + 900_000,
-		HubAppID:     hub.ID,
-		WalletPubkey: pubkey,
-		EndedAt:      endedAt,
-		Outcome:      db.CashBillOutcomeDrained,
-		TotalMloki:   1000,
-		FundedMloki:  1000,
+		WalletAppID:   hub.ID + 900_000,
+		HubAppID:      hub.ID,
+		WalletPubkey:  pubkey,
+		EndedAt:       endedAt,
+		RetainedUntil: retainedUntil,
+		Outcome:       db.CashBillOutcomeDrained,
+		TotalMloki:    1000,
+		FundedMloki:   1000,
 	}).Error)
 }
 

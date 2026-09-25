@@ -38,14 +38,25 @@ func seedDestroyedBill(t *testing.T, svc *tests.TestService, endedAt time.Time, 
 	walletPubkey, err = nostr.GetPublicKey(walletKey)
 	require.NoError(t, err)
 
+	// RetainedUntil is materialised on the row, exactly as archive.CashBill does
+	// it in production — a fixture that leaves it nil is a bill with no
+	// tombstone, since the deadline is no longer derived on read. Retention 0
+	// stays nil, which is what "no tombstone" means.
+	var retainedUntil *time.Time
+	if retentionSecs > 0 {
+		deadline := endedAt.Add(time.Duration(retentionSecs) * time.Second)
+		retainedUntil = &deadline
+	}
+
 	require.NoError(t, svc.DB.Create(&db.CashBillArchive{
-		WalletAppID:  walletAppID,
-		HubAppID:     hub.ID,
-		WalletPubkey: walletPubkey,
-		EndedAt:      endedAt,
-		Outcome:      db.CashBillOutcomeDrained,
-		TotalMloki:   1000,
-		FundedMloki:  1000,
+		WalletAppID:   walletAppID,
+		HubAppID:      hub.ID,
+		WalletPubkey:  walletPubkey,
+		EndedAt:       endedAt,
+		RetainedUntil: retainedUntil,
+		Outcome:       db.CashBillOutcomeDrained,
+		TotalMloki:    1000,
+		FundedMloki:   1000,
 	}).Error)
 	return walletAppID, walletPubkey
 }

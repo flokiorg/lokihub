@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
@@ -33,27 +34,34 @@ var archiveLadder = []int{100, 1_000, 10_000, 50_000}
 func seedArchive(tb testing.TB, gormDB *gorm.DB, n int) []string {
 	tb.Helper()
 
+	// Wide enough that every seeded row is still answerable, so the sweep does
+	// the most work rather than short-circuiting.
+	const retention = 15 * 24 * time.Hour
+
 	hubApp := db.App{Name: "bench hub", AppPubkey: randHex(tb, 32), Kind: db.AppKindCashHub}
 	require.NoError(tb, gormDB.Create(&hubApp).Error)
 	require.NoError(tb, gormDB.Create(&db.CashHubConfig{
-		AppID: hubApp.ID,
-		// Wide enough that every seeded row is still answerable, so the sweep
-		// does the most work rather than short-circuiting.
-		SpentRetentionSecs: int(time.Hour.Seconds() * 24 * 15),
+		AppID:              hubApp.ID,
+		SpentRetentionSecs: int(retention.Seconds()),
 	}).Error)
 
 	pubkeys := make([]string, n)
 	rows := make([]db.CashBillArchive, n)
 	for i := range rows {
 		pubkeys[i] = randHex(tb, 32)
+		endedAt := time.Now().Add(-time.Hour)
+		// Materialised exactly as archive.CashBill does it, so the fixture has
+		// the same shape as a real destroyed bill.
+		retainedUntil := endedAt.Add(retention)
 		rows[i] = db.CashBillArchive{
-			WalletAppID:  uint(i + 1),
-			HubAppID:     hubApp.ID,
-			WalletPubkey: pubkeys[i],
-			MintedAt:     time.Now().Add(-2 * time.Hour),
-			EndedAt:      time.Now().Add(-time.Hour),
-			Outcome:      db.CashBillOutcomeExpired,
-			TotalMloki:   1000,
+			WalletAppID:   uint(i + 1),
+			HubAppID:      hubApp.ID,
+			WalletPubkey:  pubkeys[i],
+			MintedAt:      time.Now().Add(-2 * time.Hour),
+			EndedAt:       endedAt,
+			RetainedUntil: &retainedUntil,
+			Outcome:       db.CashBillOutcomeExpired,
+			TotalMloki:    1000,
 		}
 	}
 	// One multi-row insert per 500 rather than per row: seeding is not what is
@@ -166,19 +174,18 @@ func BenchmarkPruneExpiredSpentBills(b *testing.B) {
 	}
 }
 
-// TestRetentionStatementsGrowWithArchiveSize pins the N+1 the scale harness
-// measured, so the shape is a fact in CI rather than a claim in a document.
+// TestRetentionStatementsDoNotGrowWithArchiveSize is the acceptance criterion
+// for the materialised retained_until column, asserted rather than observed.
 //
-// Both paths walk every archived bill and then ask two further questions per
-// row (db.SpentBillRetainedUntil reads the archive row, then its hub config),
-// so statements come to 2N+1. At a million archived bills that is two million
-// statements per startup and per five-minute sweep.
+// Both paths used to walk every archived bill and ask two further questions per
+// row, coming to 2N+1 statements: at a million archived bills, two million per
+// startup and per five-minute sweep, which on postgres exceeded the tick
+// interval so the sweep could never finish before the next began.
 //
-// This is a characterisation test. When the materialised retained_until column
-// lands, invert it: statements must stop growing with row count, which is the
-// acceptance criterion in
-// data/docs/design/subwallet-scale-benchmark-and-redesign-2026-09-25.md.
-func TestRetentionStatementsGrowWithArchiveSize(t *testing.T) {
+// They are now single indexed queries. Statement counts must therefore be
+// identical at 100 rows and at 1000 — if this test starts failing, an N+1 has
+// come back.
+func TestRetentionStatementsDoNotGrowWithArchiveSize(t *testing.T) {
 	if testing.Short() {
 		t.Skip("seeds thousands of archive rows")
 	}
@@ -208,14 +215,11 @@ func TestRetentionStatementsGrowWithArchiveSize(t *testing.T) {
 	smallReload, smallPrune := measure(100)
 	bigReload, bigPrune := measure(1_000)
 
-	// 2N+1: one pluck, then two per candidate.
-	require.EqualValues(t, 201, smallReload)
-	require.EqualValues(t, 2_001, bigReload)
-	require.EqualValues(t, 201, smallPrune)
-	require.EqualValues(t, 2_001, bigPrune)
+	assert.EqualValues(t, 1, smallReload, "the startup reload is one query")
+	assert.EqualValues(t, smallReload, bigReload,
+		"statements must not grow with the archive: got %d at 100 rows and %d at 1000", smallReload, bigReload)
 
-	require.Greater(t, bigReload, smallReload*5,
-		"startup reload statements scale with the archive; the fix must make this constant")
-	require.Greater(t, bigPrune, smallPrune*5,
-		"the sweep's statements scale with the archive; the fix must make this constant")
+	assert.EqualValues(t, 1, smallPrune, "the sweep is one query when nothing has expired")
+	assert.EqualValues(t, smallPrune, bigPrune,
+		"statements must not grow with the archive: got %d at 100 rows and %d at 1000", smallPrune, bigPrune)
 }
