@@ -624,10 +624,18 @@ func PublishesNip47InfoEvent(kind string) bool {
 }
 
 type AppPermission struct {
-	ID            uint
-	AppId         uint   `validate:"required"`
+	ID uint
+	// AppId/Scope carry a composite index because every NWC request reads this
+	// table twice — permissionsService.HasPermission filters on both, and
+	// GetPermittedMethods on app_id alone, which uses the same index as a
+	// prefix. The foreign key below is NOT an index: neither postgres nor
+	// sqlite indexes the referencing side of a constraint, so without this
+	// every request scanned the whole table, as did the app_permissions join in
+	// queries.GetCircleCommitmentMloki that runs inside the advisory lock
+	// admitting a circle member.
+	AppId         uint   `validate:"required" gorm:"index:idx_app_permissions_app_scope,priority:1"`
 	App           App    `gorm:"constraint:OnDelete:CASCADE;"`
-	Scope         string `validate:"required"`
+	Scope         string `validate:"required" gorm:"index:idx_app_permissions_app_scope,priority:2"`
 	MaxAmountLoki int
 	BudgetRenewal string
 	ExpiresAt     *time.Time
