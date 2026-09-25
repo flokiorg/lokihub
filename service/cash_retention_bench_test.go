@@ -86,6 +86,10 @@ func benchService(tb testing.TB, n int) (*service, *testdb.StatementCounter, []s
 	counter := testdb.CountStatements(gormDB)
 
 	pubkeys := seedArchive(tb, gormDB, n)
+
+	// A freshly created database has no statistics; ANALYZE makes this measure
+	// the steady state rather than a planner guessing. Both dialects support it.
+	require.NoError(tb, gormDB.Exec("ANALYZE").Error)
 	counter.Reset()
 
 	svc := &service{db: gormDB, walletRegistry: newWalletRegistry()}
