@@ -164,6 +164,7 @@ func cashHubStatsResponse(stats *apps.CashHubStats) *CashHubStatsResponse {
 		OutstandingMloki:       stats.OutstandingMloki,
 		OutstandingCount:       stats.OutstandingCount,
 		IssuedMloki:            stats.IssuedMloki,
+		MintedMloki:            stats.MintedMloki,
 		IssuedCount:            stats.IssuedCount,
 		RedeemedMloki:          stats.RedeemedMloki,
 		RedeemedCount:          stats.RedeemedCount,

@@ -562,6 +562,10 @@ type CashHubStatsResponse struct {
 
 	IssuedMloki   int64  `json:"issued_mloki"`
 	IssuedCount   uint64 `json:"issued_count"`
+	// MintedMloki is what the hub actually put into circulation. IssuedMloki
+	// counts every slice ever created, which double-counts a full split; this
+	// is the figure the operator-facing "Issued" tile shows.
+	MintedMloki int64 `json:"minted_mloki"`
 	RedeemedMloki int64  `json:"redeemed_mloki"`
 	RedeemedCount uint64 `json:"redeemed_count"`
 	// SplitMloki moved into another bill rather than leaving the hub — churn,
