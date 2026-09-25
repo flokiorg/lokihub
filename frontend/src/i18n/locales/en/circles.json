@@ -370,7 +370,7 @@
     "durationDays_other": "{{count}} days",
     "balanceInfo": "What this hub holds right now. New bills are minted against it.",
     "outstandingInfo": "Value already minted into bills that nobody has claimed yet — what this hub currently owes.",
-    "issuedInfo": "Every slice this hub has ever created, live and archived together. A full split turns one bill into another, so value that has been split is counted more than once here — this is not a measure of value put into circulation.",
+    "issuedInfo": "Everything this hub has actually minted, live and archived bills counted together. Value that a recipient later split into another bill is counted once, not twice.",
     "redeemedInfo": "Paid out to a recipient over Lightning.",
     "returnedInfo": "Came back to this hub because a bill expired or was deleted before anyone claimed it.",
     "feesEarnedInfo": "This hub's cut of the redemptions above, charged at its redeem fee rate.",

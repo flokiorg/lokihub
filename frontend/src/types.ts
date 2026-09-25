@@ -1061,6 +1061,10 @@ export interface CashHubStats {
 
   issued_mloki: number;
   issued_count: number;
+  // What the hub actually put into circulation. issued_mloki counts every
+  // slice ever created and double-counts a full split, so this is the figure
+  // to show a person.
+  minted_mloki: number;
   redeemed_mloki: number;
   redeemed_count: number;
   // Value that moved into another bill rather than leaving the hub — churn,

@@ -58,7 +58,7 @@ export function CashHubsSummary({ stats }: { stats: CashHubStats }) {
           <Stat
             label={t("cashKpis.issued")}
             info={t("cashKpis.issuedInfo")}
-            amountMloki={stats.issued_mloki}
+            amountMloki={stats.minted_mloki}
           />
           <Stat
             label={t("cashKpis.redeemed")}

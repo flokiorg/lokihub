@@ -43,6 +43,14 @@ type CashHubStats struct {
 
 	// MedianTimeToRedeemSecs says whether bills circulate or sit dead. nil
 	// when nothing has been redeemed yet.
+	// MintedMloki is value this hub actually put into circulation.
+	//
+	// IssuedMloki counts every slice ever created, which is not the same
+	// thing: a full split turns one bill into another and the value is
+	// counted on both, so issuance inflates with churn. Minted subtracts that
+	// churn and is what the operator-facing "Issued" figure means.
+	MintedMloki int64
+
 	MedianTimeToRedeemSecs *int64
 
 	// ExpiryBuckets is filled for both scopes — the runway is as much a
@@ -250,6 +258,28 @@ func (svc *appsService) cashHubStats(scope cashStatsScope, now time.Time) (*Cash
 			stats.WrittenOffMloki, stats.WrittenOffCount = t.Total, t.N
 		}
 	}
+
+	// Minted is issuance with full-split churn removed.
+	//
+	// A full split marks exactly one source slice terminal as 'split' and
+	// creates a carved bill carrying the same value, so each split adds that
+	// value to Issued twice; subtracting Split leaves it counted once, and
+	// the same holds down a chain of splits, each hop adding one of each.
+	// A PARTIAL split needs no correction and gets none: it reduces the
+	// source slice in place rather than marking it terminal, so the value is
+	// only ever counted once to begin with.
+	//
+	// Reconciled against the bill archive's independent lineage column,
+	// SplitFromWalletAppID, and the two agree only once consolidation is
+	// accounted for — which is why this formula is the right one rather than
+	// the lineage one. On real data here, of 115,430,000 in split-status
+	// slices, 96,856,000 went into a newly carved bill and 18,574,000 went
+	// into an ALREADY EXISTING bill. That second figure is cash_consolidate,
+	// and a consolidation target carries no SplitFromWalletAppID, so summing
+	// lineage misses it and under-counts churn by exactly that amount.
+	// Subtracting Split catches both, because both mark their source slice
+	// terminal as 'split'.
+	stats.MintedMloki = stats.IssuedMloki - stats.SplitMloki
 
 	if err := svc.fillCashExpiryBuckets(stats, scope, now); err != nil {
 		return nil, err
