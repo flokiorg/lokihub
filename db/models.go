@@ -452,8 +452,27 @@ type CashBillArchive struct {
 	// EndedAt is when the bill was deleted. Second column of the composite
 	// index so a per-hub listing is index-ordered rather than filesorting a
 	// forever-growing table.
-	EndedAt   time.Time `gorm:"not null;index:idx_cash_bill_archive_hub_ended,priority:2"`
-	ExpiresAt *time.Time
+	EndedAt time.Time `gorm:"not null;index:idx_cash_bill_archive_hub_ended,priority:2"`
+
+	// RetainedUntil is EndedAt plus the Hub's SpentRetentionSecs at the moment
+	// this row was written: the instant past which the Hub stops answering
+	// cash_status about this bill. NULL means no tombstone applies at all
+	// (retention disabled, or a row predating this column).
+	//
+	// Denormalised so the two paths that ask "which destroyed bills are still
+	// answerable" are single indexed queries instead of a walk. They used to
+	// pluck every archive row and then issue two more queries per row — 2N+1
+	// statements for startup and for every five-minute sweep, which at a
+	// million archived bills is two million statements and, on postgres,
+	// minutes of work per tick. Same reasoning as CashSliceArchive's
+	// denormalised wallet fields.
+	//
+	// It is a cache of policy, not a replacement for it: a Hub that changes
+	// SpentRetentionSecs must have that apply to bills it already destroyed, so
+	// apps.UpdateCashHubConfig recomputes this column for the Hub's rows. The
+	// live semantics are unchanged from when it was computed per read.
+	RetainedUntil *time.Time `gorm:"index"`
+	ExpiresAt     *time.Time
 	// Outcome is one of the CashBillOutcome* values.
 	Outcome string `gorm:"not null;index"`
 	// TotalMloki is the sum of this bill's archived slices, including any
