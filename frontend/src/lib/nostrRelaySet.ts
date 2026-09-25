@@ -15,6 +15,29 @@ function dedupe(urls: string[]): string[] {
   return Array.from(new Set(urls));
 }
 
+// Picks the outbox relays for a multi-author fetch: capped PER AUTHOR, then
+// unioned — not unioned then capped.
+//
+// Flattening first and slicing the result meant the first author whose relays
+// happened to come back filled the whole budget, and every author after them
+// contributed nothing: on a page listing many recipients the later ones
+// silently resolved to no profile at all. Each author gets their own
+// allowance, which is what an outbox model is for.
+//
+// MAX_OUTBOX_TOTAL_RELAYS is a separate ceiling so a page with very many
+// authors cannot open an unbounded number of connections. It sits far above
+// the per-author cap on purpose, biting only in the extreme case rather than
+// in the ordinary one the old code broke.
+//
+// Exported for its own tests: the bug was entirely in this arithmetic, and
+// reaching it through NDK would mean mocking an outbox tracker to assert
+// something that has nothing to do with NDK.
+export function selectOutboxUrls(perAuthorRelays: string[][]): string[] {
+  return dedupe(
+    perAuthorRelays.flatMap((relays) => relays.slice(0, MAX_OUTBOX_RELAYS))
+  ).slice(0, MAX_OUTBOX_TOTAL_RELAYS);
+}
+
 // Merges the configured General relays with a pubkey's own NIP-65 outbox
 // (write) relays, so identity lookups aren't limited to the static relay
 // list. Outbox discovery goes through ndk.outboxTracker (requires
@@ -53,26 +76,11 @@ export async function getRelaySetForPubkeys(
   directiveRelayUrls: string[] = []
 ): Promise<NDKRelaySet> {
   await ndk.outboxTracker?.trackUsers(pubkeys);
-  // Capped PER AUTHOR, then unioned — not unioned then capped.
-  //
-  // Flattening first and slicing the result meant the first author whose
-  // relays happened to come back filled the whole budget, and every author
-  // after them contributed nothing: on a page listing many recipients the
-  // later ones silently resolved to no profile at all. Each author now gets
-  // their own allowance, which is what an outbox model is for.
-  //
-  // MAX_OUTBOX_TOTAL_RELAYS is a separate ceiling so a page with very many
-  // authors cannot open an unbounded number of connections. It is deliberately
-  // far above the per-author cap, so it bites only in the extreme case rather
-  // than in the ordinary one the old code broke.
-  const outboxUrls = dedupe(
-    pubkeys.flatMap((pubkey) =>
-      Array.from(ndk.outboxTracker?.data.get(pubkey)?.writeRelays ?? []).slice(
-        0,
-        MAX_OUTBOX_RELAYS
-      )
+  const outboxUrls = selectOutboxUrls(
+    pubkeys.map((pubkey) =>
+      Array.from(ndk.outboxTracker?.data.get(pubkey)?.writeRelays ?? [])
     )
-  ).slice(0, MAX_OUTBOX_TOTAL_RELAYS);
+  );
   return NDKRelaySet.fromRelayUrls(
     dedupe([...baseRelayUrls, ...outboxUrls, ...directiveRelayUrls]),
     ndk

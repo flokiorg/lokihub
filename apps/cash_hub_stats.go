@@ -398,6 +398,34 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 	return nil
 }
 
+// expiryBucketKey classifies one bill by how long it has left to be redeemed.
+//
+// Split out from the query that feeds it so the boundaries can be tested
+// directly. Two of them are otherwise unreachable: a nil deadline is filtered
+// in SQL, and a deadline already in the past is excluded by the outstanding
+// query's own WHERE clause. That second case is exactly why the guard exists —
+// without it a negative duration would fall through to the first "less than"
+// arm and file already-expired value under "expires within a day", which is
+// the opposite of true. A future edit to that WHERE clause should not be able
+// to introduce that silently.
+func expiryBucketKey(expiresAt *time.Time, now time.Time) string {
+	if expiresAt == nil {
+		return "never"
+	}
+	switch left := expiresAt.Sub(now); {
+	case left < 0:
+		return "24h"
+	case left < 24*time.Hour:
+		return "24h"
+	case left < 7*24*time.Hour:
+		return "7d"
+	case left < 30*24*time.Hour:
+		return "30d"
+	default:
+		return "later"
+	}
+}
+
 // fillCashExpiryBuckets groups the outstanding liability by time left to
 // redeem it.
 //
@@ -428,25 +456,7 @@ func (svc *appsService) fillCashExpiryBuckets(stats *CashHubStats, scope cashSta
 		byKey[k] = &CashExpiryBucket{Key: k}
 	}
 	for _, r := range rows {
-		key := "never"
-		if r.ExpiresAt != nil {
-			switch left := r.ExpiresAt.Sub(now); {
-			case left < 0:
-				// Already past its deadline but not yet swept. The query
-				// above excludes these, so this is unreachable today; it is
-				// here so a future change to that WHERE clause cannot
-				// silently file expired value under "expires within a day".
-				key = "24h"
-			case left < 24*time.Hour:
-				key = "24h"
-			case left < 7*24*time.Hour:
-				key = "7d"
-			case left < 30*24*time.Hour:
-				key = "30d"
-			default:
-				key = "later"
-			}
-		}
+		key := expiryBucketKey(r.ExpiresAt, now)
 		byKey[key].Mloki += r.AmountMloki
 		byKey[key].Count++
 	}
