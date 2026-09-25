@@ -87,6 +87,11 @@ func benchCircleDB(tb testing.TB, n int) (*gorm.DB, *testdb.StatementCounter, ui
 	// insert into the benchmark output.
 	counter := testdb.CountStatements(gormDB)
 	hubID := seedCircle(tb, gormDB, n)
+
+	// A freshly created database has no statistics, so the planner guesses and
+	// can pick a plan it would never choose in production. ANALYZE makes this
+	// measure the steady state. Supported by both dialects.
+	require.NoError(tb, gormDB.Exec("ANALYZE").Error)
 	counter.Reset()
 
 	return gormDB, counter, hubID
