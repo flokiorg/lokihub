@@ -1616,6 +1616,19 @@ all.
 
 ## Privacy Considerations
 
+**`cash_consolidate` links its source bills to each other.** A single call names every source it draws
+from, so the Hub — and anyone who can observe that request — learns those bills belong to one holder.
+Nothing else in this protocol correlates bills that way: a Cash Wallet is otherwise a bearer instrument
+whose pairing key is derived on a hardened branch, so two bills from the same Hub are not linkable to
+each other, or to the Hub, from their bytes. Consolidation is the one operation that deliberately
+surrenders that, because merging value is what the caller asked for.
+
+Holders SHOULD treat consolidation as an explicit disclosure of common ownership over the bills
+involved, and avoid consolidating bills whose recipients they do not want correlated. A Hub SHOULD NOT
+retain the source-to-target mapping for longer than its own audit policy requires: unlike a redemption,
+which reveals only that one slice was paid, a consolidation record is a standing statement that N bills
+shared a holder.
+
 A Cash Wallet's `pairing_uri` or `lokicash1...` token doesn't reveal which recipient it's meant for, not
 from its bytes alone. The wallet owner controls where and how it's shared, including sharing all
 recipients' one connection through a single broadcast channel. But sharing a slice's identity through

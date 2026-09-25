@@ -373,7 +373,7 @@
     "holds": "보유",
     "spent": "지출",
     "received": "수령",
-    "capFooter": "예산 한도 {{cap}} loki",
+    "capFooter": "이번 기간 {{cap}} loki 중 {{used}} loki",
     "uncapped": "예산 한도 없음",
     "flowTitle": "일별 흐름",
     "flowHint": "수령은 선 위, 지출은 선 아래.",

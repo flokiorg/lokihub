@@ -560,12 +560,12 @@ type CashHubStatsResponse struct {
 	OutstandingMloki int64  `json:"outstanding_mloki"`
 	OutstandingCount uint64 `json:"outstanding_count"`
 
-	IssuedMloki   int64  `json:"issued_mloki"`
-	IssuedCount   uint64 `json:"issued_count"`
+	IssuedMloki int64  `json:"issued_mloki"`
+	IssuedCount uint64 `json:"issued_count"`
 	// MintedMloki is what the hub actually put into circulation. IssuedMloki
 	// counts every slice ever created, which double-counts a full split; this
 	// is the figure the operator-facing "Issued" tile shows.
-	MintedMloki int64 `json:"minted_mloki"`
+	MintedMloki   int64  `json:"minted_mloki"`
 	RedeemedMloki int64  `json:"redeemed_mloki"`
 	RedeemedCount uint64 `json:"redeemed_count"`
 	// SplitMloki moved into another bill rather than leaving the hub — churn,
@@ -664,6 +664,9 @@ type CircleMemberActivityResponse struct {
 	BalanceMloki int64  `json:"balance_mloki"`
 	// MaxAmountMloki is the member's own budget cap, 0 when uncapped.
 	MaxAmountMloki int64 `json:"max_amount_mloki"`
+	// BudgetUsedMloki is spend in the member's current budget period — the
+	// figure the cap above actually governs. SpentMloki is all-time.
+	BudgetUsedMloki int64 `json:"budget_used_mloki"`
 }
 
 // CashExpiryBucketResponse is one slice of the expiry runway. The buckets sum

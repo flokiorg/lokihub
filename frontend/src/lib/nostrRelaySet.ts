@@ -5,6 +5,11 @@ import NDK, { NDKRelaySet } from "@nostr-dev-kit/ndk";
 // doesn't already know about, so an uncapped union (e.g. across an entire
 // following list) could open dozens of concurrent WebSocket connections.
 const MAX_OUTBOX_RELAYS = 6;
+// Ceiling on the unioned set for a multi-author fetch. Generous on purpose:
+// it exists to stop a page with very many authors opening an unbounded number
+// of connections, not to ration authors against each other — rationing them
+// is what made later recipients resolve to nothing.
+const MAX_OUTBOX_TOTAL_RELAYS = 24;
 
 function dedupe(urls: string[]): string[] {
   return Array.from(new Set(urls));
@@ -48,11 +53,26 @@ export async function getRelaySetForPubkeys(
   directiveRelayUrls: string[] = []
 ): Promise<NDKRelaySet> {
   await ndk.outboxTracker?.trackUsers(pubkeys);
+  // Capped PER AUTHOR, then unioned — not unioned then capped.
+  //
+  // Flattening first and slicing the result meant the first author whose
+  // relays happened to come back filled the whole budget, and every author
+  // after them contributed nothing: on a page listing many recipients the
+  // later ones silently resolved to no profile at all. Each author now gets
+  // their own allowance, which is what an outbox model is for.
+  //
+  // MAX_OUTBOX_TOTAL_RELAYS is a separate ceiling so a page with very many
+  // authors cannot open an unbounded number of connections. It is deliberately
+  // far above the per-author cap, so it bites only in the extreme case rather
+  // than in the ordinary one the old code broke.
   const outboxUrls = dedupe(
     pubkeys.flatMap((pubkey) =>
-      Array.from(ndk.outboxTracker?.data.get(pubkey)?.writeRelays ?? [])
+      Array.from(ndk.outboxTracker?.data.get(pubkey)?.writeRelays ?? []).slice(
+        0,
+        MAX_OUTBOX_RELAYS
+      )
     )
-  ).slice(0, MAX_OUTBOX_RELAYS);
+  ).slice(0, MAX_OUTBOX_TOTAL_RELAYS);
   return NDKRelaySet.fromRelayUrls(
     dedupe([...baseRelayUrls, ...outboxUrls, ...directiveRelayUrls]),
     ndk

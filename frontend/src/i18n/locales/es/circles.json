@@ -373,7 +373,7 @@
     "holds": "Tiene",
     "spent": "Gastado",
     "received": "Recibido",
-    "capFooter": "Límite de presupuesto {{cap}} loki",
+    "capFooter": "{{used}} de {{cap}} loki este periodo",
     "uncapped": "Sin límite de presupuesto",
     "flowTitle": "Flujo diario",
     "flowHint": "Recibido por encima de la línea, gastado por debajo.",

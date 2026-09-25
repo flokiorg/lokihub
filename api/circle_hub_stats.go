@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/flokiorg/lokihub/constants"
+
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 )
@@ -39,17 +41,36 @@ func (api *api) GetCircleHubStats(appID uint) (*CircleHubStatsResponse, error) {
 		return nil, fmt.Errorf("failed to total circle member balances: %w", err)
 	}
 
+	// Budget usage is read through the same helper the payment path enforces
+	// with, so the figure shown beside a cap is the one that cap governs. One
+	// query per member, which is bounded by circle size rather than by
+	// traffic, and the alternative — reimplementing the period window here —
+	// is how the displayed number drifts from the enforced one.
+	var perms []db.AppPermission
+	if len(memberIDs) > 0 {
+		if err := api.db.Where("app_id IN ? AND scope = ?", memberIDs, constants.PAY_INVOICE_SCOPE).
+			Find(&perms).Error; err != nil {
+			return nil, fmt.Errorf("failed to load circle member budgets: %w", err)
+		}
+	}
+	usedByMember := make(map[uint]int64, len(perms))
+	for i := range perms {
+		// GetBudgetUsageSat returns loki; every other amount here is mloki.
+		usedByMember[perms[i].AppId] = int64(queries.GetBudgetUsageSat(api.db, &perms[i])) * 1000 //nolint:gosec // bounded by the app's own spend
+	}
+
 	members := make([]CircleMemberActivityResponse, 0, len(stats.PerMember))
 	var allocated int64
 	for _, m := range stats.PerMember {
 		balance := balances[m.WalletAppID]
 		allocated += balance
 		members = append(members, CircleMemberActivityResponse{
-			WalletAppID:    m.WalletAppID,
-			Name:           m.Name,
-			SpentMloki:     m.SpentMloki,
-			BalanceMloki:   balance,
-			MaxAmountMloki: m.MaxAmountMloki,
+			WalletAppID:     m.WalletAppID,
+			Name:            m.Name,
+			SpentMloki:      m.SpentMloki,
+			BalanceMloki:    balance,
+			MaxAmountMloki:  m.MaxAmountMloki,
+			BudgetUsedMloki: usedByMember[m.WalletAppID],
 		})
 	}
 

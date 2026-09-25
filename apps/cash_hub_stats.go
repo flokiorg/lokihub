@@ -431,6 +431,12 @@ func (svc *appsService) fillCashExpiryBuckets(stats *CashHubStats, scope cashSta
 		key := "never"
 		if r.ExpiresAt != nil {
 			switch left := r.ExpiresAt.Sub(now); {
+			case left < 0:
+				// Already past its deadline but not yet swept. The query
+				// above excludes these, so this is unreachable today; it is
+				// here so a future change to that WHERE clause cannot
+				// silently file expired value under "expires within a day".
+				key = "24h"
 			case left < 24*time.Hour:
 				key = "24h"
 			case left < 7*24*time.Hour:

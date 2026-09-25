@@ -1015,6 +1015,9 @@ export interface CircleMemberActivity {
   balance_mloki: number;
   // The member's own budget cap; 0 when uncapped.
   max_amount_mloki: number;
+  // Spend inside the member's CURRENT budget period — the figure the cap
+  // governs. spent_mloki beside it is all-time and is not comparable to a cap.
+  budget_used_mloki: number;
 }
 
 // A circle hub's money question mirrors a cash hub's. A cash hub owes value it
