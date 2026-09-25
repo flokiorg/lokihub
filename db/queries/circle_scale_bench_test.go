@@ -114,14 +114,13 @@ func BenchmarkGetCircleCommitmentMloki(b *testing.B) {
 
 // --- Op 14: the batched balance read ----------------------------------------
 //
-// One statement however many app ids it is handed — an N+1 that was already
-// fixed, and this is what stops it regressing.
-//
-// The ladder stops below memberLadder's top rung on purpose: every id is bound
-// as a separate SQL variable, so the query fails outright past the driver's
-// parameter ceiling. See
-// TestGetIsolatedBalancesByAppIDsHitsDriverVariableLimit.
-var balanceLadder = []int{100, 1_000, 10_000}
+// Chunked internally, so the statement count is ceil(n/balanceChunkSize) rather
+// than one. The top rung is the case the chunking exists for: passing every id
+// as its own SQL variable used to fail outright with "too many SQL variables"
+// past the driver ceiling (~32k sqlite, ~65k postgres), which broke the Cash Hub
+// dashboard, Circle Hub stats and the children listing for any provider that
+// large.
+var balanceLadder = []int{100, 1_000, 10_000, 50_000}
 
 func BenchmarkGetIsolatedBalancesByAppIDs(b *testing.B) {
 	for _, n := range balanceLadder {
@@ -145,39 +144,4 @@ func BenchmarkGetIsolatedBalancesByAppIDs(b *testing.B) {
 			b.ReportMetric(float64(counter.N())/float64(b.N), "stmts/op")
 		})
 	}
-}
-
-// TestGetIsolatedBalancesByAppIDsHitsDriverVariableLimit pins a limitation the
-// scale harness found: every app id becomes its own SQL bind variable, so the
-// query fails once the caller has more children than the driver allows —
-// roughly 32k on sqlite, 65k on postgres.
-//
-// It fails, rather than degrading: a hub past that many bills, or a circle past
-// that many members, gets an error from its stats and children endpoints
-// (api/cash_hub_stats.go, api/circle_hub_stats.go, api.go's children listing)
-// rather than a slow answer.
-//
-// This is a characterisation test, asserting today's behaviour so the boundary
-// is discoverable. When the chunked (or join-based) fix lands, invert it: the
-// call should succeed at any size.
-func TestGetIsolatedBalancesByAppIDsHitsDriverVariableLimit(t *testing.T) {
-	if testing.Short() {
-		t.Skip("seeds tens of thousands of rows")
-	}
-
-	gormDB, err := testdb.NewDB(t)
-	require.NoError(t, err)
-	defer testdb.CloseDB(gormDB)
-
-	// Silences the handle's query echoing while seeding.
-	testdb.CountStatements(gormDB)
-
-	appIDs := make([]uint, 50_000)
-	for i := range appIDs {
-		appIDs[i] = uint(i + 1)
-	}
-
-	_, err = queries.GetIsolatedBalancesByAppIDs(gormDB, appIDs)
-	require.Error(t, err, "50k bind variables must still be beyond the driver; if this passes, the chunking fix landed and this test should be inverted")
-	require.Contains(t, err.Error(), "too many SQL variables")
 }
