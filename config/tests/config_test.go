@@ -318,3 +318,40 @@ func TestJWTSecret_ReplaceUnencryptedSecretOnUnlock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, jwtSecret, jwtSecretFromCfg)
 }
+
+// A hub that has completed setup must refuse every password if its stored
+// password check is missing.
+//
+// CheckUnlockPassword treats an empty stored value as a pass, and that is
+// load-bearing: ChangeUnlockPassword uses it to set a password for the first
+// time, when there is nothing to check against. But on a hub that has already
+// run, the same leniency means a missing UnlockPasswordCheck row — a partial
+// restore, an interrupted migration, a hand-edited database — unlocks for
+// literally any input, and /api/start hands out a full-access token on it.
+//
+// No path reaches that state today. This pins the distinction so none does,
+// because the failure mode is total rather than partial.
+func TestCheckUnlockPassword_ConfiguredHubWithNoStoredCheckRefusesEverything(t *testing.T) {
+	svc, err := tests.CreateTestServiceWithMnemonic(t, "", "")
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	stored, err := svc.Cfg.Get("UnlockPasswordCheck", "")
+	require.NoError(t, err)
+	require.Empty(t, stored, "fixture must start with no stored password check")
+
+	// Before setup, an empty check must stay permissive — this is how a first
+	// password gets set at all.
+	require.False(t, svc.Cfg.SetupCompleted())
+	assert.True(t, svc.Cfg.CheckUnlockPassword("anything"),
+		"before setup there is nothing to check against, and ChangeUnlockPassword depends on this")
+
+	// Mark the hub as having run, which is what SetupCompleted reads.
+	require.NoError(t, svc.Cfg.SetUpdate("NodeLastStartTime", "1758800000", ""))
+	require.True(t, svc.Cfg.SetupCompleted())
+
+	assert.False(t, svc.Cfg.CheckUnlockPassword("anything-at-all"),
+		"a configured hub with no stored check must not accept an arbitrary password")
+	assert.False(t, svc.Cfg.CheckUnlockPassword(""),
+		"nor an empty one")
+}

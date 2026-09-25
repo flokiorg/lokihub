@@ -449,8 +449,25 @@ func (cfg *config) SetAutoUnlockPassword(unlockPassword string) error {
 
 func (cfg *config) CheckUnlockPassword(encryptionKey string) bool {
 	decryptedValue, err := cfg.Get("UnlockPasswordCheck", encryptionKey)
+	if err != nil {
+		return false
+	}
+	if decryptedValue == unlockPasswordCheck {
+		return true
+	}
 
-	return err == nil && (decryptedValue == "" || decryptedValue == unlockPasswordCheck)
+	// An empty stored check means no password has ever been set. That is
+	// permissive on purpose, and load-bearing: ChangeUnlockPassword calls
+	// through here with an empty current password to set the first one, when
+	// there is by definition nothing to check against.
+	//
+	// It must stop being permissive the moment the hub has run. Otherwise a
+	// missing UnlockPasswordCheck row on a configured hub — a partial restore,
+	// an interrupted migration, a hand-edited database — unlocks for any input
+	// at all, and /api/start hands a full-access token to whoever asked. No
+	// path produces that state today; this is here so none can, because the
+	// failure is total rather than partial.
+	return decryptedValue == "" && !cfg.SetupCompleted()
 }
 
 func (cfg *config) SaveUnlockPasswordCheck(encryptionKey string) error {
