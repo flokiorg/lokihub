@@ -334,15 +334,27 @@ func short(s string) string {
 // URI, using the beneficiary/requester's own private key. This mirrors what
 // a real beneficiary client does after receiving the response.
 func DecryptPairingURI(recipientPrivkey, walletPubkey, encryptedURI string) (string, error) {
-	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, recipientPrivkey)
-	if err != nil {
-		return "", fmt.Errorf("build cipher: %w", err)
-	}
-	uri, err := c.Decrypt(encryptedURI)
+	uri, err := DecryptPayload(recipientPrivkey, walletPubkey, encryptedURI)
 	if err != nil {
 		return "", fmt.Errorf("decrypt pairing uri: %w", err)
 	}
 	return uri, nil
+}
+
+// DecryptPayload opens any NIP-44 payload a hub nested inside a response for one
+// specific recipient — a pairing URI, a cash token, or a circle join's
+// encrypted_details JSON. walletPubkey is the sender's (the hub's) wallet
+// pubkey; recipientPrivkey is the key the payload was addressed to.
+func DecryptPayload(recipientPrivkey, walletPubkey, ciphertext string) (string, error) {
+	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, recipientPrivkey)
+	if err != nil {
+		return "", fmt.Errorf("build cipher: %w", err)
+	}
+	plaintext, err := c.Decrypt(ciphertext)
+	if err != nil {
+		return "", fmt.Errorf("decrypt payload: %w", err)
+	}
+	return plaintext, nil
 }
 
 // parsePairingURI parses a nostr+walletconnect://<walletPubkey>?relay=...&secret=...

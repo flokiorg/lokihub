@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 // shortLivedExpirySecs mirrors cash_redeem_test.go's WalletExpired_ClaimRejected:
@@ -67,8 +66,9 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
+	pairingURI := circleDetails.PairingURI
 	child := mustConnect(t, pairingURI)
 
 	// Sanity: fully live before expiry, so what we observe afterward is
@@ -206,8 +206,9 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
+	pairingURI := circleDetails.PairingURI
 	child := mustConnect(t, pairingURI)
 
 	waitPastExpiry()

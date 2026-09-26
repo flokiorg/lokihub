@@ -109,8 +109,10 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t 
 	resp, ok := publishedResponse.Result.(createCircleWalletResponse)
 	require.True(t, ok)
 
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, resp.EncryptedDetails)
+
 	var walletApp db.App
-	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", resp.WalletPubkey).First(&walletApp).Error)
+	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&walletApp).Error)
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
@@ -169,8 +171,10 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *t
 	resp, ok := publishedResponse.Result.(createCircleWalletResponse)
 	require.True(t, ok)
 
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, resp.EncryptedDetails)
+
 	var walletApp db.App
-	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", resp.WalletPubkey).First(&walletApp).Error)
+	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&walletApp).Error)
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)

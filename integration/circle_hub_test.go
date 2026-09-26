@@ -385,18 +385,20 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 				var result CreateCircleWalletResult
 				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, params, &result)
 				require.NoError(t, err)
-				require.NotEmpty(t, result.WalletPubkey)
-				require.NotEmpty(t, result.EncryptedPairingURI)
+				require.NotEmpty(t, result.EncryptedDetails)
+
+				details, err := DecryptCircleWalletDetails(member.priv, hubClient.WalletPubkey(), result)
+				require.NoError(t, err)
+				require.NotEmpty(t, details.WalletPubkey)
 
 				if testingDefaults {
-					assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, result.BudgetRenewal,
+					assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, details.BudgetRenewal,
 						"an omitted budget_renewal must default to \"never\"")
-					assert.Greater(t, result.ExpiresAt, time.Now().Unix(),
+					assert.Greater(t, details.ExpiresAt, time.Now().Unix(),
 						"an omitted expiry must default to the hub's own max_exp_secs, not produce an already-expired wallet")
 				}
 
-				pairingURI, err := nwcclient.DecryptPairingURI(member.priv, hubClient.WalletPubkey(), result.EncryptedPairingURI)
-				require.NoError(t, err)
+				pairingURI := details.PairingURI
 
 				child := mustConnect(t, pairingURI)
 

@@ -210,12 +210,22 @@ type CreateCircleWalletParams struct {
 	IdentityEvent string `json:"identity_event"`
 }
 
+// CreateCircleWalletResult carries exactly one field on purpose: the join is
+// made over the shared circlehub connection, so anything outside the nested
+// encryption is readable by every other member of the circle. Decrypt with
+// nwcclient.DecryptPayload and unmarshal into CircleWalletDetails.
 type CreateCircleWalletResult struct {
-	EncryptedPairingURI string `json:"encrypted_pairing_uri"`
-	WalletPubkey        string `json:"wallet_pubkey"`
-	ExpiresAt           int64  `json:"expires_at"`
-	FeesPpm             int    `json:"fees_ppm"`
-	BudgetRenewal       string `json:"budget_renewal"`
+	EncryptedDetails string `json:"encrypted_details"`
+}
+
+// CircleWalletDetails is the plaintext inside CreateCircleWalletResult's
+// encrypted_details — the joining member's own wallet identity and terms.
+type CircleWalletDetails struct {
+	PairingURI    string `json:"pairing_uri"`
+	WalletPubkey  string `json:"wallet_pubkey"`
+	ExpiresAt     int64  `json:"expires_at"`
+	FeesPpm       int    `json:"fees_ppm"`
+	BudgetRenewal string `json:"budget_renewal"`
 }
 
 // --- generic NWC methods ---

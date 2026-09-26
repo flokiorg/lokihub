@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 // TestCircleWallet_Budget_PayInvoiceQuotaExceeded_DistinctFromInsufficientBalance
@@ -67,8 +66,9 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
+	pairingURI := circleDetails.PairingURI
 	child := mustConnect(t, pairingURI)
 
 	spendOnce := func(description string) {
@@ -138,10 +138,11 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 				BudgetRenewal: renewal,
 				IdentityEvent: eventJSON(t, identityEvent),
 			}, &created))
-			require.Equal(t, renewal, created.BudgetRenewal)
 
-			pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+			circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 			require.NoError(t, err)
+			pairingURI := circleDetails.PairingURI
+			require.Equal(t, renewal, circleDetails.BudgetRenewal)
 			child := mustConnect(t, pairingURI)
 
 			var budget GetBudgetResult

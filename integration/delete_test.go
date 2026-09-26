@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 // findCircleChildAppID resolves requesterPubkey's circle_wallet child app id
@@ -118,8 +117,9 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
+	pairingURI := circleDetails.PairingURI
 	child := mustConnect(t, pairingURI)
 
 	const fundAmountMloki = 3000
@@ -221,7 +221,9 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, ev3),
 	}, &third), "the same identity must be free to mint again once its earlier wallet was deleted")
-	require.NotEmpty(t, third.WalletPubkey)
+	thirdDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), third)
+	require.NoError(t, err)
+	require.NotEmpty(t, thirdDetails.WalletPubkey)
 }
 
 // TestDeleteCircleChild_DeferredWhilePaymentStillSettling proves
@@ -251,8 +253,9 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &created))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), created.EncryptedPairingURI)
+	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
+	pairingURI := circleDetails.PairingURI
 	child := mustConnect(t, pairingURI)
 
 	var invoice MakeInvoiceResult
