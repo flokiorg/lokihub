@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/logger"
 )
 
 // CashHubStats is what a hub operator actually watches: money, not row counts.
@@ -303,13 +304,43 @@ func (svc *appsService) cashHubStats(scope cashStatsScope, now time.Time) (*Cash
 // fillCashDailySeries buckets issued/redeemed/returned/split/written-off into
 // days. Every terminal outcome gets its own bucket so the series sums back to
 // the totals GetCashHubStats reports.
-func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStatsScope, since, now time.Time) error {
-	type event struct {
-		At     time.Time
-		Amount int64
-		Kind   string
+// utcDayExpr renders a SQL expression bucketing a timestamp column into its UTC
+// calendar day, as a "YYYY-MM-DD" string.
+//
+// Deliberately not date()/date_trunc(). The sqlite driver stores a time.Time as
+// Go's own String() rendering — "2026-09-25 22:43:42.08 +0000 UTC m=-3599.93" —
+// which sqlite's date functions cannot parse, so date(created_at) yields NULL and
+// every row would fall into one empty bucket with no error anywhere. Slicing the
+// leading ten characters needs no parsing at all, and those characters are the
+// UTC date because the driver writes the offset as +0000.
+// TestUTCDayExprMatchesGo pins that against a driver format change.
+//
+// On postgres the cast is explicit: to_char on a timestamptz renders in the
+// SESSION time zone, so without AT TIME ZONE 'UTC' the buckets would silently
+// shift for any connection that is not UTC.
+func utcDayExpr(dialect, column string) string {
+	if dialect == "postgres" {
+		return "to_char(" + column + " AT TIME ZONE 'UTC', 'YYYY-MM-DD')"
 	}
-	var events []event
+	return "substr(" + column + ", 1, 10)"
+}
+
+func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStatsScope, since, now time.Time) error {
+	// One row per (day, kind) — at most a month times five — rather than one row
+	// per slice event.
+	//
+	// This used to select every event and bucket them in a Go map, which meant
+	// the dashboard pulled the hub's entire slice history across the wire on
+	// every load: measured at 397 ms and 867k allocations for 50k bills, so
+	// roughly 17M allocations and hundreds of megabytes at a million. The five
+	// union branches below are unchanged; only the aggregation moved into SQL.
+	type dayTotal struct {
+		Day    string
+		Kind   string
+		Amount int64
+	}
+	var totals []dayTotal
+	dayExpr := utcDayExpr(svc.db.Dialector.Name(), "e.at")
 
 	// Issued is keyed on when the slice was created, redeemed on when its
 	// payout settled, returned on when its bill was archived — each the moment
@@ -333,10 +364,14 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 	// actually returned. A LIVE slice showing status 'expired' has not
 	// returned anything yet: its window has passed but the sweep has not
 	// collected it, so it correctly contributes nothing here.
+	// The slice union is a common table expression rather than three inline
+	// copies. It used to be spelled out once per branch, so the same join over
+	// every live claim and every archived slice was evaluated three times per
+	// dashboard load. Both dialects materialise a CTE referenced more than once.
 	union := scope.union()
 	var args []any
+	args = append(args, scope.unionArgs(now)...)
 	for range 3 {
-		args = append(args, scope.unionArgs(now)...)
 		args = append(args, since)
 	}
 	archivedWhere, archivedArgs := scope.hubPredicate("s.hub_app_id")
@@ -345,14 +380,17 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 		args = append(args, since)
 	}
 	if err := svc.db.Raw(`
+		WITH slices AS (`+union+`)
+		SELECT `+dayExpr+` AS day, e.kind AS kind, COALESCE(SUM(e.amount), 0) AS amount
+		FROM (
 		SELECT created_at AS at, amount_mloki AS amount, 'issued' AS kind
-		FROM (`+union+`) u WHERE created_at >= ?
+		FROM slices WHERE created_at >= ?
 		UNION ALL
 		SELECT settled_at, amount_mloki, 'redeemed'
-		FROM (`+union+`) u2 WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
+		FROM slices WHERE status = 'redeemed' AND settled_at IS NOT NULL AND settled_at >= ?
 		UNION ALL
 		SELECT claimed_at, amount_mloki, 'split'
-		FROM (`+union+`) u4 WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
+		FROM slices WHERE status = 'split' AND claimed_at IS NOT NULL AND claimed_at >= ?
 		UNION ALL
 		SELECT s.archived_at, s.amount_mloki, 'returned'
 		FROM cash_bill_slice_archives s
@@ -361,7 +399,10 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 		SELECT s.archived_at, s.amount_mloki, 'written-off'
 		FROM cash_bill_slice_archives s
 		WHERE `+archivedWhere+`s.outcome = 'written-off' AND s.archived_at >= ?
-	`, args...).Scan(&events).Error; err != nil {
+		) e
+		WHERE e.at IS NOT NULL
+		GROUP BY `+dayExpr+`, e.kind
+	`, args...).Scan(&totals).Error; err != nil {
 		return fmt.Errorf("failed to read cash daily series for %s: %w", scope, err)
 	}
 
@@ -370,23 +411,30 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 		day := d.UTC().Truncate(24 * time.Hour)
 		buckets[day] = &CashHubDailyPoint{Date: day}
 	}
-	for _, e := range events {
-		day := e.At.UTC().Truncate(24 * time.Hour)
+	for _, t := range totals {
+		day, err := time.ParseInLocation("2006-01-02", t.Day, time.UTC)
+		if err != nil {
+			// A day string the database could not render is skipped rather than
+			// silently folded into another bucket.
+			logger.Logger.Warn().Str("day", t.Day).Str("scope", scope.String()).
+				Msg("Skipping an unparseable day bucket in the cash daily series")
+			continue
+		}
 		b, ok := buckets[day]
 		if !ok {
 			continue
 		}
-		switch e.Kind {
+		switch t.Kind {
 		case "issued":
-			b.IssuedMloki += e.Amount
+			b.IssuedMloki += t.Amount
 		case "redeemed":
-			b.RedeemedMloki += e.Amount
+			b.RedeemedMloki += t.Amount
 		case "returned":
-			b.ReturnedMloki += e.Amount
+			b.ReturnedMloki += t.Amount
 		case "split":
-			b.SplitMloki += e.Amount
+			b.SplitMloki += t.Amount
 		case "written-off":
-			b.WrittenOffMloki += e.Amount
+			b.WrittenOffMloki += t.Amount
 		}
 	}
 
