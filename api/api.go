@@ -1550,15 +1550,18 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
 	privateEnvelope := api.cfg.PrivateEnvelopeLimits()
 	info.PrivateEnvelope = PrivateEnvelopeInfo{
-		MaxBytes:        privateEnvelope.MaxEnvelopeBytes,
-		MaxItems:        privateEnvelope.MaxItems,
-		PadBucketBytes:  privateEnvelope.PadBucketBytes,
-		MaxVerifyBudget: privateEnvelope.MaxVerifyBudget,
-		// Read-only context so an operator can choose MaxBytes informed: the
-		// hard ceiling it is checked against, and the base64-expanded size a
-		// relay's max_message_length must cover.
-		CeilingBytes:       transport.MaxNIP44Plaintext,
-		EstimatedWireBytes: privateEnvelope.EstimatedWireBytes(),
+		MaxBytes:              privateEnvelope.MaxEnvelopeBytes,
+		MaxItems:              privateEnvelope.MaxItems,
+		MaxConsolidateSources: privateEnvelope.MaxConsolidateSources,
+		PadBucketBytes:        privateEnvelope.PadBucketBytes,
+		MaxVerifyBudget:       privateEnvelope.MaxVerifyBudget,
+		// Read-only context so an operator can choose these informed rather than
+		// by guesswork: the hard ceiling MaxBytes is checked against, the
+		// base64-expanded size a relay's max_message_length must cover, and what
+		// the largest permitted consolidate item actually costs.
+		CeilingBytes:            transport.MaxNIP44Plaintext,
+		EstimatedWireBytes:      privateEnvelope.EstimatedWireBytes(),
+		MaxConsolidateItemBytes: transport.EstimatedConsolidateItemBytes(privateEnvelope.MaxConsolidateSources),
 	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
@@ -1693,10 +1696,11 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		// envelope rather than baked into the subscription shape, so a change
 		// applies to the next request.
 		if err := api.cfg.SetPrivateEnvelopeLimits(transport.Limits{
-			MaxEnvelopeBytes: requested.MaxBytes,
-			MaxItems:         requested.MaxItems,
-			PadBucketBytes:   requested.PadBucketBytes,
-			MaxVerifyBudget:  requested.MaxVerifyBudget,
+			MaxEnvelopeBytes:      requested.MaxBytes,
+			MaxItems:              requested.MaxItems,
+			MaxConsolidateSources: requested.MaxConsolidateSources,
+			PadBucketBytes:        requested.PadBucketBytes,
+			MaxVerifyBudget:       requested.MaxVerifyBudget,
 		}); err != nil {
 			return fmt.Errorf("failed to set private envelope limits: %w", err)
 		}

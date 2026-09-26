@@ -82,6 +82,12 @@ type AppConfig struct {
 	// PrivateEnvelopeMaxVerifyBudget caps the signature verifications one
 	// envelope may demand, counted structurally before any crypto runs.
 	PrivateEnvelopeMaxVerifyBudget int `envconfig:"PRIVATE_ENVELOPE_MAX_VERIFY_BUDGET" default:"0"`
+	// PrivateEnvelopeMaxConsolidateSources caps sources in one cash_consolidate
+	// item on the private transport, and is necessarily LOWER than NIP-CASH's own
+	// cap of 100 on the standard path: each source carries its own signed proof
+	// (~952 bytes), so 100 sources is a ~96 KB item, past NIP-44's 65535-byte
+	// ceiling and therefore impossible to encrypt at any envelope size.
+	PrivateEnvelopeMaxConsolidateSources int `envconfig:"PRIVATE_ENVELOPE_MAX_CONSOLIDATE_SOURCES" default:"0"`
 }
 
 func (c *AppConfig) GetBaseFrontendUrl() string {
