@@ -136,3 +136,126 @@ func TestGetCashHubStats_EmptyHub(t *testing.T) {
 	assert.Nil(t, stats.MedianTimeToRedeemSecs, "nothing redeemed yet means no median, not zero")
 	assert.NotEmpty(t, stats.Daily)
 }
+
+// TestGetCashHubStats_DailySeriesUTCMidnightBoundary guards the day-bucketing
+// expression the daily series aggregates with.
+//
+// Bucketing moved from a Go map into SQL, so the database now decides which
+// calendar day an event belongs to. On sqlite that is done by slicing the leading
+// ten characters of the stored timestamp, because the driver writes a time.Time
+// as Go's String() rendering, which sqlite's date() cannot parse at all. On
+// postgres it is to_char with an explicit AT TIME ZONE 'UTC', since to_char on a
+// timestamptz otherwise renders in the session zone.
+//
+// Either could be off by a day without anything erroring, so this pins two events
+// one second either side of a UTC midnight and requires them in different
+// buckets.
+func TestGetCashHubStats_DailySeriesUTCMidnightBoundary(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+
+	now := time.Now().UTC()
+	// A midnight comfortably inside the reported window.
+	midnight := now.AddDate(0, 0, -3).Truncate(24 * time.Hour)
+	justBefore := midnight.Add(-time.Second)
+	justAfter := midnight.Add(time.Second)
+
+	for i, at := range []time.Time{justBefore, justAfter} {
+		require.NoError(t, svc.DB.Create(&db.CashBillSliceArchive{
+			WalletAppID: uint(710_001 + i), HubAppID: hub.ID, ClaimID: uint(10 + i),
+			IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(),
+			AmountMloki: int64(100 * (i + 1)), Outcome: db.CashSliceStatusRedeemed,
+			CreatedAt: at, SettledAt: &at, ArchivedAt: now,
+		}).Error)
+	}
+
+	stats, err := svc.AppsService.GetCashHubStats(hub.ID, now)
+	require.NoError(t, err)
+
+	byDay := map[string]apps.CashHubDailyPoint{}
+	for _, p := range stats.Daily {
+		byDay[p.Date.Format("2006-01-02")] = p
+	}
+
+	assert.EqualValues(t, 100, byDay[justBefore.Format("2006-01-02")].IssuedMloki,
+		"a second before UTC midnight belongs to the earlier day")
+	assert.EqualValues(t, 200, byDay[justAfter.Format("2006-01-02")].IssuedMloki,
+		"a second after UTC midnight belongs to the later day")
+}
+
+// TestGetCashHubStats_DailySeriesSumsSameDay covers what moving the aggregation
+// into SQL actually changed: several events on one day must be summed by the
+// GROUP BY, not overwrite each other.
+func TestGetCashHubStats_DailySeriesSumsSameDay(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+
+	now := time.Now().UTC()
+	day := now.AddDate(0, 0, -2)
+
+	amounts := []int64{1000, 2500, 400}
+	for i, amount := range amounts {
+		at := day.Add(time.Duration(i) * time.Hour)
+		require.NoError(t, svc.DB.Create(&db.CashBillSliceArchive{
+			WalletAppID: uint(720_001 + i), HubAppID: hub.ID, ClaimID: uint(20 + i),
+			IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(),
+			AmountMloki: amount, Outcome: db.CashSliceStatusRedeemed,
+			CreatedAt: at, SettledAt: &at, ArchivedAt: now,
+		}).Error)
+	}
+
+	stats, err := svc.AppsService.GetCashHubStats(hub.ID, now)
+	require.NoError(t, err)
+
+	byDay := map[string]apps.CashHubDailyPoint{}
+	for _, p := range stats.Daily {
+		byDay[p.Date.Format("2006-01-02")] = p
+	}
+	point := byDay[day.Format("2006-01-02")]
+	assert.EqualValues(t, 3900, point.IssuedMloki, "every event on a day must be summed")
+	assert.EqualValues(t, 3900, point.RedeemedMloki, "and likewise for the redeemed series")
+}
+
+// TestGetCashHubStats_DailySeriesReturnedAndWrittenOff covers the two
+// archive-only branches, which are keyed on archived_at rather than on a
+// recipient's action — the buckets a past bug left structurally empty.
+func TestGetCashHubStats_DailySeriesReturnedAndWrittenOff(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+
+	now := time.Now().UTC()
+	archivedAt := now.AddDate(0, 0, -1)
+
+	require.NoError(t, svc.DB.Create(&db.CashBillSliceArchive{
+		WalletAppID: 730_001, HubAppID: hub.ID, ClaimID: 31,
+		IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(),
+		AmountMloki: 700, Outcome: db.CashSliceStatusExpired,
+		CreatedAt: now.AddDate(0, 0, -5), ArchivedAt: archivedAt,
+	}).Error)
+	require.NoError(t, svc.DB.Create(&db.CashBillSliceArchive{
+		WalletAppID: 730_002, HubAppID: hub.ID, ClaimID: 32,
+		IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(),
+		AmountMloki: 300, Outcome: db.CashSliceStatusWrittenOff,
+		CreatedAt: now.AddDate(0, 0, -5), ArchivedAt: archivedAt,
+	}).Error)
+
+	stats, err := svc.AppsService.GetCashHubStats(hub.ID, now)
+	require.NoError(t, err)
+
+	byDay := map[string]apps.CashHubDailyPoint{}
+	for _, p := range stats.Daily {
+		byDay[p.Date.Format("2006-01-02")] = p
+	}
+	point := byDay[archivedAt.Format("2006-01-02")]
+	assert.EqualValues(t, 700, point.ReturnedMloki, "returned is keyed on when the bill was archived")
+	assert.EqualValues(t, 300, point.WrittenOffMloki, "as is written-off")
+}
