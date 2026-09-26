@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"github.com/flokiorg/lokihub/config"
+	"github.com/ohstr/nmilat/nipcash/transport"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -1216,6 +1217,99 @@ func (_c *MockConfig_SetTrustedNwcRelay_Call) Return(err error) *MockConfig_SetT
 }
 
 func (_c *MockConfig_SetTrustedNwcRelay_Call) RunAndReturn(run func(trusted bool) error) *MockConfig_SetTrustedNwcRelay_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PrivateEnvelopeLimits provides a mock function for the type MockConfig
+func (_mock *MockConfig) PrivateEnvelopeLimits() transport.Limits {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for PrivateEnvelopeLimits")
+	}
+
+	var r0 transport.Limits
+	if returnFunc, ok := ret.Get(0).(func() transport.Limits); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(transport.Limits)
+	}
+	return r0
+}
+
+// MockConfig_PrivateEnvelopeLimits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PrivateEnvelopeLimits'
+type MockConfig_PrivateEnvelopeLimits_Call struct {
+	*mock.Call
+}
+
+// PrivateEnvelopeLimits is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) PrivateEnvelopeLimits() *MockConfig_PrivateEnvelopeLimits_Call {
+	return &MockConfig_PrivateEnvelopeLimits_Call{Call: _e.mock.On("PrivateEnvelopeLimits")}
+}
+
+func (_c *MockConfig_PrivateEnvelopeLimits_Call) Run(run func()) *MockConfig_PrivateEnvelopeLimits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_PrivateEnvelopeLimits_Call) Return(limits transport.Limits) *MockConfig_PrivateEnvelopeLimits_Call {
+	_c.Call.Return(limits)
+	return _c
+}
+
+func (_c *MockConfig_PrivateEnvelopeLimits_Call) RunAndReturn(run func() transport.Limits) *MockConfig_PrivateEnvelopeLimits_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetPrivateEnvelopeLimits provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetPrivateEnvelopeLimits(limits transport.Limits) error {
+	ret := _mock.Called(limits)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetPrivateEnvelopeLimits")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(transport.Limits) error); ok {
+		r0 = returnFunc(limits)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetPrivateEnvelopeLimits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetPrivateEnvelopeLimits'
+type MockConfig_SetPrivateEnvelopeLimits_Call struct {
+	*mock.Call
+}
+
+// SetPrivateEnvelopeLimits is a helper method to define mock.On call
+//   - limits
+func (_e *MockConfig_Expecter) SetPrivateEnvelopeLimits(limits interface{}) *MockConfig_SetPrivateEnvelopeLimits_Call {
+	return &MockConfig_SetPrivateEnvelopeLimits_Call{Call: _e.mock.On("SetPrivateEnvelopeLimits", limits)}
+}
+
+func (_c *MockConfig_SetPrivateEnvelopeLimits_Call) Run(run func(limits transport.Limits)) *MockConfig_SetPrivateEnvelopeLimits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 transport.Limits
+		if args[0] != nil {
+			arg0 = args[0].(transport.Limits)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetPrivateEnvelopeLimits_Call) Return(err error) *MockConfig_SetPrivateEnvelopeLimits_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockConfig_SetPrivateEnvelopeLimits_Call) RunAndReturn(run func(limits transport.Limits) error) *MockConfig_SetPrivateEnvelopeLimits_Call {
 	_c.Call.Return(run)
 	return _c
 }

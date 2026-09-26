@@ -22,6 +22,7 @@ import (
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -1547,6 +1548,18 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	info.Relay = api.cfg.GetRelay()
 	info.GeneralRelay = api.cfg.GetGeneralRelay()
 	info.TrustedNwcRelay = api.cfg.TrustedNwcRelay()
+	privateEnvelope := api.cfg.PrivateEnvelopeLimits()
+	info.PrivateEnvelope = PrivateEnvelopeInfo{
+		MaxBytes:        privateEnvelope.MaxEnvelopeBytes,
+		MaxItems:        privateEnvelope.MaxItems,
+		PadBucketBytes:  privateEnvelope.PadBucketBytes,
+		MaxVerifyBudget: privateEnvelope.MaxVerifyBudget,
+		// Read-only context so an operator can choose MaxBytes informed: the
+		// hard ceiling it is checked against, and the base64-expanded size a
+		// relay's max_message_length must cover.
+		CeilingBytes:       transport.MaxNIP44Plaintext,
+		EstimatedWireBytes: privateEnvelope.EstimatedWireBytes(),
+	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
 	// Populate selected LSPs
@@ -1667,6 +1680,25 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		// are both decided in startNostr, so the change only lands on reload.
 		if err := api.svc.ReloadNostr(); err != nil {
 			return fmt.Errorf("failed to reload nostr after changing TrustedNwcRelay: %w", err)
+		}
+	}
+
+	if updateSettingsRequest.PrivateEnvelope != nil {
+		requested := *updateSettingsRequest.PrivateEnvelope
+		// CeilingBytes/EstimatedWireBytes are read-only and deliberately ignored
+		// here — they are derived, so accepting them would let a caller state a
+		// ceiling that is not the real one.
+		//
+		// No ReloadNostr: unlike TrustedNwcRelay, the limits are read per
+		// envelope rather than baked into the subscription shape, so a change
+		// applies to the next request.
+		if err := api.cfg.SetPrivateEnvelopeLimits(transport.Limits{
+			MaxEnvelopeBytes: requested.MaxBytes,
+			MaxItems:         requested.MaxItems,
+			PadBucketBytes:   requested.PadBucketBytes,
+			MaxVerifyBudget:  requested.MaxVerifyBudget,
+		}); err != nil {
+			return fmt.Errorf("failed to set private envelope limits: %w", err)
 		}
 	}
 

@@ -967,6 +967,7 @@ type InfoResponse struct {
 	Relay                       string              `json:"relay"`
 	GeneralRelay                string              `json:"generalRelay"`
 	TrustedNwcRelay             bool                `json:"trustedNwcRelay"`
+	PrivateEnvelope             PrivateEnvelopeInfo `json:"privateEnvelope"`
 	SearchRelay                 string              `json:"searchRelay"`
 	NodeAlias                   string              `json:"nodeAlias"`
 	MempoolUrl                  string              `json:"mempoolUrl"`
@@ -1012,20 +1013,42 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.EnablePolling = false
 }
 
+// PrivateEnvelopeInfo is the private-transport batch envelope policy, as read
+// and written through hub settings.
+//
+// CeilingBytes and EstimatedWireBytes are read-only and populated on reads only:
+// the first is the hard NIP-44 plaintext ceiling that MaxBytes is validated
+// against, the second is how large a full envelope becomes once base64-encoded,
+// which is the figure a relay's max_message_length has to cover. Surfacing both
+// is the difference between an operator choosing MaxBytes informed and guessing.
+type PrivateEnvelopeInfo struct {
+	MaxBytes           int `json:"maxBytes"`
+	MaxItems           int `json:"maxItems"`
+	PadBucketBytes     int `json:"padBucketBytes"`
+	MaxVerifyBudget    int `json:"maxVerifyBudget"`
+	CeilingBytes       int `json:"ceilingBytes,omitempty"`
+	EstimatedWireBytes int `json:"estimatedWireBytes,omitempty"`
+}
+
 type UpdateSettingsRequest struct {
-	Currency               string            `json:"currency"`
-	FlokicoinDisplayFormat string            `json:"flokicoinDisplayFormat"`
-	LokihubServicesURL     string            `json:"lokihubServicesURL"`
-	SwapServiceUrl         string            `json:"swapServiceUrl"`
-	Relay                  string            `json:"relay"`
-	GeneralRelay           *string           `json:"generalRelay"`
-	TrustedNwcRelay        *bool             `json:"trustedNwcRelay"`
-	SearchRelay            *string           `json:"searchRelay"`
-	MessageboardNwcUrl     string            `json:"messageboardNwcUrl"`
-	MempoolApi             string            `json:"mempoolApi"`
-	LSPs                   []LSPSettingInput `json:"lsps,omitempty"`
-	EnableSwap             *bool             `json:"enableSwap"`
-	EnableMessageboardNwc  *bool             `json:"enableMessageboardNwc"`
+	Currency               string  `json:"currency"`
+	FlokicoinDisplayFormat string  `json:"flokicoinDisplayFormat"`
+	LokihubServicesURL     string  `json:"lokihubServicesURL"`
+	SwapServiceUrl         string  `json:"swapServiceUrl"`
+	Relay                  string  `json:"relay"`
+	GeneralRelay           *string `json:"generalRelay"`
+	TrustedNwcRelay        *bool   `json:"trustedNwcRelay"`
+	// PrivateEnvelope, when present, replaces the whole envelope policy. It is
+	// all-or-nothing rather than four independent fields because the values are
+	// validated against each other (a pad bucket cannot exceed the ceiling), so
+	// a partial update could not be checked coherently.
+	PrivateEnvelope       *PrivateEnvelopeInfo `json:"privateEnvelope"`
+	SearchRelay           *string              `json:"searchRelay"`
+	MessageboardNwcUrl    string               `json:"messageboardNwcUrl"`
+	MempoolApi            string               `json:"mempoolApi"`
+	LSPs                  []LSPSettingInput    `json:"lsps,omitempty"`
+	EnableSwap            *bool                `json:"enableSwap"`
+	EnableMessageboardNwc *bool                `json:"enableMessageboardNwc"`
 }
 
 type LSPSettingInput struct {
