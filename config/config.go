@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/ohstr/nmilat/nipcash/transport"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -731,6 +733,97 @@ func (cfg *config) SetTrustedNwcRelay(trusted bool) error {
 	if err := cfg.SetUpdate("TrustedNwcRelay", value, ""); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to update TrustedNwcRelay")
 		return err
+	}
+	return nil
+}
+
+// privateEnvelope* are the settings keys backing PrivateEnvelopeLimits.
+const (
+	privateEnvelopeMaxBytesKey        = "PrivateEnvelopeMaxBytes"
+	privateEnvelopeMaxItemsKey        = "PrivateEnvelopeMaxItems"
+	privateEnvelopePadBucketBytesKey  = "PrivateEnvelopePadBucketBytes"
+	privateEnvelopeMaxVerifyBudgetKey = "PrivateEnvelopeMaxVerifyBudget"
+)
+
+// PrivateEnvelopeLimits reports the size policy applied to one private-transport
+// batch envelope, resolved in three layers: a runtime value set through hub
+// settings wins; otherwise the env var; otherwise the SDK default.
+//
+// The SDK owns the defaults and the ceiling (nipcash/transport) rather than this
+// package, so the hub and every client agree on what a valid envelope is. A
+// value that would exceed NIP-44's plaintext ceiling is refused at the setter,
+// but this getter also falls back to the defaults if the stored policy is
+// somehow invalid — a hub that cannot parse its own limits must still serve,
+// and a loud log plus working defaults beats refusing every envelope.
+//
+// These are node-level, not per-Cash-Hub: the gate runs before any item has been
+// attributed to a Hub, and one envelope can carry items for bills from several
+// Hubs, so there is no per-Hub policy to consult where the limit is enforced.
+func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
+	defaults := transport.DefaultLimits()
+	env := cfg.Env
+
+	limits := transport.Limits{
+		MaxEnvelopeBytes: cfg.privateEnvelopeInt(privateEnvelopeMaxBytesKey, env.PrivateEnvelopeMaxBytes, defaults.MaxEnvelopeBytes),
+		MaxItems:         cfg.privateEnvelopeInt(privateEnvelopeMaxItemsKey, env.PrivateEnvelopeMaxItems, defaults.MaxItems),
+		PadBucketBytes:   cfg.privateEnvelopeInt(privateEnvelopePadBucketBytesKey, env.PrivateEnvelopePadBucketBytes, defaults.PadBucketBytes),
+		MaxVerifyBudget:  cfg.privateEnvelopeInt(privateEnvelopeMaxVerifyBudgetKey, env.PrivateEnvelopeMaxVerifyBudget, defaults.MaxVerifyBudget),
+	}
+
+	if err := limits.Validate(); err != nil {
+		logger.Logger.Error().Err(err).
+			Interface("limits", limits).
+			Msg("Stored private envelope limits are invalid; falling back to defaults")
+		return defaults
+	}
+	return limits
+}
+
+// privateEnvelopeInt resolves one knob: stored setting, else env var, else
+// default. A stored value that is not a positive integer is ignored with a
+// warning rather than failing the read.
+func (cfg *config) privateEnvelopeInt(key string, envValue, defaultValue int) int {
+	stored, err := cfg.Get(key, "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to fetch private envelope limit")
+	} else if stored != "" {
+		parsed, convErr := strconv.Atoi(stored)
+		if convErr != nil || parsed <= 0 {
+			logger.Logger.Warn().Str("key", key).Str("value", stored).
+				Msg("Ignoring an unparseable private envelope limit")
+		} else {
+			return parsed
+		}
+	}
+	if envValue > 0 {
+		return envValue
+	}
+	return defaultValue
+}
+
+// SetPrivateEnvelopeLimits records a new envelope policy. It validates first, so
+// a hub cannot store a policy that would make every envelope fail — in
+// particular one above NIP-44's plaintext ceiling, which no amount of retrying
+// would fix.
+//
+// Takes effect on the next envelope; nothing needs restarting, unlike
+// SetTrustedNwcRelay, because the limits are read per request rather than baked
+// into the subscription shape.
+func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
+	if err := limits.Validate(); err != nil {
+		return fmt.Errorf("refusing to store an invalid private envelope policy: %w", err)
+	}
+
+	for key, value := range map[string]int{
+		privateEnvelopeMaxBytesKey:        limits.MaxEnvelopeBytes,
+		privateEnvelopeMaxItemsKey:        limits.MaxItems,
+		privateEnvelopePadBucketBytesKey:  limits.PadBucketBytes,
+		privateEnvelopeMaxVerifyBudgetKey: limits.MaxVerifyBudget,
+	} {
+		if err := cfg.SetUpdate(key, strconv.Itoa(value), ""); err != nil {
+			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to update private envelope limit")
+			return err
+		}
 	}
 	return nil
 }

@@ -1,5 +1,7 @@
 package config
 
+import "github.com/ohstr/nmilat/nipcash/transport"
+
 const (
 	FLNDBackendType = "FLND"
 )
@@ -55,6 +57,31 @@ type AppConfig struct {
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
+
+	// The four knobs below bound one private-transport batch envelope. They are
+	// node-level rather than per-Cash-Hub on purpose: the transport gate runs
+	// before any item has been attributed to a Hub, and a single envelope can
+	// carry items targeting bills from different Hubs, so there is no per-Hub
+	// policy to consult at the point where the limit has to be enforced.
+	//
+	// Each is a default only — a runtime value set through hub settings wins.
+	// See config.PrivateEnvelopeLimits. Defaults mirror
+	// nipcash/transport.DefaultLimits so the two cannot drift; 0 means "use the
+	// SDK default".
+
+	// PrivateEnvelopeMaxBytes caps the PADDED plaintext of one envelope. Bounded
+	// by NIP-44's 65535-byte plaintext ceiling. Raising it also raises what the
+	// relay must accept, since the base64 ciphertext is ~4/3 of this.
+	PrivateEnvelopeMaxBytes int `envconfig:"PRIVATE_ENVELOPE_MAX_BYTES" default:"0"`
+	// PrivateEnvelopeMaxItems is a cheap pre-check on item count, applied before
+	// anything is parsed. Bytes are the real constraint.
+	PrivateEnvelopeMaxItems int `envconfig:"PRIVATE_ENVELOPE_MAX_ITEMS" default:"0"`
+	// PrivateEnvelopePadBucketBytes is the padding granularity that makes a
+	// one-item envelope indistinguishable in size from a small batch.
+	PrivateEnvelopePadBucketBytes int `envconfig:"PRIVATE_ENVELOPE_PAD_BUCKET_BYTES" default:"0"`
+	// PrivateEnvelopeMaxVerifyBudget caps the signature verifications one
+	// envelope may demand, counted structurally before any crypto runs.
+	PrivateEnvelopeMaxVerifyBudget int `envconfig:"PRIVATE_ENVELOPE_MAX_VERIFY_BUDGET" default:"0"`
 }
 
 func (c *AppConfig) GetBaseFrontendUrl() string {
@@ -77,6 +104,10 @@ type Config interface {
 	// must never be set for a relay the operator does not control.
 	TrustedNwcRelay() bool
 	SetTrustedNwcRelay(trusted bool) error
+	// PrivateEnvelopeLimits bounds one private-transport batch envelope,
+	// resolved as: hub setting, else env var, else the SDK default.
+	PrivateEnvelopeLimits() transport.Limits
+	SetPrivateEnvelopeLimits(limits transport.Limits) error
 	GetNetwork() string
 	GetMempoolApi() string
 	SetMempoolApi(value string) error
