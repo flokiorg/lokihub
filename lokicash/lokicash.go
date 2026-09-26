@@ -60,6 +60,22 @@ const attestedAmountLen = 8
 // signer — the same string flnd's own VerifyMessage uses.
 const LNSignedMessagePrefix = "Flokicoin Lightning Signed Message:"
 
+// MintPayloadPrefix is the scheme prefix every mint-provenance payload starts
+// with, stopping short of the version — MintPayload emits
+// "lokicash-mint:v1:<hrp>:<pubkey>:<amount>", and this constant is just
+// "lokicash-mint:". It is exported for one reason: app-facing signing paths
+// MUST refuse to sign anything beginning with it.
+//
+// Mint provenance is produced by the node's own SignMessage over
+// MintPayload(...), and VerifyMint recovers the signer from it. The NIP-47
+// sign_message method reaches that same node key with an app-supplied string,
+// so without this guard any app holding the sign_message scope could have the
+// hub sign a mint payload for an arbitrary wallet pubkey and amount, and the
+// resulting token would verify as this hub's own provenance. The prefix is
+// deliberately version-agnostic (no "v1") so a future payload version inherits
+// the refusal instead of silently reopening the hole.
+const MintPayloadPrefix = "lokicash-mint:"
+
 // Token is the decoded content of a lokicash-family bech32 string: the
 // pieces of NIP-47 pairing data a Cash wallet connection needs (NIP-CASH §The
 // Pairing Connection), plus one optional metadata hint (NIP-CASH §The Lokicash
