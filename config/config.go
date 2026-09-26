@@ -743,6 +743,7 @@ const (
 	privateEnvelopeMaxItemsKey        = "PrivateEnvelopeMaxItems"
 	privateEnvelopePadBucketBytesKey  = "PrivateEnvelopePadBucketBytes"
 	privateEnvelopeMaxVerifyBudgetKey = "PrivateEnvelopeMaxVerifyBudget"
+	privateEnvelopeMaxConsolidateKey  = "PrivateEnvelopeMaxConsolidateSources"
 )
 
 // PrivateEnvelopeLimits reports the size policy applied to one private-transport
@@ -763,11 +764,24 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 	defaults := transport.DefaultLimits()
 	env := cfg.Env
 
+	maxBytes := cfg.privateEnvelopeInt(privateEnvelopeMaxBytesKey, env.PrivateEnvelopeMaxBytes, defaults.MaxEnvelopeBytes)
+
+	// The consolidate cap is not independent of the envelope size — a source
+	// costs ~952 bytes — so an unconfigured cap is derived from whatever envelope
+	// size resolved above, not taken flat from the default. Otherwise a hub that
+	// only lowers PRIVATE_ENVELOPE_MAX_BYTES ends up holding a policy Validate
+	// rejects, through no fault of its own.
+	//
+	// An explicitly configured cap is honoured as-is and left to Validate, so an
+	// operator who sets an impossible value is told rather than silently corrected.
+	defaultSources := min(defaults.MaxConsolidateSources, transport.MaxSourcesForEnvelope(maxBytes))
+
 	limits := transport.Limits{
-		MaxEnvelopeBytes: cfg.privateEnvelopeInt(privateEnvelopeMaxBytesKey, env.PrivateEnvelopeMaxBytes, defaults.MaxEnvelopeBytes),
-		MaxItems:         cfg.privateEnvelopeInt(privateEnvelopeMaxItemsKey, env.PrivateEnvelopeMaxItems, defaults.MaxItems),
-		PadBucketBytes:   cfg.privateEnvelopeInt(privateEnvelopePadBucketBytesKey, env.PrivateEnvelopePadBucketBytes, defaults.PadBucketBytes),
-		MaxVerifyBudget:  cfg.privateEnvelopeInt(privateEnvelopeMaxVerifyBudgetKey, env.PrivateEnvelopeMaxVerifyBudget, defaults.MaxVerifyBudget),
+		MaxEnvelopeBytes:      maxBytes,
+		MaxItems:              cfg.privateEnvelopeInt(privateEnvelopeMaxItemsKey, env.PrivateEnvelopeMaxItems, defaults.MaxItems),
+		PadBucketBytes:        cfg.privateEnvelopeInt(privateEnvelopePadBucketBytesKey, env.PrivateEnvelopePadBucketBytes, defaults.PadBucketBytes),
+		MaxVerifyBudget:       cfg.privateEnvelopeInt(privateEnvelopeMaxVerifyBudgetKey, env.PrivateEnvelopeMaxVerifyBudget, defaults.MaxVerifyBudget),
+		MaxConsolidateSources: cfg.privateEnvelopeInt(privateEnvelopeMaxConsolidateKey, env.PrivateEnvelopeMaxConsolidateSources, defaultSources),
 	}
 
 	if err := limits.Validate(); err != nil {
@@ -819,6 +833,7 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 		privateEnvelopeMaxItemsKey:        limits.MaxItems,
 		privateEnvelopePadBucketBytesKey:  limits.PadBucketBytes,
 		privateEnvelopeMaxVerifyBudgetKey: limits.MaxVerifyBudget,
+		privateEnvelopeMaxConsolidateKey:  limits.MaxConsolidateSources,
 	} {
 		if err := cfg.SetUpdate(key, strconv.Itoa(value), ""); err != nil {
 			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to update private envelope limit")

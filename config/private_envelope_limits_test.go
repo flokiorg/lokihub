@@ -78,13 +78,60 @@ func TestPrivateEnvelopeLimits_HubSettingBeatsEnv(t *testing.T) {
 	})
 
 	stored := transport.Limits{
-		MaxEnvelopeBytes: 32 * 1024,
-		MaxItems:         12,
-		PadBucketBytes:   8 * 1024,
-		MaxVerifyBudget:  60,
+		MaxEnvelopeBytes:      32 * 1024,
+		MaxItems:              12,
+		PadBucketBytes:        8 * 1024,
+		MaxVerifyBudget:       60,
+		MaxConsolidateSources: 20,
 	}
 	require.NoError(t, cfg.SetPrivateEnvelopeLimits(stored))
 	assert.Equal(t, stored, cfg.PrivateEnvelopeLimits())
+}
+
+// TestPrivateEnvelopeLimits_DerivesConsolidateCapFromEnvelopeSize is the coupling
+// that a flat default would get wrong: a source costs ~952 bytes, so a hub which
+// lowers only the envelope size must still end up with a policy that validates.
+//
+// Without the derivation this returned defaults wholesale, because 48 sources
+// (~46 KB) cannot fit a 16 KB envelope and the whole policy failed validation.
+func TestPrivateEnvelopeLimits_DerivesConsolidateCapFromEnvelopeSize(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, &AppConfig{PrivateEnvelopeMaxBytes: 16 * 1024})
+
+	got := cfg.PrivateEnvelopeLimits()
+	require.NoError(t, got.Validate(), "lowering only the envelope size must still yield a valid policy")
+
+	assert.Equal(t, 16*1024, got.MaxEnvelopeBytes)
+	assert.Equal(t, transport.MaxSourcesForEnvelope(16*1024), got.MaxConsolidateSources)
+	assert.LessOrEqual(t, transport.EstimatedConsolidateItemBytes(got.MaxConsolidateSources), got.MaxEnvelopeBytes)
+	// And it must not have quietly exceeded the default either.
+	assert.LessOrEqual(t, got.MaxConsolidateSources, transport.DefaultMaxConsolidateSources)
+}
+
+// TestPrivateEnvelopeLimits_LargeEnvelopeKeepsTheDefaultCap pins the other side of
+// the derivation: a bigger envelope affords more sources than the default allows,
+// and the default must still win — the cap is a policy choice, not just a
+// consequence of size.
+func TestPrivateEnvelopeLimits_LargeEnvelopeKeepsTheDefaultCap(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, &AppConfig{PrivateEnvelopeMaxBytes: transport.MaxNIP44Plaintext})
+
+	got := cfg.PrivateEnvelopeLimits()
+	require.NoError(t, got.Validate())
+	assert.Equal(t, transport.DefaultMaxConsolidateSources, got.MaxConsolidateSources,
+		"a larger envelope affords more sources, but the default cap is still the policy")
+}
+
+// TestPrivateEnvelopeLimits_ExplicitCapIsNotSilentlyCorrected pins that the
+// derivation applies only when the cap is unconfigured. An operator who sets an
+// impossible value should be told by validation, not quietly overridden.
+func TestPrivateEnvelopeLimits_ExplicitCapIsNotSilentlyCorrected(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, &AppConfig{
+		PrivateEnvelopeMaxBytes:              16 * 1024,
+		PrivateEnvelopeMaxConsolidateSources: 90, // cannot fit 16 KiB
+	})
+
+	// The policy is incoherent, so the getter falls back to defaults wholesale
+	// rather than inventing a cap the operator did not ask for.
+	assert.Equal(t, transport.DefaultLimits(), cfg.PrivateEnvelopeLimits())
 }
 
 // TestSetPrivateEnvelopeLimits_RefusesAboveTheNIP44Ceiling is the important one:

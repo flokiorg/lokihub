@@ -1022,12 +1022,20 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 // which is the figure a relay's max_message_length has to cover. Surfacing both
 // is the difference between an operator choosing MaxBytes informed and guessing.
 type PrivateEnvelopeInfo struct {
-	MaxBytes           int `json:"maxBytes"`
-	MaxItems           int `json:"maxItems"`
-	PadBucketBytes     int `json:"padBucketBytes"`
-	MaxVerifyBudget    int `json:"maxVerifyBudget"`
-	CeilingBytes       int `json:"ceilingBytes,omitempty"`
-	EstimatedWireBytes int `json:"estimatedWireBytes,omitempty"`
+	MaxBytes int `json:"maxBytes"`
+	MaxItems int `json:"maxItems"`
+	// MaxConsolidateSources is necessarily lower than NIP-CASH's cap of 100 on
+	// the standard transport: each source carries its own signed proof, so 100
+	// sources exceeds NIP-44's plaintext ceiling outright.
+	MaxConsolidateSources int `json:"maxConsolidateSources"`
+	PadBucketBytes        int `json:"padBucketBytes"`
+	MaxVerifyBudget       int `json:"maxVerifyBudget"`
+	CeilingBytes          int `json:"ceilingBytes,omitempty"`
+	EstimatedWireBytes    int `json:"estimatedWireBytes,omitempty"`
+	// MaxConsolidateItemBytes is read-only: how large the largest permitted
+	// consolidate item encodes to, so an operator can see the cap's real cost
+	// against MaxBytes rather than inferring it.
+	MaxConsolidateItemBytes int `json:"maxConsolidateItemBytes,omitempty"`
 }
 
 type UpdateSettingsRequest struct {
