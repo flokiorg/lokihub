@@ -50,15 +50,34 @@ var errCircleMemberAlreadyHasWallet = errors.New("identity already has an active
 // instead of maintaining a parallel copy (nmilat migration). The
 // response stays this controller's own createCircleWalletResponse: nipcw's
 // own wire response type is unexported (it carries a still-NIP-44-encrypted
-// encrypted_pairing_uri nipcw only exposes post-decryption to its own client
+// encrypted_details blob nipcw only exposes post-decryption to its own client
 // callers), so there's no exported type to adopt for it.
 
+// circleWalletDetails is everything a join hands back to the joining member.
+// It lives INSIDE the response's single NIP-44 encrypted field, keyed to the
+// joiner's own identity pubkey, and that placement is the security property:
+// create_circle_wallet is called over the *shared* circlehub connection, so the
+// NIP-47 response itself is encrypted only to a key every member holds. Any
+// field left outside is readable by every other member of the circle.
+//
+// That is why WalletPubkey in particular must be in here. It is the member's
+// wallet identity, and it appears in the clear `p` tag of every subsequent call
+// that wallet makes — so a co-member who could read it from the join response
+// would be able to follow that member's traffic for the wallet's whole life.
+// The terms travel alongside it because they describe this member's wallet
+// specifically, not the circle.
+type circleWalletDetails struct {
+	PairingURI    string `json:"pairing_uri"`
+	WalletPubkey  string `json:"wallet_pubkey"`
+	ExpiresAt     int64  `json:"expires_at"`
+	FeesPpm       int    `json:"fees_ppm"`
+	BudgetRenewal string `json:"budget_renewal"`
+}
+
+// createCircleWalletResponse carries exactly one field on purpose — see
+// circleWalletDetails. Anything added here is public to the whole circle.
 type createCircleWalletResponse struct {
-	EncryptedPairingURI string `json:"encrypted_pairing_uri"`
-	WalletPubkey        string `json:"wallet_pubkey"`
-	ExpiresAt           int64  `json:"expires_at"`
-	FeesPpm             int    `json:"fees_ppm"`
-	BudgetRenewal       string `json:"budget_renewal"`
+	EncryptedDetails string `json:"encrypted_details"`
 }
 
 func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
@@ -375,11 +394,11 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// Encrypt with the Hub's own key (app, not newApp): the requester's only
 	// prior trust anchor is the Hub connection they already dialed — the new
-	// child wallet's own pubkey is just a cleartext field inside this same
-	// unauthenticated response (createCircleWalletResponse.WalletPubkey), so
-	// using it as the encryption key would let the response vouch for
-	// itself. Signing with the already-established Hub key is what lets the
-	// requester trust this really came from the Hub they connected to.
+	// child wallet's own pubkey is merely self-asserted inside this same
+	// response (circleWalletDetails.WalletPubkey), so using it as the
+	// encryption key would let the response vouch for itself. Encrypting under
+	// the already-established Hub key is what lets the requester trust this
+	// really came from the Hub they connected to.
 	hubWalletPrivKey, err := controller.keys.GetAppWalletKey(app.ID)
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to get circle hub private key")
@@ -387,10 +406,23 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
-	encryptedURI, err := encryptPairingURI(params.Pubkey, hubWalletPrivKey, pairingURI)
+	detailsJSON, err := json.Marshal(circleWalletDetails{
+		PairingURI:    pairingURI,
+		WalletPubkey:  walletPubkey,
+		ExpiresAt:     expiresAt.Unix(),
+		FeesPpm:       providerConfig.FeesPpm,
+		BudgetRenewal: resolvedBudgetRenewal,
+	})
 	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to encrypt pairing URI for circle wallet")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encrypt pairing URI")
+		logger.Logger.Error().Err(err).Msg("Failed to marshal circle wallet details")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encode wallet details")
+		return
+	}
+
+	encryptedDetails, err := encryptPairingURI(params.Pubkey, hubWalletPrivKey, string(detailsJSON))
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to encrypt circle wallet details")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encrypt wallet details")
 		return
 	}
 
@@ -402,11 +434,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
 		Result: createCircleWalletResponse{
-			EncryptedPairingURI: encryptedURI,
-			WalletPubkey:        walletPubkey,
-			ExpiresAt:           expiresAt.Unix(),
-			FeesPpm:             providerConfig.FeesPpm,
-			BudgetRenewal:       resolvedBudgetRenewal,
+			EncryptedDetails: encryptedDetails,
 		},
 	}, nostr.Tags{})
 }

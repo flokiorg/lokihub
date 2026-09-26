@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 // budgetRenewalsByRank mirrors constants.BudgetRenewalRank's ordering
@@ -56,7 +55,9 @@ func createCircleWalletExpectingCode(t *testing.T, cfg *Config, floor, requested
 
 	if expectCode == "" {
 		require.NoError(t, err, "budget_renewal %q against floor %q must be accepted", requested, floor)
-		require.Equal(t, requested, result.BudgetRenewal)
+		details, dErr := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), result)
+		require.NoError(t, dErr)
+		require.Equal(t, requested, details.BudgetRenewal)
 		return
 	}
 	requireNWCErrorCode(t, err, expectCode)
@@ -113,9 +114,9 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 		IdentityEvent: eventJSON(t, identityEvent),
 	}, &result))
 
-	pairingURI, err := nwcclient.DecryptPairingURI(privkey, hubClient.WalletPubkey(), result.EncryptedPairingURI)
+	details, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	child := mustConnect(t, pairingURI)
+	child := mustConnect(t, details.PairingURI)
 
 	var budget GetBudgetResult
 	require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))

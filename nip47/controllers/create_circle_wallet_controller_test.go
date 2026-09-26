@@ -404,10 +404,12 @@ func TestHandleCreateCircleWalletEvent_HappyPath(t *testing.T) {
 
 	assert.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(createCircleWalletResponse)
-	assert.NotEmpty(t, result.EncryptedPairingURI)
-	assert.NotEmpty(t, result.WalletPubkey)
-	assert.Greater(t, result.ExpiresAt, time.Now().Unix())
-	assert.Equal(t, 0, result.FeesPpm)
+	assert.NotEmpty(t, result.EncryptedDetails)
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, result.EncryptedDetails)
+	assert.NotEmpty(t, details.PairingURI)
+	assert.NotEmpty(t, details.WalletPubkey)
+	assert.Greater(t, details.ExpiresAt, time.Now().Unix())
+	assert.Equal(t, 0, details.FeesPpm)
 
 	// Verify the child was created with the correct kind/parent.
 	var childApps []db.App
@@ -670,7 +672,8 @@ func TestHandleCreateCircleWalletEvent_ExpiryOmitted_DefaultsToMaxExpSecs(t *tes
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(createCircleWalletResponse)
-	assert.InDelta(t, before.Add(7200*time.Second).Unix(), result.ExpiresAt, 5,
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, result.EncryptedDetails)
+	assert.InDelta(t, before.Add(7200*time.Second).Unix(), details.ExpiresAt, 5,
 		"an omitted expiry must default to the hub's max_exp_secs, not produce an already-expired wallet")
 }
 
@@ -726,10 +729,11 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_AtOrLooserThanFloor_Accepte
 
 		require.Nil(t, publishedResponse.Error, "renewal %q should be accepted under a monthly floor", renewal)
 		result := publishedResponse.Result.(createCircleWalletResponse)
-		assert.Equal(t, renewal, result.BudgetRenewal)
+		details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, result.EncryptedDetails)
+		assert.Equal(t, renewal, details.BudgetRenewal)
 
 		var childApp db.App
-		require.NoError(t, svc.DB.Where("wallet_pubkey = ?", result.WalletPubkey).First(&childApp).Error)
+		require.NoError(t, svc.DB.Where("wallet_pubkey = ?", details.WalletPubkey).First(&childApp).Error)
 		var perm db.AppPermission
 		require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", childApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
 		assert.Equal(t, renewal, perm.BudgetRenewal)
@@ -791,7 +795,8 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_Omitted_DefaultsToNever(t *
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(createCircleWalletResponse)
-	assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, result.BudgetRenewal)
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, result.EncryptedDetails)
+	assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, details.BudgetRenewal)
 }
 
 func TestHandleCreateCircleWalletEvent_BudgetRenewal_InvalidValue_Rejected(t *testing.T) {
