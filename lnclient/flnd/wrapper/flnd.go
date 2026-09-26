@@ -39,8 +39,18 @@ type FLNDWrapper struct {
 	invoicesClient  invoicesrpc.InvoicesClient
 	peersClient     peersrpc.PeersClient
 	walletKitClient walletrpc.WalletKitClient
-	IdentityPubkey  string
-	conn            *grpc.ClientConn
+	// IdentityPubkey is NEVER POPULATED — NewFLNDclient does not set it, and
+	// nothing else does either, so it is always "". That makes IsIdentityPubkey
+	// always report false and GetMainPubkey always return "", and neither has
+	// any caller. It already caused one real bug (FLNDService.UpdateChannel
+	// compared against it and so always selected the peer's routing policy).
+	//
+	// The node's real identity pubkey lives in FLNDService.nodeInfo.Pubkey,
+	// filled from GetInfo at construction — use that. This field and its two
+	// accessors should be deleted; they are left only because removing them also
+	// means regenerating the hand-maintained LightningClientWrapper mock.
+	IdentityPubkey string
+	conn           *grpc.ClientConn
 }
 
 func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {

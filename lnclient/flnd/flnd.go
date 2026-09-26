@@ -1358,8 +1358,13 @@ func (svc *FLNDService) UpdateChannel(ctx context.Context, updateChannelRequest 
 		return err
 	}
 
+	// svc.nodeInfo.Pubkey, not svc.client.IdentityPubkey: the wrapper's field is
+	// never populated by NewFLNDclient, so it is always "" and this comparison
+	// never matched. That silently selected Node2Policy on every channel —
+	// including the ones where we ARE Node1 — so a fee update copied the
+	// *peer's* TimeLockDelta and MaxHtlcMsat into our own policy.
 	var nodePolicy *lnrpc.RoutingPolicy
-	if channelEdge.Node1Pub == svc.client.IdentityPubkey {
+	if channelEdge.Node1Pub == svc.nodeInfo.Pubkey {
 		nodePolicy = channelEdge.Node1Policy
 	} else {
 		nodePolicy = channelEdge.Node2Policy
