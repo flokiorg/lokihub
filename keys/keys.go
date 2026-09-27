@@ -27,6 +27,9 @@ type Keys interface {
 	GetSwapMnemonic() string
 	// Derives a BIP32 child key from appKey dedicated for app wallet keys (branch H+1)
 	GetAppWalletKey(childIndex uint) (string, error)
+	// Derives the hub's private-transport inbox key (branch H+3) — the key clients
+	// encrypt envelopes to. Rotatable via index; see GetPrivateTransportKey.
+	GetPrivateTransportKey(index uint32) (string, error)
 	// Derives the NWC pairing private key for a Cash pending-claim wallet (branch H+2).
 	// Cryptographically independent of GetAppWalletKey (different hardened branch index).
 	// Never needs to be stored — re-derive at claim time from the app ID.
@@ -158,6 +161,40 @@ func (keys *keys) GetAppWalletKey(appID uint) (string, error) {
 // creation time to register the app pubkey, then re-derive it at claim time to build the URI.
 func (keys *keys) GetCashPairingKey(appID uint) (string, error) {
 	path := []uint32{bip32.FirstHardenedChild + 2, bip32.FirstHardenedChild + uint32(appID)} //nolint:gosec // appID is a small auto-increment DB primary key
+	key, err := keys.DeriveKey(path)
+	if err != nil {
+		return "", err
+	}
+	childPrivKey, _ := btcec.PrivKeyFromBytes(key.Key)
+	privHex := hex.EncodeToString(childPrivKey.Serialize())
+	childPrivKey.Zero()
+	return privHex, nil
+}
+
+// GetPrivateTransportKey derives the hub's private-transport inbox key from BIP32
+// branch H+3, independent of the app-wallet (H+1) and Cash-pairing (H+2) branches.
+//
+// This is the key clients encrypt private-transport envelopes to, and the only key
+// that can open them. It is deliberately NOT the Lightning node identity key, even
+// though the node key is what a bill's mint signature proves: signing and
+// decrypting are different operations, and the node can only do the first. Asking
+// the node to perform the ECDH measured 602 µs per inbound event against a 200 µs
+// budget — paid on every junk event too, since nothing about a fresh ephemeral
+// sender is cacheable — and flnd's DeriveSharedKey returns sha256 of the shared
+// point, which NIP-44's HKDF cannot consume at all. Held in-process, the same ECDH
+// costs 166 µs. See lnclient/flnd/signrpc_stage0_bench_test.go.
+//
+// Seed-derived rather than random so it survives a restart without being stored,
+// and so rotation is a matter of advancing index rather than key custody. The
+// index exists precisely to make rotation possible: a leaked inbox key would
+// otherwise expose all future private traffic for every bill in circulation, with
+// reissuing every bill as the only remedy.
+//
+// Clients learn the public half from a replaceable announcement signed by the node
+// identity, so the chain bill → node key → announcement → inbox key has no
+// assumed link.
+func (keys *keys) GetPrivateTransportKey(index uint32) (string, error) {
+	path := []uint32{bip32.FirstHardenedChild + 3, bip32.FirstHardenedChild + index}
 	key, err := keys.DeriveKey(path)
 	if err != nil {
 		return "", err
