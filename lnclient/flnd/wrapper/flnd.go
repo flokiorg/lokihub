@@ -11,6 +11,7 @@ import (
 	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
 	"github.com/flokiorg/flnd/lnrpc/peersrpc"
 	"github.com/flokiorg/flnd/lnrpc/routerrpc"
+	"github.com/flokiorg/flnd/lnrpc/signrpc"
 	"github.com/flokiorg/flnd/lnrpc/walletrpc"
 	"github.com/flokiorg/flnd/macaroons"
 	"google.golang.org/grpc"
@@ -39,6 +40,12 @@ type FLNDWrapper struct {
 	invoicesClient  invoicesrpc.InvoicesClient
 	peersClient     peersrpc.PeersClient
 	walletKitClient walletrpc.WalletKitClient
+	// signerClient reaches flnd's signrpc subserver, which is compiled into both
+	// dev and release builds and authorised by the admin macaroon this client
+	// already presents. It is needed for BIP340 signatures over an arbitrary
+	// digest, which lnrpc.SignMessage cannot produce: that one is ECDSA over a
+	// Lightning-prefixed double hash.
+	signerClient signrpc.SignerClient
 	// IdentityPubkey is NEVER POPULATED — NewFLNDclient does not set it, and
 	// nothing else does either, so it is always "". That makes IsIdentityPubkey
 	// always report false and GetMainPubkey always return "", and neither has
@@ -120,8 +127,41 @@ func NewFLNDclient(flndOptions FLNDoptions) (result *FLNDWrapper, err error) {
 		invoicesClient:  invoicesrpc.NewInvoicesClient(conn),
 		peersClient:     peersrpc.NewPeersClient(conn),
 		walletKitClient: walletrpc.NewWalletKitClient(conn),
+		signerClient:    signrpc.NewSignerClient(conn),
 		conn:            conn,
 	}, nil
+}
+
+// keyFamilyNodeKey is flnd's keychain.KeyFamilyNodeKey — the family holding the
+// node's Lightning identity key, which is the key a bill's mint signature proves
+// and therefore the only one a client can verify an announcement against.
+const keyFamilyNodeKey = 6
+
+// SignSchnorrNodeKey returns a BIP340 signature by the node's identity key over
+// sha256(msg).
+//
+// Note carefully what is signed: flnd hashes msg itself (no tag, double_hash
+// false takes its single-SHA branch), so a caller wanting a signature over a
+// digest it already holds must pass that digest's PRE-IMAGE, not the digest. For
+// a Nostr event that means the canonical serialization, since an event id is
+// exactly sha256 of it. Passing the id instead yields a valid signature over
+// sha256(id) — the wrong thing, and it fails verification with nothing indicating
+// why.
+//
+// This is deliberately separate from SignMessage, which is ECDSA over a
+// Lightning-prefixed double hash and cannot produce a Nostr-valid signature at
+// all.
+func (wrapper *FLNDWrapper) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	resp, err := wrapper.signerClient.SignMessage(ctx, &signrpc.SignMessageReq{
+		Msg:        msg,
+		KeyLoc:     &signrpc.KeyLocator{KeyFamily: keyFamilyNodeKey, KeyIndex: 0},
+		SchnorrSig: true,
+		DoubleHash: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Signature, nil
 }
 
 func (wrapper *FLNDWrapper) Close() error {

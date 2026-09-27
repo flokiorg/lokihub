@@ -98,6 +98,8 @@ type LNClient interface {
 	ListPeers(ctx context.Context) ([]PeerDetails, error)
 	GetLogOutput(ctx context.Context, maxLen int) ([]byte, error)
 	SignMessage(ctx context.Context, message string) (string, error)
+	// TransportSigner is deliberately NOT part of this interface — see its own
+	// declaration below for why.
 	GetStorageDir() (string, error)
 	GetNetworkGraph(ctx context.Context, nodeIds []string) (NetworkGraphResponse, error)
 	UpdateLastWalletSyncRequest()
@@ -113,6 +115,23 @@ type LNClient interface {
 	SubscribeChannelAcceptor(ctx context.Context) (<-chan ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error)
 
 	SetNodeAlias(ctx context.Context, alias string) error
+}
+
+// TransportSigner is the narrow capability the private-transport announcement
+// needs: a BIP340 signature by the node's identity key.
+//
+// Kept OUT of LNClient on purpose. This repo has no mockery binary or
+// .mockery.yaml, so its "generated" LNClient doubles are hand-maintained — there
+// are eight of them, including five independent 42-method copies under lsps/ —
+// and every method added to that interface has to be written into all eight.
+// Since exactly one call site needs this, it is an optional interface the caller
+// type-asserts instead, and nothing else has to change.
+//
+// SignSchnorrNodeKey signs sha256(msg), not msg. A caller holding a digest must
+// pass its pre-image; for a Nostr event that is the canonical serialization,
+// since an event id is sha256 of it.
+type TransportSigner interface {
+	SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error)
 }
 
 type ChannelAcceptRequest struct {
