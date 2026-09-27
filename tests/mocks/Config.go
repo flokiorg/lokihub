@@ -1221,6 +1221,99 @@ func (_c *MockConfig_SetTrustedNwcRelay_Call) RunAndReturn(run func(trusted bool
 	return _c
 }
 
+// PrivateTransportEnabled provides a mock function for the type MockConfig
+func (_mock *MockConfig) PrivateTransportEnabled() bool {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for PrivateTransportEnabled")
+	}
+
+	var r0 bool
+	if returnFunc, ok := ret.Get(0).(func() bool); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
+// MockConfig_PrivateTransportEnabled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PrivateTransportEnabled'
+type MockConfig_PrivateTransportEnabled_Call struct {
+	*mock.Call
+}
+
+// PrivateTransportEnabled is a helper method to define mock.On call
+func (_e *MockConfig_Expecter) PrivateTransportEnabled() *MockConfig_PrivateTransportEnabled_Call {
+	return &MockConfig_PrivateTransportEnabled_Call{Call: _e.mock.On("PrivateTransportEnabled")}
+}
+
+func (_c *MockConfig_PrivateTransportEnabled_Call) Run(run func()) *MockConfig_PrivateTransportEnabled_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockConfig_PrivateTransportEnabled_Call) Return(b bool) *MockConfig_PrivateTransportEnabled_Call {
+	_c.Call.Return(b)
+	return _c
+}
+
+func (_c *MockConfig_PrivateTransportEnabled_Call) RunAndReturn(run func() bool) *MockConfig_PrivateTransportEnabled_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetPrivateTransportEnabled provides a mock function for the type MockConfig
+func (_mock *MockConfig) SetPrivateTransportEnabled(enabled bool) error {
+	ret := _mock.Called(enabled)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetPrivateTransportEnabled")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(bool) error); ok {
+		r0 = returnFunc(enabled)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockConfig_SetPrivateTransportEnabled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetPrivateTransportEnabled'
+type MockConfig_SetPrivateTransportEnabled_Call struct {
+	*mock.Call
+}
+
+// SetPrivateTransportEnabled is a helper method to define mock.On call
+//   - enabled
+func (_e *MockConfig_Expecter) SetPrivateTransportEnabled(enabled interface{}) *MockConfig_SetPrivateTransportEnabled_Call {
+	return &MockConfig_SetPrivateTransportEnabled_Call{Call: _e.mock.On("SetPrivateTransportEnabled", enabled)}
+}
+
+func (_c *MockConfig_SetPrivateTransportEnabled_Call) Run(run func(enabled bool)) *MockConfig_SetPrivateTransportEnabled_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 bool
+		if args[0] != nil {
+			arg0 = args[0].(bool)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockConfig_SetPrivateTransportEnabled_Call) Return(err error) *MockConfig_SetPrivateTransportEnabled_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockConfig_SetPrivateTransportEnabled_Call) RunAndReturn(run func(enabled bool) error) *MockConfig_SetPrivateTransportEnabled_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // PrivateEnvelopeLimits provides a mock function for the type MockConfig
 func (_mock *MockConfig) PrivateEnvelopeLimits() transport.Limits {
 	ret := _mock.Called()

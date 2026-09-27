@@ -737,6 +737,45 @@ func (cfg *config) SetTrustedNwcRelay(trusted bool) error {
 	return nil
 }
 
+// privateTransportEnabledKey backs PrivateTransportEnabled.
+const privateTransportEnabledKey = "PrivateTransportEnabled"
+
+// PrivateTransportEnabled reports whether this hub serves the wrapped private
+// transport alongside the standard kind-23194 one.
+//
+// Defaults to FALSE, unlike TrustedNwcRelay. The receive path is incomplete — the
+// gate accepts envelopes but nothing unwraps them yet — so a hub with this on
+// would publish an announcement inviting clients to an inbox it cannot answer, and
+// those clients would experience silence. Announcing a capability before it works
+// is the exact failure mode this work exists to remove, so the default stays off
+// until the path is finished.
+func (cfg *config) PrivateTransportEnabled() bool {
+	value, err := cfg.Get(privateTransportEnabledKey, "")
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to fetch PrivateTransportEnabled")
+		return false
+	}
+	if value == "" {
+		return cfg.Env.PrivateTransportEnabled
+	}
+	return value == "true"
+}
+
+// SetPrivateTransportEnabled records whether the private transport is served. The
+// caller is expected to ReloadNostr afterwards: the subscription and the
+// announcement are both set up in startNostr.
+func (cfg *config) SetPrivateTransportEnabled(enabled bool) error {
+	value := "false"
+	if enabled {
+		value = "true"
+	}
+	if err := cfg.SetUpdate(privateTransportEnabledKey, value, ""); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to update PrivateTransportEnabled")
+		return err
+	}
+	return nil
+}
+
 // privateEnvelope* are the settings keys backing PrivateEnvelopeLimits.
 const (
 	privateEnvelopeMaxBytesKey        = "PrivateEnvelopeMaxBytes"

@@ -58,6 +58,11 @@ type AppConfig struct {
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
 
+	// PrivateTransportEnabled turns on the wrapped private transport alongside the
+	// standard kind-23194 one. Defaults false while the receive path is
+	// incomplete — see config.PrivateTransportEnabled.
+	PrivateTransportEnabled bool `envconfig:"PRIVATE_TRANSPORT_ENABLED" default:"false"`
+
 	// The four knobs below bound one private-transport batch envelope. They are
 	// node-level rather than per-Cash-Hub on purpose: the transport gate runs
 	// before any item has been attributed to a Hub, and a single envelope can
@@ -114,6 +119,10 @@ type Config interface {
 	// resolved as: hub setting, else env var, else the SDK default.
 	PrivateEnvelopeLimits() transport.Limits
 	SetPrivateEnvelopeLimits(limits transport.Limits) error
+	// PrivateTransportEnabled reports whether this hub serves the wrapped private
+	// transport. Defaults false; see config.PrivateTransportEnabled for why.
+	PrivateTransportEnabled() bool
+	SetPrivateTransportEnabled(enabled bool) error
 	GetNetwork() string
 	GetMempoolApi() string
 	SetMempoolApi(value string) error
