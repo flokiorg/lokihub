@@ -182,6 +182,25 @@ func (svc *service) startNostr(ctx context.Context) error {
 	// start each app wallet subscription which have a child derived wallet key
 	svc.startAllExistingAppsWalletSubscriptions(ctx, pool)
 
+	// The private transport runs alongside the standard one rather than replacing
+	// it: bills and circle joins move here, while sub-wallets, ordinary apps and
+	// the legacy path keep speaking kind 23194.
+	//
+	// Off unless explicitly enabled. The receive path is not finished — the gate
+	// accepts envelopes but nothing unwraps them yet — so a hub that turned this on
+	// would advertise an inbox it cannot serve, and a client trusting the
+	// announcement would get silence. Announcing a capability before it works is
+	// exactly the failure this whole line of work exists to remove.
+	if svc.cfg.PrivateTransportEnabled() {
+		if err := svc.startPrivateTransport(ctx, pool, group); err != nil {
+			// Deliberately not fatal: the standard transport is unaffected, and a
+			// hub that cannot start the private path should keep serving rather
+			// than refuse to boot. Loud, though — silence here would look like a
+			// working private hub that never answers.
+			logger.Logger.Error().Err(err).Msg("Failed to start the private transport; standard transport unaffected")
+		}
+	}
+
 	// check if there are still legacy apps in DB
 	var legacyAppCount int64
 	result := svc.db.Model(&db.App{}).Where("wallet_pubkey IS NULL").Count(&legacyAppCount)
