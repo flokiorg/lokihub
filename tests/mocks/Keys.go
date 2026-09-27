@@ -144,6 +144,58 @@ func (_mock *MockKeys) GetCashPairingKey(appID uint) (string, error) {
 	return r0, r1
 }
 
+// GetPrivateTransportKey provides a mock function for the type MockKeys
+func (_mock *MockKeys) GetPrivateTransportKey(index uint32) (string, error) {
+	ret := _mock.Called(index)
+	if len(ret) == 0 {
+		panic("no return value specified for GetPrivateTransportKey")
+	}
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(uint32) (string, error)); ok {
+		return returnFunc(index)
+	}
+	if returnFunc, ok := ret.Get(0).(func(uint32) string); ok {
+		r0 = returnFunc(index)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(uint32) error); ok {
+		r1 = returnFunc(index)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeys_GetPrivateTransportKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPrivateTransportKey'
+type MockKeys_GetPrivateTransportKey_Call struct {
+	*mock.Call
+}
+
+// GetPrivateTransportKey is a helper method to define mock.On call
+//   - index
+func (_e *MockKeys_Expecter) GetPrivateTransportKey(index interface{}) *MockKeys_GetPrivateTransportKey_Call {
+	return &MockKeys_GetPrivateTransportKey_Call{Call: _e.mock.On("GetPrivateTransportKey", index)}
+}
+
+func (_c *MockKeys_GetPrivateTransportKey_Call) Run(run func(index uint32)) *MockKeys_GetPrivateTransportKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint32))
+	})
+	return _c
+}
+
+func (_c *MockKeys_GetPrivateTransportKey_Call) Return(s string, err error) *MockKeys_GetPrivateTransportKey_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockKeys_GetPrivateTransportKey_Call) RunAndReturn(run func(index uint32) (string, error)) *MockKeys_GetPrivateTransportKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // MockKeys_GetCashPairingKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCashPairingKey'
 type MockKeys_GetCashPairingKey_Call struct {
 	*mock.Call
