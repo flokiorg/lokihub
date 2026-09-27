@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.4.0
+	github.com/ohstr/nmilat v0.5.0-rc.1
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.58.0
@@ -244,11 +244,5 @@ require (
 
 // We want to format raw bytes as hex instead of base64. The forked version
 // allows us to specify that as an option.
-// TEMPORARY, REMOVE BEFORE TAGGING A RELEASE. Develops the cash_status rename
-// and the spent-bill tombstone against a local nmilat worktree. The path is
-// relative and inside this tree on purpose: the dev backend container mounts
-// only `.:/app`, so a replace pointing outside it would build on the host and
-// fail in the container.
-replace github.com/ohstr/nmilat => ./.claude/worktrees/nmilat-cash-status
 
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
