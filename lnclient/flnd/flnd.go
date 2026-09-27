@@ -1763,6 +1763,18 @@ func (svc *FLNDService) GetSupportedNIP47NotificationTypes() []string {
 	return []string{notifications.PAYMENT_RECEIVED_NOTIFICATION, notifications.PAYMENT_SENT_NOTIFICATION, notifications.HOLD_INVOICE_ACCEPTED_NOTIFICATION}
 }
 
+// SignSchnorrNodeKey implements lnclient.TransportSigner: a BIP340 signature by
+// the node's identity key over sha256(msg).
+//
+// Used once per restart to sign the hub's private-transport announcement, which
+// must be signed by the node identity because that is the only key a client can
+// verify against — it recovers it from its bill's mint signature. See
+// transport.AnnouncementSigningPayload for why msg is the event's serialization
+// rather than its id.
+func (svc *FLNDService) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	return svc.client.SignSchnorrNodeKey(ctx, msg)
+}
+
 func (svc *FLNDService) GetPubkey() string {
 	return svc.nodeInfo.Pubkey
 }
