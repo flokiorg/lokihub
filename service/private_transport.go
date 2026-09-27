@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip44"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/flokiorg/lokihub/lnclient"
@@ -39,7 +40,16 @@ type privateTransport struct {
 	// announcement and the key a client recovers from a bill's mint signature.
 	nodeXOnly string
 
+	// nonces refuses replayed envelopes. See privateNonceSet for why it is in
+	// memory rather than durable.
+	nonces *privateNonceSet
+
 	droppedEvents atomic.Int64
+	// rejectedEnvelopes counts envelopes that passed the wire gate but failed to
+	// unwrap, decode, pass freshness or pass replay. Separate from droppedEvents
+	// because these are the expensive rejections — each already cost an ECDH — so
+	// the two numbers answer different operational questions.
+	rejectedEnvelopes atomic.Int64
 }
 
 // minWrapBytes is a floor on an inbound envelope's ciphertext. Anything shorter
@@ -82,7 +92,49 @@ func (svc *service) newPrivateTransport() (*privateTransport, error) {
 		inboxPrivKey: inboxPrivKey,
 		inboxXOnly:   inboxXOnly,
 		nodeXOnly:    nodeXOnly,
+		nonces:       newPrivateNonceSet(),
 	}, nil
+}
+
+// unwrap opens one inbound event: decrypt, decode, check freshness, check replay.
+//
+// It returns the envelope and the conversation key, which the reply needs — the
+// response is encrypted under a key derived from this same conversation key plus
+// the envelope's reply_to, which is what saves an ECDH and a signature on the way
+// back out.
+//
+// The order is cost-driven. Decryption is unavoidable and is the expensive step
+// (~166 µs of ECDH, measured), so everything after it is arranged cheapest-first:
+// structural decode, then freshness, then the replay check last. Freshness before
+// replay specifically so a stale envelope cannot consume a slot in a bounded set.
+func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, now time.Time) (*transport.Envelope, [32]byte, error) {
+	var conversationKey [32]byte
+
+	// The sender is a fresh ephemeral key, which is why nothing here is
+	// cacheable and why this cost is paid per event, junk included.
+	conversationKey, err := nip44.GenerateConversationKey(event.PubKey, pt.inboxPrivKey)
+	if err != nil {
+		return nil, conversationKey, fmt.Errorf("conversation key: %w", err)
+	}
+
+	plaintext, err := nip44.Decrypt(event.Content, conversationKey)
+	if err != nil {
+		// Overwhelmingly the normal case for junk: the MAC fails. Not an error
+		// worth a log line per occurrence — that is what the counter is for.
+		return nil, conversationKey, fmt.Errorf("decrypt: %w", err)
+	}
+
+	envelope, err := transport.Decode([]byte(plaintext), limits)
+	if err != nil {
+		return nil, conversationKey, fmt.Errorf("decode: %w", err)
+	}
+	if err := envelope.CheckFreshness(now); err != nil {
+		return nil, conversationKey, err
+	}
+	if pt.nonces.seenOrRecord(envelope.Nonce, envelope.NotAfter) {
+		return nil, conversationKey, fmt.Errorf("envelope nonce %s… already seen", envelope.Nonce[:8])
+	}
+	return envelope, conversationKey, nil
 }
 
 // startPrivateTransport resolves the inbox key, announces it, and opens the
@@ -94,6 +146,10 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 	if err != nil {
 		return err
 	}
+
+	// Reclaim expired nonces so the set tracks the live window rather than
+	// growing toward its cap, where it would start refusing real envelopes.
+	pt.nonces.startNonceSweeper(ctx.Done())
 
 	group.Go(func() error {
 		return svc.startPrivateTransportSubscription(ctx, pool, pt, group)
@@ -255,11 +311,28 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, eventsChannel 
 				if !pt.acceptsPrivateEvent(event.Event) {
 					continue
 				}
-				// TODO(stage5): unwrap, dedupe the envelope nonce and dispatch
-				// each item. Until that lands the gate is exercised but nothing
-				// is served, which is why the private kind is not advertised yet.
-				logger.Logger.Debug().Str("id", event.Event.ID).
-					Msg("Accepted a private transport envelope (handling not yet wired)")
+
+				envelope, _, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
+				if err != nil {
+					// Counted rather than logged per event: this path is one an
+					// attacker drives, and formatting a message for each is
+					// itself a denial of service. Debug for a working trail.
+					pt.rejectedEnvelopes.Add(1)
+					logger.Logger.Debug().Err(err).Str("id", event.Event.ID).
+						Msg("Rejected a private transport envelope")
+					continue
+				}
+
+				// TODO(stage5): dispatch each item — verify its proof, resolve
+				// the app, check scope and limiter, call the existing controller —
+				// then build the response and publish it under the reply key
+				// derived from the conversation key returned above. Until that
+				// lands the private kind stays unadvertised and disabled by
+				// default, so nothing is promised that is not served.
+				logger.Logger.Debug().
+					Str("id", event.Event.ID).
+					Int("items", len(envelope.Items)).
+					Msg("Unwrapped a private transport envelope (item dispatch not yet wired)")
 			}
 		}
 		logger.Logger.Debug().Msg("Private transport subscription events channel ended")
