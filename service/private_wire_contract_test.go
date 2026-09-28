@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
 
@@ -185,4 +187,53 @@ func TestWireContract_MultiBillEnvelopeSurvivesTheWire(t *testing.T) {
 	// And the whole batch is ONE relay event. That is the property the transport
 	// exists for: the number of bills a holder has stops being public.
 	assert.Equal(t, transport.KindPrivateRequest, event.Kind)
+}
+
+// TestWireContract_ServableMethodSetsAgree pins the two halves of one rule to each
+// other.
+//
+// The SDK validates an envelope locally against transport.IsServableMethod so a
+// client learns about an unservable item before spending a round trip. This hub
+// decides what it actually serves from privateServableMethods. Those are two
+// copies of one decision, in two repos, and if they drift the failure is silent in
+// the worst direction: a client is told its item is fine, sends it, and gets
+// omission — which is information-free, so it cannot tell that from "this bill
+// isn't here".
+//
+// Direction matters, so both are asserted:
+//   - anything the SDK permits, this hub MUST serve, or clients are misled;
+//   - anything this hub serves, the SDK MUST permit, or clients are blocked from a
+//     working method.
+func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
+	for method := range privateServableMethods {
+		assert.True(t, transport.IsServableMethod(method),
+			"this hub serves %q but the SDK would refuse to send it — clients are blocked from a working method", method)
+	}
+
+	// The SDK's set is not enumerable, so check every method this repo knows about:
+	// any the SDK permits must be one this hub serves.
+	for _, method := range []string{
+		constants.NIP47MethodCashStatus,
+		constants.NIP47MethodListRecipients,
+		constants.NIP47MethodCashRedeem,
+		constants.NIP47MethodCashTransfer,
+		constants.NIP47MethodCashConsolidate,
+		constants.NIP47MethodCreateCircleWallet,
+		constants.NIP47MethodMintCash,
+		models.GET_BALANCE_METHOD,
+		models.PAY_INVOICE_METHOD,
+		models.CREATE_CONNECTION_METHOD,
+		models.GET_INFO_METHOD,
+	} {
+		_, hubServes := privateServableMethods[method]
+		assert.Equal(t, hubServes, transport.IsServableMethod(method),
+			"the SDK and this hub disagree about whether %q is servable over the private transport", method)
+	}
+
+	// mint_cash in particular: excluded on both sides, for the same reason — it is
+	// the hub owner's method and the only one with no retry idempotency, which is
+	// what makes a bounded in-memory replay set safe.
+	_, hubServesMint := privateServableMethods[constants.NIP47MethodMintCash]
+	assert.False(t, hubServesMint)
+	assert.False(t, transport.IsServableMethod(constants.NIP47MethodMintCash))
 }
