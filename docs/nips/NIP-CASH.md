@@ -1128,7 +1128,220 @@ implementation MAY instead present the two values separately — e.g. as two dis
 side by side — particularly where the recipient's own client is unknown and can't be assumed to split a
 combined string correctly.
 
-### Security Considerations for Cash-Mode Slices
+### The Private Transport
+
+Every method above travels, by default, as an ordinary NIP-47 request: a kind-23194 event
+addressed to the wallet's own pubkey. That is simple and it works, but it publishes a great
+deal to anyone watching a relay. The event's `p` tag *is* the bill's pubkey, so a bill's
+whole life — when it was minted, every status check, each transfer, the redemption that ends
+it — is a public, linkable timeline under one stable identifier. A holder who consolidates
+fifty bills publishes fifty requests that resolve to one new wallet, which links them all
+together for an observer who never decrypts anything.
+
+The **private transport** is an OPTIONAL alternative addressing for the same methods. It
+changes nothing about what they do, what they authorize, or what they return. It changes only
+what a relay learns.
+
+This transport is OPTIONAL in both directions: a Hub MAY decline to offer it, and a client
+MAY ignore it. A Hub offering it MUST continue serving the standard transport, since a bill
+is a bearer instrument that may outlive the client that minted it.
+
+### Kinds
+
+| kind | range | purpose |
+|---|---|---|
+| `11190` | replaceable | Hub announcement — how to reach a Hub's private transport |
+| `23190` | ephemeral | private request: a wrapped envelope of items |
+| `23191` | ephemeral | private response |
+| `23192` | ephemeral | item proof, one per item |
+
+The three transport kinds are **ephemeral** (20000–29999) deliberately. A relay MUST NOT be
+relied on to persist them, and more importantly SHOULD NOT: the point is that no archive of
+ciphertext accumulates for later decryption, whether by a future key compromise or a future
+break. The announcement is **replaceable** (10000–19999) instead, because a client must be
+able to fetch the current one at any time. It is addressed by author, so a filter of
+`{"kinds":[11190],"authors":["<hub identity>"]}` returns exactly one event and no `d` tag is
+needed.
+
+### The Hub Announcement (kind 11190)
+
+```jsonc
+{
+  "kind": 11190,
+  "pubkey": "<the Hub's own identity pubkey — what a client already trusts>",
+  "content": "{\"v\":1,\"inbox\":\"<hex x-only>\",\"limits\":{...},\"relays\":[...]}",
+  "tags": [],
+  "sig": "<schnorr>"
+}
+```
+
+- **`inbox`** — the x-only pubkey clients NIP-44 encrypt envelopes to and `p`-tag. It MUST NOT
+  be assumed equal to the announcing identity. An implementation whose identity key lives in a
+  signing device that can sign but cannot perform ECDH needs a *separate* decryption key, so
+  the announcement carries the inbox explicitly and a client MUST use whatever it says.
+- **`limits`** — the envelope limits a Hub will actually accept: `max_bytes`, `max_items`,
+  `max_consolidate_sources`, `pad_bucket_bytes`, `max_verify_budget`.
+- **`relays`** — OPTIONAL. Where the Hub reads its inbox. A bill's own token already carries relay
+  hints (§The Cash Token), but those were fixed when the bill was minted and a Hub may have moved
+  since; a bill minted years earlier is exactly the case this field exists for. When present a
+  client SHOULD prefer these, falling back to the token's hints. A Hub omitting it is saying "the
+  hints you already have are still correct.
+
+**Limits are advertised, never assumed.** A client that guesses them earns a rejection it
+could have predicted locally, and a Hub that changes them cannot notify anyone. So a client
+MUST fetch the announcement and MUST size envelopes against the announced values. This
+document deliberately specifies **no default for any limit**: they are a Hub's operational
+choice, and hardcoding one would make the announcement decorative.
+
+A client MUST verify the announcement's signature against the identity it already trusts for
+that Hub, and MUST reject one signed by anyone else. Otherwise the announcement is an
+inbox-substitution primitive: an attacker publishing their own would receive envelopes
+encrypted to them.
+
+### Envelopes
+
+A private request is a NIP-59 gift wrap whose innermost plaintext is an **envelope** carrying
+one or more **items**. Each item is one call to one of the methods below, against one wallet.
+
+```jsonc
+{
+  "v": 1,
+  "not_after": 1720000060,       // unix seconds; this envelope's own expiry
+  "nonce": "<hex 32 bytes>",     // the single value a Hub stores for replay detection
+  "reply_to": "<hex 32 bytes>",  // an opaque routing tag, NOT a pubkey
+  "items": [
+    {
+      "id": "1",                          // unique within this envelope only
+      "target": "<wallet pubkey>",
+      "method": "cash_status",
+      "params": { },
+      "proof": { }                        // this item's kind-23192 event, nested
+    }
+  ],
+  "pad": "…"                     // filler to a bucket boundary; never read
+}
+```
+
+Batching is the point. One envelope consolidating fifty bills is one relay event instead of
+fifty, so the count of a holder's bills stops being public, and the timing correlation that
+links them disappears.
+
+- **`not_after`** — REQUIRED. NIP-59 randomises the wrapping event's `created_at` by up to two
+  days, precisely so it leaks nothing, which means it cannot also serve as a freshness signal.
+  Replay protection therefore has to live inside the ciphertext. A Hub MUST reject an envelope
+  whose `not_after` has passed, and MUST reject one claiming to be valid further ahead than it
+  is willing to remember nonces for.
+- **`nonce`** — REQUIRED, and the only per-request state a Hub must keep. A Hub MUST reject a
+  nonce it has already served. Because items bind to it (below), a Hub needs no per-item
+  replay state at all: an item lifted into a different envelope fails on the binding. A Hub
+  need only remember a nonce until its envelope could no longer be accepted anyway, which is
+  what bounds that memory.
+- **`reply_to`** — REQUIRED, and **not a pubkey**. The response is encrypted under a key
+  derived from the request's own NIP-44 conversation key together with this tag. Only the Hub
+  and the requester know that conversation key, so a key derived from it authenticates the Hub
+  implicitly: no second ECDH, no ephemeral keypair, no extra signature. A relay sees an
+  exchange between two values that never recur.
+- **`pad`** — OPTIONAL filler. Ciphertext length otherwise discloses roughly how much is
+  inside — a one-item status check is visibly not a fifty-source consolidation. Padding to a
+  bucket boundary collapses that into a few indistinguishable sizes.
+
+An envelope MUST carry at least one item, and item `id`s MUST be unique within it.
+
+### Item Proofs (kind 23192)
+
+Each item carries its own signed proof. This is not redundant with the envelope: **one
+envelope may carry items owned by different parties**, so whoever assembles it is holding
+other people's signed authorizations. Every field below exists because omitting it would let
+that assembler perform a substitution.
+
+| tag | binds | attack it closes |
+|---|---|---|
+| `d` | the target wallet | re-pointing an item at a different bill |
+| `h` | the Hub's x-only identity | replaying the item at another Hub |
+| `m` | the method | turning a `cash_status` read into a `cash_transfer` |
+| `ph` | `sha256` of canonical `params` | re-pointing a `cash_redeem` at the assembler's own invoice |
+| `en` | the envelope `nonce` | banking a proof and replaying it in a later envelope |
+| `expiration` | the envelope's `not_after` | using it indefinitely |
+
+This is the same reasoning kind-23198 already applies by binding `bolt11_hash` and
+`new_identity_hash` (§Transferring and Splitting a Slice) — extended, because a batch has an
+assembler that a single request does not.
+
+`ph` MUST be computed over a **canonical** form of `params`: object keys sorted, insignificant
+whitespace removed, and numbers preserved exactly as written. Canonicalising rather than
+hashing the received bytes matters twice over. It stops the binding depending on nothing ever
+re-serialising `params` in transit — a dependency that would fail silently and with no
+indication why. And preserving numbers verbatim is required because an amount in millis can
+exceed the range a float64 represents exactly, so a canonicaliser that round-trips numbers
+through a float would change what the caller signed for.
+
+A proof's `created_at` MUST fall inside the same freshness window kind-23199 uses (up to five
+minutes past, one minute future), so a caller's clock tolerance is identical everywhere in
+this family.
+
+### Responses (kind 23191)
+
+```jsonc
+{
+  "v": 1,
+  "req_nonce": "<the request envelope's nonce>",
+  "results": [
+    {"id": "1", "result_type": "cash_status", "result": { }},
+    {"id": "2", "error": {"code": "NOT_FOUND", "message": "…"}}
+  ],
+  "pad": "…"
+}
+```
+
+Per-item errors use NIP-47's own error shape, so a per-item failure reads exactly like a
+single-request failure does today.
+
+**Results need not cover every item, and omission is meaningful.** An item whose target the
+Hub does not hold, or whose proof did not verify, MUST be **omitted** rather than answered
+with an error. This is what stops batching from becoming an existence oracle: producing a
+verifying proof requires the bill's connection secret in the first place, so a caller who
+legitimately holds a bill learns nothing it did not already know, while a caller probing for
+bills it does not hold learns nothing at all. A client MUST read an omission as "not served"
+and MUST NOT infer anything further.
+
+A client MUST check that `req_nonce` matches the request it sent, and MUST reject results
+whose `id` it never sent — otherwise a hostile or buggy Hub could inject results a client
+would demux into the wrong call.
+
+### Which Methods a Hub Serves
+
+A Hub MUST serve over this transport only the methods that operate on a **bill**:
+`cash_status` (and its `list_recipients` alias for the compatibility window), `cash_redeem`,
+`cash_transfer` and `cash_consolidate`. NIP-CW's `create_circle_wallet` MAY also be served
+here (§Private Join in NIP-CW).
+
+**This MUST be an explicit allowlist, not a reuse of the Hub's ordinary method dispatch.** The
+distinction is a security boundary, not a style preference. A caller on this transport
+authenticates with a *bill's* connection key, and a bill is a bearer instrument — whoever holds
+the string holds it. An implementation that routed this transport through its general NIP-47
+dispatch would make `get_balance`, `pay_invoice`, `create_connection` and every other method
+reachable from a bearer key: a privilege escalation that arrives silently, as a working
+feature nobody asked for.
+
+`mint_cash` MUST NOT be served here. It is the Hub owner's method, gated by the Hub's own
+scope on the Hub's own connection, and it has no retry idempotency — a Hub whose replay
+memory is bounded (as above) could double-mint on a caller's retry. An item naming a method
+the Hub does not serve MUST be omitted, exactly like an unverifiable one, so the allowlist
+itself discloses nothing.
+
+### Ceilings
+
+One envelope's plaintext MUST fit inside what NIP-44 can encrypt: **65535 bytes**. This is a
+protocol fact, not a policy, and it is the ceiling every announced limit sits under.
+
+It has a consequence worth stating, because arithmetic makes it easy to miss: a
+`cash_consolidate` item grows with its source count, so the 100 sources §Consolidating Tokens
+permits **cannot fit** in one envelope. A Hub's `max_consolidate_sources` MUST therefore be
+low enough that its largest permitted item still fits within its own `max_bytes`, and a Hub
+MUST NOT announce a combination where it does not. A client that needs more sources than one
+envelope holds MUST split the work across envelopes.
+
+## Security Considerations for Cash-Mode Slices
 
 **The secret MUST NOT be stored in a form that discloses it.** An implementation MUST persist only
 something a presented secret can be checked against — a one-way commitment, never the secret itself. A
@@ -1728,8 +1941,21 @@ all.
 
 ## Privacy Considerations
 
+**The standard transport publishes a bill's whole life under one identifier.** A kind-23194 request is
+`p`-tagged with the bill's own pubkey, so a relay observer gets a linkable timeline per bill — mint, every
+status check, each transfer, the redemption that ends it — without decrypting anything. §The Private
+Transport exists to remove that, and a Hub or client that cares about this SHOULD prefer it. Note what it
+does and does not do: it hides *which bill* and *how many*, because requests are wrapped and batched, but
+it cannot hide that a given client talked to a given Hub at a given moment. Relay-level metadata
+(connection timing, IP address) is outside this protocol's reach, and a client needing that
+unlinkability SHOULD reach relays over a network layer that provides it.
+
 **`cash_consolidate` links its source bills to each other.** A single call names every source it draws
 from, so the Hub — and anyone who can observe that request — learns those bills belong to one holder.
+On the private transport the *observer* half of that goes away — a consolidation is one wrapped event, so
+a relay no longer sees N bills resolving into one — but the **Hub** still learns it, because the Hub has
+to read the sources to merge them. Consolidation therefore remains a disclosure of common ownership to the
+Hub on either transport; only the public half is removed.
 Nothing else in this protocol correlates bills that way: a Cash Wallet is otherwise a bearer instrument
 whose pairing key is derived on a hardened branch, so two bills from the same Hub are not linkable to
 each other, or to the Hub, from their bytes. Consolidation is the one operation that deliberately

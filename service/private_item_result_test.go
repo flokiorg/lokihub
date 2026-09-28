@@ -19,6 +19,11 @@ import (
 func TestPrivateServableMethods_IsAnAllowlistNotTheFullDispatch(t *testing.T) {
 	for _, method := range []string{
 		constants.NIP47MethodCashStatus,
+		// The deprecated cash_status alias. It is currently the only RELEASED
+		// name, so a client that has not been updated sends this one; leaving it
+		// out silently dropped that client's item, which reads to the caller
+		// exactly like a bill the hub does not hold.
+		constants.NIP47MethodListRecipients,
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,
