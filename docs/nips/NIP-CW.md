@@ -443,6 +443,65 @@ primary QR code/string labeled "Show as classic NWC URI," flipping to "Show as `
 switched — never silently, so whoever copies whichever form is on screen at the time always knows which
 one they're sharing.
 
+## Private Join
+
+`create_circle_wallet` travels, by default, as an ordinary NIP-47 request to the Hub's own
+pubkey. That publishes more than it looks like. The Hub connection is *shared*, so every
+request to it is `p`-tagged with one stable, widely-known identifier: a relay observer learns
+how many people joined a given circle and when, without decrypting anything. The requester's
+own pubkey is in the request, so with §Membership's `following` policy — whose contact list is
+public by construction — an observer can often tell *who* joined, and match a join against a
+name.
+
+A Hub MAY therefore accept `create_circle_wallet` over NIP-CASH's **private transport** (§The
+Private Transport in NIP-CASH), which is defined once there and reused here unchanged: same
+kinds, same envelope, same item proofs, same announcement. This section states only what is
+specific to joining.
+
+A Hub that offers it MUST continue accepting the standard transport, since a prospective
+member may hold nothing but the Hub connection string and an un-updated client.
+
+### What differs from a bill operation
+
+- **The item's `target` is the Hub**, not a bill. Every other method on that transport acts on
+  a wallet the caller already holds; a join by definition has no wallet yet. The `d` tag of the
+  item's kind-23192 proof therefore carries the Hub's own pubkey, which is the same value
+  §Identity Proof already requires the kind-23199 proof to bind to.
+- **Two proofs travel together, and both are REQUIRED.** The kind-23199 identity proof is what
+  authorizes the join, and is unchanged — all five checks in §Identity Proof still apply. The
+  kind-23192 item proof authorizes the *item*, binding it to this envelope, this method and
+  these params. Neither substitutes for the other: without the 23199 proof anyone could request
+  a wallet for someone else's pubkey, and without the 23192 proof an envelope assembler could
+  re-point a verified join at different params.
+- **A batch of joins is legitimate.** One envelope MAY carry several joins — a host onboarding
+  a group — and each is independently proven, so a Hub MUST evaluate them individually rather
+  than accepting or rejecting the batch as a unit.
+- **Rate limiting and the one-active-wallet rule are unchanged**, and are per requester
+  `pubkey`, not per envelope. Batching MUST NOT be a way to bypass either: a Hub MUST apply
+  both to each item as though it had arrived on its own.
+
+### Responses
+
+The response is a kind-23191 envelope like any other, and the join's own result — a single
+`encrypted_details` ciphertext (§Response) — travels inside its `result`. That ciphertext stays
+encrypted to the requester's own pubkey exactly as on the standard transport. The two layers do
+different jobs and neither is redundant: the transport layer hides the exchange from the relay,
+and `encrypted_details` hides the wallet from *co-members*, who can decrypt the shared Hub
+connection but not each other's wallets.
+
+**An item the Hub will not serve is omitted, and a refused join is an error.** These are
+different outcomes and the distinction is deliberate. A join refused because the requester is
+not a member, is rate-limited, or already holds a wallet MUST be answered with the
+corresponding error, because a prospective member needs to tell those cases apart to know
+whether to retry — the same distinguishability §Identity Proof's check ordering exists to
+protect. Omission is reserved for an item the Hub structurally does not serve, or whose item
+proof did not verify.
+
+Note this means the membership oracle §Identity Proof closes is closed here by the *same*
+mechanism, not by omission: an attacker still cannot reach the authorization check without
+holding the target's private key, so the error they receive still tells them nothing about the
+allowlist.
+
 ## Lifecycle and Deletion
 
 ```mermaid
@@ -489,6 +548,13 @@ Every Circle Wallet's payments settle through the same host node, so the host, b
 observe every payment any member makes or receives, in-circle or not. A circle isn't a privacy tool
 between its members and the host; it's only opaque to outsiders. Members who need transaction privacy
 *from the host* shouldn't route that traffic through a circle.
+
+**The standard transport publishes who joined, and when.** Every `create_circle_wallet` request is
+`p`-tagged with the Hub's one shared pubkey and carries the requester's own pubkey, so a relay observer
+learns the circle's join rate and, under a `following` policy whose contact list is public anyway, often
+the joiners themselves. §Private Join removes that; a host who considers membership sensitive SHOULD
+offer it. What it cannot remove is relay-level metadata — that some client reached this Hub at this
+moment — which is outside this protocol's reach.
 
 A `following`-policy circle draws membership from the host's public kind:3 contact list. Anyone
 watching that list, not just fellow members, can learn who's eligible to request a wallet, even before
