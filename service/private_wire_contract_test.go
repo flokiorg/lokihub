@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/nip47"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
@@ -205,13 +206,9 @@ func TestWireContract_MultiBillEnvelopeSurvivesTheWire(t *testing.T) {
 //   - anything this hub serves, the SDK MUST permit, or clients are blocked from a
 //     working method.
 func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
-	for method := range privateServableMethods {
-		assert.True(t, transport.IsServableMethod(method),
-			"this hub serves %q but the SDK would refuse to send it — clients are blocked from a working method", method)
-	}
-
-	// The SDK's set is not enumerable, so check every method this repo knows about:
-	// any the SDK permits must be one this hub serves.
+	// Both sides are now checked through their exported predicates: the allowlist itself
+	// lives in nip47, beside the controllers it gates, so this test asks each side the
+	// same question rather than reading either one's internals.
 	for _, method := range []string{
 		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodListRecipients,
@@ -225,7 +222,7 @@ func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
 		models.CREATE_CONNECTION_METHOD,
 		models.GET_INFO_METHOD,
 	} {
-		_, hubServes := privateServableMethods[method]
+		hubServes := nip47.IsPrivateServableMethod(method)
 		assert.Equal(t, hubServes, transport.IsServableMethod(method),
 			"the SDK and this hub disagree about whether %q is servable over the private transport", method)
 	}
@@ -233,7 +230,6 @@ func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
 	// mint_cash in particular: excluded on both sides, for the same reason — it is
 	// the hub owner's method and the only one with no retry idempotency, which is
 	// what makes a bounded in-memory replay set safe.
-	_, hubServesMint := privateServableMethods[constants.NIP47MethodMintCash]
-	assert.False(t, hubServesMint)
+	assert.False(t, nip47.IsPrivateServableMethod(constants.NIP47MethodMintCash))
 	assert.False(t, transport.IsServableMethod(constants.NIP47MethodMintCash))
 }

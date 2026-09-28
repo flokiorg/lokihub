@@ -45,6 +45,13 @@ type privateTransport struct {
 	nonces *privateNonceSet
 
 	droppedEvents atomic.Int64
+	// omittedItems counts items served envelopes chose not to answer — an unknown
+	// target, a proof that did not verify, a method not on the allowlist. Counted
+	// rather than logged per item because an attacker can drive this path, and because
+	// it is also entirely normal traffic: a client asking about a bill it no longer
+	// holds gets exactly this. A rising count against steady envelopes is the signal
+	// worth watching, not any single occurrence.
+	omittedItems atomic.Int64
 	// rejectedEnvelopes counts envelopes that passed the wire gate but failed to
 	// unwrap, decode, pass freshness or pass replay. Separate from droppedEvents
 	// because these are the expensive rejections — each already cost an ECDH — so
@@ -279,7 +286,7 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 		subCtx, cancelSubscription := context.WithCancel(ctx)
 		eventsChannel := pool.SubscribeMany(subCtx, svc.cfg.GetRelayUrls(), filter)
 
-		err := svc.watchPrivateSubscription(subCtx, eventsChannel, pt, group)
+		err := svc.watchPrivateSubscription(subCtx, pool, eventsChannel, pt, group)
 		cancelSubscription()
 
 		if err != nil && ctx.Err() == nil {
@@ -299,7 +306,7 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 // Note there is deliberately no `since` on the filter and none may be added: a
 // wrapped event's created_at is randomised up to two days into the past, so a
 // `since` would silently drop a fraction of legitimate traffic.
-func (svc *service) watchPrivateSubscription(ctx context.Context, eventsChannel chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
+func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
 	eventsChannelClosed := make(chan struct{}, 1)
 
 	go func() {
@@ -312,7 +319,7 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, eventsChannel 
 					continue
 				}
 
-				envelope, _, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
+				envelope, conversationKey, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
 				if err != nil {
 					// Counted rather than logged per event: this path is one an
 					// attacker drives, and formatting a message for each is
@@ -323,16 +330,22 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, eventsChannel 
 					continue
 				}
 
-				// TODO(stage5): dispatch each item — verify its proof, resolve
-				// the app, check scope and limiter, call the existing controller —
-				// then build the response and publish it under the reply key
-				// derived from the conversation key returned above. Until that
-				// lands the private kind stays unadvertised and disabled by
-				// default, so nothing is promised that is not served.
 				logger.Logger.Debug().
 					Str("id", event.Event.ID).
 					Int("items", len(envelope.Items)).
-					Msg("Unwrapped a private transport envelope (item dispatch not yet wired)")
+					Msg("Unwrapped a private transport envelope")
+
+				// Dispatched on its own goroutine so one slow envelope — a redemption
+				// waiting on a Lightning payment, say — cannot stall every envelope
+				// queued behind it. Replay protection already happened inside unwrap,
+				// so a duplicate cannot slip past while this one is still in flight.
+				//
+				// No loop-variable capture to worry about: envelope and conversationKey
+				// are declared inside this iteration's body, not by the range clause.
+				group.Go(func() error {
+					svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey)
+					return nil
+				})
 			}
 		}
 		logger.Logger.Debug().Msg("Private transport subscription events channel ended")

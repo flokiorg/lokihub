@@ -1,4 +1,4 @@
-package service
+package nip47
 
 import (
 	"encoding/json"
@@ -44,9 +44,9 @@ var privateServableMethods = map[string]struct{}{
 	constants.NIP47MethodCreateCircleWallet: {},
 }
 
-// isPrivateServableMethod reports whether a method may be served over the private
+// IsPrivateServableMethod reports whether a method may be served over the private
 // transport.
-func isPrivateServableMethod(method string) bool {
+func IsPrivateServableMethod(method string) bool {
 	_, ok := privateServableMethods[method]
 	return ok
 }
