@@ -211,6 +211,23 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	if params.HubApp.Kind != db.AppKindCashHub {
 		return nil, fmt.Errorf("%w: mint_cash requires a cash_hub app", constants.ErrInvalidParams)
 	}
+	// Refuse to mint before spending any balance, rather than hand back a bill
+	// nobody can reach. A Cash Wallet is contacted only through the relays
+	// embedded in its own token or pairing URI — there is no discovery path and
+	// no client-side fallback (nipcash/client.Connect passes the list straight to
+	// the relay dialer), so a bill minted with no relay is permanently
+	// unspendable through the string its holder was given.
+	//
+	// It fails here, not at encode time, because by then the wallet exists and
+	// the funding transfers have run: the holder would own real value reachable
+	// only by an operator re-deriving the connection afterwards.
+	//
+	// config.GetRelayUrls already strips empty entries, so an unset Relay config
+	// arrives here as an empty list rather than as one relay named "".
+	if len(deps.RelayURLs) == 0 {
+		return nil, fmt.Errorf("%w: this hub has no relay configured, so a minted bill would be unreachable",
+			constants.ErrInvalidParams)
+	}
 	if len(params.Recipients) == 0 {
 		return nil, fmt.Errorf("%w: recipients list is empty", constants.ErrInvalidParams)
 	}

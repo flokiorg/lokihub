@@ -212,9 +212,35 @@ func (cfg *config) Unlock(encryptionKey string) error {
 	return nil
 }
 
+// GetRelayUrls returns the hub's configured relay URLs, empty entries removed.
+//
+// The filtering is load-bearing, not tidiness. strings.Split("", ",") returns
+// []string{""} — a one-element slice holding the empty string, NOT an empty
+// slice — so an unset or empty Relay config used to yield one relay whose URL
+// was "". That value then reached ~30 call sites, including every pairing URI
+// and cash token this hub mints.
+//
+// A minted bill carrying a single empty relay hint is the worst shape available:
+// it is structurally valid, its bech32 checksum verifies, nipcash.Decode accepts
+// it, and even the client's own guard misses it — NewNWCClient rejects a token
+// with ZERO relays by name, but an empty one passes its length check and then
+// passes url.Parse, which returns no error for "". The holder gets an obscure
+// dial failure against a bill that looks perfect.
+//
+// A correctly configured hub is unaffected: splitting a real comma-separated
+// list produces the same entries as before. Only the misconfigured case changes,
+// from "one unusable relay" to "no relays", which callers can actually detect.
+// Entries are trimmed for the same reason — " wss://a " is a config typo, not a
+// distinct relay.
 func (cfg *config) GetRelayUrls() []string {
 	relayUrls, _ := cfg.Get("Relay", "")
-	return strings.Split(relayUrls, ",")
+	var urls []string
+	for _, relayUrl := range strings.Split(relayUrls, ",") {
+		if trimmed := strings.TrimSpace(relayUrl); trimmed != "" {
+			urls = append(urls, trimmed)
+		}
+	}
+	return urls
 }
 
 // GetGeneralRelayUrls returns the relays used to fetch general Nostr social

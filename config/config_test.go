@@ -106,3 +106,55 @@ func TestCheckUnlockPasswordCache(t *testing.T) {
 	}()
 	assert.True(t, hitPanic)
 }
+
+// TestGetRelayUrls_NeverYieldsAnEmptyRelay pins the fix for A-4.
+//
+// strings.Split("", ",") returns []string{""} — one element holding the empty
+// string, not an empty slice — so an unset Relay config used to produce a hub
+// whose every minted bill carried a single relay hint of "". That bill is the
+// worst available shape: structurally valid, checksum verifies, nipcash.Decode
+// accepts it, and the client's own guard misses it too (NewNWCClient rejects
+// ZERO relays by name, but "" passes its length check and then passes
+// url.Parse, which returns no error for an empty string).
+//
+// A correctly configured hub must be unaffected, which the real-list cases below
+// assert: this may only ever change the misconfigured case.
+func TestGetRelayUrls_NeverYieldsAnEmptyRelay(t *testing.T) {
+	logger.Init(strconv.Itoa(int(4)))
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, migrations.Migrate(db))
+
+	cfg, err := NewConfig(&AppConfig{Workdir: ".test"}, db)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		set  string
+		want []string
+	}{
+		{"unset entirely", "", nil},
+		{"empty string", "", nil},
+		{"only a comma", ",", nil},
+		{"only whitespace", "   ", nil},
+		{"whitespace and commas", " , , ", nil},
+		{"one real relay", "wss://r1.example", []string{"wss://r1.example"}},
+		{"two real relays", "wss://r1.example,wss://r2.example",
+			[]string{"wss://r1.example", "wss://r2.example"}},
+		{"trailing comma", "wss://r1.example,", []string{"wss://r1.example"}},
+		{"padded entries", " wss://r1.example , wss://r2.example ",
+			[]string{"wss://r1.example", "wss://r2.example"}},
+		{"real relay plus an empty slot", "wss://r1.example,,wss://r2.example",
+			[]string{"wss://r1.example", "wss://r2.example"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, cfg.SetUpdate("Relay", tc.set, ""))
+			got := cfg.GetRelayUrls()
+			require.Equal(t, tc.want, got)
+			for i, u := range got {
+				require.NotEmpty(t, u, "entry %d must never be the empty string", i)
+			}
+		})
+	}
+}
