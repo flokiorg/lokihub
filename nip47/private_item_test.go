@@ -1,4 +1,4 @@
-package service
+package nip47
 
 import (
 	"encoding/json"
@@ -29,7 +29,7 @@ func TestPrivateServableMethods_IsAnAllowlistNotTheFullDispatch(t *testing.T) {
 		constants.NIP47MethodCashConsolidate,
 		constants.NIP47MethodCreateCircleWallet,
 	} {
-		assert.True(t, isPrivateServableMethod(method), "%s should be servable", method)
+		assert.True(t, IsPrivateServableMethod(method), "%s should be servable", method)
 	}
 
 	// Everything a bill must not be able to reach. Each of these would be a
@@ -48,12 +48,12 @@ func TestPrivateServableMethods_IsAnAllowlistNotTheFullDispatch(t *testing.T) {
 		// quietly invalidate that.
 		constants.NIP47MethodMintCash,
 	} {
-		assert.False(t, isPrivateServableMethod(method),
+		assert.False(t, IsPrivateServableMethod(method),
 			"%s must NOT be reachable over the private transport", method)
 	}
 
-	assert.False(t, isPrivateServableMethod(""), "an empty method must not be servable")
-	assert.False(t, isPrivateServableMethod("cash_redeem "), "no fuzzy matching")
+	assert.False(t, IsPrivateServableMethod(""), "an empty method must not be servable")
+	assert.False(t, IsPrivateServableMethod("cash_redeem "), "no fuzzy matching")
 }
 
 func TestItemResponseCollector_CapturesAResult(t *testing.T) {

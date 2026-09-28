@@ -17,6 +17,7 @@ import (
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
+	transportpkg "github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/rs/zerolog"
 	"gorm.io/gorm"
 )
@@ -50,6 +51,10 @@ type Nip47Service interface {
 	PublishNip47InfoDeletion(ctx context.Context, pool nostrmodels.SimplePool, appWalletPubKey string, appWalletPrivKey string, infoEventId string) error
 	CreateResponse(initialEvent *nostr.Event, content interface{}, tags nostr.Tags, cipher *cipher.Nip47Cipher, walletPrivKey string) (result *nostr.Event, err error)
 	EnqueueNip47InfoPublishRequest(appId uint, appWalletPubKey, appWalletPrivKey, relayUrl string)
+	// ServePrivateItem runs one item from a private-transport envelope. A false second
+	// return means OMIT it — see the implementation for why that is a protocol
+	// requirement rather than an error path.
+	ServePrivateItem(ctx context.Context, lnClient lnclient.LNClient, item transportpkg.Item, binding PrivateItemBinding) (transportpkg.Result, bool)
 }
 
 func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
