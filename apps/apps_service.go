@@ -113,6 +113,22 @@ type AppsService interface {
 	// single cash_wallet app — the roster the cash_status NIP-47 method
 	// exposes. Ordered by created_at asc.
 	ListClaimsForWallet(walletAppID uint) ([]db.CashWalletClaim, error)
+	// HasArchivedSliceForWallet reports whether any slice of this cash_wallet has
+	// already been archived away — which today means exactly one thing: an
+	// operator removed a recipient via DeleteCashClaim, since that is the only
+	// path that deletes a live claim row (a redeem or a full split sets
+	// ClaimedAt and keeps the row).
+	//
+	// It exists because "how many recipients has this wallet EVER had" cannot be
+	// answered from cash_wallet_claims alone. DeleteCashClaim hard-deletes the
+	// row and writes its archive row in the SAME transaction, so live rows and
+	// archive rows are disjoint and their union is the lifetime set — the
+	// invariant db/archive/archive_cash_bill.go already depends on when it sums
+	// a dying bill's total from the archive rather than from its claims.
+	//
+	// Existence, not a count: every caller only needs to know whether the
+	// lifetime set is larger than the live one.
+	HasArchivedSliceForWallet(walletAppID uint) (bool, error)
 	// ListCashHubWalletChildren returns every cash_wallet app that is a child of
 	// hubID, queried directly from apps. Ordered by created_at asc.
 	ListCashHubWalletChildren(hubID uint) ([]db.App, error)

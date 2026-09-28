@@ -13,42 +13,51 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection
-// demonstrates independent-audit-A Finding: cash_transfer's "convert a slice to
-// cash mode in place" eligibility check counts the wallet's *current* claim rows
-// (AppsService.ListClaimsForWallet) instead of the wallet's *lifetime*
-// recipient set, as NIP-CASH §"Which outcome a request produces" and
+// TestSecA_CashInPlace_AfterCoRecipientDeleted_SpinsOffInstead is the inverted
+// form of what was independent-audit-A's open finding: cash_transfer's
+// "convert a slice to cash mode in place" eligibility check used to count the
+// wallet's *current* claim rows (AppsService.ListClaimsForWallet) instead of the
+// lifetime recipient set NIP-CASH §"Which outcome a request produces" and
 // §Security Considerations both require ("evaluated against every recipient the
 // wallet has EVER had, not just currently-unclaimed ones").
 //
 // A claim row is normally never removed for the wallet's lifetime — a redeem or
-// full split sets ClaimedAt but keeps the row, so a co-recipient who redeemed
-// and moved on is still correctly counted. The one operation that DELETES a row
-// is the admin's own DeleteCashClaim ("removing one bad recipient from a shared
-// wallet", api.DeleteCashClaim / apps.DeleteCashClaim). After that admin action,
-// the wallet's live claim count drops below its true lifetime recipient count,
-// and the check wrongly treats a historically-multi-recipient wallet as
-// lifetime-solo — allowing an in-place cash-mode reassignment onto a connection
-// the removed co-recipient STILL holds (the connection secret is deterministic
-// and was broadcast at creation; deleting a slice never rotates it).
+// full split sets ClaimedAt but keeps the row, so a co-recipient who redeemed and
+// moved on was always counted correctly (see the paired test below). The one
+// operation that DELETES a row is the admin's own DeleteCashClaim ("removing one
+// bad recipient from a shared wallet"). After that, the live claim count dropped
+// below the true lifetime count and the check wrongly treated a
+// historically-multi-recipient wallet as lifetime-solo — allowing an in-place
+// cash-mode reassignment onto a connection the removed co-recipient STILL holds.
+// That secret is derived from the app ID (cashwallet/create.go:549) and so cannot
+// be rotated, and a cash-mode redemption's entire proof is its raw secret in the
+// request body, so the removed co-recipient could decrypt the eventual
+// cash_redeem and front-run it.
 //
-// The removed co-recipient can then decrypt the eventual cash-mode cash_redeem
-// request (its raw secret travels in the request body over that shared
-// connection) and front-run the redemption — exactly the theft the
-// spin-off-to-a-dedicated-wallet rule exists to prevent.
+// The fix reads the lifetime set as live rows + archived rows:
+// DeleteCashClaim hard-deletes the claim and writes its archive row in the same
+// transaction, so the two sets are disjoint and any archive row for the wallet
+// means "a recipient was removed" (AppsService.HasArchivedSliceForWallet).
 //
-// This test proves the insecure PATH is reachable: it asserts the transfer is
-// resolved in place (no NewWalletToken minted, cash-mode slice lands on the SAME
-// formerly-shared wallet) rather than spun off into a fresh dedicated wallet.
-func TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t *testing.T) {
+// This test asserts the SAFE path is now taken: the conversion spins off into a
+// fresh dedicated wallet (NewWalletToken returned) and no cash-mode slice is left
+// on the formerly-shared wallet.
+func TestSecA_CashInPlace_AfterCoRecipientDeleted_SpinsOffInstead(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	// A wallet that HAS ALWAYS HAD two recipients (A and B). Both were handed
-	// the same shared connection at creation.
-	wallet := newFundedCashWallet(t, svc, hub, 2000)
+	// the same shared connection at creation. Funded generously, with a queued
+	// mock invoice, so the spin-off path's internal funding transfer can now
+	// actually succeed — the old in-place path needed neither.
+	wallet := newFundedCashWallet(t, svc, hub, 200_000)
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
+	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
+		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-secA-spinoff", Amount: 1000},
+	}
 
 	aPrivkey := nostr.GeneratePrivateKey()
 	aPubkey, _ := nostr.GetPublicKey(aPrivkey)
@@ -65,18 +74,22 @@ func TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t *t
 
 	// The hub owner removes co-recipient B's still-unclaimed slice — a routine,
 	// documented admin action. This DELETES B's claim row; B nonetheless still
-	// holds the (unchanged) shared connection secret.
+	// holds the (unchanged, underivable-otherwise) shared connection secret.
 	bClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, bPubkey)
 	_, err = svc.AppsService.DeleteCashClaim(wallet.ID, bClaim.ID)
 	require.NoError(t, err)
 
 	claimsAfter, err := svc.AppsService.ListClaimsForWallet(wallet.ID)
 	require.NoError(t, err)
-	require.Len(t, claimsAfter, 1, "the count the eligibility check relies on has dropped below the true lifetime count")
+	require.Len(t, claimsAfter, 1, "the live count alone has dropped below the true lifetime count")
 
-	// A converts their slice to cash mode via a FULL transfer. Because the live
-	// claim count is now 1, the controller treats this as a lifetime-solo
-	// wallet and reassigns IN PLACE instead of spinning off a dedicated wallet.
+	// ...but the archive row DeleteCashClaim wrote in the same transaction is
+	// what makes the lifetime count recoverable. This is the signal the fix reads.
+	hadRemoved, err := svc.AppsService.HasArchivedSliceForWallet(wallet.ID)
+	require.NoError(t, err)
+	require.True(t, hadRemoved, "DeleteCashClaim must leave an archive row, or the lifetime count is unrecoverable")
+
+	// A converts their slice to cash mode via a FULL transfer.
 	_, newSecretHash := cashSecretAndHash(t)
 	proof := buildTransferProofEvent(t, aPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
@@ -90,17 +103,19 @@ func TestSecA_CashInPlace_AfterCoRecipientDeleted_LeaksOntoSharedConnection(t *t
 	result, ok := response.Result.(cashTransferResponse)
 	require.True(t, ok, "unexpected result type %T", response.Result)
 
-	// THE VULNERABILITY: the cash note was reassigned in place onto the SAME
-	// wallet whose connection B still holds — not spun off into a fresh,
-	// never-shared dedicated wallet. A spec-correct implementation would return
-	// a NewWalletToken here (spin-off) and would NOT leave the cash-mode slice on
-	// this shared wallet.
-	assert.Empty(t, result.NewWalletToken,
-		"SECURITY: cash-mode conversion resolved IN PLACE on a connection a removed co-recipient still holds")
-	cashSliceOnSharedWallet := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityCash, newSecretHash)
-	require.NotNil(t, cashSliceOnSharedWallet,
-		"SECURITY: the cash-mode slice now lives on the formerly-shared wallet; the removed co-recipient B can decrypt its future cash_redeem and steal the secret")
-	assert.Nil(t, cashSliceOnSharedWallet.ClaimedAt)
+	// THE FIX: the cash note is spun off into a fresh, never-shared dedicated
+	// wallet rather than reassigned in place onto the connection B still holds.
+	assert.NotEmpty(t, result.NewWalletToken,
+		"SECURITY: a wallet that ever had a co-recipient removed MUST spin off, not reassign in place")
+	// Queried directly rather than via cashWalletClaimByIdentity, which
+	// require.NoError's on a missing row and so cannot express "must be absent".
+	var leftBehind int64
+	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
+			wallet.ID, db.CashIdentityCash, newSecretHash).
+		Count(&leftBehind).Error)
+	assert.Zero(t, leftBehind,
+		"SECURITY: no cash-mode slice may be left on the formerly-shared wallet — B could decrypt its cash_redeem and steal the secret")
 }
 
 // TestSecA_CashInPlace_RedeemedCoRecipientStillCounted is the paired

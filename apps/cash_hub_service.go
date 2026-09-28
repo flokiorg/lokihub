@@ -180,6 +180,25 @@ func (svc *appsService) ListClaimsForWallet(walletAppID uint) ([]db.CashWalletCl
 	return claims, err
 }
 
+// HasArchivedSliceForWallet implements AppsService — see the interface for why
+// existence of an archive row is the signal, and why it is the only way to
+// recover a wallet's lifetime recipient count.
+//
+// LIMIT 1 rather than COUNT: the caller asks "is the lifetime set bigger than the
+// live one", never by how much. Measured at ~35µs on an indexed wallet_app_id and
+// flat from 200k to 2M archive rows (db/cash_lifetime_count_bench_test.go).
+func (svc *appsService) HasArchivedSliceForWallet(walletAppID uint) (bool, error) {
+	var found int64
+	err := svc.db.Raw(
+		`SELECT 1 FROM cash_bill_slice_archives WHERE wallet_app_id = ? LIMIT 1`,
+		walletAppID,
+	).Scan(&found).Error
+	if err != nil {
+		return false, err
+	}
+	return found == 1, nil
+}
+
 // ListCashHubWalletChildren returns every real cash_wallet child of hubID,
 // queried directly from apps. See the interface doc comment.
 func (svc *appsService) ListCashHubWalletChildren(hubID uint) ([]db.App, error) {

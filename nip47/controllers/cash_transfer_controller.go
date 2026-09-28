@@ -459,8 +459,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// ever held it.
 	//
 	// A FULL transfer to a CASH target reassigns in place ONLY if the
-	// wallet has (and has always had) exactly one recipient — exactly
-	// today's cash-mixing rule, unchanged: a cash-mode redemption/transfer's
+	// wallet has (and has always had) exactly one recipient — "always had"
+	// meaning the LIFETIME set: live claim rows plus any that DeleteCashClaim
+	// archived away (NIP-CASH:569-571, :1489-1497): a cash-mode redemption/transfer's
 	// entire proof is its raw secret, transmitted in the request body, so
 	// handing a cash note a connection any former co-recipient might
 	// still be listening on would hand them everything needed to steal it
@@ -483,9 +484,40 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			// no later operation ever adds a second claim row to an existing
 			// wallet), so isCashCurrent implies allClaims is exactly 1.
 			// Rejected defensively rather than trusting that invariant blindly.
+			//
+			// Deliberately still keyed on the LIVE count, not the lifetime one
+			// checked below: a wallet that reached cash mode through the old
+			// in-place bug legitimately has one live claim AND an archive row,
+			// and it must SPLIT rather than be refused with this message, which
+			// would be both misleading and a dead end for its holder.
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED,
 				"a cash-mode slice's wallet can never have more than one recipient")
 			return
+		}
+		if !split {
+			// The live count is exactly 1, but the rule above is "has and has
+			// ALWAYS HAD exactly one recipient". DeleteCashClaim hard-deletes a
+			// claim row, so a wallet that always had two reads as one the moment
+			// an operator removes a co-recipient — and that co-recipient still
+			// holds this wallet's connection secret, which is derived from the
+			// app ID (cashwallet/create.go:549) and therefore cannot be rotated.
+			// Reassigning in place would hand them a cash secret they can
+			// front-run at redemption.
+			//
+			// Live rows and archive rows are disjoint and their union is the
+			// lifetime set, so the existence of any archive row for this wallet
+			// is exactly "a recipient was removed".
+			hadRemovedRecipient, err := controller.appsService.HasArchivedSliceForWallet(app.ID)
+			if err != nil {
+				// Fail closed. Treating an unreadable history as "always solo"
+				// would reintroduce the exact hole this check exists to close.
+				logger.Logger.Error().Err(err).Uint("app_id", app.ID).
+					Msg("Failed to check Cash wallet recipient history")
+				respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+					"failed to check wallet recipient history")
+				return
+			}
+			split = hadRemovedRecipient
 		}
 	}
 
