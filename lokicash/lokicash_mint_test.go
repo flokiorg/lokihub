@@ -64,7 +64,7 @@ func TestMintProvenance_RoundTripAndVerify(t *testing.T) {
 func TestMintProvenance_AbsentIsBackwardCompatible(t *testing.T) {
 	// A plain token (no provenance) decodes with nil provenance fields and
 	// VerifyMint reports no provenance — never an error.
-	encoded, err := Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret()})
+	encoded, err := Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays()})
 	require.NoError(t, err)
 
 	out, err := Decode(encoded)
@@ -82,12 +82,12 @@ func TestEncode_RejectsHalfProvenancePair(t *testing.T) {
 	amt := uint64(100)
 
 	// Signature without amount.
-	_, err := Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), MintSignature: sig})
+	_, err := Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays(), MintSignature: sig})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "set together")
 
 	// Amount without signature.
-	_, err = Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), AttestedAmount: &amt})
+	_, err = Encode(Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays(), AttestedAmount: &amt})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "set together")
 }
@@ -98,6 +98,7 @@ func TestEncode_RejectsWrongLengthSignature(t *testing.T) {
 		HRP:            HRP,
 		WalletPubkey:   testPubkey(),
 		Secret:         testSecret(),
+		RelayURLs:      testRelays(),
 		MintSignature:  make([]byte, mintSigLen-1),
 		AttestedAmount: &amt,
 	})
@@ -106,8 +107,16 @@ func TestEncode_RejectsWrongLengthSignature(t *testing.T) {
 }
 
 func TestDecode_LoneProvenanceHalfYieldsNoProvenance(t *testing.T) {
+	// A relay is REQUIRED in every credential now (NIP-CASH §Relay Hints Are
+	// Mandatory) — a token without one names something unreachable. These raw
+	// fixtures are about provenance, so they carry one and say nothing about it.
+	// A relay is REQUIRED in every credential now (NIP-CASH §Relay Hints Are
+	// Mandatory) — a token without one names something unreachable. These raw
+	// fixtures are about provenance, so they carry one and say nothing about it.
 	base := []rawEntry{
 		{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
 		{typ: tlvSecret, value: mustHex(t, testSecret())},
 	}
 	amountBytes := make([]byte, attestedAmountLen)
@@ -131,8 +140,11 @@ func TestDecode_LoneProvenanceHalfYieldsNoProvenance(t *testing.T) {
 }
 
 func TestDecode_MalformedProvenanceYieldsNoProvenance(t *testing.T) {
+	// Carries a relay because every credential must (NIP-CASH §Relay Hints Are
+	// Mandatory); this test is about provenance, not reachability.
 	base := []rawEntry{
 		{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
 		{typ: tlvSecret, value: mustHex(t, testSecret())},
 	}
 	amountBytes := make([]byte, attestedAmountLen)

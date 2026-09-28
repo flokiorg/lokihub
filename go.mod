@@ -245,4 +245,15 @@ require (
 // We want to format raw bytes as hex instead of base64. The forked version
 // allows us to specify that as an option.
 
+// TEMPORARY — do not release with this in place.
+//
+// Points at the local nmilat checkout so lokihub can be validated against
+// unreleased SDK changes it already depends on: the available_mloki ->
+// available_millis rename, and the codec change requiring at least one non-empty
+// relay in every credential. Both are committed in nmilat but untagged, and
+// lokihub's own specs already assert the second.
+//
+// Remove this and pin a real version once nmilat is released.
+replace github.com/ohstr/nmilat => /u/flzpace/xgit/orgs/ohstr/nmilat
+
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display

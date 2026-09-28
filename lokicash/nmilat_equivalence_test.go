@@ -41,7 +41,7 @@ func requireTokensEqual(t *testing.T, want Token, got Token) {
 // TestNmilatEquivalence_TokenCodec_CrossDecode proves a token encoded by one
 // implementation decodes identically via the other, in both directions,
 // across a field matrix covering every optional dimension the wire format
-// has: no relays / one relay / many relays, IdentityRequired nil/true/false,
+// has: one relay / many relays, IdentityRequired nil/true/false,
 // and mint provenance present/absent.
 func TestNmilatEquivalence_TokenCodec_CrossDecode(t *testing.T) {
 	trueVal := true
@@ -56,12 +56,12 @@ func TestNmilatEquivalence_TokenCodec_CrossDecode(t *testing.T) {
 		name string
 		tok  Token
 	}{
-		{"minimal_no_relays", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret()}},
+		{"minimal", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays()}},
 		{"one_relay", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: []string{"wss://relay.example.com"}}},
 		{"many_relays", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: []string{"wss://a.example.com", "wss://b.example.com", "wss://c.example.com"}}},
-		{"identity_required_true", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), IdentityRequired: &trueVal}},
-		{"identity_required_false", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), IdentityRequired: &falseVal}},
-		{"other_hrp", Token{HRP: "satscash", WalletPubkey: testPubkey(), Secret: testSecret()}},
+		{"identity_required_true", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays(), IdentityRequired: &trueVal}},
+		{"identity_required_false", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays(), IdentityRequired: &falseVal}},
+		{"other_hrp", Token{HRP: "satscash", WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: testRelays()}},
 		{"with_provenance", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: []string{"wss://relay.example.com"}, MintSignature: sig, AttestedAmount: &amt}},
 		{"everything_together", Token{HRP: HRP, WalletPubkey: testPubkey(), Secret: testSecret(), RelayURLs: []string{"wss://a.example.com", "wss://b.example.com"}, IdentityRequired: &trueVal, MintSignature: sig, AttestedAmount: &amt}},
 	}

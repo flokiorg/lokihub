@@ -191,8 +191,12 @@ func TestVerifyMint_OtherNodeSignatureRecoversOtherNode(t *testing.T) {
 // malformed provenance can never brick an otherwise-valid token, nor can it be
 // smuggled through as if valid.
 func TestDecode_ProvenanceMalformation_NeverHardFails(t *testing.T) {
+	// A relay is REQUIRED in every credential now (NIP-CASH §Relay Hints Are
+	// Mandatory) — a token without one names something unreachable. These raw
+	// fixtures are about provenance, so they carry one and say nothing about it.
 	base := []rawEntry{
 		{typ: tlvWalletPubkey, value: mustHex(t, strings.Repeat("ab", keyLen))},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
 		{typ: tlvSecret, value: mustHex(t, strings.Repeat("cd", keyLen))},
 	}
 	goodAmount := make([]byte, attestedAmountLen)
@@ -200,14 +204,14 @@ func TestDecode_ProvenanceMalformation_NeverHardFails(t *testing.T) {
 	goodSig := make([]byte, mintSigLen)
 
 	cases := map[string][]rawEntry{
-		"lone signature":              {{typ: tlvMintSignature, value: goodSig}},
-		"lone amount":                 {{typ: tlvAttestedAmount, value: goodAmount}},
-		"sig wrong length + amount":   {{typ: tlvMintSignature, value: make([]byte, mintSigLen+1)}, {typ: tlvAttestedAmount, value: goodAmount}},
-		"amount wrong length + sig":   {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: make([]byte, attestedAmountLen-2)}},
-		"duplicate signature":         {{typ: tlvMintSignature, value: goodSig}, {typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: goodAmount}},
-		"duplicate amount":            {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: goodAmount}, {typ: tlvAttestedAmount, value: goodAmount}},
-		"empty signature value":       {{typ: tlvMintSignature, value: []byte{}}, {typ: tlvAttestedAmount, value: goodAmount}},
-		"empty amount value":          {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: []byte{}}},
+		"lone signature":            {{typ: tlvMintSignature, value: goodSig}},
+		"lone amount":               {{typ: tlvAttestedAmount, value: goodAmount}},
+		"sig wrong length + amount": {{typ: tlvMintSignature, value: make([]byte, mintSigLen+1)}, {typ: tlvAttestedAmount, value: goodAmount}},
+		"amount wrong length + sig": {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: make([]byte, attestedAmountLen-2)}},
+		"duplicate signature":       {{typ: tlvMintSignature, value: goodSig}, {typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: goodAmount}},
+		"duplicate amount":          {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: goodAmount}, {typ: tlvAttestedAmount, value: goodAmount}},
+		"empty signature value":     {{typ: tlvMintSignature, value: []byte{}}, {typ: tlvAttestedAmount, value: goodAmount}},
+		"empty amount value":        {{typ: tlvMintSignature, value: goodSig}, {typ: tlvAttestedAmount, value: []byte{}}},
 	}
 	for name, extra := range cases {
 		t.Run(name, func(t *testing.T) {
