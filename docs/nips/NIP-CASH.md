@@ -1299,9 +1299,10 @@ being public, and the timing correlation that would otherwise link them disappea
 Two consequences follow, and both are requirements rather than observations.
 
 **Every item is authorized independently.** An envelope is not a unit of authorization. Each
-item carries its own kind-23192 proof signed by *that bill's own* registered identity, so one
-envelope routinely carries proofs from several different keys, and a Hub MUST evaluate each on
-its own. Nothing about one item passing or failing says anything about another. It follows
+item carries its own authorization — a kind-23192 proof signed by *that bill's own* registered
+identity, or, for a cash-mode slice, the secret itself (§Bearer Items). So one envelope
+routinely carries proofs from several different keys, alongside items with no proof at all, and
+a Hub MUST evaluate each on its own. Nothing about one item passing or failing says anything about another. It follows
 that an envelope's assembler need not hold any of the bills — it may be aggregating on behalf
 of others — which is the same property §Consolidating Tokens already relies on.
 
@@ -1319,6 +1320,35 @@ therefore validate an envelope's internal coherence before sending — that a pr
 own item's target, method and params hash, that every proof carries this envelope's nonce, and
 that every item names one Hub — because local validation is the **only** place these mistakes
 are diagnosable.
+
+### Bearer Items
+
+A cash-mode slice (§Cash-Mode Slices) has no keypair — only a secret — so it cannot produce
+a kind-23192 proof at all. **A cash-mode item therefore MUST omit `proof`, and carries its
+`cash_secret` in `params` instead.** An item MUST NOT carry both: they authorize differently,
+and an item asserting both leaves a Hub to choose, hiding the sender's mistake either way.
+
+This is sound rather than a concession. The binding a proof provides — target, method, params,
+envelope — exists to stop an envelope's *assembler* substituting one for another. For a
+cash-mode item there is nothing to protect: the secret travels in the item, so whoever holds
+the envelope can already spend that slice however they like. A signature would restrict
+someone who is by construction unrestricted.
+
+Note this does **not** contradict §Consolidating Tokens' refusal of cash-mode `sources`. That
+refusal is about a secret sitting in a request encrypted only under the *calling connection's*
+shared key, where every co-recipient of a shared wallet could read it. This transport has no
+shared calling connection: an envelope is encrypted to the Hub's announced inbox alone, and
+its outer key is ephemeral. The exposure that ban prevents does not exist here.
+
+**A Hub MUST decide whether a slice is cash-mode from its own records, never from the item.**
+This is the requirement that keeps the allowance from becoming a hole. An identity-bound slice
+could otherwise dodge its proof by omitting one and looking bearer — so a Hub presented with a
+proofless item MUST look the target up, and serve it only if that slice is genuinely cash-mode
+and the supplied secret matches. For any other slice the item is unservable and MUST be
+omitted, exactly as an unverifiable proof is.
+
+A Hub MUST NOT count a proofless item against a verification budget it advertises, since there
+is no signature to verify; and a client MUST NOT assume otherwise when packing an envelope.
 
 ### Item Proofs (kind 23192)
 
