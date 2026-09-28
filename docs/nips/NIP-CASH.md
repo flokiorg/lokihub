@@ -1207,10 +1207,42 @@ that Hub, and MUST reject one signed by anyone else. Otherwise the announcement 
 inbox-substitution primitive: an attacker publishing their own would receive envelopes
 encrypted to them.
 
+### The Request Event
+
+A private request is a **kind-23190 event carrying one NIP-44 ciphertext**, and it is worth
+stating precisely because it is easy to assume a heavier construction:
+
+```
+kind        23190
+pubkey      a FRESH ephemeral key, used once and discarded
+tags         [["p", "<the announced inbox>"]]
+created_at  randomised into the past (see below)
+content     NIP-44( envelope JSON ) under the conversation key
+            between that ephemeral key and the announced inbox
+```
+
+**This is deliberately *not* a NIP-59 seal-and-gift-wrap stack**, and an implementation that
+builds one will not be understood: a Hub subscribes to kind `23190` and MUST ignore anything
+else, so a kind-1059 wrap is discarded before any decryption is attempted, giving the sender
+silence with no diagnosis.
+
+The reason is that NIP-59's inner seal exists to prove to the recipient *who* sent the
+message. Here the sender is deliberately anonymous — the outer key is ephemeral precisely so
+it identifies nobody — and authorization travels per item, in each item's own kind-23192
+proof (§Item Proofs). The proofs already do the seal's job, and better: they bind to the
+specific target, method and params rather than merely to an author. A seal would add a layer
+and an extra ECDH to prove something no Hub relies on.
+
+What this design does borrow from NIP-59 is the **`created_at` randomisation**: a request's
+timestamp is pushed up to two days into the past, so the event's own metadata says nothing
+about when the request was really made. That is why freshness cannot live in `created_at` and
+must live inside the ciphertext, in `not_after` below.
+
 ### Envelopes
 
-A private request is a NIP-59 gift wrap whose innermost plaintext is an **envelope** carrying
-one or more **items**. Each item is one call to one of the methods below, against one wallet.
+The plaintext inside that ciphertext is an **envelope** carrying one or more **items**. Each
+item is one call to one of the methods below, against one wallet — and different items MAY
+name **different wallets**, which is the whole point: see §Batching Across Bills.
 
 ```jsonc
 {
@@ -1235,8 +1267,9 @@ Batching is the point. One envelope consolidating fifty bills is one relay event
 fifty, so the count of a holder's bills stops being public, and the timing correlation that
 links them disappears.
 
-- **`not_after`** — REQUIRED. NIP-59 randomises the wrapping event's `created_at` by up to two
-  days, precisely so it leaks nothing, which means it cannot also serve as a freshness signal.
+- **`not_after`** — REQUIRED. The request event's `created_at` is randomised up to two days
+  into the past (§The Request Event), precisely so it leaks nothing, which means it cannot
+  also serve as a freshness signal.
   Replay protection therefore has to live inside the ciphertext. A Hub MUST reject an envelope
   whose `not_after` has passed, and MUST reject one claiming to be valid further ahead than it
   is willing to remember nonces for.
@@ -1255,6 +1288,37 @@ links them disappears.
   bucket boundary collapses that into a few indistinguishable sizes.
 
 An envelope MUST carry at least one item, and item `id`s MUST be unique within it.
+
+### Batching Across Bills
+
+**Items in one envelope MAY name different wallets, and generally will.** This is the
+transport's purpose, not an edge case: a holder consolidating fifty bills, or redeeming a
+dozen, sends one event rather than one per bill — so the *number* of bills a holder has stops
+being public, and the timing correlation that would otherwise link them disappears.
+
+Two consequences follow, and both are requirements rather than observations.
+
+**Every item is authorized independently.** An envelope is not a unit of authorization. Each
+item carries its own kind-23192 proof signed by *that bill's own* registered identity, so one
+envelope routinely carries proofs from several different keys, and a Hub MUST evaluate each on
+its own. Nothing about one item passing or failing says anything about another. It follows
+that an envelope's assembler need not hold any of the bills — it may be aggregating on behalf
+of others — which is the same property §Consolidating Tokens already relies on.
+
+**Every item MUST bind to the same Hub.** An item's proof commits to the Hub's own identity
+(the `h` tag), so an item bound to a different Hub cannot be served and MUST be omitted.
+A client SHOULD reject such an envelope locally before sending it: the Hub's only available
+answer is silence, which is indistinguishable from a bill it does not hold, so an envelope
+mixing Hubs produces a failure the sender cannot diagnose.
+
+That last point generalises. Because an unservable item is answered by **omission**
+(§Responses), and omission is deliberately information-free, a client learns nothing from the
+wire about *why* an item was skipped. A malformed proof, a mismatched params hash, a stale
+envelope nonce and a wrong Hub all look identical from outside. An implementation SHOULD
+therefore validate an envelope's internal coherence before sending — that a proof binds to its
+own item's target, method and params hash, that every proof carries this envelope's nonce, and
+that every item names one Hub — because local validation is the **only** place these mistakes
+are diagnosable.
 
 ### Item Proofs (kind 23192)
 
