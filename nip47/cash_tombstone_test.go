@@ -3,10 +3,13 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -226,4 +229,47 @@ func TestTombstone_DeprecatedMethodName_StillAnswers(t *testing.T) {
 		cashStatusRequest(t, pairingKey, walletPubkey, nipcash.MethodListRecipients), svc.LNClient)
 
 	require.Len(t, pool.PublishedEvents, 1, "the old method name must still be answered")
+}
+
+// TestTombstone_BoundaryRuleIsNotReimplementedLocally guards the A-2 fix.
+//
+// The defect was not the boundary itself but that one rule had two
+// implementations: db.SpentBillStillAnswerable compared !now.After(deadline)
+// while this file compared !now.Before(retainedUntil). At exactly retained_until
+// the relay gate admitted a request that tryReplySpentBill then refused to
+// answer, so it was accepted and silently dropped — the one outcome the
+// tombstone exists to prevent.
+//
+// This reads the source because the property cannot be observed any other way.
+// tryReplySpentBill calls time.Now() internally, so producing a request that
+// lands on exactly retained_until is a race rather than a test; the boundary's
+// behaviour is pinned deterministically in
+// db.TestRetentionWindowOpen_BoundaryIsInclusive. What is left to protect is
+// structural — that this path keeps delegating — and that is what this asserts.
+func TestTombstone_BoundaryRuleIsNotReimplementedLocally(t *testing.T) {
+	src, err := os.ReadFile("cash_tombstone.go")
+	require.NoError(t, err)
+
+	// Comments explain the history and legitimately name the old operators, so
+	// only real code is considered.
+	var code strings.Builder
+	for _, line := range strings.Split(string(src), "\n") {
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		code.WriteString(line)
+		code.WriteString("\n")
+	}
+	body := code.String()
+
+	assert.Contains(t, body, "db.RetentionWindowOpen(retainedUntil,",
+		"the tombstone path must delegate the retention boundary to db.RetentionWindowOpen")
+	for _, forbidden := range []string{
+		".Before(retainedUntil)",
+		".After(retainedUntil)",
+	} {
+		assert.NotContains(t, body, forbidden,
+			"the retention boundary must not be compared locally (%s) — that is exactly how "+
+				"this path and the relay gate came to disagree at the deadline", forbidden)
+	}
 }

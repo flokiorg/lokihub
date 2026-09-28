@@ -249,3 +249,65 @@ func TestRecomputeSpentRetention_OnlyMissingLeavesSetDeadlines(t *testing.T) {
 	assert.Equal(t, endedAt.Add(time.Hour).Unix(), after.Unix(),
 		"onlyMissing must not rewrite a deadline that is already set")
 }
+
+// TestRetentionWindowOpen_BoundaryIsInclusive pins the decision that a request
+// landing at exactly retained_until is still answered.
+//
+// This is the rule two packages used to write out separately and disagree on:
+// db.SpentBillStillAnswerable said !now.After(deadline) (inclusive) while
+// nip47's tombstone reply said !now.Before(deadline) (exclusive). At exactly T
+// the relay gate therefore admitted a request that the replier then refused to
+// answer — accepted and silently dropped, which is the single outcome the
+// tombstone exists to prevent. Both now route through RetentionWindowOpen.
+//
+// The boundary is tested here rather than through the tombstone handler on
+// purpose: that path reads time.Now() itself, so an exact-instant assertion
+// through it is a race, not a test. What it CAN be tested for — answering well
+// inside the window, and silence well past it — already is
+// (nip47.TestTombstone_Holder_GetsSpentAnswer,
+// nip47.TestTombstone_PastRetention_GetsSilence).
+func TestRetentionWindowOpen_BoundaryIsInclusive(t *testing.T) {
+	deadline := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+
+	for _, tc := range []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{"well inside the window", deadline.Add(-24 * time.Hour), true},
+		{"one nanosecond before the deadline", deadline.Add(-time.Nanosecond), true},
+		{"exactly the deadline", deadline, true},
+		{"one nanosecond past the deadline", deadline.Add(time.Nanosecond), false},
+		{"well past the window", deadline.Add(24 * time.Hour), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, db.RetentionWindowOpen(deadline, tc.now))
+		})
+	}
+}
+
+// TestRetentionWindowOpen_IsWhatSpentBillStillAnswerableUses guards against the
+// boundary rule being reintroduced locally: if SpentBillStillAnswerable ever
+// stops delegating, these two disagree at exactly the deadline — the same
+// instant the original divergence showed up at.
+func TestRetentionWindowOpen_IsWhatSpentBillStillAnswerableUses(t *testing.T) {
+	gormDB := retentionTestDB(t)
+
+	pubkey := "ee" + randomHex30(t)
+	endedAt := time.Now().Add(-24 * time.Hour)
+	seedSpentBill(t, gormDB, pubkey, endedAt, 48*60*60)
+
+	deadline, ok := db.SpentBillRetainedUntil(gormDB, pubkey)
+	require.True(t, ok)
+
+	for _, now := range []time.Time{
+		deadline.Add(-time.Nanosecond),
+		deadline,
+		deadline.Add(time.Nanosecond),
+	} {
+		assert.Equal(t,
+			db.RetentionWindowOpen(deadline, now),
+			db.SpentBillStillAnswerable(gormDB, pubkey, now),
+			"the two must agree at %s; a local comparison has been reintroduced", now)
+	}
+}

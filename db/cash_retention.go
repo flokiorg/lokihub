@@ -58,13 +58,33 @@ func SpentBillRetainedUntil(tx *gorm.DB, walletPubkey string) (time.Time, bool) 
 	return *retainedUntil, true
 }
 
+// RetentionWindowOpen is the ONE definition of the retention boundary: is a
+// destroyed bill still inside the window ending at deadline?
+//
+// Inclusive of the deadline itself. That instant is quoted to the caller as
+// retained_until, and "retained until T" answering at T is what the word says;
+// a request landing exactly on it getting silence would contradict the figure
+// the hub published.
+//
+// Exported, and taking plain instants rather than doing its own lookup, because
+// it has two callers that reach the deadline differently: SpentBillStillAnswerable
+// below, which only needs the verdict, and nip47's tombstone reply, which needs
+// the deadline anyway to put in the response and so must not pay for a second
+// query. Both MUST route their comparison through here.
+//
+// They used to each write the comparison out, and they disagreed: this one used
+// !now.After(deadline) while the tombstone path used !now.Before(deadline), so at
+// exactly T the relay gate admitted the request and the replier declined to
+// answer it — the request was accepted and then silently dropped, which is the
+// one outcome the tombstone exists to prevent. Aligning the two operators would
+// have fixed that instant and left the duplication that produced it.
+func RetentionWindowOpen(deadline, now time.Time) bool {
+	return !now.After(deadline)
+}
+
 // SpentBillStillAnswerable reports whether a destroyed bill is still inside its
 // Hub's retention window right now.
 func SpentBillStillAnswerable(tx *gorm.DB, walletPubkey string, now time.Time) bool {
 	deadline, ok := SpentBillRetainedUntil(tx, walletPubkey)
-	// Inclusive of the deadline itself. That instant is quoted to the caller
-	// as retained_until, and "retained until T" answering at T is what the
-	// word says; a request landing exactly on it getting silence would
-	// contradict the figure the hub published.
-	return ok && !now.After(deadline)
+	return ok && RetentionWindowOpen(deadline, now)
 }
