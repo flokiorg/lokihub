@@ -551,6 +551,13 @@ This gives three outcomes where there were two:
   window, since the alternative leaves a holder unable to distinguish "spent" from "unreachable" — this
   implementation defaults to 15 days. Past `retained_until` the Hub returns to silence either way, so a
   tombstone is never wrong — only absent for old bills.
+- **The window is inclusive of `retained_until` itself.** A request landing at exactly that instant MUST
+  still be answered; only strictly after it does the Hub fall silent. This is stated because it is not
+  self-evident from "past `retained_until`", and because the Hub **published that exact timestamp to the
+  holder** — answering at the instant you told someone you would is the only reading consistent with
+  having quoted it. An implementation that evaluates this boundary in more than one place MUST make those
+  places agree: a Hub that admits a request at `retained_until` and then declines to answer it produces
+  silence, which is precisely the indeterminate outcome this whole mechanism exists to remove.
 - A Hub answering a tombstone MUST verify that the requester holds the bill's own connection, by comparing
   the request's author pubkey against the one derived from that bill's pairing key (§The Pairing
   Connection). **Decryption is not authentication**: under NIP-47 anyone may encrypt a request to a

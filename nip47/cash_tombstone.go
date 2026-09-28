@@ -45,8 +45,18 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 		return false
 	}
 
+	// Gate 2. The boundary comparison is db.RetentionWindowOpen's, never a local
+	// one: this path and the relay gate (service.walletRegistry, via
+	// db.SpentBillStillAnswerable) must agree exactly, and when each wrote the
+	// comparison itself they did not — at exactly retainedUntil the gate admitted
+	// the request and this function declined to answer it, so the request was
+	// accepted and then dropped in silence. See db.RetentionWindowOpen.
+	//
+	// The deadline is read here rather than calling SpentBillStillAnswerable
+	// because the response carries it as retained_until, so it is needed either
+	// way and a second query would be wasted.
 	retainedUntil, ok := db.SpentBillRetainedUntil(svc.db, walletPubkey)
-	if !ok || !time.Now().Before(retainedUntil) {
+	if !ok || !db.RetentionWindowOpen(retainedUntil, time.Now()) {
 		return false
 	}
 
