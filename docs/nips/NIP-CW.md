@@ -97,7 +97,7 @@ This document uses MUST, MUST NOT, SHOULD, and MAY as defined in RFC 2119.
 
 | Method | Caller | Scope | Purpose |
 |---|---|---|---|
-| `create_circle_wallet` | a member, over the Circle Wallet Hub connection | `create_circle_wallet` | Self-service request for the caller's own Circle Wallet |
+| `create_circle_wallet` | a member, over the Circle Wallet Hub connection | `circle_wallet` | Self-service request for the caller's own Circle Wallet |
 
 ## Data Model
 
@@ -157,7 +157,7 @@ sequenceDiagram
     Hub->>Hub: validate requested budget and expiry
     Hub->>Hub: check available balance
     Hub->>Wallet: create wallet and record membership, in one transaction
-    Hub-->>Member: {encrypted_pairing_uri, wallet_pubkey, expires_at, fees_ppm, budget_renewal}
+    Hub-->>Member: {encrypted_details}  %% one ciphertext; every term is inside it
 ```
 
 ### Request
@@ -183,7 +183,15 @@ sequenceDiagram
 
 ```jsonc
 {
-  "encrypted_pairing_uri": "<NIP-44, encrypted to the requester's own pubkey>",
+  "encrypted_details": "<NIP-44, encrypted to the requester's own pubkey>"
+}
+```
+
+The plaintext inside `encrypted_details` is a JSON object carrying every term of the issued wallet:
+
+```jsonc
+{
+  "pairing_uri": "nostr+walletconnect://...",
   "wallet_pubkey": "<hex>",
   "expires_at": 1720000000,
   "fees_ppm": 0,
@@ -191,9 +199,16 @@ sequenceDiagram
 }
 ```
 
-`encrypted_pairing_uri` MUST be encrypted (NIP-44) to the requester's own pubkey, so no other holder of
-the shared Hub connection, including the wallet owner, is able to decrypt a Circle Wallet's connection
-string from the response alone.
+**The response carries exactly one field on purpose.** `encrypted_details` MUST be encrypted (NIP-44) to
+the requester's own pubkey, and every term describing the issued wallet MUST be inside it — not merely the
+connection string. A Hub MUST NOT place any of them beside the ciphertext.
+
+The reason is that the Hub connection is *shared*: it is broadcast to everyone who might join, so every
+co-member can decrypt the transport layer of this response. Anything outside `encrypted_details` is
+therefore published to the whole circle, not just to the member who asked. That includes
+`wallet_pubkey`, which is not merely descriptive: it is the subscription address for that member's wallet,
+so a co-member holding it can follow that member's traffic for the wallet's entire life. The terms travel
+inside for the same reason — they describe this one member's wallet, not the circle's policy.
 
 ### Processing Algorithm
 
@@ -205,7 +220,11 @@ On receiving `create_circle_wallet`, the Hub MUST, in order:
 3. Check the proof's event ID against the single-use replay guard. A previously-consumed event ID MUST
    be rejected, even if otherwise valid and still within its freshness window.
 4. Authorize the requester against the Hub's Circle Identity: an `allowlist`-policy Hub performs a
-   direct lookup, while a `following`-policy Hub checks the provider's live Nostr contact list.
+   direct lookup, while a `following`-policy Hub resolves the provider's current kind:3 contact list
+   (§Membership). A Hub that cannot resolve that list yet — it fetches from relays and so has a startup
+   window before any answer is available — MUST NOT fall back to denying membership, because a denial is
+   indistinguishable to the caller from "you are not a member." It MUST instead answer with a distinct
+   not-ready error the caller can retry; this implementation returns `NOT_READY`.
 5. Check the one-active-wallet-per-(Hub, identity) rule (§Membership), rejecting if the identity
    already holds an active Circle Wallet under this Hub.
 6. Validate `max_amount` against the Hub's own per-wallet ceiling, the resolved `budget_renewal` against
@@ -218,7 +237,8 @@ On receiving `create_circle_wallet`, the Hub MUST, in order:
    5, so a conflict here, or a balance/ceiling check failing, MUST roll back the entire transaction,
    including the just-created connection and permission rows.
 8. After the transaction commits, never before, publish the new connection's relay subscription.
-9. Return the encrypted pairing URI and resolved wallet parameters.
+9. Return a single `encrypted_details` ciphertext containing the pairing URI and every resolved wallet
+   parameter. Nothing describing the wallet may travel outside it (§Response).
 
 ## Identity Proof (kind 23199)
 
@@ -251,8 +271,11 @@ response cannot be used to probe list membership.
 A Circle Identity's admission mechanism (§Terminology) supports two forms:
 
 - **allowlist**: an explicit list of pubkeys the host maintains directly.
-- **following**: whoever the host's own Nostr account currently follows (kind:3 contact list), checked
-  live. Because the host alone controls their own contact list, this is a real authorization decision:
+- **following**: whoever the host's own Nostr account currently follows (kind:3 contact list). The list
+  lives on relays rather than in the Hub, so "currently" means the Hub's most recent resolution of it: an
+  implementation MAY cache the list and refresh it, and MUST bound that staleness, but MUST NOT treat an
+  unresolved list as an empty one (§Creating a Circle Wallet, step 4). Because the host alone controls
+  their own contact list, this is a real authorization decision:
   membership simply tracks a relationship the host already maintains elsewhere on Nostr, so adding or
   removing someone from the circle requires no separate action against this protocol at all.
 
@@ -406,7 +429,13 @@ watching that list, not just fellow members, can learn who's eligible to request
 they request one. Hosts who need membership itself to stay private SHOULD use the `allowlist` mechanism
 instead.
 
-`encrypted_pairing_uri` keeps a member's own connection string unreadable to anyone else holding the
-shared Hub connection, including the host. But the *existence* of that member's wallet, and its
-`wallet_pubkey`, are visible to whatever system stores or logs the Hub's request/response history.
+`encrypted_details` keeps a member's connection string **and every other term of their wallet, including
+its `wallet_pubkey`,** unreadable to anyone else holding the shared Hub connection. That matters most for
+`wallet_pubkey`: it is the address a wallet's traffic is subscribed under, so leaving it outside the
+ciphertext would let any co-member follow that member's wallet for its whole life, which is a stronger
+exposure than the connection string alone.
+
+What remains visible to whatever system stores or logs the Hub's request/response history is the
+*request*: that a given requester `pubkey` asked for a wallet, and when. The existence of a member's
+wallet is therefore still inferable from traffic; its address and terms are not.
 
