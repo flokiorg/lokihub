@@ -64,8 +64,16 @@ type App struct {
 	// that grows with the table, which cash_wallet churn (each split spins off
 	// two, each consolidate one) accelerates. app_pubkey leads the index so the
 	// app_pubkey-only case (no p-tag) uses it as a prefix too.
+	//
+	// WalletPubkey carries a SECOND, standalone index because the private transport
+	// resolves an app the other way round: an envelope's outer key is a fresh
+	// ephemeral one, so there is no app_pubkey to look up, and each item names the
+	// WALLET pubkey in its target. A composite led by app_pubkey cannot serve
+	// `WHERE wallet_pubkey = ?` — the leading column is absent — so that lookup
+	// would full-scan apps once PER ITEM, on exactly the table this comment already
+	// notes grows with every split and consolidate.
 	AppPubkey    string  `validate:"required" gorm:"not null;index:idx_apps_pubkey_lookup,priority:1"`
-	WalletPubkey *string `gorm:"index:idx_apps_pubkey_lookup,priority:2"`
+	WalletPubkey *string `gorm:"index:idx_apps_pubkey_lookup,priority:2;index:idx_apps_wallet_pubkey"`
 	// CashToken is a cash_wallet's own lokicash1... string, stored verbatim at
 	// mint so the archive can keep the exact string that was issued when the
 	// bill is destroyed (CashBillArchive.CashToken). Empty for every other
