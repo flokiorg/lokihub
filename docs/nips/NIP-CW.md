@@ -407,7 +407,7 @@ TLV-encoded pairing data converted from 8-bit to 5-bit groups exactly as NIP-19 
 | Type | Name | Value | Cardinality |
 |---|---|---|---|
 | `0` | wallet pubkey | 32 raw bytes — the Hub's own pubkey | exactly one, REQUIRED |
-| `1` | relay | a relay URL, ASCII | one or more, order preserved; each MUST be non-empty |
+| `1` | relay | a relay URL, ASCII | one or more, order preserved; each MUST be non-empty. Several mean failover — NIP-CASH §Multiple Relay Hints |
 | `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
 | `3` | label | a human-readable name, UTF-8 | zero or one, OPTIONAL |
 
