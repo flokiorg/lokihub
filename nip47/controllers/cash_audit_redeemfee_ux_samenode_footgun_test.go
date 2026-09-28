@@ -1,7 +1,7 @@
 package controllers
 
 // UX-audit coverage for the "worst-case ceiling, never a floor" property
-// NIP-CASH.md's §Listing Recipients documents for the redeem fee quote. This
+// NIP-CASH.md's §Cash Status documents for the redeem fee quote. This
 // test plays out the exact scenario a well-behaved, spec-following recipient
 // client would follow:
 //
@@ -12,7 +12,7 @@ package controllers
 //  2. Build a real invoice for exactly that quoted amount.
 //  3. Call cash_redeem.
 //
-// Per NIP-CASH's own §Listing Recipients text, this is explicitly allowed to
+// Per NIP-CASH's own §Cash Status text, this is explicitly allowed to
 // underpay relative to what actually gets paid out ("A slice's eventual
 // cash_redeem MAY pay out more than net_redeemable_millis here... it will
 // never pay out less") — but the wire behavior is not "pay out more than the

@@ -1,7 +1,7 @@
 package controllers
 
 // Coverage for the redeem-fee quote fields on cash_status
-// (NIP-CASH.md §Listing Recipients, §The Redeem Fee). This is a follow-on to
+// (NIP-CASH.md §Cash Status, §The Redeem Fee). This is a follow-on to
 // cash_audit_ux_cash_status_missing_fields_test.go, which
 // proved min_transfer_millis and expires_at are absent from the wire response
 // — this test proves the OPPOSITE for the redeem fee: the quote a recipient
@@ -34,7 +34,7 @@ import (
 // redeem-fee quote fields are genuinely reachable by a recipient, in contrast
 // to the prior round's C1/H1 findings about expires_at/min_transfer_millis. It
 // also documents the actual field names/shape a client author has to work
-// against, since NIP-CASH's own example response (§Listing Recipients) is
+// against, since NIP-CASH's own example response (§Cash Status) is
 // illustrative prose, not something guaranteed to match byte-for-byte.
 func TestHandleCashStatusEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -46,7 +46,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T) {
 
 	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	// 1% fee (10_000 ppm) on a 21,000 mloki slice: fee 210, net 20,790 — the
-	// exact figures NIP-CASH.md's own §Listing Recipients example response
+	// exact figures NIP-CASH.md's own §Cash Status example response
 	// uses, so this test's assertions double as a spec-conformance check.
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 21_000, RedeemFeePpm: 10_000},

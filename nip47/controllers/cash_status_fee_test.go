@@ -1,7 +1,7 @@
 package controllers
 
 // Test coverage for cash_status' new redeem_fee_millis/net_redeemable_millis
-// fields (NIP-CASH.md §Listing Recipients) — the quote a recipient uses to
+// fields (NIP-CASH.md §Cash Status) — the quote a recipient uses to
 // know exactly what cash_redeem will pay out before calling it.
 
 import (
