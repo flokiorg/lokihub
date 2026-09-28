@@ -1148,8 +1148,45 @@ export interface CreateCashWalletResponse {
   app_id: number;
   pairing_uri: string;
   cash_token: string;
-  expires_at: number;
+  // Optional because the backend omits it entirely for a wallet that never
+  // expires — api.CreateCashWalletResponse.ExpiresAt is *int64 with
+  // `omitempty`, which happens whenever the Cash Hub's own max_exp_secs is 0
+  // ("never") and the request carried no expiry of its own. Typing it as
+  // required was wrong: the one consumer already compensated at runtime with
+  // `|| undefined`, so nothing broke, but the type promised a number that is
+  // not always sent.
+  expires_at?: number;
   recipients: CashWalletRecipient[];
+}
+
+// CreateCashWalletRequest mirrors api.CreateCashWalletRequest. It exists so the
+// POST body is type-checked: it was previously assembled as an untyped object
+// literal, which meant renaming a field on either side compiled clean on both
+// and failed only at runtime.
+//
+// min_transfer_mloki is deliberately absent — it is not a request field. A
+// slice's split floor is inherited from the issuing Cash Hub's own configured
+// default, never supplied per call (see api.CreateCashWalletRequest).
+// Named rather than inlined into CreateCashWalletRequest so a .map() callback can
+// annotate its return type. That annotation is what makes TypeScript check the
+// object literal freshly: without it, `recipients.map((r) => ({...}))` produces an
+// INFERRED element type, and assigning that to the declared array is an
+// assignability check, which permits excess properties. A misspelled key inside
+// the callback then compiles clean — verified: it was not caught until the
+// callback was annotated.
+export interface CreateCashWalletRequestRecipient {
+  identity_type: string;
+  identity_value?: string;
+  ia_pubkey?: string;
+  amount_mloki: number;
+}
+
+export interface CreateCashWalletRequest {
+  recipients: CreateCashWalletRequestRecipient[];
+  // Shared by every recipient; omit for the hub's own ceiling.
+  expiry_secs?: number;
+  // Opts the issued token into mint provenance (NIP-CASH §Mint Provenance).
+  mint_signature?: boolean;
 }
 
 // CashWalletConnectionResponse is GET /api/apps/{id}/cash-connection's

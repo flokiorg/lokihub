@@ -76,6 +76,8 @@ import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
 import { validateHTTPURL } from "src/utils/validation";
 import {
   App,
+  CreateCashWalletRequest,
+  CreateCashWalletRequestRecipient,
   CreateCashWalletResponse,
   CashSliceStatus,
   CashWalletClaim,
@@ -779,17 +781,27 @@ export const CashHubAllocations = React.forwardRef<
     }
     setAdding(true);
     try {
-      const body = {
-        recipients: recipients.map((r) => ({
+      // Every field is a DIRECT property rather than a conditional spread, and
+      // that is the whole point of typing this body. TypeScript's
+      // excess-property check does not see through `...(cond ? {x} : {})` — a
+      // misspelled key inside a spread compiles clean even against an exact
+      // type, which is precisely the runtime failure this type exists to
+      // prevent. Written this way, a typo is a compile error (TS2561).
+      //
+      // `undefined` is equivalent to the old conditional spread on the wire:
+      // JSON.stringify omits undefined-valued properties entirely.
+      const body: CreateCashWalletRequest = {
+        recipients: recipients.map((r): CreateCashWalletRequestRecipient => ({
           identity_type: r.identityType,
           identity_value: recipientIdentityValue(r),
-          ...(r.identityType === "connection_key"
-            ? { ia_pubkey: r.resolvedIaPubkeyHex }
-            : {}),
+          ia_pubkey:
+            r.identityType === "connection_key"
+              ? r.resolvedIaPubkeyHex
+              : undefined,
           amount_mloki: r.amountLoki * 1000,
         })),
-        ...(hasDeadline ? { expiry_secs: claimDeadlineSecs } : {}),
-        ...(mintSignature ? { mint_signature: true } : {}),
+        expiry_secs: hasDeadline ? claimDeadlineSecs : undefined,
+        mint_signature: mintSignature ? true : undefined,
       };
       const result = await request<CreateCashWalletResponse>(
         `/api/apps/${id}/cash-wallets`,
