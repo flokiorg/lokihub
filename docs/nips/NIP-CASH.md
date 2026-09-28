@@ -124,7 +124,13 @@ A Cash Hub MUST maintain, for itself:
 - a default value for `min_transfer_millis` (§Transferring and Splitting a Slice), applied to every slice a freshly-minted
   wallet carries. Zero (no floor) is a valid default;
 - a default value for `redeem_fee_ppm` (§The Redeem Fee), applied to every slice a freshly-minted wallet
-  carries. Zero (free) is a valid default;
+  carries. Zero (free) is a valid default. It is a parts-per-million rate, so it MUST be bounded at
+  1,000,000 — the whole slice. A Hub MUST reject a configured value above that bound rather than clamp it,
+  since a silently-clamped fee would misreport what a recipient is about to be charged;
+- the retention window for answering about a destroyed bill (§Answering About a Destroyed Bill), in seconds.
+  Zero disables tombstones. It MUST be bounded by the same absolute bound the expiry ceiling uses
+  (§Minting Cash, `expiry`), for the same representational reason and with the same
+  reject-rather-than-clamp requirement;
 
 For each Cash Wallet it creates, an implementation MUST be able to determine which Hub minted its cash —
 §Lifecycle and Deletion needs this for its reclaim behavior.
@@ -197,7 +203,11 @@ single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second
 }
 ```
 
-- `recipients` — MUST contain at least one entry. Each entry's `identity_type` MUST be `pubkey`,
+- `recipients` — MUST contain at least one entry, and an implementation MAY cap how many (this
+  implementation caps at 100; `cash_consolidate` deliberately uses the same limit for its `sources`, so the
+  two batch operations stay symmetrical — §Consolidating Tokens). A request over the cap MUST be rejected
+  whole, never partially fulfilled: a caller cannot be left guessing which recipients were funded. Each
+  entry's `identity_type` MUST be `pubkey`,
   `connection_key`, or `cash`. A `connection_key` entry MUST also carry `ia_pubkey`. A `cash` entry
   MUST carry neither `identity_value` nor `ia_pubkey` — the Hub generates its secret (§Cash-Mode Slices). A
   `cash` entry MUST be the request's only entry; a request mixing a `cash` entry with any other entry
@@ -240,6 +250,15 @@ separate Cash Hub with its own settings, rather than overriding it per call.
 `cash_token` (§The Cash Token) packages the same pairing data as `pairing_uri` — the two MUST
 decode to an identical wallet pubkey, secret, and relay set. Either string alone is a fully sufficient
 connection credential; a recipient only ever needs one of them, not both.
+
+**A Hub MUST NOT return an empty `cash_token`.** Token encoding can fail where URI construction cannot —
+the mint signature is best-effort and the TLV stream has length limits a long relay URL can exceed — and the
+tempting response is to emit `""` and rely on `pairing_uri` still being valid. That is not safe: a client
+that prefers the token, or that treats the field's presence as meaning it is usable, receives something that
+looks like a credential and is not, with nothing indicating which of the two failed. A Hub that cannot
+produce the token MUST either omit the field entirely, so a client's own absent-field path handles it, or
+fail the mint. This matters most for a single-`cash` recipient, whose secret is shown exactly once: a
+response that silently carries half a credential can lose that value irrecoverably.
 
 For the single-`cash`-recipient request shape above, the response's `recipients` entry instead carries
 the generated secret:
@@ -478,8 +497,8 @@ sequenceDiagram
 - `min_transfer_millis` — this slice's own split floor (§Transferring and Splitting a Slice), fixed at creation. A recipient
   MUST be able to learn this value here, before attempting a `cash_transfer` split, rather than only from a
   rejected attempt's error text — which also costs a share of whatever rate limiting the Hub applies to
-  `cash_transfer`/`cash_redeem` (§Security Considerations recommends backing off repeated failed attempts;
-  this document does not otherwise specify a limit).
+  `cash_transfer`/`cash_redeem` (§Cash-Mode Slices requires that exceeding a limit is reported as a distinct
+  rate-limit error, while leaving the rates themselves to the implementation).
 - `expires_at` — the wallet's own redemption deadline (§Data Model). Every recipient shares one wallet-level
   deadline, so this value is identical on every row above, not a per-slice figure — it's repeated per
   recipient rather than hoisted to a single top-level field, so a consumer processing one row never needs to
@@ -1127,6 +1146,14 @@ sufficient on its own; an implementation SHOULD also rate-limit or back off repe
 `cash_redeem` attempts against the same wallet, the same way it would for any other credential-guessing
 surface.
 
+**Rate limits are caller-visible and belong in both directions.** A Hub SHOULD bound `mint_cash` per
+calling connection, since minting commits real balance and a runaway caller can exhaust a Hub's funds as
+effectively as any attack; and SHOULD bound `cash_redeem` per calling connection, which is the
+credential-guessing surface above. A throttled call MUST be answered with a distinct rate-limit error, not
+a generic failure — a caller that cannot tell "slow down" from "this slice is gone" has no safe retry
+strategy, and §Answering About a Destroyed Bill's whole purpose is making that distinction reliable. This
+document does not prescribe the rates; it requires only that exceeding them is reported as such.
+
 ## The Cash Token (`lokicash1...`, `satscash1...`, ...)
 
 One recognizable string is all a recipient needs — hand it over in a chat message, embed it in a zap, read
@@ -1159,7 +1186,7 @@ one-byte length field. The entries:
 | `1` | relay | a relay URL, ASCII | zero or more, order preserved |
 | `2` | secret | 32 raw bytes — the NWC connection secret | exactly one, REQUIRED |
 | `3` | identity required | 1 byte, `0` or `1` | zero or one, OPTIONAL |
-| `5` | mint signature | a recoverable minter signature (§Mint Provenance) | zero or one, OPTIONAL |
+| `5` | mint signature | 65 raw bytes — a compact recoverable ECDSA signature: 1 recovery byte, 32-byte R, 32-byte S (§Mint Provenance) | zero or one, OPTIONAL |
 | `6` | attested amount | 8 bytes, big-endian millis — the value the mint signature commits to | zero or one, OPTIONAL |
 
 Type numbers `0` and `1` carry the same meaning NIP-19 already gives them for `nprofile`/`nevent`/`naddr`
@@ -1179,10 +1206,19 @@ treat the token as carrying no valid provenance (§Mint Provenance) — never as
 both are optional.
 
 A decoder MUST reject a token missing either required field (`0` or `2`), carrying a wrong-length value for
-any of the typed fields above, or repeating any of them. All are the same class of mistake: they'd
+any of the typed fields above **except the provenance pair `5`/`6`**, or repeating any of them except that
+pair. All are the same class of mistake: they'd
 let a caller construct a token that decodes ambiguously, into a connection nobody actually holds, or into
 metadata that could mislead a client about how to attempt a call. Truncated or malformed TLV data MUST
 also be rejected rather than read out of bounds.
+
+**Why `5`/`6` are carved out.** They are the only OPTIONAL fields whose corruption says nothing about
+whether the token is usable. A wallet's pubkey, secret, amount and expiry are all still intact and
+independently verifiable, so rejecting the whole token would make real money unspendable to punish a
+malformed *advisory* field — and provenance is explicitly never a spending credential (§Mint Provenance).
+A decoder MUST therefore treat a wrong-length, duplicated or unpaired `5`/`6` as **no valid provenance**
+and decode the rest normally, exactly as §Mint Provenance requires. This is the one place where "malformed
+input" and "unusable token" come apart, which is why it is stated rather than left to the general rule.
 
 ### Redemption Metadata
 
@@ -1233,10 +1269,40 @@ they don't trust, without contacting anyone.
   Dedicated Wallet), so the value the signature commits to always matches the wallet it names. Each wallet — freshly minted, split-off, or
   consolidated — carries its own signature over its own pubkey and its own fixed amount, independent of
   whether the wallet it split from or was merged out of had one.
-- **The signature is recoverable.** It's a recoverable ECDSA signature over that payload; a verifier
+- **What is actually hashed.** The signature does not cover the payload bytes directly. A minting node
+  signs through its Lightning implementation's own signed-message convention, which wraps the payload
+  before hashing:
+
+  ```
+  digest = SHA256(SHA256(<implementation's signed-message prefix> ‖ payload))
+  ```
+
+  The prefix exists so a node can never be tricked into signing a sighash or other consensus material with
+  its identity key, and every LND-derived implementation applies it inside `SignMessage` rather than
+  exposing it to callers. **A verifier that hashes the bare payload will fail to recover any signer**, even
+  from a perfectly valid token — which is why this is normative here rather than left implicit.
+
+  The prefix is the implementation's, not this document's, so it is chain-qualified rather than fixed:
+
+  | backend | prefix |
+  |---|---|
+  | lnd (Bitcoin) | `Lightning Signed Message:` |
+  | flnd (Flokicoin) | `Flokicoin Lightning Signed Message:` |
+
+  Bitcoin's is the unqualified original; other chains prepend their own name. A verifier MUST therefore
+  select the prefix from the token's own HRP (§The Cash Token), which is precisely what identifies the base
+  asset — `satscash1...` verifies under lnd's prefix, `lokicash1...` under flnd's. An implementation
+  encountering an HRP it has no prefix for MUST treat the token as carrying no valid provenance rather than
+  guessing, and MUST NOT refuse to decode it.
+
+  Both hashes are required: the convention is double-SHA256, matching the `SingleHash = false` default of
+  the LND `SignMessage` RPC this derives from.
+- **The signature is recoverable.** It's a recoverable ECDSA signature over that digest; a verifier
   reconstructs the signer's pubkey from the signature itself, so the minter's pubkey need NOT be carried
-  separately in the token. Verification is purely local: recompute the payload from the token's own HRP,
-  pubkey (`0`), and attested amount (`6`), recover the signer, and compare it to whichever minter pubkey the
+  separately in the token. It is a 65-byte compact signature — one recovery byte followed by 32-byte R and
+  32-byte S — and TLV type `5` MUST be exactly that length (§The Cash Token). Verification is purely local:
+  recompute the payload from the token's own HRP, pubkey (`0`), and attested amount (`6`), wrap it in the
+  prefix above, hash twice, recover the signer, and compare it to whichever minter pubkey the
   holder expects or trusts. A type-`5`/`6` pair that doesn't recover to a valid pubkey over its own payload
   MUST be treated as carrying no valid provenance — never as a hard decode failure, since both are optional.
 - **Optional by default.** Because it roughly doubles a token's length, a minter SHOULD omit it unless

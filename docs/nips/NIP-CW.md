@@ -215,8 +215,10 @@ inside for the same reason — they describe this one member's wallet, not the c
 On receiving `create_circle_wallet`, the Hub MUST, in order:
 
 1. Validate `pubkey` is a well-formed 64-character lowercase-hex string.
-2. Verify the kind-23199 identity proof per §Identity Proof: signature, `d`-tag equal to the Hub's own
-   pubkey, signer equal to the requested `pubkey`, and freshness.
+2. Verify the kind-23199 identity proof per §Identity Proof, all five checks: the event's own `id` matches
+   its content, the signature verifies, the signer equals the requested `pubkey`, `created_at` is fresh,
+   and the `d` tag equals the Hub's pairing-URI pubkey. The `id` check is not optional — without it the
+   replay guard in step 3 is bypassable by mutating only that field.
 3. Check the proof's event ID against the single-use replay guard. A previously-consumed event ID MUST
    be rejected, even if otherwise valid and still within its freshness window.
 4. Authorize the requester against the Hub's Circle Identity: an `allowlist`-policy Hub performs a
@@ -230,15 +232,31 @@ On receiving `create_circle_wallet`, the Hub MUST, in order:
 6. Validate `max_amount` against the Hub's own per-wallet ceiling, the resolved `budget_renewal` against
    the Hub's own renewal floor, and, if `expiry` was explicitly supplied (non-zero), that it does not
    exceed the Hub's own expiry ceiling (§Data Model).
-7. Inside one transaction, verify that the sum of `max_amount` across every currently-active wallet the
+7. Rate-limit per requester `pubkey`. A Hub SHOULD bound how often one member may ask, and MUST answer a
+   throttled request with a distinct rate-limit error rather than a generic failure, so a caller can tell
+   "slow down" from "you are not a member" — the same distinguishability §Identity Proof's ordering exists
+   to protect. Quota SHOULD be spent only by requests that got this far, so a malformed or unauthorized
+   request cannot exhaust a legitimate member's allowance.
+8. Guard against concurrent requests against the same Hub. A Hub MUST NOT let two in-flight requests both
+   pass step 9's commitment check against the same balance; rejecting the second with a retryable error is
+   sufficient. This guard is caller-visible, which is why it is specified: a member may see a transient
+   failure caused by another member's request, not by anything wrong with their own.
+9. Inside one transaction, verify that the sum of `max_amount` across every currently-active wallet the
    Hub has issued, plus this request's `max_amount`, does not exceed the Hub's own current balance (and
    its optional aggregate ceiling, if configured). Then create the Circle Wallet connection and insert
    its membership row. The membership row's uniqueness constraint is the authoritative guard for step
    5, so a conflict here, or a balance/ceiling check failing, MUST roll back the entire transaction,
    including the just-created connection and permission rows.
-8. After the transaction commits, never before, publish the new connection's relay subscription.
-9. Return a single `encrypted_details` ciphertext containing the pairing URI and every resolved wallet
-   parameter. Nothing describing the wallet may travel outside it (§Response).
+
+   Step 8's guard is not sufficient on its own: it is process-local, so two Hub processes sharing one
+   database could still both pass this check. Making the read-and-create genuinely atomic requires a
+   database-level lock scoped to the Hub — an implementation whose datastore cannot provide one MUST NOT
+   be run as multiple concurrent processes against a shared database, since the commitment ceiling is
+   otherwise unenforced. This implementation takes a transaction-scoped advisory lock where the datastore
+   supports it.
+10. After the transaction commits, never before, publish the new connection's relay subscription.
+11. Return a single `encrypted_details` ciphertext containing the pairing URI and every resolved wallet
+    parameter. Nothing describing the wallet may travel outside it (§Response).
 
 ## Identity Proof (kind 23199)
 
@@ -254,6 +272,8 @@ section for the general reasoning, which applies identically here).
   "created_at": 1720000000, // freshness window: up to 5 minutes in the past, up to 1 minute in the future
   "tags": [
     ["d", "<Circle Wallet Hub's own pubkey>"] // binds proof to THIS Hub; no invoice to bind it to
+                                             // — see below: this is the pubkey from the Hub's
+                                             // PAIRING URI, not any key derived from its secret
   ],
   "content": "",
   "sig": "<schnorr signature by `pubkey`>"
@@ -261,7 +281,24 @@ section for the general reasoning, which applies identically here).
 ```
 
 There's only one identity mode here, since a Circle Wallet member is always a raw Nostr pubkey.
-Verification MUST run before the allowlist/following
+
+Verification MUST establish all of the following, and a failure of any one MUST be rejected:
+
+1. **The event's `id` matches its own content.** Recompute the id from the canonical serialization and
+   compare. This is load-bearing rather than a formality: a Nostr signature does not cover the `id` field,
+   so a proof whose id is *not* checked can be replayed indefinitely by mutating only that field — the
+   signature stays valid and the single-use replay guard below, which keys on the id, never sees a repeat.
+   Omitting this check silently defeats the guard rather than weakening it.
+2. **The signature verifies** against `pubkey`, and `pubkey` equals the `pubkey` named in the request.
+3. **`created_at` is inside the freshness window** given above.
+4. **The `d` tag equals the Hub's own pubkey** — specifically the pubkey a member reads from the Circle
+   Wallet Hub's **pairing URI**, the only one a member holding the shared connection string can know. An
+   implementation that maintains a second, internal keypair derived from the connection's secret MUST NOT
+   bind against that one: no member could compute it, so every genuine request would be rejected.
+5. **The `id` has not been used before**, against a single-use record (§Data Model). A previously-consumed
+   id MUST be rejected even if everything above still holds.
+
+Steps 1–4 MUST run before the allowlist/following
 authorization check. This ordering is what closes an allowlist-membership oracle: an attacker who does
 not hold the target's private key MUST NOT be able to reach the authorization check at all, so the
 response cannot be used to probe list membership.
@@ -313,7 +350,11 @@ A Circle Wallet Hub MAY apply a forwarding-fee skim to a member's payments — `
 - **When it applies.** Only to a payment that genuinely leaves the circle over real Lightning routing.
   An in-circle transfer, or any other payment settled between apps on the same underlying node
   (§In-Circle Transfers above), is always fee-free — `fees_ppm` never applies to it.
-- **How much.** `fees_ppm` times the payment amount.
+- **How much.** `fees_ppm` times the payment amount, divided by 1,000,000 and **rounded down**. Rounding
+  direction is specified because it is observable: at small amounts a rate that rounds up charges a fee on
+  a payment the member was quoted as nearly free, and two implementations disagreeing here disagree about
+  the member's balance. Flooring also means a small enough payment carries no fee at all, which is the
+  intended behaviour rather than an artifact.
 - **Who pays.** The paying member, on top of the payment amount, out of their own wallet balance —
   never any other member's, and never the Hub's own underlying balance.
 
@@ -336,6 +377,31 @@ ordinary NWC pairing, indistinguishable by string alone from a Circle Wallet a m
 from any unrelated application connection. A prospective member pasting a connection into a client has no
 way to tell "this is a Hub I can join" from "this is already someone's finished wallet" without a live
 `get_info` round-trip.
+
+A Circle Wallet Hub MUST therefore answer `get_info` with a `circle_wallet` block, and a connection that is
+not a Hub MUST omit it — its presence is what identifies a Hub at all:
+
+```jsonc
+"circle_wallet": {
+  "available_mloki": 1000000,  // what the Hub can still commit: balance minus outstanding commitments
+  "max_exp_secs": 2592000,     // the Hub's expiry ceiling; 0 means "never"
+  "fees_ppm": 0,               // the skim a member's outgoing payments will carry (§Fees)
+  "circle_policy": "allowlist" // "allowlist" | "following" (§Membership)
+}
+```
+
+The first three are the Hub's **terms**: a prospective member needs them before deciding whether to join,
+and a Hub that withheld them would only push the question into a support channel. `available_mloki` is a
+snapshot, not a reservation — it MAY be stale by the time a request lands, and step 9's commitment check
+remains authoritative.
+
+> **Note on the field name.** `available_mloki` is the one place on this wire still using the `mloki`
+> vocabulary; every other amount across NIP-CASH and NIP-CW is named `..._millis`. It is documented as it is
+> actually emitted rather than as it should have been named — renaming it is a breaking change for any
+> client already reading it, and is tracked separately.
+
+`circle_policy` is different in kind: it discloses the Hub's **admission mechanism**, not its terms. This is
+a deliberate disclosure, and §Privacy Considerations states what it costs.
 
 `circlehub1...` packages the same pairing data as an ordinary `nostr+walletconnect://` string, wrapped in
 a NIP-19-style bech32 identifier — the same technique NIP-CASH uses for its own cash token, applied here to
@@ -428,6 +494,19 @@ A `following`-policy circle draws membership from the host's public kind:3 conta
 watching that list, not just fellow members, can learn who's eligible to request a wallet, even before
 they request one. Hosts who need membership itself to stay private SHOULD use the `allowlist` mechanism
 instead.
+
+**`get_info` discloses which mechanism a Hub uses.** Any holder of the shared Hub connection string — which
+is broadcast to everyone who might join, so in practice anyone who has been told about the circle — can read
+`circle_policy` (§The Circle Wallet Hub Connection) and learn whether admission is `allowlist` or
+`following`. This is deliberate: it lets a client avoid prompting a member to request a wallet that will be
+auto-refused, and the same fact is discoverable anyway by attempting once.
+
+What it costs is worth naming rather than leaving implicit. It tells someone outside the circle which
+approach could get them in — cultivate the host's follow graph for a `following` Hub, or that there is no
+such path for an `allowlist` one. It does **not** reveal who the members are: `allowlist` contents are never
+exposed, and a `following` Hub's list was already public by construction (above). A host who considers even
+the mechanism sensitive has no way to hide it while still answering `get_info`, and SHOULD treat the Hub's
+connection string as the access-controlled secret it effectively is.
 
 `encrypted_details` keeps a member's connection string **and every other term of their wallet, including
 its `wallet_pubkey`,** unreadable to anyone else holding the shared Hub connection. That matters most for
