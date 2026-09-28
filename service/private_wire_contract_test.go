@@ -41,7 +41,7 @@ func TestWireContract_SDKWrapIsAcceptedByThisHub(t *testing.T) {
 	require.NoError(t, err)
 
 	// Built by the SDK exactly as a real client would, with no help from this repo.
-	wrapped, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
+	wrapped, _, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
 	require.NoError(t, err, "the SDK must be able to address this hub's inbox")
 
 	event, err := toGoNostrEvent(wrapped)
@@ -85,7 +85,7 @@ func TestWireContract_ReplayIsRefusedAcrossTheBoundary(t *testing.T) {
 
 	plaintext, err := testEnvelope(t).Encode(transport.DefaultLimits())
 	require.NoError(t, err)
-	wrapped, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
+	wrapped, _, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
 	require.NoError(t, err)
 	event, err := toGoNostrEvent(wrapped)
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestWireContract_HubRejectsAWrapAddressedElsewhere(t *testing.T) {
 
 	plaintext, err := testEnvelope(t).Encode(transport.DefaultLimits())
 	require.NoError(t, err)
-	wrapped, err := transport.WrapRequest(plaintext, otherInboxPub)
+	wrapped, _, err := transport.WrapRequest(plaintext, otherInboxPub)
 	require.NoError(t, err)
 	event, err := toGoNostrEvent(wrapped)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestWireContract_MultiBillEnvelopeSurvivesTheWire(t *testing.T) {
 	plaintext, err := env.Encode(transport.DefaultLimits())
 	require.NoError(t, err, "a %d-bill envelope must fit the default limits", bills)
 
-	wrapped, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
+	wrapped, _, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
 	require.NoError(t, err)
 	event, err := toGoNostrEvent(wrapped)
 	require.NoError(t, err)

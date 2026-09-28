@@ -1278,7 +1278,9 @@ links them disappears.
   replay state at all: an item lifted into a different envelope fails on the binding. A Hub
   need only remember a nonce until its envelope could no longer be accepted anyway, which is
   what bounds that memory.
-- **`reply_to`** — REQUIRED, and **not a pubkey**. The response is encrypted under a key
+- **`reply_to`** — REQUIRED, and **not a pubkey**, though it is deliberately shaped like one
+  (32 bytes, lowercase hex) because it does two jobs: it is how the response is **addressed**
+  (§Addressing the Response) as well as how it is keyed. The response is encrypted under a key
   derived from the request's own NIP-44 conversation key together with this tag. Only the Hub
   and the requester know that conversation key, so a key derived from it authenticates the Hub
   implicitly: no second ECDH, no ephemeral keypair, no extra signature. A relay sees an
@@ -1410,6 +1412,36 @@ and MUST NOT infer anything further.
 A client MUST check that `req_nonce` matches the request it sent, and MUST reject results
 whose `id` it never sent — otherwise a hostile or buggy Hub could inject results a client
 would demux into the wrong call.
+
+### Addressing the Response
+
+A client has to be able to *find* the response, and nothing about the request tells it where
+to look: the request event's author is an ephemeral key the client discards, and the Hub has no
+durable identity for that exchange to hang off.
+
+**A Hub MUST `p`-tag its kind-23191 response with the request envelope's `reply_to` value**, and
+a client finds its response by subscribing to `{"kinds":[23191],"#p":["<reply_to>"]}`.
+
+This is why `reply_to` is 32 bytes of lowercase hex: it is exactly the shape of a pubkey, so a
+relay indexes and serves it like any other `p` tag and cannot tell that it is not one. No relay
+change, no new tag, no special handling.
+
+**The unlinkability this buys is the point, and the alternative shows why.** The obvious other
+choice is to `p`-tag the requester's own ephemeral pubkey, which a client certainly knows. But
+that value is already public as the *author* of the request, so an observer would see the same
+32 bytes as author of one event and recipient of another — pairing request to response at a
+glance, for every exchange, permanently on the relay. `reply_to` appears nowhere else: it is
+generated per envelope, travels only inside the ciphertext, and surfaces exactly once, as this
+tag. Request and response therefore share no visible value at all.
+
+A client MUST treat `reply_to` as single-use, generating a fresh one per envelope. Reusing one
+would reintroduce precisely the linkage the scheme avoids, and would also let a stale response
+be mistaken for a current one.
+
+Note the tag addresses the response; it does not authenticate it. That is the reply key's job
+(above), and it is why a client MUST still check `req_nonce` and reject results for ids it
+never sent: anyone can publish an event carrying a `p` tag they observed, and only the derived
+key proves the Hub wrote it.
 
 ### Which Methods a Hub Serves
 
