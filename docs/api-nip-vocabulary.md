@@ -29,12 +29,13 @@ wire, because `mloki` is chain-specific and a spec meant to work for a Bitcoin-b
 `mloki` because renaming it is a migration plus a frontend change, for no benefit to
 any external implementer.
 
-**One known exception, and it is a bug, not this rule.** `available_mloki` in
-`get_info`'s `circle_wallet` block (`nip47/controllers/get_info_controller.go:16`) is
-on the **NIP wire** and still says `mloki`. It is the only such field; every other
-amount on that wire is `..._millis`. The rename missed it. It is documented as
-emitted in NIP-CW rather than silently corrected, because renaming it breaks any
-client already reading it. Tracked as C-13 in the conformance triage.
+**There is no longer an exception.** `available_mloki` in `get_info`'s `circle_wallet`
+block was the one field on the NIP wire still using `mloki` — the rename had missed it.
+It was renamed to `available_millis` on 2026-09-28 (C-13 in the conformance triage),
+deliberately **without** a compatibility alias: the field had no external consumers we
+could find, the private transport it is most useful to is not enabled by default, and an
+alias on a field that exists to be read once at discovery time would have outlived its
+usefulness immediately. Any client reading the old name must be updated.
 
 ## Casing: `snake_case` vs `camelCase`
 

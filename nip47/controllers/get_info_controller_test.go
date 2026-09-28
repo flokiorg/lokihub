@@ -419,13 +419,13 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 	assert.Nil(t, publishedResponse.Error)
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	require.NotNil(t, nodeInfo.CircleWallet, "circle_admin app must have circle_wallet block in get_info response")
-	assert.Equal(t, int64(150_000), nodeInfo.CircleWallet.AvailableMloki) // 200k - 50k commitment
+	assert.Equal(t, int64(150_000), nodeInfo.CircleWallet.AvailableMillis) // 200k - 50k commitment
 	assert.Equal(t, 7200, nodeInfo.CircleWallet.MaxExpSecs)
 	assert.Equal(t, 500, nodeInfo.CircleWallet.FeesPpm)
 	assert.Equal(t, db.CirclePolicyAllowlist, nodeInfo.CircleWallet.CirclePolicy)
 }
 
-func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMloki(t *testing.T) {
+func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMillis(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -486,8 +486,8 @@ func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMloki(t *testing.T) {
 	assert.Nil(t, publishedResponse.Error)
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	require.NotNil(t, nodeInfo.CircleWallet)
-	// commitment (80k) > balance (50k) → available_mloki must be clamped to 0, not negative.
-	assert.Equal(t, int64(0), nodeInfo.CircleWallet.AvailableMloki)
+	// commitment (80k) > balance (50k) → available_millis must be clamped to 0, not negative.
+	assert.Equal(t, int64(0), nodeInfo.CircleWallet.AvailableMillis)
 }
 
 func TestHandleGetInfoEvent_NonCircleAdmin_NoCircleWalletBlock(t *testing.T) {

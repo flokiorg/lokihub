@@ -253,10 +253,10 @@ type GetInfoResult struct {
 // CircleWalletInfo mirrors nip47/controllers/get_info_controller.go's
 // circleWalletInfo — only present on a circle_hub's own get_info response.
 type CircleWalletInfo struct {
-	AvailableMloki int64  `json:"available_mloki"`
-	MaxExpSecs     int    `json:"max_exp_secs"`
-	FeesPpm        int    `json:"fees_ppm"`
-	CirclePolicy   string `json:"circle_policy"`
+	AvailableMillis int64  `json:"available_millis"`
+	MaxExpSecs      int    `json:"max_exp_secs"`
+	FeesPpm         int    `json:"fees_ppm"`
+	CirclePolicy    string `json:"circle_policy"`
 }
 
 type MakeInvoiceParams struct {
