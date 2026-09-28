@@ -434,9 +434,38 @@ only read method a bill has, and it answers one of two ways: the full roster of 
 created for, or — for a bill the Hub has already destroyed — a tombstone saying so (§Answering About a
 Destroyed Bill).
 
-**The name does not imply a caller-scoped answer.** The roster is a read-only, shared view: every holder
-of the connection sees every recipient's row, matching the transparency model `get_balance` already has on
-this same connection type (§Scope Surface). An implementation MUST NOT filter it to the caller's own slice.
+**On the standard transport the answer is not caller-scoped, because it cannot be.** Every recipient of a
+bill holds the *same* connection string (§The Pairing Connection), so a Hub receiving `cash_status` there has
+no way to tell which recipient is asking. The roster is therefore a read-only, shared view: every holder of
+the connection sees every recipient's row, matching the transparency model `get_balance` already has on this
+same connection type (§Scope Surface). An implementation MUST NOT filter it to the caller's own slice.
+
+### Scoping the Roster
+
+The private transport changes that premise. There, every item carries a kind-23192 proof signed by one
+specific recipient's own identity key (§Item Proofs), so a Hub knows exactly who is asking — for the first
+time, scoping is possible at all.
+
+`cash_status` therefore takes an OPTIONAL `scope`:
+
+| value | answer |
+|---|---|
+| `all` | every recipient's row — the shared roster above |
+| `mine` | only the calling recipient's own row |
+
+**Defaults differ by transport, because the two differ in what they can know:**
+
+- **Private transport** — absent means `mine`. The safe default: a caller who says nothing receives the
+  smallest answer and learns nothing about their co-recipients. Around 300 bytes rather than 28,500 for a
+  100-recipient bill, which also removes the common cause of a reply outgrowing its envelope
+  (§Chunked Replies).
+- **Standard transport** — absent means `all`, exactly as before, and `mine` MUST be rejected. Not a policy
+  choice: the Hub cannot identify the caller there, so it cannot honour the request, and answering `all`
+  instead would silently return far more than was asked for.
+
+A Hub MUST determine "mine" from the item proof's own signer, never from anything the item asserts about
+itself. And `mine` is a *view*, not an authorization boundary: it changes what is returned, never what a
+caller may do, so a Hub MUST NOT treat having asked for `mine` as narrowing any later call's permissions.
 
 This method was called `list_recipients` in an earlier revision. A Hub SHOULD keep accepting that name for
 one release so a client can be updated independently of the Hub it talks to; the two are otherwise
@@ -1442,6 +1471,54 @@ Note the tag addresses the response; it does not authenticate it. That is the re
 (above), and it is why a client MUST still check `req_nonce` and reject results for ids it
 never sent: anyone can publish an event carrying a `p` tag they observed, and only the derived
 key proves the Hub wrote it.
+
+### Chunked Replies
+
+A reply can be larger than the request that produced it, sometimes by orders of magnitude. A
+`cash_status` item's params are two bytes — the bill is named by `target` and authorized by its
+proof — while its answer is a roster of up to 100 recipients, around 28,500 bytes. Two such
+items exceed a 56 KiB envelope with 4 bytes of request between them.
+
+A Hub cannot predict this before it acts. It can count a bill's recipients, but a `cash_redeem`
+result's size depends on what the payment did, so the honest sequence is: serve the items, then
+discover how large the answer is.
+
+**A Hub MAY therefore answer one request with several kind-23191 events**, all carrying the same
+`reply_to` tag (§Addressing the Response), and every response MUST carry:
+
+- **`seq`** — this reply's position, counting from 1;
+- **`total`** — how many replies this request produced.
+
+A single-event reply carries `seq: 1, total: 1`.
+
+**`total` is load-bearing, not a convenience**, and the reason is specific to this protocol. The
+obvious alternative is for a client to collect until every item id it sent has an answer. That
+cannot work here, because **omission is a valid final answer** (§Responses). If a client sent
+three items and the Hub omitted one, waiting for all three to be answered waits forever — and it
+is indistinguishable from waiting for a chunk still in flight. Without an explicit total, a
+client cannot tell "this item was omitted" from "the rest has not arrived", which would destroy
+the one property the omission rule exists to provide.
+
+**Relay end-of-stored-events cannot substitute for it either**, for three reasons worth stating
+because the idea is natural:
+
+1. It fires too early. A client MUST subscribe before publishing, since kind 23191 is ephemeral
+   and a subscription opened afterwards can miss the reply entirely. `reply_to` is fresh per
+   envelope, so nothing stored can match it, and the relay answers "nothing stored" immediately
+   — before the Hub has even received the request.
+2. It describes the relay's storage, not the Hub's reply. These kinds are ephemeral precisely so
+   nothing is stored, making every chunk a live event, which that signal says nothing about.
+3. Only the Hub knows the count. A relay forwards; it has no idea the Hub split its answer.
+
+**A client MUST NOT treat a timeout as completeness.** Having received `seq 2` of `total 3`, a
+client that gave up and reported the missing items as omitted would be claiming the Hub said
+nothing about work it may well have performed — for `cash_redeem`, about money that moved. A
+client SHOULD distinguish an incomplete reply from a complete one containing omissions, because
+they support different actions: the first is "ask again", the second is final.
+
+A Hub SHOULD keep `total` as low as the limits allow, since each additional event is another
+round of padding and another thing that can be lost. A client MUST accept chunks in any order,
+and MUST reject a set whose members disagree about `total` or repeat a `seq`.
 
 ### Which Methods a Hub Serves
 
