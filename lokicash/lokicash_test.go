@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testRelays is the relay hint every encodable test token needs: NIP-CASH
+// §Relay Hints Are Mandatory requires at least one non-empty relay in any
+// credential, because a token without one names something unreachable.
+func testRelays() []string { return []string{"wss://relay.test"} }
+
 func testPubkey() string {
 	return strings.Repeat("ab", keyLen)
 }
@@ -24,7 +29,6 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 		name   string
 		relays []string
 	}{
-		{"no relays", nil},
 		{"one relay", []string{"wss://relay.getalby.com/v1"}},
 		{"several relays, order preserved", []string{"wss://relay.a", "wss://relay.b", "wss://relay.c"}},
 	}
@@ -47,6 +51,32 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 			assert.Equal(t, in.WalletPubkey, out.WalletPubkey)
 			assert.Equal(t, in.Secret, out.Secret)
 			assert.Equal(t, tc.relays, out.RelayURLs)
+		})
+	}
+}
+
+// A token with no relay used to be a round-trip case here. It is now a refusal:
+// a bill is reachable only through its own relay hints — its wallet pubkey is
+// published nowhere and there is no client-side fallback — so a relay-less token
+// names something unreachable while looking entirely valid
+// (NIP-CASH §Relay Hints Are Mandatory).
+func TestEncode_RejectsTokenWithNoUsableRelay(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		relays []string
+	}{
+		{"no relays at all", nil},
+		{"one empty relay", []string{""}},
+		{"one whitespace relay", []string{"   "}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Encode(Token{
+				HRP:          HRP,
+				WalletPubkey: testPubkey(),
+				Secret:       testSecret(),
+				RelayURLs:    tc.relays,
+			})
+			require.Error(t, err, "a token nobody can reach must not encode")
 		})
 	}
 }
@@ -89,6 +119,7 @@ func TestEncodeDecode_RoundTrip_IdentityRequired(t *testing.T) {
 				HRP:              HRP,
 				WalletPubkey:     testPubkey(),
 				Secret:           testSecret(),
+				RelayURLs:        testRelays(),
 				IdentityRequired: tc.identityRequired,
 			}
 			encoded, err := Encode(in)
@@ -146,6 +177,7 @@ func TestDecode_IgnoresRetiredMaxTransfersTLV(t *testing.T) {
 	// unknown-type-ignore path.
 	raw := rawTLV(t, []rawEntry{
 		{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
 		{typ: tlvSecret, value: mustHex(t, testSecret())},
 		{typ: 4, value: []byte{0, 0, 0, 3}},
 	})
@@ -344,6 +376,7 @@ func TestDecode_IgnoresUnknownTLVTypeButKeepsParsing(t *testing.T) {
 	// succeed — mirrors NIP-19's own decoders.
 	raw := rawTLV(t, []rawEntry{
 		{typ: tlvWalletPubkey, value: mustHex(t, testPubkey())},
+		{typ: tlvRelay, value: []byte("wss://relay.test")},
 		{typ: 99, value: []byte("some-future-field")},
 		{typ: tlvSecret, value: mustHex(t, testSecret())},
 	})
