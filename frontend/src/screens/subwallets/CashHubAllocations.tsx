@@ -578,15 +578,23 @@ export const CashHubAllocations = React.forwardRef<
 
   // Opts the issued Lokicash into mint provenance (NIP-CASH §Mint
   // Provenance) — a node signature over the wallet's own pubkey and
-  // committed amount, verifiable offline. Optional, off by default (roughly
-  // doubles the token's length).
-  const [mintSignature, setMintSignature] = React.useState(false);
+  // committed amount, verifiable offline.
+  //
+  // Optional (NIP-CASH:1137, :1202, :1644 — a token without it is exactly as
+  // spendable), but ON by default: the default decides the outcome for almost
+  // every bill, and an unprovenanced one leaves its recipient unable to tell a
+  // real hub's bill from a fabricated one without contacting the hub, which is
+  // the contact §Mint Provenance exists to avoid. The cost is one node
+  // signature per mint (over the wallet's total, not per recipient — see
+  // cashwallet/create.go:638) and roughly double the token length; the operator
+  // can untick it per mint.
+  const [mintSignature, setMintSignature] = React.useState(true);
 
   const resetForm = React.useCallback(() => {
     setRecipients([newRecipientRow(maxAmountLoki ?? 0)]);
     setHasDeadline(false);
     setClaimDeadlineSecs(86400);
-    setMintSignature(false);
+    setMintSignature(true); // keep in step with the useState default above
   }, [maxAmountLoki]);
 
   React.useImperativeHandle(ref, () => ({
