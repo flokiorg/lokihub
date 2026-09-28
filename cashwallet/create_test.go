@@ -940,3 +940,40 @@ func TestCreate_Cash_RejectsCallerSuppliedIAPubkey(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
+
+// TestCreate_NoRelayConfigured_RefusesToMint pins the other half of A-4's fix.
+//
+// A Cash Wallet is reachable only through the relays embedded in its own token
+// or pairing URI: there is no discovery path, and nipcash/client.Connect hands
+// the list straight to the relay dialer with no fallback. So a bill minted
+// without a relay is permanently unspendable through the string its holder was
+// given — while still holding real value, which the hub has already moved.
+//
+// It must fail before any balance is spent. Failing at encode time would leave a
+// funded wallet whose holder can only be rescued by an operator re-deriving the
+// connection afterwards.
+func TestCreate_NoRelayConfigured_RefusesToMint(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	deps := newTestDeps(svc)
+	deps.RelayURLs = nil // what config.GetRelayUrls now returns for an unset Relay
+
+	_, err = Create(context.TODO(), deps, Params{
+		HubApp:     hub,
+		Recipients: onePubkeyRecipient(1000),
+		ExpirySecs: 1800,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+	assert.Contains(t, err.Error(), "no relay configured")
+
+	// Nothing may have been created, and no balance spent.
+	var childApps []db.App
+	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
+	assert.Empty(t, childApps, "a refused mint must leave no wallet behind")
+}

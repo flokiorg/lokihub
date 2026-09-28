@@ -40,7 +40,7 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 		// zero-value here would silently disable rate-limit tests).
 		CashWalletRateLimitPerHour:      10,
 		CashWalletClaimRateLimitPerHour: 20,
-		CircleWalletRateLimitPerHour:   3,
+		CircleWalletRateLimitPerHour:    3,
 	}
 
 	cfg, err := config.NewConfig(
@@ -50,6 +50,19 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 	if err != nil {
 		return nil, err
 	}
+	// Every test hub gets a relay, because a hub without one cannot mint: a bill is
+	// reachable only through the relay hints embedded in its own token, so
+	// cashwallet.Resolve refuses rather than hand back an unreachable credential.
+	//
+	// Before config.GetRelayUrls stopped returning []string{""} for an unset
+	// config, these tests were silently minting bills carrying a single EMPTY
+	// relay hint — the exact defect that guard exists to prevent. They passed only
+	// because nothing dialed the result. Setting a real value here makes the whole
+	// suite exercise the shape a working deployment actually produces.
+	if err = cfg.SetUpdate("Relay", "wss://relay.test", ""); err != nil {
+		return nil, err
+	}
+
 	keys := keys.NewKeys()
 
 	if mnemonic != "" {
