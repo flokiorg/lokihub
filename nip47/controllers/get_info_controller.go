@@ -13,10 +13,10 @@ import (
 )
 
 type circleWalletInfo struct {
-	AvailableMloki int64  `json:"available_mloki"`
-	MaxExpSecs     int    `json:"max_exp_secs"`
-	FeesPpm        int    `json:"fees_ppm"`
-	CirclePolicy   string `json:"circle_policy"`
+	AvailableMillis int64  `json:"available_millis"`
+	MaxExpSecs      int    `json:"max_exp_secs"`
+	FeesPpm         int    `json:"fees_ppm"`
+	CirclePolicy    string `json:"circle_policy"`
 }
 
 type getInfoResponse struct {
@@ -118,10 +118,10 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 			providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
 			if err == nil {
 				responsePayload.CircleWallet = &circleWalletInfo{
-					AvailableMloki: available,
-					MaxExpSecs:     providerConfig.MaxExpSecs,
-					FeesPpm:        providerConfig.FeesPpm,
-					CirclePolicy:   providerConfig.CircleIdentity.Policy,
+					AvailableMillis: available,
+					MaxExpSecs:      providerConfig.MaxExpSecs,
+					FeesPpm:         providerConfig.FeesPpm,
+					CirclePolicy:    providerConfig.CircleIdentity.Policy,
 				}
 			}
 		}

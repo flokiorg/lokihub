@@ -383,7 +383,7 @@ not a Hub MUST omit it — its presence is what identifies a Hub at all:
 
 ```jsonc
 "circle_wallet": {
-  "available_mloki": 1000000,  // what the Hub can still commit: balance minus outstanding commitments
+  "available_millis": 1000000, // what the Hub can still commit: balance minus outstanding commitments
   "max_exp_secs": 2592000,     // the Hub's expiry ceiling; 0 means "never"
   "fees_ppm": 0,               // the skim a member's outgoing payments will carry (§Fees)
   "circle_policy": "allowlist" // "allowlist" | "following" (§Membership)
@@ -391,14 +391,9 @@ not a Hub MUST omit it — its presence is what identifies a Hub at all:
 ```
 
 The first three are the Hub's **terms**: a prospective member needs them before deciding whether to join,
-and a Hub that withheld them would only push the question into a support channel. `available_mloki` is a
+and a Hub that withheld them would only push the question into a support channel. `available_millis` is a
 snapshot, not a reservation — it MAY be stale by the time a request lands, and step 9's commitment check
 remains authoritative.
-
-> **Note on the field name.** `available_mloki` is the one place on this wire still using the `mloki`
-> vocabulary; every other amount across NIP-CASH and NIP-CW is named `..._millis`. It is documented as it is
-> actually emitted rather than as it should have been named — renaming it is a breaking change for any
-> client already reading it, and is tracked separately.
 
 `circle_policy` is different in kind: it discloses the Hub's **admission mechanism**, not its terms. This is
 a deliberate disclosure, and §Privacy Considerations states what it costs.
