@@ -1475,12 +1475,38 @@ string, because splitting an empty configuration string on a separator yields on
 none. That shape satisfies any check that merely counts entries. Implementations MUST therefore count
 only non-empty hints, and SHOULD treat a whitespace-only hint as empty.
 
-Note what this rule does **not** promise. It fixes a *minimum*, not redundancy. This document does not
-currently define what carrying several hints means — whether a client SHOULD try them in turn, publish to
-all of them, or may use only the first — and "order preserved" above is a statement about the encoding,
-not about preference. Until that is specified, an operator MUST NOT assume that listing several relays
-provides failover: an implementation conforming to this document may legitimately use only the first one
-it can parse.
+This rule fixes a *minimum*. What carrying more than one means is specified in
+§Multiple Relay Hints below.
+
+
+### Multiple Relay Hints
+
+**A credential MAY carry more than one relay hint, and several hints mean failover.** A client MUST
+attempt them **in the order encoded**, and MUST continue to the next on failure, until one succeeds or
+all are exhausted. Order is therefore *preference*, not priority: the first relay that answers serves the
+request, and the rest are not contacted.
+
+This is the point of allowing more than one. An operator listing three relays is expressing redundancy,
+and an implementation that dialled only the first would turn that into a single point of failure with two
+decoys — the worst outcome available, because the credential offers no way to tell which entry is
+actually live.
+
+**Why this is REQUIRED rather than merely permitted.** A cash bill is a bearer instrument. It can outlive
+the client that minted it, and its holder cannot be handed a corrected string without the Hub's
+cooperation — re-deriving and re-issuing a connection is the Hub's action, not theirs. So a relay going
+away permanently strands the bill unless the remaining hints are tried. For an ordinary Nostr client a
+dead relay hint is an inconvenience; here it is unreachable money.
+
+**Individually broken hints MUST NOT be fatal.** A client MUST skip an entry that is empty or that it
+cannot parse, and continue with the rest: one malformed hint must not strand a credential whose other
+hints are sound. Only when *every* entry has been tried and none succeeded does the attempt fail, and an
+implementation SHOULD then report what it tried rather than only the last failure — with failover, the
+useful question is why all of them failed.
+
+A client MAY additionally subscribe to several relays at once rather than falling back one at a time.
+This document does not require that, since it multiplies a Hub's inbound traffic by the number of hints,
+but it is compatible with the ordering rule above: what MUST NOT happen is a client that gives up while a
+listed relay is still untried.
 
 ### Redemption Metadata
 
