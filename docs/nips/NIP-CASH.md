@@ -483,7 +483,17 @@ sequenceDiagram
 
 ### Request
 
-`cash_status` takes no parameters.
+```jsonc
+{
+  "scope": "mine"   // OPTIONAL: "all" | "mine". Absent means "mine" on the private
+                    // transport and "all" on the standard one — see
+                    // §Scoping the Roster for why the defaults differ.
+}
+```
+
+An empty params object is valid and equivalent to omitting `scope`. A Hub MUST
+reject a value that is neither `all` nor `mine`, and MUST reject `mine` on the
+standard transport.
 
 ### Response
 
