@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -244,4 +245,151 @@ func mustEncode(t *testing.T, r transport.ResponseEnvelope, limits transport.Lim
 	b, err := r.EncodeResponse(limits)
 	require.NoError(t, err)
 	return b
+}
+
+// loopBillWithCoRecipient creates one funded bill split between TWO recipients, and
+// returns what the first of them needs to address it plus both identities.
+//
+// The single-recipient loopBill above cannot exercise scoping at all: with one row,
+// "mine" and "all" are the same answer, so a scoping bug would pass unnoticed.
+func loopBillWithCoRecipient(t *testing.T, svc *tests.TestService, hub *db.App, label string) (walletPubkey, minePriv, minePub, theirsPub string) {
+	t.Helper()
+
+	minePriv = nostr.GeneratePrivateKey()
+	minePub, err := nostr.GetPublicKey(minePriv)
+	require.NoError(t, err)
+	theirsPub, err = nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	require.NoError(t, err)
+
+	wallet := db.App{
+		Name: "loopscope-" + label, Kind: db.AppKindCashWallet,
+		ParentAppID: &hub.ID, ParentKind: db.ParentKindCash,
+		AppPubkey: tests.RandomHex32(),
+	}
+	require.NoError(t, svc.DB.Create(&wallet).Error)
+
+	walletKey, err := svc.Keys.GetAppWalletKey(wallet.ID)
+	require.NoError(t, err)
+	walletPubkey, err = nostr.GetPublicKey(walletKey)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&wallet).Update("wallet_pubkey", walletPubkey).Error)
+
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: minePub, AmountMloki: 1000},
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: theirsPub, AmountMloki: 2000},
+	}))
+	for _, scope := range []string{
+		constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE,
+		constants.CASH_CONSOLIDATE_SCOPE, constants.GET_BALANCE_SCOPE,
+	} {
+		require.NoError(t, svc.DB.Create(&db.AppPermission{AppId: wallet.ID, Scope: scope}).Error)
+	}
+	return walletPubkey, minePriv, minePub, theirsPub
+}
+
+// TestFullLoop_ScopeIsHonouredPerItem proves cash_status scoping end to end, with no fake
+// on either side — the SDK builds the items, this hub's real dispatch and real controller
+// answer them, and the SDK decodes the reply.
+//
+// Both items name the SAME bill and differ only in scope, which is what makes this a test of
+// scoping rather than of two unrelated requests: one envelope, one dispatch pass, two
+// different answers. It also pins that scope is decided per ITEM, not per envelope.
+//
+// The controller-level tests cover the rules; this covers the wiring between them — that the
+// proof's signer actually reaches the controller as the scope subject. That wiring is the
+// part a unit test cannot see, and getting it wrong would either leak every co-recipient or
+// return nothing at all, both while every controller test still passed.
+func TestFullLoop_ScopeIsHonouredPerItem(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := nip47.NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	pt, _ := newUnwrapFixture(t)
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "scopefund")
+
+	target, minePriv, minePub, theirsPub := loopBillWithCoRecipient(t, svc, hub, "a")
+
+	nonce, err := transport.NewNonce()
+	require.NoError(t, err)
+	replyTo, err := transport.NewNonce()
+	require.NoError(t, err)
+	notAfter := time.Now().Add(time.Minute).Unix()
+
+	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
+	envelope := transport.Envelope{
+		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+	}
+
+	// Absent scope: the private transport's default, which must be "mine".
+	bare, err := nipcash.StatusItem("bare", target, nipcash.CashStatusParams{}, nipcash.BySigning(minePriv), binding)
+	require.NoError(t, err)
+	// Explicit "all": scoping is a default, not a removal.
+	all, err := nipcash.StatusItem("all", target, nipcash.CashStatusParams{Scope: nipcash.ScopeAll}, nipcash.BySigning(minePriv), binding)
+	require.NoError(t, err)
+	envelope.Items = append(envelope.Items, bare, all)
+
+	limits := svc.Cfg.PrivateEnvelopeLimits()
+	require.NoError(t, envelope.Validate(pt.nodeXOnly, time.Now()))
+
+	plaintext, err := envelope.Encode(limits)
+	require.NoError(t, err)
+	request, clientConversationKey, err := transport.WrapRequest(plaintext, pt.inboxXOnly)
+	require.NoError(t, err)
+	event, err := toGoNostrEvent(request)
+	require.NoError(t, err)
+
+	require.True(t, pt.acceptsPrivateEvent(event))
+	got, hubConversationKey, err := pt.unwrap(event, limits, time.Now())
+	require.NoError(t, err)
+	require.Len(t, got.Items, 2)
+
+	results := make([]transport.Result, 0, 2)
+	for _, item := range got.Items {
+		result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item,
+			nip47.PrivateItemBinding{HubXOnly: pt.nodeXOnly, Nonce: got.Nonce, NotAfter: got.NotAfter})
+		require.True(t, served, "item %s was omitted", item.ID)
+		results = append(results, result)
+	}
+
+	chunks, err := chunkResults(got.Nonce, results, limits)
+	require.NoError(t, err)
+	replyKey, err := transport.DeriveReplyKey(hubConversationKey, got.ReplyTo)
+	require.NoError(t, err)
+	clientReplyKey, err := transport.DeriveReplyKey(clientConversationKey, envelope.ReplyTo)
+	require.NoError(t, err)
+
+	rosters := map[string]nipcash.CashStatusResult{}
+	for _, chunk := range chunks {
+		encoded, err := chunk.EncodeResponse(limits)
+		require.NoError(t, err)
+		sealed, err := gonip44.Encrypt(string(encoded), replyKey)
+		require.NoError(t, err)
+		opened, err := gonip44.Decrypt(sealed, clientReplyKey)
+		require.NoError(t, err)
+		decoded, err := transport.DecodeResponse([]byte(opened), envelope.Nonce, []string{"bare", "all"}, limits)
+		require.NoError(t, err)
+		for _, r := range decoded.Results {
+			require.NotNil(t, r.Result, "item %s came back with no roster", r.ID)
+			var roster nipcash.CashStatusResult
+			require.NoError(t, json.Unmarshal(r.Result, &roster))
+			rosters[r.ID] = roster
+		}
+	}
+	require.Len(t, rosters, 2, "both items must be answered")
+
+	// The default: only the caller's own row, and nothing about the co-recipient.
+	require.Len(t, rosters["bare"].Recipients, 1,
+		"an unscoped private read returned %d rows; the default must be the caller's own row alone",
+		len(rosters["bare"].Recipients))
+	assert.Equal(t, minePub, rosters["bare"].Recipients[0].IdentityValue)
+	assert.Equal(t, uint64(1000), rosters["bare"].Recipients[0].AmountMillis)
+	for _, r := range rosters["bare"].Recipients {
+		assert.NotEqual(t, theirsPub, r.IdentityValue, "a co-recipient leaked through the real dispatch path")
+	}
+
+	// Explicitly asked for: the shared roster, both rows.
+	assert.Len(t, rosters["all"].Recipients, 2, "scope=all must still return the full roster")
 }
