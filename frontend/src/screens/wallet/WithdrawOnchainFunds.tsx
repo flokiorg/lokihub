@@ -1,9 +1,9 @@
 import {
-    AlertTriangleIcon,
-    ChevronDownIcon,
-    CopyIcon,
-    ExternalLinkIcon,
-    InfoIcon
+  AlertTriangleIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  InfoIcon,
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -15,13 +15,13 @@ import Loading from "src/components/Loading";
 import { MempoolAlert } from "src/components/MempoolAlert";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
@@ -106,7 +106,9 @@ export default function WithdrawOnchainFunds() {
 
     try {
       setLoading(true);
-      const amountLoki = sendAll ? 0 : parseInputAmount(+amountDisplay, inputUnit);
+      const amountLoki = sendAll
+        ? 0
+        : parseInputAmount(+amountDisplay, inputUnit);
       const response = await request<RedeemOnchainFundsResponse>(
         "/api/wallet/redeem-onchain-funds",
         {
@@ -160,7 +162,7 @@ export default function WithdrawOnchainFunds() {
           to={`${info?.mempoolUrl}/tx/${transactionId}`}
           className="underline flex items-center mt-2"
         >
-          View on Flokicoin Explorer 
+          View on Flokicoin Explorer
           <ExternalLinkIcon className="size-4 ms-2" />
         </ExternalLink>
         <p>Your on-chain balance in Lokihub may take some time to update.</p>
@@ -175,7 +177,8 @@ export default function WithdrawOnchainFunds() {
   if (balances.onchain.spendable <= ONCHAIN_DUST_LOKI) {
     return (
       <p>
-        You currently don't have enough {inputUnit} to pay for an onchain transaction.
+        You currently don't have enough {inputUnit} to pay for an onchain
+        transaction.
       </p>
     );
   }
@@ -189,8 +192,8 @@ export default function WithdrawOnchainFunds() {
 
       <div className="max-w-lg">
         <p>
-          Your on-chain balance will be withdrawn to the onchain flokicoin wallet
-          address you specify below.
+          Your on-chain balance will be withdrawn to the onchain flokicoin
+          wallet address you specify below.
         </p>
         <form
           onSubmit={(e) => {
@@ -244,7 +247,11 @@ export default function WithdrawOnchainFunds() {
               </Alert>
             )}
             <AnchorReserveAlert
-              amount={sendAll ? balances.onchain.spendable : parseInputAmount(+amountDisplay, inputUnit)}
+              amount={
+                sendAll
+                  ? balances.onchain.spendable
+                  : parseInputAmount(+amountDisplay, inputUnit)
+              }
               className="mt-4"
             />
           </div>
@@ -312,7 +319,7 @@ export default function WithdrawOnchainFunds() {
                       to={info?.mempoolUrl}
                       className="text-sm text-muted-foreground underline flex items-center gap-2"
                     >
-                      View on Flokicoin Explorer 
+                      View on Flokicoin Explorer
                       <ExternalLinkIcon className="w-4 h-4" />
                     </ExternalLink>
                   </div>
@@ -363,7 +370,12 @@ export default function WithdrawOnchainFunds() {
                             "entire on-chain balance"
                           ) : (
                             <>
-                              <FormattedFlokicoinAmount amount={parseInputAmount(+amountDisplay, inputUnit) * 1000} />
+                              <FormattedFlokicoinAmount
+                                amount={
+                                  parseInputAmount(+amountDisplay, inputUnit) *
+                                  1000
+                                }
+                              />
                             </>
                           )}
                         </span>

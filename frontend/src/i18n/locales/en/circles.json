@@ -188,8 +188,6 @@
     "deadlineHelpWithMax": "Every recipient must redeem within this long of creation (defaults to this hub's max: {{max}})",
     "addRecipient": "Add another recipient",
     "setClaimDeadline": "Set redeem deadline",
-    "mintSignatureLabel": "Sign mint provenance",
-    "mintSignatureHelp": "Attach a node signature proving this Lokicash's origin and amount — optional, roughly doubles the token's length",
     "statusAll": "All",
     "statusExpired": "Expired",
     "allocatedSummary": "{{allocated}} loki allocated on this page · {{total}} {{status}}",

@@ -1,5 +1,11 @@
 import React from "react";
-import { BanknoteIcon, Copy, CoinsIcon, KeyRound, QrCodeIcon } from "lucide-react";
+import {
+  BanknoteIcon,
+  Copy,
+  CoinsIcon,
+  KeyRound,
+  QrCodeIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { CashStatusBadge } from "src/components/cash/CashStatusBadge";
@@ -204,7 +210,10 @@ function CashWalletRecipientsCard({ app }: { app: App }) {
         }
       } catch (error) {
         if (!cancelled) {
-          handleRequestError(t("cashHubAllocations.errors.loadConnection"), error);
+          handleRequestError(
+            t("cashHubAllocations.errors.loadConnection"),
+            error
+          );
         }
       }
     })();

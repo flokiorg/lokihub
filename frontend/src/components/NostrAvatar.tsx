@@ -47,14 +47,19 @@ export function NostrAvatar({
   // supports server-side for exactly this case.
   const authToken = getAuthToken();
   const pictureUrl =
-    profile?.picture && validateHTTPURL(profile.picture, "profile picture") === null && authToken
+    profile?.picture &&
+    validateHTTPURL(profile.picture, "profile picture") === null &&
+    authToken
       ? `/api/circle/avatar-proxy?url=${encodeURIComponent(profile.picture)}&token=${encodeURIComponent(authToken)}`
       : undefined;
   const showImage = !!pictureUrl && !imageFailed;
 
   const fallbackSource =
     profile?.displayName || profile?.name || safeNpubEncode(pubkey) || pubkey;
-  const fallbackText = fallbackSource.replace(/^npub1/, "").slice(0, 2).toUpperCase();
+  const fallbackText = fallbackSource
+    .replace(/^npub1/, "")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <Avatar className={cn("h-8 w-8 rounded-full", className)}>

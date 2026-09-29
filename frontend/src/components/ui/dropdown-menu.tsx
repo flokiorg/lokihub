@@ -10,7 +10,13 @@ function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   const dir = document.documentElement.dir as "ltr" | "rtl";
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" dir={dir || "ltr"} {...props} />;
+  return (
+    <DropdownMenuPrimitive.Root
+      data-slot="dropdown-menu"
+      dir={dir || "ltr"}
+      {...props}
+    />
+  );
 }
 
 function DropdownMenuPortal({

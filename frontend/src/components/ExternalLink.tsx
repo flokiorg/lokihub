@@ -22,7 +22,10 @@ export default function ExternalLink({ to, className, children }: Props) {
       {children}
     </Link>
   ) : (
-    <span className={cn("cursor-pointer", className)} onClick={() => openLink(to)}>
+    <span
+      className={cn("cursor-pointer", className)}
+      onClick={() => openLink(to)}
+    >
       {children}
     </span>
   );

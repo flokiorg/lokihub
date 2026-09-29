@@ -1,8 +1,4 @@
-import {
-    HandCoinsIcon,
-    ShieldAlertIcon,
-    UnlockIcon
-} from "lucide-react";
+import { HandCoinsIcon, ShieldAlertIcon, UnlockIcon } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -29,7 +25,7 @@ export function SetupSecurity() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isLoading || !isBackendReady) return; // Prevent action while loading or backend not ready
-    
+
     navigate("/");
   }
 
@@ -48,8 +44,8 @@ export function SetupSecurity() {
                 <HandCoinsIcon className="size-6" />
               </div>
               <span className="text-sm text-muted-foreground">
-                Lokihub is a spending wallet - do not keep all your savings
-                on it!
+                Lokihub is a spending wallet - do not keep all your savings on
+                it!
               </span>
             </div>
             <div className="flex gap-3 items-center">
@@ -67,8 +63,8 @@ export function SetupSecurity() {
               </div>
               <span className="text-sm text-muted-foreground">
                 Channel backups{" "}
-                <span className="underline">are not handled</span> by Loki
-                Hub. Please take care of your own backups.
+                <span className="underline">are not handled</span> by Loki Hub.
+                Please take care of your own backups.
               </span>
             </div>
             <div className="flex items-center">
@@ -84,8 +80,14 @@ export function SetupSecurity() {
                 {t("security.confirmed")}
               </Label>
             </div>
-            <Button className="w-full" disabled={!hasConfirmed || isLoading || !isBackendReady} type="submit">
-              {(isLoading || !isBackendReady) ? <Loading className="w-4 h-4 me-2" /> : null}
+            <Button
+              className="w-full"
+              disabled={!hasConfirmed || isLoading || !isBackendReady}
+              type="submit"
+            >
+              {isLoading || !isBackendReady ? (
+                <Loading className="w-4 h-4 me-2" />
+              ) : null}
               {!isBackendReady ? t("start.starting") : tc("actions.continue")}
             </Button>
           </div>

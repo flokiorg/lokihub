@@ -46,18 +46,11 @@ import { usePeers } from "src/hooks/usePeers";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import useChannelOrderStore from "src/state/ChannelOrderStore";
-import {
-  Channel,
-  Network,
-  NewChannelOrder,
-  OnchainOrder,
-} from "src/types";
+import { Channel, Network, NewChannelOrder, OnchainOrder } from "src/types";
 
 import LightningNetworkDark from "src/assets/illustrations/lightning-network-dark.svg?react";
 import LightningNetworkLight from "src/assets/illustrations/lightning-network-light.svg?react";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
-
-
 
 export default function IncreaseOutgoingCapacity() {
   const { data: info } = useInfo();
@@ -146,7 +139,10 @@ function NewChannelInternal({
         );
       }
 
-      const amountLoki = parseInputAmount(parseFloat(order.amount || "0"), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(order.amount || "0"),
+        inputUnit
+      );
       useChannelOrderStore.getState().setOrder({
         ...order,
         amount: amountLoki.toString(),
@@ -168,28 +164,36 @@ function NewChannelInternal({
   const openImmediately =
     order.amount &&
     order.paymentMethod === "onchain" &&
-    parseInputAmount(parseFloat(order.amount), inputUnit) < balances.onchain.spendable;
+    parseInputAmount(parseFloat(order.amount), inputUnit) <
+      balances.onchain.spendable;
 
   return (
     <>
       <AppHeader
         title={t("increaseCapacity.title", "Open Channel with On-Chain")}
-        description={t("increaseCapacity.description", "Funds used to open a channel minus fees will be added to your spending balance")}
+        description={t(
+          "increaseCapacity.description",
+          "Funds used to open a channel minus fees will be added to your spending balance"
+        )}
       />
       <div className="md:max-w-md max-w-full flex flex-col gap-5 flex-1">
-        <LightningNetworkDark
-          className="w-full hidden dark:block"
-        />
+        <LightningNetworkDark className="w-full hidden dark:block" />
         <LightningNetworkLight className="w-full dark:hidden" />
         <p className="text-muted-foreground">
-          {t("increaseCapacity.info", "Open a channel with on-chain funds. Both parties are free to close the channel at any time. However, by keeping more funds on your side of the channel and using it regularly, there is more chance the channel will stay open.")}
+          {t(
+            "increaseCapacity.info",
+            "Open a channel with on-chain funds. Both parties are free to close the channel at any time. However, by keeping more funds on your side of the channel and using it regularly, there is more chance the channel will stay open."
+          )}
         </p>
 
         <Alert className="bg-muted/50">
           <InfoIcon className="h-4 w-4" />
           <AlertDescription className="flex flex-col gap-2">
             <p className="text-sm">
-              {t("increaseCapacity.lookingToReceive", "Looking to receive funds instead? You might need incoming capacity.")}
+              {t(
+                "increaseCapacity.lookingToReceive",
+                "Looking to receive funds instead? You might need incoming capacity."
+              )}
             </p>
             <LinkButton
               to="/channels/inbound"
@@ -211,13 +215,19 @@ function NewChannelInternal({
                 <TooltipTrigger type="button">
                   <div className="flex flex-row gap-2 items-center justify-start text-sm">
                     <Label htmlFor="amount">
-                      {t("increaseCapacity.increaseSpendingLabel", "Increase spending balance")}
+                      {t(
+                        "increaseCapacity.increaseSpendingLabel",
+                        "Increase spending balance"
+                      )}
                     </Label>
                     <InfoIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {t("increaseCapacity.increaseSpendingTooltip", "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees.")}
+                  {t(
+                    "increaseCapacity.increaseSpendingTooltip",
+                    "Configure the amount of spending capacity you need. You will need to deposit on-chain flokicoin to cover the entire channel size, plus on-chain fees."
+                  )}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -232,35 +242,41 @@ function NewChannelInternal({
               onInputUnitChange={handleInputUnitChange}
             />
             <div className="text-muted-foreground text-sm sensitive slashed-zero">
-              {t("increaseCapacity.currentBalance", "Current on-chain balance:")}{" "}
+              {t(
+                "increaseCapacity.currentBalance",
+                "Current on-chain balance:"
+              )}{" "}
               <FormattedFlokicoinAmount
                 amount={balances.onchain.spendable * 1000}
               />
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-muted-foreground text-xs">
-              {(inputUnit === "FLC" ? flcPresets : lokiPresets).map((amount) => {
-                let displayLabel = amount.toString();
-                if (inputUnit === "loki") {
-                    if (amount >= 1000000) displayLabel = (amount / 1000000) + "M";
-                    else if (amount >= 1000) displayLabel = (amount / 1000) + "k";
+              {(inputUnit === "FLC" ? flcPresets : lokiPresets).map(
+                (amount) => {
+                  let displayLabel = amount.toString();
+                  if (inputUnit === "loki") {
+                    if (amount >= 1000000)
+                      displayLabel = amount / 1000000 + "M";
+                    else if (amount >= 1000) displayLabel = amount / 1000 + "k";
+                  }
+
+                  const valueToFill = amount.toString();
+                  const isActive = order.amount === valueToFill;
+
+                  return (
+                    <div
+                      key={amount}
+                      className={cn(
+                        "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
+                        isActive && "border-primary hover:border-primary"
+                      )}
+                      onClick={() => setAmount(valueToFill)}
+                    >
+                      {displayLabel}
+                    </div>
+                  );
                 }
-
-                const valueToFill = amount.toString();
-                const isActive = order.amount === valueToFill;
-
-                return (
-                  <div
-                    key={amount}
-                    className={cn(
-                      "text-center border rounded p-2 cursor-pointer hover:border-muted-foreground",
-                      isActive && "border-primary hover:border-primary"
-                    )}
-                    onClick={() => setAmount(valueToFill)}
-                  >
-                    {displayLabel}
-                  </div>
-                );
-              })}
+              )}
             </div>
           </div>
           <>
@@ -287,7 +303,10 @@ function NewChannelInternal({
                   {t("increaseCapacity.publicChannel", "Public Channel")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("increaseCapacity.publicChannelDesc", "Not recommended for most users.")}
+                  {t(
+                    "increaseCapacity.publicChannelDesc",
+                    "Not recommended for most users."
+                  )}
                 </p>
               </div>
             </div>
@@ -297,10 +316,7 @@ function NewChannelInternal({
           {channels?.some((channel) => channel.public !== !!order.isPublic) && (
             <ChannelPublicPrivateAlert />
           )}
-          <DuplicateChannelAlert
-            pubkey={order?.pubkey}
-            name={"Custom"}
-          />
+          <DuplicateChannelAlert pubkey={order?.pubkey} name={"Custom"} />
           <Button size="lg">
             <Zap className="me-2 h-4 w-4" />
             {openImmediately ? t("channels.open") : tc("actions.next")}
@@ -313,7 +329,10 @@ function NewChannelInternal({
             variant="link"
             className="text-muted-foreground text-xs"
           >
-            {t("increaseCapacity.needIncoming", "Need incoming capacity instead?")}
+            {t(
+              "increaseCapacity.needIncoming",
+              "Need incoming capacity instead?"
+            )}
           </LinkButton>
         </div>
       </div>
@@ -322,23 +341,37 @@ function NewChannelInternal({
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{t("increaseCapacity.confirmTitle", "Confirm Channel Opening")}</DialogTitle>
+            <DialogTitle>
+              {t("increaseCapacity.confirmTitle", "Confirm Channel Opening")}
+            </DialogTitle>
             <DialogDescription>
-              {t("increaseCapacity.confirmDesc", "Are you sure you want to open a Lightning channel with the following details?")}
+              {t(
+                "increaseCapacity.confirmDesc",
+                "Are you sure you want to open a Lightning channel with the following details?"
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="font-medium text-muted-foreground">{t("increaseCapacity.peer", "Peer")}</div>
+                <div className="font-medium text-muted-foreground">
+                  {t("increaseCapacity.peer", "Peer")}
+                </div>
                 <div>{t("increaseCapacity.customPeer", "Custom")}</div>
               </div>
               <div>
-                <div className="font-medium text-muted-foreground">{tc("labels.amount", "Amount")}</div>
+                <div className="font-medium text-muted-foreground">
+                  {tc("labels.amount", "Amount")}
+                </div>
                 <div>
                   <FormattedFlokicoinAmount
-                    amount={parseInputAmount(parseFloat(order.amount || "0"), inputUnit) * 1000}
+                    amount={
+                      parseInputAmount(
+                        parseFloat(order.amount || "0"),
+                        inputUnit
+                      ) * 1000
+                    }
                   />
                 </div>
               </div>
@@ -370,7 +403,11 @@ function NewChannelInternal({
             <Alert variant="warning">
               <InfoIcon />
               <AlertDescription>
-                <strong>{t("increaseCapacity.important", "Important:")}</strong> {t("increaseCapacity.confirmWarning", "Opening a channel requires an on-chain transaction and network fees. This action cannot be undone. Please verify all details before proceeding.")}
+                <strong>{t("increaseCapacity.important", "Important:")}</strong>{" "}
+                {t(
+                  "increaseCapacity.confirmWarning",
+                  "Opening a channel requires an on-chain transaction and network fees. This action cannot be undone. Please verify all details before proceeding."
+                )}
               </AlertDescription>
             </Alert>
           </div>
@@ -403,7 +440,7 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
   const { data: info } = useInfo();
   const { t } = useTranslation("channels");
   const { t: tc } = useTranslation("common");
-  
+
   if (props.order.paymentMethod !== "onchain") {
     throw new Error("unexpected payment method");
   }
@@ -413,38 +450,37 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
     pubkey && peers?.some((peer) => peer.nodeId === pubkey);
 
   const [selection, setSelection] = useState<string>(() => {
-      // Initialize state: if order.pubkey is set and matches an LSP, select it.
-      // Otherwise if LSPs avail, select first. Else custom.
-      if (pubkey && info?.lsps?.find(l => l.pubkey === pubkey)) {
-          return pubkey;
-      }
-      if (info?.lsps && info.lsps.length > 0) {
-          return info.lsps[0].pubkey;
-      }
-      return "custom";
+    // Initialize state: if order.pubkey is set and matches an LSP, select it.
+    // Otherwise if LSPs avail, select first. Else custom.
+    if (pubkey && info?.lsps?.find((l) => l.pubkey === pubkey)) {
+      return pubkey;
+    }
+    if (info?.lsps && info.lsps.length > 0) {
+      return info.lsps[0].pubkey;
+    }
+    return "custom";
   });
 
   // Effect to sync selection changes to parent order state
   useEffect(() => {
-     if (selection !== "custom") {
-         const lsp = info?.lsps?.find(l => l.pubkey === selection);
-         if (lsp) {
-             setOrder(current => ({
-                 ...current,
-                 paymentMethod: "onchain",
-                 pubkey: lsp.pubkey,
-                 host: lsp.host
-             }));
-         }
-     } else if (!pubkey) {
-         // If switched to custom and no pubkey set logic? 
-         // Actually, do nothing, let user type.
-         // But maybe clear if coming from an LSP selection?
-         // Let's decided to clear it only if it was an LSP before.
-         // For now, simpler: user clears it manually or types over.
-     }
+    if (selection !== "custom") {
+      const lsp = info?.lsps?.find((l) => l.pubkey === selection);
+      if (lsp) {
+        setOrder((current) => ({
+          ...current,
+          paymentMethod: "onchain",
+          pubkey: lsp.pubkey,
+          host: lsp.host,
+        }));
+      }
+    } else if (!pubkey) {
+      // If switched to custom and no pubkey set logic?
+      // Actually, do nothing, let user type.
+      // But maybe clear if coming from an LSP selection?
+      // Let's decided to clear it only if it was an LSP before.
+      // For now, simpler: user clears it manually or types over.
+    }
   }, [selection, info?.lsps, setOrder]);
-
 
   function setPubkey(pubkey: string) {
     props.setOrder((current) => ({
@@ -483,97 +519,121 @@ function NewChannelOnchain(props: NewChannelOnchainProps) {
         {props.showCustomOptions && (
           <>
             <div className="grid gap-1.5">
-                <Label htmlFor="provider-select">{t("increaseCapacity.peerLabel")}</Label>
-                {/* LSP Selector */}
-                <Select 
-                    value={selection} 
-                    onValueChange={(val) => {
-                        setSelection(val);
-                        if (val === "custom") {
-                            setPubkey("");
-                            setHost("");
-                        }
-                    }}
-                    disabled={!hasLSPs}
-                >
-                    <SelectTrigger className="w-full" id="provider-select">
-                        <SelectValue placeholder={!hasLSPs ? t("increaseCapacity.noLsps", "No LSPs Configured") : t("increaseCapacity.selectProvider", "Select a Provider")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {info?.lsps?.map((lsp) => (
-                            <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                                {lsp.name || lsp.pubkey.substring(0, 16) + "..."}
-                            </SelectItem>
-                        ))}
-                        {hasLSPs && <div className="h-px bg-muted my-1" />}
-                        <SelectItem value="custom">{t("increaseCapacity.customPeer")}</SelectItem>
-                    </SelectContent>
-                </Select>
-                {!hasLSPs && (
-                     <div className="text-muted-foreground text-xs">
-                        <span className="me-1">{t("increaseCapacity.manageProviders", "Manage providers in")}</span>
-                        <LinkButton to="/settings/services" variant="link" className="h-auto p-0 text-xs underline">
-                            {tc("nav.settings")} &gt; Services
-                        </LinkButton>
-                     </div>
-                )}
+              <Label htmlFor="provider-select">
+                {t("increaseCapacity.peerLabel")}
+              </Label>
+              {/* LSP Selector */}
+              <Select
+                value={selection}
+                onValueChange={(val) => {
+                  setSelection(val);
+                  if (val === "custom") {
+                    setPubkey("");
+                    setHost("");
+                  }
+                }}
+                disabled={!hasLSPs}
+              >
+                <SelectTrigger className="w-full" id="provider-select">
+                  <SelectValue
+                    placeholder={
+                      !hasLSPs
+                        ? t("increaseCapacity.noLsps", "No LSPs Configured")
+                        : t(
+                            "increaseCapacity.selectProvider",
+                            "Select a Provider"
+                          )
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {info?.lsps?.map((lsp) => (
+                    <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
+                      {lsp.name || lsp.pubkey.substring(0, 16) + "..."}
+                    </SelectItem>
+                  ))}
+                  {hasLSPs && <div className="h-px bg-muted my-1" />}
+                  <SelectItem value="custom">
+                    {t("increaseCapacity.customPeer")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {!hasLSPs && (
+                <div className="text-muted-foreground text-xs">
+                  <span className="me-1">
+                    {t(
+                      "increaseCapacity.manageProviders",
+                      "Manage providers in"
+                    )}
+                  </span>
+                  <LinkButton
+                    to="/settings/services"
+                    variant="link"
+                    className="h-auto p-0 text-xs underline"
+                  >
+                    {tc("nav.settings")} &gt; Services
+                  </LinkButton>
+                </div>
+              )}
             </div>
 
             {/* Manual Input Fields - Show if selection is Custom */}
             {selection === "custom" && (
-                <>
-                    <div className="grid gap-1.5">
-                    <Label htmlFor="pubkey">{t("increaseCapacity.peer")}</Label>
-                    <Input
-                        id="pubkey"
-                        type="text"
-                        dir="ltr"
-                        value={pubkey}
-                        required
-                        placeholder="Pubkey of the peer"
-                        onChange={(e) => {
-                        const parts = e.target.value.trim().split("@");
-                        setPubkey(parts[0]);
-                        if (parts.length > 1) {
-                            setHost(parts[1]);
-                        }
-                        }}
-                    />
-                    {nodeDetails && (
-                        <div className="ms-2 text-muted-foreground text-sm">
-                        <span
-                            className="me-2"
-                            style={{ color: `${nodeDetails.color}` }}
-                        >
-                            ⬤
-                        </span>
-                        {nodeDetails.alias && (
-                            <>
-                            {nodeDetails.alias} ({nodeDetails.active_channel_count}{" "}
-                            channels)
-                            </>
-                        )}
-                        </div>
-                    )}
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="pubkey">{t("increaseCapacity.peer")}</Label>
+                  <Input
+                    id="pubkey"
+                    type="text"
+                    dir="ltr"
+                    value={pubkey}
+                    required
+                    placeholder="Pubkey of the peer"
+                    onChange={(e) => {
+                      const parts = e.target.value.trim().split("@");
+                      setPubkey(parts[0]);
+                      if (parts.length > 1) {
+                        setHost(parts[1]);
+                      }
+                    }}
+                  />
+                  {nodeDetails && (
+                    <div className="ms-2 text-muted-foreground text-sm">
+                      <span
+                        className="me-2"
+                        style={{ color: `${nodeDetails.color}` }}
+                      >
+                        ⬤
+                      </span>
+                      {nodeDetails.alias && (
+                        <>
+                          {nodeDetails.alias} (
+                          {nodeDetails.active_channel_count} channels)
+                        </>
+                      )}
                     </div>
+                  )}
+                </div>
 
-                    {!isAlreadyPeered && /*!nodeDetails && */ pubkey && (
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="host">{t("increaseCapacity.hostPort")}</Label>
-                        <Input
-                        id="host"
-                        type="text"
-                        dir="ltr"
-                        value={host}
-                        required
-                        placeholder="0.0.0.0:5521 or [2600::]:5521"
-                        onChange={(e) => {
-                            setHost(e.target.value.trim());
-                        }}
-                        />
-                    </div>
-                    )}
-                </>
+                {!isAlreadyPeered && /*!nodeDetails && */ pubkey && (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="host">
+                      {t("increaseCapacity.hostPort")}
+                    </Label>
+                    <Input
+                      id="host"
+                      type="text"
+                      dir="ltr"
+                      value={host}
+                      required
+                      placeholder="0.0.0.0:5521 or [2600::]:5521"
+                      onChange={(e) => {
+                        setHost(e.target.value.trim());
+                      }}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

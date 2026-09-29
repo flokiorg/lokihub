@@ -13,8 +13,7 @@ import {
 export function useLocale() {
   const { i18n } = useTranslation();
 
-  const currentLanguage =
-    (i18n.language as SupportedLanguageCode) || "en";
+  const currentLanguage = (i18n.language as SupportedLanguageCode) || "en";
 
   const isRTL = RTL_LANGUAGES.includes(currentLanguage);
 

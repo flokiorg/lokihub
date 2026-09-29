@@ -209,8 +209,6 @@
     "deadlineHelpWithMax": "每位接收人都必须在创建后的这段时间内兑换（默认使用此中心的最大值：{{max}}）",
     "addRecipient": "添加另一位接收人",
     "setClaimDeadline": "设置兑换截止时间",
-    "mintSignatureLabel": "签署铸造来源证明",
-    "mintSignatureHelp": "附加节点签名以证明此 Lokicash 的来源和金额 — 可选，会使代币长度大约翻倍",
     "statusAll": "全部",
     "statusExpired": "已过期",
     "allocatedSummary": "本页已分配 {{allocated}} loki · 共 {{total}} 个{{status}}",

@@ -24,7 +24,11 @@ import {
 } from "src/components/ui/card";
 import { Label } from "src/components/ui/label";
 import { Textarea } from "src/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "src/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "src/components/ui/tooltip";
 import { useNip05Verification } from "src/hooks/useNip05Verification";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
@@ -73,7 +77,9 @@ export function IdentityAuthorityManagementCard({
   // CashHubAllocations' pillIdentityLabel/IAResolvedIdentity precedent for
   // the same reason: an IA's identity is a trust anchor, not just a nicety.
   const nip05Profiles = React.useMemo(() => {
-    const withNip05 = localAuthorities.filter((a) => profiles.get(a.pubkey)?.nip05);
+    const withNip05 = localAuthorities.filter(
+      (a) => profiles.get(a.pubkey)?.nip05
+    );
     if (withNip05.length === 0) {
       return EMPTY_NIP05_PROFILES;
     }
@@ -146,9 +152,9 @@ export function IdentityAuthorityManagementCard({
             Identity Authorities
           </CardTitle>
           <CardDescription>
-            Nostr identities you trust to vouch that an email, a Discord
-            handle, or a domain belongs to its owner — so you can mint Lokicash
-            for recipients who aren't on Nostr. Remove one and every unredeemed
+            Nostr identities you trust to vouch that an email, a Discord handle,
+            or a domain belongs to its owner — so you can mint Lokicash for
+            recipients who aren't on Nostr. Remove one and every unredeemed
             slice it vouched for is cut off immediately.
           </CardDescription>
         </CardHeader>
@@ -194,12 +200,14 @@ export function IdentityAuthorityManagementCard({
                           {a.relay_urls && a.relay_urls.length > 0 ? (
                             <div className="space-y-1">
                               <p className="font-medium">
-                                Relays used to look up this identity's
-                                profile
+                                Relays used to look up this identity's profile
                               </p>
                               <div className="space-y-0.5">
                                 {a.relay_urls.map((url) => (
-                                  <p key={url} className="font-mono text-[11px] break-all">
+                                  <p
+                                    key={url}
+                                    className="font-mono text-[11px] break-all"
+                                  >
                                     {url}
                                   </p>
                                 ))}
@@ -207,8 +215,8 @@ export function IdentityAuthorityManagementCard({
                             </div>
                           ) : (
                             <p>
-                              No relay declared for this identity — using
-                              your default relays to look up its profile.
+                              No relay declared for this identity — using your
+                              default relays to look up its profile.
                             </p>
                           )}
                         </TooltipContent>
@@ -303,10 +311,10 @@ export function IdentityAuthorityManagementCard({
                   />
                   <p className="text-[10px] text-muted-foreground">
                     Optional, comma- or newline-separated. Auto-filled from a
-                    pasted nprofile's relay hints when left blank. Used to
-                    help look up this identity's profile (name, avatar,
-                    NIP-05) for display — attestation verification itself
-                    never fetches from relays.
+                    pasted nprofile's relay hints when left blank. Used to help
+                    look up this identity's profile (name, avatar, NIP-05) for
+                    display — attestation verification itself never fetches from
+                    relays.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-1">

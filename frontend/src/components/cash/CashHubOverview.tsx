@@ -172,7 +172,9 @@ export function CashHubOverview({
             size="lg"
           >
             <p className="text-muted-foreground mt-1 text-xs">
-              {t("cashKpis.outstandingHint", { count: stats.outstanding_count })}
+              {t("cashKpis.outstandingHint", {
+                count: stats.outstanding_count,
+              })}
             </p>
           </Stat>
         </div>

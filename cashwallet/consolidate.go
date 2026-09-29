@@ -76,7 +76,6 @@ type ConsolidateParams struct {
 	MinTransferMloki int64
 	RedeemFeePpm     int
 	ExpiresAt        *time.Time
-	SignMint         bool
 }
 
 // ConsolidateResult carries the merged wallet and its token, delivered to the
@@ -196,6 +195,17 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 		return nil, nil, fmt.Errorf("failed to store consolidated recipient claim: %w", err)
 	}
 
+	// Provenance before the money, for the reason Commit gives at its own call: it is
+	// mandatory, it can fail, and once the sources below have been drained a failure
+	// could only be swallowed. Single-slice by construction, so identity-required
+	// follows NewIdentity; the provenance attests the merged total, immutable for the
+	// wallet's life.
+	identityRequired := params.NewIdentityType != db.CashIdentityCash
+	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, total)
+	if err != nil {
+		return nil, nil, fmt.Errorf("refusing to consolidate into a bill without provenance: %w", err)
+	}
+
 	// Fund the merged wallet from each source in turn. A failure here returns,
 	// and the defer compensates every transfer that already completed.
 	for _, s := range params.Sources {
@@ -206,11 +216,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	}
 	fullyFunded = true
 
-	// Single-slice by construction, so identity-required follows NewIdentity.
-	// The provenance (when SignMint) attests the merged total, immutable for the
-	// wallet's life.
-	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	token := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.SignMint, total)
+	token := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).

@@ -55,9 +55,7 @@ export function LSPManagementCard({
       return;
     }
     if (
-      localLSPs.some(
-        (l) => l.name.toLowerCase() === newLSPName.toLowerCase()
-      )
+      localLSPs.some((l) => l.name.toLowerCase() === newLSPName.toLowerCase())
     ) {
       toast.error(t("services.lsp.nameUnique"));
       return;
@@ -117,9 +115,7 @@ export function LSPManagementCard({
           <Droplet className="w-5 h-5 text-primary" />
           {t("services.lsp.title")}
         </CardTitle>
-        <CardDescription>
-          {t("services.lsp.description")}
-        </CardDescription>
+        <CardDescription>{t("services.lsp.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
@@ -169,12 +165,15 @@ export function LSPManagementCard({
                       </TooltipProvider>
                     </div>
                     {provider.website ? (
-                      <div onClick={(e) => e.stopPropagation()} className="inline-block">
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-block"
+                      >
                         <ExternalLink
                           to={provider.website}
                           className="text-[10px] text-muted-foreground font-medium mt-0.5 hover:underline hover:text-foreground truncate max-w-[150px] inline-block"
                         >
-                        {(() => {
+                          {(() => {
                             try {
                               return new URL(provider.website).hostname;
                             } catch {
@@ -185,7 +184,9 @@ export function LSPManagementCard({
                       </div>
                     ) : (
                       <span className="text-[10px] text-muted-foreground font-medium mt-1">
-                        {provider.active ? t("services.lsp.active") : t("services.lsp.inactive")}
+                        {provider.active
+                          ? t("services.lsp.active")
+                          : t("services.lsp.inactive")}
                       </span>
                     )}
                   </div>
@@ -217,14 +218,15 @@ export function LSPManagementCard({
                     size="icon"
                     className="h-5 w-5 -me-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
-                        e.stopPropagation();
-                        navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
-                        toast.success(t("services.lsp.copied"));
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(
+                        `${provider.pubkey}@${provider.host}`
+                      );
+                      toast.success(t("services.lsp.copied"));
                     }}
                   >
                     <Copy className="w-3 h-3" />
                   </Button>
-
                 </div>
               </div>
             </div>
@@ -266,7 +268,9 @@ export function LSPManagementCard({
                       {provider.name}
                     </span>
                     <span className="text-[10px] text-muted-foreground font-medium mt-1">
-                      {provider.active ? t("services.lsp.active") : t("services.lsp.inactive")}
+                      {provider.active
+                        ? t("services.lsp.active")
+                        : t("services.lsp.inactive")}
                     </span>
                   </div>
                 </div>
@@ -303,9 +307,11 @@ export function LSPManagementCard({
                     size="icon"
                     className="h-5 w-5 -me-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
-                        e.stopPropagation();
-                        navigator.clipboard.writeText(`${provider.pubkey}@${provider.host}`);
-                        toast.success(t("services.lsp.copied"));
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(
+                        `${provider.pubkey}@${provider.host}`
+                      );
+                      toast.success(t("services.lsp.copied"));
                     }}
                   >
                     <Copy className="w-3 h-3" />
@@ -331,12 +337,16 @@ export function LSPManagementCard({
                   <div className="absolute inset-0 bg-muted opacity-50 group-hover:bg-primary group-hover:opacity-10 transition-colors duration-300" />
                   <Droplet className="w-5 h-5 relative z-10" />
                 </div>
-                <span className="font-medium text-sm">{t("services.lsp.addCustom")}</span>
+                <span className="font-medium text-sm">
+                  {t("services.lsp.addCustom")}
+                </span>
               </div>
             ) : (
               <div className="flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="font-semibold text-sm">{t("services.lsp.newLsp")}</span>
+                  <span className="font-semibold text-sm">
+                    {t("services.lsp.newLsp")}
+                  </span>
                   <Droplet className="w-4 h-4 text-muted-foreground" />
                 </div>
 

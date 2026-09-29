@@ -151,7 +151,8 @@ function CashHubDashboardInternal({
   // and does not touch the preference — otherwise the checkbox would fight
   // the disclosure it sits next to.
   const [keepAnalyticsOpen, setKeepAnalyticsOpen] = React.useState(
-    () => localStorage.getItem(localStorageKeys.cashAnalyticsKeepOpen) === "true"
+    () =>
+      localStorage.getItem(localStorageKeys.cashAnalyticsKeepOpen) === "true"
   );
   const [isAnalyticsOpen, setAnalyticsOpen] = React.useState(keepAnalyticsOpen);
 
@@ -260,7 +261,9 @@ function CashHubDashboardInternal({
       refetchHub();
       setIsEditing(false);
       setSavedPermissions(permissions);
-      toast(t("connections.successfullyUpdated", "Successfully updated connection"));
+      toast(
+        t("connections.successfullyUpdated", "Successfully updated connection")
+      );
     } catch (error) {
       handleRequestError(
         t("connections.failedToUpdate", "Failed to update connection"),
@@ -421,7 +424,10 @@ function CashHubDashboardInternal({
                         onClick={() => setShowConnectionDetails(true)}
                       >
                         <InfoIcon className="size-4" />{" "}
-                        {t("connections.connectionDetails", "Connection Details")}
+                        {t(
+                          "connections.connectionDetails",
+                          "Connection Details"
+                        )}
                       </div>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

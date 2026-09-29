@@ -1,8 +1,4 @@
-
-import {
-    AlertTriangle,
-    EyeIcon
-} from "lucide-react";
+import { AlertTriangle, EyeIcon } from "lucide-react";
 import React, { useState } from "react";
 
 import MnemonicDialog from "src/components/mnemonic/MnemonicDialog";
@@ -145,14 +141,12 @@ export default function Backup() {
           </div>
 
           <div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-2 items-center">
-                    <h3 className="text-sm font-medium">
-                      Manual Channels Backup
-                    </h3>
-                    <Badge variant={"positive"}>Active</Badge>
-                  </div>
-                </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex gap-2 items-center">
+                <h3 className="text-sm font-medium">Manual Channels Backup</h3>
+                <Badge variant={"positive"}>Active</Badge>
+              </div>
+            </div>
           </div>
         </div>
       </>

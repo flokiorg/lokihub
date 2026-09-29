@@ -346,8 +346,7 @@ export const CashHubAllocations = React.forwardRef<
   // Unclaimed by default, not "All". The unredeemed bills are the ones an
   // operator can still act on; "All" buried them under every bill the hub
   // ever issued, archived ones included.
-  const [status, setStatus] =
-    React.useState<CashSliceStatus | "">("unclaimed");
+  const [status, setStatus] = React.useState<CashSliceStatus | "">("unclaimed");
   const [page, setPage] = React.useState(1);
   const [isLoading, setLoading] = React.useState(false);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -490,7 +489,8 @@ export const CashHubAllocations = React.forwardRef<
   // checkbox for a bill whose app row no longer exists — every such call can
   // only 404. The six-status facets made this reachable a whole tab at a time.
   const removableIds = React.useMemo(
-    () => new Set(claims.filter((c) => !c.claimed && !c.archived).map((c) => c.id)),
+    () =>
+      new Set(claims.filter((c) => !c.claimed && !c.archived).map((c) => c.id)),
     [claims]
   );
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
@@ -581,22 +581,16 @@ export const CashHubAllocations = React.forwardRef<
   // Opts the issued Lokicash into mint provenance (NIP-CASH §Mint
   // Provenance) — a node signature over the wallet's own pubkey and
   // committed amount, verifiable offline.
-  //
-  // Optional (NIP-CASH:1137, :1202, :1644 — a token without it is exactly as
-  // spendable), but ON by default: the default decides the outcome for almost
-  // every bill, and an unprovenanced one leaves its recipient unable to tell a
-  // real hub's bill from a fabricated one without contacting the hub, which is
-  // the contact §Mint Provenance exists to avoid. The cost is one node
-  // signature per mint (over the wallet's total, not per recipient — see
-  // cashwallet/create.go:638) and roughly double the token length; the operator
-  // can untick it per mint.
-  const [mintSignature, setMintSignature] = React.useState(true);
+  // Mint provenance is no longer a choice and no longer shown: every bill is signed
+  // with the node's Lightning identity. The signature is the only thing a token
+  // carries that identifies its minting hub, and that identity is what a client
+  // verifies a transport announcement against — so an unsigned bill could not be
+  // spent at all (NIP-CASH §Mint Provenance).
 
   const resetForm = React.useCallback(() => {
     setRecipients([newRecipientRow(maxAmountLoki ?? 0)]);
     setHasDeadline(false);
     setClaimDeadlineSecs(86400);
-    setMintSignature(true); // keep in step with the useState default above
   }, [maxAmountLoki]);
 
   React.useImperativeHandle(ref, () => ({
@@ -791,17 +785,18 @@ export const CashHubAllocations = React.forwardRef<
       // `undefined` is equivalent to the old conditional spread on the wire:
       // JSON.stringify omits undefined-valued properties entirely.
       const body: CreateCashWalletRequest = {
-        recipients: recipients.map((r): CreateCashWalletRequestRecipient => ({
-          identity_type: r.identityType,
-          identity_value: recipientIdentityValue(r),
-          ia_pubkey:
-            r.identityType === "connection_key"
-              ? r.resolvedIaPubkeyHex
-              : undefined,
-          amount_mloki: r.amountLoki * 1000,
-        })),
+        recipients: recipients.map(
+          (r): CreateCashWalletRequestRecipient => ({
+            identity_type: r.identityType,
+            identity_value: recipientIdentityValue(r),
+            ia_pubkey:
+              r.identityType === "connection_key"
+                ? r.resolvedIaPubkeyHex
+                : undefined,
+            amount_mloki: r.amountLoki * 1000,
+          })
+        ),
         expiry_secs: hasDeadline ? claimDeadlineSecs : undefined,
-        mint_signature: mintSignature ? true : undefined,
       };
       const result = await request<CreateCashWalletResponse>(
         `/api/apps/${id}/cash-wallets`,
@@ -1306,21 +1301,6 @@ export const CashHubAllocations = React.forwardRef<
           </p>
         </div>
       )}
-      <div className="grid gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <Checkbox
-            id="mint-signature"
-            checked={mintSignature}
-            onCheckedChange={(checked) => setMintSignature(checked === true)}
-          />
-          <Label htmlFor="mint-signature" className="text-sm font-normal">
-            {t("cashHubAllocations.mintSignatureLabel")}
-          </Label>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {t("cashHubAllocations.mintSignatureHelp")}
-        </p>
-      </div>
       <div className="flex flex-wrap gap-2">
         {!hasCashRow && (
           <Button
@@ -1368,9 +1348,7 @@ export const CashHubAllocations = React.forwardRef<
         <div className="flex min-w-0 items-center gap-2">
           <Tabs
             value={status}
-            onValueChange={(v) =>
-              handleStatusChange(v as CashSliceStatus | "")
-            }
+            onValueChange={(v) => handleStatusChange(v as CashSliceStatus | "")}
           >
             <TabsList>
               {statusTabs.map((tab) => (
@@ -1509,8 +1487,7 @@ export const CashHubAllocations = React.forwardRef<
                       "flex min-w-0 items-start gap-2 p-2 transition-colors sm:items-center sm:gap-3",
                       // An archived bill's app row is deleted, so there is
                       // nothing at /apps/:id to open.
-                      !group.archived &&
-                        "cursor-pointer hover:bg-accent/50"
+                      !group.archived && "cursor-pointer hover:bg-accent/50"
                     )}
                     onClick={
                       group.archived
@@ -1603,13 +1580,17 @@ export const CashHubAllocations = React.forwardRef<
                             title={t("cashHubAllocations.copyBillPubkey")}
                             onClick={(e) => {
                               e.stopPropagation();
-                              copyToClipboard(group.claims[0].wallet_pubkey ?? "");
+                              copyToClipboard(
+                                group.claims[0].wallet_pubkey ?? ""
+                              );
                             }}
                           >
                             {shortenMiddle(
                               safeNpubEncode(
                                 group.claims[0].wallet_pubkey ?? ""
-                              ) ?? (group.claims[0].wallet_pubkey ?? ""),
+                              ) ??
+                                group.claims[0].wallet_pubkey ??
+                                "",
                               10,
                               6
                             )}
@@ -1697,7 +1678,9 @@ export const CashHubAllocations = React.forwardRef<
                                 </Badge>
                               ) : claimedCount === 0 ? (
                                 <Badge variant="secondary">
-                                  {t("cashHubAllocations.tokenStatusUnredeemed")}
+                                  {t(
+                                    "cashHubAllocations.tokenStatusUnredeemed"
+                                  )}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline">
@@ -1747,27 +1730,28 @@ export const CashHubAllocations = React.forwardRef<
                             invisible placeholder just left a gap that read
                             as a missing button. */}
                         {!group.archived && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={t("cashHubAllocations.revealConnection")}
-                          aria-label={t("cashHubAllocations.revealConnection")}
-                          disabled={
-                            revealingWalletId === group.walletAppId
-                          }
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRevealConnection(group.walletAppId, {
-                              amountLoki: totalLoki,
-                              recipientCount: totalCount,
-                              claimedCount,
-                              expiresAtSecs: group.claims[0].expires_at,
-                              isCash: group.claims[0].identity_type === "cash",
-                            });
-                          }}
-                        >
-                          <QrCodeIcon className="size-4" />
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={t("cashHubAllocations.revealConnection")}
+                            aria-label={t(
+                              "cashHubAllocations.revealConnection"
+                            )}
+                            disabled={revealingWalletId === group.walletAppId}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevealConnection(group.walletAppId, {
+                                amountLoki: totalLoki,
+                                recipientCount: totalCount,
+                                claimedCount,
+                                expiresAtSecs: group.claims[0].expires_at,
+                                isCash:
+                                  group.claims[0].identity_type === "cash",
+                              });
+                            }}
+                          >
+                            <QrCodeIcon className="size-4" />
+                          </Button>
                         )}
 
                         <Button

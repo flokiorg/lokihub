@@ -316,8 +316,8 @@ const Scopes: React.FC<ScopesProps> = ({
               checked={cashHub}
             />
             <Label htmlFor="cashHub" className="cursor-pointer">
-              Also allow this app to create cash bills, paying third
-              parties directly from its balance
+              Also allow this app to create cash bills, paying third parties
+              directly from its balance
             </Label>
           </div>
           {cashHub && onCashHubConfigChanged && (

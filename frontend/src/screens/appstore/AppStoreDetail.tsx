@@ -3,9 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { AboutAppCard } from "src/components/connections/AboutAppCard";
 import { AppLinksCard } from "src/components/connections/AppLinksCard";
 import { AppStoreDetailHeader } from "src/components/connections/AppStoreDetailHeader";
-import {
-  AppStoreApp
-} from "src/components/connections/SuggestedAppData";
+import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import { useAppsForAppStoreApp } from "src/hooks/useApps";
 import { useAppStore } from "src/hooks/useAppStore";

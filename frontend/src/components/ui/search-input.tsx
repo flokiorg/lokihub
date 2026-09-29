@@ -46,7 +46,9 @@ export function SearchInput({
         readOnly
         className={cn(
           "cursor-pointer max-sm:w-32",
-          isRTL ? "pr-8 pl-3 sm:pl-20 text-right" : "pl-8 pr-3 sm:pr-20 text-left"
+          isRTL
+            ? "pr-8 pl-3 sm:pl-20 text-right"
+            : "pl-8 pr-3 sm:pr-20 text-left"
         )}
         onKeyDown={handleKeyDown}
         tabIndex={0}

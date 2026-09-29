@@ -64,7 +64,7 @@ export function HealthCheckAlert() {
             </ul>
           )}
           {health.message && (
-             <div className="mt-2 font-medium">{health.message}</div>
+            <div className="mt-2 font-medium">{health.message}</div>
           )}
         </AlertDescription>
       </Alert>

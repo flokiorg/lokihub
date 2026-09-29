@@ -3,13 +3,13 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "src/components/ui/dialog";
 import { Label } from "src/components/ui/label";
 import { CurrencyInput } from "src/components/CurrencyInput";
@@ -65,7 +65,10 @@ export function IsolatedAppTopupDialog({
       });
       await reloadApp();
       await mutate(
-        (key) => typeof key === "string" && (key.startsWith("/api/balances") || key.startsWith("/api/transactions")),
+        (key) =>
+          typeof key === "string" &&
+          (key.startsWith("/api/balances") ||
+            key.startsWith("/api/transactions")),
         undefined,
         { revalidate: true }
       );
@@ -94,7 +97,9 @@ export function IsolatedAppTopupDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 mt-5">
-            <Label htmlFor="amount">{t("subwallets.increaseBalance.amount")}</Label>
+            <Label htmlFor="amount">
+              {t("subwallets.increaseBalance.amount")}
+            </Label>
             <CurrencyInput
               autoFocus
               id="amount"

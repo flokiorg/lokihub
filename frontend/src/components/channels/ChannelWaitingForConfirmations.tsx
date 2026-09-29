@@ -2,11 +2,11 @@ import { FootprintsIcon } from "lucide-react";
 import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Channel } from "src/types";
 

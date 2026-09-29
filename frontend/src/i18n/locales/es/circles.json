@@ -209,8 +209,6 @@
     "deadlineHelpWithMax": "Cada destinatario debe canjear dentro de este plazo desde la creación (por defecto, el máximo de este hub: {{max}})",
     "addRecipient": "Añadir otro destinatario",
     "setClaimDeadline": "Establecer plazo de canje",
-    "mintSignatureLabel": "Firmar procedencia de acuñación",
-    "mintSignatureHelp": "Adjuntar una firma del nodo que demuestre el origen y el importe de este Lokicash — opcional, duplica aproximadamente la longitud del token",
     "statusAll": "Todos",
     "statusExpired": "Vencidos",
     "allocatedSummary": "{{allocated}} loki asignados en esta página · {{total}} {{status}}",

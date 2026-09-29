@@ -10,10 +10,7 @@ export function DefaultRedirect() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (
-      !info ||
-      (info.running && info.unlocked)
-    ) {
+    if (!info || (info.running && info.unlocked)) {
       return;
     }
     const returnTo = location.pathname + location.search;

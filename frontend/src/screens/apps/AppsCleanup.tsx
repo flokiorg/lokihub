@@ -55,7 +55,10 @@ export function AppsCleanup() {
     <>
       <AppHeader
         title={t("cleanup.title", "Cleanup Unused Apps")}
-        description={t("cleanup.description", "Review apps that haven't been used for 2 months or longer")}
+        description={t(
+          "cleanup.description",
+          "Review apps that haven't been used for 2 months or longer"
+        )}
       />
       {currentApp && (
         <Alert variant="destructive">
@@ -64,7 +67,10 @@ export function AppsCleanup() {
             {t("cleanup.warning", "Warning")}
           </AlertTitle>
           <AlertDescription>
-            {t("cleanup.warningDetail", "Review the app carefully before deleting it, deleted apps cannot be recovered.")}
+            {t(
+              "cleanup.warningDetail",
+              "Review the app carefully before deleting it, deleted apps cannot be recovered."
+            )}
           </AlertDescription>
         </Alert>
       )}

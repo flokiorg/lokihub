@@ -24,9 +24,7 @@ const InputWithAdornment = React.forwardRef<
         {...props}
       />
       {endAdornment && (
-        <span className="absolute end-1 flex items-center">
-          {endAdornment}
-        </span>
+        <span className="absolute end-1 flex items-center">{endAdornment}</span>
       )}
     </div>
   );

@@ -7,15 +7,15 @@ import { useInfo } from "src/hooks/useInfo";
 import { PowerIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Separator } from "src/components/ui/separator";
@@ -102,17 +102,25 @@ export default function SettingsLayout() {
             <MenuItem to="/settings">{t("nav.general")}</MenuItem>
             <MenuItem to="/settings/services">{t("nav.services")}</MenuItem>
             {info?.autoUnlockPasswordSupported && (
-              <MenuItem to="/settings/auto-unlock">{t("nav.autoUnlock")}</MenuItem>
+              <MenuItem to="/settings/auto-unlock">
+                {t("nav.autoUnlock")}
+              </MenuItem>
             )}
             <MenuItem to="/settings/change-unlock-password">
               {t("nav.unlockPassword")}
             </MenuItem>
-            {hasMnemonic && <MenuItem to="/settings/backup">{t("nav.backup")}</MenuItem>}
+            {hasMnemonic && (
+              <MenuItem to="/settings/backup">{t("nav.backup")}</MenuItem>
+            )}
             {hasNodeBackup && (
-              <MenuItem to="/settings/node-migrate">{t("nav.migrate")}</MenuItem>
+              <MenuItem to="/settings/node-migrate">
+                {t("nav.migrate")}
+              </MenuItem>
             )}
             <MenuItem to="/settings/developer">{t("nav.developer")}</MenuItem>
-            <MenuItem to="/settings/debug-tools">{t("nav.debugTools")}</MenuItem>
+            <MenuItem to="/settings/debug-tools">
+              {t("nav.debugTools")}
+            </MenuItem>
             <MenuItem to="/settings/about">{t("nav.about")}</MenuItem>
           </nav>
         </aside>

@@ -20,8 +20,8 @@ export function LokihubLogo({
 
   return (
     <div className={`flex items-center gap-2 ${className}`} {...props}>
-      <div 
-        onMouseEnter={() => setIsHovered(true)} 
+      <div
+        onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className="cursor-pointer"
       >

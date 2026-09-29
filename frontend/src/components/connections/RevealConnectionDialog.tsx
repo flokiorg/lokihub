@@ -72,7 +72,8 @@ export function RevealConnectionDialog({
 }) {
   const { t } = useTranslation("apps");
   const { t: tj } = useTranslation("circles");
-  const shouldPollForConnection = mode === "create" && primaryFormat !== "lokicash";
+  const shouldPollForConnection =
+    mode === "create" && primaryFormat !== "lokicash";
   const { data: polledApp } = useApp(
     shouldPollForConnection ? app.id : undefined,
     true
@@ -186,10 +187,7 @@ export function RevealConnectionDialog({
         {requiresSaveConfirmation && (
           <DialogFooter>
             <Button onClick={onClose} className="w-full">
-              {t(
-                "connectAppCard.cashSavedConfirm",
-                "I've saved this — Close"
-              )}
+              {t("connectAppCard.cashSavedConfirm", "I've saved this — Close")}
             </Button>
           </DialogFooter>
         )}

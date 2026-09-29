@@ -19,7 +19,7 @@ export function SetupLayout({
   backTo,
   onBack,
   showBack,
-  contentClassName
+  contentClassName,
 }: Props) {
   const navigate = useNavigate();
   const { isRTL } = useLocale();
@@ -35,7 +35,8 @@ export function SetupLayout({
     }
   };
 
-  const shouldShowBack = showBack !== undefined ? showBack : (!!backTo || !!onBack);
+  const shouldShowBack =
+    showBack !== undefined ? showBack : !!backTo || !!onBack;
   const BackIcon = isRTL ? ChevronRightIcon : ChevronLeftIcon;
 
   return (

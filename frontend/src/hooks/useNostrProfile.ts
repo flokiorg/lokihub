@@ -1,10 +1,7 @@
 import useSWR from "swr";
 
 import { useNdk } from "src/hooks/useNdk";
-import {
-  NostrProfile,
-  nostrProfileCacheKey,
-} from "src/hooks/useNostrProfiles";
+import { NostrProfile, nostrProfileCacheKey } from "src/hooks/useNostrProfiles";
 import { getRelaySetForPubkey } from "src/lib/nostrRelaySet";
 
 // useNostrProfile resolves a single pubkey's kind:0 profile. Shares its SWR

@@ -1,13 +1,12 @@
-
 import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { Separator } from "src/components/ui/separator";
 
@@ -57,12 +56,10 @@ export function NodeHealthInfoDialog({ trigger }: NodeHealthInfoDialogProps) {
                 Channel Size & Quality
               </h3>
               <p>
-                Larger channels are generally better for handling various payment
-                sizes. Choose well-connected and reliable peers to ensure your
-                transactions route successfully.
+                Larger channels are generally better for handling various
+                payment sizes. Choose well-connected and reliable peers to
+                ensure your transactions route successfully.
               </p>
-
-
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>

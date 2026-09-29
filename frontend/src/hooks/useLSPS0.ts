@@ -24,12 +24,14 @@ export function useLSPS0(lspPubkey: string) {
 
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const query = new URLSearchParams();
       query.append("lsp", lspPubkey);
-      
-      const response = await request<LSPS0Protocol>(`/api/lsps0/protocols?${query.toString()}`);
+
+      const response = await request<LSPS0Protocol>(
+        `/api/lsps0/protocols?${query.toString()}`
+      );
       return response;
     } catch (e: any) {
       const errorMsg = e.message || "Failed to fetch supported protocols";

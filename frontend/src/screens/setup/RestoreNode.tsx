@@ -6,15 +6,15 @@ import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Input } from "src/components/ui/input";
@@ -49,14 +49,21 @@ export function RestoreNode() {
       <div className="flex flex-col gap-5 items-center">
         <TwoColumnLayoutHeader
           title={t("restore.restartingTitle", "Restart your Hub")}
-          description={t("restore.restartingDesc", "Lokihub needs to restart to finish restoring your node")}
+          description={t(
+            "restore.restartingDesc",
+            "Lokihub needs to restart to finish restoring your node"
+          )}
         />
         <PowerCircleIcon className="w-32 h-32" />
         <p className="max-w-sm text-center">
-          {t("restore.restartingMessage", "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process.")}
+          {t(
+            "restore.restartingMessage",
+            "If you're running in the cloud, your Lokihub will restart automatically. Otherwise, please manually restart your Lokihub to finish the restore process."
+          )}
         </p>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loading /> <p>{t("restore.waitingForRestart", "Waiting for restart...")}</p>
+          <Loading />{" "}
+          <p>{t("restore.waitingForRestart", "Waiting for restart...")}</p>
         </div>
       </div>
     );
@@ -148,7 +155,10 @@ export function RestoreNode() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {t("restore.restartingTitle", "Restore Node from Migration File")}
+                {t(
+                  "restore.restartingTitle",
+                  "Restore Node from Migration File"
+                )}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 <div>

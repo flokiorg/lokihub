@@ -1,8 +1,4 @@
-
-import {
-  CircleMinusIcon,
-  CirclePlusIcon
-} from "lucide-react";
+import { CircleMinusIcon, CirclePlusIcon } from "lucide-react";
 import React from "react";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
@@ -46,7 +42,8 @@ export function AppUsage({ app }: { app: App }) {
         // Pagination - append and deduplicate
         setAllTransactions((current) =>
           [...current, ...transactionsResponse.transactions].filter(
-            (v, i, a) => a.findIndex((t) => t.paymentHash === v.paymentHash) === i
+            (v, i, a) =>
+              a.findIndex((t) => t.paymentHash === v.paymentHash) === i
           )
         );
       }
@@ -68,15 +65,15 @@ export function AppUsage({ app }: { app: App }) {
     .map((tx) => Math.floor(tx.amount / 1000))
     .reduce((a, b) => a + b, 0);
 
-
-
   return (
     <>
       {app.isolated && (
         <div className="grid grid-cols-1 gap-2 slashed-zero">
           <Card className="justify-between">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">{t("usage.isolatedBalance", "Isolated Balance")}</CardTitle>
+              <CardTitle className="text-lg">
+                {t("usage.isolatedBalance", "Isolated Balance")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap justify-between items-center sm:items-end gap-4">
@@ -112,14 +109,15 @@ export function AppUsage({ app }: { app: App }) {
               </div>
             </CardContent>
           </Card>
-
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 slashed-zero">
         <Card className="flex flex-1 flex-col">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">{t("usage.totalSpent", "Total Spent")}</CardTitle>
+            <CardTitle className="text-lg">
+              {t("usage.totalSpent", "Total Spent")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="grow">
             <div className="mb-1">
@@ -132,7 +130,9 @@ export function AppUsage({ app }: { app: App }) {
         </Card>
         <Card className="flex flex-1 flex-col">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">{t("usage.totalReceived", "Total Received")}</CardTitle>
+            <CardTitle className="text-lg">
+              {t("usage.totalReceived", "Total Received")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="grow">
             <div className="mb-1">
@@ -148,7 +148,9 @@ export function AppUsage({ app }: { app: App }) {
       {app.maxAmount > 0 && (
         <Card className="slashed-zero">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">{t("usage.budget", "Budget")}</CardTitle>
+            <CardTitle className="text-lg">
+              {t("usage.budget", "Budget")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-row justify-between mb-2">

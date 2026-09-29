@@ -8,12 +8,12 @@ import { IsolatedAppTopupDialog } from "src/components/IsolatedAppTopupDialog";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { useApp } from "src/hooks/useApp";
@@ -28,7 +28,6 @@ export function SubwalletCreated() {
   const navigate = useNavigate();
   const createAppResponse = state as CreateAppResponse | undefined;
   const { data: app } = useApp(createAppResponse?.id, true);
-
 
   const [step, setStep] = React.useState(1);
 
@@ -104,7 +103,6 @@ export function SubwalletCreated() {
                   : t("subwalletCreated.topUpBody")}
               </div>
               <div className="grid gap-5">
-
                 {app.metadata?.lud16 && (
                   <Card>
                     <CardHeader>
@@ -187,11 +185,13 @@ export function SubwalletCreated() {
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Important</AlertTitle>
                     <AlertDescription className="inline">
-                      For your security, these connection details are only visible now
-                      and{" "}
-                      <span className="font-semibold">cannot be retrieved later</span>
-                      . If needed, you can store them in a password manager for future
-                      reference.
+                      For your security, these connection details are only
+                      visible now and{" "}
+                      <span className="font-semibold">
+                        cannot be retrieved later
+                      </span>
+                      . If needed, you can store them in a password manager for
+                      future reference.
                     </AlertDescription>
                   </Alert>
                 </>

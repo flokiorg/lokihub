@@ -1,10 +1,9 @@
-
 import {
-    CirclePlusIcon,
-    HelpCircle,
-    ShieldCheckIcon,
-    TriangleAlert,
-    TriangleAlertIcon,
+  CirclePlusIcon,
+  HelpCircle,
+  ShieldCheckIcon,
+  TriangleAlert,
+  TriangleAlertIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import AppHeader from "src/components/AppHeader";
@@ -19,10 +18,10 @@ import { SubWalletInfoDialog } from "src/components/SubWalletInfoDialog";
 import { Alert, AlertDescription, AlertTitle } from "src/components/ui/alert";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { LIST_APPS_LIMIT, SUBWALLET_APPSTORE_APP_ID } from "src/constants";
@@ -53,12 +52,7 @@ export function SubwalletList() {
     });
   };
 
-  if (
-    !info ||
-    !appsData ||
-    !balances ||
-    !balances
-  ) {
+  if (!info || !appsData || !balances || !balances) {
     return <Loading />;
   }
 
@@ -77,7 +71,6 @@ export function SubwalletList() {
     subwalletTotalAmount <= balances.lightning.totalSpendable;
   const backingShortfall =
     subwalletTotalAmount - balances.lightning.totalSpendable;
-
 
   return (
     <div className="grid gap-4">
@@ -102,8 +95,6 @@ export function SubwalletList() {
         }
       />
 
-
-
       {!isSufficientlyBacked && (
         <Alert variant="warning">
           <TriangleAlert />
@@ -112,10 +103,10 @@ export function SubwalletList() {
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
             <div className="flex flex-row flex-wrap items-center gap-x-2">
-              There's not enough flokicoin in your spending balance to honor
-              all balances of sub-wallets under your management. Increase
-              spending capacity by opening a channel or review your channel
-              statuses to back them up again.
+              There's not enough flokicoin in your spending balance to honor all
+              balances of sub-wallets under your management. Increase spending
+              capacity by opening a channel or review your channel statuses to
+              back them up again.
               <LinkButton to="/wallet/receive" variant="secondary">
                 Deposit Flokicoin
               </LinkButton>

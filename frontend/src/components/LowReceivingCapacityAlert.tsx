@@ -1,15 +1,15 @@
 import { AlertTriangleIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
+  Alert,
+  AlertDescription,
+  AlertTitle,
 } from "src/components/ui/alert.tsx";
 
 export default function LowReceivingCapacityAlert({
-    jitAvailable = false
+  jitAvailable = false,
 }: {
-    jitAvailable?: boolean;
+  jitAvailable?: boolean;
 }) {
   return (
     <Alert variant="warning">
@@ -24,8 +24,7 @@ export default function LowReceivingCapacityAlert({
         <Link className="underline" to="/wallet/swap?type=out">
           swap out funds
         </Link>
-        {jitAvailable && ", or purchase liquidity via JIT"}
-        .
+        {jitAvailable && ", or purchase liquidity via JIT"}.
       </AlertDescription>
     </Alert>
   );

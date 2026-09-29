@@ -4,10 +4,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import TwoColumnLayoutHeader from "src/components/TwoColumnLayoutHeader";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -92,14 +92,12 @@ export function FLNDForm() {
 
   if (step === "selection") {
     return (
-      <SetupLayout 
-        backTo="/setup/services"
-      >
-          <TwoColumnLayoutHeader
-            title="Connect to FLND"
-            description="Choose how you want to connect to your Flokicoin Lightning Network Daemon (FLND) node."
-          />
-          <div className="grid gap-4 mt-6 w-full">
+      <SetupLayout backTo="/setup/services">
+        <TwoColumnLayoutHeader
+          title="Connect to FLND"
+          description="Choose how you want to connect to your Flokicoin Lightning Network Daemon (FLND) node."
+        />
+        <div className="grid gap-4 mt-6 w-full">
           <Card
             className={`cursor-pointer transition-all ${
               isHovered === "default" ? "border-primary shadow-md" : ""
@@ -115,7 +113,9 @@ export function FLNDForm() {
                   <span
                     className="flex items-center text-xs font-normal ms-auto"
                     title={
-                      setupStatus.active ? "Node is active" : "Node is unreachable"
+                      setupStatus.active
+                        ? "Node is active"
+                        : "Node is unreachable"
                     }
                   >
                     {setupStatus.active ? (
@@ -126,7 +126,7 @@ export function FLNDForm() {
                     {setupStatus.active ? "Ready" : "Offline"}
                   </span>
                 ) : (
-                    <Skeleton className="h-4 w-16 ms-auto" />
+                  <Skeleton className="h-4 w-16 ms-auto" />
                 )}
               </CardTitle>
               <CardDescription>
@@ -150,12 +150,12 @@ export function FLNDForm() {
             <CardHeader>
               <CardTitle>Advanced Mode</CardTitle>
               <CardDescription>
-                Manually enter your node&apos;s GRPC address, Admin Macaroon, and TLS
-                Certificate. Suitable for remote connections.
+                Manually enter your node&apos;s GRPC address, Admin Macaroon,
+                and TLS Certificate. Suitable for remote connections.
               </CardDescription>
             </CardHeader>
           </Card>
-          </div>
+        </div>
       </SetupLayout>
     );
   }
@@ -166,7 +166,10 @@ export function FLNDForm() {
         navigate(".", { state: { step: "selection" }, replace: true });
       }}
     >
-      <form className="flex flex-col items-center w-full" onSubmit={onAdvancedSubmit}>
+      <form
+        className="flex flex-col items-center w-full"
+        onSubmit={onAdvancedSubmit}
+      >
         <div className="grid gap-4 w-full">
           <TwoColumnLayoutHeader
             title="Validating Connection"
@@ -184,7 +187,7 @@ export function FLNDForm() {
               autoComplete="off"
             />
           </div>
-          
+
           <div className="grid gap-1.5">
             <Label htmlFor="flnd-macaroon-hex">Admin Macaroon (Hex)</Label>
             <Input
@@ -198,9 +201,11 @@ export function FLNDForm() {
               autoComplete="off"
             />
           </div>
-          
+
           <div className="grid gap-1.5">
-            <Label htmlFor="flnd-cert-hex">TLS Certificate (Hex) (optional)</Label>
+            <Label htmlFor="flnd-cert-hex">
+              TLS Certificate (Hex) (optional)
+            </Label>
             <Input
               name="flnd-cert-hex"
               onChange={(e) => setFlndCertHex(e.target.value)}
@@ -213,12 +218,12 @@ export function FLNDForm() {
             {!flndCertHex && (
               <div className="flex flex-row gap-2 items-center justify-start text-sm text-muted-foreground mt-2">
                 <InfoIcon className="h-4 w-4 shrink-0" />
-                Skipping TLS certificate is not recommended as it may expose your
-                connection to security risks
+                Skipping TLS certificate is not recommended as it may expose
+                your connection to security risks
               </div>
             )}
           </div>
-          
+
           <div className="flex justify-end">
             <Button>Next</Button>
           </div>

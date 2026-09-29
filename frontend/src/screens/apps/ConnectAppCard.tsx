@@ -8,10 +8,10 @@ import { Badge } from "src/components/ui/badge";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { copyToClipboard } from "src/lib/clipboard";
@@ -114,7 +114,7 @@ export function ConnectAppCard({
         // in practice" — but if it ever does, the secret still has to be
         // reachable through SOME copy action, or those funds are gone for
         // good with no recovery path, same as any other lost cash note).
-        (cashGift || lokicashToken || cashSecret || "")
+        cashGift || lokicashToken || cashSecret || ""
       : pairingUri;
   const copy = () => {
     copyToClipboard(qrValue);
@@ -135,11 +135,19 @@ export function ConnectAppCard({
           <>
             <div className="flex flex-row items-center gap-2 text-sm z-10">
               <Loading className="size-4" />
-              <p>{t("newApp.waitingForConnection", "Waiting for app to connect...")}</p>
+              <p>
+                {t(
+                  "newApp.waitingForConnection",
+                  "Waiting for app to connect..."
+                )}
+              </p>
             </div>
             {timeout ? (
               <div className="text-sm flex flex-col gap-2 items-center text-center">
-                {t("connectAppCard.takingLonger", "Connecting is taking longer than usual.")}
+                {t(
+                  "connectAppCard.takingLonger",
+                  "Connecting is taking longer than usual."
+                )}
                 <LinkButton to={`/apps/${app?.id}`} variant="secondary">
                   {t("connectAppCard.continueAnyway", "Continue anyway")}
                 </LinkButton>
@@ -245,15 +253,15 @@ export function ConnectAppCard({
   );
 
   if (variant === "reveal") {
-    return (
-      <div className="flex flex-col items-center gap-5">{content}</div>
-    );
+    return <div className="flex flex-col items-center gap-5">{content}</div>;
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">{t("connectAppCard.connectionSecret", "Connection Secret")}</CardTitle>
+        <CardTitle className="text-center">
+          {t("connectAppCard.connectionSecret", "Connection Secret")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-5">
         {content}

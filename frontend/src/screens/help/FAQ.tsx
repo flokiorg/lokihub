@@ -25,10 +25,7 @@ export function FAQ() {
 
   return (
     <div className="grid gap-5">
-      <AppHeader
-        title={t("faq.title")}
-        description={t("faq.description")}
-      />
+      <AppHeader title={t("faq.title")} description={t("faq.description")} />
       <div className="max-w-2xl" dir="ltr">
         <Accordion type="single" collapsible className="w-full">
           {faq?.map((item, index) => (

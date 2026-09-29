@@ -106,7 +106,11 @@ export function NostrPubkeyInput({
       <div className="w-full grid gap-1.5">
         <Label>{resolvedLabel}</Label>
         <div className="flex items-center gap-3 rounded-lg border bg-muted/30 py-1.5 ps-2 pe-1.5">
-          <NostrProfileRow pubkey={hex} profile={resolvedProfile} avatarClassName="h-9 w-9" />
+          <NostrProfileRow
+            pubkey={hex}
+            profile={resolvedProfile}
+            avatarClassName="h-9 w-9"
+          />
           <Button
             type="button"
             variant="ghost"

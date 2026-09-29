@@ -1,12 +1,11 @@
-
 import dayjs from "dayjs";
 import {
-    AlertTriangleIcon,
-    ArrowDownIcon,
-    ArrowDownUpIcon,
-    ArrowUpIcon,
-    ExternalLinkIcon,
-    LightbulbIcon
+  AlertTriangleIcon,
+  ArrowDownIcon,
+  ArrowDownUpIcon,
+  ArrowUpIcon,
+  ExternalLinkIcon,
+  LightbulbIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -18,9 +17,9 @@ import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert"
 import TransactionsList from "src/components/TransactionsList";
 import { TransactionsListMenu } from "src/components/TransactionsListMenu";
 import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
+  Alert,
+  AlertDescription,
+  AlertTitle,
 } from "src/components/ui/alert.tsx";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import { useBalances } from "src/hooks/useBalances";

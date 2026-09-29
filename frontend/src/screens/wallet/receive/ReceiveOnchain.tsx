@@ -1,9 +1,9 @@
 import {
-    ArrowLeftIcon,
-    CopyIcon,
-    ExternalLinkIcon,
-    HandCoinsIcon,
-    RefreshCwIcon,
+  ArrowLeftIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  HandCoinsIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Tick from "src/assets/illustrations/tick.svg?react";
@@ -19,11 +19,11 @@ import OnchainAddressDisplay from "src/components/OnchainAddressDisplay";
 import QRCode from "src/components/QRCode";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { ExternalLinkButton } from "src/components/ui/custom/external-link-button";
 import { LinkButton } from "src/components/ui/custom/link-button";
@@ -66,8 +66,8 @@ function ReceiveToOnchain() {
 
     // Always prefer confirmed transactions if available, otherwise take the first one
     const utxo =
-        mempoolAddressUtxos.find((utxo) => utxo.status.confirmed) ||
-        mempoolAddressUtxos[0];
+      mempoolAddressUtxos.find((utxo) => utxo.status.confirmed) ||
+      mempoolAddressUtxos[0];
 
     if (utxo) {
       setTxId(utxo.txid);
@@ -186,7 +186,9 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">{t("receive.onchain.received")}</CardTitle>
+        <CardTitle className="text-center">
+          {t("receive.onchain.received")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-6">
         <Tick className="w-48" />
@@ -206,7 +208,11 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
           <ExternalLinkIcon className="w-4 h-4 mr-2" />
           {t("receive.onchain.viewExplorer")}
         </ExternalLinkButton>
-        <LinkButton to="/wallet/receive/onchain" variant="outline" className="w-full">
+        <LinkButton
+          to="/wallet/receive/onchain"
+          variant="outline"
+          className="w-full"
+        >
           <HandCoinsIcon className="w-4 h-4 mr-2" />
           {t("receive.onchain.receiveAnother")}
         </LinkButton>

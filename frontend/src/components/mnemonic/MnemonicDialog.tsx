@@ -5,11 +5,11 @@ import MnemonicInputs from "src/components/mnemonic/MnemonicInputs";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "src/components/ui/dialog";
 import { Label } from "src/components/ui/label";
 import { useInfo } from "src/hooks/useInfo";

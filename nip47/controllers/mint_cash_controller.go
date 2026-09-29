@@ -106,7 +106,6 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		HubApp:     app,
 		Recipients: recipients,
 		ExpirySecs: params.Expiry,
-		SignMint:   params.MintSignature,
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())

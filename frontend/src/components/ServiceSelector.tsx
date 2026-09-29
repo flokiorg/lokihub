@@ -1,21 +1,28 @@
-import { AlertCircle, Check, ChevronsUpDown, Globe, Settings2, ShieldCheck } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  ChevronsUpDown,
+  Globe,
+  Settings2,
+  ShieldCheck,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "src/components/ui/button";
 import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-    CommandSeparator,
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
 } from "src/components/ui/command";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "src/components/ui/popover";
 
 export interface ServiceOption {
@@ -70,12 +77,16 @@ export function ServiceSelector({
   return (
     <div className="grid gap-3">
       <div className="flex flex-col gap-1">
-        <Label className="text-base font-semibold text-foreground/90">{label}</Label>
+        <Label className="text-base font-semibold text-foreground/90">
+          {label}
+        </Label>
         {description && (
-            <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {description}
+          </p>
         )}
       </div>
-      
+
       {!isCustom ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -90,12 +101,14 @@ export function ServiceSelector({
                 <div className="flex flex-col gap-1 overflow-hidden">
                   <div className="flex items-center gap-2">
                     <Globe className="w-4 h-4 text-primary shrink-0" />
-                    <span className="font-semibold text-foreground">{selectedOption.name}</span>
+                    <span className="font-semibold text-foreground">
+                      {selectedOption.name}
+                    </span>
                     {selectedOption.recommended && (
-                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-                            <ShieldCheck className="w-3 h-3" />
-                            Verified
-                         </span>
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+                        <ShieldCheck className="w-3 h-3" />
+                        Verified
+                      </span>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground font-mono truncate">
@@ -103,12 +116,17 @@ export function ServiceSelector({
                   </span>
                 </div>
               ) : (
-                <span className="text-muted-foreground">{placeholder || "Select a service provider..."}</span>
+                <span className="text-muted-foreground">
+                  {placeholder || "Select a service provider..."}
+                </span>
               )}
               <ChevronsUpDown className="ms-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] p-0"
+            align="start"
+          >
             <Command>
               <CommandInput placeholder="Search providers..." />
               <CommandList>
@@ -125,16 +143,20 @@ export function ServiceSelector({
                       className="flex flex-col items-start py-3 px-4 gap-1 cursor-pointer aria-selected:bg-muted/50"
                     >
                       <div className="flex items-center w-full gap-2">
-                        <span className="font-medium text-sm">{option.name}</span>
+                        <span className="font-medium text-sm">
+                          {option.name}
+                        </span>
                         {option.recommended && (
-                            <ShieldCheck className="w-3 h-3 text-primary/80" />
+                          <ShieldCheck className="w-3 h-3 text-primary/80" />
                         )}
                         {value === option.value && (
                           <Check className="ms-auto h-4 w-4 text-primary" />
                         )}
                       </div>
                       {option.description && (
-                        <span className="text-xs text-muted-foreground/80 line-clamp-2 leading-snug">{option.description}</span>
+                        <span className="text-xs text-muted-foreground/80 line-clamp-2 leading-snug">
+                          {option.description}
+                        </span>
                       )}
                       <span className="text-[10px] text-muted-foreground/50 font-mono truncate w-full pt-1">
                         {option.value}
@@ -146,8 +168,8 @@ export function ServiceSelector({
                 <CommandGroup>
                   <CommandItem
                     onSelect={() => {
-                        setOpen(false);
-                        setIsCustom(true);
+                      setOpen(false);
+                      setIsCustom(true);
                     }}
                     className="flex items-center gap-2 py-3 px-4 cursor-pointer text-muted-foreground hover:text-foreground"
                   >
@@ -161,33 +183,35 @@ export function ServiceSelector({
         </Popover>
       ) : (
         <div className="flex gap-2 items-start animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex-1 space-y-2">
-                <div className="relative">
-                    <Input 
-                        value={value} 
-                        onChange={(e) => onChange(e.target.value)} 
-                        placeholder={placeholder || "https://..."}
-                        disabled={disabled}
-                        autoFocus
-                        className="font-mono text-sm"
-                    />
-                    <div className="absolute right-3 top-2.5 text-xs text-muted-foreground">Custom</div>
-                </div>
-                 <p className="text-xs text-yellow-500/80 flex items-center gap-1.5 bg-yellow-500/10 p-2 rounded-md border border-yellow-500/20">
-                    <AlertCircle className="w-3 h-3" />
-                    Using a custom service requires trust in the provider.
-                </p>
+          <div className="flex-1 space-y-2">
+            <div className="relative">
+              <Input
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder || "https://..."}
+                disabled={disabled}
+                autoFocus
+                className="font-mono text-sm"
+              />
+              <div className="absolute right-3 top-2.5 text-xs text-muted-foreground">
+                Custom
+              </div>
             </div>
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsCustom(false)}
-                className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 border border-transparent hover:border-input"
-                title="Cancel Custom Input"
-            >
-                <span className="sr-only">Cancel</span>
-                <Settings2 className="w-4 h-4 rotate-45" />
-            </Button>
+            <p className="text-xs text-yellow-500/80 flex items-center gap-1.5 bg-yellow-500/10 p-2 rounded-md border border-yellow-500/20">
+              <AlertCircle className="w-3 h-3" />
+              Using a custom service requires trust in the provider.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCustom(false)}
+            className="shrink-0 text-muted-foreground hover:text-foreground h-10 w-10 border border-transparent hover:border-input"
+            title="Cancel Custom Input"
+          >
+            <span className="sr-only">Cancel</span>
+            <Settings2 className="w-4 h-4 rotate-45" />
+          </Button>
         </div>
       )}
     </div>

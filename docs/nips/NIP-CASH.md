@@ -221,10 +221,6 @@ single-recipient, never mixed with a `pubkey`/`connection_key` entry or a second
   caller would legitimately request, and a request exceeding it MUST be rejected rather than silently
   clamped. This implementation bounds it at 100 years, sized to stay clear of its nanosecond-resolution
   wraparound.
-- `mint_signature` — OPTIONAL boolean, default `false`. Opts the issued token into mint provenance
-  (§Mint Provenance) — the node signs the wallet's own pubkey and committed amount with its Lightning
-  identity key, best-effort: a signing failure is never a reason to fail the mint, it just produces a token
-  without the signature.
 
 `min_transfer_millis` is deliberately NOT a request field here — it's a Hub-level setting (§Data Model),
 applied uniformly to every recipient of a freshly-minted wallet from the Hub's own current configuration,
@@ -695,9 +691,6 @@ sequenceDiagram
   // "cash_secret": "<opaque>",     // cash mode instead of the three identity_* fields
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"},
   // new_identity MAY also carry "ia_pubkey" when identity_type is connection_key.
-  "mint_signature": false,          // OPTIONAL — opts the resulting token(s) into mint
-                                    // provenance (§Mint Provenance), exactly as mint_cash's
-                                    // own flag does. On a split it applies to BOTH new wallets.
   // new_identity MAY instead be
   // {"identity_type": "cash", "identity_value": "<hex sha256 commitment the caller generated>"}
   // — see §Cash-Mode Slices for why identity_value is required, not server-minted, here.
@@ -746,10 +739,6 @@ sequenceDiagram
   (a caller-generated `sha256` commitment — see §Cash-Mode Slices) and `ia_pubkey` MUST NOT be present.
 - `amount_millis` — OPTIONAL, as described above. When present, MUST be strictly positive and MUST NOT
   exceed the slice's current committed amount.
-- `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance),
-  meaningful only when this call spins off a dedicated wallet (a split, or a full transfer to `cash` on a
-  multi-recipient-history wallet) — each spun-off wallet signs independently over its own pubkey and its
-  own fixed amount. A harmless no-op on an in-place reassignment, which never mints a new token to sign.
 
 ### Response
 
@@ -1015,9 +1004,6 @@ sequenceDiagram
      "attestation_event": "{...}"}         // connection_key source only, kind-35522
   ],
   "new_identity": {"identity_type": "pubkey", "identity_value": "<hex pubkey>"},
-  "mint_signature": false                  // OPTIONAL — opts the merged token into mint
-                                           // provenance over its own merged total,
-                                           // independent of whether any source had one
 }
 ```
 
@@ -1039,9 +1025,6 @@ sequenceDiagram
   for `connection_key`; a caller-supplied, never wallet-minted, commitment for `cash` (§Cash-Mode Slices).
   The merged wallet is owned by, and its token delivered to, this identity — see Response below for how
   delivery differs by type.
-- `mint_signature` — OPTIONAL boolean, default `false`. Same opt-in as `mint_cash`'s (§Mint Provenance) —
-  the merged wallet's own signature attests its own pubkey and its total merged amount, independent of
-  whether any source wallet had one.
 
 ### Response
 
@@ -1759,10 +1742,21 @@ succeeding or failing — only as a hint for deciding how to construct the attem
 
 ### Mint Provenance
 
-A token MAY carry a **mint signature** (TLV type `5`, paired with the **attested amount**, type `6`): a
+A token MUST carry a **mint signature** (TLV type `5`, paired with the **attested amount**, type `6`): a
 signature by the minting node's own Lightning identity key, proving offline which node minted the wallet
 and for how much. It lets a holder verify a token's origin and denomination, and refuse one from a minter
 they don't trust, without contacting anyone.
+
+It is REQUIRED rather than optional, and the reason is structural rather than a matter of taste. The
+signature is the only thing a token carries that identifies its **minting Hub**, and that identity is the
+only thing a client can verify a transport announcement against (§The Hub Announcement). A token without
+one therefore cannot reach the private transport at all — and the private transport is the only transport
+that serves bill methods (§The Private Transport). An unsigned bill would be unspendable.
+
+A Hub that cannot obtain the signature MUST fail the operation rather than issue an unsigned token, and
+MUST do so before committing any funds, so a refusal costs the caller nothing. There is consequently no
+request parameter to opt in or out: the earlier `mint_signature` field is gone from `mint_cash`,
+`cash_transfer` and `cash_consolidate`.
 
 - **What is signed.** The canonical ASCII string `lokicash-mint:v1:<hrp>:<wallet_pubkey_hex>:<amount_millis>`
   — the token's HRP, wallet pubkey, and committed amount. Binding the amount is only sound because a

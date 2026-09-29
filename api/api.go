@@ -38,7 +38,6 @@ import (
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -3207,35 +3206,33 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			representativeByWallet[row.WalletAppID] = row
 		}
 	}
-	tokenByWallet := make(map[uint]string, len(representativeByWallet))
-	relayUrls := api.cfg.GetRelayUrls()
+	// Read the ISSUED token off each wallet's own row rather than re-encoding one.
+	//
+	// A re-encode cannot reproduce the mint signature, and an unsigned bill carries
+	// nothing identifying its minting hub — the one thing a client verifies a
+	// transport announcement against — so it could never be spent over the private
+	// transport, the only transport serving bill methods. An audit listing that shows
+	// an operator an unspendable string indistinguishable from the real one is worse
+	// than showing none.
+	walletIDs := make([]uint, 0, len(representativeByWallet))
+	for id := range representativeByWallet {
+		walletIDs = append(walletIDs, id)
+	}
+	tokenByWallet := make(map[uint]string, len(walletIDs))
+	if len(walletIDs) > 0 {
+		var walletApps []db.App
+		if err := api.db.Select("id", "cash_token").Where("id IN ?", walletIDs).Find(&walletApps).Error; err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load issued lokicash tokens for Cash wallet claims list")
+		}
+		for _, w := range walletApps {
+			tokenByWallet[w.ID] = w.CashToken
+		}
+	}
 	for i := range result {
 		if result[i].Archived {
 			continue
 		}
-		walletAppID := result[i].WalletAppID
-		token, ok := tokenByWallet[walletAppID]
-		if !ok {
-			representative, haveClaim := representativeByWallet[walletAppID]
-			pairingSecretKey, keyErr := api.keys.GetCashPairingKey(walletAppID)
-			if haveClaim && representative.WalletPubkey != "" && keyErr == nil {
-				required := representative.IdentityType != db.CashIdentityCash
-				token, keyErr = lokicash.Encode(lokicash.Token{
-					HRP:              lokicash.HRP,
-					WalletPubkey:     representative.WalletPubkey,
-					Secret:           pairingSecretKey,
-					RelayURLs:        relayUrls,
-					IdentityRequired: &required,
-				})
-			}
-			if !haveClaim || representative.WalletPubkey == "" || keyErr != nil {
-				logger.Logger.Error().Err(keyErr).Uint("wallet_app_id", walletAppID).
-					Msg("Failed to derive lokicash token for Cash wallet claims list")
-				token = ""
-			}
-			tokenByWallet[walletAppID] = token
-		}
-		result[i].CashToken = token
+		result[i].CashToken = tokenByWallet[result[i].WalletAppID]
 	}
 
 	return result, totalCount, counts, nil
@@ -3362,37 +3359,25 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 
 	pairingURI := nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, nil)
 
-	// Unlike Commit/SpinOff (which know a just-created wallet's identity
-	// requirement directly from the params they were just given), this
-	// endpoint can be called at any later time — after the wallet's sole
-	// recipient may have moved into or out of cash-mode status via
-	// cash_transfer — so it re-derives the hint from the wallet's CURRENT
-	// claim rows rather than trusting anything cached at creation time. A
-	// wallet with no claims left (every recipient individually removed) has
-	// no well-defined identity requirement to report; it stays nil in that
-	// case, exactly like a token predating this field.
-	var identityRequired *bool
-	claims, err := api.appsSvc.ListClaimsForWallet(app.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list cash wallet claims: %w", err)
-	}
-	if len(claims) > 0 {
-		required := claims[0].IdentityType != db.CashIdentityCash
-		identityRequired = &required
-	}
-
-	lokicashToken, err := lokicash.Encode(lokicash.Token{
-		HRP:              lokicash.HRP,
-		WalletPubkey:     *app.WalletPubkey,
-		Secret:           pairingSecretKey,
-		RelayURLs:        relayUrls,
-		IdentityRequired: identityRequired,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode lokicash token: %w", err)
+	// The token is returned VERBATIM as issued, never re-derived.
+	//
+	// This used to re-encode one from the wallet's current claim rows, which was
+	// merely a different-but-usable string. It is not survivable now: a re-encode
+	// cannot reproduce the mint signature, and an unsigned bill carries nothing that
+	// identifies its minting hub — the one thing a client verifies a transport
+	// announcement against — so it could not reach the private transport, which is the
+	// only transport serving bill methods. Re-deriving would hand out an unspendable
+	// token that looks exactly like a good one.
+	//
+	// The cost is that the token's identity_required hint is whatever it was at
+	// issue, even if the sole recipient has since moved into or out of cash mode. That
+	// is acceptable and already documented: the hint is best-effort and explicitly NOT
+	// a live guarantee (NIP-CASH §Redemption Metadata). An unspendable token is not.
+	if app.CashToken == "" {
+		return nil, fmt.Errorf("cash wallet %d has no issued token stored, and one cannot be re-derived: a re-encode would lack the mint signature and be unspendable", app.ID)
 	}
 
-	return &CashWalletConnectionResponse{PairingURI: pairingURI, CashToken: lokicashToken}, nil
+	return &CashWalletConnectionResponse{PairingURI: pairingURI, CashToken: app.CashToken}, nil
 }
 
 // GetCashWalletRecipients returns every recipient slice of a single
@@ -3517,7 +3502,6 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		HubApp:     &hub,
 		Recipients: recipients,
 		ExpirySecs: req.ExpirySecs,
-		SignMint:   req.MintSignature,
 	})
 	if err != nil {
 		return nil, err

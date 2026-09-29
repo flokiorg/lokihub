@@ -29,7 +29,6 @@ import { useInfo } from "src/hooks/useInfo";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 
-
 function Settings() {
   const { theme, darkMode, setTheme, setDarkMode } = useTheme();
   const { t } = useTranslation("settings");
@@ -38,17 +37,11 @@ function Settings() {
 
   const { data: info, mutate: reloadInfo } = useInfo();
 
-
-
-
-
-
-
-
   useEffect(() => {
     async function fetchCurrencies() {
       try {
-        const data = await request<Record<string, { name: string }>>("/api/currencies");
+        const data =
+          await request<Record<string, { name: string }>>("/api/currencies");
         if (!data) {
           throw new Error("Failed to fetch currencies");
         }
@@ -62,15 +55,14 @@ function Settings() {
         setFiatCurrencies(mappedCurrencies);
       } catch (error) {
         console.error(error);
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
         toast.error(t("toasts.currencyFetchFailed", { error: errorMessage }));
       }
     }
 
     fetchCurrencies();
   }, []);
-
-
 
   async function updateSettings(
     payload: Record<string, string | boolean>,
@@ -100,25 +92,16 @@ function Settings() {
   }
 
   async function updateFlokicoinDisplayFormat(flokicoinDisplayFormat: string) {
-    await updateSettings(
-      { flokicoinDisplayFormat },
-      t("toasts.formatUpdated")
-    );
+    await updateSettings({ flokicoinDisplayFormat }, t("toasts.formatUpdated"));
   }
-
-
 
   if (!info) {
     return <Loading />;
   }
 
-
   return (
     <>
-      <SettingsHeader
-        title={t("title")}
-        description={t("description")}
-      />
+      <SettingsHeader title={t("title")} description={t("description")} />
       <form className="w-full flex flex-col gap-8">
         {/* Theme & Appearance Section */}
         <div className="space-y-4">
@@ -160,9 +143,15 @@ function Settings() {
                   <SelectValue placeholder={t("appearance.darkMode")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="system">{t("appearance.modes.system")}</SelectItem>
-                  <SelectItem value="light">{t("appearance.modes.light")}</SelectItem>
-                  <SelectItem value="dark">{t("appearance.modes.dark")}</SelectItem>
+                  <SelectItem value="system">
+                    {t("appearance.modes.system")}
+                  </SelectItem>
+                  <SelectItem value="light">
+                    {t("appearance.modes.light")}
+                  </SelectItem>
+                  <SelectItem value="dark">
+                    {t("appearance.modes.dark")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -171,10 +160,14 @@ function Settings() {
 
         {/* Units & Currency Section */}
         <div className="space-y-4">
-          <h3 className="text-xl font-medium">{t("sections.unitsAndCurrency")}</h3>
+          <h3 className="text-xl font-medium">
+            {t("sections.unitsAndCurrency")}
+          </h3>
           <div className="space-y-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="flokicoinDisplayFormat">{t("units.displayUnit")}</Label>
+              <Label htmlFor="flokicoinDisplayFormat">
+                {t("units.displayUnit")}
+              </Label>
               <Select
                 value={info.flokicoinDisplayFormat}
                 onValueChange={updateFlokicoinDisplayFormat}
@@ -218,8 +211,6 @@ function Settings() {
           <h3 className="text-xl font-medium">{t("sections.language")}</h3>
           <LanguageSwitcher />
         </div>
-
-
       </form>
     </>
   );

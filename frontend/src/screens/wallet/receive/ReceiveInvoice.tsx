@@ -3,7 +3,7 @@ import {
   CopyIcon,
   InfoIcon,
   LinkIcon,
-  PlusIcon
+  PlusIcon,
 } from "lucide-react";
 
 import React from "react";
@@ -32,7 +32,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "src/components/ui/dialog";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -46,11 +46,17 @@ import {
 import { useBalances } from "src/hooks/useBalances";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 
-
 import { useInfo } from "src/hooks/useInfo";
 import { useTransaction } from "src/hooks/useTransaction";
 import { copyToClipboard } from "src/lib/clipboard";
-import { CreateInvoiceRequest, LSPS2BuyRequest, LSPS2BuyResponse, LSPS2GetInfoResponse, LSPS2OpeningFeeParams, Transaction } from "src/types";
+import {
+  CreateInvoiceRequest,
+  LSPS2BuyRequest,
+  LSPS2BuyResponse,
+  LSPS2GetInfoResponse,
+  LSPS2OpeningFeeParams,
+  Transaction,
+} from "src/types";
 
 import { useTranslation, Trans } from "react-i18next";
 import { request } from "src/utils/request";
@@ -82,7 +88,8 @@ export default function ReceiveInvoice() {
     null
   );
   const [paymentDone, setPaymentDone] = React.useState(false);
-  const [jitFeeParams, setJitFeeParams] = React.useState<LSPS2OpeningFeeParams | null>(null);
+  const [jitFeeParams, setJitFeeParams] =
+    React.useState<LSPS2OpeningFeeParams | null>(null);
   const [jitError, setJitError] = React.useState<string | null>(null);
   const [jitApplied, setJitApplied] = React.useState(false);
   const [selectedLspPubkey, setSelectedLspPubkey] = React.useState<string>("");
@@ -92,14 +99,12 @@ export default function ReceiveInvoice() {
     true
   );
 
-
-
   React.useEffect(() => {
     if (invoiceData?.settledAt) {
       setPaymentDone(true);
     }
   }, [invoiceData]);
-  
+
   // Initialize selectedLspPubkey with the first available LSP
   React.useEffect(() => {
     if (info?.lsps?.length && !selectedLspPubkey) {
@@ -113,70 +118,94 @@ export default function ReceiveInvoice() {
     // 0.8 safety factor? Original code used it.
     // (+amountDisplay * 1000 || transaction?.amount || 0) >= 0.8 * balances.lightning.totalReceivable
     const amountSat = parseInputAmount(+amountDisplay, inputUnit) || 0;
-    // Note: This check relies on the raw input amount to determine if JIT is needed. 
+    // Note: This check relies on the raw input amount to determine if JIT is needed.
     // In "Sender Pays" mode, the actual incoming amount might be higher, making JIT even more likely.
     return amountSat * 1000 > balances.lightning.totalReceivable;
   }, [balances, amountDisplay, parseInputAmount, inputUnit]);
 
   const validationError = React.useMemo(() => {
     if (!needsJit || !jitFeeParams || !amountDisplay) return null;
-    
-    const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
+
+    const inputAmt = (parseInputAmount(+amountDisplay, inputUnit) || 0) * 1000;
     const minFee = parseInt(jitFeeParams.min_fee_mloki);
     const rate = jitFeeParams.proportional / 1000000;
     let grossAmt = 0;
-    
+
     if (senderPaysFee) {
-        // Gross = Amount + Fee(Gross)
-        const grossCandidate = Math.floor(inputAmt / (1 - rate));
-        const feeCandidate = Math.floor(grossCandidate * rate);
-        grossAmt = inputAmt + Math.max(minFee, feeCandidate);
+      // Gross = Amount + Fee(Gross)
+      const grossCandidate = Math.floor(inputAmt / (1 - rate));
+      const feeCandidate = Math.floor(grossCandidate * rate);
+      grossAmt = inputAmt + Math.max(minFee, feeCandidate);
     } else {
-        // Gross = Amount
-        grossAmt = inputAmt;
+      // Gross = Amount
+      grossAmt = inputAmt;
     }
-    
+
     const minSize = parseInt(jitFeeParams.min_payment_size_mloki);
     const maxSize = parseInt(jitFeeParams.max_payment_size_mloki);
-    
+
     if (grossAmt < minSize) {
-        return `Below min limit (${scaleInputAmount(minSize/1000, inputUnit)} ${inputUnit}).`;
+      return `Below min limit (${scaleInputAmount(minSize / 1000, inputUnit)} ${inputUnit}).`;
     }
     if (maxSize > 0 && grossAmt > maxSize) {
-        return `Exceeds max limit (${scaleInputAmount(maxSize/1000, inputUnit)} ${inputUnit}).`;
+      return `Exceeds max limit (${scaleInputAmount(maxSize / 1000, inputUnit)} ${inputUnit}).`;
     }
     return null;
-  }, [needsJit, jitFeeParams, amountDisplay, senderPaysFee, parseInputAmount, scaleInputAmount, inputUnit]);
+  }, [
+    needsJit,
+    jitFeeParams,
+    amountDisplay,
+    senderPaysFee,
+    parseInputAmount,
+    scaleInputAmount,
+    inputUnit,
+  ]);
 
   const fetchJitFees = React.useCallback(async () => {
     if (!selectedLspPubkey) return;
-    
+
     setJitError(null);
     setIsFetchingJitParams(true);
     try {
-        const res = await request<LSPS2GetInfoResponse>(`/api/lsps2/info?lsp=${selectedLspPubkey}`, {
-            method: "GET",
-        });
-        if (res) {
-            setJitFeeParams(res);
+      const res = await request<LSPS2GetInfoResponse>(
+        `/api/lsps2/info?lsp=${selectedLspPubkey}`,
+        {
+          method: "GET",
         }
+      );
+      if (res) {
+        setJitFeeParams(res);
+      }
     } catch (e: any) {
-        console.error("Failed to fetch JIT fees", e);
-        const errorMessage = e.message || "Failed to fetch fee information";
-        setJitError(errorMessage);
-        toast.error(errorMessage);
+      console.error("Failed to fetch JIT fees", e);
+      const errorMessage = e.message || "Failed to fetch fee information";
+      setJitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
-        setIsFetchingJitParams(false);
+      setIsFetchingJitParams(false);
     }
   }, [selectedLspPubkey]);
 
   React.useEffect(() => {
     // Only fetch if we need JIT and haven't fetched for the selected LSP yet
     // Do NOT fetch if there is an error (user must retry manually)
-    if (needsJit && selectedLspPubkey && !jitFeeParams && !jitError && !isFetchingJitParams) {
-        fetchJitFees();
+    if (
+      needsJit &&
+      selectedLspPubkey &&
+      !jitFeeParams &&
+      !jitError &&
+      !isFetchingJitParams
+    ) {
+      fetchJitFees();
     }
-  }, [needsJit, selectedLspPubkey, jitFeeParams, jitError, isFetchingJitParams, fetchJitFees]);
+  }, [
+    needsJit,
+    selectedLspPubkey,
+    jitFeeParams,
+    jitError,
+    isFetchingJitParams,
+    fetchJitFees,
+  ]);
 
   if (!balances || !info) {
     return <Loading />;
@@ -187,103 +216,114 @@ export default function ReceiveInvoice() {
 
     try {
       setLoading(true);
-      let jitSCID = ""; 
+      let jitSCID = "";
       let cltvDelta = 0;
       let jitLSP = "";
 
       const firstLSP = selectedLspPubkey || info?.lsps?.[0]?.pubkey;
       // Calculate amount in mloki (1 sat = 1000 mloki)
-      const inputAmountMloki = (parseInputAmount(+amountDisplay, inputUnit) || 0) * 1000;
+      const inputAmountMloki =
+        (parseInputAmount(+amountDisplay, inputUnit) || 0) * 1000;
       let invoiceAmountMloki = inputAmountMloki;
       let buyLiquidityAmountMloki = inputAmountMloki;
       let feeMloki = 0;
 
-          if (needsJit && jitFeeParams && firstLSP) {
-            
-            // Calculate Fees and Amounts based on "Sender Pays" vs "Receiver Pays"
-            const minFee = parseInt(jitFeeParams.min_fee_mloki);
-            const proportionalPpm = jitFeeParams.proportional;
-            
-            if (senderPaysFee) {
-                // Sender Pays:
-                // Input = Net Amount (what user receives).
-                // Gross = ??
-                // Logic: Gross - Fee(Gross) = Net.
-                // Fee = Max(MinFee, Gross * Rate).
-                // If MinFee dominates: Gross = Net + MinFee.
-                // If Propatioal dominates: Gross = Net / (1 - Rate).
-                
-                const rate = proportionalPpm / 1000000;
-                // Solve for Gross using proportional assumption
-                // Use Floor to align with integer math.
-                const grossCandidate = Math.floor(inputAmountMloki / (1 - rate));
-                const feeCandidate = Math.floor(grossCandidate * rate);
-                
-                // Actual Fee is Max of MinFee or Proportional
-                feeMloki = Math.max(minFee, feeCandidate);
-                
-                // If MinFee was larger, recalculate Gross
-                buyLiquidityAmountMloki = inputAmountMloki + feeMloki;
-                invoiceAmountMloki = inputAmountMloki; // We receive Input.
-            } else {
-                // Receiver Pays (Default):
-                // Input = Gross Amount (what sender pays total, roughly).
-                // Net = Input - Fee.
-                // Logic: Fee = Fee(Input).
-                
-                const proportionalFee = Math.floor((inputAmountMloki * proportionalPpm) / 1000000);
-                feeMloki = Math.max(minFee, proportionalFee);
-                
-                buyLiquidityAmountMloki = inputAmountMloki;
-                invoiceAmountMloki = inputAmountMloki - feeMloki; // We receive Input - Fee.
-            }
+      if (needsJit && jitFeeParams && firstLSP) {
+        // Calculate Fees and Amounts based on "Sender Pays" vs "Receiver Pays"
+        const minFee = parseInt(jitFeeParams.min_fee_mloki);
+        const proportionalPpm = jitFeeParams.proportional;
 
-            // Check limits on the GROSS amount (what goes through the channel)
-            const minPaymentSize = parseInt(jitFeeParams.min_payment_size_mloki);
-            const maxPaymentSize = parseInt(jitFeeParams.max_payment_size_mloki);
+        if (senderPaysFee) {
+          // Sender Pays:
+          // Input = Net Amount (what user receives).
+          // Gross = ??
+          // Logic: Gross - Fee(Gross) = Net.
+          // Fee = Max(MinFee, Gross * Rate).
+          // If MinFee dominates: Gross = Net + MinFee.
+          // If Propatioal dominates: Gross = Net / (1 - Rate).
 
-            if (buyLiquidityAmountMloki < minPaymentSize) {
-                toast.error(t("wallet:receive.amountTooSmall", { amount: scaleInputAmount(minPaymentSize / 1000, inputUnit), unit: inputUnit }));
-                setLoading(false);
-                return;
-            }
+          const rate = proportionalPpm / 1000000;
+          // Solve for Gross using proportional assumption
+          // Use Floor to align with integer math.
+          const grossCandidate = Math.floor(inputAmountMloki / (1 - rate));
+          const feeCandidate = Math.floor(grossCandidate * rate);
 
-            if (maxPaymentSize > 0 && buyLiquidityAmountMloki > maxPaymentSize) {
-                 toast.error(t("wallet:receive.amountTooLarge", { amount: scaleInputAmount(maxPaymentSize / 1000, inputUnit), unit: inputUnit }));
-                 setLoading(false);
-                 return;
-            }
+          // Actual Fee is Max of MinFee or Proportional
+          feeMloki = Math.max(minFee, feeCandidate);
 
-            // Calculate Net Amount for Invoice
-            // The invoice monitors the amount RECEIVED.
-            // LSP receives Gross -> Deducts Fee -> Fowards Net.
-            // So Invoice MUST expect Net.
+          // If MinFee was larger, recalculate Gross
+          buyLiquidityAmountMloki = inputAmountMloki + feeMloki;
+          invoiceAmountMloki = inputAmountMloki; // We receive Input.
+        } else {
+          // Receiver Pays (Default):
+          // Input = Gross Amount (what sender pays total, roughly).
+          // Net = Input - Fee.
+          // Logic: Fee = Fee(Input).
 
+          const proportionalFee = Math.floor(
+            (inputAmountMloki * proportionalPpm) / 1000000
+          );
+          feeMloki = Math.max(minFee, proportionalFee);
 
-            try {
-                toast(t("wallet:receive.buyingLiquidity"));
-                const buyRes = await request<LSPS2BuyResponse>("/api/lsps2/buy", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                    lspPubkey: firstLSP,
-                    paymentSizeMloki: buyLiquidityAmountMloki, // Buy liquidity for GROSS amount
-                    openingFeeParams: jitFeeParams
-                } as LSPS2BuyRequest)
-            });
-                if (buyRes) {
-                 jitSCID = buyRes.interceptScid;
-                 cltvDelta = buyRes.cltvExpiryDelta;
-                 jitLSP = buyRes.lspNodeID;
-                }
-            } catch (e: any) {
-                console.error("Failed to buy liquidity", e);
-                toast.error(t("wallet:receive.failedToBuyLiquidity"), {
-                    description: e.message || t("wallet:receive.unknownError")
-                });
-                return;
-            }
+          buyLiquidityAmountMloki = inputAmountMloki;
+          invoiceAmountMloki = inputAmountMloki - feeMloki; // We receive Input - Fee.
+        }
+
+        // Check limits on the GROSS amount (what goes through the channel)
+        const minPaymentSize = parseInt(jitFeeParams.min_payment_size_mloki);
+        const maxPaymentSize = parseInt(jitFeeParams.max_payment_size_mloki);
+
+        if (buyLiquidityAmountMloki < minPaymentSize) {
+          toast.error(
+            t("wallet:receive.amountTooSmall", {
+              amount: scaleInputAmount(minPaymentSize / 1000, inputUnit),
+              unit: inputUnit,
+            })
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (maxPaymentSize > 0 && buyLiquidityAmountMloki > maxPaymentSize) {
+          toast.error(
+            t("wallet:receive.amountTooLarge", {
+              amount: scaleInputAmount(maxPaymentSize / 1000, inputUnit),
+              unit: inputUnit,
+            })
+          );
+          setLoading(false);
+          return;
+        }
+
+        // Calculate Net Amount for Invoice
+        // The invoice monitors the amount RECEIVED.
+        // LSP receives Gross -> Deducts Fee -> Fowards Net.
+        // So Invoice MUST expect Net.
+
+        try {
+          toast(t("wallet:receive.buyingLiquidity"));
+          const buyRes = await request<LSPS2BuyResponse>("/api/lsps2/buy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lspPubkey: firstLSP,
+              paymentSizeMloki: buyLiquidityAmountMloki, // Buy liquidity for GROSS amount
+              openingFeeParams: jitFeeParams,
+            } as LSPS2BuyRequest),
+          });
+          if (buyRes) {
+            jitSCID = buyRes.interceptScid;
+            cltvDelta = buyRes.cltvExpiryDelta;
+            jitLSP = buyRes.lspNodeID;
           }
+        } catch (e: any) {
+          console.error("Failed to buy liquidity", e);
+          toast.error(t("wallet:receive.failedToBuyLiquidity"), {
+            description: e.message || t("wallet:receive.unknownError"),
+          });
+          return;
+        }
+      }
 
       const invoice = await request<Transaction>("/api/invoices", {
         method: "POST",
@@ -295,7 +335,7 @@ export default function ReceiveInvoice() {
           description,
           lspJitChannelSCID: jitSCID,
           lspCltvExpiryDelta: cltvDelta || 144,
-          lspPubkey: jitSCID ? (jitLSP || info?.lsps?.[0]?.pubkey) : undefined,
+          lspPubkey: jitSCID ? jitLSP || info?.lsps?.[0]?.pubkey : undefined,
           lspFeeBaseMloki: jitSCID ? feeMloki : undefined, // Base Fee = Calculated Fee
           lspFeeProportionalMillionths: jitSCID ? 0 : undefined, // Proportional Fee = 0 (All fees in base)
         } as CreateInvoiceRequest),
@@ -305,7 +345,7 @@ export default function ReceiveInvoice() {
         setTransaction(invoice);
         // If we got a JIT SCID, we consider JIT applied
         if (jitSCID) {
-           setJitApplied(true);
+          setJitApplied(true);
         }
         setAmountDisplay("");
         setDescription("");
@@ -325,16 +365,21 @@ export default function ReceiveInvoice() {
     copyToClipboard(transaction?.invoice as string);
   };
 
-
-
   return (
     <div className="grid gap-5">
-      <AppHeader title={transaction ? t("wallet:receive.lightningInvoice") : t("wallet:receive.createInvoice")} />
+      <AppHeader
+        title={
+          transaction
+            ? t("wallet:receive.lightningInvoice")
+            : t("wallet:receive.createInvoice")
+        }
+      />
       <div className="flex flex-col md:flex-row gap-12">
         <div className="w-full md:max-w-lg grid gap-6">
           {hasChannelManagement &&
             (parseAmount(+amountDisplay) * 1000 || transaction?.amount || 0) >=
-              0.8 * balances.lightning.totalReceivable && !jitApplied && (
+              0.8 * balances.lightning.totalReceivable &&
+            !jitApplied && (
               <LowReceivingCapacityAlert jitAvailable={!!info?.lsps?.length} />
             )}
           <div>
@@ -352,14 +397,15 @@ export default function ReceiveInvoice() {
                       <QRCode value={transaction.invoice} />
                       <div className="flex flex-col gap-1 items-center">
                         <p className="text-2xl font-medium slashed-zero">
-                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                          <FormattedFlokicoinAmount
+                            amount={transaction.amount}
+                          />
                         </p>
                         <div className="flex flex-col items-center">
-                            <FormattedFiatAmount
-                              amount={Math.floor(transaction.amount / 1000)}
-                              className="text-xl"
-                            />
-
+                          <FormattedFiatAmount
+                            amount={Math.floor(transaction.amount / 1000)}
+                            className="text-xl"
+                          />
                         </div>
                       </div>
                     </CardContent>
@@ -385,14 +431,15 @@ export default function ReceiveInvoice() {
                       <Tick className="w-48" />
                       <div className="flex flex-col gap-1 items-center">
                         <p className="text-2xl font-medium slashed-zero">
-                          <FormattedFlokicoinAmount amount={transaction.amount} />
+                          <FormattedFlokicoinAmount
+                            amount={transaction.amount}
+                          />
                         </p>
                         <div className="flex flex-col items-center">
-                            <FormattedFiatAmount
-                              amount={Math.floor(transaction.amount / 1000)}
-                              className="text-xl"
-                            />
-
+                          <FormattedFiatAmount
+                            amount={Math.floor(transaction.amount / 1000)}
+                            className="text-xl"
+                          />
                         </div>
                       </div>
                     </CardContent>
@@ -431,232 +478,373 @@ export default function ReceiveInvoice() {
                     onAmountChange={(val) => setAmountDisplay(val)}
                     inputUnit={inputUnit}
                     onInputUnitChange={handleInputUnitChange}
-                    placeholder={t("wallet:receive.amountPlaceholder", { unit: inputUnit })}
+                    placeholder={t("wallet:receive.amountPlaceholder", {
+                      unit: inputUnit,
+                    })}
                     min={1}
                     autoFocus
                   />
                 </div>
                 {needsJit && info?.lsps && info.lsps.length > 0 && (
                   <div className="rounded-lg border bg-muted/50 p-4 grid gap-4">
-                     {/* 1. LSP Selection Header */}
-                     <div className="flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
-                        <div className="grid gap-1.5 flex-1 w-full">
-                            <Label htmlFor="lsp-select">{t("wallet:receive.liquidityProvider")}</Label>
-                            <Select 
-                                value={selectedLspPubkey} 
-                                onValueChange={(val) => {
-                                    setSelectedLspPubkey(val);
-                                    setJitFeeParams(null); // Reset params to force refetch
-                                    setJitError(null);
-                                }}
-                            >
-                                <SelectTrigger id="lsp-select">
-                                    <SelectValue placeholder={t("wallet:receive.selectLSP")} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {info.lsps.map((lsp) => (
-                                        <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                                            {lsp.name || `${lsp.pubkey.slice(0, 8)}...`}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                       </div>
-                       
-                       <div className="flex items-center gap-2 pb-1">
-                            <span className="text-sm font-medium">{t("wallet:receive.jitPayment")}</span>
-                            <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                                        <InfoIcon className="h-4 w-4" />
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-lg">
-                                    <DialogHeader>
-                                        <DialogTitle>{t("wallet:receive.jitExplainedTitle")}</DialogTitle>
-                                    </DialogHeader>
-                                    
-                                    <div className="grid gap-4 py-2">
-                                        <div className="space-y-3">
-                                            <div>
-                                                <h4 className="font-semibold text-sm mb-1">{t("wallet:receive.jitWhyNeededTitle")}</h4>
-                                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    <Trans t={t} i18nKey="wallet:receive.jitWhyNeededDesc">
-                                                        Lightning payments require <strong>inbound liquidity</strong> (receiving capacity). You currently don't have enough capacity to receive this amount directly.
-                                                    </Trans>
-                                                </p>
-                                            </div>
-                                            
-                                            <div>
-                                                <h4 className="font-semibold text-sm mb-1">{t("wallet:receive.jitHowWorksTitle")}</h4>
-                                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    <Trans t={t} i18nKey="wallet:receive.jitHowWorksDesc">
-                                                        Your LSP will automatically open a new channel <strong>Just-In-Time (JIT)</strong> when the payment arrives. This ensures your payment succeeds immediately without you needing to manually manage channels.
-                                                    </Trans>
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {jitFeeParams && (
-                                            <>
-                                                <div className="border-t pt-4">
-                                                    <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.feeStructure")}</h4>
-                                                    <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
-                                                        <span className="text-muted-foreground">{t("wallet:receive.minFee")}</span>
-                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={jitFeeParams.min_fee_mloki ? parseInt(jitFeeParams.min_fee_mloki) : 0} /></span>
-
-                                                        
-                                                        <span className="text-muted-foreground">{t("wallet:receive.propRate")}</span>
-                                                        <span className="font-medium text-end">{(jitFeeParams.proportional / 10000).toFixed(2)}% ({jitFeeParams.proportional} ppm)</span>
-
-                                                        <span className="text-muted-foreground">{t("wallet:receive.min")}</span>
-                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} /></span>
-
-                                                        <span className="text-muted-foreground">{t("wallet:receive.max")}</span>
-                                                        <span className="font-medium text-end"><FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} /></span>
-                                                        
-                                                        <div className="col-span-2 text-xs text-muted-foreground mt-2 border-t pt-2">
-                                                            <Trans t={t} i18nKey="wallet:receive.feeLogic">
-                                                                The fee is the <strong>higher</strong> of the Minimum Fee or the calculated Proportional Fee.
-                                                            </Trans>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="border-t pt-4">
-                                                    <h4 className="font-semibold text-sm mb-2">{t("wallet:receive.whoPays")}</h4>
-                                                    <div className="space-y-3">
-                                                        <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
-                                                            <span className="text-sm font-medium">{t("wallet:receive.receiverPays")}</span>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                {t("wallet:receive.receiverPaysDesc")}
-                                                            </p>
-                                                        </div>
-                                                        <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
-                                                            <span className="text-sm font-medium">{t("wallet:receive.senderPays")}</span>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                {t("wallet:receive.senderPaysDesc")}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </DialogContent>
-                             </Dialog>
-                        </div>
-                     </div>
-
-                     {/* 2. Fees and Amounts Display */}
-                     <div className="grid gap-3">
-                        {isFetchingJitParams ? (
-                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground border border-dashed rounded-md">
-                                <Loading className="size-4 mr-2" />
-                                <span>{t("wallet:receive.loadingJit")}</span>
-                            </div>
-                        ) : jitFeeParams ? (
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-md border">
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-xs text-muted-foreground uppercase">{t("wallet:receive.estimatedFee")}</span>
-                                    <div className="text-lg">
-                                        <FormattedFlokicoinAmount amount={(() => {
-                                          const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
-                                          const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                          const rate = jitFeeParams.proportional / 1000000;
-                                          let finalFee = 0;
-                                          
-                                          if (senderPaysFee) {
-                                              const gross = Math.floor(inputAmt / (1 - rate));
-                                              const feeCand = Math.floor(gross * rate);
-                                              finalFee = Math.max(minFee, feeCand);
-                                          } else {
-                                              const prop = Math.floor(inputAmt * rate);
-                                              finalFee = Math.max(minFee, prop);
-                                          }
-                                          return Math.round(finalFee / 1000) * 1000;
-                                      })()} />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-1 text-end">
-                                    <span className="text-xs text-muted-foreground uppercase">
-                                        {senderPaysFee ? t("wallet:receive.totalToSend") : t("wallet:receive.youReceive")}
-                                    </span>
-                                    <div className="text-lg">
-                                        {senderPaysFee ? (
-                                             <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
-                                              const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                              const rate = jitFeeParams.proportional / 1000000;
-                                              const gross = Math.floor(inputAmt / (1 - rate));
-                                              const fee = Math.max(minFee, Math.floor(gross * rate));
-                                              const total = inputAmt + fee;
-                                              return Math.round(total / 1000) * 1000;
-                                             })()} />
-                                        ) : (
-                                             <FormattedFlokicoinAmount amount={(() => {
-                                              const inputAmt = (parseInputAmount(+amountDisplay, inputUnit)||0)*1000;
-                                              const minFee = parseInt(jitFeeParams.min_fee_mloki);
-                                              const rate = jitFeeParams.proportional / 1000000;
-                                              const prop = Math.floor(inputAmt * rate);
-                                              const fee = Math.max(minFee, prop);
-                                              const receive = inputAmt - fee;
-                                              return Math.max(0, Math.round(receive / 1000) * 1000);
-                                             })()} />
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {jitError && (
-                            <div className="text-destructive text-sm bg-destructive/10 p-3 rounded-md border border-destructive/20 flex items-center justify-between gap-2">
-                                <span className="flex-1">{jitError}</span>
-                                <Button variant="outline" size="sm" onClick={fetchJitFees}>{t("wallet:receive.retry")}</Button>
-                            </div>
-                        )}
-                     </div>
-
-                     {/* 3. Limits Row */}
-                     {jitFeeParams && (
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
-                                <span className="opacity-70">{t("wallet:receive.paymentRange")}</span>
-                                <div className="flex items-center gap-1.5 text-foreground/90">
-                                    <FormattedFlokicoinAmount amount={parseInt(jitFeeParams.min_payment_size_mloki)} />
-                                    <span className="opacity-40">—</span>
-                                    <FormattedFlokicoinAmount amount={parseInt(jitFeeParams.max_payment_size_mloki)} />
-                                </div>
-                            </div>
-                            {validationError && (
-                                <div className="text-[11px] text-destructive bg-destructive/5 px-2 py-1 rounded border border-destructive/10 animate-in fade-in slide-in-from-top-1">
-                                    {validationError}
-                                </div>
-                            )}
-                        </div>
-                     )}
-
-                     {/* 4. Checkbox Toggle */}
-                     {!jitError && (
-                         <div className="flex items-center space-x-2">
-                            <Checkbox 
-                                id="senderPays" 
-                                checked={senderPaysFee}
-                                onCheckedChange={(checked) => setSenderPaysFee(checked as boolean)}
+                    {/* 1. LSP Selection Header */}
+                    <div className="flex flex-col sm:flex-row gap-4 sm:items-end justify-between">
+                      <div className="grid gap-1.5 flex-1 w-full">
+                        <Label htmlFor="lsp-select">
+                          {t("wallet:receive.liquidityProvider")}
+                        </Label>
+                        <Select
+                          value={selectedLspPubkey}
+                          onValueChange={(val) => {
+                            setSelectedLspPubkey(val);
+                            setJitFeeParams(null); // Reset params to force refetch
+                            setJitError(null);
+                          }}
+                        >
+                          <SelectTrigger id="lsp-select">
+                            <SelectValue
+                              placeholder={t("wallet:receive.selectLSP")}
                             />
-                            <label
-                                htmlFor="senderPays"
-                                    className="text-sm text-foreground cursor-pointer"
+                          </SelectTrigger>
+                          <SelectContent>
+                            {info.lsps.map((lsp) => (
+                              <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
+                                {lsp.name || `${lsp.pubkey.slice(0, 8)}...`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center gap-2 pb-1">
+                        <span className="text-sm font-medium">
+                          {t("wallet:receive.jitPayment")}
+                        </span>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground"
                             >
-                                {t("wallet:receive.includeFee")}
-                            </label>
+                              <InfoIcon className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-lg">
+                            <DialogHeader>
+                              <DialogTitle>
+                                {t("wallet:receive.jitExplainedTitle")}
+                              </DialogTitle>
+                            </DialogHeader>
+
+                            <div className="grid gap-4 py-2">
+                              <div className="space-y-3">
+                                <div>
+                                  <h4 className="font-semibold text-sm mb-1">
+                                    {t("wallet:receive.jitWhyNeededTitle")}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground leading-relaxed">
+                                    <Trans
+                                      t={t}
+                                      i18nKey="wallet:receive.jitWhyNeededDesc"
+                                    >
+                                      Lightning payments require{" "}
+                                      <strong>inbound liquidity</strong>{" "}
+                                      (receiving capacity). You currently don't
+                                      have enough capacity to receive this
+                                      amount directly.
+                                    </Trans>
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <h4 className="font-semibold text-sm mb-1">
+                                    {t("wallet:receive.jitHowWorksTitle")}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground leading-relaxed">
+                                    <Trans
+                                      t={t}
+                                      i18nKey="wallet:receive.jitHowWorksDesc"
+                                    >
+                                      Your LSP will automatically open a new
+                                      channel{" "}
+                                      <strong>Just-In-Time (JIT)</strong> when
+                                      the payment arrives. This ensures your
+                                      payment succeeds immediately without you
+                                      needing to manually manage channels.
+                                    </Trans>
+                                  </p>
+                                </div>
+                              </div>
+
+                              {jitFeeParams && (
+                                <>
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold text-sm mb-2">
+                                      {t("wallet:receive.feeStructure")}
+                                    </h4>
+                                    <div className="bg-muted/50 p-3 rounded-md grid grid-cols-2 gap-y-2 text-sm">
+                                      <span className="text-muted-foreground">
+                                        {t("wallet:receive.minFee")}
+                                      </span>
+                                      <span className="font-medium text-end">
+                                        <FormattedFlokicoinAmount
+                                          amount={
+                                            jitFeeParams.min_fee_mloki
+                                              ? parseInt(
+                                                  jitFeeParams.min_fee_mloki
+                                                )
+                                              : 0
+                                          }
+                                        />
+                                      </span>
+
+                                      <span className="text-muted-foreground">
+                                        {t("wallet:receive.propRate")}
+                                      </span>
+                                      <span className="font-medium text-end">
+                                        {(
+                                          jitFeeParams.proportional / 10000
+                                        ).toFixed(2)}
+                                        % ({jitFeeParams.proportional} ppm)
+                                      </span>
+
+                                      <span className="text-muted-foreground">
+                                        {t("wallet:receive.min")}
+                                      </span>
+                                      <span className="font-medium text-end">
+                                        <FormattedFlokicoinAmount
+                                          amount={parseInt(
+                                            jitFeeParams.min_payment_size_mloki
+                                          )}
+                                        />
+                                      </span>
+
+                                      <span className="text-muted-foreground">
+                                        {t("wallet:receive.max")}
+                                      </span>
+                                      <span className="font-medium text-end">
+                                        <FormattedFlokicoinAmount
+                                          amount={parseInt(
+                                            jitFeeParams.max_payment_size_mloki
+                                          )}
+                                        />
+                                      </span>
+
+                                      <div className="col-span-2 text-xs text-muted-foreground mt-2 border-t pt-2">
+                                        <Trans
+                                          t={t}
+                                          i18nKey="wallet:receive.feeLogic"
+                                        >
+                                          The fee is the <strong>higher</strong>{" "}
+                                          of the Minimum Fee or the calculated
+                                          Proportional Fee.
+                                        </Trans>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold text-sm mb-2">
+                                      {t("wallet:receive.whoPays")}
+                                    </h4>
+                                    <div className="space-y-3">
+                                      <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
+                                        <span className="text-sm font-medium">
+                                          {t("wallet:receive.receiverPays")}
+                                        </span>
+                                        <p className="text-sm text-muted-foreground">
+                                          {t("wallet:receive.receiverPaysDesc")}
+                                        </p>
+                                      </div>
+                                      <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
+                                        <span className="text-sm font-medium">
+                                          {t("wallet:receive.senderPays")}
+                                        </span>
+                                        <p className="text-sm text-muted-foreground">
+                                          {t("wallet:receive.senderPaysDesc")}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
+
+                    {/* 2. Fees and Amounts Display */}
+                    <div className="grid gap-3">
+                      {isFetchingJitParams ? (
+                        <div className="flex items-center justify-center p-4 text-sm text-muted-foreground border border-dashed rounded-md">
+                          <Loading className="size-4 mr-2" />
+                          <span>{t("wallet:receive.loadingJit")}</span>
                         </div>
-                     )}
+                      ) : jitFeeParams ? (
+                        <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-md border">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground uppercase">
+                              {t("wallet:receive.estimatedFee")}
+                            </span>
+                            <div className="text-lg">
+                              <FormattedFlokicoinAmount
+                                amount={(() => {
+                                  const inputAmt =
+                                    (parseInputAmount(
+                                      +amountDisplay,
+                                      inputUnit
+                                    ) || 0) * 1000;
+                                  const minFee = parseInt(
+                                    jitFeeParams.min_fee_mloki
+                                  );
+                                  const rate =
+                                    jitFeeParams.proportional / 1000000;
+                                  let finalFee = 0;
+
+                                  if (senderPaysFee) {
+                                    const gross = Math.floor(
+                                      inputAmt / (1 - rate)
+                                    );
+                                    const feeCand = Math.floor(gross * rate);
+                                    finalFee = Math.max(minFee, feeCand);
+                                  } else {
+                                    const prop = Math.floor(inputAmt * rate);
+                                    finalFee = Math.max(minFee, prop);
+                                  }
+                                  return Math.round(finalFee / 1000) * 1000;
+                                })()}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-1 text-end">
+                            <span className="text-xs text-muted-foreground uppercase">
+                              {senderPaysFee
+                                ? t("wallet:receive.totalToSend")
+                                : t("wallet:receive.youReceive")}
+                            </span>
+                            <div className="text-lg">
+                              {senderPaysFee ? (
+                                <FormattedFlokicoinAmount
+                                  amount={(() => {
+                                    const inputAmt =
+                                      (parseInputAmount(
+                                        +amountDisplay,
+                                        inputUnit
+                                      ) || 0) * 1000;
+                                    const minFee = parseInt(
+                                      jitFeeParams.min_fee_mloki
+                                    );
+                                    const rate =
+                                      jitFeeParams.proportional / 1000000;
+                                    const gross = Math.floor(
+                                      inputAmt / (1 - rate)
+                                    );
+                                    const fee = Math.max(
+                                      minFee,
+                                      Math.floor(gross * rate)
+                                    );
+                                    const total = inputAmt + fee;
+                                    return Math.round(total / 1000) * 1000;
+                                  })()}
+                                />
+                              ) : (
+                                <FormattedFlokicoinAmount
+                                  amount={(() => {
+                                    const inputAmt =
+                                      (parseInputAmount(
+                                        +amountDisplay,
+                                        inputUnit
+                                      ) || 0) * 1000;
+                                    const minFee = parseInt(
+                                      jitFeeParams.min_fee_mloki
+                                    );
+                                    const rate =
+                                      jitFeeParams.proportional / 1000000;
+                                    const prop = Math.floor(inputAmt * rate);
+                                    const fee = Math.max(minFee, prop);
+                                    const receive = inputAmt - fee;
+                                    return Math.max(
+                                      0,
+                                      Math.round(receive / 1000) * 1000
+                                    );
+                                  })()}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {jitError && (
+                        <div className="text-destructive text-sm bg-destructive/10 p-3 rounded-md border border-destructive/20 flex items-center justify-between gap-2">
+                          <span className="flex-1">{jitError}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchJitFees}
+                          >
+                            {t("wallet:receive.retry")}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Limits Row */}
+                    {jitFeeParams && (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 font-sans">
+                          <span className="opacity-70">
+                            {t("wallet:receive.paymentRange")}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-foreground/90">
+                            <FormattedFlokicoinAmount
+                              amount={parseInt(
+                                jitFeeParams.min_payment_size_mloki
+                              )}
+                            />
+                            <span className="opacity-40">—</span>
+                            <FormattedFlokicoinAmount
+                              amount={parseInt(
+                                jitFeeParams.max_payment_size_mloki
+                              )}
+                            />
+                          </div>
+                        </div>
+                        {validationError && (
+                          <div className="text-[11px] text-destructive bg-destructive/5 px-2 py-1 rounded border border-destructive/10 animate-in fade-in slide-in-from-top-1">
+                            {validationError}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 4. Checkbox Toggle */}
+                    {!jitError && (
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="senderPays"
+                          checked={senderPaysFee}
+                          onCheckedChange={(checked) =>
+                            setSenderPaysFee(checked as boolean)
+                          }
+                        />
+                        <label
+                          htmlFor="senderPays"
+                          className="text-sm text-foreground cursor-pointer"
+                        >
+                          {t("wallet:receive.includeFee")}
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="grid gap-2">
-                  <Label htmlFor="description">{t("common:labels.description")}</Label>
+                  <Label htmlFor="description">
+                    {t("common:labels.description")}
+                  </Label>
                   <Input
                     id="description"
                     type="text"
@@ -669,20 +857,22 @@ export default function ReceiveInvoice() {
                   className="w-full md:w-fit"
                   loading={isLoading || isFetchingJitParams}
                   type="submit"
-                  disabled={!amountDisplay || (needsJit && (!jitFeeParams || !!validationError))}
+                  disabled={
+                    !amountDisplay ||
+                    (needsJit && (!jitFeeParams || !!validationError))
+                  }
                 >
                   {t("wallet:receive.createInvoice")}
                 </LoadingButton>
                 <div className="grid gap-2 border-t pt-6">
-
-                    <LinkButton
-                      to="/wallet/receive/onchain"
-                      variant="outline"
-                      className="w-full"
-                    >
-                      <LinkIcon className="h-4 w-4" />
-                      {t("wallet:receive.receiveOnchain")}
-                    </LinkButton>
+                  <LinkButton
+                    to="/wallet/receive/onchain"
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                    {t("wallet:receive.receiveOnchain")}
+                  </LinkButton>
                 </div>
               </form>
             )}
@@ -692,4 +882,3 @@ export default function ReceiveInvoice() {
     </div>
   );
 }
-

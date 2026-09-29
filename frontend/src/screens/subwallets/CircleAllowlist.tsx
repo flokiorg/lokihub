@@ -88,9 +88,7 @@ export const CircleAllowlist = React.forwardRef<
   const [isRemovingSelected, setRemovingSelected] = React.useState(false);
   const [confirmBulkRemove, setConfirmBulkRemove] = React.useState(false);
 
-  const [confirmRemove, setConfirmRemove] = React.useState<string | null>(
-    null
-  );
+  const [confirmRemove, setConfirmRemove] = React.useState<string | null>(null);
   const [isRemovingOne, setRemovingOne] = React.useState(false);
 
   const [isAddOpen, setAddOpen] = React.useState(false);
@@ -111,7 +109,9 @@ export const CircleAllowlist = React.forwardRef<
   }, [isAddOpen, isInlineFormShown, onFormOpenChange]);
 
   const loadAllowlist = React.useCallback(async () => {
-    if (!id) {return;}
+    if (!id) {
+      return;
+    }
     setLoading(true);
     try {
       const data = await request<{ pubkeys: string[] }>(
@@ -140,7 +140,9 @@ export const CircleAllowlist = React.forwardRef<
   }, [pubkeys]);
 
   const saveAllowlist = async (nextPubkeys: string[]) => {
-    if (!id) {return;}
+    if (!id) {
+      return;
+    }
     await request(`/api/apps/${id}/circle/allowlist`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -150,13 +152,13 @@ export const CircleAllowlist = React.forwardRef<
   };
 
   const handleAdd = async () => {
-    if (pendingAdd.length === 0) {return;}
+    if (pendingAdd.length === 0) {
+      return;
+    }
     setAdding(true);
     try {
       await saveAllowlist(Array.from(new Set([...pubkeys, ...pendingAdd])));
-      toast(
-        t("circleAllowlist.addedToast", { count: pendingAdd.length })
-      );
+      toast(t("circleAllowlist.addedToast", { count: pendingAdd.length }));
       setPendingAdd([]);
       setAddOpen(false);
     } catch (error) {
@@ -166,7 +168,9 @@ export const CircleAllowlist = React.forwardRef<
   };
 
   const handleRemove = async (pubkey: string) => {
-    if (!id) {return;}
+    if (!id) {
+      return;
+    }
     setRemovingOne(true);
     try {
       await request(`/api/apps/${id}/circle/allowlist/${pubkey}`, {
@@ -182,7 +186,9 @@ export const CircleAllowlist = React.forwardRef<
   };
 
   const handleRemoveSelected = async () => {
-    if (selected.size === 0) {return;}
+    if (selected.size === 0) {
+      return;
+    }
     setRemovingSelected(true);
     try {
       const removedCount = selected.size;
@@ -209,8 +215,7 @@ export const CircleAllowlist = React.forwardRef<
   };
 
   const allSelected =
-    pagedPubkeys.length > 0 &&
-    pagedPubkeys.every((pk) => selected.has(pk));
+    pagedPubkeys.length > 0 && pagedPubkeys.every((pk) => selected.has(pk));
   const someSelected = selected.size > 0 && !allSelected;
 
   const toggleSelectAll = () => {
@@ -293,7 +298,9 @@ export const CircleAllowlist = React.forwardRef<
         <div className="min-w-0 rounded-lg border">
           <div className="flex items-center gap-3 px-3 py-2.5">
             <Checkbox
-              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              checked={
+                allSelected ? true : someSelected ? "indeterminate" : false
+              }
               onCheckedChange={toggleSelectAll}
               aria-label={t("common.selectAll")}
             />

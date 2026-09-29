@@ -4,7 +4,12 @@ import { getNdk } from "src/lib/ndk";
 import { useInfo } from "src/hooks/useInfo";
 
 function splitRelayUrls(value: string | undefined): string[] {
-  return value?.split(",").map((r) => r.trim()).filter(Boolean) ?? [];
+  return (
+    value
+      ?.split(",")
+      .map((r) => r.trim())
+      .filter(Boolean) ?? []
+  );
 }
 
 // useNdk returns a shared NDK instance connected to both the General relays

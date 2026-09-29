@@ -8,7 +8,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "src/components/ui/accordion";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "src/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { WEEK_SCALE_PRESETS } from "src/constants";
@@ -152,8 +158,8 @@ export function CashHubConfigCard({
           />
           <p className="text-muted-foreground text-sm">
             Per-million fee charged when a recipient redeems a lokicash out to
-            an external wallet (0 = free). Never charged on a transfer/split,
-            or on a redemption into another wallet on this same node.
+            an external wallet (0 = free). Never charged on a transfer/split, or
+            on a redemption into another wallet on this same node.
           </p>
         </div>
       )}

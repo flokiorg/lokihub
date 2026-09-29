@@ -114,9 +114,7 @@ export function DisconnectCircleHub({
     <AlertDialog open>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t("disconnectCircleHub.title")}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t("disconnectCircleHub.title")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             {isLoading ? (
               <p>{t("disconnectCircleHub.checking")}</p>

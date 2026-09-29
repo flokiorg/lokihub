@@ -43,10 +43,7 @@ export const validateWebSocketURL = (
   return null;
 };
 
-export const validateHTTPURL = (
-  url: string,
-  name: string
-): string | null => {
+export const validateHTTPURL = (url: string, name: string): string | null => {
   if (!url) return null;
   if (!url.startsWith("https://") && !url.startsWith("http://")) {
     return `${name} must start with https:// or http://`;
@@ -83,7 +80,7 @@ export const validateLSPURI = (uri: string): string | null => {
   if (!uri) return "URI is required";
   const parts = uri.split("@");
   if (parts.length !== 2) return "Invalid format. Expected pubkey@host:port";
-  
+
   const pubkey = parts[0];
   const host = parts[1];
 
@@ -91,7 +88,7 @@ export const validateLSPURI = (uri: string): string | null => {
     return "Invalid pubkey. Must be 33-byte hex string";
   }
   if (!host) {
-     return "Host is required";
+    return "Host is required";
   }
   return null;
 };

@@ -12,15 +12,21 @@ interface PayInvoiceButtonsProps {
   onPaid: () => void;
 }
 
-export function PayInvoiceButtons({ paymentInvoice, balances, onPaid }: PayInvoiceButtonsProps) {
+export function PayInvoiceButtons({
+  paymentInvoice,
+  balances,
+  onPaid,
+}: PayInvoiceButtonsProps) {
   const [isPaying, setIsPaying] = React.useState(false);
   const [invoiceAmount, setInvoiceAmount] = React.useState(0);
 
   React.useEffect(() => {
-    import("@lightz/lightning-tools").then(({ Invoice }) => {
-      const inv = new Invoice({ pr: paymentInvoice });
-      setInvoiceAmount(inv.satoshi);
-    }).catch(console.error);
+    import("@lightz/lightning-tools")
+      .then(({ Invoice }) => {
+        const inv = new Invoice({ pr: paymentInvoice });
+        setInvoiceAmount(inv.satoshi);
+      })
+      .catch(console.error);
   }, [paymentInvoice]);
 
   const canPayInternally =

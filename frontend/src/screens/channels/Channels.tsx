@@ -1,18 +1,18 @@
 import dayjs from "dayjs";
 import {
-    AlertTriangleIcon,
-    ArrowDownUpIcon,
-    ArrowRightIcon,
-    CopyIcon,
-    ExternalLinkIcon,
-    HeartIcon,
-    HourglassIcon,
-    InfoIcon,
-    LinkIcon,
-    Settings2Icon,
-    SparklesIcon,
-    UnplugIcon,
-    ZapIcon,
+  AlertTriangleIcon,
+  ArrowDownUpIcon,
+  ArrowRightIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  HeartIcon,
+  HourglassIcon,
+  InfoIcon,
+  LinkIcon,
+  Settings2Icon,
+  SparklesIcon,
+  UnplugIcon,
+  ZapIcon,
 } from "lucide-react";
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -30,32 +30,32 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
+  Alert,
+  AlertDescription,
+  AlertTitle,
 } from "src/components/ui/alert.tsx";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card.tsx";
 import CircleProgress from "src/components/ui/custom/circle-progress";
 import { LinkButton } from "src/components/ui/custom/link-button";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu.tsx";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { ONCHAIN_DUST_LOKI } from "src/constants.ts";
 import { useBalances } from "src/hooks/useBalances.ts";
@@ -69,10 +69,10 @@ import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
 import { copyToClipboard } from "src/lib/clipboard.ts";
 import { cn } from "src/lib/utils.ts";
 import {
-    Channel,
-    LongUnconfirmedZeroConfChannel,
-    MempoolTransaction,
-    PendingBalancesDetails,
+  Channel,
+  LongUnconfirmedZeroConfChannel,
+  MempoolTransaction,
+  PendingBalancesDetails,
 } from "src/types";
 import { request } from "src/utils/request";
 
@@ -226,7 +226,7 @@ export default function Channels() {
                     )}
                   </DropdownMenuGroup>
                   {hasChannelManagement && info?.enableSwap && (
-                  <DropdownMenuSeparator />
+                    <DropdownMenuSeparator />
                   )}
                   {hasChannelManagement && info?.enableSwap && (
                     <DropdownMenuGroup>
@@ -235,7 +235,10 @@ export default function Channels() {
                         onClick={() => navigate("/wallet/swap?type=in")}
                         className="cursor-pointer"
                       >
-                        <div dir="ltr" className="me-2 text-muted-foreground flex flex-row items-center">
+                        <div
+                          dir="ltr"
+                          className="me-2 text-muted-foreground flex flex-row items-center"
+                        >
                           <LinkIcon className="size-4" />
                           <ArrowRightIcon className="size-4" />
                           <ZapIcon className="size-4" />
@@ -246,7 +249,10 @@ export default function Channels() {
                         onClick={() => navigate("/wallet/swap?type=out")}
                         className="cursor-pointer"
                       >
-                        <div dir="ltr" className="me-2 text-muted-foreground flex flex-row items-center">
+                        <div
+                          dir="ltr"
+                          className="me-2 text-muted-foreground flex flex-row items-center"
+                        >
                           <ZapIcon className="size-4" />
                           <ArrowRightIcon className="size-4" />
                           <LinkIcon className="size-4" />
@@ -266,7 +272,9 @@ export default function Channels() {
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>{t("menu.management")}</DropdownMenuLabel>
+                    <DropdownMenuLabel>
+                      {t("menu.management")}
+                    </DropdownMenuLabel>
                     <DropdownMenuItem>
                       <Link className="w-full" to="/peers">
                         {t("menu.connectedPeers")}
@@ -277,30 +285,32 @@ export default function Channels() {
                         {t("menu.signMessage")}
                       </Link>
                     </DropdownMenuItem>
-                      <DropdownMenuItem className="w-full" asChild>
-                        <Link
-                          className="w-full flex flex-row items-center cursor-pointer"
-                          to="/wallet/node-alias"
-                        >
-                          <SparklesIcon className="size-4 me-2 text-muted-foreground" />
-                          {t("menu.setNodeAlias")}
-                        </Link>
-                      </DropdownMenuItem>
+                    <DropdownMenuItem className="w-full" asChild>
+                      <Link
+                        className="w-full flex flex-row items-center cursor-pointer"
+                        to="/wallet/node-alias"
+                      >
+                        <SparklesIcon className="size-4 me-2 text-muted-foreground" />
+                        {t("menu.setNodeAlias")}
+                      </Link>
+                    </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
 
               {info?.enableSwap && (
-              <LinkButton
-                to="/wallet/swap"
-                variant="secondary"
-                className="hidden sm:flex"
-              >
-                <ArrowDownUpIcon />
-                Swap
-              </LinkButton>
+                <LinkButton
+                  to="/wallet/swap"
+                  variant="secondary"
+                  className="hidden sm:flex"
+                >
+                  <ArrowDownUpIcon />
+                  Swap
+                </LinkButton>
               )}
-              <LinkButton to="/channels/outgoing">{t("channels.open")}</LinkButton>
+              <LinkButton to="/channels/outgoing">
+                {t("channels.open")}
+              </LinkButton>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -331,7 +341,9 @@ export default function Channels() {
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>{t("channels.nodeHealth.tooltip", { percent: nodeHealth })}</TooltipContent>
+                  <TooltipContent>
+                    {t("channels.nodeHealth.tooltip", { percent: nodeHealth })}
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -374,7 +386,12 @@ export default function Channels() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className={cn("flex flex-row gap-1 items-center justify-start text-sm font-medium", isRTL && "flex-row-reverse")}>
+                            <div
+                              className={cn(
+                                "flex flex-row gap-1 items-center justify-start text-sm font-medium",
+                                isRTL && "flex-row-reverse"
+                              )}
+                            >
                               {t("node.spendingBalance")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
@@ -431,7 +448,6 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
-
                 </div>
                 <div className="flex flex-col flex-1">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pe-0">
@@ -439,7 +455,12 @@ export default function Channels() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className={cn("flex flex-row gap-1 items-center justify-start text-sm font-medium", isRTL && "flex-row-reverse")}>
+                            <div
+                              className={cn(
+                                "flex flex-row gap-1 items-center justify-start text-sm font-medium",
+                                isRTL && "flex-row-reverse"
+                              )}
+                            >
                               {t("node.receiveLimit")}
                               <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             </div>
@@ -467,7 +488,6 @@ export default function Channels() {
                       </>
                     )}
                   </CardContent>
-
                 </div>
               </CardContent>
             </Card>
@@ -484,7 +504,12 @@ export default function Channels() {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          <div className={cn("flex flex-row gap-1 items-center text-sm font-medium", isRTL && "flex-row-reverse")}>
+                          <div
+                            className={cn(
+                              "flex flex-row gap-1 items-center text-sm font-medium",
+                              isRTL && "flex-row-reverse"
+                            )}
+                          >
                             {t("node.balance")}
                             <InfoIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                           </div>

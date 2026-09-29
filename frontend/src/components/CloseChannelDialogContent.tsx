@@ -1,9 +1,9 @@
 import {
-    AlertCircleIcon,
-    AlertTriangleIcon,
-    CopyIcon,
-    ExternalLinkIcon,
-    Loader2,
+  AlertCircleIcon,
+  AlertTriangleIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Loader2,
 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
@@ -22,13 +22,13 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { Channel, CloseChannelResponse } from "src/types";
 import { request } from "src/utils/request";
 import {
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -117,14 +117,16 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
               Are you sure you want to close the channel with {alias}?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-left">
-              {info?.enableSwap && <SwapAlert minChannels={0} className="mb-4" />}
+              {info?.enableSwap && (
+                <SwapAlert minChannels={0} className="mb-4" />
+              )}
               <Alert className="mb-4">
                 <AlertCircleIcon className="h-4 w-4" />
                 <AlertDescription>
                   <div>
                     Closing this channel will move{" "}
-                    <FormattedFlokicoinAmount amount={channel.localBalance} /> in
-                    this channel to your on-chain balance and reduce your
+                    <FormattedFlokicoinAmount amount={channel.localBalance} />{" "}
+                    in this channel to your on-chain balance and reduce your
                     receive limit by{" "}
                     <FormattedFlokicoinAmount amount={channel.remoteBalance} />.
                   </div>
@@ -209,8 +211,8 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                     </Label>
                     <p className="text-sm text-muted-foreground">
                       You close the channel alone. Your funds may be locked for
-                      up to one week and may incur higher fees. Only try this
-                      if a normal closure does not work.
+                      up to one week and may incur higher fees. Only try this if
+                      a normal closure does not work.
                     </p>
                   </div>
                 </div>
@@ -246,7 +248,7 @@ export function CloseChannelDialogContent({ alias, channel }: Props) {
                 to={`${info?.mempoolUrl}/tx/${fundingTxId}`}
                 className="underline flex items-center mt-2"
               >
-                View on Flokicoin Explorer 
+                View on Flokicoin Explorer
                 <ExternalLinkIcon className="size-4 ms-2" />
               </ExternalLink>
             </AlertDialogDescription>

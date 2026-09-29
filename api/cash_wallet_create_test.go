@@ -99,14 +99,14 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
 }
 
-// TestCreateCashWallet_WithMintSignature_ProducesSignedToken is the end-to-end
-// regression for admin-API mint-provenance reachability (see
-// TestCreateCashWalletRequest_MintProvenanceReachableFromAdminAPI for the
-// field-level guard): CreateCashWalletRequest.MintSignature must actually
-// thread through api.CreateCashWallet -> cashwallet.Params.SignMint and
-// produce a token whose provenance recovers to the node's own pubkey, not
-// just a request field that exists but goes nowhere.
-func TestCreateCashWallet_WithMintSignature_ProducesSignedToken(t *testing.T) {
+// TestCreateCashWallet_ProducesSignedToken pins that a wallet minted through the admin
+// API carries provenance recovering to the node's own pubkey.
+//
+// There is no longer a request field to opt in with: provenance is mandatory, because
+// it is the only thing a token carries that identifies its minting hub, and that is
+// what a client verifies a transport announcement against. This test therefore guards
+// that signing actually happens rather than that a flag is threaded.
+func TestCreateCashWallet_ProducesSignedToken(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -129,7 +129,6 @@ func TestCreateCashWallet_WithMintSignature_ProducesSignedToken(t *testing.T) {
 			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
 		ExpirySecs:    1800,
-		MintSignature: true,
 	})
 	require.NoError(t, err)
 

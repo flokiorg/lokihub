@@ -1186,7 +1186,6 @@ export interface CreateCashWalletRequest {
   // Shared by every recipient; omit for the hub's own ceiling.
   expiry_secs?: number;
   // Opts the issued token into mint provenance (NIP-CASH §Mint Provenance).
-  mint_signature?: boolean;
 }
 
 // CashWalletConnectionResponse is GET /api/apps/{id}/cash-connection's

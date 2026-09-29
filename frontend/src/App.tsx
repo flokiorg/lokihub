@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 import {
-    RouterProvider,
-    createBrowserRouter,
-    createHashRouter,
+  RouterProvider,
+  createBrowserRouter,
+  createHashRouter,
 } from "react-router-dom";
 import { ErrorBoundary } from "src/components/ErrorBoundary";
 import { GlobalError } from "src/components/GlobalError";

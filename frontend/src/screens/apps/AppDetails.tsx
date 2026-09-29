@@ -236,7 +236,6 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     setIsEditingPermissions(editMode);
   }, [location.search, nameReadOnly]);
 
-
   const handleSave = async () => {
     try {
       const updateAppRequest: UpdateAppRequest = {

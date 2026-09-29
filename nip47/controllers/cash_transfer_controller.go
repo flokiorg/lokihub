@@ -68,13 +68,6 @@ type cashTransferParams struct {
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
 	// AppsService.SplitCashSliceAmount.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
-
-	// MintSignature opts a spun-off wallet's token into mint provenance
-	// (NIP-CASH §Mint Provenance) — only meaningful when this call actually
-	// spins off a dedicated wallet (a split, or a full transfer to cash mode on
-	// a multi-recipient-history wallet); harmless no-op on an in-place
-	// reassignment, which never mints a new token to sign.
-	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 // cashTransferResponse never carries a secret of any kind — IdentityValue is
@@ -590,7 +583,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	controller.handleCashTransferSplit(ctx, nip47Request, app, currentIdentityType, currentIdentityValue, requestedAmount,
-		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, proofEventID, params.MintSignature, claim, publishResponse, tags)
+		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, proofEventID, claim, publishResponse, tags)
 }
 
 // handleCashTransferSplit moves a full or partial amount out of a slice and
@@ -616,7 +609,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // never actually authorized anything permanently burned.
 func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, nip47Request *models.Request, app *db.App,
 	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
-	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey, proofEventID string, mintSignature bool,
+	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey, proofEventID string,
 	claim *db.CashWalletClaim, publishResponse publishFunc, tags nostr.Tags) {
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
@@ -728,7 +721,6 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		MinTransferMloki:       claim.MinTransferMloki,
 		RedeemFeePpm:           claim.RedeemFeePpm,
 		ExpiresAt:              app.ExpiresAt,
-		SignMint:               mintSignature,
 	})
 	if err != nil {
 		if sourceFundsIntact {

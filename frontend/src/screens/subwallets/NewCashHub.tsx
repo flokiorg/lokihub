@@ -69,7 +69,10 @@ export function NewCashHub() {
         title={t("newCashHub.title")}
         description={t("newCashHub.description")}
       />
-      <form onSubmit={handleSubmit} className="flex flex-col items-start gap-4 max-w-lg">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col items-start gap-4 max-w-lg"
+      >
         <div className="w-full grid gap-1.5">
           <Label htmlFor="name">{t("common.nameLabel")}</Label>
           <Input

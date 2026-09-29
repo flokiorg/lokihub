@@ -1,36 +1,34 @@
 import {
-    BanknoteIcon,
-    BoxIcon,
-    CircleHelp,
-    HomeIcon,
-    LogOut,
-    LucideIcon,
-    Plug2Icon,
-    Settings,
-    SquareStack,
-    WalletIcon,
+  BanknoteIcon,
+  BoxIcon,
+  CircleHelp,
+  HomeIcon,
+  LogOut,
+  LucideIcon,
+  Plug2Icon,
+  Settings,
+  SquareStack,
+  WalletIcon,
 } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 
-
 import { LokihubLogo } from "src/components/icons/LokihubLogo";
 import SidebarHint from "src/components/SidebarHint";
 
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    useSidebar
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
 } from "src/components/ui/sidebar";
-
 
 import { useHealthCheck } from "src/hooks/useHealthCheck";
 import { useInfo } from "src/hooks/useInfo";
@@ -125,10 +123,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="p-2 flex flex-row items-center justify-between">
           <Link to="/home" onClick={() => setOpenMobile(false)}>
-            <LokihubLogo
-              iconClassName="h-14 w-14"
-              alias={info?.nodeAlias}
-            />
+            <LokihubLogo iconClassName="h-14 w-14" alias={info?.nodeAlias} />
           </Link>
           <div className="flex gap-3 items-center">
             <HealthIndicator />

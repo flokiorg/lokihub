@@ -87,9 +87,7 @@ export function DisconnectApp({
               ) : (
                 <p>
                   {t("disconnectApp.connectedAppsWarning")}
-                  {app.isolated && (
-                    <> {t("disconnectApp.isolatedFundsSafe")}</>
-                  )}
+                  {app.isolated && <> {t("disconnectApp.isolatedFundsSafe")}</>}
                 </p>
               )}
               {isSubwallet && hasLightningAddress && (
