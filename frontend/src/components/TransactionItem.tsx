@@ -1,14 +1,14 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import {
-    ArrowDownIcon,
-    ArrowDownUpIcon,
-    ArrowUpDownIcon,
-    ArrowUpIcon,
-    ChevronDownIcon,
-    ChevronUpIcon,
-    CopyIcon,
-    XIcon,
+  ArrowDownIcon,
+  ArrowDownUpIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CopyIcon,
+  XIcon,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import React from "react";
@@ -21,12 +21,12 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import PodcastingInfo from "src/components/PodcastingInfo";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "src/components/ui/dialog";
 import { LOKI_ACCOUNT_APP_NAME } from "src/constants";
 import { useApp } from "src/hooks/useApp";
@@ -63,9 +63,7 @@ const HANDLED_METADATA_KEYS = new Set([
 ]);
 
 function humanizeMetadataKey(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatMetadataValue(value: unknown): string {
@@ -223,24 +221,28 @@ function TransactionItem({ tx }: Props) {
             tx.state === "pending" && "animate-pulse"
           )}
         >
-          <div className={isRTL ? "order-3" : "order-1"}>
-            {typeStateIcon}
-          </div>
+          <div className={isRTL ? "order-3" : "order-1"}>{typeStateIcon}</div>
           <div
             className={cn(
               "overflow-hidden max-w-full flex flex-col justify-center",
-              isRTL
-                ? "order-2 ms-auto items-end"
-                : "order-2 me-3 items-start"
+              isRTL ? "order-2 ms-auto items-end" : "order-2 me-3 items-start"
             )}
           >
-            <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                isRTL && "flex-row-reverse"
+              )}
+            >
               <span className="md:text-xl font-semibold break-all line-clamp-1">
                 {typeStateText}
                 {from !== undefined && <>&nbsp;{from}</>}
                 {to !== undefined && <>&nbsp;{to}</>}
               </span>
-              <span className="text-xs md:text-base text-muted-foreground shrink-0" dir="ltr">
+              <span
+                className="text-xs md:text-base text-muted-foreground shrink-0"
+                dir="ltr"
+              >
                 {dayjs(tx.updatedAt).fromNow()}
               </span>
             </div>
@@ -284,7 +286,9 @@ function TransactionItem({ tx }: Props) {
         <DialogHeader>
           <DialogTitle
             className={cn(tx.state === "pending" && "animate-pulse")}
-          >{dialogTitle}</DialogTitle>
+          >
+            {dialogTitle}
+          </DialogTitle>
           <DialogDescription className="text-start text-foreground max-h-[90vh] overflow-y-auto pe-2">
             <div
               className={cn(
@@ -412,7 +416,10 @@ function TransactionItem({ tx }: Props) {
                     <div className="mt-6">
                       <p>{t("transactions.preimage")}</p>
                       <div className="flex items-center gap-4">
-                        <p className="text-muted-foreground break-all" dir="ltr">
+                        <p
+                          className="text-muted-foreground break-all"
+                          dir="ltr"
+                        >
                           {tx.preimage}
                         </p>
                         <CopyIcon

@@ -15,7 +15,12 @@ export function SetupRedirect() {
       return;
     }
     // If node is already running and setup, redirect to home
-    if (info.setupCompleted && info.running && location.pathname !== "/setup/security" && location.pathname !== "/setup/finish") {
+    if (
+      info.setupCompleted &&
+      info.running &&
+      location.pathname !== "/setup/security" &&
+      location.pathname !== "/setup/finish"
+    ) {
       navigate("/");
       return;
     }
@@ -27,7 +32,6 @@ export function SetupRedirect() {
       navigate("/setup/password");
       return;
     }
-
   }, [info, location, navigate, store.unlockPassword]);
 
   if (!info) {

@@ -103,7 +103,10 @@ function SwapInForm() {
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (swapAmountDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(swapAmountDisplay),
+        inputUnit
+      );
       if (!isNaN(amountLoki)) {
         const newAmount = scaleInputAmount(amountLoki, newUnit);
         setSwapAmountDisplay(newAmount.toString());
@@ -115,7 +118,10 @@ function SwapInForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+    const amountLoki = parseInputAmount(
+      parseFloat(swapAmountDisplay),
+      inputUnit
+    );
     try {
       setLoading(true);
       const swapInResponse = await request<SwapResponse>("/api/swaps/in", {
@@ -190,7 +196,8 @@ function SwapInForm() {
       </div>
       <div className="grid gap-1.5">
         {hasChannelManagement &&
-          parseInputAmount(parseFloat(swapAmountDisplay || "0"), inputUnit) * 1000 >=
+          parseInputAmount(parseFloat(swapAmountDisplay || "0"), inputUnit) *
+            1000 >=
             0.8 * balances.lightning.totalReceivable && (
             <div className="mb-4">
               <LowReceivingCapacityAlert />
@@ -203,10 +210,13 @@ function SwapInForm() {
           onAmountChange={setSwapAmountDisplay}
           inputUnit={inputUnit}
           onInputUnitChange={handleInputUnitChange}
-          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 1}
+          min={
+            swapInfo.minAmount
+              ? scaleInputAmount(swapInfo.minAmount, inputUnit)
+              : 1
+          }
           required
         />
-
 
         <div className="flex justify-between">
           {balances && (
@@ -319,11 +329,16 @@ function SwapOutForm() {
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [inputUnit, setInputUnit] = useInputUnit(balances?.lightning.totalSpendable);
+  const [inputUnit, setInputUnit] = useInputUnit(
+    balances?.lightning.totalSpendable
+  );
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (swapAmountDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(swapAmountDisplay),
+        inputUnit
+      );
       if (!isNaN(amountLoki)) {
         const newAmount = scaleInputAmount(amountLoki, newUnit);
         setSwapAmountDisplay(newAmount.toString());
@@ -335,7 +350,10 @@ function SwapOutForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+    const amountLoki = parseInputAmount(
+      parseFloat(swapAmountDisplay),
+      inputUnit
+    );
     try {
       setLoading(true);
       const swapOutResponse = await request<SwapResponse>("/api/swaps/out", {
@@ -415,7 +433,11 @@ function SwapOutForm() {
           onAmountChange={setSwapAmountDisplay}
           inputUnit={inputUnit}
           onInputUnitChange={handleInputUnitChange}
-          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 1}
+          min={
+            swapInfo.minAmount
+              ? scaleInputAmount(swapInfo.minAmount, inputUnit)
+              : 1
+          }
           required
         />
 

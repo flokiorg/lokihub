@@ -65,7 +65,9 @@ export function SetupPassword() {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="confirm-password">{t("password.repeatLabel")}</Label>
+              <Label htmlFor="confirm-password">
+                {t("password.repeatLabel")}
+              </Label>
               <PasswordInput
                 id="confirm-password"
                 autoComplete="new-password"
@@ -80,9 +82,7 @@ export function SetupPassword() {
               <Checkbox
                 id="securePassword"
                 required
-                onCheckedChange={() =>
-                  setIsPasswordSecured(!isPasswordSecured)
-                }
+                onCheckedChange={() => setIsPasswordSecured(!isPasswordSecured)}
               />
               <Label
                 htmlFor="securePassword"

@@ -125,11 +125,6 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
-	// SignMint requests optional mint provenance on the issued token (NIP-CASH
-	// §Mint Provenance): the node signs the token so a holder can verify its
-	// origin and denomination offline. Off by default — provenance roughly
-	// doubles a token's length and is never needed to spend it.
-	SignMint bool
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
@@ -193,8 +188,6 @@ type Resolved struct {
 	// Split inherits its OWN RedeemFeePpm from the specific slice it was
 	// split from, never freshly from this hub config.
 	RedeemFeePpm int
-	// SignMint carries Params.SignMint through to Commit (see Params.SignMint).
-	SignMint bool
 }
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
@@ -384,7 +377,6 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		ExpiresAt:        expiresAt,
 		MinTransferMloki: hubConfig.MinTransferMloki,
 		RedeemFeePpm:     hubConfig.RedeemFeePpm,
-		SignMint:         params.SignMint,
 	}, nil
 }
 
@@ -610,6 +602,24 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		deleteAppWithRetry(deps, newApp)
 	}()
 
+	// Mint provenance is obtained HERE, before the funds move, because it is
+	// mandatory and it can fail: it needs the node to sign. An unsigned bill carries
+	// nothing that identifies its minting hub, and that identity is the only thing a
+	// client can verify a transport announcement against — so an unsigned bill can
+	// never reach the private transport, which is the only transport serving bill
+	// methods. Refusing now costs nothing; refusing after the transfer below would
+	// mean reporting failure for a wallet that exists and holds money.
+	//
+	// Uniform across every recipient by construction (Resolve requires a cash-mode
+	// recipient to be this request's only one), so the first recipient's identity type
+	// speaks for the whole wallet. The provenance attests the wallet's total committed
+	// amount (sum), immutable for the wallet's life (§Mint Provenance).
+	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
+	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, sum)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to mint a bill without provenance: %w", err)
+	}
+
 	// Transfer funds from Cash Hub to Cash wallet. This is the one genuinely
 	// irreversible step in this function, which is why it happens last: by
 	// this point every other side effect is already durably committed, so
@@ -646,13 +656,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// leaving a funded wallet the caller doesn't know exists. Degrade to an
 	// empty token instead; PairingURI alone is still a fully functional
 	// connection string.
-	// Uniform across every recipient by construction (Resolve requires a
-	// cash-mode recipient to be this request's only one), so the first
-	// recipient's identity type speaks for the whole wallet. When SignMint is
-	// set, the token's provenance attests the wallet's total committed amount
-	// (sum), which is immutable for the wallet's life (§Mint Provenance).
-	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
-	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, resolved.SignMint, sum)
+	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum)
 
 	// Persist the token verbatim so the archive can keep the exact string this
 	// bill was issued with once it is destroyed (db.App.CashToken). Re-deriving
@@ -732,10 +736,6 @@ type SplitParams struct {
 	// shorten or lengthen it (NIP-CASH "Spinning a Slice Off Into a
 	// Dedicated Wallet" → Eligibility and limits).
 	ExpiresAt *time.Time
-	// SignMint requests optional mint provenance on the split-off token (see
-	// Params.SignMint) — its own signature over its own pubkey and its own
-	// fixed AmountMloki, independent of whether the source wallet had one.
-	SignMint bool
 }
 
 // SplitResult carries what cash_transfer_controller.go needs to deliver the
@@ -819,6 +819,17 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 		return nil, fmt.Errorf("failed to store split-off recipient claim: %w", err)
 	}
 
+	// Provenance before the money, for the reason Commit gives at its own call: it is
+	// mandatory, it can fail, and after the transfer below a failure could only be
+	// swallowed. A split-off wallet is always a single slice by construction (Split
+	// never creates anything else), so the identity type is known without inspecting
+	// the claim just stored.
+	identityRequired := params.NewIdentityType != db.CashIdentityCash
+	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, params.AmountMloki)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to split off a bill without provenance: %w", err)
+	}
+
 	// The one irreversible step, done last for the same reason Commit does:
 	// once funds move, nothing after this can fail and leave the new wallet
 	// stranded or invisible. Pays from SourceWalletApp (an isolated-balance
@@ -833,16 +844,11 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	}
 	fundsTransferred = true
 
-	// A split-off wallet is always a single slice, by construction (Split
-	// never creates anything else) — no need to inspect the just-created
-	// claim to know whether identity is required. encodeCashToken already
-	// degrades gracefully on any encode/sign failure (funds have already
-	// moved, so a defensive failure here must never become an error return —
-	// that would tell the caller the split failed when it actually
-	// succeeded, leaving a funded wallet with no way to deliver its
-	// connection; the wallet remains recoverable via the admin API either way).
-	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	lokicashToken := encodeCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.SignMint, params.AmountMloki)
+	// Encoding only — everything fallible already happened above the transfer. A
+	// defensive encode failure still must not become an error return: funds have
+	// moved, and saying the split failed would leave a funded wallet the caller does
+	// not know exists (recoverable via the admin API either way).
+	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).

@@ -1,8 +1,8 @@
 import {
-    ExternalLinkIcon,
-    HandCoinsIcon,
-    MoreHorizontalIcon,
-    Trash2Icon
+  ExternalLinkIcon,
+  HandCoinsIcon,
+  MoreHorizontalIcon,
+  Trash2Icon,
 } from "lucide-react";
 import React from "react";
 import { useSearchParams } from "react-router-dom";
@@ -12,15 +12,15 @@ import ExternalLink from "src/components/ExternalLink";
 
 import { RoutingFeeDialogContent } from "src/components/RoutingFeeDialogContent";
 import {
-    AlertDialog,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button.tsx";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu.tsx";
 import { useInfo } from "src/hooks/useInfo";
 import { Channel } from "src/types";
@@ -28,7 +28,6 @@ import { Channel } from "src/types";
 type ChannelDropdownMenuProps = {
   alias: string;
   channel: Channel;
-
 };
 
 export function ChannelDropdownMenu({
@@ -38,9 +37,7 @@ export function ChannelDropdownMenu({
   const { data: info } = useInfo();
   const [searchParams] = useSearchParams();
   const { t } = useTranslation("channels");
-  const [dialog, setDialog] = React.useState<
-    "closeChannel" | "routingFee"
-  >();
+  const [dialog, setDialog] = React.useState<"closeChannel" | "routingFee">();
 
   React.useEffect(() => {
     // when opening the swap dialog, close existing dialog
@@ -65,7 +62,6 @@ export function ChannelDropdownMenu({
           </DropdownMenuTrigger>
         </Button>
         <DropdownMenuContent align="end" className="w-64">
-
           <DropdownMenuItem>
             <ExternalLink
               className="flex flex-1 flex-row items-center gap-2"
@@ -81,7 +77,11 @@ export function ChannelDropdownMenu({
               to={`${info?.mempoolUrl}/lightning/node/${channel.remotePubkey}`}
             >
               <ExternalLinkIcon />
-              {t("channels.dropdown.viewNode", "View Node on {{explorer}}", { explorer: info?.mempoolUrl ? new URL(info.mempoolUrl).hostname : "Explorer" })}
+              {t("channels.dropdown.viewNode", "View Node on {{explorer}}", {
+                explorer: info?.mempoolUrl
+                  ? new URL(info.mempoolUrl).hostname
+                  : "Explorer",
+              })}
             </ExternalLink>
           </DropdownMenuItem>
           {channel.public && (
@@ -104,7 +104,6 @@ export function ChannelDropdownMenu({
         <CloseChannelDialogContent alias={alias} channel={channel} />
       )}
       {dialog === "routingFee" && <RoutingFeeDialogContent channel={channel} />}
-
     </AlertDialog>
   );
 }

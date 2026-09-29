@@ -153,7 +153,9 @@ export default function DeveloperSettings() {
                 </RadioGroup>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="token-expiry">{t("developer.tokenExpiry")}</Label>
+                <Label htmlFor="token-expiry">
+                  {t("developer.tokenExpiry")}
+                </Label>
                 <Input
                   type="number"
                   name="token-expiry"

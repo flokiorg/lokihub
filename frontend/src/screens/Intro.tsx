@@ -58,7 +58,13 @@ export function StarryNight({ children }: { children: React.ReactNode }) {
   });
 
   const [shootingStars] = useState<
-    { id: number; delay: number; repeatDelay: number; top: number; left: number }[]
+    {
+      id: number;
+      delay: number;
+      repeatDelay: number;
+      top: number;
+      left: number;
+    }[]
   >(() => {
     const shootingStarCount = 4;
     const newShootingStars = [];
@@ -194,71 +200,74 @@ export function Intro() {
 
   return (
     <>
-    {createPortal(
-      <div dir="ltr" className="fixed top-4 right-4 z-[9999]">
-        <CompactLanguageSwitcher showLabel />
-      </div>,
-      document.body
-    )}
-    <StarryNight>
-      <Carousel className={cn("w-full h-full bg-transparent")} setApi={setApi}>
-        <CarouselContent className="select-none bg-transparent">
-          <CarouselItem>
-            <div className="flex flex-col justify-center items-center h-screen p-5">
-              <div className="flex flex-col gap-4 text-center items-center max-w-lg">
-                <div className="text-4xl font-extrabold text-foreground">
-                  {t("intro.slide1.title")}
-                </div>
-                <div className="text-2xl text-muted-foreground font-semibold">
-                  {t("intro.slide1.subtitle")}
-                </div>
-                <div className="mt-20 flex flex-col items-center gap-3">
-                  <Button onClick={() => api?.scrollNext()} size="lg">
-                    {t("intro.slide1.next")}
-                  </Button>
+      {createPortal(
+        <div dir="ltr" className="fixed top-4 right-4 z-[9999]">
+          <CompactLanguageSwitcher showLabel />
+        </div>,
+        document.body
+      )}
+      <StarryNight>
+        <Carousel
+          className={cn("w-full h-full bg-transparent")}
+          setApi={setApi}
+        >
+          <CarouselContent className="select-none bg-transparent">
+            <CarouselItem>
+              <div className="flex flex-col justify-center items-center h-screen p-5">
+                <div className="flex flex-col gap-4 text-center items-center max-w-lg">
+                  <div className="text-4xl font-extrabold text-foreground">
+                    {t("intro.slide1.title")}
+                  </div>
+                  <div className="text-2xl text-muted-foreground font-semibold">
+                    {t("intro.slide1.subtitle")}
+                  </div>
+                  <div className="mt-20 flex flex-col items-center gap-3">
+                    <Button onClick={() => api?.scrollNext()} size="lg">
+                      {t("intro.slide1.next")}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CarouselItem>
-          <CarouselItem>
-            <Slide
-              api={api}
-              icon={CloudLightningIcon}
-              title={t("intro.slide2.title")}
-              description={t("intro.slide2.description")}
-            />
-          </CarouselItem>
-          <CarouselItem>
-            <Slide
-              api={api}
-              icon={ShieldCheckIcon}
-              title={t("intro.slide3.title")}
-              description={t("intro.slide3.description")}
-            />
-          </CarouselItem>
-          <CarouselItem>
-            <Slide
-              api={api}
-              icon={WalletIcon}
-              title={t("intro.slide4.title")}
-              description={t("intro.slide4.description")}
-            />
-          </CarouselItem>
-        </CarouselContent>
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2">
-          <CarouselDots>
-            {scrollSnaps.map((_, index) => (
-              <CarouselDotButton
-                key={index}
-                data-selected={index === selectedIndex}
-                onClick={() => onDotButtonClick(index)}
-                aria-label={`Go to slide ${index + 1}`}
+            </CarouselItem>
+            <CarouselItem>
+              <Slide
+                api={api}
+                icon={CloudLightningIcon}
+                title={t("intro.slide2.title")}
+                description={t("intro.slide2.description")}
               />
-            ))}
-          </CarouselDots>
-        </div>
-      </Carousel>
-    </StarryNight>
+            </CarouselItem>
+            <CarouselItem>
+              <Slide
+                api={api}
+                icon={ShieldCheckIcon}
+                title={t("intro.slide3.title")}
+                description={t("intro.slide3.description")}
+              />
+            </CarouselItem>
+            <CarouselItem>
+              <Slide
+                api={api}
+                icon={WalletIcon}
+                title={t("intro.slide4.title")}
+                description={t("intro.slide4.description")}
+              />
+            </CarouselItem>
+          </CarouselContent>
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2">
+            <CarouselDots>
+              {scrollSnaps.map((_, index) => (
+                <CarouselDotButton
+                  key={index}
+                  data-selected={index === selectedIndex}
+                  onClick={() => onDotButtonClick(index)}
+                  aria-label={`Go to slide ${index + 1}`}
+                />
+              ))}
+            </CarouselDots>
+          </div>
+        </Carousel>
+      </StarryNight>
     </>
   );
 }

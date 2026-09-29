@@ -2,10 +2,10 @@ import { DownloadIcon, MoreHorizontalIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "src/components/ui/button";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "src/components/ui/dropdown-menu";
 import { LIST_TRANSACTIONS_LIMIT } from "src/constants";
 import { ListTransactionsResponse, Transaction } from "src/types";
@@ -87,8 +87,6 @@ const handleExportTransactions = async (appId?: number) => {
 };
 
 export const TransactionsListMenu = ({ appId }: { appId?: number }) => {
-
-
   return (
     <DropdownMenu>
       <Button asChild size="icon" variant="secondary">
@@ -97,13 +95,13 @@ export const TransactionsListMenu = ({ appId }: { appId?: number }) => {
         </DropdownMenuTrigger>
       </Button>
       <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            className="flex flex-row items-center gap-2 cursor-pointer"
-            onClick={() => handleExportTransactions(appId)}
-          >
-            <DownloadIcon className="h-4 w-4" />
-            Export Transactions
-          </DropdownMenuItem>
+        <DropdownMenuItem
+          className="flex flex-row items-center gap-2 cursor-pointer"
+          onClick={() => handleExportTransactions(appId)}
+        >
+          <DownloadIcon className="h-4 w-4" />
+          Export Transactions
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

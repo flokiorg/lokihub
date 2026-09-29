@@ -22,12 +22,8 @@ export default function NodeAlias() {
     }
   }, [info?.nodeAlias]);
 
-
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-
 
     setIsLoading(true);
     try {

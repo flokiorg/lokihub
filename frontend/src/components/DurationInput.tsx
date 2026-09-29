@@ -68,11 +68,14 @@ export function DurationInput({
   );
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const activePreset = showCustom ? undefined : presets.find((preset) => preset.seconds === seconds);
+  const activePreset = showCustom
+    ? undefined
+    : presets.find((preset) => preset.seconds === seconds);
 
   const applyAmount = (nextAmount: string, nextUnit: DurationUnit) => {
     const parsed = parseFloat(nextAmount);
-    let nextSeconds = parsed > 0 ? Math.round(parsed * UNIT_SECONDS[nextUnit]) : 0;
+    let nextSeconds =
+      parsed > 0 ? Math.round(parsed * UNIT_SECONDS[nextUnit]) : 0;
     nextSeconds = Math.max(nextSeconds, nextSeconds ? min : 0);
     // Intentionally not clamped to max here — silently capping would submit
     // a different value than what's displayed. The caller shows an inline
@@ -156,24 +159,26 @@ export function DurationInput({
             }}
             endAdornment={
               <div className="flex items-center bg-muted rounded-md p-0.5 me-1 border z-10">
-                {(["minutes", "hours", "days"] as DurationUnit[]).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={cn(
-                      "px-2.5 py-1 rounded-sm text-xs font-medium capitalize transition-colors",
-                      unit === option
-                        ? "bg-background shadow-sm text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                    onClick={() => {
-                      setUnit(option);
-                      applyAmount(amount, option);
-                    }}
-                  >
-                    {option}
-                  </button>
-                ))}
+                {(["minutes", "hours", "days"] as DurationUnit[]).map(
+                  (option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={cn(
+                        "px-2.5 py-1 rounded-sm text-xs font-medium capitalize transition-colors",
+                        unit === option
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => {
+                        setUnit(option);
+                        applyAmount(amount, option);
+                      }}
+                    >
+                      {option}
+                    </button>
+                  )
+                )}
               </div>
             }
           />

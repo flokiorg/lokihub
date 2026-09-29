@@ -12,6 +12,7 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
@@ -55,7 +56,6 @@ func TestCreate_WithMintProvenance(t *testing.T) {
 		HubApp:     hub,
 		Recipients: onePubkeyRecipient(1000),
 		ExpirySecs: 1800,
-		SignMint:   true,
 	})
 	require.NoError(t, err)
 
@@ -72,7 +72,14 @@ func TestCreate_WithMintProvenance(t *testing.T) {
 
 // TestCreate_WithoutMintProvenance is the default: no signature is attached and
 // the token is fully spendable without one.
-func TestCreate_WithoutMintProvenance(t *testing.T) {
+// TestCreate_AlwaysSigned replaces a test that asserted a mint could produce an
+// UNSIGNED token, which is no longer a reachable state and must not be.
+//
+// Provenance is the only thing a token carries that identifies its minting hub, and
+// that identity is the only thing a client can verify a transport announcement
+// against — so an unsigned bill can never reach the private transport, which is the
+// only transport that serves bill methods. An unsigned bill would be unspendable.
+func TestCreate_AlwaysSigned(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -80,44 +87,54 @@ func TestCreate_WithoutMintProvenance(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
+	// No opt-in of any kind: signing is not a caller's choice any more.
 	result, err := Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp:     hub,
 		Recipients: onePubkeyRecipient(1000),
 		ExpirySecs: 1800,
-		// SignMint defaults false
 	})
 	require.NoError(t, err)
 
 	tok, err := lokicash.Decode(result.CashToken)
 	require.NoError(t, err)
-	assert.Nil(t, tok.MintSignature)
-	assert.Nil(t, tok.AttestedAmount)
+	assert.NotNil(t, tok.MintSignature, "every minted bill must carry provenance")
+	assert.NotNil(t, tok.AttestedAmount, "provenance without an attested amount is meaningless")
 }
 
-// TestCreate_MintProvenanceBestEffort verifies a signing failure never fails
-// the mint: the wallet is still created and funded, just without provenance.
-func TestCreate_MintProvenanceBestEffort(t *testing.T) {
+// TestCreate_SigningFailureAbortsWithNothingCommitted is the inverse of a test that
+// asserted a signing failure "never fails the mint". It now must, and the important
+// half is what is NOT left behind.
+//
+// Signing is obtained before any funds move, precisely so this can be a clean refusal.
+// Had it stayed where it was — after the transfer — a failure could only ever be
+// swallowed, because reporting it would tell the caller a mint failed while a funded
+// wallet existed that they did not know about.
+func TestCreate_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	// SigningKey left nil -> MockLn.SignMessage returns an empty string, which
-	// decodes to zero bytes and is dropped as malformed provenance.
+	// A node that cannot sign. Cleared explicitly, because NewMockLn now supplies a
+	// key by default — minting is impossible without one, so "cannot sign" is a
+	// deliberate condition rather than the absence of setup.
+	svc.LNClient.(*tests.MockLn).SigningKey = nil
+
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	hubBefore := queries.GetIsolatedBalance(svc.DB, hub.ID)
 
 	result, err := Create(context.TODO(), newTestDeps(svc), Params{
 		HubApp:     hub,
 		Recipients: onePubkeyRecipient(1000),
 		ExpirySecs: 1800,
-		SignMint:   true,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, result.WalletApp)
+	require.Error(t, err, "a mint that cannot be signed must fail, not degrade to an unspendable bill")
+	assert.Nil(t, result)
 
-	tok, err := lokicash.Decode(result.CashToken)
-	require.NoError(t, err)
-	assert.Nil(t, tok.MintSignature) // degraded to no provenance, mint still succeeded
+	// Nothing moved: the refusal happened before the transfer.
+	assert.Equal(t, hubBefore, queries.GetIsolatedBalance(svc.DB, hub.ID),
+		"a refused mint must leave the hub's balance untouched")
 }
 
 // TestSplit_WithMintProvenance splits off a slice with SignMint set and
@@ -150,7 +167,6 @@ func TestSplit_WithMintProvenance(t *testing.T) {
 		AmountMloki:      1000,
 		NewIdentityType:  db.CashIdentityPubkey,
 		NewIdentityValue: newPubkey,
-		SignMint:         true,
 	})
 	require.NoError(t, err)
 
@@ -203,7 +219,6 @@ func TestSplitInTwo_WithMintProvenance_BothWalletsSigned(t *testing.T) {
 		RemainderIdentityType:  db.CashIdentityPubkey,
 		RemainderIdentityValue: remainderPubkey,
 		RemainderAmountMloki:   3000,
-		SignMint:               true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.Carved)
@@ -228,23 +243,30 @@ func TestSplitInTwo_WithMintProvenance_BothWalletsSigned(t *testing.T) {
 	assert.Equal(t, minterPubkey, recoveredRemainder)
 }
 
-// TestSplit_MintProvenanceBestEffort verifies a signing failure never fails
-// the split: the wallet is still created and funded, just without provenance
-// — same best-effort contract as Create's own equivalent test.
-func TestSplit_MintProvenanceBestEffort(t *testing.T) {
+// TestSplit_SigningFailureAbortsWithNothingCommitted is the inverse of a test that
+// asserted a signing failure "never fails the split". A split mints a new bill, and an
+// unsigned bill cannot reach the private transport — the only transport serving bill
+// methods — so it would be unspendable. Refusing is the correct outcome.
+//
+// As with Create, the signature is obtained before the source wallet is drained, so a
+// refusal leaves the source untouched.
+func TestSplit_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	// SigningKey left nil -> MockLn.SignMessage returns an empty string, which
-	// decodes to zero bytes and is dropped as malformed provenance.
+	// A node that cannot sign, cleared explicitly — NewMockLn supplies a key by
+	// default now, so this is a deliberate condition, not missing setup.
 	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.SigningKey = nil
 	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
 		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p1", Amount: 1000},
 	}
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	sourceWallet := newProvenanceTestSourceWallet(t, svc, hub)
+
+	sourceBefore := queries.GetIsolatedBalance(svc.DB, sourceWallet.ID)
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	result, err := Split(context.TODO(), newTestDeps(svc), SplitParams{
@@ -253,12 +275,11 @@ func TestSplit_MintProvenanceBestEffort(t *testing.T) {
 		AmountMloki:      1000,
 		NewIdentityType:  db.CashIdentityPubkey,
 		NewIdentityValue: newPubkey,
-		SignMint:         true,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, result.WalletApp)
+	require.Error(t, err, "a split that cannot be signed must fail, not produce an unspendable bill")
+	assert.Nil(t, result)
 
-	tok, err := lokicash.Decode(result.CashToken)
-	require.NoError(t, err)
-	assert.Nil(t, tok.MintSignature) // degraded to no provenance, split still succeeded
+	// The source was never drained: the refusal happened before the transfer.
+	assert.Equal(t, sourceBefore, queries.GetIsolatedBalance(svc.DB, sourceWallet.ID),
+		"a refused split must leave the source wallet's balance untouched")
 }

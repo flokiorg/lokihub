@@ -32,9 +32,9 @@ export function SetupFinish() {
     ) {
       lastStartupErrorTime = startupErrorTime;
       // Navigate back with error
-      navigate("/setup/node", { 
-        replace: true, 
-        state: { error: startupError, step: "selection" } 
+      navigate("/setup/node", {
+        replace: true,
+        state: { error: startupError, step: "selection" },
       });
     }
   }, [startupError, startupErrorTime]);
@@ -48,9 +48,12 @@ export function SetupFinish() {
       // if it still didn't redirect after 30 seconds, we show an error
       // Typically initial startup should complete in less than 10 seconds.
       setLoading(false);
-      navigate("/setup/node", { 
-        replace: true, 
-        state: { error: "Connection timed out. Please check your node.", step: "selection" } 
+      navigate("/setup/node", {
+        replace: true,
+        state: {
+          error: "Connection timed out. Please check your node.",
+          step: "selection",
+        },
       });
     }, 30000);
 
@@ -68,12 +71,10 @@ export function SetupFinish() {
       return;
     }
     hasFetchedRef.current = true;
-    
+
     (async () => {
       setLoading(true);
-      const result = await finishSetup(
-        useSetupStore.getState().unlockPassword
-      );
+      const result = await finishSetup(useSetupStore.getState().unlockPassword);
       // only setup call is successful as start is async
       if (!result.success) {
         setLoading(false);
@@ -81,17 +82,17 @@ export function SetupFinish() {
         const nodeInfo = useSetupStore.getState().nodeInfo;
         let step = "selection";
         if (nodeInfo.backendType === "FLND") {
-           if (nodeInfo.flndAddress) {
-             step = "form";
-           }
+          if (nodeInfo.flndAddress) {
+            step = "form";
+          }
         }
-        
-        navigate("/setup/node", { 
-          replace: true, 
-          state: { 
+
+        navigate("/setup/node", {
+          replace: true,
+          state: {
             error: result.error || "Unknown error occurred",
             step,
-          } 
+          },
         });
       } else {
         await refetchInfo();
@@ -99,8 +100,6 @@ export function SetupFinish() {
       }
     })();
   }, [navigate, info, refetchInfo]);
-
-
 
   return (
     <SetupLayout>
@@ -125,25 +124,25 @@ const finishSetup = async (
       if (nodeInfo.autoConnect) {
         // Setup Local (Default)
         await request("/api/setup/local", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                unlockPassword,
-                lokihubServicesURL: nodeInfo.lokihubServicesURL,
-                swapServiceUrl: nodeInfo.swapServiceUrl,
-                relay: nodeInfo.relay,
-                messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
-                mempoolApi: nodeInfo.mempoolApi,
-                lsps: (nodeInfo.lsps || []).map(lsp => ({
-                  name: lsp.name,
-                  pubkey: lsp.pubkey,
-                  host: lsp.host,
-                  active: lsp.active,
-                  isCommunity: lsp.isCommunity,
-                })),
-            }),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            unlockPassword,
+            lokihubServicesURL: nodeInfo.lokihubServicesURL,
+            swapServiceUrl: nodeInfo.swapServiceUrl,
+            relay: nodeInfo.relay,
+            messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
+            mempoolApi: nodeInfo.mempoolApi,
+            lsps: (nodeInfo.lsps || []).map((lsp) => ({
+              name: lsp.name,
+              pubkey: lsp.pubkey,
+              host: lsp.host,
+              active: lsp.active,
+              isCommunity: lsp.isCommunity,
+            })),
+          }),
         });
       } else {
         // Setup Manual (Advanced)
@@ -151,34 +150,34 @@ const finishSetup = async (
         const flndAddress = nodeInfo.flndAddress || "";
         const flndCertHex = nodeInfo.flndCertHex || "";
         const flndMacaroonHex = nodeInfo.flndMacaroonHex || "";
-        
+
         await request("/api/setup/manual", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                unlockPassword,
-                flndAddress,
-                flndCertHex,
-                flndMacaroonHex,
-                lokihubServicesURL: nodeInfo.lokihubServicesURL,
-                swapServiceUrl: nodeInfo.swapServiceUrl,
-                relay: nodeInfo.relay,
-                messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
-                mempoolApi: nodeInfo.mempoolApi,
-                lsps: (nodeInfo.lsps || []).map(lsp => ({
-                  name: lsp.name,
-                  pubkey: lsp.pubkey,
-                  host: lsp.host,
-                  active: lsp.active,
-                  isCommunity: lsp.isCommunity,
-                })),
-            }),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            unlockPassword,
+            flndAddress,
+            flndCertHex,
+            flndMacaroonHex,
+            lokihubServicesURL: nodeInfo.lokihubServicesURL,
+            swapServiceUrl: nodeInfo.swapServiceUrl,
+            relay: nodeInfo.relay,
+            messageboardNwcUrl: nodeInfo.messageboardNwcUrl,
+            mempoolApi: nodeInfo.mempoolApi,
+            lsps: (nodeInfo.lsps || []).map((lsp) => ({
+              name: lsp.name,
+              pubkey: lsp.pubkey,
+              host: lsp.host,
+              active: lsp.active,
+              isCommunity: lsp.isCommunity,
+            })),
+          }),
         });
       }
     } else {
-       await request("/api/setup", {
+      await request("/api/setup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -208,4 +207,3 @@ const finishSetup = async (
     return { success: false, error: error.message || "Failed to connect" };
   }
 };
-

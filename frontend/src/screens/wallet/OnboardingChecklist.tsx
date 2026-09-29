@@ -2,11 +2,11 @@ import { ChevronRightIcon, CircleCheckIcon, CircleIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useOnboardingData } from "src/hooks/useOnboardingData";
 import { cn } from "src/lib/utils";

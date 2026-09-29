@@ -4,25 +4,25 @@ import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmoun
 import Loading from "src/components/Loading.tsx";
 import { Badge } from "src/components/ui/badge.tsx";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress.tsx";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "src/components/ui/table.tsx";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip.tsx";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { useUnit } from "src/hooks/useUnit";
@@ -47,7 +47,9 @@ export function ChannelsTable({
   return (
     <Card className="hidden lg:block">
       <CardHeader>
-        <CardTitle className="text-2xl">{t("channels.title", "Channels")}</CardTitle>
+        <CardTitle className="text-2xl">
+          {t("channels.title", "Channels")}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
@@ -174,7 +176,9 @@ function ChannelTableRow({
       <TableCell>
         <span className="font-semibold text-sm me-2">{alias}</span>
       </TableCell>
-      <TableCell>{channel.public ? t("channels.typePublic") : t("channels.typePrivate")}</TableCell>
+      <TableCell>
+        {channel.public ? t("channels.typePublic") : t("channels.typePrivate")}
+      </TableCell>
       <TableCell>
         {channel.status == "online" ? (
           unconfirmedChannel ? (
@@ -182,18 +186,30 @@ function ChannelTableRow({
               {t("channels.status.pending", "Unconfirmed")}
             </Badge>
           ) : (
-            <Badge variant="positive">{t("channels.status.online", "Online")}</Badge>
+            <Badge variant="positive">
+              {t("channels.status.online", "Online")}
+            </Badge>
           )
         ) : channel.status == "opening" ? (
-          <Badge variant="outline">{t("channels.status.opening", "Opening")}</Badge>
+          <Badge variant="outline">
+            {t("channels.status.opening", "Opening")}
+          </Badge>
         ) : (
-          <Badge variant="warning">{t("channels.status.offline", "Offline")}</Badge>
+          <Badge variant="warning">
+            {t("channels.status.offline", "Offline")}
+          </Badge>
         )}
       </TableCell>
       <TableCell>
         <FormattedFlokicoinAmount amount={capacity} />
       </TableCell>
-      <TableCell title={channel.unspendablePunishmentReserve + " " + unit(channel.unspendablePunishmentReserve * 1000)}>
+      <TableCell
+        title={
+          channel.unspendablePunishmentReserve +
+          " " +
+          unit(channel.unspendablePunishmentReserve * 1000)
+        }
+      >
         {channel.localBalance < channel.unspendablePunishmentReserve * 1000 && (
           <>
             <FormattedFlokicoinAmount
@@ -218,7 +234,9 @@ function ChannelTableRow({
           />
           <div className="flex flex-row rtl:flex-row-reverse w-full justify-between px-2 text-xs items-center h-6 mix-blend-exclusion text-white">
             <span>
-              <FormattedFlokicoinAmount amount={channel.localSpendableBalance} />
+              <FormattedFlokicoinAmount
+                amount={channel.localSpendableBalance}
+              />
             </span>
             <span>
               <FormattedFlokicoinAmount amount={channel.remoteBalance} />
@@ -230,10 +248,7 @@ function ChannelTableRow({
         <ChannelWarning channel={channel} />
       </TableCell>
       <TableCell>
-        <ChannelDropdownMenu
-          alias={alias}
-          channel={channel}
-        />
+        <ChannelDropdownMenu alias={alias} channel={channel} />
       </TableCell>
     </TableRow>
   );

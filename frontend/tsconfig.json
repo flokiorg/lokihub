@@ -25,7 +25,9 @@
     "preserveSymlinks": true,
     "paths": {
       "react": ["./node_modules/@types/react"],
-      "@lightz/lightning-tools": ["../../lightning-tools/dist/types/index.d.ts"],
+      "@lightz/lightning-tools": [
+        "../../lightning-tools/dist/types/index.d.ts"
+      ],
       "@lightz/lightning-tools/*": ["../../lightning-tools/dist/types/*.d.ts"]
     }
   },

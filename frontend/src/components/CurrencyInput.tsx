@@ -3,14 +3,23 @@ import { InputWithAdornment } from "src/components/ui/custom/input-with-adornmen
 import { useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 
-interface CurrencyInputProps extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
+interface CurrencyInputProps
+  extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
   amount: string;
   onAmountChange: (val: string) => void;
   inputUnit: "FLC" | "loki";
   onInputUnitChange: (unit: "FLC" | "loki") => void;
 }
 
-export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitChange, onFocus, onBlur, ...props }: CurrencyInputProps) {
+export function CurrencyInput({
+  amount,
+  onAmountChange,
+  inputUnit,
+  onInputUnitChange,
+  onFocus,
+  onBlur,
+  ...props
+}: CurrencyInputProps) {
   const { displayFormat } = useUnit();
   // Callers typically derive `amount` from a parsed number (e.g.
   // scaleInputAmount(loki, unit).toString()), which round-trips through
@@ -30,9 +39,12 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
 
   const Adornment = () => {
     if (displayFormat !== "auto") {
-      return <span className="me-3 text-muted-foreground text-sm font-medium">{displayFormat === "flc" ? "FLC" : "loki"}</span>;
+      return (
+        <span className="me-3 text-muted-foreground text-sm font-medium">
+          {displayFormat === "flc" ? "FLC" : "loki"}
+        </span>
+      );
     }
-
 
     return (
       <div className="flex items-center bg-muted rounded-md p-0.5 me-1 border z-10">
@@ -40,7 +52,9 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
           type="button"
           className={cn(
             "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
-            inputUnit === "FLC" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            inputUnit === "FLC"
+              ? "bg-background shadow-sm text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           )}
           onClick={(e) => {
             e.preventDefault();
@@ -53,7 +67,9 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
           type="button"
           className={cn(
             "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
-            inputUnit === "loki" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            inputUnit === "loki"
+              ? "bg-background shadow-sm text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           )}
           onClick={(e) => {
             e.preventDefault();
@@ -69,7 +85,7 @@ export function CurrencyInput({ amount, onAmountChange, inputUnit, onInputUnitCh
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Strip everything except digits and decimal point
     let rawValue = e.target.value.replace(/[^0-9.]/g, "");
-    
+
     // Prevent multiple decimal points
     const parts = rawValue.split(".");
     if (parts.length > 2) {

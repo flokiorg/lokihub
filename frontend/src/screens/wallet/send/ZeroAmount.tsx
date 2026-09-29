@@ -31,7 +31,9 @@ export default function ZeroAmount() {
   const [isLoading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
-  const [inputUnit, setInputUnit] = useInputUnit(balances?.lightning.totalSpendable);
+  const [inputUnit, setInputUnit] = useInputUnit(
+    balances?.lightning.totalSpendable
+  );
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (amountDisplay) {
@@ -157,7 +159,9 @@ export default function ZeroAmount() {
             </div>
           </div>
         </div>
-        <SpendingAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
+        <SpendingAlert
+          amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
+        />
         <div className="flex gap-2">
           <LinkButton to="/wallet/send" variant="outline">
             Back

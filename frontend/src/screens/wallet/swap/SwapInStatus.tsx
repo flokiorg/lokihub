@@ -197,13 +197,15 @@ export default function SwapInStatus() {
                     <LottieLoading />
                   ) : (
                     <QRCode
-                       value={`flokicoin:${swap.lockupAddress}?amount=${swap.sendAmount / 100_000_000}`}
+                      value={`flokicoin:${swap.lockupAddress}?amount=${swap.sendAmount / 100_000_000}`}
                     />
                   ))}
                 <div className="flex flex-col gap-2 items-center">
                   <div className="flex items-center gap-2">
                     <p className="text-xl font-bold slashed-zero text-center">
-                      <FormattedFlokicoinAmount amount={swap.sendAmount * 1000} />
+                      <FormattedFlokicoinAmount
+                        amount={swap.sendAmount * 1000}
+                      />
                     </p>
                     {!swap.lockupTxId && !isInternalSwap && (
                       <CopyIcon

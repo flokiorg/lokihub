@@ -7,7 +7,6 @@ export function PaymentFailedAlert({
   invoice: string;
   errorMessage: string;
 }) {
-
   return (
     <Alert>
       <TriangleAlertIcon className="h-4 w-4" />
@@ -15,7 +14,8 @@ export function PaymentFailedAlert({
       <AlertDescription>
         <p>{errorMessage}</p>
         <p>
-          Try the payment again, review our FAQ, or contact the community on Discord for help with failed payments.
+          Try the payment again, review our FAQ, or contact the community on
+          Discord for help with failed payments.
         </p>
       </AlertDescription>
     </Alert>

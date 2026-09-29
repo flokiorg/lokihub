@@ -24,11 +24,16 @@ export function MultiRelayInput({
   const [error, setError] = useState("");
 
   const selectedRelays = value
-    ? value.split(",").map((r) => r.trim()).filter((r) => r.length > 0)
+    ? value
+        .split(",")
+        .map((r) => r.trim())
+        .filter((r) => r.length > 0)
     : [];
 
-  const communityRelayUrls = options.map(opt => opt.value);
-  const customRelays = selectedRelays.filter(url => !communityRelayUrls.includes(url));
+  const communityRelayUrls = options.map((opt) => opt.value);
+  const customRelays = selectedRelays.filter(
+    (url) => !communityRelayUrls.includes(url)
+  );
 
   const validateRelay = (url: string): boolean => {
     const validationError = validateWebSocketURL(url, "Relay URL");
@@ -47,7 +52,7 @@ export function MultiRelayInput({
   const toggleCommunityRelay = (relayUrl: string) => {
     let updatedRelays: string[];
     if (selectedRelays.includes(relayUrl)) {
-      updatedRelays = selectedRelays.filter(r => r !== relayUrl);
+      updatedRelays = selectedRelays.filter((r) => r !== relayUrl);
     } else {
       updatedRelays = [...selectedRelays, relayUrl];
     }
@@ -67,7 +72,7 @@ export function MultiRelayInput({
   };
 
   const removeCustomRelay = (relayUrl: string) => {
-    const updatedRelays = selectedRelays.filter(r => r !== relayUrl);
+    const updatedRelays = selectedRelays.filter((r) => r !== relayUrl);
     onChange(updatedRelays.join(","));
   };
 
@@ -80,7 +85,6 @@ export function MultiRelayInput({
 
   return (
     <div className="space-y-3">
-
       {/* Community Relays - Selectable Cards */}
       {options.length > 0 && (
         <div className="space-y-2">
@@ -95,9 +99,10 @@ export function MultiRelayInput({
                   onClick={() => toggleCommunityRelay(option.value)}
                   className={`
                     relative group flex items-start justify-between p-4 rounded-xl border transition-all cursor-pointer select-none overflow-hidden
-                    ${isSelected
-                      ? 'border-primary ring-1 ring-primary'
-                      : 'border-border hover:border-primary'
+                    ${
+                      isSelected
+                        ? "border-primary ring-1 ring-primary"
+                        : "border-border hover:border-primary"
                     }
                   `}
                 >
@@ -110,17 +115,25 @@ export function MultiRelayInput({
 
                   <div className="flex gap-3 relative z-10">
                     <div className="flex-shrink-0 mt-0.5">
-                       <div className="relative p-2 rounded-lg overflow-hidden">
-                          <div className={`absolute inset-0 ${isSelected ? 'bg-primary opacity-20' : 'bg-muted opacity-100'}`} />
-                          <Zap className="w-4 h-4 text-primary relative z-10" />
-                       </div>
+                      <div className="relative p-2 rounded-lg overflow-hidden">
+                        <div
+                          className={`absolute inset-0 ${isSelected ? "bg-primary opacity-20" : "bg-muted opacity-100"}`}
+                        />
+                        <Zap className="w-4 h-4 text-primary relative z-10" />
+                      </div>
                     </div>
                     <div className="space-y-1 text-left">
-                       <div className="font-semibold text-sm">{option.name || "Unknown Relay"}</div>
-                       {option.description && (
-                          <div className="text-sm text-muted-foreground">{option.description}</div>
-                       )}
-                       <div className="text-xs font-mono text-muted-foreground opacity-80">{option.value}</div>
+                      <div className="font-semibold text-sm">
+                        {option.name || "Unknown Relay"}
+                      </div>
+                      {option.description && (
+                        <div className="text-sm text-muted-foreground">
+                          {option.description}
+                        </div>
+                      )}
+                      <div className="text-xs font-mono text-muted-foreground opacity-80">
+                        {option.value}
+                      </div>
                     </div>
                   </div>
 
@@ -181,9 +194,7 @@ export function MultiRelayInput({
               placeholder={placeholder}
               className="font-mono text-sm"
             />
-            {error && (
-              <p className="text-sm text-destructive mt-1">{error}</p>
-            )}
+            {error && <p className="text-sm text-destructive mt-1">{error}</p>}
           </div>
           <Button
             type="button"

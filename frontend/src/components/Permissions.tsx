@@ -10,7 +10,7 @@ import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import {
   DEFAULT_APP_BUDGET_LOKI,
-  DEFAULT_APP_BUDGET_RENEWAL
+  DEFAULT_APP_BUDGET_RENEWAL,
 } from "src/constants";
 import { cn } from "src/lib/utils";
 import {
@@ -172,7 +172,9 @@ const Permissions: React.FC<PermissionsProps> = ({
                   )}
                 >
                   <PermissionIcon className="me-1 size-4" />
-                  <p className="text-sm">{t(`scopes.${scope}`, { defaultValue: scope })}</p>
+                  <p className="text-sm">
+                    {t(`scopes.${scope}`, { defaultValue: scope })}
+                  </p>
                 </Badge>
               );
             })}
@@ -251,7 +253,9 @@ const Permissions: React.FC<PermissionsProps> = ({
             </div>
           )}
           {budgetCaption && (
-            <p className="text-muted-foreground text-sm -mt-2">{budgetCaption}</p>
+            <p className="text-muted-foreground text-sm -mt-2">
+              {budgetCaption}
+            </p>
           )}
         </>
       )}
@@ -279,7 +283,9 @@ const Permissions: React.FC<PermissionsProps> = ({
           </>
         ) : (
           <>
-            <p className="text-sm font-medium mb-2">{t("expiry.connectionExpiry")}</p>
+            <p className="text-sm font-medium mb-2">
+              {t("expiry.connectionExpiry")}
+            </p>
             <p className="text-muted-foreground text-sm">
               {permissions.expiresAt
                 ? new Date(permissions.expiresAt).toString()

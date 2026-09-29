@@ -17,7 +17,8 @@ type Props = {
 export function CompactLanguageSwitcher({ showLabel }: Props) {
   const { currentLanguage, changeLanguage, supportedLanguages } = useLocale();
   const currentLangName =
-    supportedLanguages.find((l) => l.code === currentLanguage)?.name ?? currentLanguage;
+    supportedLanguages.find((l) => l.code === currentLanguage)?.name ??
+    currentLanguage;
 
   return (
     <DropdownMenu>
@@ -49,7 +50,9 @@ export function CompactLanguageSwitcher({ showLabel }: Props) {
           <DropdownMenuItem
             key={lang.code}
             onClick={() => changeLanguage(lang.code as SupportedLanguageCode)}
-            className={currentLanguage === lang.code ? "bg-muted font-medium" : ""}
+            className={
+              currentLanguage === lang.code ? "bg-muted font-medium" : ""
+            }
           >
             {lang.name}
           </DropdownMenuItem>

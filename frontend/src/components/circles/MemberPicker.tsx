@@ -44,17 +44,13 @@ export function MemberPicker({
 
   const { profiles: selectedProfiles } = useNostrProfiles(selected);
 
-  const {
-    hex,
-    isResolving,
-    isSearchCandidate,
-    results,
-    isSearching,
-  } = useNostrIdentityLookup(query);
+  const { hex, isResolving, isSearchCandidate, results, isSearching } =
+    useNostrIdentityLookup(query);
   const { profile: directProfile } = useNostrProfile(hex);
 
   const searchProfiles = React.useMemo(
-    () => new Map<string, NostrProfile>(results.map((r) => [r.pubkey, r.profile])),
+    () =>
+      new Map<string, NostrProfile>(results.map((r) => [r.pubkey, r.profile])),
     [results]
   );
   const { verified: verifiedNip05Pubkeys, pending: pendingNip05Pubkeys } =
@@ -89,7 +85,9 @@ export function MemberPicker({
   return (
     <div className="grid gap-3">
       {selected.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("memberPicker.noneYet")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("memberPicker.noneYet")}
+        </p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {selected.map((pubkey) => (
@@ -206,7 +204,9 @@ export function MemberPicker({
                           value={pubkey}
                           disabled={isAlreadyMember}
                           onSelect={() => {
-                            if (isAlreadyMember) {return;}
+                            if (isAlreadyMember) {
+                              return;
+                            }
                             toggle(pubkey);
                             if (visibleResults.length === 1) {
                               setQuery("");
@@ -218,7 +218,9 @@ export function MemberPicker({
                             isAlreadyMember
                               ? "cursor-default"
                               : "cursor-pointer",
-                            isPinned ? "border-s-primary" : "border-s-transparent"
+                            isPinned
+                              ? "border-s-primary"
+                              : "border-s-transparent"
                           )}
                         >
                           <NostrProfileRow
@@ -256,9 +258,7 @@ export function MemberPicker({
                   </span>
                 </CommandEmpty>
               ) : (
-                <CommandEmpty>
-                  {t("memberPicker.searchHint")}
-                </CommandEmpty>
+                <CommandEmpty>{t("memberPicker.searchHint")}</CommandEmpty>
               )}
             </CommandList>
           )}

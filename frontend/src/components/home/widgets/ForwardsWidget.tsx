@@ -1,10 +1,10 @@
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useForwards } from "src/hooks/useForwards";
 
@@ -38,7 +38,9 @@ export function ForwardsWidget() {
                 amount={forwards.outboundAmountForwardedMloki}
               />
               <FormattedFiatAmount
-                amount={Math.floor(forwards.outboundAmountForwardedMloki / 1000)}
+                amount={Math.floor(
+                  forwards.outboundAmountForwardedMloki / 1000
+                )}
               />
             </p>
           </div>

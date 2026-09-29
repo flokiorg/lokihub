@@ -26,10 +26,15 @@ function QRCode({ value, size, level, className, withIcon = true }: Props) {
   const bgColor = "#FFFFFF"; // isDarkMode ? "#242424" : "#FFFFFF";
 
   // Use Q level by default if there is an icon overlay to ensure better scannability
-  const qrLevel = withIcon ? "Q" : (level || "L");
+  const qrLevel = withIcon ? "Q" : level || "L";
 
   return (
-    <div className={cn("bg-white p-2 rounded-md relative flex items-center justify-center w-fit mx-auto", className)}>
+    <div
+      className={cn(
+        "bg-white p-2 rounded-md relative flex items-center justify-center w-fit mx-auto",
+        className
+      )}
+    >
       <ReactQRCode
         value={value}
         size={size}

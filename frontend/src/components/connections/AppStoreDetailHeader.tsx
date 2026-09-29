@@ -28,10 +28,7 @@ export function AppStoreDetailHeader({
         title={
           <>
             <div className="flex flex-row items-center">
-              <img
-                src={logoSrc}
-                className="w-14 h-14 rounded-lg me-4"
-              />
+              <img src={logoSrc} className="w-14 h-14 rounded-lg me-4" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   {appStoreApp.title}

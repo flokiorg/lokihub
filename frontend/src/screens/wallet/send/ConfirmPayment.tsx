@@ -14,11 +14,11 @@ import { PaymentFailedAlert } from "src/components/PaymentFailedAlert";
 import { PendingPaymentAlert } from "src/components/PendingPaymentAlert";
 import { SpendingAlert } from "src/components/SpendingAlert";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useBalances } from "src/hooks/useBalances";
 import { PayInvoiceResponse, TransactionMetadata } from "src/types";
@@ -135,7 +135,10 @@ export default function ConfirmPayment() {
             )}
           </CardContent>
           <CardFooter className="flex flex-col gap-2 pt-2">
-            <SpendingAlert className="mb-2" amount={invoice.satoshi + Math.floor(estimatedFee / 1000)} />
+            <SpendingAlert
+              className="mb-2"
+              amount={invoice.satoshi + Math.floor(estimatedFee / 1000)}
+            />
             <LoadingButton
               onClick={confirmPayment}
               loading={isLoading}

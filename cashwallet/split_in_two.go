@@ -38,10 +38,6 @@ type SplitInTwoParams struct {
 	MinTransferMloki int64
 	RedeemFeePpm     int
 	ExpiresAt        *time.Time
-	// SignMint requests optional mint provenance on BOTH resulting tokens —
-	// each wallet signs independently over its own pubkey and its own fixed
-	// amount (see SplitParams.SignMint).
-	SignMint bool
 }
 
 // SplitInTwoResult carries the created wallet(s). Remainder is nil for a full
@@ -78,7 +74,6 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 		MinTransferMloki: params.MinTransferMloki,
 		RedeemFeePpm:     params.RedeemFeePpm,
 		ExpiresAt:        params.ExpiresAt,
-		SignMint:         params.SignMint,
 	})
 	if err != nil {
 		// Nothing has left the source yet — safe to restore.
@@ -99,7 +94,6 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 		MinTransferMloki: params.MinTransferMloki,
 		RedeemFeePpm:     params.RedeemFeePpm,
 		ExpiresAt:        params.ExpiresAt,
-		SignMint:         params.SignMint,
 	})
 	if err != nil {
 		// Compensate the carved spin-off: move its funds back to the source,

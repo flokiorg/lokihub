@@ -135,7 +135,10 @@ export function NewCircleHub() {
     : [
         { blocked: !name, hint: t("newCircleHub.enterNameHint") },
         { blocked: !resolvedPubkeyHex },
-        { blocked: memberMode === "pinned" && selectedMemberPubkeys.length === 0 },
+        {
+          blocked:
+            memberMode === "pinned" && selectedMemberPubkeys.length === 0,
+        },
       ];
 
   const isSubmitDisabled = validationIssues.some((issue) => issue.blocked);
@@ -189,9 +192,7 @@ export function NewCircleHub() {
             body: JSON.stringify({ pubkeys: selectedMemberPubkeys }),
           });
         } catch (allowlistError) {
-          toast.error(
-            t("newCircleHub.allowlistSeedFailedToast", { name })
-          );
+          toast.error(t("newCircleHub.allowlistSeedFailedToast", { name }));
           navigate("/sub-wallets/created", { state: response });
           setLoading(false);
           return;
@@ -212,7 +213,10 @@ export function NewCircleHub() {
         title={t("newCircleHub.title")}
         description={t("newCircleHub.description")}
       />
-      <form onSubmit={handleSubmit} className="flex flex-col items-start gap-6 max-w-lg">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col items-start gap-6 max-w-lg"
+      >
         <div className="w-full grid gap-1.5">
           <Label htmlFor="name">{t("common.nameLabel")}</Label>
           <Input
@@ -264,7 +268,8 @@ export function NewCircleHub() {
                     <SelectItem key={identity.id} value={String(identity.id)}>
                       <span className="flex w-full items-center justify-between gap-2">
                         <span>
-                          {identity.name} ({t(`policyLabel.${identity.policy}`)})
+                          {identity.name} ({t(`policyLabel.${identity.policy}`)}
+                          )
                         </span>
                         {identity.usedByCount > 0 && (
                           <span className="text-xs text-muted-foreground">
@@ -307,38 +312,42 @@ export function NewCircleHub() {
               <div className="w-full grid gap-1.5">
                 <Label>{t("newCircleHub.memberModeLabel")}</Label>
                 <div className="grid grid-cols-2 gap-3">
-                  {memberModeOptions.map(({ mode, icon: Icon, title, description }) => {
-                    const isSelected = memberMode === mode;
-                    return (
-                      <button
-                        type="button"
-                        key={mode}
-                        onClick={() => setMemberMode(mode)}
-                        className={cn(
-                          "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
-                          isSelected
-                            ? "border-primary ring-1 ring-primary shadow-sm"
-                            : "border-border hover:border-primary/50"
-                        )}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                            <Check className="h-3 w-3" />
-                          </div>
-                        )}
-                        <Icon
+                  {memberModeOptions.map(
+                    ({ mode, icon: Icon, title, description }) => {
+                      const isSelected = memberMode === mode;
+                      return (
+                        <button
+                          type="button"
+                          key={mode}
+                          onClick={() => setMemberMode(mode)}
                           className={cn(
-                            "h-4 w-4",
-                            isSelected ? "text-primary" : "text-muted-foreground"
+                            "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
+                            isSelected
+                              ? "border-primary ring-1 ring-primary shadow-sm"
+                              : "border-border hover:border-primary/50"
                           )}
-                        />
-                        <span className="text-sm font-semibold">{title}</span>
-                        <p className="text-xs leading-snug text-muted-foreground">
-                          {description}
-                        </p>
-                      </button>
-                    );
-                  })}
+                        >
+                          {isSelected && (
+                            <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
+                              <Check className="h-3 w-3" />
+                            </div>
+                          )}
+                          <Icon
+                            className={cn(
+                              "h-4 w-4",
+                              isSelected
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                            )}
+                          />
+                          <span className="text-sm font-semibold">{title}</span>
+                          <p className="text-xs leading-snug text-muted-foreground">
+                            {description}
+                          </p>
+                        </button>
+                      );
+                    }
+                  )}
                 </div>
               </div>
 
@@ -500,7 +509,11 @@ export function NewCircleHub() {
 
         <div className="grid gap-2">
           <div className="flex gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(-1)}
+            >
               {tc("actions.cancel")}
             </Button>
             <LoadingButton

@@ -9,9 +9,7 @@ export function ClaimStateBadge({ claim }: { claim: CashWalletClaim }) {
   // value just moved into a brand-new wallet, so "Redeemed" would be
   // misleading here even though claimed is also true.
   if (claim.spun_off_to_wallet_app_id) {
-    return (
-      <Badge variant="outline">{t("claimBadge.movedToNewWallet")}</Badge>
-    );
+    return <Badge variant="outline">{t("claimBadge.movedToNewWallet")}</Badge>;
   }
   if (claim.claimed) {
     return <Badge variant="positive">{t("claimBadge.claimed")}</Badge>;

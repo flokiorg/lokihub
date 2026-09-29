@@ -80,9 +80,7 @@ describe("secondaryProfileLabel", () => {
   // the untruncated value.
   it("keeps the full npub beside the shortened one", () => {
     const secondary = secondaryProfileLabel(PUBKEY, { name: "alice" });
-    expect(secondary?.fullNpub.length).toBeGreaterThan(
-      secondary!.npub.length
-    );
+    expect(secondary?.fullNpub.length).toBeGreaterThan(secondary!.npub.length);
     expect(secondary?.fullNpub).not.toContain("…");
   });
 });

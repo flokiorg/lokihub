@@ -40,12 +40,12 @@ export function useLSPS5(lspPubkey: string) {
   const setWebhook = useCallback(async (params: LSPS5SetWebhookRequest) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       await request("/api/lsps5/webhook", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params)
+        body: JSON.stringify(params),
       });
       return true;
     } catch (e: any) {
@@ -68,12 +68,14 @@ export function useLSPS5(lspPubkey: string) {
 
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const query = new URLSearchParams();
       query.append("lsp", lspPubkey);
-      
-      const response = await request<LSPS5ListWebhooksResponse>(`/api/lsps5/webhooks?${query.toString()}`);
+
+      const response = await request<LSPS5ListWebhooksResponse>(
+        `/api/lsps5/webhooks?${query.toString()}`
+      );
       return response;
     } catch (e: any) {
       const errorMsg = e.message || "Failed to list webhooks";
@@ -87,27 +89,30 @@ export function useLSPS5(lspPubkey: string) {
   /**
    * Removes a webhook registration from the LSP
    */
-  const removeWebhook = useCallback(async (params: LSPS5RemoveWebhookRequest) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const query = new URLSearchParams();
-      query.append("lsp", params.lspPubkey);
-      query.append("url", params.url);
-      
-      await request(`/api/lsps5/webhook?${query.toString()}`, {
-        method: "DELETE"
-      });
-      return true;
-    } catch (e: any) {
-      const errorMsg = e.message || "Failed to remove webhook";
-      setError(errorMsg);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const removeWebhook = useCallback(
+    async (params: LSPS5RemoveWebhookRequest) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const query = new URLSearchParams();
+        query.append("lsp", params.lspPubkey);
+        query.append("url", params.url);
+
+        await request(`/api/lsps5/webhook?${query.toString()}`, {
+          method: "DELETE",
+        });
+        return true;
+      } catch (e: any) {
+        const errorMsg = e.message || "Failed to remove webhook";
+        setError(errorMsg);
+        return false;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
 
   return { setWebhook, listWebhooks, removeWebhook, isLoading, error };
 }

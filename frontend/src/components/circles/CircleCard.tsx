@@ -26,17 +26,16 @@ export function CircleCard({ app }: { app: App }) {
   // only undefined for a non-circle_hub app, which SubwalletList.tsx
   // never renders as a CircleCard, but we guard the body defensively anyway.
   const providerPubkey = identity?.providerPubkey ?? "";
-  const { profile, isLoading: isProfileLoading } = useNostrProfile(providerPubkey || undefined);
+  const { profile, isLoading: isProfileLoading } = useNostrProfile(
+    providerPubkey || undefined
+  );
 
   const isAllowlist = identity?.policy === "allowlist";
-  const { data: allowlistData, isLoading: isAllowlistLoading } = useCircleAllowlist(
-    app.id,
-    isAllowlist
-  );
+  const { data: allowlistData, isLoading: isAllowlistLoading } =
+    useCircleAllowlist(app.id, isAllowlist);
   const memberPubkeys = allowlistData?.pubkeys ?? [];
-  const { profiles: memberProfiles, isLoading: isMembersLoading } = useNostrProfiles(
-    isAllowlist ? memberPubkeys : []
-  );
+  const { profiles: memberProfiles, isLoading: isMembersLoading } =
+    useNostrProfiles(isAllowlist ? memberPubkeys : []);
 
   if (!identity) {
     return null;
@@ -88,8 +87,8 @@ export function CircleCard({ app }: { app: App }) {
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-3 slashed-zero">
-        {identity.policy === "following" && (
-          identity.followingCount === undefined ? (
+        {identity.policy === "following" &&
+          (identity.followingCount === undefined ? (
             <span className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {t("common.syncingFollowing")}
@@ -107,8 +106,7 @@ export function CircleCard({ app }: { app: App }) {
                 </>
               )}
             </span>
-          )
-        )}
+          ))}
         {isAllowlist && (
           <span className="text-sm">
             {t("circleCard.member", { count: identity.allowlistCount })}

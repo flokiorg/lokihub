@@ -4,19 +4,19 @@ import { ChannelWarning } from "src/components/channels/ChannelWarning";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import { Badge } from "src/components/ui/badge.tsx";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Progress } from "src/components/ui/progress.tsx";
 import { Separator } from "src/components/ui/separator";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "src/components/ui/tooltip";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { formatAmount } from "src/lib/utils.ts";
@@ -93,28 +93,33 @@ function ChannelCard({
               <div className="flex-1 whitespace-nowrap text-ellipsis font-semibold truncate leading-normal">
                 {alias}
               </div>
-              <ChannelDropdownMenu
-                alias={alias}
-                channel={channel}
-              />
+              <ChannelDropdownMenu alias={alias} channel={channel} />
             </div>
           </CardTitle>
         </CardHeader>
         <CardDescription className="w-full flex flex-col gap-4">
           <div className="flex w-full justify-between items-center">
-            <p className="text-muted-foreground font-medium">{t("channels.status.active", "Status")}</p>
+            <p className="text-muted-foreground font-medium">
+              {t("channels.status.active", "Status")}
+            </p>
             {channel.status == "online" ? (
               unconfirmedChannel ? (
                 <Badge variant="outline" title={unconfirmedChannel.message}>
                   {t("channels.status.pending", "Unconfirmed")}
                 </Badge>
               ) : (
-                <Badge variant="positive">{t("channels.status.online", "Online")}</Badge>
+                <Badge variant="positive">
+                  {t("channels.status.online", "Online")}
+                </Badge>
               )
             ) : channel.status == "opening" ? (
-              <Badge variant="outline">{t("channels.status.opening", "Opening")}</Badge>
+              <Badge variant="outline">
+                {t("channels.status.opening", "Opening")}
+              </Badge>
             ) : (
-              <Badge variant="warning">{t("channels.status.offline", "Offline")}</Badge>
+              <Badge variant="warning">
+                {t("channels.status.offline", "Offline")}
+              </Badge>
             )}
           </div>
           <div className="flex w-full justify-between items-center">

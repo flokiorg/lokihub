@@ -32,9 +32,7 @@ export function DuplicateChannelAlert({ pubkey, name }: PeerAlertProps) {
           ? t("alerts.duplicateChannel.titleWithName", { name })
           : t("alerts.duplicateChannel.titleGeneric")}
       </AlertTitle>
-      <AlertDescription>
-        {t("alerts.duplicateChannel.desc")}
-      </AlertDescription>
+      <AlertDescription>{t("alerts.duplicateChannel.desc")}</AlertDescription>
     </Alert>
   );
 }

@@ -3,11 +3,11 @@ import { useLocation } from "react-router-dom";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 
 import Tick from "src/assets/illustrations/tick.svg?react";
@@ -68,7 +68,7 @@ export default function OnchainSuccess() {
               className="w-full"
             >
               <ExternalLinkIcon className="w-4 h-4 mr-2" />
-              View on Flokicoin Explorer 
+              View on Flokicoin Explorer
             </ExternalLinkButton>
             <LinkButton to="/wallet/send" variant="outline" className="w-full">
               <HandCoinsIcon className="w-4 h-4 mr-2" />

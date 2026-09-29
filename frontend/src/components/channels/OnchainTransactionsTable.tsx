@@ -5,10 +5,10 @@ import { useTranslation } from "react-i18next";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "src/components/ui/table";
 import { useInfo } from "src/hooks/useInfo";
@@ -31,11 +31,11 @@ export function OnchainTransactionsTable() {
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
-  
+
   // Store latest values in refs to avoid stale closures
   const isLoadingMoreRef = useRef(isLoadingMore);
   const isReachingEndRef = useRef(isReachingEnd);
-  
+
   useEffect(() => {
     isLoadingMoreRef.current = isLoadingMore;
     isReachingEndRef.current = isReachingEnd;
@@ -43,7 +43,7 @@ export function OnchainTransactionsTable() {
 
   useEffect(() => {
     const currentElement = loadMoreRef.current;
-    
+
     if (observerRef.current) {
       observerRef.current.disconnect();
     }
@@ -55,14 +55,18 @@ export function OnchainTransactionsTable() {
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        
-        if (entry.isIntersecting && !isLoadingMoreRef.current && !isReachingEndRef.current) {
+
+        if (
+          entry.isIntersecting &&
+          !isLoadingMoreRef.current &&
+          !isReachingEndRef.current
+        ) {
           setSize((prevSize) => prevSize + 1);
         }
       },
       {
         threshold: 0.1,
-        rootMargin: '500px', // Start loading well before reaching the bottom (~20% before)
+        rootMargin: "500px", // Start loading well before reaching the bottom (~20% before)
       }
     );
 
@@ -79,16 +83,18 @@ export function OnchainTransactionsTable() {
     if (isLoading) {
       return (
         <Card className="mt-6">
-            <CardHeader>
-                <CardTitle className="text-2xl">{t("onchain.transactions")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="flex justify-center p-4">
-                    <Loader2 className="animate-spin" />
-                </div>
-            </CardContent>
+          <CardHeader>
+            <CardTitle className="text-2xl">
+              {t("onchain.transactions")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center p-4">
+              <Loader2 className="animate-spin" />
+            </div>
+          </CardContent>
         </Card>
-      )
+      );
     }
     return null;
   }
@@ -157,7 +163,9 @@ export function OnchainTransactionsTable() {
                           .format("D MMMM YYYY, HH:mm")}
                       >
                         <span dir="ltr">
-                          {dayjs(tx.createdAt * 1000).local().fromNow()}
+                          {dayjs(tx.createdAt * 1000)
+                            .local()
+                            .fromNow()}
                         </span>
                       </p>
                     </div>
@@ -191,7 +199,7 @@ export function OnchainTransactionsTable() {
           </TableBody>
         </Table>
         {!isReachingEnd && !error && (
-          <div 
+          <div
             ref={loadMoreRef}
             className="flex items-center justify-center p-4"
           >

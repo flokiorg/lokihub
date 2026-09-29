@@ -14,7 +14,11 @@ export function safeNpubEncode(hex: string): string | undefined {
 // "npub1sg6plzptd6…jsf1a2b3") instead of just its beginning — showing both
 // ends lets someone eyeball-match it against another display of the same
 // npub, which a prefix-only truncation doesn't support.
-export function shortenMiddle(value: string, headLen = 12, tailLen = 6): string {
+export function shortenMiddle(
+  value: string,
+  headLen = 12,
+  tailLen = 6
+): string {
   if (value.length <= headLen + tailLen) {
     return value;
   }
@@ -34,7 +38,9 @@ export interface DecodedNostrPointer {
 // (e.g. to fetch that profile, or to prefill an Identity Authority's
 // relay_urls) instead of only a generic relay pool. Returns undefined for
 // anything unparseable instead of throwing.
-export function safeDecodeToPointer(input: string): DecodedNostrPointer | undefined {
+export function safeDecodeToPointer(
+  input: string
+): DecodedNostrPointer | undefined {
   const trimmed = input.trim();
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
     return { hex: trimmed.toLowerCase() };

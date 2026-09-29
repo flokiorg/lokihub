@@ -41,7 +41,10 @@ export function nostrProfileCacheKey(pubkey: string, relayUrls: string[]) {
 // aren't tied to any single pubkey's outbox (e.g. every listed Identity
 // Authority's own declared relay_urls, unioned together) — see
 // getRelaySetForPubkeys.
-export function useNostrProfiles(pubkeys: string[], extraRelayUrls: string[] = []) {
+export function useNostrProfiles(
+  pubkeys: string[],
+  extraRelayUrls: string[] = []
+) {
   const { ndk, relayUrls } = useNdk();
   const extraRelayUrlsKey = extraRelayUrls.join(",");
   const { mutate } = useSWRConfig();
@@ -93,7 +96,11 @@ export function useNostrProfiles(pubkeys: string[], extraRelayUrls: string[] = [
               lud16: raw.lud16,
             };
             next.set(event.pubkey, profile);
-            mutate(nostrProfileCacheKey(event.pubkey, relayUrls), profile, false);
+            mutate(
+              nostrProfileCacheKey(event.pubkey, relayUrls),
+              profile,
+              false
+            );
           }
           return next;
         });

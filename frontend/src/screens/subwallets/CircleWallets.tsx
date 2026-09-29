@@ -140,9 +140,7 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
           })
         )
       );
-      toast(
-        t("circleWallets.removedSelectedToast", { count: ids.length })
-      );
+      toast(t("circleWallets.removedSelectedToast", { count: ids.length }));
       setSelected(new Set());
       setConfirmBulkDeleteOpen(false);
       if (ids.length === children.length && page > 1) {
@@ -195,7 +193,9 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
         <div className="min-w-0 rounded-lg border">
           <div className="flex items-center gap-3 px-3 py-2.5">
             <Checkbox
-              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              checked={
+                allSelected ? true : someSelected ? "indeterminate" : false
+              }
               onCheckedChange={toggleSelectAll}
               aria-label={t("common.selectAll")}
             />
@@ -267,7 +267,9 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("circleWallets.removeTitle")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("circleWallets.removeTitle")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {t("circleWallets.removeDescription")}
             </AlertDialogDescription>

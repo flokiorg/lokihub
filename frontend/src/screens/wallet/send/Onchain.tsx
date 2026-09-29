@@ -239,7 +239,9 @@ function OnchainForm({
               onClick={() => setEditFee(true)}
             >
               {feeRate ? (
-                <p>{feeRate} {unit()}/vB</p>
+                <p>
+                  {feeRate} {unit()}/vB
+                </p>
               ) : (
                 <Loading className="w-4 h-4" />
               )}
@@ -292,7 +294,7 @@ function OnchainForm({
                   to={info?.mempoolUrl}
                   className="text-muted-foreground underline flex items-center gap-2"
                 >
-                  View on Flokicoin Explorer 
+                  View on Flokicoin Explorer
                   <ExternalLinkIcon className="w-4 h-4" />
                 </ExternalLink>
               </div>
@@ -300,17 +302,21 @@ function OnchainForm({
           </div>
         )}
       </div>
-      {amountDisplay && parseInputAmount(parseFloat(amountDisplay), inputUnit) < 10_000 && (
-        <Alert>
-          <InfoIcon className="h-4 w-4" />
-          <AlertTitle>Amount not ideal for On-chain transaction</AlertTitle>
-          <AlertDescription>
-            Small amounts can become unspendable when mempool fees increase.
-            Consider using Lightning instead or sending at least {scaleInputAmount(10_000, inputUnit)} {inputUnit}.
-          </AlertDescription>
-        </Alert>
-      )}
-      <AnchorReserveAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
+      {amountDisplay &&
+        parseInputAmount(parseFloat(amountDisplay), inputUnit) < 10_000 && (
+          <Alert>
+            <InfoIcon className="h-4 w-4" />
+            <AlertTitle>Amount not ideal for On-chain transaction</AlertTitle>
+            <AlertDescription>
+              Small amounts can become unspendable when mempool fees increase.
+              Consider using Lightning instead or sending at least{" "}
+              {scaleInputAmount(10_000, inputUnit)} {inputUnit}.
+            </AlertDescription>
+          </Alert>
+        )}
+      <AnchorReserveAlert
+        amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
+      />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back
@@ -401,7 +407,11 @@ function SwapForm({
           onAmountChange={(val) => setAmountDisplay(val)}
           inputUnit={inputUnit}
           onInputUnitChange={handleInputUnitChange}
-          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 1}
+          min={
+            swapInfo.minAmount
+              ? scaleInputAmount(swapInfo.minAmount, inputUnit)
+              : 1
+          }
           required
           autoFocus
         />
@@ -452,7 +462,9 @@ function SwapForm({
           <p>{swapInfo.lokiServiceFee + swapInfo.boltzServiceFee}%</p>
         </div>
       </div>
-      <SpendingAlert amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)} />
+      <SpendingAlert
+        amount={parseInputAmount(parseFloat(amountDisplay || "0"), inputUnit)}
+      />
       <div className="flex gap-2">
         <LinkButton to="/wallet/send" variant="outline">
           Back

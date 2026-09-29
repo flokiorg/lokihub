@@ -7,13 +7,13 @@ import { toast } from "sonner";
 import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";
 import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
@@ -21,15 +21,15 @@ import { Label } from "src/components/ui/label";
 import { useCapabilities } from "src/hooks/useCapabilities";
 import { createApp } from "src/requests/createApp";
 import {
-    AppPermissions,
-    BudgetRenewalType,
-    CreateAppRequest,
-    CreateAppResponse,
-    Nip47NotificationType,
-    Nip47RequestMethod,
-    Scope,
-    WalletCapabilities,
-    validBudgetRenewals,
+  AppPermissions,
+  BudgetRenewalType,
+  CreateAppRequest,
+  CreateAppResponse,
+  Nip47NotificationType,
+  Nip47RequestMethod,
+  Scope,
+  WalletCapabilities,
+  validBudgetRenewals,
 } from "src/types";
 
 import AppHeader from "src/components/AppHeader";
@@ -43,8 +43,8 @@ import { defineStepper } from "src/components/stepper";
 import { Checkbox } from "src/components/ui/checkbox";
 import { Input } from "src/components/ui/input";
 import {
-    DEFAULT_APP_BUDGET_LOKI,
-    DEFAULT_APP_BUDGET_RENEWAL
+  DEFAULT_APP_BUDGET_LOKI,
+  DEFAULT_APP_BUDGET_RENEWAL,
 } from "src/constants";
 import { useApp } from "src/hooks/useApp";
 import { useAppLogo } from "src/hooks/useAppLogo";
@@ -64,7 +64,9 @@ const NewApp = () => {
     return <Loading />;
   }
 
-  return <NewAppInternal capabilities={capabilities} appStoreApps={appStoreApps} />;
+  return (
+    <NewAppInternal capabilities={capabilities} appStoreApps={appStoreApps} />
+  );
 };
 
 type NewAppInternalProps = {
@@ -72,7 +74,10 @@ type NewAppInternalProps = {
   appStoreApps: AppStoreApp[];
 };
 
-const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => {
+const NewAppInternal = ({
+  capabilities,
+  appStoreApps,
+}: NewAppInternalProps) => {
   const location = useLocation();
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
@@ -132,7 +137,9 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
     );
     if (unsupportedMethods.length) {
       setUnsupportedError(
-        t("newApp.unsupportedMethods", { methods: unsupportedMethods.join(", ") })
+        t("newApp.unsupportedMethods", {
+          methods: unsupportedMethods.join(", "),
+        })
       );
     }
 
@@ -153,7 +160,9 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
     );
     if (unsupportedNotificationTypes.length) {
       setUnsupportedError(
-        t("newApp.unsupportedNotificationTypes", { types: unsupportedNotificationTypes.join(", ") })
+        t("newApp.unsupportedNotificationTypes", {
+          types: unsupportedNotificationTypes.join(", "),
+        })
       );
     }
 
@@ -261,21 +270,33 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
           id: "configure",
           title: t("newApp.configure", "Configure"),
         },
-        ...(returnTo || pubkey ? [] : [{ id: "finalize", title: t("newApp.finalize", "Finalize") }])
+        ...(returnTo || pubkey
+          ? []
+          : [{ id: "finalize", title: t("newApp.finalize", "Finalize") }])
       ),
     [appStoreApp, returnTo, pubkey]
   );
 
   const handleCreateApp = async (nextFunc: () => void) => {
     if (!permissions.scopes.length) {
-      toast(t("newApp.specifyWalletPermissions", "Please specify wallet permissions."));
+      toast(
+        t(
+          "newApp.specifyWalletPermissions",
+          "Please specify wallet permissions."
+        )
+      );
       return;
     }
     if (
       permissions.cashHub &&
       (!permissions.cashPerWalletMaxLoki || !permissions.cashMaxExpSecs)
     ) {
-      toast(t("newApp.specifyCashHubLimits", "Please specify cash bill budget and expiry limits."));
+      toast(
+        t(
+          "newApp.specifyCashHubLimits",
+          "Please specify cash bill budget and expiry limits."
+        )
+      );
       return;
     }
 
@@ -354,7 +375,10 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
       nextFunc();
     } catch (error) {
-      handleRequestError(t("newApp.failedToCreate", "Failed to create app"), error);
+      handleRequestError(
+        t("newApp.failedToCreate", "Failed to create app"),
+        error
+      );
     }
     setLoading(false);
   };
@@ -362,8 +386,16 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
   if (unsupportedError) {
     return (
       <>
-        <AppHeader title={t("newApp.unsupportedApp", "Unsupported App")} description={unsupportedError} />
-        <p>{t("newApp.tryLdkBackend", "Try the Lokihub LDK backend for extra features.")}</p>
+        <AppHeader
+          title={t("newApp.unsupportedApp", "Unsupported App")}
+          description={unsupportedError}
+        />
+        <p>
+          {t(
+            "newApp.tryLdkBackend",
+            "Try the Lokihub LDK backend for extra features."
+          )}
+        </p>
       </>
     );
   }
@@ -371,7 +403,11 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
   return (
     <>
       <AppHeader
-        title={appName ? t("newApp.connectTo", { appName }) : t("newApp.connectNewApp", "Connect a new app")}
+        title={
+          appName
+            ? t("newApp.connectTo", { appName })
+            : t("newApp.connectNewApp", "Connect a new app")
+        }
         icon={
           appStoreApp?.logo && logoSrc ? (
             <img
@@ -381,7 +417,10 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
             />
           ) : undefined
         }
-        description={t("newApp.headerDescription", "Configure wallet permissions for the app and follow instructions to finalize the connection")}
+        description={t(
+          "newApp.headerDescription",
+          "Configure wallet permissions for the app and follow instructions to finalize the connection"
+        )}
       />
 
       <Stepper.Provider className="space-y-4 max-w-lg" variant="vertical">
@@ -400,7 +439,11 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                 >
                   <Stepper.Title>
                     {step.title ||
-                      (isInstallable ? t("newApp.install", "Install") : t("newApp.open", "Open")) + " " + appName}
+                      (isInstallable
+                        ? t("newApp.install", "Install")
+                        : t("newApp.open", "Open")) +
+                        " " +
+                        appName}
                   </Stepper.Title>
                   {methods.when(step.id, () => (
                     <>
@@ -415,7 +458,12 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
                               <div className="flex flex-col items-center justify-center p-8 gap-4">
                                 <div className="flex flex-row items-center gap-2 text-sm z-10">
                                   <Loading className="size-4" />
-                                  <p className="text-muted-foreground font-medium">{t("newApp.waitingForConnection", "Waiting for app to connect...")}</p>
+                                  <p className="text-muted-foreground font-medium">
+                                    {t(
+                                      "newApp.waitingForConnection",
+                                      "Waiting for app to connect..."
+                                    )}
+                                  </p>
                                 </div>
                               </div>
                             );
@@ -423,81 +471,92 @@ const NewAppInternal = ({ capabilities, appStoreApps }: NewAppInternalProps) => 
 
                           return (
                             <div className="flex flex-col gap-4">
-                            <ConfirmPasswordDialog
-                              open={showConfirmPasswordDialog}
-                              setOpen={setShowConfirmPasswordDialog}
-                              onSubmit={() => {
-                                handleCreateApp(methods.next);
-                              }}
-                              unlockPassword={unlockPassword}
-                              setUnlockPassword={setUnlockPassword}
-                              superuser={superuser}
-                              cashHub={!!permissions.cashHub}
-                            />
-                            {!appStoreApp && (
-                              <div className="w-full grid gap-1.5">
-                                <Label htmlFor="name">{t("newApp.name", "Name")}</Label>
-                                <Input
-                                  autoFocus
-                                  type="text"
-                                  name="name"
-                                  value={appName}
-                                  id="name"
-                                  onChange={(e) => setAppName(e.target.value)}
-                                  required
-                                  autoComplete="off"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                  {t("newApp.nameDescription", "Name of the app or purpose of the connection")}
-                                </p>
-                              </div>
-                            )}
-                            <div className="flex flex-col gap-2 w-full">
-                              <Permissions
-                                capabilities={capabilities}
-                                permissions={permissions}
-                                setPermissions={setPermissions}
-                                isNewConnection
-                                scopesReadOnly={
-                                  !!reqMethodsParam ||
-                                  !!notificationTypesParam ||
-                                  !!isolatedParam
-                                }
-                                budgetReadOnly={!!budgetMaxAmountMlokiParam}
-                                expiresAtReadOnly={!!expiresAtParam}
+                              <ConfirmPasswordDialog
+                                open={showConfirmPasswordDialog}
+                                setOpen={setShowConfirmPasswordDialog}
+                                onSubmit={() => {
+                                  handleCreateApp(methods.next);
+                                }}
+                                unlockPassword={unlockPassword}
+                                setUnlockPassword={setUnlockPassword}
+                                superuser={superuser}
+                                cashHub={!!permissions.cashHub}
                               />
-                            </div>
-                            {appStoreApp?.superuser && (
-                              <div className="flex mt-2">
-                                <Checkbox
-                                  id="superuser"
-                                  required
-                                  checked={superuser}
-                                  onCheckedChange={() =>
-                                    setSuperuser(!superuser)
+                              {!appStoreApp && (
+                                <div className="w-full grid gap-1.5">
+                                  <Label htmlFor="name">
+                                    {t("newApp.name", "Name")}
+                                  </Label>
+                                  <Input
+                                    autoFocus
+                                    type="text"
+                                    name="name"
+                                    value={appName}
+                                    id="name"
+                                    onChange={(e) => setAppName(e.target.value)}
+                                    required
+                                    autoComplete="off"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    {t(
+                                      "newApp.nameDescription",
+                                      "Name of the app or purpose of the connection"
+                                    )}
+                                  </p>
+                                </div>
+                              )}
+                              <div className="flex flex-col gap-2 w-full">
+                                <Permissions
+                                  capabilities={capabilities}
+                                  permissions={permissions}
+                                  setPermissions={setPermissions}
+                                  isNewConnection
+                                  scopesReadOnly={
+                                    !!reqMethodsParam ||
+                                    !!notificationTypesParam ||
+                                    !!isolatedParam
                                   }
-                                  className="mt-0.5"
+                                  budgetReadOnly={!!budgetMaxAmountMlokiParam}
+                                  expiresAtReadOnly={!!expiresAtParam}
                                 />
-                                <Label
-                                  htmlFor="superuser"
-                                  className="ms-2 text-sm text-foreground flex flex-col items-start justify-center"
-                                >
-                                  <div>
-                                    {t("newApp.enableAcceptingConnections", "Enable accepting connections to other apps")}
-                                  </div>
-                                  <div className="text-muted-foreground font-normal">
-                                    {t("newApp.allowAuthorizeNew", "Allow this app to let you authorize new connections to your Lokihub.")}
-                                  </div>
-                                </Label>
                               </div>
-                            )}
+                              {appStoreApp?.superuser && (
+                                <div className="flex mt-2">
+                                  <Checkbox
+                                    id="superuser"
+                                    required
+                                    checked={superuser}
+                                    onCheckedChange={() =>
+                                      setSuperuser(!superuser)
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <Label
+                                    htmlFor="superuser"
+                                    className="ms-2 text-sm text-foreground flex flex-col items-start justify-center"
+                                  >
+                                    <div>
+                                      {t(
+                                        "newApp.enableAcceptingConnections",
+                                        "Enable accepting connections to other apps"
+                                      )}
+                                    </div>
+                                    <div className="text-muted-foreground font-normal">
+                                      {t(
+                                        "newApp.allowAuthorizeNew",
+                                        "Allow this app to let you authorize new connections to your Lokihub."
+                                      )}
+                                    </div>
+                                  </Label>
+                                </div>
+                              )}
 
-                            {returnTo && (
-                              <p className="text-xs text-muted-foreground">
-                                {t("newApp.returnTo", { url: returnTo })}
-                              </p>
-                            )}
-                          </div>
+                              {returnTo && (
+                                <p className="text-xs text-muted-foreground">
+                                  {t("newApp.returnTo", { url: returnTo })}
+                                </p>
+                              )}
+                            </div>
                           );
                         },
                         finalize: () =>
@@ -569,7 +628,10 @@ function FinalizeConnection({
   React.useEffect(() => {
     if (app?.lastUsedAt) {
       toast(t("newApp.connectionEstablished", "Connection established!"), {
-        description: t("newApp.canUseApp", "You can now use the app with your Lokihub."),
+        description: t(
+          "newApp.canUseApp",
+          "You can now use the app with your Lokihub."
+        ),
       });
       // Land on the app that was just connected, not on the Connections
       // list — same rule the sub-wallet/hub flows follow in
@@ -589,18 +651,28 @@ function FinalizeConnection({
           <>{appStoreApp.finalizeGuide}</>
         ) : (
           <ol className="list-decimal list-inside">
-            <li>{t("newApp.openApp", "Open the app you wish to connect to")}</li>
             <li>
-              {t("newApp.findSettings", "Find settings to connect your wallet (may be under Nostr Wallet Connect or NWC).")}
+              {t("newApp.openApp", "Open the app you wish to connect to")}
             </li>
-            <li>{t("newApp.scanOrPaste", "Scan or paste the connection secret")}</li>
+            <li>
+              {t(
+                "newApp.findSettings",
+                "Find settings to connect your wallet (may be under Nostr Wallet Connect or NWC)."
+              )}
+            </li>
+            <li>
+              {t("newApp.scanOrPaste", "Scan or paste the connection secret")}
+            </li>
           </ol>
         )}
 
         {app?.isolated && info && (
           <li>
             {t("newApp.optionalTopUp", {
-              amount: formatFlokicoinAmount(app.balance, info.flokicoinDisplayFormat),
+              amount: formatFlokicoinAmount(
+                app.balance,
+                info.flokicoinDisplayFormat
+              ),
             })}{" "}
             <IsolatedAppTopupDialog appId={app.id}>
               <Button size="sm" variant="secondary">
@@ -658,32 +730,48 @@ function ConfirmPasswordDialog({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("newApp.confirmNewConnection", "Confirm New Connection")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("newApp.confirmNewConnection", "Confirm New Connection")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               <div className="flex flex-col">
                 {superuser && (
                   <>
                     <p>
-                      {t("newApp.lokiGoPermission", "Loki Go will be given permission to create other app connections which can spend your balance.")}
+                      {t(
+                        "newApp.lokiGoPermission",
+                        "Loki Go will be given permission to create other app connections which can spend your balance."
+                      )}
                     </p>
 
                     <p className="mt-4">
-                      {t("newApp.warningLokiGo", "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget.")}
+                      {t(
+                        "newApp.warningLokiGo",
+                        "Warning: Loki Go can create connections with a larger budget than the one set for Loki Go. Make sure to always set a budget."
+                      )}
                     </p>
                   </>
                 )}
 
                 {cashHub && (
                   <p className="mt-4">
-                    {t("newApp.warningCashHub", "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection.")}
+                    {t(
+                      "newApp.warningCashHub",
+                      "Warning: this app will be able to create new wallets and pay third parties directly from its balance, without asking you again each time. It can spend up to the balance you top up into this connection."
+                    )}
                   </p>
                 )}
 
                 <p className="mt-4">
-                  {t("newApp.enterUnlockPassword", "Please enter your unlock password to continue.")}
+                  {t(
+                    "newApp.enterUnlockPassword",
+                    "Please enter your unlock password to continue."
+                  )}
                 </p>
                 <div className="grid gap-1.5 mt-4">
-                  <Label htmlFor="password">{t("newApp.unlockPassword", "Unlock Password")}</Label>
+                  <Label htmlFor="password">
+                    {t("newApp.unlockPassword", "Unlock Password")}
+                  </Label>
                   <PasswordInput
                     id="password"
                     onChange={setUnlockPassword}

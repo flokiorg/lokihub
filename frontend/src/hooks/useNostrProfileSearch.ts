@@ -38,7 +38,11 @@ export function useNostrProfileSearch(query: string) {
   const [isSearching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
-    if (!ndk || searchRelayUrls.length === 0 || trimmed.length < MIN_QUERY_LENGTH) {
+    if (
+      !ndk ||
+      searchRelayUrls.length === 0 ||
+      trimmed.length < MIN_QUERY_LENGTH
+    ) {
       setResults([]);
       setSearching(false);
       return;

@@ -48,9 +48,7 @@ export function DisconnectCashHub({
   // Fail open on error, matching the previous behaviour: let the backend
   // guard reject the delete rather than blocking an otherwise-empty hub
   // because this count failed.
-  const outstandingCount = liveBillsError
-    ? 0
-    : (liveBills?.totalCount ?? null);
+  const outstandingCount = liveBillsError ? 0 : (liveBills?.totalCount ?? null);
 
   const { deleteApp, isDeleting } = useDeleteApp(
     app,

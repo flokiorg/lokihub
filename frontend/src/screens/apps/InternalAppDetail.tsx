@@ -19,16 +19,18 @@ export function InternalAppDetail() {
 
   if (!appStoreApp) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        App not found
-      </div>
+      <div className="p-8 text-center text-muted-foreground">App not found</div>
     );
   }
 
   return <InternalAppDetailContent appStoreApp={appStoreApp} />;
 }
 
-function InternalAppDetailContent({ appStoreApp }: { appStoreApp: AppStoreApp }) {
+function InternalAppDetailContent({
+  appStoreApp,
+}: {
+  appStoreApp: AppStoreApp;
+}) {
   const navigate = useNavigate();
   const connectedApps = useAppsForAppStoreApp(appStoreApp);
 
@@ -40,7 +42,10 @@ function InternalAppDetailContent({ appStoreApp }: { appStoreApp: AppStoreApp })
 
   return (
     <div className="grid gap-5">
-      <AppHeader title={appStoreApp.title} description={appStoreApp.description} />
+      <AppHeader
+        title={appStoreApp.title}
+        description={appStoreApp.description}
+      />
       <div className="grid gap-4 max-w-lg">
         <AboutAppCard appStoreApp={appStoreApp} />
         {connectedApp ? (

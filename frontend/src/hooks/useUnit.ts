@@ -12,15 +12,19 @@ import {
  */
 export function useUnit() {
   const { data: info } = useInfo();
-  
+
   const displayFormat = info?.flokicoinDisplayFormat || "auto";
 
   return {
     unit: (amountLoki?: number) => getFlokicoinUnit(displayFormat, amountLoki),
-    scaleAmount: (amountLoki: number) => lokiToDisplay(amountLoki, displayFormat),
-    parseAmount: (amountDisplay: number) => displayToLoki(amountDisplay, displayFormat),
-    scaleInputAmount: (amountLoki: number, inputUnit: "FLC" | "loki") => lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki"),
-    parseInputAmount: (amountDisplay: number, inputUnit: "FLC" | "loki") => displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki"),
+    scaleAmount: (amountLoki: number) =>
+      lokiToDisplay(amountLoki, displayFormat),
+    parseAmount: (amountDisplay: number) =>
+      displayToLoki(amountDisplay, displayFormat),
+    scaleInputAmount: (amountLoki: number, inputUnit: "FLC" | "loki") =>
+      lokiToDisplay(amountLoki, inputUnit === "FLC" ? "flc" : "loki"),
+    parseInputAmount: (amountDisplay: number, inputUnit: "FLC" | "loki") =>
+      displayToLoki(amountDisplay, inputUnit === "FLC" ? "flc" : "loki"),
     displayFormat,
   };
 }
@@ -42,7 +46,9 @@ export function useInputUnit(referenceAmountLoki: number | undefined) {
     if (referenceAmountLoki === undefined) {
       return "FLC";
     }
-    return getFlokicoinUnit(displayFormat, referenceAmountLoki) as "FLC" | "loki";
+    return getFlokicoinUnit(displayFormat, referenceAmountLoki) as
+      | "FLC"
+      | "loki";
   });
 
   const setInputUnit = React.useCallback((unit: "FLC" | "loki") => {

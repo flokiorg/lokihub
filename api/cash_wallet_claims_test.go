@@ -32,6 +32,29 @@ func newBareCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, maxAmo
 		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
 	)
 	require.NoError(t, err)
+
+	// Store an issued token, because a real wallet always has one and the endpoints
+	// under test now return it verbatim rather than re-deriving. A fixture without one
+	// models a wallet that cannot exist: a re-encode cannot reproduce the mint
+	// signature, and an unsigned bill is unspendable over the only transport that
+	// serves bill methods.
+	require.NotNil(t, wallet.WalletPubkey)
+	pairingSecretKey, err := svc.Keys.GetCashPairingKey(wallet.ID)
+	require.NoError(t, err)
+	attested := uint64(1000)
+	required := true
+	token, err := lokicash.Encode(lokicash.Token{
+		HRP:              lokicash.HRP,
+		WalletPubkey:     *wallet.WalletPubkey,
+		Secret:           pairingSecretKey,
+		RelayURLs:        svc.Cfg.GetRelayUrls(),
+		IdentityRequired: &required,
+		MintSignature:    make([]byte, 65), // shaped like provenance; these tests never verify it
+		AttestedAmount:   &attested,
+	})
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(wallet).Update("cash_token", token).Error)
+	wallet.CashToken = token
 	return wallet
 }
 
@@ -442,9 +465,14 @@ func TestGetCashWalletConnection_HappyPath(t *testing.T) {
 // lokicash token's identity-required hint is re-derived from the wallet's
 // CURRENT claim rows on every call, not cached from creation — necessary
 // because a solo wallet's sole recipient can move into or out of cash mode
-// status via cash_transfer well after the wallet (and its first-ever token)
-// was created.
-func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T) {
+// status via cash_transfer after the wallet was created.
+//
+// The token is now returned VERBATIM as issued, so the hint is whatever it was at
+// issue. That is the deliberate trade: a re-encode cannot reproduce the mint
+// signature, and an unsigned bill is unspendable over the only transport that serves
+// bill methods, whereas a stale identity_required hint is explicitly best-effort and
+// NOT a live guarantee (NIP-CASH §Redemption Metadata).
+func TestGetCashWalletConnection_IssuedTokenIsFrozen(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -464,10 +492,9 @@ func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T)
 	require.NotNil(t, decoded.IdentityRequired)
 	assert.True(t, *decoded.IdentityRequired)
 
-	// Flip the sole recipient into cash mode status via ReassignCashSliceIdentity
-	// directly (the DB-service layer cash_transfer itself calls) — re-deriving
-	// the connection afterward must reflect the change, not the stale
-	// creation-time value.
+	// Flip the sole recipient into cash mode via ReassignCashSliceIdentity directly
+	// (the DB-service layer cash_transfer itself calls). The returned token must NOT
+	// change: it is the string this bill was issued with.
 	_, err = svc.AppsService.ReassignCashSliceIdentity(wallet.ID,
 		db.CashIdentityPubkey, pubkey, db.CashIdentityCash, strings.Repeat("cd", 32), "")
 	require.NoError(t, err)
@@ -477,13 +504,15 @@ func TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims(t *testing.T)
 	decodedAfter, err := lokicash.Decode(connAfter.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decodedAfter.IdentityRequired)
-	assert.False(t, *decodedAfter.IdentityRequired, "the token must reflect the wallet's current cash-mode status, not its status at creation")
+	assert.True(t, *decodedAfter.IdentityRequired,
+		"the issued token must be returned verbatim; its identity_required hint is fixed at issue")
+	assert.Equal(t, conn.CashToken, connAfter.CashToken, "the issued token must never change")
 }
 
-// TestGetCashWalletConnection_NoClaims_HintsOmitted verifies a wallet with no
-// claim rows left (e.g. every recipient individually removed) produces a
-// token with neither hint set, rather than guessing.
-func TestGetCashWalletConnection_NoClaims_HintsOmitted(t *testing.T) {
+// TestGetCashWalletConnection_NoClaims_StillReturnsTheIssuedToken covers a wallet
+// whose claim rows have all gone. The endpoint no longer derives anything from them,
+// so the issued token comes back unchanged rather than being rebuilt without hints.
+func TestGetCashWalletConnection_NoClaims_StillReturnsTheIssuedToken(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -494,9 +523,8 @@ func TestGetCashWalletConnection_NoClaims_HintsOmitted(t *testing.T) {
 	theAPI := newTestAPI(svc)
 	conn, err := theAPI.GetCashWalletConnection(wallet.ID)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(conn.CashToken)
-	require.NoError(t, err)
-	assert.Nil(t, decoded.IdentityRequired)
+	assert.Equal(t, wallet.CashToken, conn.CashToken,
+		"with no claims to derive from, the issued token is the only correct answer")
 }
 
 func TestGetCashWalletConnection_NotCashWallet(t *testing.T) {

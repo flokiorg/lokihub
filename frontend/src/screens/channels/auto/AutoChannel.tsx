@@ -109,8 +109,8 @@ export function AutoChannel() {
           <p className="text-muted-foreground slashed-zero">
             Please pay the lightning invoice below which will cover the costs of
             opening your channel. You will receive a channel with{" "}
-            <FormattedFlokicoinAmount amount={channelSize * 1000} /> of receiving
-            capacity.
+            <FormattedFlokicoinAmount amount={channelSize * 1000} /> of
+            receiving capacity.
           </p>
           <PayLightningInvoice invoice={invoice} />
 
@@ -130,19 +130,16 @@ export function AutoChannel() {
       {!invoice && (
         <>
           <div className="flex flex-col gap-6 max-w-md text-muted-foreground">
-            <LightningNetworkDark
-              className="w-full hidden dark:block"
-            />
-            <LightningNetworkLight
-              className="w-full dark:hidden"
-            />
+            <LightningNetworkDark className="w-full hidden dark:block" />
+            <LightningNetworkLight className="w-full dark:hidden" />
 
             <>
               <p>
                 You're now going to open a new lightning channel that you can
                 use to send and receive payments using your Hub in the booming
-                flokicoin economy! To make things easy, Loki has picked a channel
-                partner for you from one of our recommended channel partners.
+                flokicoin economy! To make things easy, Loki has picked a
+                channel partner for you from one of our recommended channel
+                partners.
               </p>
               <p>
                 After paying a lightning invoice to cover on-chain fees, you'll

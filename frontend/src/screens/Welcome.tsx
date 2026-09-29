@@ -30,26 +30,20 @@ export function Welcome() {
           <h1 className="font-semibold text-2xl font-headline">
             {t("welcome.title")}
           </h1>
-          <p className="text-muted-foreground">
-            {t("welcome.subtitle")}
-          </p>
+          <p className="text-muted-foreground">{t("welcome.subtitle")}</p>
         </div>
         <div className="grid gap-2">
           <Button
             className="w-full"
             onClick={() =>
               navigateToAuthPage(
-                  info?.backendType
-                    ? "/setup/password"
-                    : "/setup/password"
+                info?.backendType ? "/setup/password" : "/setup/password"
               )
             }
           >
             {t("welcome.getStarted")}
             {info?.backendType && ` (${info?.backendType})`}
           </Button>
-
-
         </div>
       </div>
     </Container>

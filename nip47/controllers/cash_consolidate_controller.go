@@ -53,8 +53,6 @@ type consolidateSourceParam struct {
 type cashConsolidateParams struct {
 	Sources     []consolidateSourceParam     `json:"sources"`
 	NewIdentity cashTransferNewIdentityParam `json:"new_identity"`
-	// MintSignature opts the consolidated token into mint provenance.
-	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type cashConsolidateResponse struct {
@@ -390,7 +388,6 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		MinTransferMloki: minTransfer,
 		RedeemFeePpm:     redeemFee,
 		ExpiresAt:        earliest,
-		SignMint:         params.MintSignature,
 	})
 	if err != nil {
 		// By here step 4 fully succeeded, so insertedProofs == proofEventIDs;

@@ -1,4 +1,3 @@
-
 import React from "react";
 import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
@@ -11,10 +10,10 @@ import { OnchainFeesWidget } from "src/components/home/widgets/OnchainFeesWidget
 import Loading from "src/components/Loading";
 import { Button } from "src/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useBalances } from "src/hooks/useBalances";
 import { useInfo } from "src/hooks/useInfo";
@@ -45,7 +44,9 @@ function DashboardAlerts() {
   const { apps, loading } = useAppStore();
   const [dismissed, setDismissed] = React.useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(localStorageKeys.appAlertsHiddenUntil);
+      const stored = localStorage.getItem(
+        localStorageKeys.appAlertsHiddenUntil
+      );
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -55,7 +56,10 @@ function DashboardAlerts() {
   const handleDismiss = (appId: string) => {
     const newDismissed = [...dismissed, appId];
     setDismissed(newDismissed);
-    localStorage.setItem(localStorageKeys.appAlertsHiddenUntil, JSON.stringify(newDismissed));
+    localStorage.setItem(
+      localStorageKeys.appAlertsHiddenUntil,
+      JSON.stringify(newDismissed)
+    );
   };
 
   if (loading) return null;
@@ -86,7 +90,12 @@ function DashboardAlerts() {
         <AppAlert key={app.id} app={app} type="new" onDismiss={handleDismiss} />
       ))}
       {updatedApps.map((app) => (
-        <AppAlert key={app.id} app={app} type="updated" onDismiss={handleDismiss} />
+        <AppAlert
+          key={app.id}
+          app={app}
+          type="updated"
+          onDismiss={handleDismiss}
+        />
       ))}
     </>
   );

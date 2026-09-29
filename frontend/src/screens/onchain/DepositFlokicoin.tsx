@@ -78,9 +78,7 @@ export default function DepositFlokicoin() {
 
   return (
     <div className="grid gap-5">
-      <AppHeader
-        title={t("onchain.depositTitle")}
-      />
+      <AppHeader title={t("onchain.depositTitle")} />
       <MempoolAlert />
       <div className="w-80">
         {confirmedAmount ? (
@@ -144,7 +142,9 @@ function DepositPending({
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-center">{t("onchain.awaitingConfirm", "Awaiting Confirmation")}</CardTitle>
+        <CardTitle className="text-center">
+          {t("onchain.awaitingConfirm", "Awaiting Confirmation")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
         <LottieLoading size={288} />
@@ -179,7 +179,9 @@ function DepositSuccess({ amount, txId }: { amount: number; txId: string }) {
     <>
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="text-center">{t("onchain.received", "Payment Received!")}</CardTitle>
+          <CardTitle className="text-center">
+            {t("onchain.received", "Payment Received!")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
           <CircleCheckIcon className="w-72 h-72 p-2" />

@@ -64,7 +64,9 @@ export function ChangeUnlockPassword() {
         <Alert variant="destructive" className="w-full md:max-w-6xl mb-8">
           <TriangleAlertIcon />
           <AlertTitle>{t("changePassword.important")}</AlertTitle>
-          <AlertDescription>{t("changePassword.importantDesc")}</AlertDescription>
+          <AlertDescription>
+            {t("changePassword.importantDesc")}
+          </AlertDescription>
         </Alert>
         <form
           onSubmit={onSubmit}

@@ -97,16 +97,26 @@ type MockLn struct {
 	MockLookupInvoiceError error
 	// SendKeysendError, when non-nil, is returned by SendKeysend instead of a success response.
 	SendKeysendError error
-	// SigningKey, when set, makes SignMessage produce a real LND-style zbase32
-	// recoverable signature over the message (compact sig over its double-SHA256),
-	// so mint-provenance signing can be exercised end to end. Leave nil for the
-	// historical no-op behavior. Set Pubkey to this key's compressed hex when a
-	// test needs GetPubkey to match the signer.
+	// SigningKey makes SignMessage produce a real LND-style zbase32 recoverable
+	// signature over the message (compact sig over its double-SHA256). Set Pubkey to
+	// this key's compressed hex when a test needs GetPubkey to match the signer.
+	//
+	// NewMockLn now populates it, because mint provenance is mandatory: every wallet
+	// creation signs, and a node that cannot sign refuses the mint outright. A nil key
+	// therefore means "this node cannot sign", which is a deliberate failure case
+	// rather than a neutral default — a test wanting it clears this explicitly.
 	SigningKey *btcec.PrivateKey
 }
 
 func NewMockLn() (*MockLn, error) {
-	return &MockLn{}, nil
+	// A signing node by default. Minting is impossible without one now, so a mock
+	// without a key would make almost every cash test fail for a reason unrelated to
+	// what it is testing.
+	key, err := btcec.NewPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	return &MockLn{SigningKey: key}, nil
 }
 
 func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {

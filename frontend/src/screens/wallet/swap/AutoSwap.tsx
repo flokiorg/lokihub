@@ -1,9 +1,9 @@
 import {
-    ArrowDownUpIcon,
-    ClipboardPasteIcon,
-    ClockIcon,
-    MoveRightIcon,
-    XCircleIcon,
+  ArrowDownUpIcon,
+  ClipboardPasteIcon,
+  ClockIcon,
+  MoveRightIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -75,14 +75,20 @@ function AutoSwapOutForm() {
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (balanceThresholdDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(balanceThresholdDisplay), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(balanceThresholdDisplay),
+        inputUnit
+      );
       if (!isNaN(amountLoki)) {
         const newAmount = scaleInputAmount(amountLoki, newUnit);
         setBalanceThresholdDisplay(newAmount.toString());
       }
     }
     if (swapAmountDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(swapAmountDisplay),
+        inputUnit
+      );
       if (!isNaN(amountLoki)) {
         const newAmount = scaleInputAmount(amountLoki, newUnit);
         setSwapAmountDisplay(newAmount.toString());
@@ -94,8 +100,14 @@ function AutoSwapOutForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const balanceThresholdNum = parseInputAmount(parseFloat(balanceThresholdDisplay), inputUnit);
-    const swapAmountNum = parseInputAmount(parseFloat(swapAmountDisplay), inputUnit);
+    const balanceThresholdNum = parseInputAmount(
+      parseFloat(balanceThresholdDisplay),
+      inputUnit
+    );
+    const swapAmountNum = parseInputAmount(
+      parseFloat(swapAmountDisplay),
+      inputUnit
+    );
 
     if (swapAmountNum > balanceThresholdNum) {
       toast.info(
@@ -174,11 +186,16 @@ function AutoSwapOutForm() {
           onAmountChange={setSwapAmountDisplay}
           inputUnit={inputUnit}
           onInputUnitChange={handleInputUnitChange}
-          min={swapInfo.minAmount ? scaleInputAmount(swapInfo.minAmount, inputUnit) : 0}
+          min={
+            swapInfo.minAmount
+              ? scaleInputAmount(swapInfo.minAmount, inputUnit)
+              : 0
+          }
           required
         />
         <p className="text-xs text-muted-foreground">
-          Minimum <FormattedFlokicoinAmount amount={swapInfo.minAmount * 1000} />
+          Minimum{" "}
+          <FormattedFlokicoinAmount amount={swapInfo.minAmount * 1000} />
         </p>
       </div>
       <div className="flex flex-col gap-4">

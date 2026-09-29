@@ -37,4 +37,3 @@ export function useBanner() {
 
   return { showBanner, dismissBanner };
 }
-

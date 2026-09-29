@@ -102,369 +102,368 @@ const routes: RouteObject[] = [
               },
             ],
           },
-      {
-        path: "wallet",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Wallet" },
-        children: [
           {
-            index: true,
-            element: <Wallet />,
-          },
-          {
-            path: "swap",
-            handle: { crumb: () => "Swap" },
+            path: "wallet",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Wallet" },
             children: [
               {
                 index: true,
-                element: <Swap />,
+                element: <Wallet />,
               },
               {
-                path: "out/status/:swapId",
-                element: <SwapOutStatus />,
+                path: "swap",
+                handle: { crumb: () => "Swap" },
+                children: [
+                  {
+                    index: true,
+                    element: <Swap />,
+                  },
+                  {
+                    path: "out/status/:swapId",
+                    element: <SwapOutStatus />,
+                  },
+                  {
+                    path: "in/status/:swapId",
+                    element: <SwapInStatus />,
+                  },
+                  {
+                    path: "auto",
+                    element: <AutoSwap />,
+                  },
+                ],
               },
               {
-                path: "in/status/:swapId",
-                element: <SwapInStatus />,
+                path: "receive",
+                handle: { crumb: () => "Receive" },
+                children: [
+                  {
+                    index: true,
+                    element: <Receive />,
+                  },
+                  {
+                    handle: { crumb: () => "Receive On-chain" },
+                    path: "onchain",
+                    element: <ReceiveOnchain />,
+                  },
+                  {
+                    handle: { crumb: () => "Invoice" },
+                    path: "invoice",
+                    element: <ReceiveInvoice />,
+                  },
+                ],
+              },
+              {
+                path: "send",
+                handle: { crumb: () => "Send" },
+                children: [
+                  {
+                    index: true,
+                    element: <Send />,
+                  },
+                  {
+                    path: "onchain",
+                    element: <Onchain />,
+                  },
+                  {
+                    path: "lnurl-pay",
+                    element: <LnurlPay />,
+                  },
+                  {
+                    path: "0-amount",
+                    element: <ZeroAmount />,
+                  },
+                  {
+                    path: "confirm-payment",
+                    element: <ConfirmPayment />,
+                  },
+                  {
+                    path: "onchain-success",
+                    element: <OnchainSuccess />,
+                  },
+                  {
+                    path: "success",
+                    element: <PaymentSuccess />,
+                  },
+                ],
+              },
+              {
+                path: "sign-message",
+                element: <SignMessage />,
+                handle: { crumb: () => "Sign Message" },
+              },
+              {
+                path: "node-alias",
+                element: <NodeAlias />,
+                handle: { crumb: () => "Node Alias" },
+              },
+              {
+                path: "withdraw",
+                element: <WithdrawOnchainFunds />,
+                handle: { crumb: () => "Withdraw On-Chain Balance" },
+              },
+            ],
+          },
+          {
+            path: "settings",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Settings" },
+            children: [
+              {
+                path: "",
+                element: <SettingsLayout />,
+                children: [
+                  {
+                    index: true,
+                    element: <Settings />,
+                  },
+                  {
+                    path: "services",
+                    element: <Services />,
+                    handle: { crumb: () => "Services" },
+                  },
+                  {
+                    path: "identity-authorities",
+                    element: <Navigate to="/settings/services" replace />,
+                  },
+                  {
+                    path: "about",
+                    element: <About />,
+                    handle: { crumb: () => "About" },
+                  },
+                  {
+                    path: "auto-unlock",
+                    element: <AutoUnlock />,
+                    handle: { crumb: () => "Auto Unlock" },
+                  },
+                  {
+                    path: "change-unlock-password",
+                    element: <ChangeUnlockPassword />,
+                    handle: { crumb: () => "Unlock Password" },
+                  },
+                  {
+                    path: "backup",
+                    element: <Backup />,
+                    handle: { crumb: () => "Backup" },
+                  },
+                  {
+                    path: "node-migrate",
+                    element: <MigrateNode />,
+                  },
+                  {
+                    path: "developer",
+                    element: <DeveloperSettings />,
+                  },
+                  {
+                    path: "debug-tools",
+                    element: <DebugTools />,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            path: "apps",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Connections" },
+            children: [
+              {
+                index: true,
+                element: <Connections />,
+              },
+              {
+                path: ":id",
+                element: <AppDetails />,
+              },
+              {
+                path: "new",
+                element: <NewApp />,
+                handle: { crumb: () => "New App" },
+              },
+              {
+                path: "cleanup",
+                element: <AppsCleanup />,
+              },
+            ],
+          },
+          {
+            path: "sub-wallets",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Sub-wallets" },
+
+            children: [
+              {
+                index: true,
+                element: <SubwalletList />,
+              },
+              {
+                path: "new",
+                element: <NewSubwallet />,
+              },
+              {
+                path: "new/simple",
+                element: <NewSimpleSubwallet />,
+              },
+              {
+                path: "new/circle",
+                element: <NewCircleHub />,
+              },
+              {
+                path: "created",
+                element: <SubwalletCreated />,
+              },
+            ],
+          },
+          {
+            path: "cash-hub",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Cash Hub" },
+            children: [
+              {
+                index: true,
+                element: <CashHubList />,
+              },
+              {
+                path: "new",
+                element: <NewCashHub />,
+              },
+              {
+                path: "created",
+                element: <SubwalletCreated />,
+              },
+              {
+                // One hub's own dashboard. A hub row used to lead to /apps/:id,
+                // where the cash list sat below three unrelated cards with no
+                // room for totals or charts. Last, so it cannot shadow the
+                // literal "new"/"created" siblings above.
+                path: ":id",
+                element: <CashHubDashboard />,
+              },
+            ],
+          },
+          {
+            path: "internal-apps",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Connections" },
+            children: [
+              {
+                path: ":id",
+                element: <InternalAppDetail />,
+              },
+            ],
+          },
+          {
+            path: "appstore",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "App Store" },
+            children: [
+              {
+                path: ":appStoreId",
+                element: <AppStoreDetail />,
+              },
+            ],
+          },
+          {
+            path: "channels",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Node" },
+            children: [
+              {
+                index: true,
+                element: <Channels />,
+              },
+              {
+                path: "first",
+                handle: { crumb: () => "Your First Channel" },
+                children: [
+                  {
+                    index: true,
+                    element: <FirstChannel />,
+                  },
+                  {
+                    path: "opening",
+                    element: <OpeningFirstChannel />,
+                  },
+                  {
+                    path: "opened",
+                    element: <OpenedFirstChannel />,
+                  },
+                ],
               },
               {
                 path: "auto",
-                element: <AutoSwap />,
+                handle: { crumb: () => "New Channel" },
+                children: [
+                  {
+                    index: true,
+                    element: <AutoChannel />,
+                  },
+                  {
+                    path: "opening",
+                    element: <OpeningAutoChannel />,
+                  },
+                  {
+                    path: "opened",
+                    element: <OpenedAutoChannel />,
+                  },
+                ],
               },
-            ],
-          },
-          {
-            path: "receive",
-            handle: { crumb: () => "Receive" },
-            children: [
               {
-                index: true,
-                element: <Receive />,
-              },
-              {
-                handle: { crumb: () => "Receive On-chain" },
-                path: "onchain",
-                element: <ReceiveOnchain />,
-              },
-              {
-                handle: { crumb: () => "Invoice" },
-                path: "invoice",
-                element: <ReceiveInvoice />,
+                path: "outgoing",
+                element: <IncreaseOutgoingCapacity />,
+                handle: { crumb: () => "Open Channel with On-Chain" },
               },
 
+              {
+                path: "order",
+                element: <CurrentChannelOrder />,
+                handle: { crumb: () => "Current Order" },
+              },
+              {
+                path: "inbound",
+                element: <OrderChannel />,
+                handle: { crumb: () => "Increase Inbound Liquidity" },
+              },
+              {
+                path: "history",
+                element: <OrderHistory />,
+                handle: { crumb: () => "Liquidity Orders" },
+              },
+              {
+                path: "onchain/deposit-flokicoin",
+                element: <DepositFlokicoin />,
+                handle: { crumb: () => "Deposit Flokicoin" },
+              },
             ],
           },
           {
-            path: "send",
-            handle: { crumb: () => "Send" },
+            path: "peers",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Peers" },
             children: [
               {
                 index: true,
-                element: <Send />,
+                element: <Peers />,
               },
               {
-                path: "onchain",
-                element: <Onchain />,
-              },
-              {
-                path: "lnurl-pay",
-                element: <LnurlPay />,
-              },
-              {
-                path: "0-amount",
-                element: <ZeroAmount />,
-              },
-              {
-                path: "confirm-payment",
-                element: <ConfirmPayment />,
-              },
-              {
-                path: "onchain-success",
-                element: <OnchainSuccess />,
-              },
-              {
-                path: "success",
-                element: <PaymentSuccess />,
+                path: "new",
+                element: <ConnectPeer />,
+                handle: { crumb: () => "Connect Peer" },
               },
             ],
           },
           {
-            path: "sign-message",
-            element: <SignMessage />,
-            handle: { crumb: () => "Sign Message" },
-          },
-          {
-            path: "node-alias",
-            element: <NodeAlias />,
-            handle: { crumb: () => "Node Alias" },
-          },
-          {
-            path: "withdraw",
-            element: <WithdrawOnchainFunds />,
-            handle: { crumb: () => "Withdraw On-Chain Balance" },
-          },
-        ],
-      },
-      {
-        path: "settings",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Settings" },
-        children: [
-          {
-            path: "",
-            element: <SettingsLayout />,
+            path: "help",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "FAQ" },
             children: [
               {
                 index: true,
-                element: <Settings />,
-              },
-              {
-                path: "services",
-                element: <Services />,
-                handle: { crumb: () => "Services" },
-              },
-              {
-                path: "identity-authorities",
-                element: <Navigate to="/settings/services" replace />,
-              },
-              {
-                path: "about",
-                element: <About />,
-                handle: { crumb: () => "About" },
-              },
-              {
-                path: "auto-unlock",
-                element: <AutoUnlock />,
-                handle: { crumb: () => "Auto Unlock" },
-              },
-              {
-                path: "change-unlock-password",
-                element: <ChangeUnlockPassword />,
-                handle: { crumb: () => "Unlock Password" },
-              },
-              {
-                path: "backup",
-                element: <Backup />,
-                handle: { crumb: () => "Backup" },
-              },
-              {
-                path: "node-migrate",
-                element: <MigrateNode />,
-              },
-              {
-                path: "developer",
-                element: <DeveloperSettings />,
-              },
-              {
-                path: "debug-tools",
-                element: <DebugTools />,
+                element: <FAQ />,
               },
             ],
           },
         ],
-      },
-      {
-        path: "apps",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Connections" },
-        children: [
-          {
-            index: true,
-            element: <Connections />,
-          },
-          {
-            path: ":id",
-            element: <AppDetails />,
-          },
-          {
-            path: "new",
-            element: <NewApp />,
-            handle: { crumb: () => "New App" },
-          },
-          {
-            path: "cleanup",
-            element: <AppsCleanup />,
-          },
-        ],
-      },
-      {
-        path: "sub-wallets",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Sub-wallets" },
-
-        children: [
-          {
-            index: true,
-            element: <SubwalletList />,
-          },
-          {
-            path: "new",
-            element: <NewSubwallet />,
-          },
-          {
-            path: "new/simple",
-            element: <NewSimpleSubwallet />,
-          },
-          {
-            path: "new/circle",
-            element: <NewCircleHub />,
-          },
-          {
-            path: "created",
-            element: <SubwalletCreated />,
-          },
-        ],
-      },
-      {
-        path: "cash-hub",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Cash Hub" },
-        children: [
-          {
-            index: true,
-            element: <CashHubList />,
-          },
-          {
-            path: "new",
-            element: <NewCashHub />,
-          },
-          {
-            path: "created",
-            element: <SubwalletCreated />,
-          },
-          {
-            // One hub's own dashboard. A hub row used to lead to /apps/:id,
-            // where the cash list sat below three unrelated cards with no
-            // room for totals or charts. Last, so it cannot shadow the
-            // literal "new"/"created" siblings above.
-            path: ":id",
-            element: <CashHubDashboard />,
-          },
-        ],
-      },
-      {
-        path: "internal-apps",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Connections" },
-        children: [
-          {
-            path: ":id",
-            element: <InternalAppDetail />,
-          },
-        ],
-      },
-      {
-        path: "appstore",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "App Store" },
-        children: [
-          {
-            path: ":appStoreId",
-            element: <AppStoreDetail />,
-          },
-        ],
-      },
-      {
-        path: "channels",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Node" },
-        children: [
-          {
-            index: true,
-            element: <Channels />,
-          },
-          {
-            path: "first",
-            handle: { crumb: () => "Your First Channel" },
-            children: [
-              {
-                index: true,
-                element: <FirstChannel />,
-              },
-              {
-                path: "opening",
-                element: <OpeningFirstChannel />,
-              },
-              {
-                path: "opened",
-                element: <OpenedFirstChannel />,
-              },
-            ],
-          },
-          {
-            path: "auto",
-            handle: { crumb: () => "New Channel" },
-            children: [
-              {
-                index: true,
-                element: <AutoChannel />,
-              },
-              {
-                path: "opening",
-                element: <OpeningAutoChannel />,
-              },
-              {
-                path: "opened",
-                element: <OpenedAutoChannel />,
-              },
-            ],
-          },
-          {
-            path: "outgoing",
-            element: <IncreaseOutgoingCapacity />,
-            handle: { crumb: () => "Open Channel with On-Chain" },
-          },
-
-          {
-            path: "order",
-            element: <CurrentChannelOrder />,
-            handle: { crumb: () => "Current Order" },
-          },
-          {
-            path: "inbound",
-            element: <OrderChannel />,
-            handle: { crumb: () => "Increase Inbound Liquidity" },
-          },
-          {
-            path: "history",
-            element: <OrderHistory />,
-            handle: { crumb: () => "Liquidity Orders" },
-          },
-          {
-            path: "onchain/deposit-flokicoin",
-            element: <DepositFlokicoin />,
-            handle: { crumb: () => "Deposit Flokicoin" },
-          },
-        ],
-      },
-      {
-        path: "peers",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "Peers" },
-        children: [
-          {
-            index: true,
-            element: <Peers />,
-          },
-          {
-            path: "new",
-            element: <ConnectPeer />,
-            handle: { crumb: () => "Connect Peer" },
-          },
-        ],
-      },
-      {
-        path: "help",
-        element: <DefaultRedirect />,
-        handle: { crumb: () => "FAQ" },
-        children: [
-          {
-            index: true,
-            element: <FAQ />,
-          },
-        ],
-      },
-    ],
       },
     ],
   },

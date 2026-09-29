@@ -5,18 +5,15 @@ import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import { Badge } from "src/components/ui/badge";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardTitle,
 } from "src/components/ui/card";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { useAppStore } from "src/hooks/useAppStore";
 import { cn } from "src/lib/utils";
-import {
-    AppStoreApp,
-    sortedAppStoreCategories
-} from "./SuggestedAppData";
+import { AppStoreApp, sortedAppStoreCategories } from "./SuggestedAppData";
 
 function SuggestedAppCard({ id, title, description, logo }: AppStoreApp) {
   const logoSrc = useAppLogo(id);
@@ -26,9 +23,13 @@ function SuggestedAppCard({ id, title, description, logo }: AppStoreApp) {
         <CardContent>
           <div className="flex gap-3 items-center">
             {logo && logoSrc ? (
-                <img src={logoSrc} alt="logo" className="inline rounded-lg size-12" />
+              <img
+                src={logoSrc}
+                alt="logo"
+                className="inline rounded-lg size-12"
+              />
             ) : (
-                <div className="inline rounded-lg size-12 bg-muted/50" />
+              <div className="inline rounded-lg size-12 bg-muted/50" />
             )}
             <div className="grow">
               <CardTitle>{title}</CardTitle>
@@ -66,11 +67,11 @@ export default function SuggestedApps() {
   );
 
   if (loading) {
-      return <Loading />;
+    return <Loading />;
   }
 
   if (error) {
-      return <div className="text-center text-red-500">Failed to load apps</div>;
+    return <div className="text-center text-red-500">Failed to load apps</div>;
   }
 
   if (appStoreApps.length === 0) {
@@ -91,8 +92,8 @@ export default function SuggestedApps() {
       <div className="flex gap-2 flex-wrap mt-6 mb-2">
         {sortedAppStoreCategories.map(([categoryId, category]) => {
           // Check if category has any apps
-          const hasApps = appStoreApps.some((app) =>
-            app.category === categoryId
+          const hasApps = appStoreApps.some(
+            (app) => app.category === categoryId
           );
 
           if (!hasApps) return null;
@@ -131,8 +132,8 @@ export default function SuggestedApps() {
               selectedCategories.includes(categoryId)
           )
           .map(([categoryId, category]) => {
-            const categoryApps = appStoreApps.filter((app) =>
-              app.category === categoryId
+            const categoryApps = appStoreApps.filter(
+              (app) => app.category === categoryId
             );
 
             if (categoryApps.length === 0) {
@@ -146,7 +147,8 @@ export default function SuggestedApps() {
                   {categoryApps.map((app) =>
                     app.internal ? (
                       <InternalAppCard key={app.id} {...app} />
-                    ) : ( // @ts-ignore
+                    ) : (
+                      // @ts-ignore
                       <SuggestedAppCard key={app.id} {...app} />
                     )
                   )}

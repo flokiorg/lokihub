@@ -53,7 +53,8 @@ const ExpirySelect: React.FC<ExpiryProps> = ({
           // days === 0 means "Never" — always exceeds any finite maxDate.
           const exceedsMax =
             maxDate !== undefined &&
-            (days === 0 || dayjs().add(days, "day").endOf("day").isAfter(maxDate));
+            (days === 0 ||
+              dayjs().add(days, "day").endOf("day").isAfter(maxDate));
           return (
             <button
               type="button"

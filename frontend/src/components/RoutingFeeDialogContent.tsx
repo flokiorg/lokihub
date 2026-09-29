@@ -8,13 +8,13 @@ import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { Channel, UpdateChannelRequest } from "src/types";
 import { request } from "src/utils/request";
 import {
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "./ui/alert-dialog";
 
 type Props = {
@@ -29,12 +29,18 @@ export function RoutingFeeDialogContent({ channel }: Props) {
   const [inputUnit, setInputUnit] = useInputUnit(currentBaseFeeLoki);
 
   const [baseFeeDisplay, setBaseFeeDisplay] = React.useState(
-    scaleInputAmount(currentBaseFeeLoki, displayFormat === "loki" ? "loki" : "FLC").toString()
+    scaleInputAmount(
+      currentBaseFeeLoki,
+      displayFormat === "loki" ? "loki" : "FLC"
+    ).toString()
   );
 
   const handleInputUnitChange = (newUnit: "FLC" | "loki") => {
     if (baseFeeDisplay) {
-      const amountLoki = parseInputAmount(parseFloat(baseFeeDisplay), inputUnit);
+      const amountLoki = parseInputAmount(
+        parseFloat(baseFeeDisplay),
+        inputUnit
+      );
       if (!isNaN(amountLoki)) {
         const newAmount = scaleInputAmount(amountLoki, newUnit);
         setBaseFeeDisplay(newAmount.toString());
@@ -53,7 +59,8 @@ export function RoutingFeeDialogContent({ channel }: Props) {
 
   async function updateFee() {
     try {
-      const forwardingFeeBaseMloki = parseInputAmount(parseFloat(baseFeeDisplay), inputUnit) * 1000;
+      const forwardingFeeBaseMloki =
+        parseInputAmount(parseFloat(baseFeeDisplay), inputUnit) * 1000;
 
       console.info(
         `🎬 Updating channel ${channel.id} with ${channel.remotePubkey}`
@@ -91,9 +98,9 @@ export function RoutingFeeDialogContent({ channel }: Props) {
         <AlertDialogDescription>
           <p className="mb-4 text-foreground">
             Adjust the fee you charge for each payment routed through this
-            channel. A high fee (e.g. {scaleInputAmount(100_000, inputUnit)} {inputUnit}) can be set to prevent
-            unwanted routing. No matter the fee, you can still receive
-            payments.{" "}
+            channel. A high fee (e.g. {scaleInputAmount(100_000, inputUnit)}{" "}
+            {inputUnit}) can be set to prevent unwanted routing. No matter the
+            fee, you can still receive payments.{" "}
           </p>
           <Label htmlFor="fee" className="block mb-2">
             Base Routing Fee
@@ -128,7 +135,8 @@ export function RoutingFeeDialogContent({ channel }: Props) {
         <AlertDialogCancel>Cancel</AlertDialogCancel>
         <AlertDialogAction
           disabled={
-            parseInputAmount(parseFloat(baseFeeDisplay), inputUnit) === currentBaseFeeLoki &&
+            parseInputAmount(parseFloat(baseFeeDisplay), inputUnit) ===
+              currentBaseFeeLoki &&
             (parseInt(forwardingFeeProportionalMillionths) || 0) ===
               currentFeePPM
           }

@@ -2,10 +2,10 @@ import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import {
-    Card,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "src/components/ui/card";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { useTranslation } from "react-i18next";
@@ -52,7 +52,8 @@ export default function AppAlert({ app, type, onDismiss }: Props) {
           </div>
           <div>
             <CardTitle className="text-lg">
-              {type === "new" ? t("alerts.newApp") : t("alerts.updatedApp")}: {app.title}
+              {type === "new" ? t("alerts.newApp") : t("alerts.updatedApp")}:{" "}
+              {app.title}
             </CardTitle>
             <CardDescription>{app.description}</CardDescription>
           </div>

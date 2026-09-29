@@ -84,10 +84,15 @@ func TestListCashWalletClaims_ArchivedRowWithoutTokenStillLists(t *testing.T) {
 	theAPI := newTestAPI(svc)
 	result, _, _, err := theAPI.ListCashWalletClaims(hub.ID, 0, 0, "")
 	require.NoError(t, err)
-	require.Len(t, result, 1, "a row with no stored token must still be listed")
+	require.Len(t, result, 1, "an archived row must still be listed")
 
 	assert.True(t, result[0].Archived)
-	assert.Empty(t, result[0].CashToken)
+	// An archived bill KEEPS its issued token: the archive copies it verbatim off the
+	// App row that held it in life. It used to come back empty only because a wallet
+	// could exist without one, which is no longer true — every bill is signed at mint,
+	// and that exact string is what the archive preserves.
+	assert.NotEmpty(t, result[0].CashToken,
+		"an archived bill must retain the token it was issued with, for the operator's audit trail")
 	assert.NotEmpty(t, result[0].WalletPubkey,
 		"the pubkey is the fallback identifier such a row is shown by")
 }

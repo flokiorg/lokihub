@@ -57,20 +57,17 @@ export function useAppsForAppStoreApp(appStoreApp: AppStoreApp | undefined) {
     isStoreApp
   );
 
-  const connectedApps = React.useMemo(
-    () => {
-      if (!isStoreApp) {
-        return undefined;
-      }
+  const connectedApps = React.useMemo(() => {
+    if (!isStoreApp) {
+      return undefined;
+    }
 
-      return connectedAppsByAppStoreId?.apps
-        ? [...connectedAppsByAppStoreId.apps].filter(
-            (v, i, a) => a.findIndex((value) => value.id === v.id) === i
-          )
-        : undefined;
-    },
-    [connectedAppsByAppStoreId, isStoreApp]
-  );
+    return connectedAppsByAppStoreId?.apps
+      ? [...connectedAppsByAppStoreId.apps].filter(
+          (v, i, a) => a.findIndex((value) => value.id === v.id) === i
+        )
+      : undefined;
+  }, [connectedAppsByAppStoreId, isStoreApp]);
   return connectedApps;
 }
 
