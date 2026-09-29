@@ -86,6 +86,7 @@ services:
       # PRIVATE_TRANSPORT_ENABLED=true in .env to exercise the private transport
       # end to end against this stack.
       - PRIVATE_TRANSPORT_ENABLED=${PRIVATE_TRANSPORT_ENABLED:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-4}
     # Docker's default nofile limit in this environment is only 1024 (vs.
     # the host's own 524288) - air's own watcher easily exceeds that, which
     # caused a "too many open files" crash-loop. Root-caused: raise the
