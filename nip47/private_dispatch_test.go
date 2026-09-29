@@ -14,6 +14,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
 
@@ -259,4 +260,76 @@ func walletAppIDFor(t *testing.T, svc *tests.TestService, walletPubkey string) u
 	var app db.App
 	require.NoError(t, svc.DB.Where("wallet_pubkey = ?", walletPubkey).First(&app).Error)
 	return app.ID
+}
+
+// TestServePrivateItem_BadScopeIsAnErrorNotAnOmission covers the state cash_status'
+// `scope` introduced, and it lands on the error side of the omit/error line for a
+// specific reason.
+//
+// Reaching the controller at all means the proof verified and the signer holds a
+// slice of this bill — so the caller has ALREADY established that the hub holds it.
+// An error therefore discloses nothing an omission would have protected, and it is
+// strictly more useful: a client that sent a malformed scope can be told so.
+//
+// Omitting instead would be the harmful choice here. An omission is
+// information-free by design, so the client would see their item vanish and have no
+// way to learn that the fault was their own — the exact trap the SDK's local scope
+// check exists to keep them out of, and this is the other side of it.
+func TestServePrivateItem_BadScopeIsAnErrorNotAnOmission(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("cd", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+
+	// Built raw on purpose: nipcash.StatusItem refuses this client-side, so the only
+	// way a hub ever sees it is from a client that did not check.
+	item := buildItem(t, "s1", walletPubkey, constants.NIP47MethodCashStatus,
+		`{"scope":"everything"}`, recipientPriv, hubXOnly, nonce, notAfter)
+
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	require.True(t, served, "a bad scope must be SERVED with an error: the caller already proved the hub holds this bill")
+	require.NotNil(t, result.Error, "a bad scope must carry a reason the client can act on")
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, result.Error.Code)
+	assert.Equal(t, "s1", result.ID)
+}
+
+// TestServePrivateItem_UnscopedStatusReturnsOnlyTheCallersRow is the dispatch-level
+// half of the scope default: absent means "mine" here, because a per-item proof
+// makes the caller identifiable for the first time (NIP-CASH §Scoping the Roster).
+//
+// privateDispatchFixture's bill has one recipient, so this asserts the row's
+// identity rather than the count — the two-recipient version of this lives in
+// service/private_full_loop_test.go, where it can tell "mine" and "all" apart.
+func TestServePrivateItem_UnscopedStatusReturnsOnlyTheCallersRow(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, recipientPub := privateDispatchFixture(t, svc)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("cd", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+
+	item := buildItem(t, "u1", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
+		recipientPriv, hubXOnly, nonce, notAfter)
+
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	require.True(t, served)
+	require.Nil(t, result.Error)
+
+	var roster nipcash.CashStatusResult
+	require.NoError(t, json.Unmarshal(result.Result, &roster))
+	require.Len(t, roster.Recipients, 1)
+	assert.Equal(t, recipientPub, roster.Recipients[0].IdentityValue,
+		"the scoped row must be the proof signer's own")
 }
