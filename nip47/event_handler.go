@@ -499,23 +499,31 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodMintCash:
 		controller.
 			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
-	case constants.NIP47MethodCashRedeem:
-		controller.
-			HandleCashRedeemEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
-	case constants.NIP47MethodCashTransfer:
-		controller.
-			HandleCashTransferEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
-	case constants.NIP47MethodCashConsolidate:
-		controller.
-			HandleCashConsolidateEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
-	case constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
-		controller.
-			// nil caller: on this transport every recipient holds the same
-			// connection string, so the Hub genuinely cannot tell which one is
-			// asking — which is why the roster is unscoped here and why asking
-			// for scope=mine is refused rather than approximated
-			// (NIP-CASH §Scoping the Roster).
-			HandleCashStatusEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nil)
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodListRecipients:
+		// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
+		// Private Transport). They are refused here rather than dispatched.
+		//
+		// Not "unknown method", which the default case below would say: the method
+		// exists and this hub serves it, just not on this transport. A client author
+		// reading that would look for a typo instead of for the announcement.
+		//
+		// The reason they moved is that this transport cannot carry them privately:
+		// every request here is p-tagged with its own bill's wallet pubkey, so a
+		// holder's bills are a public, linkable set, and no amount of encryption
+		// changes that. mint_cash stays below because it is the hub owner's method on
+		// the hub's own connection, and NIP-CASH keeps it off the private transport
+		// for its own reasons.
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code: constants.ERROR_NOT_IMPLEMENTED,
+				Message: fmt.Sprintf(
+					"%s is served over the private transport only — find this hub's kind-11190 announcement and send a kind-23190 request (NIP-CASH §The Private Transport)",
+					nip47Request.Method),
+			},
+		}, nostr.Tags{})
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.
 			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)

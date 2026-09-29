@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"context"
 	"testing"
 
@@ -13,6 +14,15 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
+)
+
+// cash_status is served over the PRIVATE transport only, so every request reaches the
+// controller with a caller identity (the item proof's signer) and a scope. These
+// fixtures ask for the full roster, which is what they assert on; with scope=all the
+// caller is not used for filtering, so any identity stands in.
+var (
+	fullRosterParams = json.RawMessage(`{"scope":"all"}`)
+	fullRosterCaller = &CashStatusCaller{IdentityValue: "test-caller"}
 )
 
 // TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller
@@ -41,11 +51,11 @@ func TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t 
 	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pkClaimed)
 	require.NoError(t, err)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 
 	require.Nil(t, response.Error)
 	result := response.Result.(nipcash.CashStatusResult)
@@ -70,11 +80,11 @@ func TestHandleCashStatusEvent_NonCashWalletApp_Rejected(t *testing.T) {
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, hub, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
@@ -88,11 +98,11 @@ func TestHandleCashStatusEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 
 	require.Nil(t, response.Error)
 	result := response.Result.(nipcash.CashStatusResult)

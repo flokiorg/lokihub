@@ -20,10 +20,14 @@ import (
 // interesting part is that the DEFAULT differs by transport, because the two
 // differ in what they can know:
 //
-//	private  + absent -> mine      (the safe default: learn nothing about co-recipients)
-//	private  + all    -> all
-//	standard + absent -> all       (unchanged: the Hub cannot identify the caller)
-//	standard + mine   -> REJECTED  (cannot be honoured, must not be approximated)
+//	absent -> mine   (the safe default: learn nothing about co-recipients)
+//	all    -> all
+//	invalid -> rejected
+//
+// There is no standard-transport half any more: cash_status is served over the
+// private transport ONLY, which always knows who is asking (the item proof's
+// signer). A request reaching the controller without a caller is a bug, not a
+// transport, and is refused rather than quietly widened to the full roster.
 
 // scopeFixture builds a two-recipient bill and returns the wallet plus both
 // recipients' pubkeys.
@@ -97,30 +101,16 @@ func TestCashStatusScope_PrivateAllIsStillAvailable(t *testing.T) {
 	assert.Len(t, result.Recipients, 2, "scope=all must still return the full roster")
 }
 
-// TestCashStatusScope_StandardAbsentMeansAll pins that the standard transport is
-// untouched. Every recipient holds the same connection string there, so the
-// shared roster is the only answer the Hub can give — and every existing client
-// depends on it.
-func TestCashStatusScope_StandardAbsentMeansAll(t *testing.T) {
+// TestCashStatusScope_NoCallerIsRefused covers the case that replaced the old
+// standard-transport default. cash_status is private-transport only, so a nil caller
+// cannot arise from a real request; if one does, it is refused rather than answered
+// with the full roster — widening on a missing identity is exactly the disclosure
+// scoping exists to prevent.
+func TestCashStatusScope_NoCallerIsRefused(t *testing.T) {
 	svc, wallet, _, _ := scopeFixture(t)
 
 	response := callStatus(t, svc, wallet, statusRequest(t, ""), nil)
-	require.Nil(t, response.Error)
-	result := response.Result.(nipcash.CashStatusResult)
-	assert.Len(t, result.Recipients, 2, "the standard transport's unscoped read must be unchanged")
-}
-
-// TestCashStatusScope_StandardRejectsMine covers the rule that is easy to get
-// wrong in the harmful direction. The Hub cannot identify the caller on this
-// transport, so it cannot honour "mine" — and silently answering "all" instead
-// would return far more than was asked for, to a caller who had explicitly asked
-// for less.
-func TestCashStatusScope_StandardRejectsMine(t *testing.T) {
-	svc, wallet, _, _ := scopeFixture(t)
-
-	response := callStatus(t, svc, wallet, statusRequest(t, nipcash.ScopeMine), nil)
-	require.NotNil(t, response.Error, "scope=mine on the standard transport must be refused, not approximated")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	require.NotNil(t, response.Error, "a request with no caller identity must be refused, not widened")
 	assert.Nil(t, response.Result, "a refused request must not also return a roster")
 }
 

@@ -186,19 +186,17 @@ func (svc *service) startNostr(ctx context.Context) error {
 	// it: bills and circle joins move here, while sub-wallets, ordinary apps and
 	// the legacy path keep speaking kind 23194.
 	//
-	// Off unless explicitly enabled. The receive path is not finished — the gate
-	// accepts envelopes but nothing unwraps them yet — so a hub that turned this on
-	// would advertise an inbox it cannot serve, and a client trusting the
-	// announcement would get silence. Announcing a capability before it works is
-	// exactly the failure this whole line of work exists to remove.
-	if svc.cfg.PrivateTransportEnabled() {
-		if err := svc.startPrivateTransport(ctx, pool, group); err != nil {
-			// Deliberately not fatal: the standard transport is unaffected, and a
-			// hub that cannot start the private path should keep serving rather
-			// than refuse to boot. Loud, though — silence here would look like a
-			// working private hub that never answers.
-			logger.Logger.Error().Err(err).Msg("Failed to start the private transport; standard transport unaffected")
-		}
+	// Always started. The four bill methods are served over this transport ONLY
+	// (NIP-CASH §The Private Transport), so a hub that did not start it would accept
+	// bills it could never let anyone spend. There is deliberately no switch: one
+	// that turned this off would not degrade the hub, it would strand every bill on
+	// it.
+	if err := svc.startPrivateTransport(ctx, pool, group); err != nil {
+		// Deliberately not fatal, and now the reasoning is narrower than it was: the
+		// rest of the NWC surface (mint_cash, get_balance, pay_invoice) is unaffected
+		// and should keep serving, so refusing to boot would take down more than it
+		// fixes. Loud, though — bills on this hub are unspendable until it recovers.
+		logger.Logger.Error().Err(err).Msg("Failed to start the private transport; bill methods are unavailable until it recovers")
 	}
 
 	// check if there are still legacy apps in DB
