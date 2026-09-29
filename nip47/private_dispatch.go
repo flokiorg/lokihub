@@ -130,7 +130,7 @@ func (svc *nip47Service) ServePrivateItem(
 	)
 
 	switch item.Method {
-	case constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
+	case constants.NIP47MethodCashStatus:
 		controller.HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
 			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode})
 	case constants.NIP47MethodCashRedeem:

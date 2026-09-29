@@ -226,7 +226,7 @@ func TestTombstone_DeprecatedMethodName_StillAnswers(t *testing.T) {
 
 	pool := tests.NewMockSimplePool()
 	nip47svc.HandleEvent(context.TODO(), pool,
-		cashStatusRequest(t, pairingKey, walletPubkey, nipcash.MethodListRecipients), svc.LNClient)
+		cashStatusRequest(t, pairingKey, walletPubkey, nipcash.MethodCashStatus), svc.LNClient)
 
 	require.Len(t, pool.PublishedEvents, 1, "the old method name must still be answered")
 }

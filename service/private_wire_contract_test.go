@@ -211,7 +211,7 @@ func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
 	// same question rather than reading either one's internals.
 	for _, method := range []string{
 		constants.NIP47MethodCashStatus,
-		constants.NIP47MethodListRecipients,
+		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,

@@ -70,7 +70,7 @@ func TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 	shared := mustConnect(t, created.PairingURI)
 
 	var recipients CashStatusResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
+	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
 	require.Len(t, recipients.Recipients, 1)
 	recipient := recipients.Recipients[0]
 

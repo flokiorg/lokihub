@@ -37,7 +37,6 @@ var privateServableMethods = map[string]struct{}{
 	// RELEASED name, so a client that has not been updated yet asks for this one.
 	// Omitting it would silently drop that client's item — indistinguishable, to
 	// the caller, from a bill the hub does not hold. Drop it when the alias goes.
-	constants.NIP47MethodListRecipients:     {},
 	constants.NIP47MethodCashRedeem:         {},
 	constants.NIP47MethodCashTransfer:       {},
 	constants.NIP47MethodCashConsolidate:    {},

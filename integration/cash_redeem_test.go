@@ -82,7 +82,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotEmpty(t, result0.Preimage)
 
 		var recipientsAfter0 CashStatusResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipientsAfter0))
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipientsAfter0))
 		require.Len(t, recipientsAfter0.Recipients, 3)
 		for _, r := range recipientsAfter0.Recipients {
 			if r.IdentityValue == recipients[0].pubkey {
@@ -107,7 +107,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		// Recipient 2's slice must still be fully intact.
 		var recipientsAfter1 CashStatusResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipientsAfter1))
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipientsAfter1))
 		for _, r := range recipientsAfter1.Recipients {
 			if r.IdentityValue == recipients[2].pubkey {
 				require.False(t, r.Claimed)
@@ -289,7 +289,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &claimResult))
 
 		var recipients CashStatusResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 2)
 		for _, r := range recipients.Recipients {
 			if r.IdentityValue == claimedPub {

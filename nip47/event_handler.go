@@ -500,8 +500,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		controller.
 			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
-		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
-		constants.NIP47MethodListRecipients:
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus:
 		// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
 		// Private Transport). They are refused here rather than dispatched.
 		//

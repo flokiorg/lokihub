@@ -802,7 +802,7 @@ func TestHandleEvent_CashWallet_CashStatus_RejectedWhenWalletExpired(t *testing.
 	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
 	require.NoError(t, err)
 
-	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodListRecipients)
+	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodCashStatus)
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
 }

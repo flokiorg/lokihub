@@ -114,8 +114,7 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 	if err := json.Unmarshal([]byte(payload), nip47Request); err != nil {
 		return false
 	}
-	if nip47Request.Method != nipcash.MethodCashStatus &&
-		nip47Request.Method != nipcash.MethodListRecipients {
+	if nip47Request.Method != nipcash.MethodCashStatus {
 		return false
 	}
 

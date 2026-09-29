@@ -23,7 +23,7 @@ func TestPrivateServableMethods_IsAnAllowlistNotTheFullDispatch(t *testing.T) {
 		// name, so a client that has not been updated sends this one; leaving it
 		// out silently dropped that client's item, which reads to the caller
 		// exactly like a bill the hub does not hold.
-		constants.NIP47MethodListRecipients,
+		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,

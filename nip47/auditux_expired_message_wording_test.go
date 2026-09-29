@@ -78,7 +78,7 @@ func TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary(t *testing.T
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,
-		constants.NIP47MethodListRecipients,
+		constants.NIP47MethodCashStatus,
 	} {
 		t.Run(method, func(t *testing.T) {
 			content := map[string]interface{}{"method": method}

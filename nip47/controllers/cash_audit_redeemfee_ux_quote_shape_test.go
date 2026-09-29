@@ -52,7 +52,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 21_000, RedeemFeePpm: 10_000},
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
+	nip47Request := &models.Request{Method: constants.NIP47MethodCashStatus, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
@@ -101,7 +101,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_ZeroFee_StillExplicit(t *testing.T
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 5000}, // RedeemFeePpm defaults to 0
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
+	nip47Request := &models.Request{Method: constants.NIP47MethodCashStatus, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
