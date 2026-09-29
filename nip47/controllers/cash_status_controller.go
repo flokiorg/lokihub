@@ -144,14 +144,15 @@ func resolveCashStatusScope(nip47Request *models.Request, caller *CashStatusCall
 	}
 
 	if caller == nil {
-		// Standard transport: the Hub cannot tell which recipient is asking.
-		if params.Scope == nipcash.ScopeMine {
-			return "", fmt.Errorf("scope %q is not available on this transport: every recipient holds the same connection, so the Hub cannot tell which one is asking", nipcash.ScopeMine)
-		}
-		return nipcash.ScopeAll, nil
+		// Unreachable: cash_status is served over the private transport only, and
+		// that path always knows who is asking (the item proof's signer). Kept as a
+		// refusal rather than a nil-deref, and rather than quietly widening to the
+		// full roster — which is precisely the disclosure scoping exists to prevent.
+		return "", fmt.Errorf("cash_status reached the controller with no caller identity; it is served over the private transport only")
 	}
 	if params.Scope == "" {
-		// Private transport: the safe default is the smallest answer.
+		// The default is the smallest answer: a caller who says nothing learns
+		// nothing about their co-recipients.
 		return nipcash.ScopeMine, nil
 	}
 	return params.Scope, nil

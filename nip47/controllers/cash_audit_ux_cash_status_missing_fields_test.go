@@ -70,11 +70,11 @@ func TestHandleCashStatusEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 3000, MinTransferMloki: 500},
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 	require.Nil(t, response.Error)
 
 	result, ok := response.Result.(nipcash.CashStatusResult)
@@ -117,11 +117,11 @@ func TestHandleCashStatusEvent_ExpiresAtOmittedForNeverExpiringWallet(t *testing
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 3000},
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 	require.Nil(t, response.Error)
 
 	result, ok := response.Result.(nipcash.CashStatusResult)

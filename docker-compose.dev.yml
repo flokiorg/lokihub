@@ -80,12 +80,6 @@ services:
       # tls.cert into this container at all.
       - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
       - RELAY=${RELAY:-ws://relay:5500}
-      # Off unless .env says otherwise, matching the production default: turning
-      # it on publishes a kind-11190 announcement inviting clients to an inbox, so
-      # a hub should only advertise it deliberately. Set
-      # PRIVATE_TRANSPORT_ENABLED=true in .env to exercise the private transport
-      # end to end against this stack.
-      - PRIVATE_TRANSPORT_ENABLED=${PRIVATE_TRANSPORT_ENABLED:-false}
       - LOG_LEVEL=${LOG_LEVEL:-4}
     # Docker's default nofile limit in this environment is only 1024 (vs.
     # the host's own 524288) - air's own watcher easily exceeds that, which

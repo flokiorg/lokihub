@@ -88,8 +88,8 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	// §The Redeem Fee tells them to, and reads their own net_redeemable_millis.
 	controller := NewTestNip47Controller(svc)
 	var listResp *models.Response
-	controller.HandleCashStatusEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
-		func(r *models.Response, _ nostr.Tags) { listResp = r }, nil)
+	controller.HandleCashStatusEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}, 1, wallet,
+		func(r *models.Response, _ nostr.Tags) { listResp = r }, fullRosterCaller)
 	require.Nil(t, listResp.Error)
 	quoted := listResp.Result.(nipcash.CashStatusResult).Recipients[0]
 	require.Equal(t, claimantPubkey, quoted.IdentityValue)

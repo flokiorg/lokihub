@@ -763,57 +763,6 @@ func (cfg *config) SetTrustedNwcRelay(trusted bool) error {
 	return nil
 }
 
-// privateTransportEnabledKey backs PrivateTransportEnabled.
-const privateTransportEnabledKey = "PrivateTransportEnabled"
-
-// PrivateTransportEnabled reports whether this hub serves the wrapped private
-// transport alongside the standard kind-23194 one.
-//
-// Defaults to FALSE, unlike TrustedNwcRelay — but no longer for the original
-// reason, which was that nothing unwrapped an envelope at all. That gap is closed:
-// the subscription unwraps, ServePrivateItem dispatches to the real controllers,
-// and a reply is chunked, encrypted and published, all exercised end to end in
-// service/private_full_loop_test.go against real bills, real claim rows and real
-// permissions, with nmilat's own codec on the client side.
-//
-// What has NOT happened is a run across a live relay. Every test so far drives the
-// path in-process, so the relay hop — publish, subscribe, the ephemeral kind-23191
-// arriving at a client that is actually listening — is the one part still unproven.
-// Turning this on publishes an announcement inviting clients to an inbox, and
-// announcing a capability before it demonstrably works is the exact failure mode
-// this work exists to remove. So the default stays off until that run, not because
-// the code is missing.
-//
-// It is a runtime setting as well as an env var (PRIVATE_TRANSPORT_ENABLED), so
-// enabling it for that run needs no rebuild — see SetPrivateTransportEnabled, and
-// ReloadNostr afterwards.
-func (cfg *config) PrivateTransportEnabled() bool {
-	value, err := cfg.Get(privateTransportEnabledKey, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch PrivateTransportEnabled")
-		return false
-	}
-	if value == "" {
-		return cfg.Env.PrivateTransportEnabled
-	}
-	return value == "true"
-}
-
-// SetPrivateTransportEnabled records whether the private transport is served. The
-// caller is expected to ReloadNostr afterwards: the subscription and the
-// announcement are both set up in startNostr.
-func (cfg *config) SetPrivateTransportEnabled(enabled bool) error {
-	value := "false"
-	if enabled {
-		value = "true"
-	}
-	if err := cfg.SetUpdate(privateTransportEnabledKey, value, ""); err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update PrivateTransportEnabled")
-		return err
-	}
-	return nil
-}
-
 // privateEnvelope* are the settings keys backing PrivateEnvelopeLimits.
 const (
 	privateEnvelopeMaxBytesKey        = "PrivateEnvelopeMaxBytes"

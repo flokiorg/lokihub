@@ -52,11 +52,11 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 21_000, RedeemFeePpm: 10_000},
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 	require.Nil(t, response.Error)
 
 	// Marshal exactly what goes over the wire to a recipient's NWC client —
@@ -101,11 +101,11 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_ZeroFee_StillExplicit(t *testing.T
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pk, AmountMloki: 5000}, // RedeemFeePpm defaults to 0
 	}))
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients}
+	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nil)
+	}, fullRosterCaller)
 	require.Nil(t, response.Error)
 
 	raw, err := json.Marshal(response.Result)
