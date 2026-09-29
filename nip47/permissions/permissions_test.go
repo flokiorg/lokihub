@@ -182,15 +182,13 @@ func TestRequestMethodToScope_CashHub(t *testing.T) {
 // cash_status (the read-only roster), since anyone allowed to attempt a claim
 // may reasonably see the roster first.
 //
-// Both names for the roster are advertised while cash_status remains
-// accepted on the wire, so a client that looks for the old one in get_info
-// keeps finding it.
+// One name for the roster now: the list_recipients alias is gone, so get_info
+// advertises cash_status alone.
 func TestScopeToRequestMethods_CashClaimFunds(t *testing.T) {
 	methods := scopeToRequestMethods(constants.CASH_REDEEM_SCOPE)
 	assert.ElementsMatch(t, []string{
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashStatus,
-		constants.NIP47MethodListRecipients,
 	}, methods)
 }
 
@@ -201,7 +199,7 @@ func TestRequestMethodToScope_ClaimFunds(t *testing.T) {
 }
 
 func TestRequestMethodToScope_CashStatus(t *testing.T) {
-	scope, err := RequestMethodToScope(constants.NIP47MethodListRecipients)
+	scope, err := RequestMethodToScope(constants.NIP47MethodCashStatus)
 	require.NoError(t, err)
 	assert.Equal(t, constants.CASH_REDEEM_SCOPE, scope)
 }
@@ -232,7 +230,7 @@ func TestGetPermittedMethods_CashClaimFundsScope(t *testing.T) {
 	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
 	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
 	assert.Contains(t, result, constants.NIP47MethodCashRedeem)
-	assert.Contains(t, result, constants.NIP47MethodListRecipients)
+	assert.Contains(t, result, constants.NIP47MethodCashStatus)
 	assert.NotContains(t, result, models.PAY_INVOICE_METHOD)
 }
 

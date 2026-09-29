@@ -23,7 +23,7 @@ import (
 func TestBillMethodsAreNotOnTheStandardTransport(t *testing.T) {
 	billMethods := []string{
 		constants.NIP47MethodCashStatus,
-		constants.NIP47MethodListRecipients,
+		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,

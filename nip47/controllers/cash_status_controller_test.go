@@ -51,7 +51,7 @@ func TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t 
 	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pkClaimed)
 	require.NoError(t, err)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
+	nip47Request := &models.Request{Method: constants.NIP47MethodCashStatus, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
@@ -80,7 +80,7 @@ func TestHandleCashStatusEvent_NonCashWalletApp_Rejected(t *testing.T) {
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
+	nip47Request := &models.Request{Method: constants.NIP47MethodCashStatus, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, hub, func(r *models.Response, _ nostr.Tags) {
 		response = r
@@ -98,7 +98,7 @@ func TestHandleCashStatusEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
-	nip47Request := &models.Request{Method: constants.NIP47MethodListRecipients, Params: fullRosterParams}
+	nip47Request := &models.Request{Method: constants.NIP47MethodCashStatus, Params: fullRosterParams}
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r

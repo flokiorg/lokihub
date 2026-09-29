@@ -100,7 +100,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotContains(t, info.Methods, "list_transactions", "list_transactions would leak other recipients' payout history on a shared connection")
 		require.NotContains(t, info.Methods, "lookup_invoice")
 		require.Contains(t, info.Methods, constants.NIP47MethodCashRedeem)
-		require.Contains(t, info.Methods, constants.NIP47MethodListRecipients)
+		require.Contains(t, info.Methods, constants.NIP47MethodCashStatus)
 
 		// Behavioral check, not just advertised-methods: actually calling
 		// make_invoice/pay_invoice against a cash_wallet must be rejected, not
@@ -152,7 +152,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		child := mustConnect(t, result.PairingURI)
 
 		var recipients CashStatusResult
-		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
+		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 2, "one shared connection must show both recipients' slices")
 
 		var balance GetBalanceResult

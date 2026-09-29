@@ -97,8 +97,7 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 			requestMethod == constants.NIP47MethodCashRedeem ||
 			requestMethod == constants.NIP47MethodCashTransfer ||
 			requestMethod == constants.NIP47MethodCashConsolidate ||
-			requestMethod == constants.NIP47MethodCashStatus ||
-			requestMethod == constants.NIP47MethodListRecipients {
+			requestMethod == constants.NIP47MethodCashStatus {
 			return true
 		}
 
@@ -157,7 +156,6 @@ func scopeToRequestMethods(scope string) []string {
 		return []string{
 			constants.NIP47MethodCashRedeem,
 			constants.NIP47MethodCashStatus,
-			constants.NIP47MethodListRecipients,
 		}
 	case constants.CASH_TRANSFER_SCOPE:
 		return []string{constants.NIP47MethodCashTransfer}
@@ -208,7 +206,7 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CASH_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus:
 		return constants.CASH_REDEEM_SCOPE, nil
 	case constants.NIP47MethodCashTransfer:
 		return constants.CASH_TRANSFER_SCOPE, nil

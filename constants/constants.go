@@ -163,12 +163,6 @@ const (
 	// Despite the name it is NOT scoped to the caller's own slice: every
 	// holder of the connection sees every row (NIP-CASH §Cash Status).
 	NIP47MethodCashStatus = nipcash.MethodCashStatus
-	// NIP47MethodListRecipients is the former name of NIP47MethodCashStatus,
-	// still accepted on the wire so a client can be updated independently of
-	// the hub it talks to.
-	//
-	// Deprecated: use NIP47MethodCashStatus.
-	NIP47MethodListRecipients = nipcash.MethodListRecipients
 )
 
 // Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string

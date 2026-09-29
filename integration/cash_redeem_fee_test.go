@@ -72,7 +72,7 @@ func TestCashRedeemFee_SameNodeExemptAndCashStatusQuote(t *testing.T) {
 
 	t.Run("CashStatus_QuotesWorstCaseFee", func(t *testing.T) {
 		var recipients CashStatusResult
-		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodListRecipients, struct{}{}, &recipients))
+		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
 		require.Len(t, recipients.Recipients, 1)
 		r := recipients.Recipients[0]
 
