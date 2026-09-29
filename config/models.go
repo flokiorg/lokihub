@@ -120,7 +120,9 @@ type Config interface {
 	PrivateEnvelopeLimits() transport.Limits
 	SetPrivateEnvelopeLimits(limits transport.Limits) error
 	// PrivateTransportEnabled reports whether this hub serves the wrapped private
-	// transport. Defaults false; see config.PrivateTransportEnabled for why.
+	// transport. Defaults false — the serving path is complete and tested
+	// in-process, but has not yet run across a live relay; see
+	// config.PrivateTransportEnabled for the full reasoning.
 	PrivateTransportEnabled() bool
 	SetPrivateTransportEnabled(enabled bool) error
 	GetNetwork() string
