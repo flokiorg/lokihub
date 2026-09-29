@@ -80,6 +80,12 @@ services:
       # tls.cert into this container at all.
       - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
       - RELAY=${RELAY:-ws://relay:5500}
+      # Off unless .env says otherwise, matching the production default: turning
+      # it on publishes a kind-11190 announcement inviting clients to an inbox, so
+      # a hub should only advertise it deliberately. Set
+      # PRIVATE_TRANSPORT_ENABLED=true in .env to exercise the private transport
+      # end to end against this stack.
+      - PRIVATE_TRANSPORT_ENABLED=${PRIVATE_TRANSPORT_ENABLED:-false}
     # Docker's default nofile limit in this environment is only 1024 (vs.
     # the host's own 524288) - air's own watcher easily exceeds that, which
     # caused a "too many open files" crash-loop. Root-caused: raise the
@@ -90,6 +96,22 @@ services:
         hard: 65536
     volumes:
       - .:/app
+      # nmilat, at the SAME absolute path inside the container as outside.
+      #
+      # go.mod carries a TEMPORARY `replace` for nmilat pointing at an absolute
+      # host path (see go.mod), and a replace is resolved by the compiler inside
+      # this container — so without this mount `air` cannot build at all. That
+      # fails in the worst available way: a crash-loop whose last SUCCESSFUL
+      # binary keeps serving, so the stack looks healthy while running stale code.
+      # It did exactly that for three days.
+      #
+      # Source and target are the same variable on purpose: the replace names one
+      # absolute path, so any other mount point would not satisfy it. Read-only,
+      # because a replace only ever reads the module.
+      #
+      # This mount and the `replace` are one unit — drop both together at release
+      # time, along with DEV_NMILAT_DIR in .env.
+      - ${DEV_NMILAT_DIR:?set DEV_NMILAT_DIR in .env to your nmilat checkout — go.mod replaces nmilat with an absolute path the backend container must also see}:${DEV_NMILAT_DIR}:ro
       - ${DEV_DATA_DIR:-./data}/hub:/data
       - ${DEV_DATA_DIR:-./data}/flnd:/flnd-data:ro
       - lokihub-go-mod-cache:/go/pkg/mod
