@@ -89,7 +89,7 @@ func TestHandleCashRedeemEvent_QuotedNetAmount_RejectedWhenRedemptionResolvesSam
 	controller := NewTestNip47Controller(svc)
 	var listResp *models.Response
 	controller.HandleCashStatusEvent(context.TODO(), &models.Request{Method: constants.NIP47MethodListRecipients}, 1, wallet,
-		func(r *models.Response, _ nostr.Tags) { listResp = r })
+		func(r *models.Response, _ nostr.Tags) { listResp = r }, nil)
 	require.Nil(t, listResp.Error)
 	quoted := listResp.Result.(nipcash.CashStatusResult).Recipients[0]
 	require.Equal(t, claimantPubkey, quoted.IdentityValue)

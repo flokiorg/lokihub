@@ -510,7 +510,12 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			HandleCashConsolidateEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nostr.Tags{})
 	case constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
 		controller.
-			HandleCashStatusEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+			// nil caller: on this transport every recipient holds the same
+			// connection string, so the Hub genuinely cannot tell which one is
+			// asking — which is why the roster is unscoped here and why asking
+			// for scope=mine is refused rather than approximated
+			// (NIP-CASH §Scoping the Roster).
+			HandleCashStatusEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, nil)
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.
 			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)

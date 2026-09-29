@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
@@ -29,16 +31,59 @@ import (
 //     any reasonable JSON consumer treats an omitted optional field and an
 //     empty one identically.
 //
-// HandleCashStatusEvent returns the full roster of a shared cash_wallet's
-// recipients — identity, entitled amount, and claimed status only. This is
-// deliberately a transparent, shared-view method (any holder of the
-// connection sees every recipient's row, not just their own) rather than a
-// caller-scoped one, matching the model already accepted for get_balance —
-// but it never includes invoice/preimage/payment detail, since a cash_wallet
-// carries no list_transactions grant at all.
-func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
+// CashStatusCaller is which recipient is asking, when the transport can know.
+//
+// nil on the standard transport, and that is a fact about the protocol rather
+// than a missing feature: every recipient of a bill holds the SAME connection
+// string (NIP-CASH §The Pairing Connection), so a Hub receiving cash_status
+// there cannot tell them apart. The private transport can, because every item
+// carries a proof signed by one specific recipient's own key.
+//
+// IdentityValue is taken from that proof's signer and never from anything the
+// item asserts about itself — NIP-CASH §Scoping the Roster requires that
+// direction explicitly, since an item that could name its own scope subject
+// could read any co-recipient's row by naming theirs.
+type CashStatusCaller struct {
+	// IdentityValue is the verified signer's identity value, for a
+	// pubkey-bound bill.
+	IdentityValue string
+	// IsCash marks a cash-mode bill, whose slices have no identity of their
+	// own — authorization there is the secret in params, and the bill's single
+	// cash row is by definition the caller's.
+	IsCash bool
+}
+
+// HandleCashStatusEvent returns a cash_wallet's recipients — identity, entitled
+// amount, and claimed status only. It never includes invoice/preimage/payment
+// detail, since a cash_wallet carries no list_transactions grant at all.
+//
+// How much of the roster comes back depends on `scope` and on the transport
+// (NIP-CASH §Scoping the Roster):
+//
+//	scope=all    every recipient's row — the shared, transparent view that
+//	             matches the model already accepted for get_balance
+//	scope=mine   only the calling recipient's own row
+//
+// The DEFAULT differs by transport, because the two differ in what they can
+// know. Absent means "all" on the standard transport, exactly as before, and
+// "mine" on the private one — where a caller who says nothing should receive the
+// smallest answer and learn nothing about their co-recipients. Asking for "mine"
+// on the standard transport is REJECTED rather than approximated: the Hub cannot
+// identify the caller there, and answering "all" instead would silently return
+// far more than was asked for.
+//
+// Note that "mine" is a view, not an authorization boundary. It changes what is
+// returned and never what a caller may do, so having asked for it must not
+// narrow any later call.
+func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, caller *CashStatusCaller) {
 	if app.Kind != db.AppKindCashWallet {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_status requires a cash_wallet app")
+		return
+	}
+
+	scope, err := resolveCashStatusScope(nip47Request, caller)
+	if err != nil {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 		return
 	}
 
@@ -47,6 +92,9 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to list Cash wallet recipients")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list recipients")
 		return
+	}
+	if scope == nipcash.ScopeMine {
+		claims = claimsForCaller(claims, caller)
 	}
 
 	var expiresAt *int64
@@ -79,4 +127,57 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		ResultType: nip47Request.Method,
 		Result:     nipcash.CashStatusResult{Recipients: recipients},
 	}, nostr.Tags{})
+}
+
+// resolveCashStatusScope decides how much roster to return, applying the
+// transport-specific default and refusing what a transport cannot honour.
+func resolveCashStatusScope(nip47Request *models.Request, caller *CashStatusCaller) (string, error) {
+	var params nipcash.CashStatusParams
+	if len(nip47Request.Params) > 0 {
+		if err := json.Unmarshal(nip47Request.Params, &params); err != nil {
+			return "", fmt.Errorf("could not parse cash_status params")
+		}
+	}
+	if !nipcash.IsValidCashStatusScope(params.Scope) {
+		// Same rule the SDK checks client-side, shared rather than duplicated.
+		return "", fmt.Errorf("scope must be %q or %q", nipcash.ScopeAll, nipcash.ScopeMine)
+	}
+
+	if caller == nil {
+		// Standard transport: the Hub cannot tell which recipient is asking.
+		if params.Scope == nipcash.ScopeMine {
+			return "", fmt.Errorf("scope %q is not available on this transport: every recipient holds the same connection, so the Hub cannot tell which one is asking", nipcash.ScopeMine)
+		}
+		return nipcash.ScopeAll, nil
+	}
+	if params.Scope == "" {
+		// Private transport: the safe default is the smallest answer.
+		return nipcash.ScopeMine, nil
+	}
+	return params.Scope, nil
+}
+
+// claimsForCaller narrows a roster to the asking recipient's own row.
+//
+// Returns nothing when no row matches. That is deliberate rather than a fallback
+// to the full roster: a caller whose proof verified but who holds no slice of
+// this bill is entitled to no rows, and widening the answer on no match would
+// turn every mismatch into a full roster disclosure.
+func claimsForCaller(claims []db.CashWalletClaim, caller *CashStatusCaller) []db.CashWalletClaim {
+	if caller == nil {
+		return claims
+	}
+	out := make([]db.CashWalletClaim, 0, 1)
+	for _, c := range claims {
+		if caller.IsCash {
+			if c.IdentityType == db.CashIdentityCash {
+				out = append(out, c)
+			}
+			continue
+		}
+		if c.IdentityType != db.CashIdentityCash && c.IdentityValue == caller.IdentityValue {
+			out = append(out, c)
+		}
+	}
+	return out
 }

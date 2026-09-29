@@ -16,9 +16,14 @@ import (
 )
 
 // TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller
-// confirms the deliberately shared/transparent model: any holder of the
-// connection sees the FULL roster, not just their own row — matching the
-// model already accepted for get_balance.
+// confirms the deliberately shared/transparent model on the STANDARD transport
+// (nil caller): any holder of the connection sees the FULL roster, not just their
+// own row — matching the model already accepted for get_balance, and unavoidable
+// there since every recipient holds the same connection string.
+//
+// The private transport scopes to the caller's own row by default instead, which
+// it can because each item carries a proof identifying who is asking. See
+// cash_status_scope_test.go for that half.
 func TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -40,7 +45,7 @@ func TestHandleCashStatusEvent_HappyPath_ShowsAllRecipientsRegardlessOfCaller(t 
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 
 	require.Nil(t, response.Error)
 	result := response.Result.(nipcash.CashStatusResult)
@@ -69,7 +74,7 @@ func TestHandleCashStatusEvent_NonCashWalletApp_Rejected(t *testing.T) {
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, hub, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
@@ -87,7 +92,7 @@ func TestHandleCashStatusEvent_EmptyWallet_ReturnsEmptyList(t *testing.T) {
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 
 	require.Nil(t, response.Error)
 	result := response.Result.(nipcash.CashStatusResult)

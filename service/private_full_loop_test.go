@@ -103,7 +103,7 @@ func TestFullLoop_SDKBuildsRealHubServesSDKReads(t *testing.T) {
 	}
 	for i := 0; i < bills; i++ {
 		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i],
-			nipcash.BySigning(privs[i]), binding)
+			nipcash.CashStatusParams{}, nipcash.BySigning(privs[i]), binding)
 		require.NoError(t, err)
 		envelope.Items = append(envelope.Items, item)
 	}
@@ -200,11 +200,11 @@ func TestFullLoop_OmittedBillIsAbsentFromTheReply(t *testing.T) {
 	notAfter := time.Now().Add(time.Minute).Unix()
 	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
 
-	realItem, err := nipcash.StatusItem("real", realTarget, nipcash.BySigning(realPriv), binding)
+	realItem, err := nipcash.StatusItem("real", realTarget, nipcash.CashStatusParams{}, nipcash.BySigning(realPriv), binding)
 	require.NoError(t, err)
 	// A bill this hub has never heard of, proven by a key it has never seen.
 	ghostItem, err := nipcash.StatusItem("ghost", strings.Repeat("ee", 32),
-		nipcash.BySigning(nostr.GeneratePrivateKey()), binding)
+		nipcash.CashStatusParams{}, nipcash.BySigning(nostr.GeneratePrivateKey()), binding)
 	require.NoError(t, err)
 
 	limits := svc.Cfg.PrivateEnvelopeLimits()

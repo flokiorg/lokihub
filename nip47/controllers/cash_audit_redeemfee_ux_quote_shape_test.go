@@ -56,7 +56,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_PresentOnTheWire(t *testing.T) {
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 	require.Nil(t, response.Error)
 
 	// Marshal exactly what goes over the wire to a recipient's NWC client —
@@ -105,7 +105,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_ZeroFee_StillExplicit(t *testing.T
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 	require.Nil(t, response.Error)
 
 	raw, err := json.Marshal(response.Result)

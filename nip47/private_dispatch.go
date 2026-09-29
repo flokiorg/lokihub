@@ -70,7 +70,14 @@ func (svc *nip47Service) ServePrivateItem(
 
 	// 3. Authorize the ITEM. The envelope proves nothing about who may act on a bill, since
 	// its author is a throwaway key.
-	if !svc.privateItemIsAuthorized(item, binding, &app) {
+	//
+	// The authorized identity comes back rather than being discarded, because cash_status
+	// needs it: scoping the roster to "mine" MUST be decided from the proof's own signer and
+	// never from anything the item asserts about itself (NIP-CASH §Scoping the Roster). An
+	// item that could name its own scope subject could read a co-recipient's row by naming
+	// theirs.
+	signer, billIsCashMode, authorized := svc.privateItemIsAuthorized(item, binding, &app)
+	if !authorized {
 		return transport.Result{}, false
 	}
 
@@ -119,7 +126,8 @@ func (svc *nip47Service) ServePrivateItem(
 
 	switch item.Method {
 	case constants.NIP47MethodCashStatus, constants.NIP47MethodListRecipients:
-		controller.HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish)
+		controller.HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
+			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode})
 	case constants.NIP47MethodCashRedeem:
 		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
 	case constants.NIP47MethodCashTransfer:
@@ -145,16 +153,21 @@ func (svc *nip47Service) ServePrivateItem(
 	return result, ok
 }
 
-// privateItemIsAuthorized checks one item's authorization against the bill it names.
+// privateItemIsAuthorized checks one item's authorization against the bill it names, and
+// reports WHO it authorized.
 //
 // Two shapes, and the hub decides which applies from its OWN records rather than from what
 // the item claims. That direction matters: an identity-bound bill could otherwise dodge its
 // proof by omitting one and looking bearer (NIP-CASH §Bearer Items).
+//
+// signer is the verified proof's own signer, empty for a proofless cash-mode item — there is
+// no key to recover there, since the secret in params is the whole authorization.
+// billIsCashMode is read from the hub's own claim rows, never from the item.
 func (svc *nip47Service) privateItemIsAuthorized(
 	item transport.Item,
 	binding PrivateItemBinding,
 	app *db.App,
-) bool {
+) (signer string, billIsCashMode bool, authorized bool) {
 	// create_circle_wallet acts on a HUB rather than a bill, so there are no claims to
 	// match a signer against — the kind-23199 identity proof inside its own params is what
 	// authorizes it, and the controller checks that. Handled first because a hub
@@ -164,11 +177,10 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	claims, err := svc.appsService.ListClaimsForWallet(app.ID)
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to read a bill's claims")
-		return false
+		return "", false, false
 	}
 
 	// Cash-mode is a property of the BILL, read here, never asserted by the item.
-	billIsCashMode := false
 	for _, claim := range claims {
 		if claim.IdentityType == db.CashIdentityCash {
 			billIsCashMode = true
@@ -180,14 +192,14 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// Proofless is legitimate only for a genuinely cash-mode bill, whose secret in
 		// params is the whole authorization. The controller still verifies that secret;
 		// this only decides whether a missing proof is acceptable for this bill.
-		return billIsCashMode
+		return "", billIsCashMode, billIsCashMode
 	}
 
 	paramsHash, err := transport.CanonicalParamsHash(item.Params)
 	if err != nil {
-		return false
+		return "", billIsCashMode, false
 	}
-	signer, err := transport.VerifyItemProof(item.Proof, transport.ProofBinding{
+	signer, err = transport.VerifyItemProof(item.Proof, transport.ProofBinding{
 		Target:     item.Target,
 		HubXOnly:   binding.HubXOnly,
 		Method:     item.Method,
@@ -196,18 +208,18 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		NotAfter:   binding.NotAfter,
 	}, time.Now())
 	if err != nil {
-		return false
+		return "", billIsCashMode, false
 	}
 	if isCircleJoin {
-		return true
+		return signer, billIsCashMode, true
 	}
 
 	// The signer must actually hold a slice of this bill. A verified proof only shows
 	// somebody signed for this binding; it does not show they are a recipient.
 	for _, claim := range claims {
 		if claim.IdentityType != db.CashIdentityCash && claim.IdentityValue == signer {
-			return true
+			return signer, billIsCashMode, true
 		}
 	}
-	return false
+	return "", billIsCashMode, false
 }

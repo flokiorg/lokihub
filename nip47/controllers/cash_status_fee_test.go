@@ -40,7 +40,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuoteFields(t *testing.T) {
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 	require.Nil(t, response.Error)
 
 	result, ok := response.Result.(nipcash.CashStatusResult)
@@ -86,7 +86,7 @@ func TestHandleCashStatusEvent_RedeemFeeQuote_IsWorstCaseCeiling(t *testing.T) {
 	var response *models.Response
 	NewTestNip47Controller(svc).HandleCashStatusEvent(context.TODO(), nip47Request, 1, wallet, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	})
+	}, nil)
 	require.Nil(t, response.Error)
 
 	result := response.Result.(nipcash.CashStatusResult)
