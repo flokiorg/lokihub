@@ -54,6 +54,7 @@ func (svc *nip47Service) ServePrivateItem(
 	// 1. Servable at all? First because it is free, and because the allowlist must not
 	// leak: an unserved method is omitted exactly like an unknown bill.
 	if !IsPrivateServableMethod(item.Method) {
+		omitted(item, "method is not on the private-transport allowlist")
 		return transport.Result{}, false
 	}
 
@@ -65,6 +66,7 @@ func (svc *nip47Service) ServePrivateItem(
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Logger.Error().Err(err).Msg("Failed to resolve a private item's target")
 		}
+		omitted(item, "no bill with this target wallet_pubkey")
 		return transport.Result{}, false
 	}
 
@@ -78,12 +80,14 @@ func (svc *nip47Service) ServePrivateItem(
 	// theirs.
 	signer, billIsCashMode, authorized := svc.privateItemIsAuthorized(item, binding, &app)
 	if !authorized {
+		omitted(item, "item authorization failed")
 		return transport.Result{}, false
 	}
 
 	// 4. Scope, checked per item. Batching MUST NOT be a way around permissions.
 	scope, err := permissions.RequestMethodToScope(item.Method)
 	if err != nil {
+		omitted(item, "method maps to no permission scope")
 		return transport.Result{}, false
 	}
 	if hasPermission, code, message := svc.permissionsService.HasPermission(&app, scope); !hasPermission {
@@ -109,6 +113,7 @@ func (svc *nip47Service) ServePrivateItem(
 	}
 	if err := svc.db.Create(&requestEvent).Error; err != nil {
 		logger.Logger.Error().Err(err).Str("item", item.ID).Msg("Failed to record a private item")
+		omitted(item, "could not record the request event")
 		return transport.Result{}, false
 	}
 
@@ -222,4 +227,24 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		}
 	}
 	return "", billIsCashMode, false
+}
+
+// omitted records WHY an item was dropped, at Debug only.
+//
+// The caller is told nothing — an omission must stay information-free, or batching
+// becomes an oracle for which bills a hub holds — so this changes nothing on the
+// wire. It exists because the hub is the ONLY side that can know: a client sees
+// four different faults as one silence by design, so without this the first
+// question anyone asks about a vanished item has no answer anywhere.
+//
+// That cost real time on the first live run, where a correctly-omitted item and a
+// hub that never received the request were indistinguishable from both ends.
+func omitted(item transport.Item, reason string) {
+	logger.Logger.Debug().
+		Str("item", item.ID).
+		Str("method", item.Method).
+		Str("target", item.Target).
+		Bool("has_proof", len(item.Proof) > 0).
+		Str("reason", reason).
+		Msg("Omitted a private transport item")
 }
