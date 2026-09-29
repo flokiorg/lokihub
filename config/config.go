@@ -769,12 +769,24 @@ const privateTransportEnabledKey = "PrivateTransportEnabled"
 // PrivateTransportEnabled reports whether this hub serves the wrapped private
 // transport alongside the standard kind-23194 one.
 //
-// Defaults to FALSE, unlike TrustedNwcRelay. The receive path is incomplete — the
-// gate accepts envelopes but nothing unwraps them yet — so a hub with this on
-// would publish an announcement inviting clients to an inbox it cannot answer, and
-// those clients would experience silence. Announcing a capability before it works
-// is the exact failure mode this work exists to remove, so the default stays off
-// until the path is finished.
+// Defaults to FALSE, unlike TrustedNwcRelay — but no longer for the original
+// reason, which was that nothing unwrapped an envelope at all. That gap is closed:
+// the subscription unwraps, ServePrivateItem dispatches to the real controllers,
+// and a reply is chunked, encrypted and published, all exercised end to end in
+// service/private_full_loop_test.go against real bills, real claim rows and real
+// permissions, with nmilat's own codec on the client side.
+//
+// What has NOT happened is a run across a live relay. Every test so far drives the
+// path in-process, so the relay hop — publish, subscribe, the ephemeral kind-23191
+// arriving at a client that is actually listening — is the one part still unproven.
+// Turning this on publishes an announcement inviting clients to an inbox, and
+// announcing a capability before it demonstrably works is the exact failure mode
+// this work exists to remove. So the default stays off until that run, not because
+// the code is missing.
+//
+// It is a runtime setting as well as an env var (PRIVATE_TRANSPORT_ENABLED), so
+// enabling it for that run needs no rebuild — see SetPrivateTransportEnabled, and
+// ReloadNostr afterwards.
 func (cfg *config) PrivateTransportEnabled() bool {
 	value, err := cfg.Get(privateTransportEnabledKey, "")
 	if err != nil {
