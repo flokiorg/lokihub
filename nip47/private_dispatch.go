@@ -193,10 +193,16 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		}
 	}
 
-	if len(item.Proof) == 0 {
+	if !item.HasProof() {
 		// Proofless is legitimate only for a genuinely cash-mode bill, whose secret in
 		// params is the whole authorization. The controller still verifies that secret;
 		// this only decides whether a missing proof is acceptable for this bill.
+		//
+		// HasProof, not a length check: JSON has three spellings of "no proof" —
+		// absent, empty, and the literal `null` — and the last decodes to four bytes.
+		// A length check read that as a proof present-but-unverifiable, so every
+		// proofless bearer item was refused and cash-mode bills could not be served
+		// over this transport at all.
 		return "", billIsCashMode, billIsCashMode
 	}
 
@@ -244,7 +250,9 @@ func omitted(item transport.Item, reason string) {
 		Str("item", item.ID).
 		Str("method", item.Method).
 		Str("target", item.Target).
-		Bool("has_proof", len(item.Proof) > 0).
+		Bool("has_proof", item.HasProof()).
+		Bool("is_bearer", item.IsBearer()).
+		Int("params_bytes", len(item.Params)).
 		Str("reason", reason).
 		Msg("Omitted a private transport item")
 }
