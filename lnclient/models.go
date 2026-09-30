@@ -64,7 +64,7 @@ type CustomMessage struct {
 }
 
 type LNClient interface {
-	SendPaymentSync(payReq string, amount *uint64) (*PayInvoiceResponse, error)
+	SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*PayInvoiceResponse, error)
 	SendKeysend(amount uint64, destination string, customRecords []TLVRecord, preimage string) (*PayKeysendResponse, error)
 	GetPubkey() string
 	GetInfo(ctx context.Context) (info *NodeInfo, err error)

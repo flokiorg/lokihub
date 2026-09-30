@@ -64,7 +64,7 @@ func TestUpdateCashHubConfig_MinTransferMloki_SetAndRead(t *testing.T) {
 	hub := newCashHub(t, svc, 10_000, 3600)
 
 	minTransfer := int64(500)
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &minTransfer, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &minTransfer, nil, nil, nil))
 
 	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
 	require.NoError(t, err)
@@ -86,10 +86,10 @@ func TestUpdateCashHubConfig_MinTransferMloki_ZeroIsValid(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	initial := int64(500)
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &initial, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &initial, nil, nil, nil))
 
 	zero := int64(0)
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &zero, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &zero, nil, nil, nil))
 
 	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestUpdateCashHubConfig_MinTransferMloki_Negative_Rejected(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	negative := int64(-1)
-	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &negative, nil, nil)
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, &negative, nil, nil, nil)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
@@ -145,7 +145,7 @@ func TestUpdateCashHubConfig_MaxExpSecs_ZeroIsValid(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	zero := 0
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &zero, nil, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &zero, nil, nil, nil, nil))
 
 	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestUpdateCashHubConfig_MaxExpSecs_Negative_Rejected(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	negative := -1
-	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &negative, nil, nil, nil)
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &negative, nil, nil, nil, nil)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
@@ -187,7 +187,7 @@ func TestUpdateCashHubConfig_MaxExpSecs_TooLarge_Rejected(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	tooLarge := constants.MAX_EXPIRY_SECS + 1
-	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &tooLarge, nil, nil, nil)
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, &tooLarge, nil, nil, nil, nil)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 

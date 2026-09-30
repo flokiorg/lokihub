@@ -188,6 +188,9 @@ type Resolved struct {
 	// Split inherits its OWN RedeemFeePpm from the specific slice it was
 	// split from, never freshly from this hub config.
 	RedeemFeePpm int
+	// RedeemFeeBaseMloki is the flat part of the same quoted fee, carried under the
+	// same rules — the two are one price and must never travel separately.
+	RedeemFeeBaseMloki int64
 }
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
@@ -376,7 +379,8 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		Recipients:       resolvedRecipients,
 		ExpiresAt:        expiresAt,
 		MinTransferMloki: hubConfig.MinTransferMloki,
-		RedeemFeePpm:     hubConfig.RedeemFeePpm,
+		RedeemFeePpm:       hubConfig.RedeemFeePpm,
+		RedeemFeeBaseMloki: hubConfig.RedeemFeeBaseMloki,
 	}, nil
 }
 
@@ -517,7 +521,8 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			IAPubkey:         r.IAPubkey,
 			AmountMloki:      int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
 			MinTransferMloki: resolved.MinTransferMloki,
-			RedeemFeePpm:     resolved.RedeemFeePpm,
+			RedeemFeePpm:       resolved.RedeemFeePpm,
+			RedeemFeeBaseMloki: resolved.RedeemFeeBaseMloki,
 		}
 	}
 
@@ -656,7 +661,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// leaving a funded wallet the caller doesn't know exists. Degrade to an
 	// empty token instead; PairingURI alone is still a fully functional
 	// connection string.
-	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum)
+	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum, resolved.HubApp.AppPubkey)
 
 	// Persist the token verbatim so the archive can keep the exact string this
 	// bill was issued with once it is destroyed (db.App.CashToken). Re-deriving
@@ -730,6 +735,9 @@ type SplitParams struct {
 	// own config must never retroactively change the rate for an
 	// already-issued lokicash.
 	RedeemFeePpm int
+	// RedeemFeeBaseMloki is the flat part of the same quoted fee, carried under the
+	// same rules — the two are one price and must never travel separately.
+	RedeemFeeBaseMloki int64
 	// ExpiresAt is inherited from the source slice's own wallet, unchanged —
 	// including nil (never expires) if the source wallet itself never
 	// expires. A split relocates an existing entitlement; it does not
@@ -814,7 +822,8 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 		IAPubkey:         params.NewIAPubkey,
 		AmountMloki:      int64(params.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by the source slice's own AmountMloki, already validated when that slice was created/resolved
 		MinTransferMloki: params.MinTransferMloki,
-		RedeemFeePpm:     params.RedeemFeePpm,
+		RedeemFeePpm:       params.RedeemFeePpm,
+		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 	}}); err != nil {
 		return nil, fmt.Errorf("failed to store split-off recipient claim: %w", err)
 	}
@@ -848,7 +857,7 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	// defensive encode failure still must not become an error return: funds have
 	// moved, and saying the split failed would leave a funded wallet the caller does
 	// not know exists (recoverable via the admin API either way).
-	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki)
+	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki, params.HubApp.AppPubkey)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).

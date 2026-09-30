@@ -72,7 +72,7 @@ func TestUpdateCashHubConfig_SpentRetention_SetAndRead(t *testing.T) {
 	hub := newCashHub(t, svc, 10_000, 3600)
 
 	retention := 7 * 24 * 60 * 60
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, &retention))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, nil, &retention))
 
 	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
 	require.NoError(t, err)
@@ -91,10 +91,10 @@ func TestUpdateCashHubConfig_SpentRetention_ZeroDisables(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	initial := 3600
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, &initial))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, nil, &initial))
 
 	zero := 0
-	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, &zero))
+	require.NoError(t, svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, nil, &zero))
 
 	cfg, err := svc.AppsService.GetCashHubConfig(hub.ID)
 	require.NoError(t, err)
@@ -108,6 +108,6 @@ func TestUpdateCashHubConfig_SpentRetention_Negative_Rejected(t *testing.T) {
 
 	hub := newCashHub(t, svc, 10_000, 3600)
 	negative := -1
-	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, &negative)
+	err = svc.AppsService.UpdateCashHubConfig(hub.ID, nil, nil, nil, nil, nil, &negative)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }

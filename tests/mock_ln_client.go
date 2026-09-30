@@ -119,7 +119,7 @@ func NewMockLn() (*MockLn, error) {
 	return &MockLn{SigningKey: key}, nil
 }
 
-func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	// Delay applies before consuming a queued response/error too, so a test can
 	// simulate a slow RPC call that ultimately errors (e.g. to race an async
 	// settle notification in ahead of the synchronous error return).

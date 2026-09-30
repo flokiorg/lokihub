@@ -31,13 +31,16 @@ import (
 //     any reasonable JSON consumer treats an omitted optional field and an
 //     empty one identically.
 //
-// CashStatusCaller is which recipient is asking, when the transport can know.
+// CashStatusCaller is which recipient is asking. Always known, and never nil in
+// practice: cash_status is served over the private transport only, where every
+// item carries a proof signed by one specific recipient's own key.
 //
-// nil on the standard transport, and that is a fact about the protocol rather
-// than a missing feature: every recipient of a bill holds the SAME connection
-// string (NIP-CASH §The Pairing Connection), so a Hub receiving cash_status
-// there cannot tell them apart. The private transport can, because every item
-// carries a proof signed by one specific recipient's own key.
+// The standard transport could never have populated this, which is why it no
+// longer serves the method. That is a fact about the protocol rather than a
+// missing feature: every recipient of a bill holds the SAME connection string
+// (NIP-CASH §The Pairing Connection), so a Hub receiving cash_status there
+// cannot tell one recipient from another and can only answer everyone or no
+// one.
 //
 // IdentityValue is taken from that proof's signer and never from anything the
 // item asserts about itself — NIP-CASH §Scoping the Roster requires that
@@ -57,20 +60,17 @@ type CashStatusCaller struct {
 // amount, and claimed status only. It never includes invoice/preimage/payment
 // detail, since a cash_wallet carries no list_transactions grant at all.
 //
-// How much of the roster comes back depends on `scope` and on the transport
+// How much of the roster comes back depends on `scope`
 // (NIP-CASH §Scoping the Roster):
 //
 //	scope=all    every recipient's row — the shared, transparent view that
 //	             matches the model already accepted for get_balance
 //	scope=mine   only the calling recipient's own row
 //
-// The DEFAULT differs by transport, because the two differ in what they can
-// know. Absent means "all" on the standard transport, exactly as before, and
-// "mine" on the private one — where a caller who says nothing should receive the
-// smallest answer and learn nothing about their co-recipients. Asking for "mine"
-// on the standard transport is REJECTED rather than approximated: the Hub cannot
-// identify the caller there, and answering "all" instead would silently return
-// far more than was asked for.
+// Absent means "mine": a caller who says nothing receives the smallest answer
+// and learns nothing about their co-recipients. There is no longer a
+// transport-dependent default, because there is no longer more than one
+// transport for this method.
 //
 // Note that "mine" is a view, not an authorization boundary. It changes what is
 // returned and never what a caller may do, so having asked for it must not
@@ -105,7 +105,7 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 
 	recipients := make([]nipcash.RecipientStatus, len(claims))
 	for i, c := range claims {
-		redeemFeeMloki := transactions.CalculateFeeSkimMloki(uint64(c.AmountMloki), c.RedeemFeePpm) //nolint:gosec // AmountMloki is always non-negative
+		redeemFeeMloki := transactions.CalculateRedeemFeeMloki(uint64(c.AmountMloki), c.RedeemFeeBaseMloki, c.RedeemFeePpm) //nolint:gosec // AmountMloki is always non-negative
 		status := nipcash.RecipientStatus{
 			IdentityType:        c.IdentityType,
 			IdentityValue:       c.IdentityValue,

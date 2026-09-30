@@ -62,7 +62,7 @@ func (m *mockLNClientJIT) GetBalances(ctx context.Context, includeInactiveChanne
 func (m *mockLNClientJIT) SubscribeChannelAcceptor(ctx context.Context) (<-chan lnclient.ChannelAcceptRequest, func(id string, accept bool, zeroConf bool) error, error) {
 	return nil, nil, nil
 }
-func (m *mockLNClientJIT) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (m *mockLNClientJIT) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	return nil, nil
 }
 func (m *mockLNClientJIT) SendKeysend(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {

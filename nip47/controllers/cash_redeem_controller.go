@@ -262,7 +262,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	willBeSelfPayment := transactions.IsSelfPayment(controller.db, paymentRequest, controller.lnClient)
 	hubFeeMloki := uint64(0)
 	if !willBeSelfPayment {
-		hubFeeMloki = transactions.CalculateFeeSkimMloki(uint64(claimedAmount), claim.RedeemFeePpm) //nolint:gosec // claimedAmount is always non-negative
+		hubFeeMloki = transactions.CalculateRedeemFeeMloki(uint64(claimedAmount), claim.RedeemFeeBaseMloki, claim.RedeemFeePpm) //nolint:gosec // claimedAmount is always non-negative
 	}
 	expectedAmount := uint64(claimedAmount) - hubFeeMloki //nolint:gosec // claimedAmount is always non-negative and >= hubFeeMloki (a <=100% cut of it)
 	if resolvedAmount != expectedAmount {

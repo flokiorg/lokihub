@@ -75,6 +75,8 @@ type ConsolidateParams struct {
 	// entitlement (NIP-CASH §Consolidating Tokens).
 	MinTransferMloki int64
 	RedeemFeePpm     int
+	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
+	RedeemFeeBaseMloki int64
 	ExpiresAt        *time.Time
 }
 
@@ -190,7 +192,8 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 		IAPubkey:         params.NewIAPubkey,
 		AmountMloki:      int64(total), //nolint:gosec // bounded to <= the hub's PerWalletMaxMloki by the caller, itself an int64
 		MinTransferMloki: params.MinTransferMloki,
-		RedeemFeePpm:     params.RedeemFeePpm,
+		RedeemFeePpm:       params.RedeemFeePpm,
+		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 	}}); err != nil {
 		return nil, nil, fmt.Errorf("failed to store consolidated recipient claim: %w", err)
 	}
@@ -216,7 +219,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	}
 	fullyFunded = true
 
-	token := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total)
+	token := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total, params.HubApp.AppPubkey)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).

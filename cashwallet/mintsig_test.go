@@ -283,3 +283,72 @@ func TestSplit_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
 	assert.Equal(t, sourceBefore, queries.GetIsolatedBalance(svc.DB, sourceWallet.ID),
 		"a refused split must leave the source wallet's balance untouched")
 }
+
+// TestConsolidate_SigningFailureAbortsWithNothingCommitted closes the last of the
+// three wallet-creation paths.
+//
+// Commit and Split already had this test; Consolidate obtains its provenance at
+// the same point and for the same reason, and had none — so the one path where a
+// swallowed signing failure would be worst was the one path not pinned. It is
+// worst here because consolidate DRAINS existing bills: a failure after the
+// sources are emptied cannot be reported as failure without lying about bills
+// that no longer exist, which is exactly why the signature is taken first.
+//
+// The sources are bare app rows rather than really-funded bills, because the
+// in-process mock issues ONE fixed invoice and so cannot stand in for several
+// distinct internal transfers (consolidate_test.go's own header says this). That
+// costs this test nothing: everything Consolidate does before it asks for a
+// signature — derive the pairing key, create the merged app, insert its claim —
+// never reads a source's balance, and the funding loop that would is exactly what
+// must not be reached.
+//
+// The load-bearing assertion is that no merged bill survives. A refused
+// consolidation that left one behind would leave an app the hub believes is a
+// live bill, with a claim promising value that was never transferred.
+func TestConsolidate_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	hubBefore := queries.GetIsolatedBalance(svc.DB, hub.ID)
+	var billsBefore int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("kind = ?", db.AppKindCashWallet).Count(&billsBefore).Error)
+
+	// The node cannot sign.
+	svc.LNClient.(*tests.MockLn).SigningKey = nil
+
+	newPk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	result, stranded, err := Consolidate(context.TODO(), newTestDeps(svc), ConsolidateParams{
+		HubApp: hub,
+		Sources: []ConsolidateSource{
+			{WalletApp: &db.App{ID: 9001}, AmountMloki: 3000},
+			{WalletApp: &db.App{ID: 9002}, AmountMloki: 2000},
+		},
+		NewIdentityType:  db.CashIdentityPubkey,
+		NewIdentityValue: newPk,
+	})
+	require.Error(t, err, "a consolidation that cannot be signed must fail, not degrade to an unspendable merged bill")
+	assert.Nil(t, result)
+	assert.Empty(t, stranded, "nothing was transferred, so nothing can be stranded")
+
+	// The CAUSE, not merely the failure. Asserting "an error, and no bill" is not
+	// enough and a mutation test proved it: with the signature made best-effort the
+	// run still failed — later, in the funding loop — and still left no bill, so a
+	// swallowed signing failure passed unnoticed. What must hold is that the refusal
+	// happened at the signature, BEFORE any funding was attempted.
+	assert.Contains(t, err.Error(), "provenance",
+		"the refusal must come from the missing signature, not from something later")
+	assert.NotContains(t, err.Error(), "failed to fund",
+		"funding must never be attempted once the node has refused to sign — that ordering is the whole point")
+
+	assert.Equal(t, hubBefore, queries.GetIsolatedBalance(svc.DB, hub.ID),
+		"a refused consolidation must leave the hub's balance untouched")
+
+	var billsAfter int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("kind = ?", db.AppKindCashWallet).Count(&billsAfter).Error)
+	assert.Equal(t, billsBefore, billsAfter,
+		"a refused consolidation must leave no merged bill behind — one would carry a claim promising value never transferred")
+}

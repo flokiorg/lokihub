@@ -57,7 +57,7 @@ func (svc *appsService) GetCashHubConfig(appID uint) (*db.CashHubConfig, error) 
 	return &cfg, nil
 }
 
-func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, spentRetentionSecs *int) error {
+func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error {
 	updates := map[string]interface{}{}
 	if perWalletMaxMloki != nil {
 		if *perWalletMaxMloki <= 0 {
@@ -89,6 +89,16 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 			return fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
 		}
 		updates["redeem_fee_ppm"] = *redeemFeePpm
+	}
+	if redeemFeeBaseMloki != nil {
+		// Only a floor. There is deliberately no ceiling beyond what a slice can bear:
+		// CalculateRedeemFeeMloki already caps the fee at the amount it is charged on,
+		// and an operator who sets a base larger than the bills they mint is quoting a
+		// zero payout, which is a pricing mistake rather than a safety one.
+		if *redeemFeeBaseMloki < 0 {
+			return fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
+		}
+		updates["redeem_fee_base_mloki"] = *redeemFeeBaseMloki
 	}
 	if spentRetentionSecs != nil {
 		// As on create: 0 means "no tombstone", not "unset".
