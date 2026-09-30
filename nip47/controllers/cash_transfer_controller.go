@@ -186,18 +186,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		return
 	}
 
-	// 2. Rate limit — shares cashClaimLimiter (and its budget) with cash_redeem,
-	// deliberately: transferring OUT of a cash-mode slice is also a
-	// secret-presentation surface with no signature to forge, exactly like
-	// redeeming one. If the two methods had separate budgets, an attacker
-	// could double their effective guess allowance by splitting attempts
-	// across both.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_transfer")
-		return
-	}
-
-	// 3. Determine the caller's current identity. A cash-secret proof and
+	// 2. Determine the caller's current identity. A cash-secret proof and
 	// an identity-bound one are mutually exclusive param shapes.
 	var currentIdentityType, currentIdentityValue string
 	if isCashCurrent {
@@ -234,7 +223,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		currentIdentityValue = params.IdentityValue
 	}
 
-	// 4. new_identity's own type must be recognized before anything else
+	// 3. new_identity's own type must be recognized before anything else
 	// checks it — computed here (from the raw request, not yet validated
 	// for trust) so the proof-binding hash below reflects exactly what the
 	// caller asked for, independent of whether it turns out to be valid.
@@ -252,6 +241,24 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// whatever the caller submitted, valid or not (including IAPubkey, "" if
 	// omitted), exactly as it does for every other target type/field.
 	targetHash := newIdentityHash(newIdentityType, params.NewIdentity.IdentityValue, params.NewIdentity.IAPubkey)
+
+	// 4. Rate limit, charged only now that the request is a real attempt.
+	//
+	// Shares cashClaimLimiter and its budget with cash_redeem, deliberately:
+	// transferring OUT of a cash-mode slice is also a secret-presentation surface
+	// with no signature to forge, exactly like redeeming one. Separate budgets would
+	// let an attacker double their effective guess allowance by splitting attempts
+	// across both methods.
+	//
+	// Moved after the param validation above for the same reason as in
+	// cash_redeem_controller: one envelope carries up to 32 items, each dispatched
+	// here separately, so charging before validation let a co-recipient spend a
+	// shared bill's whole hourly allowance with a single envelope of malformed
+	// requests. A real secret-guess is well-formed and still reaches this line.
+	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_transfer")
+		return
+	}
 
 	// 5. Read-only lookup of the slice being transferred BEFORE touching the
 	// atomic transfer guard, so a proof that fails verification never

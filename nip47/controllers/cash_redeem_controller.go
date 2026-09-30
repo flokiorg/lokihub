@@ -98,18 +98,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 
-	// 2. Rate limit per connection. Since this connection may be shared by
-	// several recipients, this throttles the wallet as a whole, not any one
-	// caller specifically — intentional, given the connection itself may be
-	// widely held. This is also the ONLY throttle standing between a cash-mode
-	// slice and an attacker who's guessing at its secret, since a cash-mode
-	// redemption has no signature to forge — only a secret to guess.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_redeem")
-		return
-	}
-
-	// 3. Basic param validation. A cash-mode redemption and an identity-bound
+	// 2. Basic param validation. A cash-mode redemption and an identity-bound
 	// one are mutually exclusive param shapes, not two optional variants of
 	// the same one — mixing them is rejected rather than picking one side to
 	// honor.
@@ -152,12 +141,39 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		identityValue = params.IdentityValue
 	}
 
-	// 4. Decode the invoice up front — the identity proof must bind to it.
+	// 3. Decode the invoice up front — the identity proof must bind to it.
 	bolt11 := strings.ToLower(params.Invoice)
 	paymentRequest, err := decodepay.Decode(bolt11)
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 			fmt.Sprintf("Failed to decode bolt11 invoice: %s", err.Error()))
+		return
+	}
+
+	// 4. Rate limit per connection, charged only now that the request is a real
+	// attempt at a redemption.
+	//
+	// The connection may be shared by several recipients, so this throttles the
+	// WALLET as a whole rather than any one caller — intentional, given the
+	// connection itself may be widely held. It is also the ONLY throttle standing
+	// between a cash-mode slice and an attacker guessing its secret, since a
+	// cash-mode redemption has no signature to forge, only a secret to guess.
+	//
+	// It used to be charged at step 2, before any of the validation above. That was
+	// per-request when a request was one message; the private transport made one
+	// envelope carry up to MaxItems (32) items, each dispatched into this controller
+	// separately, and nothing adjusted. So a co-recipient — who legitimately holds the
+	// token and passes the possession gate — could send one envelope of 32 malformed
+	// redeems (`{"invoice": ""}` is enough), spend the bill's whole hourly allowance,
+	// and leave every other recipient RATE_LIMITED for the hour, repeatable until the
+	// bill expired. The attacker needed no valid data at all, because validation came
+	// after the charge.
+	//
+	// Charging here instead costs nothing in brute-force resistance: a genuine
+	// secret-guess IS well-formed and still reaches this line. Only garbage became
+	// free to send, and garbage was never a threat to the secret.
+	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_redeem")
 		return
 	}
 
