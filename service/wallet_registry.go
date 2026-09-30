@@ -230,7 +230,12 @@ func (svc *service) retainedSpentBillPubkeys() []string {
 	err := svc.db.Table("cash_bill_archives").
 		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
 		Where("cash_hub_configs.spent_retention_secs > 0").
-		Where("cash_bill_archives.retained_until > ?", time.Now()).
+		// >= not >, to match db.RetentionWindowOpen's !now.After(deadline): the window
+		// is open THROUGH the deadline instant. With > this gate closed one second
+		// before the replier stopped answering, so at exactly retained_until the bill
+		// was unregistered while still contractually answerable — the caller got
+		// silence at the one instant the tombstone exists to cover.
+		Where("cash_bill_archives.retained_until >= ?", time.Now()).
 		Pluck("cash_bill_archives.wallet_pubkey", &pubkeys).Error
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to reload retained spent-bill wallets")
@@ -260,7 +265,9 @@ func (svc *service) PruneExpiredSpentBills() {
 
 	var expired []string
 	err := svc.db.Table("cash_bill_archives").
-		Where("retained_until IS NOT NULL AND retained_until <= ?", time.Now()).
+		// < not <=, the mirror of the gate above: a bill is reclaimable only once the
+		// window has actually closed, and at exactly retained_until it has not.
+		Where("retained_until IS NOT NULL AND retained_until < ?", time.Now()).
 		Limit(pruneExpiredSpentBillsBatch).
 		Pluck("wallet_pubkey", &expired).Error
 	if err != nil {
