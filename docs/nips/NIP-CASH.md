@@ -1659,6 +1659,26 @@ to both existing implementations because they share one SDK. An independent clie
 rest of this section would find its response, fail to decrypt it, and have nothing in the
 document to check its work against.
 
+##### Test vectors
+
+Three vectors, so an independent implementation can check its work without a Hub. All values are
+lowercase hex; `conversation_key` is the 32-byte PRK, `reply_to` is the 64-character text that is
+concatenated to the label.
+
+| # | `conversation_key` | `reply_to` | `reply_key` |
+|---|---|---|---|
+| 1 | `000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f` | `0000…0000` (64 zeros) | `aede656a94d03cfa382dcc742ec44cec9248ed2be2b71bf0fa92ed48298705da` |
+| 2 | `ffff…ffff` (64 f's) | `deadbeef` × 8 | `a0953747794eb0fc06b187bf8a1449f60716b788b850b7adfe82e11753d03a7b` |
+| 3 | `0e11ac12d17df2ba09c49b400df9aa1cba33288b42a099068bbcf05f6c910741` | `0123456789abcdef` × 4 | `d80410259b62e3676c3a95a9b1ccdd639c8a8c6cbc48ec1d7bc375774f2e16b1` |
+
+Vector 3's `conversation_key` is `SHA-256("nipcash-reply-v1")`, chosen only so the value is
+reproducible from this document rather than copied on trust.
+
+Getting a different answer for vector 1 while matching RFC 5869's own test vectors narrows it to
+three places: the label's exact spelling, whether `reply_to` is concatenated as text or as its
+32 decoded bytes, and whether an Extract step was run first. All three produce a valid-looking
+32-byte key that no Hub can read.
+
 ### Chunked Replies
 
 A reply can be larger than the request that produced it, sometimes by orders of magnitude. A
