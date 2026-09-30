@@ -74,11 +74,17 @@ func TestCashMintProvenance(t *testing.T) {
 			// MintSignature omitted (default false)
 		}, &created))
 
+		// Provenance is REQUIRED now (NIP-CASH §Mint Provenance), not opt-in: the mint
+		// signature is the only thing a token carries that identifies its minting Hub, and
+		// that identity is what a private-transport announcement is checked against — so an
+		// unsigned bill could never reach the only transport serving bill methods.
+		//
+		// Inverted from asserting its ABSENCE, which was correct while signing was opt-in.
 		decoded, err := lokicash.Decode(created.CashToken)
 		require.NoError(t, err)
-		assert.Nil(t, decoded.MintSignature)
+		require.NotNil(t, decoded.MintSignature, "every mint must be signed, or the bill is unspendable")
 		_, ok := lokicash.VerifyMint(decoded)
-		assert.False(t, ok)
+		assert.True(t, ok, "the provenance must verify, not merely be present")
 	})
 }
 
@@ -98,7 +104,10 @@ func TestCashConsolidate(t *testing.T) {
 	type src struct {
 		walletPubkey string
 		conn         string
-		amount       uint64
+		// token is required, not convenience: the private transport recovers the hub
+		// identity from the bill's own mint signature, which a pairing URI omits.
+		token  string
+		amount uint64
 	}
 	sources := make([]src, len(amounts))
 	for i, amt := range amounts {
@@ -107,7 +116,7 @@ func TestCashConsolidate(t *testing.T) {
 			Recipients: onePubkeyRecipient(callerPub, amt),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		sources[i] = src{walletPubkey: created.WalletPubkey, conn: created.PairingURI, amount: amt}
+		sources[i] = src{walletPubkey: created.WalletPubkey, conn: created.PairingURI, token: created.CashToken, amount: amt}
 		sum += amt
 	}
 
@@ -131,8 +140,9 @@ func TestCashConsolidate(t *testing.T) {
 		})
 	}
 
-	// Call cash_consolidate over one source's own shared connection.
-	callConn := mustConnect(t, sources[0].conn)
+	// Call cash_consolidate over one source's own shared connection. callerPriv signs the
+	// item, and also each source's own proof inside params — authorization is per source.
+	callConn := mustConnectBill(t, sources[0].conn, sources[0].token, callerPriv)
 	var result CashConsolidateResult
 	require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, params, &result))
 	assert.EqualValues(t, sum, result.AmountMillis)
@@ -149,12 +159,12 @@ func TestCashConsolidate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, result.NewWalletPubkey, mergedToken.WalletPubkey)
 
-	merged := mustConnect(t, nwcURIFromLokicash(mergedToken))
+	merged := mustConnectBill(t, nwcURIFromLokicash(mergedToken), decryptedToken, newPriv)
 
 	// The merged wallet holds exactly the sum.
-	var mergedBalance GetBalanceResult
-	require.NoError(t, merged.Call(ctxT(t), "get_balance", struct{}{}, &mergedBalance))
-	assert.EqualValues(t, sum, mergedBalance.Balance)
+	var mergedBalance CashStatusResult
+	require.NoError(t, merged.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &mergedBalance))
+	assert.EqualValues(t, sum, unclaimedMillis(mergedBalance))
 
 	// Every source is drained -- and a drained bill is deleted, so each one
 	// stops answering rather than reporting a zero balance.

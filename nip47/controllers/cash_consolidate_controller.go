@@ -628,7 +628,7 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 		if !trusted {
 			return nil, "", constants.ERROR_RESTRICTED, "the Identity Authority for this source has been revoked"
 		}
-		if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
+		if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
 			return nil, "", constants.ERROR_BAD_REQUEST, err.Error()
 		}
 	}

@@ -31,12 +31,7 @@ import (
 // method with no retry idempotency, which is what makes the in-memory replay set
 // safe. Adding it here would quietly invalidate that reasoning.
 var privateServableMethods = map[string]struct{}{
-	constants.NIP47MethodCashStatus: {},
-	// The deprecated alias for cash_status, honoured here for the same reason the
-	// standard path honours it (NIP-CASH §Cash Status): it is currently the only
-	// RELEASED name, so a client that has not been updated yet asks for this one.
-	// Omitting it would silently drop that client's item — indistinguishable, to
-	// the caller, from a bill the hub does not hold. Drop it when the alias goes.
+	constants.NIP47MethodCashStatus:         {},
 	constants.NIP47MethodCashRedeem:         {},
 	constants.NIP47MethodCashTransfer:       {},
 	constants.NIP47MethodCashConsolidate:    {},

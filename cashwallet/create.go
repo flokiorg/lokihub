@@ -453,16 +453,31 @@ func GenerateCashSecret() (secretHex, secretHash string, err error) {
 // a normal wallet's scope set. No pay_invoice/lookup_invoice (this app never
 // makes or looks up its own invoices) and no list_transactions (which would
 // leak every OTHER recipient's payout history — amount, timestamp, preimage —
-// to anyone holding the shared connection). get_info stays reachable via the
-// system-wide "always granted" list; get_budget is explicitly carved out of
-// that same list for AppKindCashWallet (see nip47/event_handler.go) since it
-// would otherwise reveal the wallet's total funded amount across every
-// recipient with no proof required.
+// to anyone holding the shared connection).
+//
+// No get_balance either, for the SAME reason get_budget is carved out of the
+// always-granted list for AppKindCashWallet (see nip47/event_handler.go): a
+// bill's balance is the total funded across EVERY recipient, and get_balance
+// handed it to anyone holding the shared connection with no proof required.
+// get_budget was carved out on exactly that reasoning and get_balance was left
+// in, which was inconsistent. A recipient's own entitlement is what they are
+// owed, and cash_status reports it — scoped to them, over the private
+// transport, and only once they have proven possession.
+//
+// Dropping it also removes the last reason to dial a bill on kind 23194 other
+// than get_info. That matters because a 23194 request names its target in a
+// clear-text "p" tag, so every such call tells a relay watcher that this
+// specific bill is live and being used — exactly the correlation the private
+// transport exists to remove.
+//
+// get_info stays, and is now load-bearing rather than incidental: its
+// private_methods field is how a bill's holder discovers which methods are
+// served over the private transport (NIP-CASH §Scope Surface). It reveals a
+// method set, not money.
 var cashWalletScopes = []string{
 	constants.CASH_REDEEM_SCOPE,
 	constants.CASH_TRANSFER_SCOPE,
 	constants.CASH_CONSOLIDATE_SCOPE,
-	constants.GET_BALANCE_SCOPE,
 }
 
 // compensatingDeleteMaxAttempts/compensatingDeleteRetryDelay bound

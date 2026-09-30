@@ -23,14 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 // splitOffPartial fires one partial cash_transfer split of splitAmount off the
 // slice currently registered to (curPriv/curPub) on the shared wallet, to a
 // fresh pubkey target. Returns the result and error verbatim (callers decide
 // whether a given race outcome is expected to succeed or fail).
-func splitOffPartial(t *testing.T, shared *nwcclient.Client, curPriv, curPub, walletPubkey string, splitAmount uint64) (CashTransferResult, error) {
+func splitOffPartial(t *testing.T, shared billCaller, curPriv, curPub, walletPubkey string, splitAmount uint64) (CashTransferResult, error) {
 	t.Helper()
 	newPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 	require.NoError(t, err)
@@ -86,8 +85,8 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 
 		// Two independent connections so the two splits genuinely race on the
 		// wire, not behind one client's internal lock.
-		clientA := mustConnect(t, created.PairingURI)
-		clientB := mustConnect(t, created.PairingURI)
+		clientA := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		clientB := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 		var resA, resB CashTransferResult
 		var errA, errB error
@@ -139,10 +138,15 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 		// The source wallet was consumed by the winning split: it was left
 		// holding nothing (its value moved into the two new wallets), so the
 		// hub deleted it and it no longer answers.
-		sharedConn := mustConnect(t, created.PairingURI)
+		sharedConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-			var bal GetBalanceResult
-			return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+			// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
+			// every recipient's total, handed out with no proof). The distinction matters to what
+			// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
+			// definite answer, which is NOT the silence a destroyed bill produces and would make
+			// this pass for the wrong reason.
+			var st CashStatusResult
+			return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
 		})
 	}
 }
@@ -185,8 +189,8 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			Expiry:     happyPathExpirySecs,
 		}, &created))
 
-		redeemConn := mustConnect(t, created.PairingURI)
-		splitConn := mustConnect(t, created.PairingURI)
+		redeemConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		splitConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 		redeemInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount, "audit redeem-vs-split full")
 		redeemProof := buildClaimProofEvent(t, curPriv, created.WalletPubkey, redeemInvoice.PaymentHash, nil, time.Now())
@@ -229,7 +233,7 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 		// Deliberately not read up front any more: whether this wallet is even
 		// still there depends on which op won — a split drains and deletes it,
 		// a redeem leaves it in place holding nothing.
-		sharedConn := mustConnect(t, created.PairingURI)
+		sharedConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 		switch {
 		case redeemWon && splitWon:
@@ -243,8 +247,13 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// lost. A redeem now deletes a drained bill exactly as a split
 			// does, so this branch asserts the same disappearance.
 			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-				var bal GetBalanceResult
-				return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+				// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
+				// every recipient's total, handed out with no proof). The distinction matters to what
+				// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
+				// definite answer, which is NOT the silence a destroyed bill produces and would make
+				// this pass for the wrong reason.
+				var st CashStatusResult
+				return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
 			})
 			require.NotEmpty(t, redeemRes.Preimage)
 		case splitWon:
@@ -252,8 +261,13 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// left holding nothing (its value moved into the carved + remainder
 			// wallets) so the hub deleted it, and the racing full redeem lost.
 			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-				var bal GetBalanceResult
-				return sharedConn.Call(ctx, "get_balance", struct{}{}, &bal)
+				// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
+				// every recipient's total, handed out with no proof). The distinction matters to what
+				// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
+				// definite answer, which is NOT the silence a destroyed bill produces and would make
+				// this pass for the wrong reason.
+				var st CashStatusResult
+				return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
 			})
 			require.EqualValues(t, splitAmount, splitRes.AmountMillis)
 			require.NotNil(t, splitRes.RemainingAmountMillis)
@@ -261,7 +275,7 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// The remainder is redeemable — from its OWN new wallet, under the
 			// original identity — proving the value survived intact, just relocated.
 			require.NotEmpty(t, splitRes.RemainderWalletToken)
-			remWallet := decryptSplitWallet(t, splitRes.RemainderWalletPubkey, splitRes.RemainderWalletToken, curPriv)
+			remWallet := decryptSplitWallet(t, splitRes.RemainderWalletPubkey, splitRes.RemainderWalletToken, curPriv, curPriv)
 			remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit redeem-vs-split remainder")
 			remProof := buildClaimProofEvent(t, curPriv, splitRes.RemainderWalletPubkey, remInvoice.PaymentHash, nil, time.Now())
 			var remRes ClaimFundsResult
@@ -284,7 +298,7 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-split-boundaries", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
-	newSlice := func(t *testing.T, amount uint64) (shared *nwcclient.Client, curPriv, curPub, walletPubkey string) {
+	newSlice := func(t *testing.T, amount uint64) (shared billCaller, curPriv, curPub, walletPubkey string) {
 		curPriv = newTestPrivkey(t)
 		var err error
 		curPub, err = nostr.GetPublicKey(curPriv)
@@ -294,7 +308,7 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 			Recipients: onePubkeyRecipient(curPub, amount),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		return mustConnect(t, created.PairingURI), curPriv, curPub, created.WalletPubkey
+		return mustConnectBill(t, created.PairingURI, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
 	}
 
 	t.Run("Zero_Rejected", func(t *testing.T) {
@@ -393,7 +407,7 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnect(t, created.PairingURI)
+	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 	// A single proof, bound to newPub. Use it once to split 30k off.
 	newPriv := newTestPrivkey(t)
@@ -431,7 +445,7 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 
 	// Both spun-off wallets are genuinely funded, each redeemable exactly once:
 	// the carved 30k by newPub, the 70k remainder by curPub.
-	carvedClient := decryptSplitWallet(t, res1.NewWalletPubkey, res1.NewWalletToken, curPriv)
+	carvedClient := decryptSplitWallet(t, res1.NewWalletPubkey, res1.NewWalletToken, curPriv, newPriv)
 	inv := mintInvoiceFromSimpleWallet(t, cfg, first, "audit replay carved-wallet redeem")
 	cp := buildClaimProofEvent(t, newPriv, res1.NewWalletPubkey, inv.PaymentHash, nil, time.Now())
 	var cr ClaimFundsResult
@@ -441,7 +455,7 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 	require.NotEmpty(t, cr.Preimage)
 
 	require.NotEmpty(t, res1.RemainderWalletToken)
-	remClient := decryptSplitWallet(t, res1.RemainderWalletPubkey, res1.RemainderWalletToken, curPriv)
+	remClient := decryptSplitWallet(t, res1.RemainderWalletPubkey, res1.RemainderWalletToken, curPriv, curPriv)
 	remInv := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-first, "audit replay remainder-wallet redeem")
 	remCp := buildClaimProofEvent(t, curPriv, res1.RemainderWalletPubkey, remInv.PaymentHash, nil, time.Now())
 	var remCr ClaimFundsResult

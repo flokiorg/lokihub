@@ -85,12 +85,12 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
-		child := mustConnect(t, result.PairingURI)
+		child := mustConnectBill(t, result.PairingURI, result.CashToken, beneficiaryPriv)
 
-		var balance GetBalanceResult
-		require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
-		t.Logf("child balance: %d mloki", balance.Balance)
-		require.EqualValues(t, happyPathAmountMloki, balance.Balance, "child Cash wallet should be pre-funded with exactly the requested amount")
+		var balance CashStatusResult
+		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &balance))
+		t.Logf("child balance: %d mloki", unclaimedMillis(balance))
+		require.EqualValues(t, happyPathAmountMloki, unclaimedMillis(balance), "child Cash wallet should be pre-funded with exactly the requested amount")
 
 		var info GetInfoResult
 		require.NoError(t, child.Call(ctxT(t), "get_info", struct{}{}, &info))
@@ -99,8 +99,20 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NotContains(t, info.Methods, "pay_invoice", "Cash wallets no longer carry the generic pay_invoice scope")
 		require.NotContains(t, info.Methods, "list_transactions", "list_transactions would leak other recipients' payout history on a shared connection")
 		require.NotContains(t, info.Methods, "lookup_invoice")
-		require.Contains(t, info.Methods, constants.NIP47MethodCashRedeem)
-		require.Contains(t, info.Methods, constants.NIP47MethodCashStatus)
+		// The four bill methods are NOT advertised here, and that is deliberate: get_info
+		// describes this kind-23194 connection, which refuses them (NIP-CASH §Scope
+		// Surface / §It is the ONLY transport for the bill methods). Advertising them
+		// promised a caller something this transport will not do.
+		//
+		// Inverted from `require.Contains`, which was correct while they were served on
+		// 23194. They are still GRANTED — the private transport checks the same scopes per
+		// item — so this asserts advertising only; the private-transport tests cover that
+		// they work.
+		require.NotContains(t, info.Methods, constants.NIP47MethodCashRedeem,
+			"a bill must not advertise a method its own transport refuses")
+		require.NotContains(t, info.Methods, constants.NIP47MethodCashStatus)
+		require.NotContains(t, info.Methods, constants.NIP47MethodCashTransfer)
+		require.NotContains(t, info.Methods, constants.NIP47MethodCashConsolidate)
 
 		// Behavioral check, not just advertised-methods: actually calling
 		// make_invoice/pay_invoice against a cash_wallet must be rejected, not
@@ -129,7 +141,10 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 	})
 
 	t.Run("CreateWallet_MultipleRecipients_OneSharedWallet", func(t *testing.T) {
-		pub1, err := nostr.GetPublicKey(newTestPrivkey(t))
+		// The key is kept, not just the pubkey: cash_status travels over the private
+		// transport, which authorizes per item, so recipient 1 has to sign for its own read.
+		priv1 := newTestPrivkey(t)
+		pub1, err := nostr.GetPublicKey(priv1)
 		require.NoError(t, err)
 		pub2, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
@@ -149,15 +164,18 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		// the wallet backs more than one slice.
 		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
-		child := mustConnect(t, result.PairingURI)
+		child := mustConnectBill(t, result.PairingURI, result.CashToken, priv1)
 
 		var recipients CashStatusResult
-		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
+		// scope=all: this asserts on BOTH recipients, and the default is now `mine` — the
+		// caller's own row — which would pass a narrower assertion than the test claims.
+		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus,
+			CashStatusParams{Scope: "all"}, &recipients))
 		require.Len(t, recipients.Recipients, 2, "one shared connection must show both recipients' slices")
 
-		var balance GetBalanceResult
-		require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
-		require.EqualValues(t, happyPathAmountMloki*3, balance.Balance, "the shared wallet must be funded with the SUM of both recipients")
+		var balance CashStatusResult
+		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &balance))
+		require.EqualValues(t, happyPathAmountMloki*3, unclaimedMillis(balance), "the shared wallet must be funded with the SUM of both recipients")
 	})
 
 	t.Run("CreateWallet_SumOfRecipients_ExceedsPerWalletCap", func(t *testing.T) {
@@ -257,7 +275,9 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.Empty(t, result.Recipients[0].IdentityValue, "the internal secret hash must never be surfaced on the wire")
 		requireLokicashMatchesPairingURI(t, result.PairingURI, result.CashToken)
 
-		child := mustConnect(t, result.PairingURI)
+		// Bearer: a cash-mode bill carries no slice proof — its secret in params IS the
+		// authorization, and an item carrying both is refused (§Bearer Items).
+		child := mustConnectBill(t, result.PairingURI, result.CashToken, "")
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash-mode redemption")
 		var claimResult ClaimFundsResult

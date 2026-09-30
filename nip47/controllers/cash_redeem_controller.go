@@ -239,7 +239,7 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		}
 		// Also verify the IA attestation itself: signature, connection_key/
 		// claimant tag binding, and its own expiration.
-		if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
+		if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 			return
 		}
@@ -456,7 +456,7 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 	return nil
 }
 
-// verifyClaimAttestationEvent checks a kind-35522 event is validly signed by
+// VerifyClaimAttestationEvent checks a kind-35522 event is validly signed by
 // iaPubkey (the IA recorded on this slice at wallet-creation time), has the
 // correct d-tag (connectionKey) and p-tag (the claimant's real nostr
 // pubkey — identity_event's own signer), carries a valid, unexpired
@@ -500,7 +500,7 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // expiration is the only bound on how long a not-yet-revoked-but-later-to-
 // be-revoked attestation stays honorable — see NIP-CASH.md's own Security
 // Considerations for the same reasoning at the spec level.
-func verifyClaimAttestationEvent(ev *nostr.Event, iaPubkey, nostrPubkey, connectionKey string) error {
+func VerifyClaimAttestationEvent(ev *nostr.Event, iaPubkey, nostrPubkey, connectionKey string) error {
 	nip01Ev, err := toNip01Event(ev)
 	if err != nil {
 		return fmt.Errorf("attestation_event: %w", err)

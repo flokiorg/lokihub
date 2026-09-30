@@ -374,7 +374,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 				respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "the Identity Authority for this claim has been revoked")
 				return
 			}
-			if err := verifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, currentIdentityValue); err != nil {
+			if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, currentIdentityValue); err != nil {
 				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 				return
 			}

@@ -20,7 +20,7 @@ import (
 
 // privateDispatchFixture builds a hub with one funded, single-recipient bill and returns
 // what a client needs to address it: the bill's wallet pubkey and the recipient's key.
-func privateDispatchFixture(t *testing.T, svc *tests.TestService) (walletPubkey, recipientPriv, recipientPub string) {
+func privateDispatchFixture(t *testing.T, svc *tests.TestService) (walletPubkey, recipientPriv, recipientPub, connPriv string) {
 	t.Helper()
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
@@ -44,6 +44,20 @@ func privateDispatchFixture(t *testing.T, svc *tests.TestService) (walletPubkey,
 	require.NoError(t, err)
 	require.NoError(t, svc.DB.Model(&wallet).Update("wallet_pubkey", walletPubkey).Error)
 
+	// app_pubkey must be the DETERMINISTIC pairing pubkey, exactly as
+	// cashwallet.Create sets it — it is the pubkey of the connection secret inside
+	// the bill's token, and therefore what a kind-23193 bill proof is checked
+	// against.
+	//
+	// This fixture used to leave a random value here. Harmless while nothing checked
+	// it; now it would make every bill proof fail, and the failure is an omission, so
+	// every test would have gone quiet for a reason unrelated to what it asserts.
+	connPriv, err = svc.Keys.GetCashPairingKey(wallet.ID)
+	require.NoError(t, err)
+	connPub, err := nostr.GetPublicKey(connPriv)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&wallet).Update("app_pubkey", connPub).Error)
+
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: recipientPub, AmountMloki: 1000},
 	}))
@@ -60,23 +74,35 @@ func privateDispatchFixture(t *testing.T, svc *tests.TestService) (walletPubkey,
 	} {
 		require.NoError(t, svc.DB.Create(&db.AppPermission{AppId: wallet.ID, Scope: scope}).Error)
 	}
-	return walletPubkey, recipientPriv, recipientPub
+	return walletPubkey, recipientPriv, recipientPub, connPriv
 }
 
-// buildItem assembles a real item with a real proof, the way the SDK does.
-func buildItem(t *testing.T, id, target, method, params, signerPriv, hubXOnly, nonce string, notAfter int64) transport.Item {
+// buildItem assembles a real item with both real proofs, the way the SDK does:
+// a kind-23192 slice proof signed by the recipient, and a kind-23193 bill proof
+// signed by the bill's connection key.
+//
+// Both are needed for the item to be served at all, and they are signed by
+// DIFFERENT keys on purpose — that separation is the whole point of having two.
+func buildItem(t *testing.T, id, target, method, params, signerPriv, connPriv, hubXOnly, nonce string, notAfter int64) transport.Item {
 	t.Helper()
 	hash, err := transport.CanonicalParamsHash(json.RawMessage(params))
 	require.NoError(t, err)
-	proof, err := transport.BuildItemProof(signerPriv, transport.ProofBinding{
+	binding := transport.ProofBinding{
 		Target: target, HubXOnly: hubXOnly, Method: method,
 		ParamsHash: hash, Nonce: nonce, NotAfter: notAfter,
-	})
+	}
+	proof, err := transport.BuildItemProof(signerPriv, binding)
 	require.NoError(t, err)
-	return transport.Item{
+	item := transport.Item{
 		ID: id, Target: target, Method: method,
 		Params: json.RawMessage(params), Proof: proof,
 	}
+	if connPriv != "" {
+		billProof, err := transport.BuildBillProof(connPriv, binding)
+		require.NoError(t, err)
+		item.BillProof = billProof
+	}
+	return item
 }
 
 // TestServePrivateItem_ServesAnAuthorizedItem is the happy path: a real bill, a real proof
@@ -87,7 +113,7 @@ func TestServePrivateItem_ServesAnAuthorizedItem(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -95,7 +121,7 @@ func TestServePrivateItem_ServesAnAuthorizedItem(t *testing.T) {
 	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
 
 	item := buildItem(t, "s1", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-		recipientPriv, hubXOnly, nonce, notAfter)
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 
 	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	require.True(t, served, "an authorized item on a bill this hub holds must be served")
@@ -119,7 +145,7 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -137,39 +163,56 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 		{
 			name: "a bill this hub does not hold",
 			item: buildItem(t, "x1", unknownTarget, constants.NIP47MethodCashStatus, `{}`,
-				recipientPriv, hubXOnly, nonce, notAfter),
+				recipientPriv, connPriv, hubXOnly, nonce, notAfter),
 			why: "answering would confirm which bills exist",
 		},
 		{
-			name: "a proof signed by someone who holds no slice",
+			name: "a bill proof signed by the wrong key",
 			item: buildItem(t, "x2", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-				strangerPriv, hubXOnly, nonce, notAfter),
-			why: "a verified proof is not the same as being a recipient",
+				recipientPriv, strangerPriv, hubXOnly, nonce, notAfter),
+			why: "possession is what gates every answer; without it nothing may be confirmed",
+		},
+		{
+			name: "no bill proof at all",
+			item: func() transport.Item {
+				it := buildItem(t, "x7", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
+					recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+				it.BillProof = nil
+				return it
+			}(),
+			why: "a missing bill proof must not fall through to an answer",
+		},
+		{
+			name: "a slice proof presented as the bill proof",
+			item: func() transport.Item {
+				it := buildItem(t, "x8", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
+					recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+				// Same six bindings, different kind. If the kind were not checked,
+				// anyone able to sign anything could claim possession.
+				it.BillProof = it.Proof
+				return it
+			}(),
+			why: "the kind is the only thing separating a slice proof from a bill proof",
 		},
 		{
 			name: "a proof bound to a different hub",
 			item: buildItem(t, "x3", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-				recipientPriv, strings.Repeat("99", 32), nonce, notAfter),
+				recipientPriv, connPriv, strings.Repeat("99", 32), nonce, notAfter),
 			why: "an item must not be replayable at another hub",
 		},
 		{
 			name: "a proof bound to a different envelope",
 			item: buildItem(t, "x4", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-				recipientPriv, hubXOnly, strings.Repeat("77", 32), notAfter),
+				recipientPriv, connPriv, hubXOnly, strings.Repeat("77", 32), notAfter),
 			why: "a banked proof must not be replayable in a later envelope",
 		},
 		{
 			name: "a method this transport does not serve",
 			item: buildItem(t, "x5", walletPubkey, constants.NIP47MethodMintCash, `{}`,
-				recipientPriv, hubXOnly, nonce, notAfter),
+				recipientPriv, connPriv, hubXOnly, nonce, notAfter),
 			why: "the allowlist itself must not be discoverable",
 		},
-		{
-			name: "no proof on an identity-bound bill",
-			item: transport.Item{ID: "x6", Target: walletPubkey,
-				Method: constants.NIP47MethodCashStatus, Params: json.RawMessage(`{}`)},
-			why: "a bill cannot dodge its proof by looking bearer",
-		},
+
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, tc.item, binding)
@@ -190,7 +233,7 @@ func TestServePrivateItem_RecordsOneRequestEventPerItem(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -199,7 +242,7 @@ func TestServePrivateItem_RecordsOneRequestEventPerItem(t *testing.T) {
 
 	for _, id := range []string{"a", "b", "c"} {
 		item := buildItem(t, id, walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-			recipientPriv, hubXOnly, nonce, notAfter)
+			recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 		_, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 		require.True(t, served, "item %s", id)
 	}
@@ -232,7 +275,7 @@ func TestServePrivateItem_ARefusalIsAnAnswerNotAnOmission(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
 
 	// Revoke the scope the bill needs, leaving everything else intact: this hub still
 	// holds the bill and can identify the caller — it simply will not serve the method.
@@ -246,7 +289,7 @@ func TestServePrivateItem_ARefusalIsAnAnswerNotAnOmission(t *testing.T) {
 	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
 
 	item := buildItem(t, "r1", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-		recipientPriv, hubXOnly, nonce, notAfter)
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 
 	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	require.True(t, served, "a refusal must be SERVED, so the caller learns the hub declined")
@@ -281,7 +324,7 @@ func TestServePrivateItem_BadScopeIsAnErrorNotAnOmission(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, _ := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -291,7 +334,7 @@ func TestServePrivateItem_BadScopeIsAnErrorNotAnOmission(t *testing.T) {
 	// Built raw on purpose: nipcash.StatusItem refuses this client-side, so the only
 	// way a hub ever sees it is from a client that did not check.
 	item := buildItem(t, "s1", walletPubkey, constants.NIP47MethodCashStatus,
-		`{"scope":"everything"}`, recipientPriv, hubXOnly, nonce, notAfter)
+		`{"scope":"everything"}`, recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 
 	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	require.True(t, served, "a bad scope must be SERVED with an error: the caller already proved the hub holds this bill")
@@ -313,7 +356,7 @@ func TestServePrivateItem_UnscopedStatusReturnsOnlyTheCallersRow(t *testing.T) {
 	defer svc.Remove()
 
 	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-	walletPubkey, recipientPriv, recipientPub := privateDispatchFixture(t, svc)
+	walletPubkey, recipientPriv, recipientPub, connPriv := privateDispatchFixture(t, svc)
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -321,7 +364,7 @@ func TestServePrivateItem_UnscopedStatusReturnsOnlyTheCallersRow(t *testing.T) {
 	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
 
 	item := buildItem(t, "u1", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
-		recipientPriv, hubXOnly, nonce, notAfter)
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 
 	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	require.True(t, served)
