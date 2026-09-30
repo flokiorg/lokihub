@@ -208,11 +208,19 @@ func TestAllScopes_IncludesCashClaimFunds(t *testing.T) {
 	assert.Contains(t, AllScopes(), constants.CASH_REDEEM_SCOPE)
 }
 
-// GetPermittedMethods must include cash_redeem/cash_status for a
-// cash_wallet regardless of what the (mock) LN client's own
-// GetSupportedNIP47Methods() advertises — these are app-level abstractions
-// over pay_invoice, not real LN-backend methods, mirroring how
-// mint_cash/create_circle_wallet are already bypassed here.
+// GetPermittedMethods MUST NOT advertise the bill methods, and the scope that grants
+// them MUST still grant them.
+//
+// Inverted from an earlier version that asserted cash_redeem/cash_status WERE advertised.
+// That was right while they were served on kind 23194; it is wrong now. get_info describes
+// one kind-23194 connection, and these four are served over the private transport only
+// (NIP-CASH §It is the ONLY transport for the bill methods) — so advertising them promised
+// a caller something that transport refuses, and every client following get_info was sent
+// down a path that cannot work.
+//
+// Both halves are asserted together on purpose, because the tempting fix — dropping the
+// scope — would have refused every real call while making this test pass. Advertising and
+// authorizing are different questions, and only the first changed.
 func TestGetPermittedMethods_CashClaimFundsScope(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -229,9 +237,83 @@ func TestGetPermittedMethods_CashClaimFundsScope(t *testing.T) {
 
 	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
 	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
-	assert.Contains(t, result, constants.NIP47MethodCashRedeem)
-	assert.Contains(t, result, constants.NIP47MethodCashStatus)
+
+	// Not advertised: this connection cannot serve them.
+	assert.NotContains(t, result, constants.NIP47MethodCashRedeem,
+		"a bill must not advertise a method its own transport refuses")
+	assert.NotContains(t, result, constants.NIP47MethodCashStatus,
+		"a bill must not advertise a method its own transport refuses")
+	// And never granted by this scope anyway.
 	assert.NotContains(t, result, models.PAY_INVOICE_METHOD)
+
+	// Still GRANTED, which is what the private transport checks per item. Read from the
+	// scope mapping rather than from the advertised list, since those are now different
+	// questions.
+	granted := scopeToRequestMethods(constants.CASH_REDEEM_SCOPE)
+	assert.Contains(t, granted, constants.NIP47MethodCashRedeem,
+		"the scope must still grant cash_redeem, or every real call is refused")
+	assert.Contains(t, granted, constants.NIP47MethodCashStatus)
+
+	// And DISCOVERABLE: removing them from `methods` left no wire-level signal that they
+	// exist, so they are reported separately. This is the third leg — not advertised as
+	// callable here, still granted, and still findable.
+	private := permissionsSvc.GetPrivateMethods(app)
+	assert.Contains(t, private, constants.NIP47MethodCashRedeem)
+	assert.Contains(t, private, constants.NIP47MethodCashStatus)
+	for _, m := range private {
+		assert.NotContains(t, result, m,
+			"a method cannot be both advertised as callable here and reported as private")
+	}
+}
+
+// TestGetPrivateMethods_ReflectsGrantsNotAFixedList: the field is derived from what this
+// app was actually granted, never a hardcoded set.
+//
+// The distinction matters because a fixed list would tell a client to attempt a method this
+// particular bill was never given — which the hub would then refuse, putting the client back
+// in the position the field exists to remove.
+func TestGetPrivateMethods_ReflectsGrantsNotAFixedList(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+
+	// No cash scopes at all: nothing private to report.
+	assert.Empty(t, permissionsSvc.GetPrivateMethods(app),
+		"an app with no cash scopes must report no private methods")
+
+	// One scope granted: only its own methods appear, not the whole bill-method set.
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID, App: *app, Scope: constants.CASH_TRANSFER_SCOPE,
+	}).Error)
+	private := permissionsSvc.GetPrivateMethods(app)
+	assert.Contains(t, private, constants.NIP47MethodCashTransfer)
+	assert.NotContains(t, private, constants.NIP47MethodCashConsolidate,
+		"a scope this app was never granted must not be reported as available")
+}
+
+// TestGetPermittedMethods_BillStillAdvertisesWhatItCanServe is the other side of the
+// filter: dropping the private-only four must not take the rest with them.
+//
+// A bill still answers get_balance and get_info on kind 23194, and a client needs to know
+// that. A filter that removed too much would leave a bill looking like it supports nothing.
+func TestGetPermittedMethods_BillStillAdvertisesWhatItCanServe(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Create(&db.AppPermission{
+		AppId: app.ID, App: *app, Scope: constants.GET_BALANCE_SCOPE,
+	}).Error)
+
+	result := NewPermissionsService(svc.DB, svc.EventPublisher).GetPermittedMethods(app, svc.LNClient)
+	assert.Contains(t, result, models.GET_BALANCE_METHOD,
+		"the private-only filter must not drop methods this transport does serve")
 }
 
 func TestGetPermittedMethods_CashHubScope(t *testing.T) {

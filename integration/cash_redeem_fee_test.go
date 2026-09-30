@@ -68,7 +68,7 @@ func TestCashRedeemFee_SameNodeExemptAndCashStatusQuote(t *testing.T) {
 		Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnect(t, created.PairingURI)
+	shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
 
 	t.Run("CashStatus_QuotesWorstCaseFee", func(t *testing.T) {
 		var recipients CashStatusResult
@@ -156,7 +156,7 @@ func TestCashRedeemFee_QuotedNetAmount_RejectedForSameNodeRedemption(t *testing.
 		Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnect(t, created.PairingURI)
+	shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
 
 	netAmount := uint64(happyPathAmountMloki) - uint64(happyPathAmountMloki)*redeemFeePpm/1_000_000
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, netAmount, "integration redeem-fee mismatch test")

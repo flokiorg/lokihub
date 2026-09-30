@@ -151,7 +151,7 @@ func TestCashHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *te
 		Recipients: onePubkeyRecipient(beneficiaryPub, childAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	child := mustConnect(t, created.PairingURI)
+	child := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
 
 	waitPastExpiry()
 

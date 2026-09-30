@@ -187,6 +187,17 @@ type RecipientStatus struct {
 	ExpiresAt           *int64 `json:"expires_at,omitempty"`
 }
 
+// CashStatusParams is cash_status's request body. `scope` selects how much of the roster
+// comes back (NIP-CASH §Scoping the Roster): absent means "mine" — the calling
+// recipient's own row — and "all" asks for the shared roster.
+//
+// Spelled out here because the default changed what an empty request means. A test that
+// wants every recipient's row MUST now ask for it; sending `{}` and expecting the full
+// roster reads as a passing assertion about one row.
+type CashStatusParams struct {
+	Scope string `json:"scope,omitempty"`
+}
+
 type CashStatusResult struct {
 	Recipients []RecipientStatus `json:"recipients"`
 	// Error/RetainedUntil carry the spent-bill tombstone instead of a roster:

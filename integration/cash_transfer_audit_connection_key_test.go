@@ -36,7 +36,11 @@ func connKeyTransferProofTags(connectionKey, attestationID string) nostr.Tags {
 // under hubClient and returns everything a caller needs to later transfer or
 // redeem it: the shared connection, the wallet pubkey, the connection_key, and
 // the claimant keypair the IA attests.
-func createConnKeyCashWallet(t *testing.T, hubClient *nwcclient.Client, iaPub, connectionKey string, amountMloki uint64) (shared *nwcclient.Client, walletPubkey, claimantPriv, claimantPub string) {
+// Returns a *billConn, so the four bill methods travel over the private transport while
+// everything else stays on kind 23194. The claimant signs each item's slice proof: the
+// transport authorizes per item, so the identity that was implicit in this shared
+// connection now has to be named.
+func createConnKeyCashWallet(t *testing.T, hubClient *nwcclient.Client, iaPub, connectionKey string, amountMloki uint64) (shared *billConn, walletPubkey, claimantPriv, claimantPub string) {
 	t.Helper()
 	claimantPriv = newTestPrivkey(t)
 	claimantPub = mustPubkey(t, claimantPriv)
@@ -47,7 +51,7 @@ func createConnKeyCashWallet(t *testing.T, hubClient *nwcclient.Client, iaPub, c
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
-	return mustConnect(t, created.PairingURI), created.WalletPubkey, claimantPriv, claimantPub
+	return mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv), created.WalletPubkey, claimantPriv, claimantPub
 }
 
 // TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath proves the
@@ -97,8 +101,13 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	// nothing (its value moved into the carved + remainder wallets) and the hub
 	// deleted it — no double-spend, and nothing left to answer.
 	requireCashWalletDrainedAway(t, admin, hubAppID, walletPubkey, func(ctx context.Context) error {
-		var bal GetBalanceResult
-		return shared.Call(ctx, "get_balance", struct{}{}, &bal)
+		// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
+		// every recipient's total, handed out with no proof). The distinction matters to what
+		// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
+		// definite answer, which is NOT the silence a destroyed bill produces and would make
+		// this pass for the wrong reason.
+		var st CashStatusResult
+		return shared.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
 	})
 
 	// The remainder is redeemable under the SAME connection_key (fresh
@@ -111,7 +120,7 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	remTok, err := lokicash.Decode(remDec)
 	require.NoError(t, err)
-	remClient := mustConnect(t, nwcURIFromLokicash(remTok))
+	remClient := mustConnectBill(t, nwcURIFromLokicash(remTok), remDec, newPriv)
 	remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit connkey remainder redeem")
 	remAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
 	remProof := buildClaimProofEvent(t, claimantPriv, res.RemainderWalletPubkey, remInvoice.PaymentHash,
@@ -134,7 +143,7 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	tok, err := lokicash.Decode(dec)
 	require.NoError(t, err)
-	newClient := mustConnect(t, nwcURIFromLokicash(tok))
+	newClient := mustConnectBill(t, nwcURIFromLokicash(tok), dec, newPriv)
 	newInvoice := mintInvoiceFromSimpleWallet(t, cfg, splitAmount, "audit connkey carveoff redeem")
 	newProof := buildClaimProofEvent(t, newPriv, res.NewWalletPubkey, newInvoice.PaymentHash, nil, time.Now())
 	var newClaim ClaimFundsResult
@@ -210,9 +219,9 @@ func TestAudit_CashTransferConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	// Funds untouched: the slice's whole value is still on the source wallet.
-	var bal GetBalanceResult
-	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, fullAmount, bal.Balance, "a revoked-IA transfer must not move any funds")
+	var bal CashStatusResult
+	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &bal))
+	require.EqualValues(t, fullAmount, unclaimedMillis(bal), "a revoked-IA transfer must not move any funds")
 
 	// Re-register the IA so the ephemeral cleanup can reclaim the wallet's funds
 	// on delete (a connection_key wallet whose IA is untrusted is still
@@ -258,9 +267,9 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 
 	// Nothing moved.
-	var bal GetBalanceResult
-	require.NoError(t, shared.Call(ctxT(t), "get_balance", struct{}{}, &bal))
-	require.EqualValues(t, fullAmount, bal.Balance, "a rejected untrusted-target split must not move any funds")
+	var bal CashStatusResult
+	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &bal))
+	require.EqualValues(t, fullAmount, unclaimedMillis(bal), "a rejected untrusted-target split must not move any funds")
 }
 
 // TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected is

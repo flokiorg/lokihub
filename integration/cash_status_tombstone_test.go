@@ -89,7 +89,7 @@ func strangerURI(t *testing.T, pairingURI string) string {
 
 // mintAndDrainOneBill mints a single-recipient bill on hubClient, redeems it in
 // full, and returns a client still holding its (now destroyed) connection.
-func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client) (*nwcclient.Client, string) {
+func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client) (billCaller, string) {
 	t.Helper()
 
 	beneficiaryPriv := newTestPrivkey(t)
@@ -105,7 +105,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 	decoded, err := lokicash.Decode(created.CashToken)
 	require.NoError(t, err)
 
-	holder := mustConnect(t, created.PairingURI)
+	holder := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
 
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration tombstone drain")
 	proof := buildClaimProofEvent(t, beneficiaryPriv, decoded.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -127,7 +127,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 // Polled, not asserted once, for the same reason requireSpentBillSilent polls:
 // the hub answers the request that empties a bill BEFORE destroying it, so for
 // a moment afterwards the bill is still there and still returns its roster.
-func awaitTombstone(t *testing.T, holder *nwcclient.Client) CashStatusResult {
+func awaitTombstone(t *testing.T, holder billCaller) CashStatusResult {
 	t.Helper()
 
 	deadline := time.Now().Add(drainedWalletDeleteWindow)

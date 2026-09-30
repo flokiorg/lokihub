@@ -389,6 +389,62 @@ func billProofHolder(signer, wantPubkey string) bool {
 	return wantPubkey != "" && signer == wantPubkey
 }
 
+
+// attestedConnectionKey resolves a connection_key recipient from an IA attestation in
+// cash_status's own params, returning the identity_value to scope the answer to.
+//
+// A connection_key claim's identity_value is hex(sha256(platform + ":" + externalID)),
+// never a pubkey, so the signer of an item can never equal it and the transport gate
+// has nothing to compare. cash_redeem solves this by requiring an attestation that
+// binds a claimant's keypair to that identity; this is the same evidence, checked the
+// same way, for a read instead of a spend.
+//
+// The attestation alone is sufficient to identify WHICH claim: rather than trusting a
+// caller-supplied identity_value, every connection_key claim on this bill is tried
+// against it, each with its OWN registered IAPubkey. A match means that IA has
+// attested this signer for that identity, which is exactly the fact needed. Trusting a
+// caller-named identity_value instead would let a caller point at someone else's row
+// and only then discover the attestation does not cover it — the same fail-open shape
+// this whole gate exists to avoid.
+//
+// Absent or unverifiable, it returns false and the caller falls through to the ordinary
+// decidable check, which refuses. That direction matters: a missing attestation must
+// never widen anything.
+func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.CashWalletClaim, signer string) (string, bool) {
+	var params struct {
+		AttestationEvent string `json:"attestation_event"`
+	}
+	if len(item.Params) == 0 || json.Unmarshal(item.Params, &params) != nil {
+		return "", false
+	}
+	if params.AttestationEvent == "" {
+		return "", false
+	}
+	var attestation nostr.Event
+	if err := json.Unmarshal([]byte(params.AttestationEvent), &attestation); err != nil {
+		return "", false
+	}
+	for _, claim := range claims {
+		if claim.IdentityType != db.CashIdentityConnectionKey || claim.IAPubkey == "" {
+			continue
+		}
+		if err := controllers.VerifyClaimAttestationEvent(&attestation, claim.IAPubkey, signer, claim.IdentityValue); err != nil {
+			continue
+		}
+		// Live trust, not trust-at-mint: an IA whose registration has since been
+		// revoked must not still vouch for a reader, exactly as it must not still
+		// vouch for a redeemer.
+		if svc.identityAuthorityMgr != nil {
+			trusted, err := svc.identityAuthorityMgr.IsTrusted(claim.IAPubkey)
+			if err != nil || !trusted {
+				continue
+			}
+		}
+		return claim.IdentityValue, true
+	}
+	return "", false
+}
+
 // privateItemIsAuthorized checks one item's authorization against the bill it names, and
 // reports WHO it authorized.
 //
@@ -510,13 +566,20 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	// slice are real: a recipient removed by DeleteCashClaim, a recipient who transferred her
 	// slice away in place, and anyone the widely-held connection was ever shown to.
 	//
-	// So the deferral is now scoped to the methods it was reasoned about. cash_status falls
-	// through to the decidable check below, which means a connection_key recipient cannot
-	// read their own row over cash_status — their identity_value is a hash, and cash_status
-	// carries no attestation to bind it to a signer. That is a real functional loss, taken
-	// deliberately: the alternative is handing every roster to every token holder. Restoring
-	// it properly needs cash_status to accept an IA attestation the way cash_redeem does,
-	// which is a protocol addition rather than a gate fix.
+	// So the deferral is scoped to the methods it was reasoned about. cash_status instead
+	// resolves a connection_key caller HERE, from an IA attestation carried in its own
+	// params — the same evidence cash_redeem already requires, for the same reason.
+	//
+	// Without it a connection_key recipient could not read their own row at all: their
+	// identity_value is a hash, so the signer can never equal it, and there was nothing
+	// else to match on. Refusing was the safe half of the fix and cost that mode its only
+	// read. The attestation restores it without reopening anything, because it proves the
+	// binding the gate could not otherwise see.
+	if !decidableHere && item.Method == constants.NIP47MethodCashStatus {
+		if identity, ok := svc.attestedConnectionKey(item, claims, signer); ok {
+			return identity, billIsCashMode, true
+		}
+	}
 	if !decidableHere && item.Method != constants.NIP47MethodCashStatus {
 		return signer, billIsCashMode, true
 	}

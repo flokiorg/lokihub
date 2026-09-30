@@ -60,11 +60,11 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 	decoded, err := lokicash.Decode(resp.CashToken)
 	require.NoError(t, err)
 
-	child := mustConnect(t, resp.PairingURI)
+	child := mustConnectBill(t, resp.PairingURI, resp.CashToken, beneficiaryPriv)
 
-	var balance GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
-	require.EqualValues(t, happyPathAmountMloki, balance.Balance,
+	var balance CashStatusResult
+	require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &balance))
+	require.EqualValues(t, happyPathAmountMloki, unclaimedMillis(balance),
 		"admin-minted wallet must be pre-funded with exactly the requested amount, same as an NWC-minted one")
 
 	// The real proof: an actual cash_redeem, moving real money, succeeds
@@ -131,7 +131,19 @@ func TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode(t *testing.T
 // TestAdminCreateCashWallet_NoMintSignature_NoProvenance is the control:
 // omitting mint_signature (the default) produces a token with no
 // provenance, same as the NWC path's own default.
-func TestAdminCreateCashWallet_NoMintSignature_NoProvenance(t *testing.T) {
+// Renamed and INVERTED from TestAdminCreateCashWallet_NoMintSignature_NoProvenance, which
+// asserted an admin-minted bill carried no provenance when the caller did not ask for it.
+//
+// That premise is gone: a mint signature is now REQUIRED (NIP-CASH §Mint Provenance), there
+// is no opt-in any more, and a Hub that cannot obtain one MUST fail the mint rather than
+// issue an unsigned token. The reason is structural — the signature is the only thing a
+// token carries that identifies its minting Hub, and that identity is what a private-transport
+// announcement is verified against. An unsigned bill could not reach the only transport that
+// serves bill methods, so it would be unspendable.
+//
+// The admin path matters here specifically because it is a SECOND way to mint, and an
+// exemption on it would produce exactly those unspendable bills.
+func TestAdminCreateCashWallet_AlwaysCarriesProvenance(t *testing.T) {
 	cfg := requireConfig(t)
 	admin, ok := newAdminClient(cfg)
 	if !ok {
@@ -147,14 +159,16 @@ func TestAdminCreateCashWallet_NoMintSignature_NoProvenance(t *testing.T) {
 			{IdentityType: "pubkey", IdentityValue: beneficiaryPub, AmountMloki: happyPathAmountMloki},
 		},
 		ExpirySecs: happyPathExpirySecs,
-		// MintSignature omitted (default false)
+		// Nothing requested: signing is not opt-in any more.
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = admin.deleteCashWallet(hubAppID, resp.AppID) })
 
 	decoded, err := lokicash.Decode(resp.CashToken)
 	require.NoError(t, err)
-	assert.Nil(t, decoded.MintSignature)
-	_, verified := lokicash.VerifyMint(decoded)
-	assert.False(t, verified)
+	require.NotNil(t, decoded.MintSignature,
+		"an admin-minted bill must carry provenance; without it the bill cannot reach the private transport and is unspendable")
+	minter, verified := lokicash.VerifyMint(decoded)
+	require.True(t, verified, "the provenance must verify, not merely be present")
+	require.NotEmpty(t, minter, "a verified signature must recover its minting node")
 }

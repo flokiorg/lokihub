@@ -1095,7 +1095,7 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ev := buildWithTags(t, tc.tags)
-			err := verifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
+			err := VerifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
 			if tc.wantError == "" {
 				require.NoError(t, err)
 			} else {

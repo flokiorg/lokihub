@@ -64,7 +64,9 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 // separately to sign a cash_redeem proof (distinct from the connection's own
 // cash credential — see nip47/controllers/cash_redeem_controller.go).
 type cashChildFixture struct {
-	Client             *nwcclient.Client
+	// billCaller, so this fixture works whichever transport carries the call: the four bill
+	// methods go over the private transport, everything else stays on kind 23194.
+	Client             billCaller
 	WalletPubkey       string
 	BeneficiaryPrivkey string
 	BeneficiaryPubkey  string
@@ -88,7 +90,9 @@ func mintCashChild(t *testing.T, hub CashHubConfig, amountMloki uint64) cashChil
 	}, &result))
 
 	return cashChildFixture{
-		Client:             mustConnect(t, result.PairingURI),
+		// The beneficiary signs each item's slice proof: the private transport authorizes
+		// per item, so the identity that was implicit in this connection is now named.
+		Client:             mustConnectBill(t, result.PairingURI, result.CashToken, beneficiaryPriv),
 		WalletPubkey:       result.WalletPubkey,
 		BeneficiaryPrivkey: beneficiaryPriv,
 		BeneficiaryPubkey:  beneficiaryPub,

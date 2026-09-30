@@ -51,8 +51,8 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 		proofJSON := eventJSON(t, proof)
 		amt := splitAmount
 
-		clientA := mustConnect(t, created.PairingURI)
-		clientB := mustConnect(t, created.PairingURI)
+		clientA := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		clientB := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 		var resA, resB CashTransferResult
 		var errA, errB error
@@ -93,10 +93,15 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 		// source wallet was left holding nothing (its value moved into the
 		// winner's carved + remainder wallets) and the hub deleted it. A
 		// replayed duplicate proof carved off nothing more.
-		conn := mustConnect(t, created.PairingURI)
+		conn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-			var bal GetBalanceResult
-			return conn.Call(ctx, "get_balance", struct{}{}, &bal)
+			// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
+			// every recipient's total, handed out with no proof). The distinction matters to what
+			// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
+			// definite answer, which is NOT the silence a destroyed bill produces and would make
+			// this pass for the wrong reason.
+			var st CashStatusResult
+			return conn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
 		})
 	}
 }
@@ -119,7 +124,7 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnect(t, created.PairingURI)
+	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 	newPub := mustPubkey(t, newTestPrivkey(t))
 	const splitAmount = uint64(25_000)
@@ -186,7 +191,7 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnect(t, created.PairingURI)
+	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
 	// Fire partial splits until the limiter trips (or a generous ceiling — the
 	// default budget is 20/hour, so 40 attempts is ample headroom).
@@ -224,7 +229,7 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 		Recipients: onePubkeyRecipient(otherPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &other))
-	otherShared := mustConnect(t, other.PairingURI)
+	otherShared := mustConnectBill(t, other.PairingURI, other.CashToken, otherPriv)
 	otherTargetPub := mustPubkey(t, newTestPrivkey(t))
 	amt := uint64(happyPathAmountMloki / 2)
 	otherProof := buildTransferProofEvent(t, otherPriv, other.WalletPubkey, "pubkey", otherTargetPub, "", amt, nil, time.Now())

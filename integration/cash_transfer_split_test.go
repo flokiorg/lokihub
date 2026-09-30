@@ -71,7 +71,7 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.PairingURI, created.CashToken, victimPriv)
 
 		// The attacker redeems their own slice first. It's now claimed, but
 		// the attacker still holds this shared connection and can decrypt
@@ -142,7 +142,9 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 		// The decrypted token is a genuinely live, spendable connection: the
 		// new wallet holds exactly the victim's slice amount, redeemable with
 		// the cash secret the victim generated locally.
-		newWalletClient := mustConnect(t, nwcURIFromLokicash(newWalletToken))
+		// Bearer: the spun-off bill is cash-mode, so its secret in params IS the
+		// authorization and the item carries no slice proof (§Bearer Items).
+		newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, "")
 		newWalletInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet redeem")
 		var newWalletClaim ClaimFundsResult
 		require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

@@ -104,7 +104,7 @@ func TestNmilatEquivalence_Attestation_StructuralChecks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ev := buildWithTags(t, tc.tags)
 
-			lokihubErr := verifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
+			lokihubErr := VerifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
 			if tc.lokihubWantErr == "" {
 				require.NoError(t, lokihubErr)
 			} else {
@@ -157,7 +157,7 @@ func TestVerifyClaimAttestationEvent_IDIntegrityHardening(t *testing.T) {
 	require.NoError(t, ev.Sign(iaPrivkey))
 
 	// Sanity: the untampered event is accepted.
-	require.NoError(t, verifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey))
+	require.NoError(t, VerifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey))
 
 	// Tamper the ID only - content, tags, and sig are untouched, so
 	// CheckSignature (which recomputes the hash and ignores the stored ID)
@@ -170,7 +170,7 @@ func TestVerifyClaimAttestationEvent_IDIntegrityHardening(t *testing.T) {
 	require.NoError(t, sigErr)
 	require.True(t, valid, "go-nostr CheckSignature ignores the stored ID field entirely - this is exactly the gap the ID-integrity hardening closes")
 
-	err := verifyClaimAttestationEvent(&tampered, iaPubkey, claimantPubkey, connectionKey)
+	err := VerifyClaimAttestationEvent(&tampered, iaPubkey, claimantPubkey, connectionKey)
 	require.Error(t, err, "a tampered-ID attestation must now be rejected")
 	assert.Contains(t, err.Error(), "event ID mismatch")
 }

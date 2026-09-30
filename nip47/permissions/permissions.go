@@ -24,6 +24,9 @@ type permissionsService struct {
 type PermissionsService interface {
 	HasPermission(app *db.App, requestMethod string) (result bool, code string, message string)
 	GetPermittedMethods(app *db.App, lnClient lnclient.LNClient) []string
+	// GetPrivateMethods is GetPermittedMethods' complement: the granted methods this
+	// connection does NOT serve, because they travel over the private transport.
+	GetPrivateMethods(app *db.App) []string
 	PermitsNotifications(app *db.App) bool
 }
 
@@ -87,17 +90,34 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 		}
 	}
 
+	// The four BILL methods are dropped from the advertised set, and the scopes that
+	// grant them are deliberately left alone.
+	//
+	// get_info answers "what may I call on THIS connection", and a connection is kind
+	// 23194. These four are served over the private transport only (NIP-CASH §It is the
+	// ONLY transport for the bill methods), so advertising them here promised a caller
+	// something this transport refuses — every client following get_info was sent down a
+	// path that cannot work.
+	//
+	// Nothing is lost by dropping them: the bill-method set is FIXED by the spec, not
+	// discovered, so a client that has a bill already knows what it may call. Discovery
+	// of the transport itself is the kind-11190 announcement's job.
+	//
+	// Authorization is untouched. The scopes still exist and still gate these methods on
+	// the private transport (RequestMethodToScope + HasPermission per item) — this filter
+	// changes what a bill ADVERTISES, never what it permits. Removing the scopes instead
+	// would have refused every real call.
+	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
+		return !privateOnlyMethods[requestMethod]
+	})
+
 	// only return methods supported by the lnClient
 	lnClientSupportedMethods := lnClient.GetSupportedNIP47Methods()
 	requestMethods = utils.Filter(requestMethods, func(requestMethod string) bool {
 		// TODO: better way to exclude methods unrelated to the lnclient
 		if requestMethod == models.CREATE_CONNECTION_METHOD ||
 			requestMethod == constants.NIP47MethodMintCash ||
-			requestMethod == constants.NIP47MethodCreateCircleWallet ||
-			requestMethod == constants.NIP47MethodCashRedeem ||
-			requestMethod == constants.NIP47MethodCashTransfer ||
-			requestMethod == constants.NIP47MethodCashConsolidate ||
-			requestMethod == constants.NIP47MethodCashStatus {
+			requestMethod == constants.NIP47MethodCreateCircleWallet {
 			return true
 		}
 
@@ -105,6 +125,46 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 	})
 
 	return requestMethods
+}
+
+// privateOnlyMethods are served over the private transport only, so get_info — which
+// describes one kind-23194 connection — MUST NOT advertise them (NIP-CASH §Scope Surface).
+//
+// Exactly the set in NIP-CASH §Which Methods a Hub Serves, minus create_circle_wallet,
+// which is servable on either transport and so remains advertisable here.
+// GetPrivateMethods returns the private-transport-only methods this app's scopes actually
+// grant, for get_info's `private_methods` field.
+//
+// Derived from the app's GRANTS rather than returned as a fixed list, so the field cannot
+// claim a method this particular bill was never given. It is the same intersection
+// GetPermittedMethods filters OUT of the advertised set — the two are deliberately
+// complementary halves of one answer.
+//
+// Informational. The hub still checks these scopes per item on the private transport; this
+// only tells a client where to look.
+func (svc *permissionsService) GetPrivateMethods(app *db.App) []string {
+	appPermissions := []db.AppPermission{}
+	svc.db.Where("app_id = ?", app.ID).Find(&appPermissions)
+	scopes := make([]string, 0, len(appPermissions))
+	for _, p := range appPermissions {
+		scopes = append(scopes, p.Scope)
+	}
+
+	var out []string
+	for _, method := range scopesToRequestMethods(scopes) {
+		if privateOnlyMethods[method] {
+			out = append(out, method)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+var privateOnlyMethods = map[string]bool{
+	constants.NIP47MethodCashStatus:      true,
+	constants.NIP47MethodCashRedeem:      true,
+	constants.NIP47MethodCashTransfer:    true,
+	constants.NIP47MethodCashConsolidate: true,
 }
 
 func (svc *permissionsService) PermitsNotifications(app *db.App) bool {

@@ -22,6 +22,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
@@ -110,7 +111,7 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 }
 
 // buildIAAttestationEvent builds and signs a kind-35522 IA attestation,
-// carrying the platform/evidence tags verifyClaimAttestationEvent requires
+// carrying the platform/evidence tags VerifyClaimAttestationEvent requires
 // (matching a real nipIC.NewAttestation-produced event's shape) alongside the
 // usual d/p/expiration bindings. platform/evidence content is fixed and not
 // test-parameterized since no test here needs to vary it.
@@ -345,8 +346,13 @@ func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uin
 
 	err := call(ctx)
 	require.Error(t, err, "a deleted cash wallet must not answer")
-	require.ErrorIs(t, err, context.DeadlineExceeded,
-		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey")
+	// Two shapes of silence, same meaning. On kind 23194 it is a timeout; on the private
+	// transport the hub answers the ENVELOPE and says nothing about the item, which reaches
+	// a caller as an omission. Both are information-free by design — indistinguishable from
+	// a pubkey this hub never served — which is exactly the property being asserted.
+	require.True(t,
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted),
+		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey (got %v)", err)
 }
 
 // requireSpentBillSilent asserts that a bill which has just been spent in full
@@ -374,7 +380,13 @@ func requireSpentBillSilent(t *testing.T, call func(ctx context.Context) error) 
 		err := call(ctx)
 		cancel()
 
-		if errors.Is(err, context.DeadlineExceeded) {
+		// Two shapes of the same thing. On kind 23194 silence is a timeout; on the private
+		// transport the hub answers the ENVELOPE and simply says nothing about the item,
+		// which reaches a caller as an omission. Both are information-free by design —
+		// deliberately indistinguishable from a bill the hub never held — so both satisfy
+		// "stopped answering". Accepting only the timeout would fail this test for the very
+		// behaviour it is asserting.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -467,4 +479,71 @@ func payInvoiceFromSimpleWallet(t *testing.T, cfg *Config, invoice string) PayIn
 	require.NoError(t, client.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice}, &result))
 	require.NotEmpty(t, result.Preimage)
 	return result
+}
+
+// billTotalMillis reads a bill's remaining value the way a recipient now has to:
+// through cash_status, over the private transport, summing the rows that are still
+// unclaimed.
+//
+// It replaces get_balance, which a bill no longer serves. That method returned the
+// whole wallet's funded total to anyone holding the shared connection with no proof
+// required — the same disclosure get_budget is carved out of the always-granted list
+// for — so it was dropped from cashWalletScopes. See cashwallet/create.go.
+//
+// Summing UNCLAIMED rows is what makes this the equivalent of the old call rather
+// than a different measurement: a claimed slice's value has already left the bill,
+// and get_balance reported what remained.
+//
+// signerPriv must hold a slice of the bill: cash_status is scoped, and a caller with
+// no slice is refused NOT_FOUND whatever the bill's identity modes are.
+func billTotalMillis(t *testing.T, token, signerPriv string) uint64 {
+	t.Helper()
+
+	var status CashStatusResult
+	require.NoError(t, privateCall(t, token, constants.NIP47MethodCashStatus,
+		CashStatusParams{Scope: "all"}, signerPriv, &status),
+		"reading a bill's remaining value via cash_status")
+
+	var total uint64
+	for _, r := range status.Recipients {
+		if r.Claimed {
+			continue
+		}
+		total += uint64(r.AmountMillis)
+	}
+	return total
+}
+
+// billSilentOnStatus builds the "is this bill gone?" probe for
+// requireCashWalletDrainedAway, asking cash_status instead of get_balance.
+//
+// The distinction matters to what the caller is testing. get_balance is now refused
+// with a coded RESTRICTED — an immediate, definite answer — which is NOT the silence
+// a destroyed bill produces and would make a silence assertion pass for entirely the
+// wrong reason. cash_status over the private transport genuinely goes quiet when the
+// bill no longer exists, which is the property under test.
+func billSilentOnStatus(t *testing.T, token, signerPriv string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		var status CashStatusResult
+		return privateCallCtx(t, ctx, token, constants.NIP47MethodCashStatus,
+			CashStatusParams{Scope: "all"}, signerPriv, &status)
+	}
+}
+
+// unclaimedMillis sums the still-unclaimed rows of a cash_status roster — a bill's
+// remaining value, and the direct replacement for what get_balance used to report.
+//
+// Only UNCLAIMED rows: a claimed slice's value has already left the bill, which is
+// what get_balance also reflected. Summing every row instead would report the bill's
+// ORIGINAL total and quietly turn "nothing moved" assertions into ones that cannot
+// fail.
+func unclaimedMillis(status CashStatusResult) uint64 {
+	var total uint64
+	for _, r := range status.Recipients {
+		if r.Claimed {
+			continue
+		}
+		total += uint64(r.AmountMillis)
+	}
+	return total
 }

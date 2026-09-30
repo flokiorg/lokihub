@@ -74,7 +74,13 @@ func createCashHubWithTransferPolicy(t *testing.T, cfg *Config, name string, min
 // generation.
 // decryptSplitWallet decrypts a nested-encrypted split token (delivered to the
 // caller keyed to their own privkey) and connects to the resulting wallet.
-func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv string) *nwcclient.Client {
+//
+// The two keys are SEPARATE parameters because they are separate roles, and conflating
+// them is wrong in a real case: callerPriv decrypts the delivered token (delivery is keyed
+// to whoever made the split), while signerPriv signs the derived bill's item proofs and must
+// be whoever owns the SLICE on it. For a remainder those are the same party; for a
+// carve-off delivered to the caller but owned by the new target they are not.
+func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv, signerPriv string) billCaller {
 	t.Helper()
 	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, callerPriv)
 	require.NoError(t, err)
@@ -83,14 +89,14 @@ func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv string)
 	tok, err := lokicash.Decode(dec)
 	require.NoError(t, err)
 	require.Equal(t, walletPubkey, tok.WalletPubkey)
-	return mustConnect(t, nwcURIFromLokicash(tok))
+	return mustConnectBill(t, nwcURIFromLokicash(tok), dec, signerPriv)
 }
 
 // splitToControlledTarget performs a partial split and returns BOTH resulting
 // wallets: the carved piece (newClient, for the new identity) and the caller's
 // own remainder (remainderClient) — which, under the two-wallet split model, is
 // its OWN fresh wallet, not the source connection.
-func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPriv, curPub, walletPubkey string, splitAmount uint64) (newClient *nwcclient.Client, newPriv, newPub, newWalletPubkey string, remainderClient *nwcclient.Client, remaining uint64) {
+func splitToControlledTarget(t *testing.T, walletClient billCaller, curPriv, curPub, walletPubkey string, splitAmount uint64) (newClient billCaller, newPriv, newPub, newWalletPubkey string, remainderClient billCaller, remaining uint64) {
 	t.Helper()
 	newPriv = newTestPrivkey(t)
 	newPub = mustPubkey(t, newPriv)
@@ -109,8 +115,12 @@ func splitToControlledTarget(t *testing.T, walletClient *nwcclient.Client, curPr
 	require.NotNil(t, res.RemainingAmountMillis)
 	require.NotEmpty(t, res.RemainderWalletToken, "a partial split delivers the remainder as its own new wallet")
 
-	newClient = decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, curPriv)
-	remainderClient = decryptSplitWallet(t, res.RemainderWalletPubkey, res.RemainderWalletToken, curPriv)
+	// Delivery is keyed to the CALLER for both wallets, but ownership differs: the carved
+	// piece belongs to the new target, the remainder stays with the caller. So each client
+	// signs with whoever owns the slice on it — which is what the next generation of this
+	// chain then splits from.
+	newClient = decryptSplitWallet(t, res.NewWalletPubkey, res.NewWalletToken, curPriv, newPriv)
+	remainderClient = decryptSplitWallet(t, res.RemainderWalletPubkey, res.RemainderWalletToken, curPriv, curPriv)
 	return newClient, newPriv, newPub, res.NewWalletPubkey, remainderClient, *res.RemainingAmountMillis
 }
 
@@ -141,14 +151,16 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	curClient := mustConnect(t, created.PairingURI)
+	// billCaller, not *billConn: the loop below reassigns this from splitToControlledTarget,
+	// which hands back the next generation's connection through the same interface.
+	var curClient billCaller = mustConnectBill(t, created.PairingURI, created.CashToken, owner0Priv)
 	curPriv, curPub, curWalletPubkey := owner0Priv, owner0Pub, created.WalletPubkey
 	curAmount := originalAmount
 
 	// Each "leaf" is a wallet left holding exactly one floor after the value
 	// moved forward off it — collected so we can prove conservation at the end.
 	type leaf struct {
-		client *nwcclient.Client
+		client billCaller
 		amount uint64
 	}
 	var leaves []leaf
@@ -180,9 +192,9 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 
 		// The remainder is now its OWN fresh dedicated wallet holding exactly one
 		// floor — the source wallet was consumed by the split, not left as a leaf.
-		var leafBal GetBalanceResult
-		require.NoError(t, remainderClient.Call(ctxT(t), "get_balance", struct{}{}, &leafBal))
-		require.EqualValues(t, floor, leafBal.Balance, "gen %d remainder wallet must hold exactly the floor", gen)
+		var leafBal CashStatusResult
+		require.NoError(t, remainderClient.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &leafBal))
+		require.EqualValues(t, floor, unclaimedMillis(leafBal), "gen %d remainder wallet must hold exactly the floor", gen)
 		leaves = append(leaves, leaf{client: remainderClient, amount: uint64(floor)})
 
 		// Advance to the spun-off wallet for the next generation.
@@ -199,17 +211,17 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 		require.EqualValues(t, l.amount, b.Balance, "leaf %d balance drifted", i)
 		total += uint64(b.Balance)
 	}
-	var finalBal GetBalanceResult
-	require.NoError(t, curClient.Call(ctxT(t), "get_balance", struct{}{}, &finalBal))
-	total += uint64(finalBal.Balance)
+	var finalBal CashStatusResult
+	require.NoError(t, curClient.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &finalBal))
+	total += uint64(unclaimedMillis(finalBal))
 	require.EqualValues(t, originalAmount, total,
 		"CONSERVATION VIOLATION across a %d-generation split chain: leaves + final != original", generations)
-	require.EqualValues(t, originalAmount-uint64(floor)*generations, finalBal.Balance,
+	require.EqualValues(t, originalAmount-uint64(floor)*generations, unclaimedMillis(finalBal),
 		"final forward wallet must hold original minus one floor per hop")
 
 	// Liveness: the final forward wallet is genuinely redeemable for its whole
 	// balance by the identity the last split left it at.
-	redeemInv := mintInvoiceFromSimpleWallet(t, cfg, uint64(finalBal.Balance), "audit chain final redeem")
+	redeemInv := mintInvoiceFromSimpleWallet(t, cfg, uint64(unclaimedMillis(finalBal)), "audit chain final redeem")
 	redeemProof := buildClaimProofEvent(t, curPriv, curWalletPubkey, redeemInv.PaymentHash, nil, time.Now())
 	var redeemRes ClaimFundsResult
 	require.NoError(t, curClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

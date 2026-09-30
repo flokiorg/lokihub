@@ -32,6 +32,16 @@ import (
 // tests is exercising the Hub's own server-side rejection, which a
 // well-behaved SDK client can't be coerced into attempting.
 
+// Every BILL connection below is built from the cash token, never from the
+// pairing URI the same mint returns. Both carry the same wallet pubkey, relays
+// and connection secret, so both connect — but only the token carries the mint
+// signature, and the private transport recovers the Hub's identity from that
+// signature in order to verify the transport announcement it then trusts. A
+// client connected by pairing URI reaches the Hub and can still call
+// get_balance; it simply cannot call a bill method, because there is nothing to
+// check the announcement against. That is the shape of the failure to expect
+// here, and it surfaces at the first bill call rather than at Connect.
+
 const nmilatHappyPathAmountMillis = 5_000
 const nmilatHappyPathExpiry = time.Hour
 
@@ -52,9 +62,9 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 			Expiry:     nmilatHappyPathExpiry,
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, result.PairingURI)
+		require.NotEmpty(t, result.CashToken)
 
-		wallet, err := cashclient.Connect(ctxT(t), result.PairingURI)
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
@@ -86,9 +96,9 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 			Expiry:     nmilatHappyPathExpiry,
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, result.PairingURI)
+		require.NotEmpty(t, result.CashToken)
 
-		wallet, err := cashclient.Connect(ctxT(t), result.PairingURI)
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
@@ -127,7 +137,8 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 	// never calls at all — a multi-recipient roster read, through nmilat's
 	// real client.
 	t.Run("CashStatus", func(t *testing.T) {
-		pubA := mustPubkey(t, newTestPrivkey(t))
+		privA := newTestPrivkey(t)
+		pubA := mustPubkey(t, privA)
 		pubB := mustPubkey(t, newTestPrivkey(t))
 
 		minted, err := hubClient.MintCash(ctxT(t), nipcash.MintCashParams{
@@ -139,11 +150,20 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		wallet, err := cashclient.Connect(ctxT(t), minted.PairingURI)
+		// Dialled with the TOKEN, not the pairing URI, and that is now a requirement
+		// rather than a preference: bill methods run over the private transport, whose
+		// hub identity comes from the bill's own mint signature — which a pairing URI
+		// does not carry. A client holding only a pairing URI can mint, but cannot act
+		// on a bill.
+		//
+		// A credential is likewise now required: the transport authorizes per item, so
+		// the identity that was implicit in the connection has to be stated. ScopeAll
+		// because this test reads the whole roster; the default is the caller's own row.
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
-		roster, err := wallet.CashStatus(ctxT(t))
+		roster, err := wallet.CashStatus(ctxT(t), nipcash.BySigning(privA), nipcash.ScopeAll)
 		require.NoError(t, err)
 		require.Len(t, roster.Recipients, 2)
 		for _, r := range roster.Recipients {
@@ -170,7 +190,7 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		secret := result.Recipients[0].CashSecret
 		require.NotEmpty(t, secret, "the plaintext cash secret must come back exactly once, here")
 
-		wallet, err := cashclient.Connect(ctxT(t), result.PairingURI)
+		wallet, err := cashclient.Connect(ctxT(t), result.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
@@ -195,7 +215,7 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		wallet, err := cashclient.Connect(ctxT(t), minted.PairingURI)
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
@@ -231,7 +251,7 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		wallet, err := cashclient.Connect(ctxT(t), minted.PairingURI)
+		wallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(wallet.Close)
 
@@ -284,11 +304,16 @@ func TestNmilatSDK_CashHub_MintRedeemTransferConsolidate(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		walletA, err := cashclient.Connect(ctxT(t), mintedA.PairingURI)
+		// The TOKEN, not the pairing URI: the private transport recovers the hub
+		// identity from the bill's own mint signature, which a pairing URI omits.
+		walletA, err := cashclient.Connect(ctxT(t), mintedA.CashToken)
 		require.NoError(t, err)
 		t.Cleanup(walletA.Close)
 
-		consolidateResult, err := walletA.CashConsolidate(ctxT(t), nipcash.CashConsolidateParams{
+		// cred authorizes the CALL, separately from each source's own credential
+		// inside params. On the standard transport that was implicit in the connection;
+		// the private transport authorizes per item, so it has to be said.
+		consolidateResult, err := walletA.CashConsolidate(ctxT(t), nipcash.BySigning(ownerPriv), nipcash.CashConsolidateParams{
 			Sources: []nipcash.Source{
 				nipcash.From(mintedA.WalletPubkey, nmilatHappyPathAmountMillis, nipcash.BySigning(ownerPriv)),
 				nipcash.From(mintedB.WalletPubkey, nmilatHappyPathAmountMillis, nipcash.BySigning(ownerPriv)),
@@ -357,7 +382,7 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	cashWallet, err := cashclient.Connect(ctxT(t), minted.PairingURI)
+	cashWallet, err := cashclient.Connect(ctxT(t), minted.CashToken)
 	require.NoError(t, err)
 	t.Cleanup(cashWallet.Close)
 

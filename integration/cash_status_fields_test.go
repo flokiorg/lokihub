@@ -58,7 +58,11 @@ func TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
 	hubClient := mustConnect(t, resp.PairingUri)
 
-	beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
+	// The beneficiary's KEY is kept, not just their pubkey: cash_status now travels over
+	// the private transport, which authorizes per item, so the caller has to sign for the
+	// slice it is asking about.
+	beneficiaryPriv := newTestPrivkey(t)
+	beneficiaryPub, err := nostr.GetPublicKey(beneficiaryPriv)
 	require.NoError(t, err)
 
 	var created MintCashResult
@@ -67,10 +71,15 @@ func TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	shared := mustConnect(t, created.PairingURI)
-
+	// Over the private transport, and addressed by the bill's TOKEN rather than its
+	// pairing URI: the hub identity comes from the token's own mint signature, which a
+	// pairing URI does not carry.
+	//
+	// Empty params, so this also exercises the default scope — which is `mine`, the
+	// caller's own row, and the one row this bill has.
 	var recipients CashStatusResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &recipients))
+	require.NoError(t, privateCall(t, created.CashToken, constants.NIP47MethodCashStatus,
+		struct{}{}, beneficiaryPriv, &recipients))
 	require.Len(t, recipients.Recipients, 1)
 	recipient := recipients.Recipients[0]
 

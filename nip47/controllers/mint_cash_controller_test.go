@@ -282,14 +282,17 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	require.Equal(t, 1, len(childApps))
 	assert.Equal(t, db.ParentKindCash, childApps[0].ParentKind)
 
-	// Hardened scope surface: exactly cash_redeem + cash_transfer + get_balance.
+	// Hardened scope surface: exactly the three bill methods, and nothing that
+	// discloses money without proof. get_balance is deliberately absent — a bill's
+	// balance is the total funded across every recipient, which is the same
+	// disclosure get_budget is carved out of the always-granted list for.
 	var perms []db.AppPermission
 	svc.DB.Where("app_id = ?", childApps[0].ID).Find(&perms)
 	scopes := make([]string, len(perms))
 	for i, p := range perms {
 		scopes[i] = p.Scope
 	}
-	assert.ElementsMatch(t, []string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.CASH_CONSOLIDATE_SCOPE, constants.GET_BALANCE_SCOPE}, scopes)
+	assert.ElementsMatch(t, []string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.CASH_CONSOLIDATE_SCOPE}, scopes)
 }
 
 func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *testing.T) {

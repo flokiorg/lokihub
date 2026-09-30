@@ -36,7 +36,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
 
 		newPriv := newTestPrivkey(t)
 		newPub, err := nostr.GetPublicKey(newPriv)
@@ -66,6 +66,11 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
 
 		// The NEW identity must be able to redeem the full, unchanged amount.
+		//
+		// ActAs, because the private transport authorizes PER ITEM: the slice now belongs
+		// to newPriv, so newPriv must sign the item. The connection is unchanged — that is
+		// the point of an in-place reassignment — but who signs on it is not.
+		shared.ActAs(newPriv)
 		newInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer new identity")
 		newProof := buildClaimProofEvent(t, newPriv, created.WalletPubkey, newInvoice.PaymentHash, nil, time.Now())
 		var newClaimResult ClaimFundsResult
@@ -88,7 +93,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
 
 		// The caller generates their own cash secret and submits only its
 		// commitment — the wallet never mints or returns one over this
@@ -105,6 +110,10 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.Equal(t, "cash", transferResult.IdentityType)
 		require.Equal(t, newSecretHash, transferResult.IdentityValue)
 
+		// Bearer: the slice is cash-mode now, so its secret in params IS the authorization
+		// and the item must carry NO slice proof. One carrying both is refused outright
+		// (§Bearer Items) — the hub must not choose between two authorizations.
+		shared.Bearer()
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration transfer to cash mode")
 		var claimResult ClaimFundsResult
 		require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
@@ -124,7 +133,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
 
 		intendedPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
