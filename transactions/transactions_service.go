@@ -519,7 +519,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 
 	var response *lnclient.PayInvoiceResponse
 	if selfPayment {
-		response, err = svc.interceptSelfPayment(paymentRequest.PaymentHash, lnClient)
+		response, err = svc.interceptSelfPayment(paymentRequest.PaymentHash, paymentAmount, lnClient)
 	} else {
 		response, err = lnClient.SendPaymentSync(payReq, amountMloki)
 	}
@@ -695,7 +695,7 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			return nil, err
 		}
 
-		_, err = svc.interceptSelfPayment(paymentHash, lnClient)
+		_, err = svc.interceptSelfPayment(paymentHash, amount, lnClient)
 		if err == nil {
 			payKeysendResponse = &lnclient.PayKeysendResponse{
 				Fee: 0,
@@ -1259,7 +1259,22 @@ func IsSelfPayment(gormDB *gorm.DB, paymentRequest *decodepay.Bolt11, lnClient l
 	return result.Error == nil && result.RowsAffected > 0
 }
 
-func (svc *transactionsService) interceptSelfPayment(paymentHash string, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
+// interceptSelfPayment settles a payment whose payee is a wallet on this same node,
+// without going near the network.
+//
+// payerAmountMloki is what the PAYER is being debited, and it is required because the
+// incoming row cannot always supply it. An AMOUNTLESS bolt11 records AmountMloki = 0
+// (MakeInvoice stores whatever the LN client reports for the invoice it created), while
+// the payer's debit is resolved from the request's own amount. Settling the incoming leg
+// at its recorded 0 therefore debited the payer in full and credited the payee nothing,
+// destroying the difference — with a preimage and a success response, so nothing
+// downstream could tell. reconcileCashRedeemFee did not compensate either, because the
+// fee delta was 0.
+//
+// Fixed by writing the payer's amount onto the incoming row before it settles, which is
+// the only moment the two sides are both known. Not specific to cash: every amountless
+// self-payment had this shape.
+func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAmountMloki uint64, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
 	svc.logger.Debug().Str("payment_hash", paymentHash).Msg("Intercepting self payment")
 	incomingTransaction := db.Transaction{}
 	result := svc.db.Limit(1).Find(&incomingTransaction, &db.Transaction{
@@ -1273,6 +1288,21 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, lnClien
 
 	if result.RowsAffected == 0 {
 		return nil, NewNotFoundError()
+	}
+
+	// Before either settlement path, so the hold branch below inherits it too. Only ever
+	// fills in a zero: an invoice that named its own amount is authoritative, and a payer
+	// must not be able to restate it.
+	if incomingTransaction.AmountMloki == 0 && payerAmountMloki > 0 {
+		if err := svc.db.Model(&incomingTransaction).
+			Update("amount_mloki", payerAmountMloki).Error; err != nil {
+			return nil, fmt.Errorf("failed to set the amount on an amountless self-payment's incoming leg: %w", err)
+		}
+		incomingTransaction.AmountMloki = payerAmountMloki
+		svc.logger.Debug().
+			Str("payment_hash", paymentHash).
+			Uint64("amount", payerAmountMloki).
+			Msg("Credited an amountless self-payment's incoming leg with the payer's amount")
 	}
 
 	if incomingTransaction.Hold {
