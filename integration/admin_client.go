@@ -16,7 +16,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type adminClient struct {
@@ -171,7 +174,16 @@ type adminCashWalletClaim struct {
 	ID            uint   `json:"id"`
 	WalletAppID   uint   `json:"wallet_app_id"`
 	IdentityValue string `json:"identity_value"`
-	Claimed       bool   `json:"claimed"`
+	// AmountMloki is this slice's entitled amount, as the HUB records it. The API
+	// has always returned it; this struct simply never decoded it.
+	//
+	// It is the right source for "did any funds move?", better than asking the bill
+	// over the wire: a response cannot prove a mutation did NOT happen, and
+	// cash_status is scoped and proof-gated, so it cannot answer at all for a
+	// connection_key slice whose IA has been revoked — which is exactly the state
+	// several adversarial tests assert against.
+	AmountMloki int64 `json:"amount_mloki"`
+	Claimed     bool  `json:"claimed"`
 	// CashToken is this claim's wallet packaged as a lokicash1... string. It
 	// is the only field in this listing that identifies the WALLET rather than
 	// the slice, so it is what requireCashWalletDrainedAway matches on. Empty
@@ -513,4 +525,29 @@ func (c *adminClient) listAppsByNamePrefix(prefix string) ([]adminApp, error) {
 		return nil, err
 	}
 	return resp.Apps, nil
+}
+
+// unclaimedMlokiForWallet sums a bill's still-unclaimed slices from the Hub's OWN
+// records, for assertions of the form "no funds moved".
+//
+// Server truth deliberately. The alternative — reading the bill over the wire — is
+// weaker in two ways: a reply cannot prove that a mutation did not happen, and
+// cash_status is scoped and proof-gated, so it cannot answer for a connection_key
+// slice at all unless the caller supplies a currently-trusted IA's attestation. Tests
+// that revoke an IA and then assert the funds are intact would otherwise be unable to
+// look.
+func unclaimedMlokiForWallet(t *testing.T, admin *adminClient, hubAppID uint, walletPubkey string) int64 {
+	t.Helper()
+
+	claims, err := admin.listCashWalletClaims(hubAppID)
+	require.NoError(t, err, "listing this hub's cash wallet claims")
+
+	var total int64
+	for _, c := range claims {
+		if c.WalletPubkey != walletPubkey || c.Archived || c.Claimed {
+			continue
+		}
+		total += c.AmountMloki
+	}
+	return total
 }

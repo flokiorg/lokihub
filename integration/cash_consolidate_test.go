@@ -10,7 +10,6 @@
 package integration
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -169,11 +168,12 @@ func TestCashConsolidate(t *testing.T) {
 	// Every source is drained -- and a drained bill is deleted, so each one
 	// stops answering rather than reporting a zero balance.
 	for _, s := range sources {
-		srcConn := mustConnect(t, s.conn)
-		requireSpentBillSilent(t, func(ctx context.Context) error {
-			var b GetBalanceResult
-			return srcConn.Call(ctx, "get_balance", struct{}{}, &b)
-		})
+		// A destroyed bill answers a "spent" tombstone rather than falling silent — the
+		// Hub retains it for a bounded window precisely so its holder gets a definitive
+		// answer. What must hold is that the tombstone discloses nothing: it names the
+		// state and carries no roster.
+		srcConn := mustConnectBill(t, s.conn, s.token, callerPriv)
+		requireSpentBillTombstoned(t, srcConn)
 	}
 
 	// The merged wallet redeems for the full sum — the funds really moved.

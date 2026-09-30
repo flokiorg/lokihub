@@ -135,13 +135,11 @@ func TestSpec_Archive_IsUnreachableOverNWC(t *testing.T) {
 	var bal GetBalanceResult
 	balErr := bill.Call(balCtx, "get_balance", struct{}{}, &bal)
 	balCancel()
-	if balErr == nil {
-		require.Zero(t, bal.Balance,
-			"get_balance reported %d for a destroyed bill; the archive must not be readable over NWC", bal.Balance)
-		t.Log("get_balance on a destroyed bill: answered, balance 0")
-	} else {
-		t.Logf("get_balance on a destroyed bill: silent (%v)", balErr)
-	}
+	require.Error(t, balErr,
+		"get_balance must not be servable on a bill at all — a bill's balance is the total "+
+			"funded across every recipient, so it was dropped from cashWalletScopes; if it "+
+			"answers here, that removal has been undone")
+	t.Logf("get_balance on a destroyed bill: refused (%v)", balErr)
 
 	// cash_status is the ONE deliberate exception, and only as a TOMBSTONE: it may say
 	// "spent" with a retention deadline, and MUST NOT return the roster the archive still

@@ -138,16 +138,18 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 		// The source wallet was consumed by the winning split: it was left
 		// holding nothing (its value moved into the two new wallets), so the
 		// hub deleted it and it no longer answers.
-		sharedConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
-		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-			// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
-			// every recipient's total, handed out with no proof). The distinction matters to what
-			// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
-			// definite answer, which is NOT the silence a destroyed bill produces and would make
-			// this pass for the wrong reason.
-			var st CashStatusResult
-			return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
-		})
+		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, 
+			// nil: there is no longer a bill method that goes SILENT on a destroyed bill.
+			// get_balance is gone from a bill's scopes, and cash_status answers a
+			// destroyed bill with a "spent" tombstone on purpose — a holder is entitled
+			// to a definitive answer rather than having to infer one from silence. So
+			// "the request path stays quiet" stopped being the property; that it answers
+			// ONLY a tombstone, carrying no roster, is owned by
+			// TestSpec_Archive_IsUnreachableOverNWC and requireSpentBillTombstoned.
+			//
+			// What remains is the stronger half regardless, read from the Hub's own
+			// records: a reply could never have proved the deletion happened.
+			nil)
 	}
 }
 
@@ -233,8 +235,6 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 		// Deliberately not read up front any more: whether this wallet is even
 		// still there depends on which op won — a split drains and deletes it,
 		// a redeem leaves it in place holding nothing.
-		sharedConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
-
 		switch {
 		case redeemWon && splitWon:
 			// This is the catastrophic case the guard must prevent: the wallet
@@ -246,29 +246,35 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			// Redeem took the whole slice, so the bill is empty and the split
 			// lost. A redeem now deletes a drained bill exactly as a split
 			// does, so this branch asserts the same disappearance.
-			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-				// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
-				// every recipient's total, handed out with no proof). The distinction matters to what
-				// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
-				// definite answer, which is NOT the silence a destroyed bill produces and would make
-				// this pass for the wrong reason.
-				var st CashStatusResult
-				return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
-			})
+			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, 
+			// nil: there is no longer a bill method that goes SILENT on a destroyed bill.
+			// get_balance is gone from a bill's scopes, and cash_status answers a
+			// destroyed bill with a "spent" tombstone on purpose — a holder is entitled
+			// to a definitive answer rather than having to infer one from silence. So
+			// "the request path stays quiet" stopped being the property; that it answers
+			// ONLY a tombstone, carrying no roster, is owned by
+			// TestSpec_Archive_IsUnreachableOverNWC and requireSpentBillTombstoned.
+			//
+			// What remains is the stronger half regardless, read from the Hub's own
+			// records: a reply could never have proved the deletion happened.
+			nil)
 			require.NotEmpty(t, redeemRes.Preimage)
 		case splitWon:
 			// The split consumed the source slice entirely: the source wallet was
 			// left holding nothing (its value moved into the carved + remainder
 			// wallets) so the hub deleted it, and the racing full redeem lost.
-			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, func(ctx context.Context) error {
-				// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
-				// every recipient's total, handed out with no proof). The distinction matters to what
-				// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
-				// definite answer, which is NOT the silence a destroyed bill produces and would make
-				// this pass for the wrong reason.
-				var st CashStatusResult
-				return sharedConn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
-			})
+			requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, 
+			// nil: there is no longer a bill method that goes SILENT on a destroyed bill.
+			// get_balance is gone from a bill's scopes, and cash_status answers a
+			// destroyed bill with a "spent" tombstone on purpose — a holder is entitled
+			// to a definitive answer rather than having to infer one from silence. So
+			// "the request path stays quiet" stopped being the property; that it answers
+			// ONLY a tombstone, carrying no roster, is owned by
+			// TestSpec_Archive_IsUnreachableOverNWC and requireSpentBillTombstoned.
+			//
+			// What remains is the stronger half regardless, read from the Hub's own
+			// records: a reply could never have proved the deletion happened.
+			nil)
 			require.EqualValues(t, splitAmount, splitRes.AmountMillis)
 			require.NotNil(t, splitRes.RemainingAmountMillis)
 			require.EqualValues(t, fullAmount-splitAmount, *splitRes.RemainingAmountMillis)
