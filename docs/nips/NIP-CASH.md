@@ -426,21 +426,29 @@ doesn't — never at any recipient's expense.
 ## Cash Status (`cash_status`)
 
 Any holder of a Cash Wallet connection MAY call `cash_status` to ask what state the bill is in. It is the
-only read method a bill has, and it answers one of two ways: the full roster of recipients the bill was
-created for, or — for a bill the Hub has already destroyed — a tombstone saying so (§Answering About a
-Destroyed Bill).
+only read method a bill has, and it answers one of two ways: the roster of recipients the bill was created
+for — scoped per §Scoping the Roster — or, for a bill the Hub has already destroyed, a tombstone saying so
+(§Answering About a Destroyed Bill).
 
-**On the standard transport the answer is not caller-scoped, because it cannot be.** Every recipient of a
-bill holds the *same* connection string (§The Pairing Connection), so a Hub receiving `cash_status` there has
-no way to tell which recipient is asking. The roster is therefore a read-only, shared view: every holder of
-the connection sees every recipient's row, matching the transparency model `get_balance` already has on this
-same connection type (§Scope Surface). An implementation MUST NOT filter it to the caller's own slice.
+**A shared connection cannot identify its caller.** Every recipient of a bill holds the *same* connection
+string (§The Pairing Connection), so nothing derived from the connection alone can tell which recipient is
+asking — which is why `cash_status` is served over the private transport only, where each item carries its
+own signed proof. Asked with `scope: all`, the roster remains a read-only shared view: every recipient sees
+every other recipient's row, matching the transparency model `get_balance` already has on this
+same connection type (§Scope Surface). Asked with `scope: mine`, or with no scope at all, it returns only the
+calling recipient's own row — a Hub MUST honour that and MUST NOT widen it (§Scoping the Roster).
+
+This paragraph previously ended "an implementation MUST NOT filter it to the caller's own slice", which
+contradicted §Scoping the Roster once scoping existed. That sentence was written when a Hub genuinely could
+not tell its recipients apart, so filtering was not implementable; the private transport identifies the
+caller per item, and the narrow answer became both possible and the default.
 
 ### Scoping the Roster
 
 The private transport changes that premise. There, every item carries a kind-23192 proof signed by one
 specific recipient's own identity key (§Item Proofs), so a Hub knows exactly who is asking — for the first
-time, scoping is possible at all.
+time, scoping is possible at all. It also carries a kind-23193 bill proof (§Bill Proofs), which is what
+lets a Hub say `NOT_FOUND` to a holder who owns no slice instead of falling silent.
 
 `cash_status` therefore takes an OPTIONAL `scope`:
 
@@ -449,23 +457,27 @@ time, scoping is possible at all.
 | `all` | every recipient's row — the shared roster above |
 | `mine` | only the calling recipient's own row |
 
-**Defaults differ by transport, because the two differ in what they can know:**
+**Absent means `mine`.** The safe default: a caller who says nothing receives the smallest answer and
+learns nothing about their co-recipients. Around 300 bytes rather than 28,500 for a 100-recipient bill,
+which also removes the common cause of a reply outgrowing its envelope (§Chunked Replies).
 
-- **Private transport** — absent means `mine`. The safe default: a caller who says nothing receives the
-  smallest answer and learns nothing about their co-recipients. Around 300 bytes rather than 28,500 for a
-  100-recipient bill, which also removes the common cause of a reply outgrowing its envelope
-  (§Chunked Replies).
-- **Standard transport** — absent means `all`, exactly as before, and `mine` MUST be rejected. Not a policy
-  choice: the Hub cannot identify the caller there, so it cannot honour the request, and answering `all`
-  instead would silently return far more than was asked for.
+There is no second default to describe, because `cash_status` is served over the private transport only
+(§The Private Transport). The standard transport could never have scoped this method — every recipient of a
+bill holds the SAME connection string, so a Hub receiving the request there cannot tell one from another and
+can only answer everyone or no one — and that is among the reasons it no longer serves it.
 
 A Hub MUST determine "mine" from the item proof's own signer, never from anything the item asserts about
 itself. And `mine` is a *view*, not an authorization boundary: it changes what is returned, never what a
 caller may do, so a Hub MUST NOT treat having asked for `mine` as narrowing any later call's permissions.
 
-This method was called `list_recipients` in an earlier revision. A Hub SHOULD keep accepting that name for
-one release so a client can be updated independently of the Hub it talks to; the two are otherwise
-identical.
+A caller whose item proof verifies but who holds no slice of this bill receives no rows. A Hub MUST NOT
+widen to the full roster on no match, which would turn every mismatch into a full disclosure. Where the
+caller has also proved possession of the bill — as every item must (§Bill Proofs) — the Hub MUST instead
+answer `NOT_FOUND`, which says "this bill is not addressed to you" without describing it.
+
+This method was called `list_recipients` in an earlier revision. That alias is **removed**: everything
+before this revision was a release candidate and nothing was minted under it, so no client needs the
+compatibility.
 
 ```mermaid
 sequenceDiagram
@@ -483,13 +495,12 @@ sequenceDiagram
 {
   "scope": "mine"   // OPTIONAL: "all" | "mine". Absent means "mine" on the private
                     // transport and "all" on the standard one — see
-                    // §Scoping the Roster for why the defaults differ.
+                    // Absent means "mine" — see §Scoping the Roster.
 }
 ```
 
 An empty params object is valid and equivalent to omitting `scope`. A Hub MUST
-reject a value that is neither `all` nor `mine`, and MUST reject `mine` on the
-standard transport.
+reject a value that is neither `all` nor `mine`.
 
 ### Response
 
@@ -551,8 +562,14 @@ On receiving `cash_status` for a bill that still exists, the wallet MUST, in ord
    current default — a slice's rate is fixed at creation, §The Redeem Fee) and `amount_millis`, and
    `net_redeemable_millis` as the difference; include that slice's own `min_transfer_millis` floor unchanged;
    include the wallet's `expires_at` from step 2, identical on every row.
-4. Return the full roster. This method MUST NOT be scoped to only the caller's own slice — every recipient
-   sees every other recipient's row, identity and amount included (§Privacy Considerations).
+4. Apply `scope` (§Scoping the Roster). Absent means `mine`: only the calling recipient's own row. `all`
+   returns every recipient's row, identity and amount included (§Privacy Considerations) — available on
+   request, but no longer the default, and no longer the only option.
+
+   This step previously read "MUST NOT be scoped to only the caller's own slice", which was accurate while
+   the Hub could not tell its recipients apart: they share one connection string, so the only answers
+   available were everyone or no one. The private transport identifies the caller per item, so the smallest
+   honest answer became possible and is now the default.
 
 ### Answering About a Destroyed Bill
 
@@ -594,14 +611,17 @@ This gives three outcomes where there were two:
   having quoted it. An implementation that evaluates this boundary in more than one place MUST make those
   places agree: a Hub that admits a request at `retained_until` and then declines to answer it produces
   silence, which is precisely the indeterminate outcome this whole mechanism exists to remove.
-- A Hub answering a tombstone MUST verify that the requester holds the bill's own connection, by comparing
-  the request's author pubkey against the one derived from that bill's pairing key (§The Pairing
-  Connection). **Decryption is not authentication**: under NIP-47 anyone may encrypt a request to a
-  wallet pubkey using a freshly generated key, and the Hub would encrypt its reply straight back to them.
-  A Hub that skips this check answers anyone, and since wallet pubkeys travel in clear-text `p` tags, that
-  turns the Hub into a queryable index of every bill it ever issued. For a live bill this check is
-  implicit — the connection record names the authorized pubkey — but a destroyed bill has no record left,
-  so it MUST be performed explicitly.
+- A Hub answering a tombstone MUST verify that the requester holds the bill's own connection. On the
+  private transport that is the item's **bill proof** (§Bill Proofs), whose signer MUST equal the pubkey
+  derived from the bill's pairing key. **Decryption is not authentication**, and neither is naming a
+  wallet pubkey: anyone may generate a key and address a request at a bill, and a Hub that skips this
+  check answers anyone — which, since wallet pubkeys are public, turns the Hub into a queryable index of
+  every bill it ever issued.
+
+  For a live bill the check is implicit on both transports, because the connection record names the
+  authorized pubkey. A destroyed bill has no record left, so it MUST be performed explicitly — and can be,
+  without retaining any secret: the archive keeps the bill's identifier, and the pairing key is derived
+  deterministically from it (§The Pairing Connection).
 - A request naming a pubkey the Hub never served, or one past its retention window, MUST still be met with
   silence.
 - Only `cash_status` answers this way. `cash_redeem`, `cash_transfer` and `cash_consolidate` naming a
@@ -611,6 +631,13 @@ This gives three outcomes where there were two:
 **A client MUST NOT report a bill as spent or expired on the strength of a timeout alone**, whether or not
 the Hub it is talking to implements this. Silence is indeterminate by construction, and a client that
 treats it as definitive will tell users their money is gone during an ordinary outage.
+
+The same applies to an **omission** on the private transport, for the same reason and more sharply: an
+omission is information-free by design, so it is the single answer a Hub gives for a bill it does not
+hold, a proof that did not verify, a possession proof it could not confirm, and a method it will not
+serve. A client MUST NOT resend an omitted `cash_redeem`, `cash_transfer` or `cash_consolidate` blind —
+it cannot be told apart from a request that WAS applied and whose reply was lost, so resending may pay
+twice. `cash_status` is safe to retry, since it moves nothing.
 
 ## Transferring and Splitting a Slice (`cash_transfer`)
 
@@ -1169,13 +1196,46 @@ it — is a public, linkable timeline under one stable identifier. A holder who 
 fifty bills publishes fifty requests that resolve to one new wallet, which links them all
 together for an observer who never decrypts anything.
 
-The **private transport** is an OPTIONAL alternative addressing for the same methods. It
-changes nothing about what they do, what they authorize, or what they return. It changes only
-what a relay learns.
+The **private transport** carries the same methods under different addressing. It changes
+nothing about what they do, what they authorize, or what they return. It changes only what a
+relay learns.
 
-This transport is OPTIONAL in both directions: a Hub MAY decline to offer it, and a client
-MAY ignore it. A Hub offering it MUST continue serving the standard transport, since a bill
-is a bearer instrument that may outlive the client that minted it.
+#### It is the ONLY transport for the bill methods
+
+A Hub MUST serve `cash_status`, `cash_redeem`, `cash_transfer` and `cash_consolidate` over the
+private transport, and MUST NOT serve them over kind 23194. A request for one of them on the
+standard transport MUST be refused with `NOT_IMPLEMENTED`.
+
+Kind 23194 is not going away — it carries the whole NWC surface. What is removed from it is
+those four methods:
+
+| method | transport |
+|---|---|
+| `cash_status`, `cash_redeem`, `cash_transfer`, `cash_consolidate` | private ONLY |
+| `mint_cash` | standard ONLY (see below) |
+| `create_circle_wallet` | either |
+| `get_balance`, `pay_invoice`, `get_info`, … | standard, unchanged |
+
+`mint_cash` stays on the standard transport and MUST NOT be offered on the private one. It has
+no retry idempotency, and that is precisely what makes the private transport's replay set safe
+to define as it is; it is also the Hub owner's own method on the Hub's own connection, where
+the linkability the private transport exists to remove does not arise. `create_circle_wallet`
+acts on a HUB rather than a bill, so there is no bill pubkey to leak and either transport is
+acceptable.
+
+There is **no fallback**. A bill whose items cannot be built or served is an error, not a
+reroute — a silent fallback to the standard transport would undo the property this transport
+exists to provide, and would do it invisibly.
+
+Two consequences worth stating plainly, because each is a hard requirement elsewhere in this
+document:
+
+- every bill MUST carry mint provenance (§Mint Provenance), since the mint signature is the
+  only thing in a token that identifies its minting Hub and therefore the only thing an
+  announcement can be verified against — an unsigned bill could never reach this transport at
+  all;
+- every item MUST carry a bill proof (§Bill Proofs), since the envelope is addressed to the
+  Hub rather than to the bill and so no longer demonstrates that the sender holds it.
 
 ### Kinds
 
@@ -1184,7 +1244,8 @@ is a bearer instrument that may outlive the client that minted it.
 | `11190` | replaceable | Hub announcement — how to reach a Hub's private transport |
 | `23190` | ephemeral | private request: a wrapped envelope of items |
 | `23191` | ephemeral | private response |
-| `23192` | ephemeral | item proof, one per item |
+| `23192` | ephemeral | item proof (slice), one per item |
+| `23193` | ephemeral | bill proof (possession), one per item |
 
 The three transport kinds are **ephemeral** (20000–29999) deliberately. A relay MUST NOT be
 relied on to persist them, and more importantly SHOULD NOT: the point is that no archive of
@@ -1229,6 +1290,33 @@ that Hub, and MUST reject one signed by anyone else. Otherwise the announcement 
 inbox-substitution primitive: an attacker publishing their own would receive envelopes
 encrypted to them.
 
+**A client MUST prefer the newest announcement it can see, and MUST NOT adopt one older than
+the one it already holds.**
+
+Verifying the signature is not sufficient, and this is the subtle part: kind 11190 is
+replaceable *at a relay*, but every announcement a Hub has ever published stays individually
+valid forever, because each one is genuinely signed by that Hub's identity. A relay serving an
+old one forges nothing. It **chooses which of the Hub's own past policies a client obeys** — and
+one cooperating relay among the candidates is enough, since a bill's token hints are consulted
+on every refresh.
+
+So a client MUST compare `created_at` across every candidate it gathers, adopt only the newest,
+and never move backwards. Concretely: a relay replaying a Hub's pre-change announcement
+reinstates whatever that policy allowed — a wider padding bucket takes 1–8 items from three
+distinguishable wire sizes back to four, which is the batch-count leak §Padding exists to close.
+And once a Hub rotates its inbox key, being able to pin a client to the retired one would defeat
+rotation entirely, which is the only remedy a Hub has for a leaked inbox.
+
+**A Hub MUST NOT announce a `pad_bucket_bytes` below one maximal item, and a client MUST reject
+one that does.**
+
+Padding only conceals batch size while a bucket is wider than the thing being concealed. A
+policy of `1` makes every item count produce its own wire size, exactly linear, so an observer
+reads the batch count off the ciphertext length — the client's own padding, switched off by a
+single announced integer. This is a constraint on an ANNOUNCED policy specifically: a
+locally-chosen bucket is the operator's own business, but a client adopting a policy from
+somewhere else MUST bound what that policy is allowed to do to it.
+
 ### The Request Event
 
 A private request is a **kind-23190 event carrying one NIP-44 ciphertext**, and it is worth
@@ -1250,10 +1338,10 @@ silence with no diagnosis.
 
 The reason is that NIP-59's inner seal exists to prove to the recipient *who* sent the
 message. Here the sender is deliberately anonymous — the outer key is ephemeral precisely so
-it identifies nobody — and authorization travels per item, in each item's own kind-23192
-proof (§Item Proofs). The proofs already do the seal's job, and better: they bind to the
-specific target, method and params rather than merely to an author. A seal would add a layer
-and an extra ECDH to prove something no Hub relies on.
+it identifies nobody — and authorization travels per item, in each item's own kind-23192 slice
+proof (§Item Proofs) and kind-23193 bill proof (§Bill Proofs). The proofs already do the seal's
+job, and better: they bind to the specific target, method and params rather than merely to an
+author. A seal would add a layer and an extra ECDH to prove something no Hub relies on.
 
 What this design does borrow from NIP-59 is the **`created_at` randomisation**: a request's
 timestamp is pushed up to two days into the past, so the event's own metadata says nothing
@@ -1278,7 +1366,8 @@ name **different wallets**, which is the whole point: see §Batching Across Bill
       "target": "<wallet pubkey>",
       "method": "cash_status",
       "params": { },
-      "proof": { }                        // this item's kind-23192 event, nested
+      "proof": { },                       // this item's kind-23192 SLICE proof, nested
+      "bill_proof": { }                   // its kind-23193 BILL proof — REQUIRED on every item
     }
   ],
   "pad": "…"                     // filler to a bucket boundary; never read
@@ -1288,6 +1377,22 @@ name **different wallets**, which is the whole point: see §Batching Across Bill
 Batching is the point. One envelope consolidating fifty bills is one relay event instead of
 fifty, so the count of a holder's bills stops being public, and the timing correlation that
 links them disappears.
+
+- **`proof`** — the item's kind-23192 slice proof (§Item Proofs). Absent only for a bearer
+  item, whose `cash_secret` in `params` is that authorization instead (§Bearer Items).
+- **`bill_proof`** — REQUIRED on every item, with no exemption for any identity mode
+  (§Bill Proofs). It proves the sender holds this bill's token, which `proof` does not: a slice
+  proof is signed with a key of the signer's own choosing, so it says who they are and nothing
+  about whether the bill was ever given to them.
+
+  Both travel as nested objects rather than JSON strings: a string would need escaping, costing
+  around 5%, and would force every reader through a second parse.
+
+  An implementation MUST treat an absent, empty, or literal-`null` `bill_proof` as absent. This
+  is called out because `null` is the trap: it decodes to four bytes, so a length check reads it
+  as a proof that is present and unverifiable. That exact mistake, on `proof`, made bearer items
+  unservable in a released implementation, and the symptom was an omission — information-free,
+  so no caller could learn why.
 
 - **`not_after`** — REQUIRED. The request event's `created_at` is randomised up to two days
   into the past (§The Request Event), precisely so it leaks nothing, which means it cannot
@@ -1323,9 +1428,10 @@ being public, and the timing correlation that would otherwise link them disappea
 Two consequences follow, and both are requirements rather than observations.
 
 **Every item is authorized independently.** An envelope is not a unit of authorization. Each
-item carries its own authorization — a kind-23192 proof signed by *that bill's own* registered
-identity, or, for a cash-mode slice, the secret itself (§Bearer Items). So one envelope
-routinely carries proofs from several different keys, alongside items with no proof at all, and
+item carries its own authorization: a kind-23193 bill proof always, signed with *that bill's own*
+connection secret, plus a kind-23192 proof signed by *that bill's own* registered identity or,
+for a cash-mode slice, the secret itself (§Bearer Items). So one envelope
+routinely carries proofs from several different keys, alongside items with no slice proof at all, and
 a Hub MUST evaluate each on its own. Nothing about one item passing or failing says anything about another. It follows
 that an envelope's assembler need not hold any of the bills — it may be aggregating on behalf
 of others — which is the same property §Consolidating Tokens already relies on.
@@ -1351,6 +1457,11 @@ A cash-mode slice (§Cash-Mode Slices) has no keypair — only a secret — so i
 a kind-23192 proof at all. **A cash-mode item therefore MUST omit `proof`, and carries its
 `cash_secret` in `params` instead.** An item MUST NOT carry both: they authorize differently,
 and an item asserting both leaves a Hub to choose, hiding the sender's mistake either way.
+
+**This exemption covers `proof` only.** A cash-mode item still MUST carry a `bill_proof`
+(§Bill Proofs), signed with the bill's connection secret, which every token has regardless of
+identity mode. The two are answering different questions — the cash secret says which slice, the
+bill proof says the sender holds the bill — so having one has never implied the other.
 
 This is sound rather than a concession. The binding a proof provides — target, method, params,
 envelope — exists to stop an envelope's *assembler* substituting one for another. For a
@@ -1406,6 +1517,59 @@ A proof's `created_at` MUST fall inside the same freshness window kind-23199 use
 minutes past, one minute future), so a caller's clock tolerance is identical everywhere in
 this family.
 
+An item proof establishes **which slice** the sender claims, and nothing more. Its key is the
+signer's own choice, so anyone can produce a structurally perfect one for any target they can
+name. Possession of the bill is a separate claim, proved separately — see §Bill Proofs below.
+
+### Bill Proofs (kind 23193)
+
+Every item MUST also carry a **bill proof**, signed with the bill's own **connection secret**
+(the `secret` inside its token, §The Cash Token). It answers a different question from the
+item proof:
+
+| proof | question | signed with |
+|---|---|---|
+| kind 23192 | which slice is mine? | the recipient's identity key, or none for a bearer item |
+| kind 23193 | do I hold this bill at all? | the bill's connection secret |
+
+It binds exactly the same six tags as kind 23192, for the same reasons: an assembler holds
+other people's bill proofs while building an envelope, and each MUST be unusable anywhere
+else.
+
+**A bill proof is REQUIRED on every item, whatever the bill's identity mode.** A bearer item
+carries no kind-23192 proof — its `cash_secret` is that authorization (§Bearer Items) — and is
+NOT exempt from this one. The two are orthogonal: the secret says which slice, this says which
+bill the sender holds.
+
+The kind is load-bearing. Both proofs bind the same six tags, so an implementation that
+verified everything except the kind would accept a kind-23192 proof as possession, and
+possession would become forgeable by anyone able to sign anything. A verifier MUST check the
+kind.
+
+#### Why it exists
+
+The standard transport had this property implicitly. A request there is encrypted **to the
+bill's own wallet pubkey**, so sending one at all demonstrated possession of the token. The
+private transport encrypts to the Hub's inbox and merely NAMES a target — and a wallet pubkey
+is public — so that demonstration disappeared with the change of addressing. The bill proof
+restores it explicitly.
+
+It is what makes a Hub's answers safe to give. Once possession is proved, confirming the bill
+exists tells the sender nothing they did not already know, so a Hub MAY then answer with a
+reason instead of an omission:
+
+- a sender who holds the bill but no slice of it MUST receive `NOT_FOUND` rather than silence
+  (§Responses), since "this bill is not addressed to you" is otherwise indistinguishable from
+  an unreachable Hub, and clients cannot tell whether to retry;
+- a destroyed bill MAY be answered with a tombstone (§Answering About a Destroyed Bill).
+
+Without possession the Hub MUST omit, because a wallet pubkey is guessable and any answer —
+including a refusal — would confirm which bills a Hub holds.
+
+Note this is what a bill proof does **not** grant: it is not a spending credential and not an
+entitlement. Every recipient of a bill shares one connection string, so holding it proves only
+that the bill was given to the sender, never that any slice is theirs.
+
 ### Responses (kind 23191)
 
 ```jsonc
@@ -1460,10 +1624,40 @@ A client MUST treat `reply_to` as single-use, generating a fresh one per envelop
 would reintroduce precisely the linkage the scheme avoids, and would also let a stale response
 be mistaken for a current one.
 
-Note the tag addresses the response; it does not authenticate it. That is the reply key's job
-(above), and it is why a client MUST still check `req_nonce` and reject results for ids it
-never sent: anyone can publish an event carrying a `p` tag they observed, and only the derived
-key proves the Hub wrote it.
+Note the tag addresses the response; it does not authenticate it. That is the reply key's job,
+and it is why a client MUST still check `req_nonce` and reject results for ids it never sent:
+anyone can publish an event carrying a `p` tag they observed, and only the derived key proves
+the Hub wrote it.
+
+#### The Reply Key
+
+**A kind-23191 response MUST be encrypted under a key derived from the request's own NIP-44
+conversation key and its `reply_to`:**
+
+```
+reply_key = HKDF-Expand(
+    hash = SHA-256,
+    prk  = <the request's NIP-44 conversation key, 32 bytes>,
+    info = "nipcash-reply-v1" || <reply_to, as its 64 lowercase hex characters>,
+    L    = 32
+)
+```
+
+HKDF-Expand only (RFC 5869), with no extract step: the conversation key is already a uniformly
+random 32-byte secret, so extraction would add nothing. `info` is the ASCII label concatenated
+with the hex `reply_to` **as text**, not as decoded bytes. The label namespaces the output so a
+derived reply key can never collide with a NIP-44 conversation key used for anything else.
+
+Both sides can compute it and nobody else can: only the Hub and the requester know the wrap
+conversation key. That is what makes the derivation authenticate the Hub implicitly — no second
+ECDH, no ephemeral keypair for the response, and (when the Hub's transport key lives on its
+Lightning node) no extra node round trip per reply. To an observer the exchange is still between
+two values that never recur.
+
+This derivation was previously implemented but never written down, and the omission was invisible
+to both existing implementations because they share one SDK. An independent client following the
+rest of this section would find its response, fail to decrypt it, and have nothing in the
+document to check its work against.
 
 ### Chunked Replies
 
@@ -1513,12 +1707,50 @@ A Hub SHOULD keep `total` as low as the limits allow, since each additional even
 round of padding and another thing that can be lost. A client MUST accept chunks in any order,
 and MUST reject a set whose members disagree about `total` or repeat a `seq`.
 
+**A client MUST reject a reply that answers the same item id in more than one chunk**, and MUST
+NOT resolve the conflict by arrival order or by `seq`.
+
+This follows from the rule above it. Duplicate ids are already malformed *within* one chunk, and
+chunks may arrive in any order — so if the duplicate rule stops at the chunk boundary, two
+contradictory statements about the same bill are resolved by whichever arrives first. Only the
+Hub can produce them, since the reply is authenticated by a key only it and the requester
+derive, but a **relay holding no key at all** then decides which one the client believes, simply
+by reordering two events it cannot read: a `NOT_FOUND` becomes a live bill, or the reverse.
+
+Ordering by `seq` is not the remedy. It makes the outcome deterministic and leaves the choice
+with the Hub, which picks the winner by deciding which chunk to number first. Refusing leaves
+neither party a choice: a Hub that answers one item twice with different content has
+contradicted itself, and no reading of that reply is safe to act on.
+
+**A client MUST bound `total` by the number of items it requested.** `total` is Hub-supplied and
+otherwise constrained only from below, so an inflated value is a reply a client will wait for
+forever, and — worse — one that makes a genuinely complete answer look partial. See below.
+
+**A client MUST NOT discard a decided outcome because the reply was incomplete.** A Hub can
+declare `total: 2`, send the complete genuine result in chunk 1, and never send chunk 2. An
+implementation that checks the transport error before the item's own outcome throws away the
+answer it was given — and for a spun-off wallet that answer contains the only copy of the new
+bill's token, which no one can recover afterwards. Incompleteness and a decided item outcome are
+independent facts, and a client MUST surface both.
+
+**A client MUST bound its wait for a reply by the request envelope's own `not_after`.** Past that
+instant the Hub is contractually finished with the envelope, so nothing further is coming; a
+client that waits on the caller's deadline instead lets a Hub choose how long it hangs.
+
+**An envelope-level error means no item ran, and a client MUST surface it for every item in the
+envelope.** Collecting it and reporting the items as merely unanswered discards the one fact that
+makes a spend safe to send again, converting a retryable refusal into a permanent
+indeterminacy — the state a client is told never to resolve by retrying. This is safe to act on
+because every bill method carries its own idempotency guard (§Redemption, §Transferring and
+Splitting a Slice): a second application finds the slice already claimed. **A Hub method added
+without such a guard MUST NOT be served over this transport**, or this rule becomes a way to
+induce a double application.
+
 ### Which Methods a Hub Serves
 
 A Hub MUST serve over this transport only the methods that operate on a **bill**:
-`cash_status` (and its `list_recipients` alias for the compatibility window), `cash_redeem`,
-`cash_transfer` and `cash_consolidate`. NIP-CW's `create_circle_wallet` MAY also be served
-here (§Private Join in NIP-CW).
+`cash_status`, `cash_redeem`, `cash_transfer` and `cash_consolidate`. NIP-CW's
+`create_circle_wallet` MAY also be served here (§Private Join in NIP-CW).
 
 **This MUST be an explicit allowlist, not a reuse of the Hub's ordinary method dispatch.** The
 distinction is a security boundary, not a style preference. A caller on this transport
@@ -1606,12 +1838,13 @@ one-byte length field. The entries:
 | `3` | identity required | 1 byte, `0` or `1` | zero or one, OPTIONAL |
 | `5` | mint signature | 65 raw bytes — a compact recoverable ECDSA signature: 1 recovery byte, 32-byte R, 32-byte S (§Mint Provenance) | zero or one, OPTIONAL |
 | `6` | attested amount | 8 bytes, big-endian millis — the value the mint signature commits to | zero or one, OPTIONAL |
+| `7` | hub group | 4 raw bytes — the issuing Cash Hub's fingerprint (§The Hub Group Fingerprint) | zero or one, OPTIONAL |
 
 Type numbers `0` and `1` carry the same meaning NIP-19 already gives them for `nprofile`/`nevent`/`naddr`
-(`0` is the token's primary identifier, `1` is a relay hint); types `2`–`3` and `5`–`6` are specific to
+(`0` is the token's primary identifier, `1` is a relay hint); types `2`–`3` and `5`–`7` are specific to
 this token family. A decoder MUST ignore any TLV entry of an unrecognized type rather than rejecting the
 token, so a future field can be added without breaking older decoders — again mirroring NIP-19. Types `3`,
-`5`, and `6` are themselves examples of this: a token minted before they existed simply omits them, and a
+`5`, `6`, and `7` are themselves examples of this: a token minted before they existed simply omits them, and a
 decoder written before they existed correctly ignores them if present. Type `4` is reserved and MUST NOT be
 assigned a new meaning — a decoder ignores it as an unrecognized type on any token that carries it, per the
 general rule above. (A future revision MAY add a `min_transfer_millis` hint type following the same
@@ -1624,8 +1857,14 @@ treat the token as carrying no valid provenance (§Mint Provenance) — never as
 both are optional.
 
 A decoder MUST reject a token missing either required field (`0` or `2`), carrying a wrong-length value for
-any of the typed fields above **except the provenance pair `5`/`6`**, or repeating any of them except that
-pair. All are the same class of mistake: they'd
+any of the typed fields above **except the provenance pair `5`/`6` and the hub group `7`**, or repeating any
+of them except those.
+
+Type `7` gets the same tolerance as the provenance pair, for a related reason: it is a grouping hint, not a
+credential. A decoder meeting a wrong-length or repeated hub group MUST drop it and leave the token
+otherwise intact, never fail the decode. The bill is still perfectly spendable one at a time, and refusing
+the whole token would let a cosmetic field strand real value. An ENCODER, by contrast, MUST refuse to
+produce a wrong-length one, so a producer's bug surfaces at the producer. All are the same class of mistake: they'd
 let a caller construct a token that decodes ambiguously, into a connection nobody actually holds, or into
 metadata that could mislead a client about how to attempt a call. Truncated or malformed TLV data MUST
 also be rejected rather than read out of bounds.
@@ -1739,6 +1978,38 @@ rather than caching the value from creation. Regardless: `cash_redeem` and `cash
 authoritatively checked server-side on every call, exactly as `cash_transfer`'s own proof requirement is
 (§Security Considerations). A client MUST NOT treat this field as a substitute for a call actually
 succeeding or failing — only as a hint for deciding how to construct the attempt in the first place.
+
+### The Hub Group Fingerprint
+
+A token MAY carry a **hub group** (TLV type `7`): four bytes, the first four of
+`sha256(<issuing Cash Hub's pubkey>)`. A Hub SHOULD stamp the same value on every bill it mints, including
+the ones it creates by splitting or consolidating existing bills.
+
+It answers exactly one question: **do two bills share an issuing Hub, and may they therefore be
+consolidated together?** Nothing else in a token answers it. Mint provenance identifies the minting *node*
+(§Mint Provenance), and one node routinely runs several Hubs — so a client grouping bills by minter merges
+bills from sibling Hubs, and the Hub refuses the whole selection, because a consolidation MUST NOT move
+value across Hubs (§Consolidating Tokens). Each Hub is its own funded book, and a bill's unredeemed
+remainder is reclaimed into its own parent Hub.
+
+**It is NOT an authorization input and MUST NOT be treated as one.** It is unauthenticated and truncated: a
+client cannot verify it, and a wrong value causes nothing worse than a wrongly grouped selection that the
+Hub then refuses — a retry with explicit sources, never misplaced value. That is what makes four
+unverifiable bytes sufficient here, where they would be unacceptable for anything a Hub acts on.
+
+Four bytes, and not more, for two reasons. Collisions matter only among the Hubs of ONE node, since bills
+must already share a minter before grouping is considered at all — a handful of Hubs against a 4-byte
+space. And a bill is a string a person copies and pastes, so the field costs about ten characters of a
+roughly 290-character token.
+
+It is a **hash**, and truncated, rather than the Hub's pubkey itself. Every bill a Hub mints would
+otherwise carry a stable, linkable identifier for that Hub in the clear, which would let an observer
+holding two bills learn they came from the same Hub *and* which Hub that is. A short digest of a pubkey
+nobody can enumerate lets a holder group their own bills without publishing who issued them.
+
+A bill carrying no fingerprint is **ungrouped**, which is not the same as matching other ungrouped bills.
+Clients MUST NOT treat absent fingerprints as equal: two bills agreeing only on "unknown Hub" are exactly
+the case that grouping-by-minter got wrong, and pairing them would reintroduce it.
 
 ### Mint Provenance
 
@@ -1886,13 +2157,45 @@ A Cash Wallet connection MUST be granted only:
 - `cash_redeem` — the payout method, identity-bound or cash (§Cash-Mode Slices)
 - `cash_transfer` — the proof-gated transfer/split method (§Transferring and Splitting a Slice)
 - `cash_consolidate` — the proof-gated combine method (§Consolidating Tokens)
-- `cash_status` — the bill's state: shared read-only roster, or a destroyed-bill tombstone (§Cash Status), granted alongside `cash_redeem`
-- `list_recipients` — the deprecated alias for `cash_status`, granted alongside it for the duration of the
-  compatibility window described in §Cash Status. A Hub honouring that window MUST advertise both names in
-  `get_info`, since a client that looks for the old one has to keep finding it; this list is "only" in the
-  sense that nothing outside it may be granted, not that the alias is an exception to it
+- `cash_status` — the bill's state: the caller's own row, the shared roster on request, or a destroyed-bill
+  tombstone (§Cash Status), granted alongside `cash_redeem`
 - `get_balance`
 - `get_info` (an always-granted handshake method under NIP-47)
+
+**`get_info` MUST NOT advertise the four bill methods.** It answers "what may I call on THIS
+connection", and a connection is kind 23194, where those four are refused (§It is the ONLY transport for
+the bill methods). Advertising them promises a caller something the transport will not do, and sends every
+client that reads `methods` down a path that cannot work.
+
+Nothing is lost by omitting them. The bill-method set is fixed by this document (§Which Methods a Hub
+Serves) rather than discovered, so a client holding a bill already knows what it may call; discovering the
+transport is the kind-11190 announcement's job. `create_circle_wallet` is servable on either transport and
+so MAY still be advertised.
+
+**They MUST instead appear in `private_methods`**, a sibling field naming the granted methods this
+connection does not itself serve:
+
+```jsonc
+{
+  "methods": ["get_balance", "get_info", "get_budget"],
+  "private_methods": ["cash_consolidate", "cash_redeem", "cash_status", "cash_transfer"]
+}
+```
+
+Without it there is no wire-level signal that the bill methods exist at all: they are absent from
+`methods` because this transport refuses them, and the announcement (§The Hub Announcement) carries only
+an inbox, limits and relays. A client would have to hardcode the set from §Which Methods a Hub Serves.
+
+A sibling field rather than a marker inside `methods`, because `methods` is a flat array of strings with
+nowhere to annotate an entry — and keeping it strictly "callable here" is what makes it correct. A Hub
+SHOULD derive `private_methods` from what that connection was actually granted, so it never names a method
+this particular bill does not have. The two lists MUST NOT overlap.
+
+`private_methods` is **informational**. A Hub still checks the same scopes per item on the private
+transport, and a client MUST NOT read a method's presence here as permission to call it.
+
+Note this concerns advertising only. The scopes above still GRANT these methods — an implementation that
+dropped the scopes instead would refuse every real call while appearing to satisfy this rule.
 
 A Cash Wallet connection MUST NOT be granted `pay_invoice`, `lookup_invoice`, or `list_transactions`. Any
 of these would let one recipient observe or interfere with another recipient on the same connection.
