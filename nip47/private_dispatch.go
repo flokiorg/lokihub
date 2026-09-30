@@ -61,7 +61,19 @@ func (svc *nip47Service) ServePrivateItem(
 		return transport.Result{}, false
 	}
 
-	// 2. Resolve the bill by wallet_pubkey ALONE. There is no app_pubkey to use — the
+	// 2. Verify the bill proof's SIGNATURE first, before the bill is looked up.
+	//
+	// The verification is bill-independent and is the expensive step, so doing it here
+	// makes a missing bill and a foreign proof cost the same — see billProofSigner for
+	// the timing oracle this closes. Who the signer must BE is decided after the
+	// lookup, because the answer differs for a live bill and a tombstoned one.
+	signer, signed := svc.billProofSigner(item, binding)
+	if !signed {
+		omitted(item, "bill proof missing, malformed, or not verifiable")
+		return transport.Result{}, false
+	}
+
+	// 3. Resolve the bill by wallet_pubkey ALONE. There is no app_pubkey to use — the
 	// envelope's outer key is ephemeral — which is why apps.wallet_pubkey carries its own
 	// index; the composite one leads with app_pubkey and cannot serve this.
 	var app db.App
@@ -75,7 +87,7 @@ func (svc *nip47Service) ServePrivateItem(
 		// standard transport has answered that since tombstones existed; this is the
 		// same answer, reached through the bill proof instead of through a request
 		// encrypted to the bill.
-		if result, ok := svc.tryPrivateSpentBill(item, binding); ok {
+		if result, ok := svc.tryPrivateSpentBill(item, binding, signer); ok {
 			return result, true
 		}
 		omitted(item, "no bill with this target wallet_pubkey")
@@ -96,8 +108,8 @@ func (svc *nip47Service) ServePrivateItem(
 	// tells them nothing they did not already know. Failing it is an OMISSION, so a
 	// caller who cannot prove possession learns nothing at all, which is what keeps
 	// a guessed wallet pubkey from becoming an existence oracle.
-	if !svc.billProofValid(item, binding, app.AppPubkey) {
-		omitted(item, "bill proof missing or not signed by this bill's connection key")
+	if !billProofHolder(signer, app.AppPubkey) {
+		omitted(item, "bill proof not signed by this bill's connection key")
 		return transport.Result{}, false
 	}
 
@@ -266,7 +278,7 @@ func (svc *nip47Service) ServePrivateItem(
 // bill keeps its silence, exactly as on the standard transport: the agreed design is
 // three outcomes on the STATUS method, and answering the others would return a
 // result_type that does not match the request.
-func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding PrivateItemBinding) (transport.Result, bool) {
+func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding PrivateItemBinding, signer string) (transport.Result, bool) {
 	if item.Method != nipcash.MethodCashStatus {
 		return transport.Result{}, false
 	}
@@ -296,7 +308,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	if err != nil {
 		return transport.Result{}, false
 	}
-	if !svc.billProofValid(item, binding, expectedPubkey) {
+	if !billProofHolder(signer, expectedPubkey) {
 		return transport.Result{}, false
 	}
 
@@ -331,13 +343,31 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 // fields, so accepting either kind here would let anyone who can sign anything
 // claim possession — the kind is the only thing separating "I control a key" from
 // "I hold this bill". transport.VerifyBillProof enforces it.
-func (svc *nip47Service) billProofValid(item transport.Item, binding PrivateItemBinding, wantPubkey string) bool {
-	if !item.HasBillProof() || wantPubkey == "" {
-		return false
+// billProofSigner verifies the kind-23193 bill proof and returns who signed it.
+//
+// Split out from the comparison deliberately, and called BEFORE the bill is looked
+// up, because the signature verification is the expensive part (~373us of secp256k1)
+// and it does not depend on the bill at all. Doing it first makes every omission cost
+// the same.
+//
+// It used to run after the lookup, which made the two information-free omissions
+// distinguishable by TIMING: a target naming no bill missed the lookup and returned
+// immediately having verified nothing, while a target naming a real bill with a
+// foreign proof paid the full verification before failing. Both say nothing, but they
+// did not say it at the same speed — so an attacker who supplies a structurally
+// perfect proof signed with their own key could measure the difference and enumerate
+// which wallet pubkeys this hub actually serves. That is precisely the existence
+// oracle the omission exists to prevent.
+//
+// Returns false for a missing or malformed proof too, so an item that cannot possibly
+// authorize never reaches the database.
+func (svc *nip47Service) billProofSigner(item transport.Item, binding PrivateItemBinding) (string, bool) {
+	if !item.HasBillProof() {
+		return "", false
 	}
 	paramsHash, err := transport.CanonicalParamsHash(item.Params)
 	if err != nil {
-		return false
+		return "", false
 	}
 	signer, err := transport.VerifyBillProof(item.BillProof, transport.ProofBinding{
 		Target:     item.Target,
@@ -348,9 +378,15 @@ func (svc *nip47Service) billProofValid(item transport.Item, binding PrivateItem
 		NotAfter:   binding.NotAfter,
 	}, time.Now())
 	if err != nil {
-		return false
+		return "", false
 	}
-	return signer == wantPubkey
+	return signer, true
+}
+
+// billProofHolder reports whether an already-verified signer is the key this bill's
+// proof must carry. Free: the expensive work happened in billProofSigner.
+func billProofHolder(signer, wantPubkey string) bool {
+	return wantPubkey != "" && signer == wantPubkey
 }
 
 // privateItemIsAuthorized checks one item's authorization against the bill it names, and
