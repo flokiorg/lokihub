@@ -22,7 +22,7 @@ import (
 
 // loopBill creates one funded, single-recipient bill and returns what a client needs to
 // address it.
-func loopBill(t *testing.T, svc *tests.TestService, hub *db.App, label string) (walletPubkey, recipientPriv string) {
+func loopBill(t *testing.T, svc *tests.TestService, hub *db.App, label string) (walletPubkey, recipientPriv, connPriv string) {
 	t.Helper()
 
 	recipientPriv = nostr.GeneratePrivateKey()
@@ -42,6 +42,15 @@ func loopBill(t *testing.T, svc *tests.TestService, hub *db.App, label string) (
 	require.NoError(t, err)
 	require.NoError(t, svc.DB.Model(&wallet).Update("wallet_pubkey", walletPubkey).Error)
 
+	// app_pubkey is the deterministic pairing pubkey, as cashwallet.Create sets it.
+	// It is what a kind-23193 bill proof is verified against, so a fixture with a
+	// random value here would have every item omitted at the possession gate.
+	connPriv, err = svc.Keys.GetCashPairingKey(wallet.ID)
+	require.NoError(t, err)
+	connPub, err := nostr.GetPublicKey(connPriv)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&wallet).Update("app_pubkey", connPub).Error)
+
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: recipientPub, AmountMloki: 1000},
 	}))
@@ -51,7 +60,7 @@ func loopBill(t *testing.T, svc *tests.TestService, hub *db.App, label string) (
 	} {
 		require.NoError(t, svc.DB.Create(&db.AppPermission{AppId: wallet.ID, Scope: scope}).Error)
 	}
-	return walletPubkey, recipientPriv
+	return walletPubkey, recipientPriv, connPriv
 }
 
 // TestFullLoop_SDKBuildsRealHubServesSDKReads is the contract test with no fake on either
@@ -85,10 +94,12 @@ func TestFullLoop_SDKBuildsRealHubServesSDKReads(t *testing.T) {
 	const bills = 3
 	targets := make([]string, 0, bills)
 	privs := make([]string, 0, bills)
+	connPrivs := make([]string, 0, bills)
 	for i := 0; i < bills; i++ {
-		target, priv := loopBill(t, svc, hub, string(rune('a'+i)))
+		target, priv, connPriv := loopBill(t, svc, hub, string(rune('a'+i)))
 		targets = append(targets, target)
 		privs = append(privs, priv)
+		connPrivs = append(connPrivs, connPriv)
 	}
 
 	// --- client side: build the envelope with the SDK's own constructors ---
@@ -103,7 +114,7 @@ func TestFullLoop_SDKBuildsRealHubServesSDKReads(t *testing.T) {
 		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 	}
 	for i := 0; i < bills; i++ {
-		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i],
+		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i], connPrivs[i],
 			nipcash.CashStatusParams{}, nipcash.BySigning(privs[i]), binding)
 		require.NoError(t, err)
 		envelope.Items = append(envelope.Items, item)
@@ -192,7 +203,7 @@ func TestFullLoop_OmittedBillIsAbsentFromTheReply(t *testing.T) {
 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "loopfund")
-	realTarget, realPriv := loopBill(t, svc, hub, "real")
+	realTarget, realPriv, realConnPriv := loopBill(t, svc, hub, "real")
 
 	nonce, err := transport.NewNonce()
 	require.NoError(t, err)
@@ -201,10 +212,10 @@ func TestFullLoop_OmittedBillIsAbsentFromTheReply(t *testing.T) {
 	notAfter := time.Now().Add(time.Minute).Unix()
 	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
 
-	realItem, err := nipcash.StatusItem("real", realTarget, nipcash.CashStatusParams{}, nipcash.BySigning(realPriv), binding)
+	realItem, err := nipcash.StatusItem("real", realTarget, realConnPriv, nipcash.CashStatusParams{}, nipcash.BySigning(realPriv), binding)
 	require.NoError(t, err)
 	// A bill this hub has never heard of, proven by a key it has never seen.
-	ghostItem, err := nipcash.StatusItem("ghost", strings.Repeat("ee", 32),
+	ghostItem, err := nipcash.StatusItem("ghost", strings.Repeat("ee", 32), nostr.GeneratePrivateKey(),
 		nipcash.CashStatusParams{}, nipcash.BySigning(nostr.GeneratePrivateKey()), binding)
 	require.NoError(t, err)
 
@@ -252,7 +263,7 @@ func mustEncode(t *testing.T, r transport.ResponseEnvelope, limits transport.Lim
 //
 // The single-recipient loopBill above cannot exercise scoping at all: with one row,
 // "mine" and "all" are the same answer, so a scoping bug would pass unnoticed.
-func loopBillWithCoRecipient(t *testing.T, svc *tests.TestService, hub *db.App, label string) (walletPubkey, minePriv, minePub, theirsPub string) {
+func loopBillWithCoRecipient(t *testing.T, svc *tests.TestService, hub *db.App, label string) (walletPubkey, minePriv, minePub, theirsPub, connPriv string) {
 	t.Helper()
 
 	minePriv = nostr.GeneratePrivateKey()
@@ -274,6 +285,14 @@ func loopBillWithCoRecipient(t *testing.T, svc *tests.TestService, hub *db.App, 
 	require.NoError(t, err)
 	require.NoError(t, svc.DB.Model(&wallet).Update("wallet_pubkey", walletPubkey).Error)
 
+	// The real pairing pubkey, as cashwallet.Create sets it — what the bill proof is
+	// checked against.
+	connPriv, err = svc.Keys.GetCashPairingKey(wallet.ID)
+	require.NoError(t, err)
+	connPub, err := nostr.GetPublicKey(connPriv)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&wallet).Update("app_pubkey", connPub).Error)
+
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: minePub, AmountMloki: 1000},
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: theirsPub, AmountMloki: 2000},
@@ -284,7 +303,7 @@ func loopBillWithCoRecipient(t *testing.T, svc *tests.TestService, hub *db.App, 
 	} {
 		require.NoError(t, svc.DB.Create(&db.AppPermission{AppId: wallet.ID, Scope: scope}).Error)
 	}
-	return walletPubkey, minePriv, minePub, theirsPub
+	return walletPubkey, minePriv, minePub, theirsPub, connPriv
 }
 
 // TestFullLoop_ScopeIsHonouredPerItem proves cash_status scoping end to end, with no fake
@@ -310,7 +329,7 @@ func TestFullLoop_ScopeIsHonouredPerItem(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "scopefund")
 
-	target, minePriv, minePub, theirsPub := loopBillWithCoRecipient(t, svc, hub, "a")
+	target, minePriv, minePub, theirsPub, scopeConnPriv := loopBillWithCoRecipient(t, svc, hub, "a")
 
 	nonce, err := transport.NewNonce()
 	require.NoError(t, err)
@@ -324,10 +343,10 @@ func TestFullLoop_ScopeIsHonouredPerItem(t *testing.T) {
 	}
 
 	// Absent scope: the private transport's default, which must be "mine".
-	bare, err := nipcash.StatusItem("bare", target, nipcash.CashStatusParams{}, nipcash.BySigning(minePriv), binding)
+	bare, err := nipcash.StatusItem("bare", target, scopeConnPriv, nipcash.CashStatusParams{}, nipcash.BySigning(minePriv), binding)
 	require.NoError(t, err)
 	// Explicit "all": scoping is a default, not a removal.
-	all, err := nipcash.StatusItem("all", target, nipcash.CashStatusParams{Scope: nipcash.ScopeAll}, nipcash.BySigning(minePriv), binding)
+	all, err := nipcash.StatusItem("all", target, scopeConnPriv, nipcash.CashStatusParams{Scope: nipcash.ScopeAll}, nipcash.BySigning(minePriv), binding)
 	require.NoError(t, err)
 	envelope.Items = append(envelope.Items, bare, all)
 

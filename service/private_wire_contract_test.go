@@ -148,22 +148,28 @@ func TestWireContract_MultiBillEnvelopeSurvivesTheWire(t *testing.T) {
 		params := `{}`
 		hash, err := transport.CanonicalParamsHash([]byte(params))
 		require.NoError(t, err)
-		proof, err := transport.BuildItemProof(billPriv, transport.ProofBinding{
+		binding := transport.ProofBinding{
 			Target:     billTarget,
 			HubXOnly:   pt.nodeXOnly, // one hub for every item, as required
 			Method:     "cash_status",
 			ParamsHash: hash,
 			Nonce:      env.Nonce,
 			NotAfter:   env.NotAfter,
-		})
+		}
+		proof, err := transport.BuildItemProof(billPriv, binding)
+		require.NoError(t, err)
+		// Each bill also carries its own bill proof, signed by its own connection
+		// key — a different key from the slice proof's, as on the wire.
+		billProof, err := transport.BuildBillProof(nostr.GeneratePrivateKey(), binding)
 		require.NoError(t, err)
 
 		env.Items = append(env.Items, transport.Item{
-			ID:     strings.Repeat("i", i+1),
-			Target: billTarget,
-			Method: "cash_status",
-			Params: []byte(params),
-			Proof:  proof,
+			ID:        strings.Repeat("i", i+1),
+			Target:    billTarget,
+			Method:    "cash_status",
+			Params:    []byte(params),
+			Proof:     proof,
+			BillProof: billProof,
 		})
 	}
 
@@ -210,7 +216,6 @@ func TestWireContract_ServableMethodSetsAgree(t *testing.T) {
 	// lives in nip47, beside the controllers it gates, so this test asks each side the
 	// same question rather than reading either one's internals.
 	for _, method := range []string{
-		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodCashStatus,
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,

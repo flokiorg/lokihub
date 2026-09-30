@@ -74,6 +74,11 @@ func testEnvelope(t *testing.T) transport.Envelope {
 			Method: "cash_status",
 			Params: json.RawMessage(`{}`),
 			Proof:  json.RawMessage(`{"kind":23192}`),
+			// A placeholder like the slice proof above: these tests exercise the
+			// ENVELOPE layer — sealing, unwrapping, replay, freshness — which never
+			// verifies either proof. It only requires both to be present, since an
+			// item missing one could not be served anyway.
+			BillProof: json.RawMessage(`{"kind":23193}`),
 		}},
 	}
 }
@@ -231,16 +236,26 @@ func TestNonceSet_IsAtomicUnderConcurrency(t *testing.T) {
 // of drifting toward its cap, where it would refuse real envelopes.
 func TestNonceSet_SweepReclaimsExpired(t *testing.T) {
 	s := newPrivateNonceSet()
+	// Both entries are burnt for at least transport.ProofFreshnessPast from NOW,
+	// whatever their envelope's own not_after said — a nonce has to outlive every
+	// proof bound to it, or a lapsed entry becomes an unseen first sighting and the
+	// proof can be lifted into someone else's envelope. So the sweep is driven from
+	// that window, not from the envelope's.
 	past := time.Now().Add(-time.Minute).Unix()
-	future := time.Now().Add(time.Minute).Unix()
+	longFuture := time.Now().Add(transport.ProofFreshnessPast + 10*time.Minute).Unix()
 
 	s.seenOrRecord("aa"+strings.Repeat("1", 62), past)
-	s.seenOrRecord("bb"+strings.Repeat("2", 62), future)
+	s.seenOrRecord("bb"+strings.Repeat("2", 62), longFuture)
 	require.Equal(t, int64(2), s.Len())
 
-	removed := s.sweepExpired(time.Now())
+	require.Equal(t, int64(0), s.sweepExpired(time.Now()),
+		"nothing is reclaimable yet: even the entry whose envelope window is an hour past "+
+			"is still burnt for the proof's own lifetime")
+
+	// Past the proof window, the short entry becomes reclaimable and the long one does not.
+	removed := s.sweepExpired(time.Now().Add(transport.ProofFreshnessPast + time.Second))
 	assert.Equal(t, int64(1), removed)
-	assert.Equal(t, int64(1), s.Len(), "the live nonce must survive the sweep")
+	assert.Equal(t, int64(1), s.Len(), "the longer-lived nonce must survive the sweep")
 }
 
 // TestNonceSet_FailsClosedAtCapacity is the decision that matters most here.
