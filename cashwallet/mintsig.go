@@ -58,8 +58,22 @@ const mintSigRawLen = 65
 // the money did.
 //
 // amountMillis is the wallet's total committed amount, the value mintSig attests.
-func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64) string {
+// hubPubkey is the issuing Hub app's own pubkey. It is hashed and truncated into
+// the token's hub-group fingerprint (lokicash.HubGroupFor), which is how a holder
+// tells which of their bills may be consolidated together — provenance identifies
+// the minting NODE, and one node runs several Hubs, so a holder grouping by minter
+// merges bills this Hub then refuses.
+//
+// An empty hubPubkey yields no fingerprint rather than a hash of "": a bill with no
+// fingerprint is ungrouped, which is correct and merely inconvenient, whereas a
+// fingerprint every Hub shares would group bills across Hubs and guarantee the
+// refusal this exists to avoid.
+func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) string {
 	amt := amountMillis
+	var hubGroup []byte
+	if hubPubkey != "" {
+		hubGroup = lokicash.HubGroupFor(hubPubkey)
+	}
 	tok := lokicash.Token{
 		HRP:              lokicash.HRP,
 		WalletPubkey:     walletPubkey,
@@ -68,6 +82,7 @@ func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRe
 		IdentityRequired: identityRequired,
 		MintSignature:    mintSig,
 		AttestedAmount:   &amt,
+		HubGroup:         hubGroup,
 	}
 	token, err := lokicash.Encode(tok)
 	if err != nil {

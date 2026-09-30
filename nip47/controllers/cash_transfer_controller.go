@@ -750,6 +750,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		RemainderAmountMloki:   remainderAmount,
 		MinTransferMloki:       claim.MinTransferMloki,
 		RedeemFeePpm:           claim.RedeemFeePpm,
+		RedeemFeeBaseMloki:     claim.RedeemFeeBaseMloki,
 		ExpiresAt:              app.ExpiresAt,
 	})
 	if err != nil {

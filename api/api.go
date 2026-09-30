@@ -134,7 +134,8 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				PerWalletMaxMloki: createAppRequest.CashPerWalletMaxMloki,
 				MaxExpSecs:        createAppRequest.CashMaxExpSecs,
 				MinTransferMloki:  createAppRequest.CashMinTransferMloki,
-				RedeemFeePpm:      createAppRequest.CashRedeemFeePpm,
+				RedeemFeePpm:       createAppRequest.CashRedeemFeePpm,
+				RedeemFeeBaseMloki: createAppRequest.CashRedeemFeeBaseMloki,
 				// Omitted means the default, not "disabled": a caller that
 				// never heard of this field should get a working tombstone,
 				// and 0 is the explicit opt-out.
@@ -460,10 +461,12 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 	if userApp.Kind == db.AppKindCashHub &&
 		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
 			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
+			updateAppRequest.CashRedeemFeeBaseMloki != nil ||
 			updateAppRequest.CashSpentRetentionSecs != nil) {
 		if err := api.appsSvc.UpdateCashHubConfig(userApp.ID,
 			updateAppRequest.CashPerWalletMaxMloki, updateAppRequest.CashMaxExpSecs,
 			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm,
+			updateAppRequest.CashRedeemFeeBaseMloki,
 			updateAppRequest.CashSpentRetentionSecs); err != nil {
 			return err
 		}
@@ -598,6 +601,7 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CashMaxExpSecs = &cfg.MaxExpSecs
 			response.CashMinTransferMloki = &cfg.MinTransferMloki
 			response.CashRedeemFeePpm = &cfg.RedeemFeePpm
+			response.CashRedeemFeeBaseMloki = &cfg.RedeemFeeBaseMloki
 			response.CashSpentRetentionSecs = &cfg.SpentRetentionSecs
 		}
 	}

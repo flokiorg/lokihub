@@ -69,7 +69,7 @@ type AppsService interface {
 	// NIP-CASH §Data Model explicitly allows; MinTransferMloki must only be
 	// non-negative (0 = no floor is valid); RedeemFeePpm must be within
 	// 0..constants.MAX_FEES_PPM (0 = free).
-	UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, spentRetentionSecs *int) error
+	UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error
 	// CreateCircleHub creates a circle_hub app and persists its CircleHubConfig,
 	// attaching it to either an existing CircleIdentity (identityRef.ExistingID) or a
 	// brand-new one created from identityRef's remaining fields.

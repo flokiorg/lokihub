@@ -249,6 +249,10 @@ type App struct {
 	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs,omitempty"`
 	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki,omitempty"`
 	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm,omitempty"`
+	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none). Routing
+	// cost barely scales with amount, so a purely proportional fee cannot cover a
+	// small slice's own delivery — see db.CashHubConfig.RedeemFeeBaseMloki.
+	CashRedeemFeeBaseMloki *int64 `json:"cashRedeemFeeBaseMloki,omitempty"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// are set only for circle_hub apps — the hub-wide defaults set at
 	// creation time, for the same reason as above.
@@ -338,6 +342,7 @@ type UpdateAppRequest struct {
 	CashSpentRetentionSecs *int   `json:"cashSpentRetentionSecs"`
 	CashMinTransferMloki   *int64 `json:"cashMinTransferMloki"`
 	CashRedeemFeePpm       *int   `json:"cashRedeemFeePpm"`
+	CashRedeemFeeBaseMloki *int64 `json:"cashRedeemFeeBaseMloki"`
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// update a circle_hub's CircleHubConfig; nil leaves the
 	// corresponding field unchanged. Ignored for other app kinds.
@@ -368,6 +373,10 @@ type CreateAppRequest struct {
 	CashMaxExpSecs        int      `json:"cashMaxExpSecs"`
 	CashMinTransferMloki  int64    `json:"cashMinTransferMloki"`
 	CashRedeemFeePpm      int      `json:"cashRedeemFeePpm"`
+	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none) — see
+	// db.CashHubConfig.RedeemFeeBaseMloki for why a proportional-only fee cannot
+	// cover a small slice's own routing cost.
+	CashRedeemFeeBaseMloki int64 `json:"cashRedeemFeeBaseMloki"`
 	// CashSpentRetentionSecs: how long this Hub answers cash_status about a
 	// destroyed bill before returning to silence.
 	//

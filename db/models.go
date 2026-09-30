@@ -139,6 +139,21 @@ type CashHubConfig struct {
 	// inherited from there on. Same validation/semantics as
 	// CircleHubConfig.FeesPpm (0 <= x <= constants.MAX_FEES_PPM).
 	RedeemFeePpm int
+	// RedeemFeeBaseMloki is the flat part of the same fee (0 = none), added to
+	// the per-million part rather than replacing it.
+	//
+	// It exists because routing cost is mostly FIXED while RedeemFeePpm is purely
+	// proportional, so a purely proportional fee cannot cover a small slice's own
+	// redemption: at 0.1% a 1,000-mloki slice earns the Hub 1 mloki against a real
+	// route that routinely costs hundreds, and the difference came out of the Hub's
+	// own balance. Lightning's own forwarding fees are base + ppm for exactly this
+	// reason, and so is every custodial service that survives doing this.
+	//
+	// Sized to cover a typical route, this makes the fee the Hub withholds from a
+	// slice enough to pay for delivering it, which is what lets the payment's fee
+	// cap be set to the quoted fee (see SendPaymentSync) and therefore what keeps
+	// payout + cap within the slice itself.
+	RedeemFeeBaseMloki int64
 	// SpentRetentionSecs is how long after a bill is destroyed this Hub keeps
 	// answering cash_status for it with a "spent" tombstone instead of going
 	// silent. Measured from the spend, not from the bill's expiry, so a
@@ -222,6 +237,13 @@ type CashWalletClaim struct {
 	// transactions.reconcileCashRedeemFee) — a same-node redemption always
 	// pays out the slice's full AmountMloki with no fee.
 	RedeemFeePpm int
+	// RedeemFeeBaseMloki is this slice's own flat fee component, snapshotted and
+	// inherited under exactly the same rules as RedeemFeePpm above: fixed at
+	// creation, never rewritten by an identity reassignment, and carried unchanged
+	// onto a split-off or consolidated wallet. The two are one quoted price and
+	// must travel together, or a slice could be split into pieces that each pay a
+	// different share of the same route.
+	RedeemFeeBaseMloki int64
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see

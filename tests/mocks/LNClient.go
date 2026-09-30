@@ -1759,7 +1759,7 @@ func (_c *MockLNClient_SendPaymentProbes_Call) RunAndReturn(run func(ctx context
 }
 
 // SendPaymentSync provides a mock function for the type MockLNClient
-func (_mock *MockLNClient) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (_mock *MockLNClient) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	ret := _mock.Called(payReq, amount)
 
 	if len(ret) == 0 {

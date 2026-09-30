@@ -219,6 +219,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	var earliest *time.Time
 	var minTransfer int64
 	var redeemFee int
+	var redeemFeeBase int64
 	proofEventIDs := make([]string, 0, len(params.Sources))
 	// iaTrustCache memoizes IsTrusted per ia_pubkey for this call only — see
 	// resolveConsolidateSource's doc comment for why (TOCTOU: one consistent
@@ -276,10 +277,16 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		if len(resolved) == 0 {
 			minTransfer = rs.claim.MinTransferMloki
 			redeemFee = rs.claim.RedeemFeePpm
+			redeemFeeBase = rs.claim.RedeemFeeBaseMloki
 		} else {
-			if rs.claim.MinTransferMloki != minTransfer || rs.claim.RedeemFeePpm != redeemFee {
+			// The base joins this check because it is half of one quoted price. Merging
+			// slices that agreed on the per-million part but not the flat part would
+			// silently re-price whichever side lost, and the merged bill would quote a
+			// fee its sources never agreed to.
+			if rs.claim.MinTransferMloki != minTransfer || rs.claim.RedeemFeePpm != redeemFee ||
+				rs.claim.RedeemFeeBaseMloki != redeemFeeBase {
 				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-					"sources disagree on min_transfer_millis/redeem_fee_ppm; only same-terms slices may be consolidated")
+					"sources disagree on min_transfer_millis/redeem_fee_ppm/redeem_fee_base; only same-terms slices may be consolidated")
 				return
 			}
 		}
@@ -385,8 +392,9 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		NewIdentityType:  params.NewIdentity.IdentityType,
 		NewIdentityValue: params.NewIdentity.IdentityValue,
 		NewIAPubkey:      params.NewIdentity.IAPubkey,
-		MinTransferMloki: minTransfer,
-		RedeemFeePpm:     redeemFee,
+		MinTransferMloki:   minTransfer,
+		RedeemFeePpm:       redeemFee,
+		RedeemFeeBaseMloki: redeemFeeBase,
 		ExpiresAt:        earliest,
 	})
 	if err != nil {

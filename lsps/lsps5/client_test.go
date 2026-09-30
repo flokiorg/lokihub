@@ -42,7 +42,7 @@ func (m *mockLNClient) SubscribeCustomMessages(ctx context.Context) (<-chan lncl
 }
 
 // No-ops for other methods
-func (m *mockLNClient) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (m *mockLNClient) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	return nil, nil
 }
 func (m *mockLNClient) SendKeysend(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {

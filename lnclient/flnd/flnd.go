@@ -474,7 +474,7 @@ func (svc *FLNDService) Shutdown() error {
 	return nil
 }
 
-func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	const MAX_PARTIAL_PAYMENTS = 16
 
 	paymentRequest, err := decodepay.Decode(payReq)
@@ -489,10 +489,25 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64) (*lnclien
 	if amount != nil {
 		paymentAmountMloki = *amount
 	}
+	// feeLimitMloki, when supplied, is the fee the caller already WITHHELD from the
+	// payment and is therefore willing to spend delivering it. Honouring it is what
+	// keeps payout + fee inside the amount being paid, so the node never covers a
+	// route out of its own balance: LND fails a payment rather than exceed this, so
+	// an over-priced route becomes a failed redeem instead of a silent subsidy.
+	//
+	// Falling back to the fee RESERVE when it is nil is deliberate and is the older
+	// behaviour: the reserve is max(1%, 10_000), which for anything under 1,000,000
+	// is a flat 10,000 — far above a small payment's own quoted fee, which is exactly
+	// how the node ended up paying thousands of times what it earned on a small cash
+	// redeem. Callers that have no fee of their own to spend still get it.
+	feeLimit := transactions.CalculateFeeReserveMloki(paymentAmountMloki)
+	if feeLimitMloki != nil {
+		feeLimit = *feeLimitMloki
+	}
 	sendRequest := &routerrpc.SendPaymentRequest{
 		PaymentRequest: payReq,
 		MaxParts:       MAX_PARTIAL_PAYMENTS,
-		FeeLimitMsat:   int64(transactions.CalculateFeeReserveMloki(paymentAmountMloki)), //nolint:gosec // msat amounts are always far below int64 range
+		FeeLimitMsat:   int64(feeLimit), //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	if amount != nil {

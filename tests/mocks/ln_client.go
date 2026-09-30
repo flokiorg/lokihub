@@ -825,7 +825,7 @@ func (_m *LNClient) SendPaymentProbes(ctx context.Context, invoice string) error
 }
 
 // SendPaymentSync provides a mock function with given fields: payReq, amount
-func (_m *LNClient) SendPaymentSync(payReq string, amount *uint64) (*lnclient.PayInvoiceResponse, error) {
+func (_m *LNClient) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
 	ret := _m.Called(payReq, amount)
 
 	if len(ret) == 0 {

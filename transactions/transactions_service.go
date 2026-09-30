@@ -521,7 +521,26 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	if selfPayment {
 		response, err = svc.interceptSelfPayment(paymentRequest.PaymentHash, paymentAmount, lnClient)
 	} else {
-		response, err = lnClient.SendPaymentSync(payReq, amountMloki)
+		// Cap the route at the fee this redemption already WITHHELD from the slice.
+		//
+		// cashRedeemFeeMloki is non-nil only for a cash_redeem, and only the Hub sets
+		// it — so this is the one payment whose price was quoted in advance, to the
+		// recipient, and deducted from their payout before the route was chosen. Paying
+		// more for the route than was withheld for it means the Hub covers the
+		// difference out of its own balance, which is what a purely proportional fee
+		// made routine on small slices.
+		//
+		// Zero is not a cap: a Hub with no fee configured has withheld nothing and has
+		// made no promise, so it keeps the old reserve rather than having every external
+		// redeem fail. Configuring a fee is what opts a Hub into the guarantee, which is
+		// the right way round — the guarantee IS that the fee covers the route.
+		// Read from metadata rather than reusing the variable above, which lives inside
+		// the DB-transaction closure; this is the same key cash_redeem_controller.go set.
+		var routeCap *uint64
+		if v, ok := metadata["cash_redeem_fee_mloki"].(uint64); ok && v > 0 {
+			routeCap = &v
+		}
+		response, err = lnClient.SendPaymentSync(payReq, amountMloki, routeCap)
 	}
 
 	if err != nil {
@@ -1557,6 +1576,38 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 // max of 1% or 10000 milliloki (10 loki)
 func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
 	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), 10000))
+}
+
+// CalculateRedeemFeeMloki computes a cash slice's redeem fee: a flat base plus a
+// per-million cut of the amount.
+//
+// Deliberately NOT CalculateFeeSkimMloki, which computes a circle_hub's forwarding
+// fee and is purely proportional. The two look alike and mean different things;
+// folding a base into the shared helper would silently change circle forwarding
+// too.
+//
+// The base exists because routing cost does not scale with the payment. A purely
+// proportional fee earns ~nothing on a small slice while the Hub still pays a full
+// route for it, and that gap was coming out of the Hub's own balance. Adding a base
+// makes the withheld fee cover the delivery it is withheld for.
+//
+// Saturating, like its sibling: a fee can never exceed the amount it is charged on,
+// so a base larger than the slice yields the whole slice rather than wrapping. The
+// caller is then quoting a zero payout, which is exactly the case
+// MinRedeemableMloki exists to refuse at mint time.
+func CalculateRedeemFeeMloki(amountMloki uint64, baseMloki int64, feePpm int) uint64 {
+	fee := CalculateFeeSkimMloki(amountMloki, feePpm)
+	if baseMloki > 0 {
+		base := uint64(baseMloki)
+		if fee > math.MaxUint64-base {
+			return amountMloki
+		}
+		fee += base
+	}
+	if fee > amountMloki {
+		return amountMloki
+	}
+	return fee
 }
 
 // CalculateFeeSkimMloki computes a circle_hub's forwarding-fee cut of an

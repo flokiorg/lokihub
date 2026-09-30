@@ -37,6 +37,8 @@ type SplitInTwoParams struct {
 
 	MinTransferMloki int64
 	RedeemFeePpm     int
+	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
+	RedeemFeeBaseMloki int64
 	ExpiresAt        *time.Time
 }
 
@@ -72,7 +74,8 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 		NewIdentityValue: params.CarvedIdentityValue,
 		NewIAPubkey:      params.CarvedIAPubkey,
 		MinTransferMloki: params.MinTransferMloki,
-		RedeemFeePpm:     params.RedeemFeePpm,
+		RedeemFeePpm:       params.RedeemFeePpm,
+		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 		ExpiresAt:        params.ExpiresAt,
 	})
 	if err != nil {
@@ -92,7 +95,8 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 		NewIdentityValue: params.RemainderIdentityValue,
 		NewIAPubkey:      params.RemainderIAPubkey,
 		MinTransferMloki: params.MinTransferMloki,
-		RedeemFeePpm:     params.RedeemFeePpm,
+		RedeemFeePpm:       params.RedeemFeePpm,
+		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 		ExpiresAt:        params.ExpiresAt,
 	})
 	if err != nil {
