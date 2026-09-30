@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ohstr/nmilat/nipcash/transport"
+
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -104,15 +106,21 @@ func (s *privateNonceSet) seenOrRecord(nonce string, notAfter int64) bool {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	if existing, ok := shard.expiry[nonce]; ok {
-		// A known nonce whose window has already passed is not a replay worth
-		// refusing on its own — the freshness check rejects a stale envelope
-		// before it reaches here — but the entry is stale, so refresh it.
-		if existing >= time.Now().Unix() {
-			return true
-		}
-		shard.expiry[nonce] = notAfter
-		return false
+	if _, ok := shard.expiry[nonce]; ok {
+		// A known nonce is a replay, full stop — including one whose own envelope
+		// window has since passed.
+		//
+		// This used to refresh a lapsed entry and re-admit it, reasoning that "the
+		// freshness check rejects a stale envelope before it reaches here". That is
+		// true of the SAME envelope and false of a NEW one that merely reuses the
+		// nonce with a fresh window, which is the whole exploit: the nonce is the only
+		// thing binding a proof to one envelope, and a proof stays verifiable for
+		// ProofFreshnessPast (5m) while an envelope window is at most
+		// MaxNotAfterWindow (2m). For the ~3 minutes in between, anyone who had been
+		// handed someone else's signed item — an aggregator assembling a batch, the
+		// model the proof's own doc comment names — could resubmit it inside an
+		// envelope of their own, with their own reply_to, and receive the results.
+		return true
 	}
 
 	if s.count.Load() >= nonceSetCapacity {
@@ -123,7 +131,22 @@ func (s *privateNonceSet) seenOrRecord(nonce string, notAfter int64) bool {
 		return true
 	}
 
-	shard.expiry[nonce] = notAfter
+	// Burn the nonce for as long as a proof bound to it can still verify, NOT merely
+	// for the envelope's own window. The envelope's not_after is the caller's promise
+	// about the envelope; ProofFreshnessPast is the protocol's promise about the
+	// proof, and the second outlives the first by design. Taking the later of the two
+	// also closes the shorter route to the same replay, where the sweeper reclaimed a
+	// lapsed entry and the next envelope was not a refresh but a first sighting.
+	//
+	// Costs memory: entries now live up to 5 minutes instead of 2, so the set holds
+	// roughly 2.5x as many at the same request rate. That trades into the capacity
+	// refusal below, which is the honest failure — a full set means freshness cannot
+	// be guaranteed, and declining is correct.
+	burnUntil := time.Now().Add(transport.ProofFreshnessPast).Unix()
+	if notAfter > burnUntil {
+		burnUntil = notAfter
+	}
+	shard.expiry[nonce] = burnUntil
 	s.count.Add(1)
 	return false
 }
