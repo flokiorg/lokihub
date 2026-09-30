@@ -547,3 +547,48 @@ func unclaimedMillis(status CashStatusResult) uint64 {
 	}
 	return total
 }
+
+// requireSpentBillTombstoned polls a destroyed bill until it reports itself spent,
+// carrying no roster.
+//
+// This replaces requireSpentBillSilent at the cash_status call sites, because silence
+// is no longer the property. A Hub retains a destroyed bill for a bounded window
+// precisely so its holder gets a definitive "spent" instead of having to infer one
+// from silence — so a spent bill ANSWERS cash_status, on purpose, and asserting the
+// absence of an answer would be asserting against the feature.
+//
+// What must still hold is that the answer discloses nothing: a tombstone names the
+// state and carries no recipients. That is the assertion here.
+//
+// Polled rather than read once, for the same reason the silence variant polls: the Hub
+// answers the request that empties a bill BEFORE destroying it, so for a moment
+// afterwards the bill is still live and still returns its roster.
+func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
+	t.Helper()
+
+	deadline := time.Now().Add(drainedWalletDeleteWindow)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
+		var status CashStatusResult
+		err := conn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &status)
+		cancel()
+
+		if err == nil && status.Error == nipcash.ErrorSpent {
+			require.Empty(t, status.Recipients,
+				"a tombstone must carry no roster — the bill and its slices are gone")
+			return
+		}
+		// An omission is also acceptable: past its retention window, or on a Hub with
+		// retention disabled, a destroyed bill genuinely does fall silent.
+		if errors.Is(err, errPrivateOmitted) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Fail(t,
+				"a spent bill must answer only a tombstone, or nothing at all",
+				"still returning %d roster row(s) %s after its last slice was spent (err: %v, error field: %q)",
+				len(status.Recipients), drainedWalletDeleteWindow, err, status.Error)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}

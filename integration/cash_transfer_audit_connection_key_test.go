@@ -11,7 +11,6 @@
 package integration
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -100,15 +99,11 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	// The source slice was consumed: the source wallet was left holding
 	// nothing (its value moved into the carved + remainder wallets) and the hub
 	// deleted it — no double-spend, and nothing left to answer.
-	requireCashWalletDrainedAway(t, admin, hubAppID, walletPubkey, func(ctx context.Context) error {
-		// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
-		// every recipient's total, handed out with no proof). The distinction matters to what
-		// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
-		// definite answer, which is NOT the silence a destroyed bill produces and would make
-		// this pass for the wrong reason.
-		var st CashStatusResult
-		return shared.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
-	})
+	// nil: no bill method goes SILENT on a destroyed bill any more. get_balance is gone
+	// from a bill's scopes, and cash_status answers a destroyed bill with a "spent"
+	// tombstone deliberately. The deletion itself, read from the Hub's own records, is
+	// the stronger half regardless — a reply could never prove it happened.
+	requireCashWalletDrainedAway(t, admin, hubAppID, walletPubkey, nil)
 
 	// The remainder is redeemable under the SAME connection_key (fresh
 	// attestation + proof) — now from its OWN new wallet, for exactly the
@@ -176,7 +171,7 @@ func TestAudit_CashTransferConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	}
 	iaPriv := createEphemeralTrustedIA(t, cfg)
 	iaPub := mustPubkey(t, iaPriv)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-connkey-revoked-ia", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-connkey-revoked-ia", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	const fullAmount = uint64(80_000)
@@ -219,9 +214,16 @@ func TestAudit_CashTransferConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	// Funds untouched: the slice's whole value is still on the source wallet.
-	var bal CashStatusResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &bal))
-	require.EqualValues(t, fullAmount, unclaimedMillis(bal), "a revoked-IA transfer must not move any funds")
+	// Read from the HUB's own records, not over the wire.
+	//
+	// Two reasons, and the second is the binding one. A reply could never prove that a
+	// mutation did NOT happen. And cash_status is scoped and proof-gated: a
+	// connection_key recipient can only read their own row by presenting an attestation
+	// from a currently-trusted IA — which is exactly what this test has just revoked. So
+	// there is no wire call that can answer here, by design, and asking for one would be
+	// asserting against the revocation this test exists to verify.
+	require.EqualValues(t, fullAmount, unclaimedMlokiForWallet(t, admin, hubAppID, walletPubkey),
+		"a revoked-IA transfer must not move any funds")
 
 	// Re-register the IA so the ephemeral cleanup can reclaim the wallet's funds
 	// on delete (a connection_key wallet whose IA is untrusted is still
@@ -239,7 +241,7 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 	cfg := requireConfig(t)
 	iaPriv := createEphemeralTrustedIA(t, cfg)
 	iaPub := mustPubkey(t, iaPriv)
-	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-connkey-bad-target-ia", nil)
+	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "audit-connkey-bad-target-ia", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
 	const fullAmount = uint64(60_000)
@@ -267,9 +269,16 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 
 	// Nothing moved.
-	var bal CashStatusResult
-	require.NoError(t, shared.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &bal))
-	require.EqualValues(t, fullAmount, unclaimedMillis(bal), "a rejected untrusted-target split must not move any funds")
+	// Read from the HUB's own records, not over the wire.
+	//
+	// Two reasons, and the second is the binding one. A reply could never prove that a
+	// mutation did NOT happen. And cash_status is scoped and proof-gated: a
+	// connection_key recipient can only read their own row by presenting an attestation
+	// from a currently-trusted IA — which is exactly what this test has just revoked. So
+	// there is no wire call that can answer here, by design, and asking for one would be
+	// asserting against the revocation this test exists to verify.
+	require.EqualValues(t, fullAmount, unclaimedMlokiForWallet(t, admin, hubAppID, walletPubkey),
+		"a rejected untrusted-target split must not move any funds")
 }
 
 // TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected is

@@ -206,10 +206,10 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 	// Conservation: sum(all leaves) + final forward balance == original.
 	var total uint64
 	for i, l := range leaves {
-		var b GetBalanceResult
-		require.NoError(t, l.client.Call(ctxT(t), "get_balance", struct{}{}, &b))
-		require.EqualValues(t, l.amount, b.Balance, "leaf %d balance drifted", i)
-		total += uint64(b.Balance)
+		var b CashStatusResult
+		require.NoError(t, l.client.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &b))
+		require.EqualValues(t, l.amount, unclaimedMillis(b), "leaf %d balance drifted", i)
+		total += unclaimedMillis(b)
 	}
 	var finalBal CashStatusResult
 	require.NoError(t, curClient.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &finalBal))

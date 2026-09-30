@@ -9,7 +9,6 @@
 package integration
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -166,15 +165,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		// answers any more.
 		for _, c := range [][2]string{{conn1, conn1Token}, {conn2, conn2Token}} {
 			src := mustConnectBill(t, c[0], c[1], callerPriv)
-			requireSpentBillSilent(t, func(ctx context.Context) error {
-				// cash_status, not get_balance: a bill no longer serves get_balance (its balance is
-				// every recipient's total, handed out with no proof). The distinction matters to what
-				// this asserts — get_balance is now refused with a coded RESTRICTED, an immediate and
-				// definite answer, which is NOT the silence a destroyed bill produces and would make
-				// this pass for the wrong reason.
-				var st CashStatusResult
-				return src.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &st)
-			})
+			requireSpentBillTombstoned(t, src)
 		}
 
 		// Redeeming an already-consolidated source must fail (no double-spend).
