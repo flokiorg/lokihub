@@ -103,7 +103,11 @@ func TestAuditBSecA_LapsedNonceReadmitsALiftedBillProof(t *testing.T) {
 		NotAfter: now.Add(transport.MaxNotAfterWindow).Unix(),
 		Nonce:    nonce, // the lapsed one
 		ReplyTo:  replyTo2,
-		Items:    []transport.Item{item, withID(item, "2"), withID(item, "3")},
+		// One item, not three copies: the lift is about reusing the NONCE, and an
+		// envelope repeating an identical request is now refused in its own right
+		// (transport.ErrDuplicateItem) — which would mask this finding behind an
+		// unrelated rejection.
+		Items: []transport.Item{item},
 	}
 	_, _, err = pt.unwrap(seal(t, env2), transport.DefaultLimits(), now)
 	require.Error(t, err,
@@ -178,11 +182,6 @@ func TestAuditBSecA_SweeperErasesTheBindingEntirely(t *testing.T) {
 		"and the nonce is still known, so the replay is still refused")
 	t.Log("AUDITB-SECA-F1c: a nonce is burnt for ProofFreshnessPast (5m), not for its own " +
 		"not_after (<=120s), so it outlives every proof bound to it")
-}
-
-func withID(i transport.Item, id string) transport.Item {
-	i.ID = id
-	return i
 }
 
 var _ = hex.EncodeToString
