@@ -123,13 +123,6 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_consolidate requires a cash_wallet app")
 		return
 	}
-	// Shares the claim limiter with cash_redeem/cash_transfer: a captured proof
-	// (or, on those other methods, a cash secret) is a presentation surface
-	// worth rate-limiting even without a signature to forge.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_consolidate")
-		return
-	}
 	if len(params.Sources) < 2 {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "consolidate requires at least two sources")
 		return
@@ -149,6 +142,22 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 				db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
 		return
 	}
+	// Rate limit, charged only now that the request is a real attempt.
+	//
+	// Shares the claim limiter with cash_redeem/cash_transfer: a captured proof (or,
+	// on those methods, a cash secret) is a presentation surface worth limiting even
+	// without a signature to forge, and separate budgets would let an attacker split
+	// attempts across methods to double their allowance.
+	//
+	// Charged after the shape checks above for the same reason as the other two
+	// controllers: one envelope carries up to 32 items, each dispatched here
+	// separately, so charging first let a single envelope of malformed requests spend
+	// a shared bill's whole hourly allowance and lock out every other recipient.
+	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_consolidate")
+		return
+	}
+
 	deps := cashwallet.Deps{
 		AppsService:         controller.appsService,
 		TransactionsService: controller.transactionsService,

@@ -20,13 +20,21 @@ type circleWalletInfo struct {
 }
 
 type getInfoResponse struct {
-	Alias            *string           `json:"alias"`
-	Color            *string           `json:"color"`
-	Pubkey           *string           `json:"pubkey"`
-	Network          *string           `json:"network"`
-	BlockHeight      *uint32           `json:"block_height"`
-	BlockHash        *string           `json:"block_hash"`
-	Methods          []string          `json:"methods"`
+	Alias       *string  `json:"alias"`
+	Color       *string  `json:"color"`
+	Pubkey      *string  `json:"pubkey"`
+	Network     *string  `json:"network"`
+	BlockHeight *uint32  `json:"block_height"`
+	BlockHash   *string  `json:"block_hash"`
+	Methods     []string `json:"methods"`
+	// PrivateMethods names granted methods this connection does NOT serve, because they
+	// travel over the NIP-CASH private transport (§Scope Surface). Omitted when empty, so
+	// only a bill carries it.
+	//
+	// Without it there is no wire-level signal that the bill methods exist at all: they
+	// were removed from Methods because 23194 refuses them, and the kind-11190
+	// announcement carries only inbox, limits and relays.
+	PrivateMethods   []string          `json:"private_methods,omitempty"`
 	Notifications    []string          `json:"notifications"`
 	Metadata         interface{}       `json:"metadata,omitempty"`
 	LightningAddress *string           `json:"lud16"`
@@ -40,8 +48,11 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 	}
 
 	responsePayload := &getInfoResponse{
-		Methods:       controller.permissionsService.GetPermittedMethods(app, controller.lnClient),
-		Notifications: supportedNotifications,
+		Methods: controller.permissionsService.GetPermittedMethods(app, controller.lnClient),
+		// The complement of Methods: granted, but served on the private transport. Derived
+		// from this app's own grants, so it never claims a method this bill lacks.
+		PrivateMethods: controller.permissionsService.GetPrivateMethods(app),
+		Notifications:  supportedNotifications,
 	}
 
 	// basic permissions check

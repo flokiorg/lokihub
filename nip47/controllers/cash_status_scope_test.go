@@ -16,9 +16,9 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// cash_status' scope, per NIP-CASH §Scoping the Roster. Four rules, and the
-// interesting part is that the DEFAULT differs by transport, because the two
-// differ in what they can know:
+// cash_status' scope, per NIP-CASH §Scoping the Roster. Three rules, and the
+// interesting one is the default, because it is the answer a caller who says
+// nothing receives:
 //
 //	absent -> mine   (the safe default: learn nothing about co-recipients)
 //	all    -> all
