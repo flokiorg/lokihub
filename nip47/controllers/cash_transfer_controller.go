@@ -512,6 +512,36 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			}
 			split = hadRemovedRecipient
 		}
+		if !split && allClaims[0].TransferCount > 0 {
+			// The archive check above catches a recipient being REMOVED. It does not
+			// catch a recipient being REPLACED, and the lifetime recipient set grows
+			// either way.
+			//
+			// An in-place reassignment (AppsService.ReassignCashSliceIdentity) rewrites
+			// this claim's identity and writes NO archive row — live rows and archive
+			// rows stay disjoint, so their union is NOT the lifetime set after a
+			// handoff, and the interface comment on HasArchivedSliceForWallet saying an
+			// archive row is "the only way to recover a wallet's lifetime recipient
+			// count" is wrong. TransferCount is the other way: it is an exact count of
+			// those handoffs.
+			//
+			// Without this, two ordinary calls hand a cash secret to a previous owner.
+			// Alice (sole recipient) full-transfers to Bob's pubkey, which correctly
+			// reassigns in place, because a pubkey redemption still needs Bob's own
+			// signature. Alice necessarily still holds the bill's token, and its pairing
+			// secret is derived from the app ID (cashwallet/create.go:549) so it cannot
+			// be rotated. Bob then full-transfers to a CASH target: the gate sees one
+			// live claim and no archive row, concludes "always solo", and reassigns in
+			// place again — onto the connection Alice still reads. A cash redemption
+			// carries its raw cash_secret in the request body, so Alice takes it off the
+			// wire and front-runs the single-winner ClaimCashSlice, recovering a bill she
+			// already sold.
+			//
+			// Splitting instead costs a fresh wallet and token, which is the same price
+			// the removed-recipient case already pays, and is the safe direction: the new
+			// wallet's secret is derived from a new app ID that no previous owner has.
+			split = true
+		}
 	}
 
 	if !split {
