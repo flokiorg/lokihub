@@ -367,6 +367,41 @@ type CashTransferProof struct {
 	CreatedAt time.Time
 }
 
+// CashMintIdempotency records that one mint_cash request was already served, so a
+// caller's retry-on-timeout cannot mint a second wallet.
+//
+// mint_cash was the one money method with no replay guard. cash_transfer and
+// cash_consolidate sources carry a signed identity_event the backend refuses on replay;
+// mint_cash's params are plain identity_type / identity_value / amount_millis with no
+// nonce, so a caller whose own retry logic reads a timeout as "it failed" resends the
+// same logical request as a new NWC event and the hub mints and funds a SECOND wallet.
+//
+// A client-visible timeout does NOT mean the mint did not happen: Commit is durable and
+// complete before any response is built, and publishPrivateReply records
+// PUBLISH_CONFIRMED or PUBLISH_FAILED either way. The observed case was a response
+// sitting confirmed on the relay for a subscriber that had already given up.
+//
+// Keyed per hub, not globally: two hubs are different ledgers and an idempotency key is
+// only ever meaningful within the one the caller addressed. The unique index is what
+// enforces the guard — a concurrent duplicate loses on insert rather than on a
+// read-then-write race.
+//
+// WalletPubkey and Token are recorded so a replay can be told WHICH wallet it already
+// created. Deliberately NOT the recipients' cash secrets: for a cash-mode mint the hub
+// holds only a commitment and could not reproduce one even if it wanted to, which is
+// why a replay is REFUSED with a pointer to the wallet rather than answered with the
+// original result. Storing secrets to make replay work would trade this gap for a worse
+// one.
+type CashMintIdempotency struct {
+	ID             uint   `gorm:"primaryKey"`
+	HubAppID       uint   `gorm:"not null;uniqueIndex:idx_cash_mint_idem,priority:1"`
+	IdempotencyKey string `gorm:"not null;uniqueIndex:idx_cash_mint_idem,priority:2"`
+	WalletAppID    uint   `gorm:"not null;index"`
+	WalletPubkey   string `gorm:"not null"`
+	Token          string
+	CreatedAt      time.Time
+}
+
 // CashStrandedFund is a durable record of one compensating-saga reversal that
 // itself failed during cashwallet.Consolidate/SplitInTwo, so an operator can
 // find and resolve it by querying data instead of grepping logs.

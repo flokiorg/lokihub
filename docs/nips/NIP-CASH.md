@@ -265,6 +265,31 @@ the generated secret:
 
 A `cash` recipient's `cash_secret` appears in this response and nowhere else, ever (§Cash-Mode Slices).
 
+#### `idempotency_key`
+
+**OPTIONAL, and any caller that retries SHOULD send one.**
+
+`mint_cash` is the only value-creating method with no replay protection of its own. A
+`cash_transfer` or `cash_consolidate` source carries a signed proof whose nonce the Hub burns, so a
+resend is refused by construction; `mint_cash`'s parameters are plain identity and amount fields with
+nothing unique in them. A caller whose retry logic reads a timeout as "it failed" therefore resends
+the same logical request and the Hub mints and funds a **second** wallet.
+
+A timeout does not mean the mint did not happen. The Hub's funding step is complete and durable
+before any response is built, so the usual case is a response the caller never saw rather than work
+the Hub never did.
+
+The key is scoped to the Hub that received it: two Hubs are two ledgers, and one Hub's key MUST NOT
+affect another's. It is opaque to the Hub, which MUST NOT derive meaning from its contents.
+
+**A repeat MUST be refused, not answered with the original result.** This is a deliberate limit
+rather than an implementation shortcut: a `cash`-mode mint's secret exists only in the reply the
+caller missed, because the Hub keeps a one-way commitment and never the secret (§Cash-Mode Slices),
+so there is nothing for it to replay. A Hub MUST NOT store recipients' secrets in order to make
+replay possible — that trades a double-mint for a worse exposure. What an `idempotency_key` buys is
+that the money is not created twice; recovering a lost `cash_secret` is not something this protocol
+can offer, and a caller that cannot tolerate losing one SHOULD mint to a `pubkey` recipient instead.
+
 ### Processing Algorithm
 
 On receiving `mint_cash`, the Hub MUST, in order:
@@ -289,15 +314,21 @@ On receiving `mint_cash`, the Hub MUST, in order:
    to check it against, subject only to the implementation's own representational bound (§Minting, `expiry`). Otherwise (the Hub's own ceiling is a real, positive value): if omitted or zero, set it to the
    Hub's own expiry ceiling; otherwise it MUST NOT exceed that ceiling.
 5. Verify the Hub's own available balance is at least the sum of all recipients' amounts.
-6. Create the Cash Wallet connection, record one slice per recipient — stamping each with the Hub's
+6. If the request carries an `idempotency_key`, and this Hub has already served one with the same
+   key, **the Hub MUST refuse rather than mint again**, and SHOULD name the Cash Wallet that key
+   already produced. Checked here, after validation and before any state is created: a request that
+   was never going to succeed has nothing to be idempotent about, and recording a key for a mint
+   that did not happen would lock out the caller's legitimate retry.
+7. Create the Cash Wallet connection, record one slice per recipient — stamping each with the Hub's
    current `min_transfer_millis` and `redeem_fee_ppm` defaults (§Data Model) and a one-way commitment of
    the secret for `cash`-mode slices, never the secret itself — and perform a single internal transfer
    from the Hub to the new connection for the full sum. This MUST be atomic: a failure at any point after
-   this step MUST leave no partial state.
-7. Return the pairing connection string and the resolved recipient list, with each `cash` slice's
+   this step MUST leave no partial state. If an `idempotency_key` was supplied, record it against the
+   wallet now, in the same atomic step.
+8. Return the pairing connection string and the resolved recipient list, with each `cash` slice's
    plaintext secret included this one time.
 
-A request that fails any check above MUST be rejected before step 6. No partial wallet, slice, or
+A request that fails any check above MUST be rejected before step 7. No partial wallet, slice, or
 transfer is ever observable from a rejected request.
 
 ## Redeeming a Slice (`cash_redeem`)
