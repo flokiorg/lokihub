@@ -120,9 +120,12 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 			}
 			return nil, false, fmt.Errorf("failed to spin off the remainder: %w", err)
 		}
-		if derr := deps.AppsService.DeleteCashBill(carved.WalletApp, db.CashBillOutcomeVoid); derr != nil {
-			logger.Logger.Error().Err(derr).Uint("carved_wallet_id", carved.WalletApp.ID).
-				Msg("Reversed the carved spin-off but failed to delete the emptied wallet; harmless but leaves a zero-balance app")
+		// The reversal above returned nil, which is not the same as "the carved wallet
+		// is empty" — see deleteIfDrained. If it still holds funds the wallet stays,
+		// and the source claim must NOT be reported safe to restore, or the same value
+		// is handed back to its recipient while still sitting in the carved wallet.
+		if !deleteIfDrained(deps, "split", params.SourceWalletApp.ID, carved.WalletApp) {
+			return nil, false, fmt.Errorf("failed to spin off the remainder: %w", err)
 		}
 		return nil, true, fmt.Errorf("failed to spin off the remainder: %w", err)
 	}
