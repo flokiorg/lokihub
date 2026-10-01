@@ -119,6 +119,7 @@ func TestCashRedeem_RouteCapReachesTheNode(t *testing.T) {
 
 			// The invariant itself, stated as arithmetic rather than inferred from the
 			// two assertions above.
+			//nolint:gosec // every row's sliceMloki is a positive literal
 			assert.Equal(t, uint64(c.sliceMloki), *calls[0].Amount+*calls[0].FeeLimitMloki,
 				"payout + route_cap != slice: the Hub either eats the difference or "+
 					"pockets it, and f6e0124 exists so that it does neither")
