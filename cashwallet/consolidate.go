@@ -167,7 +167,19 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 			}
 		}
 		if allReversed {
-			_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
+			// allReversed means every fundInternal CALL returned nil, which is not the
+			// same as "the merged wallet is empty" — see deleteIfDrained.
+			var firstSource uint
+			if len(funded) > 0 {
+				firstSource = funded[0].WalletApp.ID
+			}
+			if !deleteIfDrained(deps, "consolidate", firstSource, newApp) {
+				// The wallet survived because it still holds funds, so no source claim
+				// may be restored: the same value would exist in two places.
+				for _, s := range funded {
+					strandedSourceAppIDs = append(strandedSourceAppIDs, s.WalletApp.ID)
+				}
+			}
 		}
 	}()
 
