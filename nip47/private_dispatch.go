@@ -424,11 +424,20 @@ func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.
 	if err := json.Unmarshal([]byte(params.AttestationEvent), &attestation); err != nil {
 		return "", false
 	}
+	// Parsed and signature-verified ONCE, outside the loop. It used to happen per
+	// claim, and a signature does not depend on which claim it is compared against — so
+	// a bill with 100 connection_key claims cost ~100 secp256k1 verifications for ONE
+	// item, against a transport budget that believes an item costs 2. Same shape, same
+	// fix, as the proof split that closed the bill-existence timing leak.
+	parsed, err := controllers.ParseClaimAttestation(&attestation)
+	if err != nil {
+		return "", false
+	}
 	for _, claim := range claims {
 		if claim.IdentityType != db.CashIdentityConnectionKey || claim.IAPubkey == "" {
 			continue
 		}
-		if err := controllers.VerifyClaimAttestationEvent(&attestation, claim.IAPubkey, signer, claim.IdentityValue); err != nil {
+		if err := controllers.MatchClaimAttestation(parsed, claim.IAPubkey, signer, claim.IdentityValue); err != nil {
 			continue
 		}
 		// Live trust, not trust-at-mint: an IA whose registration has since been
