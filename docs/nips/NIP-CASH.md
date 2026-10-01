@@ -1855,6 +1855,34 @@ slice's `identity_value` is public information for `pubkey` and `connection_key`
 secret is the opposite. It *is* the entire security of that slice. Storing it in the clear turns any read
 access to that storage into a theft of every unredeemed cash-mode slice on the Hub.
 
+**A caller that generates a cash-mode secret MUST persist it before placing the call that commits it.**
+This is the mirror image of the rule above, and it binds the *caller* rather than the Hub. For a
+`cash_transfer`/`cash_consolidate` cash-mode target the caller supplies the commitment itself
+(§Cash-Mode Slices), so only a one-way commitment ever crosses the wire and the Hub never learns or returns
+the preimage. Between the request leaving and the caller recording it, that secret therefore exists in
+exactly one place: the caller's own volatile memory. If the caller dies in that window after the Hub has
+committed, the slice is real, funded and unspendable **by anyone** — the Hub cannot help, because it never
+had the preimage, and there is no protocol operation that can recover or replace it. Nothing about this is
+detectable afterwards: the Hub's state is perfectly consistent and the funds are simply unreachable
+forever. A caller MUST therefore write the secret to durable storage *before* the request goes out, not
+after the response comes back, and MUST NOT treat a successful response as the moment the secret becomes
+worth keeping.
+
+Persisting it is **necessary but not sufficient**, and an implementation MUST NOT present it as a complete
+recovery path. The destination's token is carried only in the response, so a caller holding a written-ahead
+secret for a call whose reply it never saw still needs the Hub's cooperation to learn which wallet that
+secret opens. An implementation SHOULD therefore persist the secret against a record identifying the call it
+belonged to, and SHOULD surface any such unreconciled secret to its user rather than leaving it where only
+the implementation can see it — a secret stored where nobody will look protects nothing. What the rule buys
+is the difference between a loss that is recoverable with the Hub's help and one that is not recoverable at
+all.
+
+The same hazard runs the other way for `mint_cash`, and is inherent rather than fixable by a caller: there
+the Hub generates the secret and the response is the only copy that will ever exist
+(§Creating a Cash-Mode Slice), so a reply lost in transit destroys it with no recourse for either side. A
+caller cannot write ahead what it has not yet been told. Implementations should understand that asymmetry as
+the reason `cash_transfer` deliberately does **not** let the Hub mint the target's secret.
+
 **A cash-mode redemption MUST still be atomic and race-safe**, exactly like an identity-bound one (§Redeeming
 a Slice, step 4). First-redeem-wins is intentional for a cash-mode slice — that's the whole point — but two
 concurrent redemptions against the same secret MUST NOT both succeed.
