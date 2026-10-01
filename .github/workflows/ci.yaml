@@ -72,6 +72,14 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Compile-only, because these tests need a live Hub and an admin API.
+      # Without it CI never even builds ./integration/, so a breaking API change
+      # lands green while the whole adversarial suite — the artifact of every
+      # audit round — no longer compiles. Found by Session A's QA role; the suite
+      # had drifted exactly that way before anyone noticed.
+      - name: Vet (integration, compile only)
+        run: go vet -tags integration ./integration/...
+
       - name: Test (race)
         run: go test -race -count=1 ./...
 
