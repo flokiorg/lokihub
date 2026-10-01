@@ -2,7 +2,10 @@ package tests
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -99,6 +102,34 @@ type SendPaymentSyncCall struct {
 	FeeLimitMloki *uint64
 }
 
+// SendKeysendCall records one SendKeysend invocation's arguments.
+//
+// Same reason SendPaymentSyncCall exists, and the same blind spot: the mock
+// discarded all four — amount, destination, custom records and preimage — and
+// returned a fixed fee, so no test could observe where a keysend went or how much
+// it moved. Audit finding D-QA-3.
+//
+// CustomRecords is copied rather than aliased: the caller owns that slice.
+type SendKeysendCall struct {
+	Amount        uint64
+	Destination   string
+	CustomRecords []lnclient.TLVRecord
+	Preimage      string
+}
+
+// MakeHoldInvoiceCall records one MakeHoldInvoice invocation's arguments.
+//
+// PaymentHash is the load-bearing one: a hold invoice is created FOR a hash the
+// payer supplied, so passing the wrong one is the defect this records. Audit
+// finding D-QA-3.
+type MakeHoldInvoiceCall struct {
+	Amount          int64
+	Description     string
+	DescriptionHash string
+	Expiry          int64
+	PaymentHash     string
+}
+
 type MockLn struct {
 	PayInvoiceResponses []*lnclient.PayInvoiceResponse
 	PayInvoiceErrors    []error
@@ -139,9 +170,25 @@ type MockLn struct {
 	// callsMu guards the recordings below. lokihub's CI runs `go test -race`, and
 	// several suites drive payments from concurrent goroutines against one MockLn, so
 	// an unguarded append here would be a data race rather than a flake.
+	// HoldInvoiceBindsPreimage makes SettleHoldInvoice refuse a preimage that does
+	// not hash to a hold invoice this mock actually issued, the way a node does.
+	//
+	// Opt-in for the same reason MakeInvoiceHonoursAmount is: suites that drive the
+	// settle path without going through MakeHoldInvoice first have no issued invoice
+	// to match against, and failing them would be an artefact of the fixture rather
+	// than a finding. A test exercising the real preimage->hash binding sets this.
+	HoldInvoiceBindsPreimage bool
+
 	callsMu              sync.Mutex
 	sendPaymentSyncCalls []SendPaymentSyncCall
 	makeInvoiceAmounts   []int64
+	sendKeysendCalls     []SendKeysendCall
+	makeHoldInvoiceCalls []MakeHoldInvoiceCall
+	settleHoldPreimages  []string
+	lookupInvoiceHashes  []string
+	// issuedHoldHashes is every payment hash MakeHoldInvoice was asked to create an
+	// invoice for, which is what HoldInvoiceBindsPreimage checks a settle against.
+	issuedHoldHashes map[string]bool
 }
 
 // SendPaymentSyncCalls returns every SendPaymentSync argument set so far, in order.
@@ -157,6 +204,35 @@ func (mln *MockLn) MakeInvoiceAmounts() []int64 {
 	mln.callsMu.Lock()
 	defer mln.callsMu.Unlock()
 	return append([]int64(nil), mln.makeInvoiceAmounts...)
+}
+
+// SendKeysendCalls returns every SendKeysend argument set so far, in order.
+func (mln *MockLn) SendKeysendCalls() []SendKeysendCall {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]SendKeysendCall(nil), mln.sendKeysendCalls...)
+}
+
+// MakeHoldInvoiceCalls returns every MakeHoldInvoice argument set so far, in order.
+func (mln *MockLn) MakeHoldInvoiceCalls() []MakeHoldInvoiceCall {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]MakeHoldInvoiceCall(nil), mln.makeHoldInvoiceCalls...)
+}
+
+// SettleHoldPreimages returns every preimage SettleHoldInvoice was handed, in order.
+func (mln *MockLn) SettleHoldPreimages() []string {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]string(nil), mln.settleHoldPreimages...)
+}
+
+// LookupInvoiceHashes returns every payment hash LookupInvoice was asked for, in
+// order — the recording that makes a reconciliation's own binding observable.
+func (mln *MockLn) LookupInvoiceHashes() []string {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]string(nil), mln.lookupInvoiceHashes...)
 }
 
 func NewMockLn() (*MockLn, error) {
@@ -207,6 +283,16 @@ func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki 
 }
 
 func (mln *MockLn) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	// Recorded before the delay and before any error, so a call that goes on to fail
+	// is still observable: what was ASKED for is the interesting part.
+	mln.callsMu.Lock()
+	mln.sendKeysendCalls = append(mln.sendKeysendCalls, SendKeysendCall{
+		Amount:        amount,
+		Destination:   destination,
+		CustomRecords: append([]lnclient.TLVRecord(nil), custom_records...),
+		Preimage:      preimage,
+	})
+	mln.callsMu.Unlock()
 	if mln.PaymentDelay != nil {
 		time.Sleep(*mln.PaymentDelay)
 	}
@@ -245,10 +331,65 @@ func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description st
 }
 
 func (mln *MockLn) MakeHoldInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, paymentHash string) (transaction *lnclient.Transaction, err error) {
-	return MockLNClientHoldTransaction, nil
+	mln.callsMu.Lock()
+	mln.makeHoldInvoiceCalls = append(mln.makeHoldInvoiceCalls, MakeHoldInvoiceCall{
+		Amount:          amount,
+		Description:     description,
+		DescriptionHash: descriptionHash,
+		Expiry:          expiry,
+		PaymentHash:     paymentHash,
+	})
+	if paymentHash != "" {
+		if mln.issuedHoldHashes == nil {
+			mln.issuedHoldHashes = map[string]bool{}
+		}
+		mln.issuedHoldHashes[paymentHash] = true
+	}
+	mln.callsMu.Unlock()
+
+	// A hold invoice exists FOR a hash the payer supplied, so returning the fixture's
+	// own hash whatever was asked made the one argument that identifies the invoice
+	// unobservable — a caller could pass a sibling transaction's hash, or the payment
+	// request, and every test stayed green (D-QA-3). The returned invoice now carries
+	// the hash it was asked to carry.
+	//
+	// A COPY, never the shared fixture pointer: handing out MockLNClientHoldTransaction
+	// and then writing to it would let one test's hash leak into every other test that
+	// holds the same pointer.
+	issued := *MockLNClientHoldTransaction
+	if amount != 0 {
+		issued.Amount = amount
+	}
+	if paymentHash != "" {
+		issued.PaymentHash = paymentHash
+		// The fixture's preimage belongs to the fixture's hash. Keeping it next to a
+		// different hash would hand tests a preimage that does not hash to it, which
+		// is a worse lie than the one being fixed.
+		issued.Preimage = ""
+	}
+	return &issued, nil
 }
 
 func (mln *MockLn) SettleHoldInvoice(ctx context.Context, preimage string) (err error) {
+	mln.callsMu.Lock()
+	mln.settleHoldPreimages = append(mln.settleHoldPreimages, preimage)
+	bind := mln.HoldInvoiceBindsPreimage
+	issued := len(mln.issuedHoldHashes)
+	var known bool
+	if preimage != "" {
+		if raw, decErr := hex.DecodeString(preimage); decErr == nil {
+			sum := sha256.Sum256(raw)
+			known = mln.issuedHoldHashes[hex.EncodeToString(sum[:])]
+		}
+	}
+	mln.callsMu.Unlock()
+
+	// Opt-in, and only once an invoice has actually been issued through this mock —
+	// otherwise a suite that drives the settle path directly would fail on the
+	// fixture's shape rather than on a defect. See HoldInvoiceBindsPreimage.
+	if bind && issued > 0 && !known {
+		return fmt.Errorf("mock: no accepted hold invoice for preimage %q (sha256 of it matches none of the %d issued by this node)", preimage, issued)
+	}
 	return nil
 }
 
@@ -257,10 +398,26 @@ func (mln *MockLn) CancelHoldInvoice(ctx context.Context, paymentHash string) (e
 }
 
 func (mln *MockLn) LookupInvoice(ctx context.Context, paymentHash string) (transaction *lnclient.Transaction, err error) {
+	mln.callsMu.Lock()
+	mln.lookupInvoiceHashes = append(mln.lookupInvoiceHashes, paymentHash)
+	mln.callsMu.Unlock()
+
 	if mln.MockLookupInvoiceError != nil {
 		return nil, mln.MockLookupInvoiceError
 	}
 	if mln.MockTransaction != nil {
+		// Answer for the hash ASKED FOR, not whatever the fixture holds. The mock used
+		// to return MockTransaction unconditionally, so a reconciliation could look up
+		// any hash at all — a sibling row's, a hash carried over from a retry, the
+		// payment request — and still be handed the invoice it expected, then write
+		// that invoice's preimage and FeesPaid onto the wrong transaction. The whole
+		// repository stayed green with the lookup pointed at a constant (D-QA-1).
+		//
+		// Only enforced when the fixture actually names a hash: an empty PaymentHash
+		// means the test is not about identity, and failing it would be noise.
+		if mln.MockTransaction.PaymentHash != "" && paymentHash != mln.MockTransaction.PaymentHash {
+			return nil, fmt.Errorf("mock: no invoice for payment hash %q (this node holds %q)", paymentHash, mln.MockTransaction.PaymentHash)
+		}
 		return mln.MockTransaction, nil
 	}
 	return MockLNClientTransaction, nil

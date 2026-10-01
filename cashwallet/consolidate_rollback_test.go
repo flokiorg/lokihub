@@ -125,13 +125,16 @@ func TestConsolidate_MidLoopFailure_RollbackSucceeds_DeletesMergedWallet(t *test
 	s2 := newConsolidateSourceApp(t, svc, hub, "s2", 200_000, "s2-fund")
 	newPk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
+	// amountMloki is captured, not discarded — see the sibling note in
+	// split_in_two_rollback_test.go (audit finding D-QA-4).
 	type call struct {
 		fromAppID, toAppID uint
+		amountMloki        uint64
 	}
 	var calls []call
 	deps := newTestDeps(svc)
-	deps.FundInternalOverride = func(_ context.Context, fromAppID, toAppID uint, _ uint64, _ string) error {
-		calls = append(calls, call{fromAppID, toAppID})
+	deps.FundInternalOverride = func(_ context.Context, fromAppID, toAppID uint, amountMloki uint64, _ string) error {
+		calls = append(calls, call{fromAppID, toAppID, amountMloki})
 		switch len(calls) {
 		case 1: // fund merged from s1 — succeeds
 			return nil
@@ -157,6 +160,14 @@ func TestConsolidate_MidLoopFailure_RollbackSucceeds_DeletesMergedWallet(t *test
 	assert.Equal(t, s1.ID, calls[0].fromAppID, "call 1 funds the merged wallet FROM s1")
 	assert.Equal(t, s2.ID, calls[1].fromAppID, "call 2 funds the merged wallet FROM s2")
 	assert.Equal(t, s1.ID, calls[2].toAppID, "call 3 reverses TO s1")
+	// And for the same AMOUNT s1's forward leg moved — see the sibling assertion
+	// in split_in_two_rollback_test.go for why a short reversal is worse than a
+	// failed one.
+	assert.Equalf(t, calls[0].amountMloki, calls[2].amountMloki,
+		"s1's forward leg moved %d mloki but its reversal returned %d — the difference is stranded "+
+			"in the merged wallet while s1's claim is restored as if whole",
+		calls[0].amountMloki, calls[2].amountMloki)
+	assert.NotZerof(t, calls[2].amountMloki, "a reversal of 0 mloki is not a reversal")
 
 	assert.Equal(t, 2, mergedChildCount(t, svc, hub),
 		"the merged wallet must be DELETED once its one completed transfer was successfully reversed — only s1 and s2 remain")

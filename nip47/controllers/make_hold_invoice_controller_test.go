@@ -15,6 +15,10 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
+// nip47MakeHoldInvoicePaymentHash is the payment_hash the request below asks for,
+// named rather than repeated so the assertions cannot drift from the request.
+const nip47MakeHoldInvoicePaymentHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
 const nip47MakeHoldInvoiceJson = `
 {
 	"method": "make_hold_invoice",
@@ -81,8 +85,24 @@ func TestHandleMakeHoldInvoiceEvent(t *testing.T) {
 
 	assert.Nil(t, publishedResponse.Error)
 	assert.Equal(t, tests.MockLNClientHoldTransaction.Invoice, publishedResponse.Result.(*makeHoldInvoiceResponse).Invoice)
-	assert.Equal(t, tests.MockLNClientHoldTransaction.PaymentHash, publishedResponse.Result.(*makeHoldInvoiceResponse).PaymentHash)
+	// The hash the CALLER asked for, not the fixture's.
+	//
+	// This assertion used to read MockLNClientHoldTransaction.PaymentHash while the
+	// request above asks for 1234...cdef, so it asserted that make_hold_invoice hands
+	// back a DIFFERENT hash than the one requested. It only passed because the LN mock
+	// discarded the paymentHash argument and always returned its own constant
+	// (audit finding D-QA-3). A hold invoice exists for a hash its payer supplies and
+	// keeps the preimage of, so substituting another one would make the invoice
+	// unsettleable by the only party able to settle it.
+	assert.Equal(t, nip47MakeHoldInvoicePaymentHash, publishedResponse.Result.(*makeHoldInvoiceResponse).PaymentHash)
 	assert.Equal(t, expectedMetadata, publishedResponse.Result.(*makeHoldInvoiceResponse).Metadata)
+
+	// And the node was asked for that same hash, which is the half the response alone
+	// cannot show: a hub that echoed the request back while asking the node for
+	// something else would satisfy the assertion above.
+	holdCalls := svc.LNClient.(*tests.MockLn).MakeHoldInvoiceCalls()
+	assert.Len(t, holdCalls, 1)
+	assert.Equal(t, nip47MakeHoldInvoicePaymentHash, holdCalls[0].PaymentHash)
 }
 
 const nip47MakeHoldInvoiceMissingPaymentHashJson = `

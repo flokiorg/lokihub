@@ -1168,17 +1168,51 @@ func TestSplitAndReassignCashSliceIdentity_PartialVsTransfer_NeverBothSucceed(t 
 		splitWon := splitErr == nil
 		transferWon := transferErr == nil
 		require.Truef(t, splitWon || transferWon, "trial %d: neither op succeeded (splitErr=%v transferErr=%v)", trial, splitErr, transferErr)
-		if splitWon && transferWon {
-			// Both CAN legitimately succeed here (unlike the full-split case
-			// above) only if they serialize — TransferCount's optimistic lock
-			// means the second to commit re-reads and retries in the
-			// controller layer in production, but at the bare AppsService
-			// layer a second call with a fresh read is a separate, valid
-			// call. What must NEVER happen is silent overdraw: verify the
-			// slice's final state is consistent with exactly one full
-			// end-to-end interleaving, not a lost update.
-			t.Skip("both succeeded via internal serialization (second call's own fresh read) — not the race this test targets, see TestSplitCashSliceAmount_ConcurrentPartialSplits_NeverOverdraw for the overdraw guarantee")
+
+		// Conservation, asserted on EVERY trial — this is what the comment that
+		// used to stand here promised and then skipped (audit finding D-QA-2).
+		//
+		// Both CAN legitimately succeed here, unlike the full-split case above,
+		// if they serialize: TransferCount's optimistic lock makes the second to
+		// commit re-read and retry in the controller layer, but at the bare
+		// AppsService layer a second call with a fresh read is a separate, valid
+		// call. So "both won" is not itself a defect. Silent overdraw is, and
+		// that is checked here instead of being described in prose.
+		//
+		// Deliberately OUTSIDE an `if splitWon && transferWon` guard. The t.Skip
+		// this replaces sat inside one, and that branch is measured at **0 of 200
+		// trials** on this machine — so the skip never actually fired, and an
+		// assertion placed there would be dead code wearing the shape of
+		// coverage. (The audit report's claim that this test "skips on every run"
+		// does not hold, and nothing was being "abandoned"; what was true, and
+		// worse, is that the test asserted nothing beyond splitWon||transferWon.)
+		//
+		// What this check is NOT: a detector for a weakened optimistic lock.
+		// Measured, not assumed — against the documented mutation that strips
+		// identity and transfer_count from the partial branch's WHERE clause,
+		// conservation still holds and this test still passes. The assertion that
+		// catches that mutation is the transfer-HONESTY one in
+		// TestAuditDQA_PartialSplitVsTransfer_ConservesTheSliceAmount: it compares
+		// ReassignCashSliceIdentity's returned amount, which is the value it read
+		// BEFORE the race, against what the new identity actually holds. Totals
+		// can balance while the transfer's own report is a lie, so conservation
+		// and honesty are genuinely two different invariants. Read that test for
+		// the full set; this one stays focused on mutual exclusion and keeps the
+		// cheap conservation guard so it is no longer asserting almost nothing.
+		var live []db.CashWalletClaim
+		require.NoError(t, svc.DB.Where("wallet_app_id = ? AND claimed_at IS NULL", wallet.ID).Find(&live).Error)
+		var stillHeld int64
+		for _, c := range live {
+			stillHeld += c.AmountMloki
 		}
+		carvedOff := int64(0)
+		if splitWon {
+			carvedOff = 2000
+		}
+		require.Equalf(t, int64(5000), stillHeld+carvedOff,
+			"trial %d: OVERDRAW — the slice held 5000, %d is still claimable and %d was carved off "+
+				"(split won=%v, transfer won=%v), so %d mloki came out of a lost update",
+			trial, stillHeld, carvedOff, splitWon, transferWon, stillHeld+carvedOff-5000)
 	}
 }
 
