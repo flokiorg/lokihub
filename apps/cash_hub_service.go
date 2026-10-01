@@ -12,6 +12,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// validateTransferFloorCoversFee refuses a split floor that sits below the flat
+// redeem fee.
+//
+// Such a pair is self-contradictory rather than merely lax: min_transfer_mloki exists
+// so a split cannot produce a piece too small to be worth anything, and a piece at or
+// below redeem_fee_base_mloki cannot be redeemed to Lightning at all — the fee
+// consumes it and cash_redeem now refuses a zero payout outright. So a floor below the
+// base claims to prevent exactly what it permits.
+//
+// A floor of 0 is NOT rejected, deliberately. 0 means "no floor" in both this field's
+// own documentation and every enforcement site, and silently promoting it to the fee
+// base would reinterpret a meaningful zero — the same mistake that made a negative
+// value read as "unset" above, and the same shape as the bugs this round found in
+// spent_retention_secs and identity_required. An operator who wants no floor may have
+// one, and the consequence is dust that can only be consolidated, not redeemed. Making
+// that the default is a policy change for an operator to make, not a validation rule.
+func validateTransferFloorCoversFee(minTransferMloki, redeemFeeBaseMloki int64) error {
+	if minTransferMloki > 0 && minTransferMloki < redeemFeeBaseMloki {
+		return fmt.Errorf("%w: min_transfer_mloki (%d) must not be below redeem_fee_base_mloki (%d) — "+
+			"a split floor beneath the flat fee permits pieces that cannot be redeemed at all",
+			constants.ErrInvalidParams, minTransferMloki, redeemFeeBaseMloki)
+	}
+	return nil
+}
+
 func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	config db.CashHubConfig) (*db.App, string, error) {
@@ -32,6 +57,21 @@ func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki 
 	// is destroyed), so only a negative or overflowing value is rejected.
 	if config.SpentRetentionSecs < 0 || config.SpentRetentionSecs > constants.MAX_EXPIRY_SECS {
 		return nil, "", fmt.Errorf("%w: spent_retention_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+	}
+	// These two were validated on UPDATE and not here, so this path accepted configs
+	// the other refuses. A negative min_transfer_mloki is the dangerous one: every
+	// enforcement site tests `> 0`, so a negative value reads as "no floor" and
+	// silently disables the guard the operator thought they had set.
+	//
+	// 0 stays meaningful in both ("no floor", "no base") — see UpdateCashHubConfig.
+	if config.MinTransferMloki < 0 {
+		return nil, "", fmt.Errorf("%w: min_transfer_mloki must not be negative", constants.ErrInvalidParams)
+	}
+	if config.RedeemFeeBaseMloki < 0 {
+		return nil, "", fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
+	}
+	if err := validateTransferFloorCoversFee(config.MinTransferMloki, config.RedeemFeeBaseMloki); err != nil {
+		return nil, "", err
 	}
 
 	app, secret, err := svc.CreateApp(name, pubkey, maxAmountLoki, budgetRenewal, expiresAt, scopes,
@@ -109,6 +149,27 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 	}
 	if len(updates) == 0 {
 		return nil
+	}
+	// Checked against the pair that will be IN FORCE afterwards, not against what this
+	// call happens to carry: either field may be updated alone, so raising the fee base
+	// on a hub with a low floor is just as incoherent as setting both at once, and
+	// checking only the supplied values would miss it.
+	if minTransferMloki != nil || redeemFeeBaseMloki != nil {
+		current, err := svc.GetCashHubConfig(appID)
+		if err != nil {
+			return err
+		}
+		effectiveFloor := current.MinTransferMloki
+		if minTransferMloki != nil {
+			effectiveFloor = *minTransferMloki
+		}
+		effectiveBase := current.RedeemFeeBaseMloki
+		if redeemFeeBaseMloki != nil {
+			effectiveBase = *redeemFeeBaseMloki
+		}
+		if err := validateTransferFloorCoversFee(effectiveFloor, effectiveBase); err != nil {
+			return err
+		}
 	}
 
 	result := svc.db.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
