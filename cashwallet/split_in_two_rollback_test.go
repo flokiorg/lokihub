@@ -34,13 +34,18 @@ func TestSplitInTwo_RemainderFails_CarvedReversalSucceeds_CarvedWalletDeleted(t 
 	carvedPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	remainderPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
+	// amountMloki is captured, not discarded. It used to be `_ uint64`, so a
+	// reversal that returned a different amount than the forward leg took — or
+	// zero — passed this test unchanged (audit finding D-QA-4): the only thing
+	// asserted was WHICH wallets the transfers ran between.
 	type call struct {
 		fromAppID, toAppID uint
+		amountMloki        uint64
 	}
 	var calls []call
 	deps := newTestDeps(svc)
-	deps.FundInternalOverride = func(_ context.Context, fromAppID, toAppID uint, _ uint64, _ string) error {
-		calls = append(calls, call{fromAppID, toAppID})
+	deps.FundInternalOverride = func(_ context.Context, fromAppID, toAppID uint, amountMloki uint64, _ string) error {
+		calls = append(calls, call{fromAppID, toAppID, amountMloki})
 		switch len(calls) {
 		case 1: // fund the carved wallet from the source — succeeds
 			return nil
@@ -71,6 +76,14 @@ func TestSplitInTwo_RemainderFails_CarvedReversalSucceeds_CarvedWalletDeleted(t 
 	assert.Equal(t, sourceWallet.ID, calls[0].fromAppID, "call 1 funds the carved wallet FROM the source")
 	assert.Equal(t, sourceWallet.ID, calls[1].fromAppID, "call 2 funds the remainder wallet FROM the source")
 	assert.Equal(t, sourceWallet.ID, calls[2].toAppID, "call 3 reverses the carved transfer back TO the source")
+	// And for the same AMOUNT. A reversal that hands back less than it took leaves
+	// the difference stranded in the carved wallet while the source's claim is
+	// restored in full, so the hub's books say the money is in two places.
+	assert.Equalf(t, calls[0].amountMloki, calls[2].amountMloki,
+		"the carved spin-off moved %d mloki but the reversal returned %d — the difference is "+
+			"stranded while the source claim is restored as if whole",
+		calls[0].amountMloki, calls[2].amountMloki)
+	assert.NotZerof(t, calls[2].amountMloki, "a reversal of 0 mloki is not a reversal")
 
 	assert.True(t, sourceFundsIntact,
 		"the carved transfer was successfully reversed, so it's safe for the caller to restore the source claim")
