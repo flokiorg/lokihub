@@ -2628,9 +2628,30 @@ all.
 status check, each transfer, the redemption that ends it — without decrypting anything. §The Private
 Transport exists to remove that, and a Hub or client that cares about this SHOULD prefer it. Note what it
 does and does not do: it hides *which bill* and *how many*, because requests are wrapped and batched, but
-it cannot hide that a given client talked to a given Hub at a given moment. Relay-level metadata
-(connection timing, IP address) is outside this protocol's reach, and a client needing that
-unlinkability SHOULD reach relays over a network layer that provides it.
+it cannot hide that a given client talked to a given Hub at a given moment.
+
+**Part of that is inside this protocol, not merely relay metadata, and a network layer alone does not
+remove it.** Before sending anything a client has to obtain the Hub's announcement (§The Hub
+Announcement), and the natural way to fetch a replaceable event is by its author — which for this
+announcement is the Hub's **Lightning node pubkey**, since that is the identity it is signed under so a
+client can anchor trust to it. An LN node pubkey is public routing data and resolves to a named operator,
+so that subscription frame tells the relay *which Hub this client uses*, in the clear, before any wrapped
+envelope exists. Connection timing and IP address are indeed outside this protocol's reach; the Hub's
+identity in the author filter is not.
+
+A client that needs this unlinkability SHOULD therefore do both, and SHOULD NOT treat either alone as
+sufficient: reach relays over a network layer that hides its address, **and** obtain the announcement by
+some means that does not name the Hub to the relay carrying its traffic — fetching it from an unrelated
+relay, or once per install rather than once per session, and caching it durably. Implementations should
+understand the distinction plainly: an anonymizing network layer hides *who is asking*, while the author
+filter discloses *what is being asked for*, and only the second is something this protocol can
+address.
+
+A Hub MAY also publish its announcement under a key other than its node identity, but MUST NOT do so
+silently: a client anchors trust in the announcement to the identity it already has for that Hub
+(§The Hub Announcement), so changing the signing key without giving the client another way to establish
+that binding substitutes a privacy gain for an authenticity loss, which is the wrong trade. This document
+does not define such a mechanism; it records that the obvious unilateral fix is not safe.
 
 **`cash_consolidate` links its source bills to each other.** A single call names every source it draws
 from, so the Hub — and anyone who can observe that request — learns those bills belong to one holder.
