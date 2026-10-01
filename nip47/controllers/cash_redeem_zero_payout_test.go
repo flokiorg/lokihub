@@ -117,7 +117,7 @@ func TestCashRedeem_ZeroPayout_RefusedAndSliceSurvives(t *testing.T) {
 					PaymentRequest: tests.MockZeroAmountInvoice,
 					PaymentHash:    tests.MockZeroAmountPaymentHash,
 					Preimage:       &preimage,
-					AmountMloki:    uint64(c.sliceMloki),
+					AmountMloki:    uint64(c.sliceMloki), //nolint:gosec // every row's sliceMloki is a positive literal
 					AppId:          &payee.ID,
 				}).Error)
 			}
