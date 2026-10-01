@@ -2630,28 +2630,49 @@ Transport exists to remove that, and a Hub or client that cares about this SHOUL
 does and does not do: it hides *which bill* and *how many*, because requests are wrapped and batched, but
 it cannot hide that a given client talked to a given Hub at a given moment.
 
-**Part of that is inside this protocol, not merely relay metadata, and a network layer alone does not
-remove it.** Before sending anything a client has to obtain the Hub's announcement (§The Hub
-Announcement), and the natural way to fetch a replaceable event is by its author — which for this
-announcement is the Hub's **Lightning node pubkey**, since that is the identity it is signed under so a
-client can anchor trust to it. An LN node pubkey is public routing data and resolves to a named operator,
-so that subscription frame tells the relay *which Hub this client uses*, in the clear, before any wrapped
-envelope exists. Connection timing and IP address are indeed outside this protocol's reach; the Hub's
-identity in the author filter is not.
+**What it does hide is the caller, and it hides them completely.** A request event's author is a fresh
+ephemeral key, used once and discarded, and its `reply_to` correlator is single-use (§The Request Event,
+§Addressing the Response), so there is no stable identifier for the caller anywhere on the wire and the
+caller's own Nostr identity never appears at all. Fetching a Hub's announcement carries no identifier
+either, so a relay cannot distinguish a Hub's customers from anyone merely reading a public event. That is
+the guarantee this transport exists to provide, and it is unconditional.
 
-A client that needs this unlinkability SHOULD therefore do both, and SHOULD NOT treat either alone as
-sufficient: reach relays over a network layer that hides its address, **and** obtain the announcement by
-some means that does not name the Hub to the relay carrying its traffic — fetching it from an unrelated
-relay, or once per install rather than once per session, and caching it durably. Implementations should
-understand the distinction plainly: an anonymizing network layer hides *who is asking*, while the author
-filter discloses *what is being asked for*, and only the second is something this protocol can
-address.
+**What it does not hide is which Hub, and a client cannot prevent that.** This is
+structural, not an implementation slip, and it is worth stating plainly because the mitigations that
+suggest themselves do not work. Every private-transport request MUST be `p`-tagged with the Hub's inbox
+key — that is how the Hub's own relay subscription finds it at all (§The Request Event) — and the
+Hub publishes that same inbox key in its announcement, signed by the identity a client already trusts for
+it (§The Hub Announcement). Announcements are public replaceable events. So any relay can fetch every
+announcement once, build the mapping from inbox key to Hub, and from then on read the Hub off the `p` tag
+of every envelope it carries.
 
-A Hub MAY also publish its announcement under a key other than its node identity, but MUST NOT do so
-silently: a client anchors trust in the announcement to the identity it already has for that Hub
-(§The Hub Announcement), so changing the signing key without giving the client another way to establish
-that binding substitutes a privacy gain for an authenticity loss, which is the wrong trade. This document
-does not define such a mechanism; it records that the obvious unilateral fix is not safe.
+That public binding is not an oversight, and this is the part worth understanding before trying to remove
+it: the announcement is signed by the Hub's node identity over a payload containing the inbox key, so that
+a client can *verify* the inbox it is about to encrypt to really belongs to the Hub it already trusts
+(§The Hub Announcement — an announcement signed by the inbox key would merely vouch for itself). "A client
+can verify this inbox belongs to Hub X" and "a relay cannot tell this envelope is addressed to Hub X"
+cannot both be derived from one public artifact. The disclosure is the trust anchor working, not failing.
+
+A client therefore MUST NOT assume that avoiding the announcement fetch, fetching it from an unrelated
+relay, or caching it across sessions hides which Hub it uses: those change *when* the association is
+visible, not *whether* it is. Nor does an anonymizing network layer remove it — that hides **which
+client** is asking, which is a different and genuinely useful property, not **which Hub** is being asked
+about.
+
+What this protocol hides from a relay is *which bills*, *how many*, and *what was asked* — all of which
+live inside the wrapped envelope. What it does not hide is the pair (client address, Hub), and a client
+that needs that pair concealed SHOULD reach relays over a network layer that hides its address, which
+reduces the disclosure to "somebody is using this Hub" — a statement about the Hub's traffic volume
+rather than about any user.
+
+Removing the disclosure entirely would need addressing that does not name a shared, published inbox — a
+per-client inbox, a rotating one the Hub does not announce, or a blinded per-envelope tag the Hub scans
+for. **This document defines none of them**, and each costs something real: a per-client inbox cannot be
+published, so a new client has no way to bootstrap; an unannounced rotation cannot be discovered; and a
+blinded tag forces the Hub to trial-decrypt instead of letting its relay filter do the work. The
+single-inbox design is a deliberate trade of this one property for the ability to bootstrap from a public
+announcement, and an implementation SHOULD document that it makes that trade rather than implying
+otherwise.
 
 **`cash_consolidate` links its source bills to each other.** A single call names every source it draws
 from, so the Hub — and anyone who can observe that request — learns those bills belong to one holder.
