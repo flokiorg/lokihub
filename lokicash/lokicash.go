@@ -37,7 +37,29 @@ const (
 	tlvIdentityRequired uint8 = 3
 	tlvMintSignature    uint8 = 5
 	tlvAttestedAmount   uint8 = 6
+	tlvHubGroup         uint8 = 7
 )
+
+// HubGroupLen is the byte length of the hub-group fingerprint (TLV type 7): a
+// truncated hash of the issuing Cash Hub's own pubkey.
+//
+// Aliased, not redefined. This package delegates its whole wire format to nipcash
+// (see Encode), so a second literal here would be a second thing to drift.
+//
+// Four bytes is enough because of what it is FOR. It answers one question — do two
+// bills share an issuing Hub, and may therefore be consolidated — and is never an
+// authorization input. A wrong value makes a client group wrongly and this Hub
+// refuses with the same-Hub error it already has, so the cost is a retry, never
+// misplaced value.
+//
+// It exists because nothing else in a token identifies the issuing Hub. Mint
+// provenance identifies the minting NODE, and one node routinely runs several Hubs,
+// so a client grouping by minter merges bills this Hub will refuse.
+const HubGroupLen = nipcash.HubGroupLen
+
+// HubGroupFor derives the fingerprint this Hub stamps on every bill it mints.
+// Delegates to nipcash so both sides derive it identically.
+func HubGroupFor(hubPubkeyHex string) []byte { return nipcash.HubGroupFor(hubPubkeyHex) }
 
 // keyLen is the byte length of both a wallet pubkey and a pairing secret —
 // raw 32-byte values, same as every other Nostr key.
@@ -115,6 +137,11 @@ type Token struct {
 	// denomination but is NEVER a spending credential.
 	MintSignature  []byte
 	AttestedAmount *uint64
+
+	// HubGroup is this Hub's own fingerprint (TLV type 7, HubGroupLen bytes), so a
+	// holder can tell which of their bills may be consolidated together without
+	// asking. Grouping only — never an authorization input.
+	HubGroup []byte
 }
 
 // Encode packages t into a lokicash-family bech32 token under t.HRP.
@@ -155,6 +182,7 @@ func toNipcashToken(t Token) nipcash.Token {
 		IdentityRequired:     t.IdentityRequired,
 		MintSignature:        t.MintSignature,
 		AttestedAmountMillis: t.AttestedAmount,
+		HubGroup:             t.HubGroup,
 	}
 }
 
@@ -167,6 +195,7 @@ func fromNipcashToken(nt nipcash.Token) Token {
 		IdentityRequired: nt.IdentityRequired,
 		MintSignature:    nt.MintSignature,
 		AttestedAmount:   nt.AttestedAmountMillis,
+		HubGroup:         nt.HubGroup,
 	}
 }
 
