@@ -22,6 +22,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -125,6 +126,8 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
+	// IdempotencyKey is optional; see Resolved.IdempotencyKey.
+	IdempotencyKey string
 }
 
 // RecipientResult echoes back one recipient's resolved/committed slice.
@@ -191,7 +194,29 @@ type Resolved struct {
 	// RedeemFeeBaseMloki is the flat part of the same quoted fee, carried under the
 	// same rules — the two are one price and must never travel separately.
 	RedeemFeeBaseMloki int64
+	// IdempotencyKey, when non-empty, is recorded against the new wallet INSIDE
+	// Commit's own transaction, so the replay guard and the wallet it guards commit
+	// or roll back together. Recording it afterwards would leave a window where the
+	// mint is durable and the guard is not, and the caller's next retry would mint
+	// again — the whole defect this exists to close.
+	//
+	// It also means a concurrent duplicate loses on the unique index and rolls the
+	// entire mint back, instead of minting and then failing to record. A caller
+	// retrying on a timeout races its own original request by construction, which is
+	// exactly why it timed out, so that case is the normal one rather than the exotic
+	// one. Any read-before-commit a caller does is only for a legible refusal; this
+	// is the guard.
+	IdempotencyKey string
 }
+
+// ErrMintIdempotencyKeyReused means this Hub has already served a mint_cash carrying
+// this idempotency key, so Commit refused rather than minting a second wallet.
+//
+// Raised from inside Commit's transaction, by the unique index — so it also covers the
+// concurrent case, where a caller's retry races the original request it is retrying.
+// The whole mint rolls back, which is correct: the other attempt is creating the
+// wallet.
+var ErrMintIdempotencyKeyReused = errors.New("mint_cash: this idempotency key has already been used by this Hub")
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
 // a small local constant since apps doesn't export its own (kept private to
@@ -375,12 +400,13 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	}
 
 	return &Resolved{
-		HubApp:           params.HubApp,
-		Recipients:       resolvedRecipients,
-		ExpiresAt:        expiresAt,
-		MinTransferMloki: hubConfig.MinTransferMloki,
+		HubApp:             params.HubApp,
+		Recipients:         resolvedRecipients,
+		ExpiresAt:          expiresAt,
+		MinTransferMloki:   hubConfig.MinTransferMloki,
 		RedeemFeePpm:       hubConfig.RedeemFeePpm,
 		RedeemFeeBaseMloki: hubConfig.RedeemFeeBaseMloki,
+		IdempotencyKey:     params.IdempotencyKey,
 	}, nil
 }
 
@@ -531,11 +557,11 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	claimRows := make([]db.CashWalletClaim, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
 		claimRows[i] = db.CashWalletClaim{
-			IdentityType:     r.IdentityType,
-			IdentityValue:    r.IdentityValue,
-			IAPubkey:         r.IAPubkey,
-			AmountMloki:      int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
-			MinTransferMloki: resolved.MinTransferMloki,
+			IdentityType:       r.IdentityType,
+			IdentityValue:      r.IdentityValue,
+			IAPubkey:           r.IAPubkey,
+			AmountMloki:        int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
+			MinTransferMloki:   resolved.MinTransferMloki,
 			RedeemFeePpm:       resolved.RedeemFeePpm,
 			RedeemFeeBaseMloki: resolved.RedeemFeeBaseMloki,
 		}
@@ -591,6 +617,24 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		if err := deps.AppsService.CreateCashWalletClaimsTx(tx, newApp.ID, claimRows); err != nil {
 			return fmt.Errorf("failed to store recipient claims: %w", err)
 		}
+
+		// Same transaction as the wallet it guards. The unique index on
+		// (hub_app_id, idempotency_key) is what enforces the guard, so a concurrent
+		// duplicate fails here and takes the whole mint down with it — which is the
+		// correct outcome, not a lost one: the other attempt is minting the wallet.
+		//
+		// Token is filled in afterwards, best-effort. It is a convenience for the
+		// refusal message rather than part of the guard, and it is not known yet.
+		if resolved.IdempotencyKey != "" {
+			if err := tx.Create(&db.CashMintIdempotency{
+				HubAppID:       resolved.HubApp.ID,
+				IdempotencyKey: resolved.IdempotencyKey,
+				WalletAppID:    newApp.ID,
+				WalletPubkey:   *newApp.WalletPubkey,
+			}).Error; err != nil {
+				return fmt.Errorf("%w: %v", ErrMintIdempotencyKeyReused, err)
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -620,6 +664,21 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			return
 		}
 		deleteAppWithRetry(deps, newApp)
+		// The idempotency record goes with it. It committed in the transaction above,
+		// but the mint as a whole did NOT happen — the wallet is being compensated
+		// away — so leaving the key behind would refuse the caller's legitimate retry
+		// forever, naming a wallet that no longer exists. A guard that blocks a retry
+		// of a FAILED mint is worse than no guard: it turns a transient funding
+		// failure into a permanently unusable key.
+		if resolved.IdempotencyKey != "" {
+			if delErr := deps.DB.Where("hub_app_id = ? AND idempotency_key = ?",
+				resolved.HubApp.ID, resolved.IdempotencyKey).
+				Delete(&db.CashMintIdempotency{}).Error; delErr != nil {
+				logger.Logger.Error().Err(delErr).
+					Uint("hub_app_id", resolved.HubApp.ID).
+					Msg("Could not release the mint_cash idempotency key after a failed mint; the caller's retry with that key will be refused although nothing was created")
+			}
+		}
 	}()
 
 	// Mint provenance is obtained HERE, before the funds move, because it is
@@ -832,11 +891,11 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	walletPubkey := *newApp.WalletPubkey
 
 	if err := deps.AppsService.CreateCashWalletClaims(newApp.ID, []db.CashWalletClaim{{
-		IdentityType:     params.NewIdentityType,
-		IdentityValue:    params.NewIdentityValue,
-		IAPubkey:         params.NewIAPubkey,
-		AmountMloki:      int64(params.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by the source slice's own AmountMloki, already validated when that slice was created/resolved
-		MinTransferMloki: params.MinTransferMloki,
+		IdentityType:       params.NewIdentityType,
+		IdentityValue:      params.NewIdentityValue,
+		IAPubkey:           params.NewIAPubkey,
+		AmountMloki:        int64(params.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by the source slice's own AmountMloki, already validated when that slice was created/resolved
+		MinTransferMloki:   params.MinTransferMloki,
 		RedeemFeePpm:       params.RedeemFeePpm,
 		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 	}}); err != nil {

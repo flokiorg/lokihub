@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
@@ -13,6 +14,8 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
+
+	"gorm.io/gorm"
 )
 
 // cashRateLimitPerHour is the fallback used by tests, which build a
@@ -38,7 +41,8 @@ func mapCashWalletErrorCode(err error) string {
 		return constants.ERROR_INSUFFICIENT_BALANCE
 	case errors.Is(err, transactions.NewQuotaExceededError()):
 		return constants.ERROR_QUOTA_EXCEEDED
-	case errors.Is(err, constants.ErrInvalidParams):
+	case errors.Is(err, constants.ErrInvalidParams),
+		errors.Is(err, cashwallet.ErrMintIdempotencyKeyReused):
 		return constants.ERROR_BAD_REQUEST
 	default:
 		return constants.ERROR_INTERNAL
@@ -103,9 +107,10 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	// fail never burns rate-limit quota (mirrors create_circle_wallet_controller.go,
 	// where the same ordering applies).
 	resolved, err := cashwallet.Resolve(ctx, deps, cashwallet.Params{
-		HubApp:     app,
-		Recipients: recipients,
-		ExpirySecs: params.Expiry,
+		HubApp:         app,
+		Recipients:     recipients,
+		ExpirySecs:     params.Expiry,
+		IdempotencyKey: params.IdempotencyKey,
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
@@ -121,10 +126,48 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		return
 	}
 
+	// 4. Replay guard. Checked here rather than at the top because a request that
+	// fails validation never created anything, so there is nothing to be idempotent
+	// about — and an early check would record a key for a mint that never happened.
+	//
+	// Read-then-insert is not the guard; the unique index is. This read exists only to
+	// give a legible answer, and the insert below is what actually decides, so two
+	// concurrent duplicates cannot both get through.
+	if params.IdempotencyKey != "" {
+		var prior db.CashMintIdempotency
+		err := controller.db.Where("hub_app_id = ? AND idempotency_key = ?", app.ID, params.IdempotencyKey).
+			First(&prior).Error
+		if err == nil {
+			respondIdempotentReplay(publishResponse, nip47Request.Method, prior)
+			return
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+				"could not check this request's idempotency key")
+			return
+		}
+	}
+
 	result, err := cashwallet.Commit(ctx, deps, resolved)
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
 		return
+	}
+
+	// The key itself was recorded inside Commit's transaction. Only the token is
+	// filled in here, because it is not known until after the mint — and it is a
+	// convenience for a later refusal's message, not part of the guard, so a failure
+	// to store it is logged rather than surfaced. Withholding a funded wallet's token
+	// to report a bookkeeping miss would strand real money.
+	if params.IdempotencyKey != "" && result.CashToken != "" {
+		if updErr := controller.db.Model(&db.CashMintIdempotency{}).
+			Where("hub_app_id = ? AND idempotency_key = ?", app.ID, params.IdempotencyKey).
+			Update("token", result.CashToken).Error; updErr != nil {
+			logger.Logger.Warn().Err(updErr).
+				Uint("hub_app_id", app.ID).
+				Uint("cash_wallet_id", result.WalletApp.ID).
+				Msg("Recorded the mint_cash idempotency key but could not attach its token; a replay will name the wallet without it")
+		}
 	}
 
 	recipientResults := make([]nipcash.RecipientResult, len(result.Recipients))
@@ -158,4 +201,26 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 			Recipients:   recipientResults,
 		},
 	}, nostr.Tags{})
+}
+
+// respondIdempotentReplay answers a mint_cash whose idempotency key has already been
+// served.
+//
+// Refused rather than answered with the original result, and that is the honest
+// choice rather than a shortcut: for a cash-mode mint the secret exists only in the
+// reply the caller missed — the Hub keeps a commitment, never the secret — so there is
+// no original result to replay. Storing secrets to make replay work would trade this
+// gap for a strictly worse one.
+//
+// What the caller gets instead is the wallet it already created, by pubkey and token,
+// so it can read the wallet's state with cash_status rather than guess. The error code
+// is BAD_REQUEST because the request genuinely cannot be served again; the message
+// carries the recovery path.
+func respondIdempotentReplay(publishResponse publishFunc, method string, prior db.CashMintIdempotency) {
+	msg := fmt.Sprintf("this idempotency_key already minted cash wallet %s — not minting again", prior.WalletPubkey)
+	if prior.Token != "" {
+		msg += fmt.Sprintf(" (token %s)", prior.Token)
+	}
+	msg += ". A cash-mode secret from the original reply cannot be reissued; read the wallet's state with cash_status, or mint a new wallet with a different key"
+	respondError(publishResponse, method, constants.ERROR_BAD_REQUEST, msg)
 }
