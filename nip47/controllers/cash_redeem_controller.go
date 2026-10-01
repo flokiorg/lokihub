@@ -532,14 +532,41 @@ func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, wall
 // be-revoked attestation stays honorable — see NIP-CASH.md's own Security
 // Considerations for the same reasoning at the spec level.
 func VerifyClaimAttestationEvent(ev *nostr.Event, iaPubkey, nostrPubkey, connectionKey string) error {
+	attestation, err := ParseClaimAttestation(ev)
+	if err != nil {
+		return err
+	}
+	return MatchClaimAttestation(attestation, iaPubkey, nostrPubkey, connectionKey)
+}
+
+// ParseClaimAttestation is VerifyClaimAttestationEvent's expensive half: it parses the
+// event and VERIFIES ITS SIGNATURE (nipIC.ParseAttestation calls event.Verify).
+//
+// Split out so a caller testing one attestation against SEVERAL claims pays the
+// signature once. A signature does not depend on which claim it is being compared to,
+// and the loop in private_dispatch.go's attestedConnectionKey was paying it per claim:
+// measured at ~297 us a verification, a bill with 100 connection_key claims cost ~100
+// verifications for ONE item, while the transport's verification budget believes an
+// item costs 2. One 32-item envelope against such a bill is ~3264 real verifications
+// against an announced budget of 200.
+//
+// This is the same shape, and the same fix, as the proof-verification split that closed
+// the bill-existence timing leak: do the expensive work once, compare cheaply.
+func ParseClaimAttestation(ev *nostr.Event) (*nipIC.Attestation, error) {
 	nip01Ev, err := toNip01Event(ev)
 	if err != nil {
-		return fmt.Errorf("attestation_event: %w", err)
+		return nil, fmt.Errorf("attestation_event: %w", err)
 	}
 	attestation, err := nipIC.ParseAttestation(nip01Ev)
 	if err != nil {
-		return fmt.Errorf("attestation_event: %w", err)
+		return nil, fmt.Errorf("attestation_event: %w", err)
 	}
+	return attestation, nil
+}
+
+// MatchClaimAttestation is the cheap half: everything that depends on WHICH claim is
+// being tested. No cryptography — comparisons and an expiry check only.
+func MatchClaimAttestation(attestation *nipIC.Attestation, iaPubkey, nostrPubkey, connectionKey string) error {
 	if attestation.PubKey != iaPubkey {
 		return fmt.Errorf("attestation_event must be signed by the trusted ia_pubkey recorded for this slice")
 	}
