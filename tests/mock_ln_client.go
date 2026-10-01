@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -81,6 +82,23 @@ var MockLNClientHoldTransaction = &lnclient.Transaction{
 	Amount:          2000,
 }
 
+// SendPaymentSyncCall records one SendPaymentSync invocation's arguments.
+//
+// It exists because the mock discarded all three — payment request, amount and fee
+// limit — and returned a fixed preimage, so no unit test could observe the amount an
+// internal transfer actually moved, or whether the route cap a cash_redeem withheld
+// ever reached the node. The amountless-same-node defect, which destroyed a slice's
+// full amount and answered SUCCESS, lived in exactly that blind spot, and the
+// fixtures' "expected" values were this mock's own constants.
+//
+// Values are copied, not aliased: the caller owns those pointers and may reuse or
+// mutate them after the call, which would silently rewrite a recording taken earlier.
+type SendPaymentSyncCall struct {
+	PayReq        string
+	Amount        *uint64
+	FeeLimitMloki *uint64
+}
+
 type MockLn struct {
 	PayInvoiceResponses []*lnclient.PayInvoiceResponse
 	PayInvoiceErrors    []error
@@ -106,6 +124,39 @@ type MockLn struct {
 	// therefore means "this node cannot sign", which is a deliberate failure case
 	// rather than a neutral default — a test wanting it clears this explicitly.
 	SigningKey *btcec.PrivateKey
+
+	// MakeInvoiceHonoursAmount makes MakeInvoice return an invoice for the amount it
+	// was ASKED for, instead of the fixed MockLNClientTransaction constant.
+	//
+	// Opt-in, deliberately. The default returns a 1000-mloki invoice whatever it was
+	// asked for, and many tests assert against that constant, so honouring the amount
+	// by default would rewrite their expectations wholesale. It is also the precise
+	// shape of the fixture that hid the amountless-redeem bug — tests seeded 1000
+	// where a real MakeInvoice(0, …) records 0 — so a test that reasons about amounts
+	// should set this, and one that does not care should leave it alone.
+	MakeInvoiceHonoursAmount bool
+
+	// callsMu guards the recordings below. lokihub's CI runs `go test -race`, and
+	// several suites drive payments from concurrent goroutines against one MockLn, so
+	// an unguarded append here would be a data race rather than a flake.
+	callsMu              sync.Mutex
+	sendPaymentSyncCalls []SendPaymentSyncCall
+	makeInvoiceAmounts   []int64
+}
+
+// SendPaymentSyncCalls returns every SendPaymentSync argument set so far, in order.
+func (mln *MockLn) SendPaymentSyncCalls() []SendPaymentSyncCall {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]SendPaymentSyncCall(nil), mln.sendPaymentSyncCalls...)
+}
+
+// MakeInvoiceAmounts returns every amount MakeInvoice was asked for, in order —
+// including the zeroes, which is the whole point.
+func (mln *MockLn) MakeInvoiceAmounts() []int64 {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	return append([]int64(nil), mln.makeInvoiceAmounts...)
 }
 
 func NewMockLn() (*MockLn, error) {
@@ -120,6 +171,21 @@ func NewMockLn() (*MockLn, error) {
 }
 
 func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {
+	// Recorded first, so a call that goes on to error is still observable — the
+	// interesting question is usually what was ASKED for, not what came back.
+	call := SendPaymentSyncCall{PayReq: payReq}
+	if amount != nil {
+		v := *amount
+		call.Amount = &v
+	}
+	if feeLimitMloki != nil {
+		v := *feeLimitMloki
+		call.FeeLimitMloki = &v
+	}
+	mln.callsMu.Lock()
+	mln.sendPaymentSyncCalls = append(mln.sendPaymentSyncCalls, call)
+	mln.callsMu.Unlock()
+
 	// Delay applies before consuming a queued response/error too, so a test can
 	// simulate a slow RPC call that ultimately errors (e.g. to race an async
 	// settle notification in ahead of the synchronous error return).
@@ -157,10 +223,23 @@ func (mln *MockLn) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, err er
 }
 
 func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
+	mln.callsMu.Lock()
+	mln.makeInvoiceAmounts = append(mln.makeInvoiceAmounts, amount)
+	mln.callsMu.Unlock()
+
 	if len(mln.MakeInvoiceQueue) > 0 {
 		tx := mln.MakeInvoiceQueue[0]
 		mln.MakeInvoiceQueue = mln.MakeInvoiceQueue[1:]
 		return tx, nil
+	}
+	if mln.MakeInvoiceHonoursAmount {
+		// A COPY. MockLNClientTransaction points into the shared
+		// MockLNClientTransactions slice, so setting Amount on it directly would
+		// corrupt the fixture for every other test in the package — including ones
+		// already running.
+		tx := *MockLNClientTransaction
+		tx.Amount = amount
+		return &tx, nil
 	}
 	return MockLNClientTransaction, nil
 }
