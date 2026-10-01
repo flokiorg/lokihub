@@ -1593,8 +1593,13 @@ func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
 //
 // Saturating, like its sibling: a fee can never exceed the amount it is charged on,
 // so a base larger than the slice yields the whole slice rather than wrapping. The
-// caller is then quoting a zero payout, which is exactly the case
-// MinRedeemableMloki exists to refuse at mint time.
+// caller is then quoting a zero payout, and it is the CALLER's job to refuse that —
+// cash_redeem_controller.go does, right after computing expectedAmount, because
+// whether a slice can pay out at all depends on IsSelfPayment and is not knowable
+// here. An earlier version of this comment named a mint-time MinRedeemableMloki
+// instead; no such guard was ever implemented, and mint time is the wrong place for
+// it anyway, since a slice below the base fee is still transferable, consolidatable
+// and redeemable same-node.
 func CalculateRedeemFeeMloki(amountMloki uint64, baseMloki int64, feePpm int) uint64 {
 	fee := CalculateFeeSkimMloki(amountMloki, feePpm)
 	if baseMloki > 0 {

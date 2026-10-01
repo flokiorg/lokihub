@@ -281,6 +281,37 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		hubFeeMloki = transactions.CalculateRedeemFeeMloki(uint64(claimedAmount), claim.RedeemFeeBaseMloki, claim.RedeemFeePpm) //nolint:gosec // claimedAmount is always non-negative
 	}
 	expectedAmount := uint64(claimedAmount) - hubFeeMloki //nolint:gosec // claimedAmount is always non-negative and >= hubFeeMloki (a <=100% cut of it)
+
+	// A redemption that pays out nothing is refused rather than performed.
+	//
+	// Reachable since the redeem fee grew a flat base: CalculateRedeemFeeMloki
+	// saturates at the amount it is charged on, so a slice at or below the base
+	// quotes a fee equal to the whole slice and a payout of zero. Nothing downstream
+	// stops that. resolvedAmount is zero for an amountless invoice, so it MATCHES
+	// expectedAmount, the exact-match check below passes, and the slice is consumed to
+	// pay an invoice for nothing — the recipient loses the slice and receives no
+	// payment, with a SUCCESS response.
+	//
+	// Refused here rather than at mint time, although CalculateRedeemFeeMloki's own
+	// comment used to promise a mint-time MinRedeemableMloki that was never
+	// implemented. Mint time is the wrong place: whether a slice can pay out at all
+	// depends on IsSelfPayment, which is only known now, and a slice below the base
+	// fee is still perfectly useful — it can be transferred, consolidated with
+	// others, or redeemed same-node where the fee is waived entirely. Refusing to
+	// mint it would break those to prevent this.
+	//
+	// The slice stays claimable: the claim is rolled back exactly as the amount
+	// mismatch below does, so the holder can consolidate it and redeem the total.
+	if expectedAmount == 0 {
+		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
+			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after a zero-payout redemption")
+		}
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, fmt.Sprintf(
+			"this slice cannot be redeemed to Lightning: its allocated share of %d millis is fully consumed by the %d millis redeem fee, so the payout would be zero. Consolidate it with another slice first, or redeem to an invoice on this node, where the fee is waived",
+			claimedAmount, hubFeeMloki))
+		return
+	}
+
 	if resolvedAmount != expectedAmount {
 		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after amount mismatch")

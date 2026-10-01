@@ -392,10 +392,28 @@ A `cash_redeem` MAY carry a fee; `cash_transfer` (§Transferring and Splitting a
   redemption the Hub's own node both sends and receives — paid to a Circle Wallet, an isolated Simple
   Subwallet, a standard connection, or another cash_wallet on the same node — is always fee-free, and no
   fee ever applies to `cash_transfer`.
-- **How much.** `redeem_fee_ppm` (parts-per-million) times the slice's own committed amount.
+- **How much.** A flat base plus a proportional cut: `redeem_fee_base` plus `redeem_fee_ppm`
+  (parts-per-million) times the slice's own committed amount. Either part MAY be zero.
 - **Who pays.** The redeeming recipient, deducted from their own payout — never charged against another,
   not-yet-redeemed slice. `cash_status` (§Cash Status) quotes the exact fee and net amount up
   front, so a recipient always knows what `cash_redeem` will pay out before they call it.
+
+The base exists because routing cost does not scale with the payment. A purely proportional fee earns
+almost nothing on a small slice while the Hub still pays a full route to deliver it, and that gap comes
+out of the Hub's own balance — the Hub subsidising someone else's withdrawal. A base makes the withheld
+fee cover the delivery it is withheld for.
+
+**The fee MUST NOT exceed the amount it is charged on, and a Hub MUST refuse a `cash_redeem` whose
+payout would be zero** rather than performing it. The two rules are one consequence: once the fee is
+capped at the slice, a slice at or below the base quotes a payout of zero, and a zero payout matches
+an amountless invoice exactly — so without the refusal the slice is consumed to pay nothing, and the
+recipient reads a success. The refusal MUST leave the slice claimable, and SHOULD say that the slice
+can still be consolidated with another or redeemed same-node, because both remain true: a slice below
+the base fee is not worthless, it is only not independently withdrawable to Lightning.
+
+This is deliberately a redeem-time rule, not a minting rule. Whether a slice can pay out depends on
+whether the redemption resolves same-node, which is unknowable when the slice is created, and a Hub
+that refused to mint such a slice would block transferring and consolidating it as well.
 
 An implementation MUST decide same-node-ness with the exact same predicate its own payment path uses to
 decide whether to skip real Lightning routing — not a second check that could drift from it and either
