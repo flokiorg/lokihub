@@ -164,6 +164,24 @@ func chunkResults(reqNonce string, results []transport.Result, limits transport.
 				return nil, fmt.Errorf("a single result for item %q does not fit the envelope limit", r.ID)
 			}
 			groups = append(groups, current)
+			// r now STARTS a new group, so it has to fit on its own. The check above
+			// only covers r being the first item of the whole batch — which made this
+			// guard position-dependent: an oversize result anywhere but first produced
+			// NO error and a chunk that cannot be encoded.
+			//
+			// What that cost: chunk 1 is published declaring Total: 2, chunk 2 then
+			// fails to encode, and the client collects 1 of 2, times out, and reports
+			// ErrIncompleteReply for a batch the hub has already EXECUTED. For a
+			// cash_redeem that is a spend the caller cannot confirm — the same shape as
+			// a hub lying about `total`, reached by accident instead of malice.
+			//
+			// Latent rather than live: no current method produces a single result this
+			// large (TestAuditDSecB_MaximalSingleResultStillFitsOneChunk). It needs a
+			// future schema change that lifts a cap, and the position dependence is
+			// what would have kept it invisible to the obvious test.
+			if !fits([]transport.Result{r}, len(results)) {
+				return nil, fmt.Errorf("a single result for item %q does not fit the envelope limit", r.ID)
+			}
 			current = []transport.Result{r}
 			continue
 		}
