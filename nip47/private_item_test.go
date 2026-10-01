@@ -142,7 +142,10 @@ func TestItemResponseCollector_RefusesADoubleAnswer(t *testing.T) {
 // than silently stop collecting.
 func TestItemResponseCollector_MatchesThePublishFuncSignature(t *testing.T) {
 	c := &itemResponseCollector{}
-	var fn func(*models.Response, nostr.Tags) = c.publish
+	// The explicit type IS the assertion, so staticcheck's ST1023 is wrong here:
+	// `fn := c.publish` would infer whatever signature publish happens to have, and
+	// this compile-time guard would silently stop guarding anything.
+	var fn func(*models.Response, nostr.Tags) = c.publish //nolint:staticcheck // the declared type is the test
 	require.NotNil(t, fn)
 
 	fn(&models.Response{ResultType: "cash_status"}, nostr.Tags{})
