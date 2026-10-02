@@ -99,6 +99,15 @@ func TestAuditDSecB_UnpaddedEnvelopeConsumesASlotAtATwentiethOfTheHonestCost(t *
 // count at saturation. That arithmetic was done against a 120 s slot lifetime. At 300 s the
 // headroom is what this prints.
 func TestAuditDSecB_UnpaddedFloodFillsTheNonceSetFasterThanTheIngestLoopSaturates(t *testing.T) {
+	// Measures an achievable ingest rate from wall-clock time, then asks whether a
+	// flood could fill the nonce set inside the freshness window. The race detector
+	// slows execution by roughly 5-20x, so the rate measured under it is not the
+	// rate being reasoned about and the comparison fails for an unrelated reason.
+	// CI runs `go test -race ./...`, which is where this first showed up.
+	if raceDetectorEnabled {
+		t.Skip("throughput measurement: meaningless under the race detector; asserted in the ordinary (non -race) run")
+	}
+
 	if testing.Short() {
 		t.Skip("timing measurement")
 	}
