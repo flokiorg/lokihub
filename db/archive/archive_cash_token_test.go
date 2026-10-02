@@ -23,6 +23,7 @@ func TestArchiveAndDeleteCashBillTx_KeepsCashTokenVerbatim(t *testing.T) {
 
 	bill := newCashBill(t, gormDB, hub, 5000, []db.CashWalletClaim{{AmountMloki: 5000}})
 
+	//nolint:gosec // G101: a bech32 token fixture for the archive round trip, not a credential
 	const token = "lokicash1qqqsyqcyq5rqwzqfpg9scrgwpugpzysnzk0ju0000000000000000"
 	require.NoError(t, gormDB.Model(&db.App{}).
 		Where("id = ?", bill.ID).Update("cash_token", token).Error)
