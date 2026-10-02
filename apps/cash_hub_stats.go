@@ -340,7 +340,7 @@ func (svc *appsService) fillCashDailySeries(stats *CashHubStats, scope cashStats
 		Amount int64
 	}
 	var totals []dayTotal
-	dayExpr := utcDayExpr(svc.db.Dialector.Name(), "e.at")
+	dayExpr := utcDayExpr(svc.db.Name(), "e.at")
 
 	// Issued is keyed on when the slice was created, redeemed on when its
 	// payout settled, returned on when its bill was archived — each the moment

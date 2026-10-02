@@ -96,7 +96,7 @@ func explainSweepQuery(t *testing.T, gormDB *gorm.DB) string {
 		WHERE parent_app_id IS NOT NULL AND expires_at < ? AND cleanup_in_progress = ?
 		LIMIT 200`
 
-	if gormDB.Dialector.Name() == "postgres" {
+	if gormDB.Name() == "postgres" {
 		var lines []string
 		require.NoError(t, gormDB.Raw("EXPLAIN "+q, time.Now(), false).Scan(&lines).Error)
 		return strings.Join(lines, "\n")

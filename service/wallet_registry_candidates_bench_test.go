@@ -311,7 +311,7 @@ const bloomHashes = 4
 
 func newBloom(capacity int) *bloomCandidate {
 	bits := uint64(1)
-	want := uint64(capacity) * 15
+	want := uint64(capacity) * 15 //nolint:gosec // G115: capacity is a positive test constant
 	for bits < want {
 		bits <<= 1
 	}
@@ -486,7 +486,7 @@ func BenchmarkCandidateResident(b *testing.B) {
 				var after runtime.MemStats
 				runtime.ReadMemStats(&after)
 
-				resident := int64(after.HeapAlloc) - int64(before.HeapAlloc)
+				resident := int64(after.HeapAlloc) - int64(before.HeapAlloc) //nolint:gosec // G115: a heap delta is meant to be signed, and these figures are nowhere near int64 max
 				b.ReportMetric(float64(resident)/float64(n), "B/wallet")
 				b.ReportMetric(float64(resident)/(1024*1024), "MB_total")
 

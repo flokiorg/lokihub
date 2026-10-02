@@ -216,6 +216,12 @@ func (svc *appsService) fillCircleEligibleCount(stats *CircleHubStats, hubID uin
 		Count(&n).Error; err != nil {
 		return fmt.Errorf("failed to count allowlist for hub %d: %w", hubID, err)
 	}
+	// Clamped rather than suppressed: n comes back from a COUNT and cannot be
+	// negative, but nothing in the type says so, and a negative would wrap to an
+	// enormous positive instead of an obvious zero.
+	if n < 0 {
+		n = 0
+	}
 	count := uint64(n)
 	stats.EligibleCount = &count
 	return nil
