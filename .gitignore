@@ -49,3 +49,6 @@ tmp/
 # archived NIP drafts — internal working copies only, not for history
 docs/nips/archive/
 
+# internal working notes — release continuation, audit scratch; never published
+docs/private/
+
