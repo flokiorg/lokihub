@@ -17,16 +17,16 @@ import (
 //
 // Two halves, in two repos, each individually defensible:
 //
-//   nmilat  proof.go:217-223  proofRequiredTags omits "expiration", so a proof's
-//                             declared not_after is never compared to the
-//                             envelope's. The proof's ONLY clock is created_at,
-//                             good for ProofFreshnessPast = 5 MINUTES.
-//   lokihub private_nonce_set.go:107-116  a nonce whose recorded not_after has
-//                             lapsed is REFRESHED and re-admitted, not refused.
-//                             The comment says "the freshness check rejects a
-//                             stale envelope before it reaches here" — true of
-//                             the same envelope, false of a NEW envelope that
-//                             merely reuses the nonce with a fresh window.
+//	nmilat  proof.go:217-223  proofRequiredTags omits "expiration", so a proof's
+//	                          declared not_after is never compared to the
+//	                          envelope's. The proof's ONLY clock is created_at,
+//	                          good for ProofFreshnessPast = 5 MINUTES.
+//	lokihub private_nonce_set.go:107-116  a nonce whose recorded not_after has
+//	                          lapsed is REFRESHED and re-admitted, not refused.
+//	                          The comment says "the freshness check rejects a
+//	                          stale envelope before it reaches here" — true of
+//	                          the same envelope, false of a NEW envelope that
+//	                          merely reuses the nonce with a fresh window.
 //
 // Composed: the nonce, which is the only thing pinning a proof to one envelope,
 // stops being a burnt value after at most MaxNotAfterWindow = 120s, while the

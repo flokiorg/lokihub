@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"

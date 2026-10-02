@@ -93,7 +93,7 @@ func TestAudit_CashTransferIdenticalProofRace_ExactlyOneWins(t *testing.T) {
 		// source wallet was left holding nothing (its value moved into the
 		// winner's carved + remainder wallets) and the hub deleted it. A
 		// replayed duplicate proof carved off nothing more.
-		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey, 
+		requireCashWalletDrainedAway(t, admin, hubAppID, created.WalletPubkey,
 			// nil: there is no longer a bill method that goes SILENT on a destroyed bill.
 			// get_balance is gone from a bill's scopes, and cash_status answers a
 			// destroyed bill with a "spent" tombstone on purpose — a holder is entitled

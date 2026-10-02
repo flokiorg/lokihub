@@ -77,7 +77,7 @@ type ConsolidateParams struct {
 	RedeemFeePpm     int
 	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
 	RedeemFeeBaseMloki int64
-	ExpiresAt        *time.Time
+	ExpiresAt          *time.Time
 }
 
 // ConsolidateResult carries the merged wallet and its token, delivered to the
@@ -199,11 +199,11 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	walletPubkey := *newApp.WalletPubkey
 
 	if err := deps.AppsService.CreateCashWalletClaims(newApp.ID, []db.CashWalletClaim{{
-		IdentityType:     params.NewIdentityType,
-		IdentityValue:    params.NewIdentityValue,
-		IAPubkey:         params.NewIAPubkey,
-		AmountMloki:      int64(total), //nolint:gosec // bounded to <= the hub's PerWalletMaxMloki by the caller, itself an int64
-		MinTransferMloki: params.MinTransferMloki,
+		IdentityType:       params.NewIdentityType,
+		IdentityValue:      params.NewIdentityValue,
+		IAPubkey:           params.NewIAPubkey,
+		AmountMloki:        int64(total), //nolint:gosec // bounded to <= the hub's PerWalletMaxMloki by the caller, itself an int64
+		MinTransferMloki:   params.MinTransferMloki,
 		RedeemFeePpm:       params.RedeemFeePpm,
 		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 	}}); err != nil {

@@ -131,9 +131,9 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			createAppRequest.Scopes,
 			createAppRequest.Metadata,
 			db.CashHubConfig{
-				PerWalletMaxMloki: createAppRequest.CashPerWalletMaxMloki,
-				MaxExpSecs:        createAppRequest.CashMaxExpSecs,
-				MinTransferMloki:  createAppRequest.CashMinTransferMloki,
+				PerWalletMaxMloki:  createAppRequest.CashPerWalletMaxMloki,
+				MaxExpSecs:         createAppRequest.CashMaxExpSecs,
+				MinTransferMloki:   createAppRequest.CashMinTransferMloki,
 				RedeemFeePpm:       createAppRequest.CashRedeemFeePpm,
 				RedeemFeeBaseMloki: createAppRequest.CashRedeemFeeBaseMloki,
 				// Omitted means the default, not "disabled": a caller that

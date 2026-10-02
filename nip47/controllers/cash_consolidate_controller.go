@@ -396,15 +396,15 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 
 	// 5. Create + fund the merged wallet (compensating rollback on failure).
 	result, strandedSourceAppIDs, err := cashwallet.Consolidate(ctx, deps, cashwallet.ConsolidateParams{
-		HubApp:           hubApp,
-		Sources:          sources,
-		NewIdentityType:  params.NewIdentity.IdentityType,
-		NewIdentityValue: params.NewIdentity.IdentityValue,
-		NewIAPubkey:      params.NewIdentity.IAPubkey,
+		HubApp:             hubApp,
+		Sources:            sources,
+		NewIdentityType:    params.NewIdentity.IdentityType,
+		NewIdentityValue:   params.NewIdentity.IdentityValue,
+		NewIAPubkey:        params.NewIdentity.IAPubkey,
 		MinTransferMloki:   minTransfer,
 		RedeemFeePpm:       redeemFee,
 		RedeemFeeBaseMloki: redeemFeeBase,
-		ExpiresAt:        earliest,
+		ExpiresAt:          earliest,
 	})
 	if err != nil {
 		// By here step 4 fully succeeded, so insertedProofs == proofEventIDs;

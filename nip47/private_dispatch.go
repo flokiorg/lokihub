@@ -389,7 +389,6 @@ func billProofHolder(signer, wantPubkey string) bool {
 	return wantPubkey != "" && signer == wantPubkey
 }
 
-
 // attestedConnectionKey resolves a connection_key recipient from an IA attestation in
 // cash_status's own params, returning the identity_value to scope the answer to.
 //
