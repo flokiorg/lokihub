@@ -620,7 +620,7 @@ func TestClaimAndDeleteCashClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
 
 	hub := newCashHub(t, svc, 1_000_000, 3600)
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		wallet := newCashWallet(t, svc, hub)
 		pubkey := randomHex32()
@@ -681,7 +681,7 @@ func TestClaimAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed(t *te
 
 	hub := newCashHub(t, svc, 1_000_000, 3600)
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		wallet := newCashWallet(t, svc, hub)
 		pubkey := randomHex32()
@@ -1000,7 +1000,7 @@ func TestSplitCashSliceAmount_ConcurrentPartialSplits_NeverOverdraw(t *testing.T
 
 	hub := newCashHub(t, svc, 1_000_000, 3600)
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		wallet := newCashWallet(t, svc, hub)
 		pubkey := randomHex32()
@@ -1048,7 +1048,7 @@ func TestSplitAndClaimCashSlice_ConcurrentRace_NeverBothSucceed(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		hub := newCashHub(t, svc, 10_000, 3600)
 		wallet := newCashWallet(t, svc, hub)
@@ -1089,7 +1089,7 @@ func TestSplitAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed(t *te
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		hub := newCashHub(t, svc, 1_000_000, 3600)
 		wallet := newCashWallet(t, svc, hub)
@@ -1138,7 +1138,7 @@ func TestSplitAndReassignCashSliceIdentity_PartialVsTransfer_NeverBothSucceed(t 
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	const trials = 200
+	trials := raceTrials(200)
 	for trial := 0; trial < trials; trial++ {
 		hub := newCashHub(t, svc, 1_000_000, 3600)
 		wallet := newCashWallet(t, svc, hub)

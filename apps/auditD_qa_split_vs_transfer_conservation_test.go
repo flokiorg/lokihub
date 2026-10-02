@@ -58,10 +58,10 @@ func TestAuditDQA_PartialSplitVsTransfer_ConservesTheSliceAmount(t *testing.T) {
 	defer svc.Remove()
 
 	const (
-		trials      = 200
 		sliceAmount = int64(5000)
 		carve       = int64(2000)
 	)
+	trials := raceTrials(200)
 
 	bothWon := 0
 	for trial := 0; trial < trials; trial++ {
