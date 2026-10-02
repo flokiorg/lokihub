@@ -73,7 +73,7 @@ func TestDeleteAppAndCreateChild_ConcurrentRace_NeverOrphans(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	const trials = 100
+	trials := raceTrials(100)
 	for trial := 0; trial < trials; trial++ {
 		hub, _, err := svc.AppsService.CreateCashHub(
 			"race-hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
