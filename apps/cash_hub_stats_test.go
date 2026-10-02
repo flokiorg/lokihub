@@ -197,11 +197,26 @@ func TestGetCashHubStats_DailySeriesSumsSameDay(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 1_000_000, 3600)
 
 	now := time.Now().UTC()
-	day := now.AddDate(0, 0, -2)
+	// Truncated to midnight, the same way the midnight-boundary test above does
+	// it, because the hourly offsets below must not cross a date boundary.
+	//
+	// This used to be a bare AddDate(0, 0, -2), which inherits now's HOUR, so
+	// `day` sat at whatever time of day the suite happened to run. The loop then
+	// seeded events at day+0h, +1h and +2h and asserted all three land on day's
+	// calendar date — true for 22 hours out of 24, and false for a run starting
+	// after ~22:00 UTC, when +1h/+2h roll into the next day and the same-day sum
+	// comes up short. Caught 2026-10-01 at ~23:00 UTC by a full-suite run that
+	// crossed midnight; it passes again on the next run, which is exactly what
+	// makes this kind of test bug survive.
+	day := now.AddDate(0, 0, -2).Truncate(24 * time.Hour)
 
 	amounts := []int64{1000, 2500, 400}
 	for i, amount := range amounts {
 		at := day.Add(time.Duration(i) * time.Hour)
+		// The invariant the assertions below depend on, pinned rather than
+		// assumed: every seeded event is on day's own date.
+		require.Equal(t, day.Format("2006-01-02"), at.Format("2006-01-02"),
+			"event %d was seeded on a different calendar day than the one being summed", i)
 		require.NoError(t, svc.DB.Create(&db.CashBillSliceArchive{
 			WalletAppID: uint(720_001 + i), HubAppID: hub.ID, ClaimID: uint(20 + i),
 			IdentityType: db.CashIdentityPubkey, IdentityValue: randomHex32(),
