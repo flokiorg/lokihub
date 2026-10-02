@@ -44,6 +44,7 @@ const expiredInvoiceSettlementGrace = time.Hour
 //     ever retried. This fix does not stop a lapsed invoice being left behind —
 //     it makes the resulting pin self-healing instead of permanent, so the same
 //     wallet becomes reclaimable once its invoice has lapsed by the grace below.
+//
 //   - ACCEPTED is a hold invoice whose HTLC is committed and held. That is a
 //     payment genuinely in flight — it will credit on settle — and it was not
 //     counted at all, which defeated this guard for exactly the case it exists

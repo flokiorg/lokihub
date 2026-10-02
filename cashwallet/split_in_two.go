@@ -39,7 +39,7 @@ type SplitInTwoParams struct {
 	RedeemFeePpm     int
 	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
 	RedeemFeeBaseMloki int64
-	ExpiresAt        *time.Time
+	ExpiresAt          *time.Time
 }
 
 // SplitInTwoResult carries the created wallet(s). Remainder is nil for a full
@@ -67,16 +67,16 @@ type SplitInTwoResult struct {
 // source was consumed terminal by design and MUST NOT be restored regardless.
 func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result *SplitInTwoResult, sourceFundsIntact bool, err error) {
 	carved, err := Split(ctx, deps, SplitParams{
-		HubApp:           params.HubApp,
-		SourceWalletApp:  params.SourceWalletApp,
-		AmountMloki:      params.CarvedAmountMloki,
-		NewIdentityType:  params.CarvedIdentityType,
-		NewIdentityValue: params.CarvedIdentityValue,
-		NewIAPubkey:      params.CarvedIAPubkey,
-		MinTransferMloki: params.MinTransferMloki,
+		HubApp:             params.HubApp,
+		SourceWalletApp:    params.SourceWalletApp,
+		AmountMloki:        params.CarvedAmountMloki,
+		NewIdentityType:    params.CarvedIdentityType,
+		NewIdentityValue:   params.CarvedIdentityValue,
+		NewIAPubkey:        params.CarvedIAPubkey,
+		MinTransferMloki:   params.MinTransferMloki,
 		RedeemFeePpm:       params.RedeemFeePpm,
 		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-		ExpiresAt:        params.ExpiresAt,
+		ExpiresAt:          params.ExpiresAt,
 	})
 	if err != nil {
 		// Nothing has left the source yet — safe to restore.
@@ -88,16 +88,16 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 	}
 
 	remainder, err := Split(ctx, deps, SplitParams{
-		HubApp:           params.HubApp,
-		SourceWalletApp:  params.SourceWalletApp,
-		AmountMloki:      params.RemainderAmountMloki,
-		NewIdentityType:  params.RemainderIdentityType,
-		NewIdentityValue: params.RemainderIdentityValue,
-		NewIAPubkey:      params.RemainderIAPubkey,
-		MinTransferMloki: params.MinTransferMloki,
+		HubApp:             params.HubApp,
+		SourceWalletApp:    params.SourceWalletApp,
+		AmountMloki:        params.RemainderAmountMloki,
+		NewIdentityType:    params.RemainderIdentityType,
+		NewIdentityValue:   params.RemainderIdentityValue,
+		NewIAPubkey:        params.RemainderIAPubkey,
+		MinTransferMloki:   params.MinTransferMloki,
 		RedeemFeePpm:       params.RedeemFeePpm,
 		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-		ExpiresAt:        params.ExpiresAt,
+		ExpiresAt:          params.ExpiresAt,
 	})
 	if err != nil {
 		// Compensate the carved spin-off: move its funds back to the source,

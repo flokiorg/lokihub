@@ -41,25 +41,25 @@ func TestCashRedeem_RouteCapReachesTheNode(t *testing.T) {
 		why          string
 	}{
 		{
-			name: "proportional_fee_caps_the_route_at_what_was_withheld",
+			name:       "proportional_fee_caps_the_route_at_what_was_withheld",
 			sliceMloki: 1000, feePpm: 100_000, // 10% => fee 100
 			wantPayout: 900, wantRouteCap: ptrUint64(100),
 			why: "the invariant: 900 paid out + 100 route cap == the 1000 slice",
 		},
 		{
-			name: "flat_base_caps_the_route_too",
+			name:       "flat_base_caps_the_route_too",
 			sliceMloki: 10_000, feeBaseMloki: 500,
 			wantPayout: 9500, wantRouteCap: ptrUint64(500),
 			why: "the base is the half of f6e0124 that makes small slices pay for themselves",
 		},
 		{
-			name: "base_plus_proportional_cap_is_their_sum",
+			name:       "base_plus_proportional_cap_is_their_sum",
 			sliceMloki: 10_000, feeBaseMloki: 500, feePpm: 100_000, // 500 + 1000
 			wantPayout: 8500, wantRouteCap: ptrUint64(1500),
 			why: "both components are withheld, so both are available to the route",
 		},
 		{
-			name: "no_fee_configured_passes_NO_cap",
+			name:       "no_fee_configured_passes_NO_cap",
 			sliceMloki: 1000,
 			wantPayout: 1000, wantRouteCap: nil,
 			why: "zero is not a cap: a Hub that withheld nothing made no promise, so it " +

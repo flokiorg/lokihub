@@ -212,7 +212,6 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 				recipientPriv, connPriv, hubXOnly, nonce, notAfter),
 			why: "the allowlist itself must not be discoverable",
 		},
-
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, tc.item, binding)

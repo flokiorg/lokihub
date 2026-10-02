@@ -128,7 +128,7 @@ func TestCreateCashWallet_ProducesSignedToken(t *testing.T) {
 		Recipients: []CashWalletRecipient{
 			{IdentityType: db.CashIdentityPubkey, IdentityValue: beneficiaryPubkey, AmountMloki: 1000},
 		},
-		ExpirySecs:    1800,
+		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
 
