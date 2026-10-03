@@ -4,7 +4,7 @@ go 1.26.8
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/flokiorg/go-flokicoin v0.26.1-alpha
+	github.com/flokiorg/go-flokicoin v0.26.3
 	github.com/getlantern/systray v1.2.2
 	github.com/labstack/echo/v4 v4.15.3
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
@@ -15,9 +15,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/wailsapp/wails/v2 v2.12.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.12.0
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.84.0
 	gopkg.in/macaroon.v2 v2.1.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -34,8 +34,8 @@ require (
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
-	github.com/flokiorg/flnd v0.2.2-beta
-	github.com/flokiorg/flndecodepay v1.0.3
+	github.com/flokiorg/flnd v0.2.3
+	github.com/flokiorg/flndecodepay v1.0.5
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
@@ -43,9 +43,9 @@ require (
 	github.com/ohstr/nmilat v0.5.0-rc.2
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
-	golang.org/x/net v0.58.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/net v0.59.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.42.2
@@ -74,7 +74,7 @@ require (
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
-	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
+	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/lru v1.1.3 // indirect
 	github.com/docker/cli v28.1.1+incompatible // indirect
@@ -84,10 +84,10 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.33.0 // indirect
-	github.com/flokiorg/flokicoin-neutrino v0.17.0-beta // indirect
+	github.com/flokiorg/flokicoin-neutrino v0.17.2 // indirect
 	github.com/flokiorg/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
-	github.com/flokiorg/lightning-onion v1.0.1-alpha // indirect
-	github.com/flokiorg/walletd v0.2.0-beta // indirect
+	github.com/flokiorg/lightning-onion v1.0.4 // indirect
+	github.com/flokiorg/walletd v0.2.2 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
 	github.com/getlantern/golog v0.0.0-20190830074920-4ef2e798c2d7 // indirect
@@ -100,7 +100,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
+	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-migrate/migrate/v4 v4.19.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -145,7 +145,7 @@ require (
 	github.com/miekg/dns v1.1.63 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/sys/user v0.3.0 // indirect
+	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -209,13 +209,13 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.15.0 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	golang.org/x/tools v0.49.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 	gopkg.in/macaroon-bakery.v2 v2.3.0 // indirect
@@ -236,7 +236,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/echo-jwt/v4 v4.3.1
-	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0
 	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50 // indirect
 	gorm.io/datatypes v1.2.7
