@@ -17,7 +17,7 @@ require (
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.12.0
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.83.2
 	gopkg.in/macaroon.v2 v2.1.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -34,7 +34,7 @@ require (
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
-	github.com/flokiorg/flnd v0.2.3
+	github.com/flokiorg/flnd v0.2.4
 	github.com/flokiorg/flndecodepay v1.0.5
 	github.com/flowgate-lsp/nostr-lsps5 v1.0.2
 	github.com/godbus/dbus/v5 v5.1.0
