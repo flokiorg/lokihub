@@ -58,20 +58,24 @@ jobs:
             echo "PRERELEASE=false" >> $GITHUB_ENV
           fi
 
+      # A missing note used to set exists=false, which if:-gated off every
+      # remaining step -- so the job reported success having published
+      # nothing. That actually happened: releases/0.5.0-rc.4.md was committed
+      # and never released, and nobody noticed. Fail instead.
       - name: Check Release Note
-        id: check_note
         shell: bash
         run: |
-          if [ -f "releases/${{ env.TAG }}.md" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release note found: releases/${{ env.TAG }}.md"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "No release note found for ${{ env.TAG }}, skipping release."
+          if [ ! -f "releases/${{ env.TAG }}.md" ]; then
+            echo "::error::no releases/${{ env.TAG }}.md - write the release note and commit it before running this workflow"
+            exit 1
           fi
+          if [ ! -s "releases/${{ env.TAG }}.md" ]; then
+            echo "::error::releases/${{ env.TAG }}.md is empty"
+            exit 1
+          fi
+          echo "Release note found: releases/${{ env.TAG }}.md"
 
       - name: Download Build Artifacts
-        if: steps.check_note.outputs.exists == 'true'
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ steps.get_run_ids.outputs.run_id }}
@@ -79,17 +83,37 @@ jobs:
           path: artifacts
 
       - name: Display Artifacts
-        if: steps.check_note.outputs.exists == 'true'
         run: ls -R artifacts
+
+      # build-all.yaml is harvested by "latest successful run", which says
+      # nothing about which commit it built. Releasing 0.5.0-rc.8 once attached
+      # 18 files all named 0.5.0-rc.7, built ten days earlier: the notes
+      # described changes the binaries did not contain. Every asset carries the
+      # version in its filename, so the check is cheap.
+      - name: Verify artifacts match the version being released
+        shell: bash
+        run: |
+          set -euo pipefail
+          total=$(find artifacts -type f | wc -l)
+          if [ "$total" -eq 0 ]; then
+            echo "::error::no artifacts were downloaded from the build-all run"
+            exit 1
+          fi
+          wrong=$(find artifacts -type f ! -name "*${{ env.TAG }}*" | head -20 || true)
+          if [ -n "$wrong" ]; then
+            echo "::error::the latest successful build-all run produced artifacts that do not carry ${{ env.TAG }} in their names - it predates this version. Re-run build-all.yaml on this commit, then this workflow."
+            echo "$wrong"
+            exit 1
+          fi
+          echo "all $total artifacts carry ${{ env.TAG }}"
 
 
       - name: Create Release
-        if: steps.check_note.outputs.exists == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           name: Release ${{ env.TAG }}
           body_path: releases/${{ env.TAG }}.md
           files: artifacts/**/*
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           prerelease: ${{ env.PRERELEASE }}
