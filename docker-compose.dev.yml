@@ -1,6 +1,6 @@
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:latest
+    image: ghcr.io/ohstr/ncli:0.8.0-rc.3
     container_name: lokihub-dev-relay
     hostname: relay
     restart: unless-stopped
