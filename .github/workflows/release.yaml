@@ -62,18 +62,37 @@ jobs:
       # remaining step -- so the job reported success having published
       # nothing. That actually happened: releases/0.5.0-rc.4.md was committed
       # and never released, and nobody noticed. Fail instead.
-      - name: Check Release Note
+      #
+      # A pre-release (0.5.0-rc.9) documents the version it is a candidate
+      # for, so the notes live under that open "## [0.5.0]" section rather
+      # than one heading per candidate -- mirrors how nmilat's CHANGELOG.md
+      # accumulates an unreleased version across its own rc's.
+      - name: Resolve Release Notes from CHANGELOG.md
+        id: notes
         shell: bash
         run: |
-          if [ ! -f "releases/${{ env.TAG }}.md" ]; then
-            echo "::error::no releases/${{ env.TAG }}.md - write the release note and commit it before running this workflow"
+          NOTES_VERSION="${TAG%%-*}"
+
+          NOTES=$(awk -v ver="$NOTES_VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]") > 0) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md)
+          NOTES=$(printf '%s\n' "$NOTES" | sed -e '/./,$!d' -e ':a' -e '/^\n*$/{$d;N;ba' -e '}')
+
+          if [ -z "$NOTES" ]; then
+            echo "::error::no CHANGELOG.md section found for [$NOTES_VERSION] - write the release note and commit it before running this workflow"
             exit 1
           fi
-          if [ ! -s "releases/${{ env.TAG }}.md" ]; then
-            echo "::error::releases/${{ env.TAG }}.md is empty"
-            exit 1
-          fi
-          echo "Release note found: releases/${{ env.TAG }}.md"
+
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            echo "$NOTES"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release note found for [$NOTES_VERSION] in CHANGELOG.md"
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
@@ -113,7 +132,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           name: Release ${{ env.TAG }}
-          body_path: releases/${{ env.TAG }}.md
+          body: ${{ steps.notes.outputs.notes }}
           files: artifacts/**/*
           fail_on_unmatched_files: true
           prerelease: ${{ env.PRERELEASE }}
