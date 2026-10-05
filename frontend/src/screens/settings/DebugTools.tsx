@@ -15,6 +15,13 @@ import {
   AlertDialogTrigger,
 } from "src/components/ui/alert-dialog";
 import { Button } from "src/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "src/components/ui/card";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "src/components/ui/radio-group";
@@ -437,32 +444,22 @@ export default function DebugTools() {
               </Button>
             </>
           )}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Input
-              type="number"
-              min={1}
-              value={logMaxLen}
-              onChange={(e) => setLogMaxLen(e.target.value.trim())}
-              className="w-24"
-              aria-label="Max log length (characters)"
-            />
-            <Button
-              variant="outline"
-              onClick={() =>
-                apiRequest(`/api/log/app?maxLen=${logMaxLen}`, "GET")
-              }
-            >
-              Get App Logs
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                apiRequest(`/api/log/node?maxLen=${logMaxLen}`, "GET")
-              }
-            >
-              Get Node Logs
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() =>
+              apiRequest(`/api/log/app?maxLen=${logMaxLen}`, "GET")
+            }
+          >
+            Get App Logs
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              apiRequest(`/api/log/node?maxLen=${logMaxLen}`, "GET")
+            }
+          >
+            Get Node Logs
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -524,6 +521,26 @@ export default function DebugTools() {
           {dialog === "resetRoutingData" && <ResetRoutingDataDialogContent />}
         </AlertDialog>
       </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Logs</CardTitle>
+          <CardDescription>
+            Max length applies to Get App Logs / Get Node Logs above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 max-w-40">
+            <Label htmlFor="logMaxLength">Max Length (characters)</Label>
+            <Input
+              id="logMaxLength"
+              type="number"
+              min={1}
+              value={logMaxLen}
+              onChange={(e) => setLogMaxLen(e.target.value.trim())}
+            />
+          </div>
+        </CardContent>
+      </Card>
       {apiResponse && (
         <Textarea
           className="whitespace-pre-wrap break-anywhere font-mono"
