@@ -1100,6 +1100,7 @@ type PublishNodeProfileRequest struct {
 	Name    string `json:"name"`
 	About   string `json:"about"`
 	Picture string `json:"picture"`
+	Banner  string `json:"banner"`
 	Nip05   string `json:"nip05"`
 	Lud16   string `json:"lud16"`
 }
