@@ -17,7 +17,7 @@ import {
 import { Button } from "src/components/ui/button";
 import {
   Card,
-  CardDescription,
+  CardContent,
   CardHeader,
   CardTitle,
 } from "src/components/ui/card";
@@ -576,33 +576,30 @@ export default function DebugTools() {
           {dialog === "resetRoutingData" && <ResetRoutingDataDialogContent />}
         </AlertDialog>
       </div>
-      <Card>
-        <CardHeader className="pb-3 flex flex-row items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">Logs</CardTitle>
-            <CardDescription>
-              Max length applies to Get App Logs / Get Node Logs above.
-            </CardDescription>
-          </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Log settings">
-                <SettingsIcon className="size-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <LogSettingsDialogContent
-              logMaxLen={logMaxLen}
-              onSave={setLogMaxLen}
-            />
-          </AlertDialog>
-        </CardHeader>
-      </Card>
       {apiResponse && (
-        <Textarea
-          className="whitespace-pre-wrap break-anywhere font-mono"
-          rows={35}
-          value={`API Response: ${apiResponse}`}
-        />
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-start justify-between gap-2">
+            <CardTitle className="text-base">Response</CardTitle>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Log settings">
+                  <SettingsIcon className="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <LogSettingsDialogContent
+                logMaxLen={logMaxLen}
+                onSave={setLogMaxLen}
+              />
+            </AlertDialog>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              className="whitespace-pre-wrap break-anywhere font-mono"
+              rows={35}
+              value={`API Response: ${apiResponse}`}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
