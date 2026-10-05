@@ -15,6 +15,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/gorilla/websocket"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/tests"
@@ -165,6 +166,11 @@ func TestPublishTransportAnnouncement_RequiresTransportSigner(t *testing.T) {
 	pool := nostr.NewSimplePool(context.Background())
 	err = svc.publishTransportAnnouncement(context.Background(), pool, pt)
 	require.ErrorContains(t, err, "this LN backend cannot sign the transport announcement")
+
+	status := svc.GetPrivateTransportStatus()
+	assert.False(t, status.Announced, "GetPrivateTransportStatus must reflect the failure, not just the error return")
+	assert.Zero(t, status.AnnouncedRelays)
+	assert.Contains(t, status.Error, "this LN backend cannot sign the transport announcement")
 }
 
 func TestPublishTransportAnnouncement_PropagatesSignerError(t *testing.T) {
@@ -185,6 +191,10 @@ func TestPublishTransportAnnouncement_PropagatesSignerError(t *testing.T) {
 	err = svc.publishTransportAnnouncement(context.Background(), pool, pt)
 	require.ErrorContains(t, err, "node refused to sign the announcement")
 	require.ErrorContains(t, err, "node locked")
+
+	status := svc.GetPrivateTransportStatus()
+	assert.False(t, status.Announced)
+	assert.Contains(t, status.Error, "node locked")
 }
 
 // TestPublishTransportAnnouncement_NoRelayAcceptedIsAnError covers a hub whose
@@ -207,6 +217,12 @@ func TestPublishTransportAnnouncement_NoRelayAcceptedIsAnError(t *testing.T) {
 	pool := nostr.NewSimplePool(context.Background())
 	err = svc.publishTransportAnnouncement(context.Background(), pool, pt)
 	require.ErrorContains(t, err, "no relay accepted the transport announcement")
+
+	status := svc.GetPrivateTransportStatus()
+	assert.False(t, status.Announced)
+	assert.Zero(t, status.AnnouncedRelays)
+	assert.Equal(t, 1, status.TotalRelays)
+	assert.Contains(t, status.Error, "no relay accepted the transport announcement")
 }
 
 // TestPublishTransportAnnouncement_SucceedsWhenAtLeastOneRelayAccepts proves
@@ -231,6 +247,12 @@ func TestPublishTransportAnnouncement_SucceedsWhenAtLeastOneRelayAccepts(t *test
 	pool := nostr.NewSimplePool(context.Background())
 	err = svc.publishTransportAnnouncement(context.Background(), pool, pt)
 	require.NoError(t, err, "one reachable relay accepting the event must be enough")
+
+	status := svc.GetPrivateTransportStatus()
+	assert.True(t, status.Announced)
+	assert.Equal(t, 1, status.AnnouncedRelays)
+	assert.Equal(t, 2, status.TotalRelays)
+	assert.Empty(t, status.Error)
 }
 
 // startPrivateTransport itself (resolve -> start the subscription goroutine

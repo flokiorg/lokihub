@@ -62,6 +62,11 @@ type service struct {
 	keys                 keys.Keys
 	relayStatuses        []RelayStatus
 	startupState         string
+	// privateTransportStatus is set by setPrivateTransportIdentity /
+	// setPrivateTransportAnnounceResult (service/private_transport.go) and
+	// read by GetPrivateTransportStatus. A pointer so a read never races a
+	// concurrent update of the whole snapshot.
+	privateTransportStatus atomic.Pointer[PrivateTransportStatus]
 }
 
 func NewService(ctx context.Context) (*service, error) {

@@ -389,6 +389,50 @@ func (_c *MockService_GetRelayStatuses_Call) RunAndReturn(run func() []service.R
 	return _c
 }
 
+// GetPrivateTransportStatus provides a mock function for the type MockService
+func (_mock *MockService) GetPrivateTransportStatus() service.PrivateTransportStatus {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPrivateTransportStatus")
+	}
+
+	var r0 service.PrivateTransportStatus
+	if returnFunc, ok := ret.Get(0).(func() service.PrivateTransportStatus); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(service.PrivateTransportStatus)
+	}
+	return r0
+}
+
+// MockService_GetPrivateTransportStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPrivateTransportStatus'
+type MockService_GetPrivateTransportStatus_Call struct {
+	*mock.Call
+}
+
+// GetPrivateTransportStatus is a helper method to define mock.On call
+func (_e *MockService_Expecter) GetPrivateTransportStatus() *MockService_GetPrivateTransportStatus_Call {
+	return &MockService_GetPrivateTransportStatus_Call{Call: _e.mock.On("GetPrivateTransportStatus")}
+}
+
+func (_c *MockService_GetPrivateTransportStatus_Call) Run(run func()) *MockService_GetPrivateTransportStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockService_GetPrivateTransportStatus_Call) Return(privateTransportStatus service.PrivateTransportStatus) *MockService_GetPrivateTransportStatus_Call {
+	_c.Call.Return(privateTransportStatus)
+	return _c
+}
+
+func (_c *MockService_GetPrivateTransportStatus_Call) RunAndReturn(run func() service.PrivateTransportStatus) *MockService_GetPrivateTransportStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetStartupState provides a mock function for the type MockService
 func (_mock *MockService) GetStartupState() string {
 	ret := _mock.Called()

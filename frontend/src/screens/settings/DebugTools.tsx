@@ -1,7 +1,6 @@
 import { ClipboardPasteIcon, InfoIcon } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
-import { ExecuteCustomNodeCommandDialogContent } from "src/components/ExecuteCustomNodeCommandDialogContent";
 import { ResetRoutingDataDialogContent } from "src/components/ResetRoutingDataDialogContent";
 import SettingsHeader from "src/components/SettingsHeader";
 import {
@@ -300,48 +299,6 @@ function RefundSwapDialogContent() {
   );
 }
 
-function GetLogsDialogContent({ apiRequest, target }: Props) {
-  const [maxLen, setMaxLen] = React.useState<string>("");
-
-  async function onConfirm() {
-    await apiRequest(`/api/log/${target}?maxLen=${maxLen}`, "GET");
-    setMaxLen("");
-  }
-
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle className="capitalize">
-          Get {target} Logs
-        </AlertDialogTitle>
-        <AlertDialogDescription className="text-start">
-          <Label htmlFor="maxLength" className="block mb-2">
-            Enter Max Length (in characters)
-          </Label>
-          <Input
-            id="maxLength"
-            name="maxLength"
-            type="number"
-            required
-            autoFocus
-            min={1}
-            value={maxLen}
-            onChange={(e) => {
-              setMaxLen(e.target.value.trim());
-            }}
-          />
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction disabled={!parseInt(maxLen)} onClick={onConfirm}>
-          Confirm
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  );
-}
-
 function GetNetworkGraphDialogContent({ apiRequest }: Props) {
   const [nodeIds, setNodeIds] = React.useState<string>("");
 
@@ -385,12 +342,15 @@ export default function DebugTools() {
     | "probeInvoice"
     | "probeKeysend"
     | "refundSwap"
-    | "getAppLogs"
-    | "getNodeLogs"
     | "getNetworkGraph"
     | "resetRoutingData"
-    | "customNodeCommand"
   >();
+  // Log length is an always-visible parameter next to the fetch buttons
+  // rather than a value typed into a blocking dialog before every fetch —
+  // click Get App/Node Logs and it fetches immediately with whatever this
+  // is currently set to; change it and click again to refetch with a
+  // different cap.
+  const [logMaxLen, setLogMaxLen] = React.useState<string>("5000");
 
   const { hasChannelManagement } = useInfo();
 
@@ -477,16 +437,32 @@ export default function DebugTools() {
               </Button>
             </>
           )}
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" onClick={() => setDialog("getAppLogs")}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Input
+              type="number"
+              min={1}
+              value={logMaxLen}
+              onChange={(e) => setLogMaxLen(e.target.value.trim())}
+              className="w-24"
+              aria-label="Max log length (characters)"
+            />
+            <Button
+              variant="outline"
+              onClick={() =>
+                apiRequest(`/api/log/app?maxLen=${logMaxLen}`, "GET")
+              }
+            >
               Get App Logs
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" onClick={() => setDialog("getNodeLogs")}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                apiRequest(`/api/log/node?maxLen=${logMaxLen}`, "GET")
+              }
+            >
               Get Node Logs
             </Button>
-          </AlertDialogTrigger>
+          </div>
           <Button
             variant="outline"
             onClick={() => {
@@ -519,17 +495,6 @@ export default function DebugTools() {
           >
             Get Node Commands
           </Button>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              onClick={() => {
-                apiRequest(`/api/commands`, "GET");
-                setDialog("customNodeCommand");
-              }}
-            >
-              Execute Node Command
-            </Button>
-          </AlertDialogTrigger>
           {/* probing functions are not useful */}
           {/*info?.backendType === "LDK" && (
             <AlertDialogTrigger asChild>
@@ -553,22 +518,10 @@ export default function DebugTools() {
             <ProbeKeysendDialogContent apiRequest={apiRequest} />
           )}
           {dialog === "refundSwap" && <RefundSwapDialogContent />}
-          {(dialog === "getAppLogs" || dialog === "getNodeLogs") && (
-            <GetLogsDialogContent
-              apiRequest={apiRequest}
-              target={dialog === "getAppLogs" ? "app" : "node"}
-            />
-          )}
           {dialog === "getNetworkGraph" && (
             <GetNetworkGraphDialogContent apiRequest={apiRequest} />
           )}
           {dialog === "resetRoutingData" && <ResetRoutingDataDialogContent />}
-          {dialog === "customNodeCommand" && (
-            <ExecuteCustomNodeCommandDialogContent
-              availableCommands={apiResponse}
-              setCommandResponse={setApiResponse}
-            />
-          )}
         </AlertDialog>
       </div>
       {apiResponse && (

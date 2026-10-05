@@ -274,6 +274,20 @@ export interface InfoResponse {
   relay: string;
   trustedNwcRelay: boolean;
   generalRelay: string;
+  // privateTransport is the hub's NIP-CASH private-transport announcement
+  // status (read-only). nodeIdentity/inboxPubkey are x-only hex (Nostr
+  // pubkey format). announced is false, with error explaining why, when the
+  // hub's LN backend can't sign the announcement or no relay accepted it —
+  // bill methods are unreachable to any client that hasn't talked to this
+  // hub before until it is.
+  privateTransport: {
+    nodeIdentity?: string;
+    inboxPubkey?: string;
+    announced: boolean;
+    announcedRelays: number;
+    totalRelays: number;
+    error?: string;
+  };
   searchRelay: string;
   lsps: LSP[];
   enableSwap: boolean;

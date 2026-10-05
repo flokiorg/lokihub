@@ -1,16 +1,19 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
+import { NodeIdentityRows } from "src/components/NodeIdentityRows";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import { useInfo } from "src/hooks/useInfo";
+import { useNodeIdentity } from "src/hooks/useNodeIdentity";
 
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 
 export default function NodeAlias() {
   const { data: info, mutate: reloadInfo } = useInfo();
+  const nodeIdentity = useNodeIdentity();
 
   const [nodeAlias, setNodeAlias] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +82,12 @@ export default function NodeAlias() {
           </Button>
         </form>
       </div>
+      {nodeIdentity.hex && (
+        <div className="max-w-lg grid gap-2">
+          <Label>Node Identity</Label>
+          <NodeIdentityRows identity={nodeIdentity} />
+        </div>
+      )}
     </div>
   );
 }

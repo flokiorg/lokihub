@@ -70,6 +70,8 @@
     "management": "Management",
     "advanced": "Advanced",
     "publicKey": "Public Key",
+    "nostrNpub": "Nostr npub",
+    "nostrNprofile": "Nostr nprofile",
     "deposit": "Deposit",
     "withdraw": "Withdraw",
     "swapIn": "Swap In",
