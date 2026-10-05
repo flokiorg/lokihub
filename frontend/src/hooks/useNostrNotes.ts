@@ -90,8 +90,11 @@ export function useNostrNotes(pubkey?: string, pageSize = 20) {
     return merged.sort((a, b) => b.createdAt - a.createdAt);
   }, [data]);
 
+  // false (not "maybe"), until a page has actually come back — otherwise
+  // this defaulted true before the first fetch ever resolved, so the Load
+  // More button rendered immediately alongside the loading skeleton.
   const lastPage = data?.[data.length - 1];
-  const hasMore = (lastPage?.length ?? pageSize) >= pageSize;
+  const hasMore = data !== undefined && (lastPage?.length ?? 0) >= pageSize;
 
   const loadMore = React.useCallback(() => {
     if (hasMore) {
@@ -99,9 +102,15 @@ export function useNostrNotes(pubkey?: string, pageSize = 20) {
     }
   }, [hasMore, setSize, size]);
 
+  // Without a pubkey, or with no General relay configured at all, this
+  // will never fetch — getKey returns null forever in both cases. Treating
+  // that the same as "still loading" would leave the skeleton showing
+  // forever instead of settling into the empty state.
+  const canFetch = !!pubkey && relayUrls.length > 0;
+
   return {
     notes,
-    isLoading: data === undefined,
+    isLoading: canFetch && data === undefined,
     isLoadingMore: isValidating && data !== undefined,
     hasMore,
     loadMore,

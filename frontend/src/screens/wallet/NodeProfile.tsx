@@ -329,14 +329,9 @@ export default function NodeProfile() {
             </CardContent>
           </Card>
         ))}
-        {hasMoreNotes && (
-          <Button
-            variant="outline"
-            className="w-fit"
-            onClick={loadMoreNotes}
-            disabled={isLoadingMoreNotes}
-          >
-            {isLoadingMoreNotes ? "Loading..." : "Load More"}
+        {!isNotesLoading && !isLoadingMoreNotes && hasMoreNotes && (
+          <Button variant="outline" className="w-fit" onClick={loadMoreNotes}>
+            Load More
           </Button>
         )}
       </div>
