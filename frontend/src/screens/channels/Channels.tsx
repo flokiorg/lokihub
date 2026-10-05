@@ -28,6 +28,7 @@ import ExternalLink from "src/components/ExternalLink";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import LowReceivingCapacityAlert from "src/components/LowReceivingCapacityAlert";
+import { NostrAvatar } from "src/components/NostrAvatar";
 import ResponsiveButton from "src/components/ResponsiveButton";
 import {
   Alert,
@@ -159,6 +160,18 @@ export default function Channels() {
         contentRight={
           hasChannelManagement && (
             <div className="flex gap-3 items-center justify-center">
+              {nodeIdentity.nostrHex && (
+                <Link
+                  to="/wallet/node-profile"
+                  className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <NostrAvatar
+                    pubkey={nodeIdentity.nostrHex}
+                    className="h-6 w-6"
+                  />
+                  <span className="hidden sm:inline">{t("menu.profile")}</span>
+                </Link>
+              )}
               <DropdownMenu modal={false}>
                 <ResponsiveButton
                   asChild
@@ -190,38 +203,6 @@ export default function Channels() {
                         )}
                       </div>
                     </DropdownMenuItem>
-                    {nodeIdentity.npub && (
-                      <DropdownMenuItem>
-                        <div
-                          className="flex flex-row gap-2 items-center w-full cursor-pointer"
-                          onClick={() => {
-                            copyToClipboard(nodeIdentity.npub!);
-                          }}
-                        >
-                          <div>{t("menu.nostrNpub")}</div>
-                          <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
-                            {nodeIdentity.npub}
-                          </div>
-                          <CopyIcon className="shrink-0 size-4" />
-                        </div>
-                      </DropdownMenuItem>
-                    )}
-                    {nodeIdentity.nprofile && (
-                      <DropdownMenuItem>
-                        <div
-                          className="flex flex-row gap-2 items-center w-full cursor-pointer"
-                          onClick={() => {
-                            copyToClipboard(nodeIdentity.nprofile!);
-                          }}
-                        >
-                          <div>{t("menu.nostrNprofile")}</div>
-                          <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
-                            {nodeIdentity.nprofile}
-                          </div>
-                          <CopyIcon className="shrink-0 size-4" />
-                        </div>
-                      </DropdownMenuItem>
-                    )}
                     {nodeConnectionInfo?.address &&
                       nodeConnectionInfo?.port && (
                         <DropdownMenuItem>

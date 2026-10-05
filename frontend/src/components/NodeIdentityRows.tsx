@@ -4,7 +4,15 @@ import { copyToClipboard } from "src/lib/clipboard";
 import { shortenMiddle } from "src/utils/nostr";
 import { NodeIdentityFormats } from "src/hooks/useNodeIdentity";
 
-function IdentityRow({ label, value }: { label: string; value: string }) {
+// IdentityRow is exported for NodeProfile, which shows a couple of other
+// copyable values (the LN URI) in this exact same convention alongside it.
+export function IdentityRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="grid gap-1">
       <span className="text-sm text-muted-foreground">{label}</span>

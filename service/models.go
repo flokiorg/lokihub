@@ -44,6 +44,10 @@ type Service interface {
 	// whether (and to how many relays) the announcement was published. The
 	// zero value means the hub hasn't attempted to start it yet.
 	GetPrivateTransportStatus() PrivateTransportStatus
+	// PublishNodeProfile signs and publishes a kind-0 profile for the hub's
+	// own node identity to the General relay pool. Returns an error if the
+	// LN backend cannot sign (no TransportSigner) or no relay accepted it.
+	PublishNodeProfile(ctx context.Context, metadata NodeProfileMetadata) error
 	GetStartupState() string
 	ReloadNostr() error
 	WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error)

@@ -433,6 +433,52 @@ func (_c *MockService_GetPrivateTransportStatus_Call) RunAndReturn(run func() se
 	return _c
 }
 
+// PublishNodeProfile provides a mock function for the type MockService
+func (_mock *MockService) PublishNodeProfile(ctx context.Context, metadata service.NodeProfileMetadata) error {
+	ret := _mock.Called(ctx, metadata)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PublishNodeProfile")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, service.NodeProfileMetadata) error); ok {
+		r0 = returnFunc(ctx, metadata)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockService_PublishNodeProfile_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PublishNodeProfile'
+type MockService_PublishNodeProfile_Call struct {
+	*mock.Call
+}
+
+// PublishNodeProfile is a helper method to define mock.On call
+//   - ctx
+//   - metadata
+func (_e *MockService_Expecter) PublishNodeProfile(ctx interface{}, metadata interface{}) *MockService_PublishNodeProfile_Call {
+	return &MockService_PublishNodeProfile_Call{Call: _e.mock.On("PublishNodeProfile", ctx, metadata)}
+}
+
+func (_c *MockService_PublishNodeProfile_Call) Run(run func(ctx context.Context, metadata service.NodeProfileMetadata)) *MockService_PublishNodeProfile_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(service.NodeProfileMetadata))
+	})
+	return _c
+}
+
+func (_c *MockService_PublishNodeProfile_Call) Return(err error) *MockService_PublishNodeProfile_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockService_PublishNodeProfile_Call) RunAndReturn(run func(ctx context.Context, metadata service.NodeProfileMetadata) error) *MockService_PublishNodeProfile_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetStartupState provides a mock function for the type MockService
 func (_mock *MockService) GetStartupState() string {
 	ret := _mock.Called()
