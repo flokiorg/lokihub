@@ -21,6 +21,7 @@ type NodeProfileMetadata struct {
 	Name    string `json:"name,omitempty"`
 	About   string `json:"about,omitempty"`
 	Picture string `json:"picture,omitempty"`
+	Banner  string `json:"banner,omitempty"`
 	Nip05   string `json:"nip05,omitempty"`
 	Lud16   string `json:"lud16,omitempty"`
 }

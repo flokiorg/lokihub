@@ -1802,6 +1802,7 @@ func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfi
 		Name:    request.Name,
 		About:   request.About,
 		Picture: request.Picture,
+		Banner:  request.Banner,
 		Nip05:   request.Nip05,
 		Lud16:   request.Lud16,
 	})

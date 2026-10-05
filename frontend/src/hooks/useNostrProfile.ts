@@ -33,6 +33,7 @@ export function useNostrProfile(pubkey?: string, relayHints: string[] = []) {
         name: profile.name,
         displayName: profile.displayName,
         picture: profile.picture ?? profile.image,
+        banner: profile.banner,
         about: profile.about ?? profile.bio,
         nip05: profile.nip05,
         lud16: profile.lud16,

@@ -77,6 +77,7 @@ import {
   PendingBalancesDetails,
 } from "src/types";
 import { request } from "src/utils/request";
+import { shortenMiddle } from "src/utils/nostr";
 
 export default function Channels() {
   useSyncWallet();
@@ -169,7 +170,11 @@ export default function Channels() {
                     pubkey={nodeIdentity.nostrHex}
                     className="h-6 w-6"
                   />
-                  <span className="hidden sm:inline">{t("menu.profile")}</span>
+                  {nodeIdentity.npub && (
+                    <span className="hidden sm:inline font-mono">
+                      {shortenMiddle(nodeIdentity.npub, 8, 4)}
+                    </span>
+                  )}
                 </Link>
               )}
               <DropdownMenu modal={false}>

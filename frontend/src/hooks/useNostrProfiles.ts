@@ -9,6 +9,7 @@ export interface NostrProfile {
   name?: string;
   displayName?: string;
   picture?: string;
+  banner?: string;
   about?: string;
   nip05?: string;
   lud16?: string;
@@ -91,6 +92,7 @@ export function useNostrProfiles(
               name: raw.name,
               displayName: raw.displayName,
               picture: raw.picture ?? raw.image,
+              banner: raw.banner,
               about: raw.about ?? raw.bio,
               nip05: raw.nip05,
               lud16: raw.lud16,
