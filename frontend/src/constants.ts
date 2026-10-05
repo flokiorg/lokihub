@@ -18,6 +18,10 @@ export const localStorageKeys = {
   // and the other closed.
   cashHubsAnalyticsKeepOpen: "lokihub-cash-hubs-analytics-keep-open",
   circleAnalyticsKeepOpen: "lokihub-circle-analytics-keep-open",
+  // The max-length the Debug Tools "Get App/Node Logs" buttons request.
+  // Saved so a value an operator set to chase down something long doesn't
+  // reset back to the default on every reload of the page.
+  debugLogMaxLen: "lokihub-debug-log-max-len",
 };
 
 export const ONCHAIN_DUST_LOKI = 1000;
