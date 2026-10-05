@@ -9,6 +9,7 @@ import AppHeader from "src/components/AppHeader";
 import { CustomPagination } from "src/components/CustomPagination";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import Loading from "src/components/Loading";
+import { OverviewCardSkeleton } from "src/components/OverviewCardSkeleton";
 import ResponsiveLinkButton from "src/components/ResponsiveLinkButton";
 import {
   CashCoverage,
@@ -139,69 +140,75 @@ export function CashHubList() {
       {/* The same overview one hub's dashboard opens with, totalled across
           every hub. It replaces a two-figure text line that could only ever
           show the current page's hubs, and answered none of what an operator
-          checks first: what is owed, what has come back, what it earned. */}
-      {stats && (
-        <>
-          <CashHubsSummary stats={stats} />
-
-          {/* The section is NOT a card: each chart below brings its own, and
-              a card inside a card just draws a second border around the same
-              content. The trigger row carries the heading instead. */}
-          <Accordion
-            type="single"
-            collapsible
-            value={isAnalyticsOpen ? "analytics" : ""}
-            onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
-          >
-            <AccordionItem value="analytics" className="border-b-0">
-              {/* Checkbox as a sibling of the trigger, not a child: the
-                  trigger is a <button>, so a control nested inside it could
-                  not be clicked without toggling the section. */}
-              <div className="flex items-center gap-3 px-1">
-                <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
-                  {t("circleHub.analyticsTitle")}
-                </AccordionTrigger>
-                {isAnalyticsOpen && (
-                  <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
-                    <Checkbox
-                      checked={keepAnalyticsOpen}
-                      onCheckedChange={(checked) =>
-                        toggleKeepAnalyticsOpen(checked === true)
-                      }
-                    />
-                    {t("circleHub.keepAnalyticsOpen")}
-                  </label>
-                )}
-              </div>
-              <AccordionContent className="pt-4 pb-0">
-                {/* Coverage leads, because it is the only card here that can
-                    represent a problem rather than a fact. The rest runs
-                    forward in time: what is owed now, what that will do next,
-                    and which hub it sits on. */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {/* Coverage is a few figures, not a plot, so it takes
-                      the whole row rather than sitting half-empty beside
-                      one. The two categorical plots pair, and the time
-                      series goes wide, where a 30-day axis is readable. */}
-                  <CashCoverage
-                    className="lg:col-span-2"
-                    backingMloki={stats.backing_mloki}
-                    outstandingMloki={stats.outstanding_mloki}
-                    shortfallMloki={stats.shortfall_mloki}
-                    capacityMloki={stats.balance_mloki}
-                  />
-                  <CashExpiryRunway stats={stats} />
-                  <CashHubBreakdown stats={stats} />
-                  <CashOutstandingChart
-                    className="lg:col-span-2"
-                    daily={stats.daily}
-                    outstandingMloki={stats.outstanding_mloki}
-                  />
+          checks first: what is owed, what has come back, what it earned.
+          Analytics lives inside this card (its last section) instead of as
+          its own block below it. While stats are still loading, a skeleton
+          takes this card's place instead of rendering nothing. */}
+      {stats ? (
+        <CashHubsSummary
+          stats={stats}
+          analytics={
+            // Not a card: each chart below brings its own, and a card
+            // inside a card just draws a second border around the same
+            // content. The trigger row carries the heading instead.
+            <Accordion
+              type="single"
+              collapsible
+              value={isAnalyticsOpen ? "analytics" : ""}
+              onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
+            >
+              <AccordionItem value="analytics" className="border-b-0">
+                {/* Checkbox as a sibling of the trigger, not a child: the
+                    trigger is a <button>, so a control nested inside it
+                    could not be clicked without toggling the section. */}
+                <div className="flex items-center gap-3 px-1">
+                  <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
+                    {t("circleHub.analyticsTitle")}
+                  </AccordionTrigger>
+                  {isAnalyticsOpen && (
+                    <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
+                      <Checkbox
+                        checked={keepAnalyticsOpen}
+                        onCheckedChange={(checked) =>
+                          toggleKeepAnalyticsOpen(checked === true)
+                        }
+                      />
+                      {t("circleHub.keepAnalyticsOpen")}
+                    </label>
+                  )}
                 </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </>
+                <AccordionContent className="pt-4 pb-0">
+                  {/* Coverage leads, because it is the only card here that
+                      can represent a problem rather than a fact. The rest
+                      runs forward in time: what is owed now, what that will
+                      do next, and which hub it sits on. */}
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    {/* Coverage is a few figures, not a plot, so it takes
+                        the whole row rather than sitting half-empty beside
+                        one. The two categorical plots pair, and the time
+                        series goes wide, where a 30-day axis is readable. */}
+                    <CashCoverage
+                      className="lg:col-span-2"
+                      backingMloki={stats.backing_mloki}
+                      outstandingMloki={stats.outstanding_mloki}
+                      shortfallMloki={stats.shortfall_mloki}
+                      capacityMloki={stats.balance_mloki}
+                    />
+                    <CashExpiryRunway stats={stats} />
+                    <CashHubBreakdown stats={stats} />
+                    <CashOutstandingChart
+                      className="lg:col-span-2"
+                      daily={stats.daily}
+                      outstandingMloki={stats.outstanding_mloki}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          }
+        />
+      ) : (
+        <OverviewCardSkeleton />
       )}
 
       {/*

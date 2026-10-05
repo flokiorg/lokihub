@@ -41,9 +41,13 @@ function Stat({
 export function CircleHubOverview({
   hub,
   stats,
+  analytics,
 }: {
   hub: App;
   stats: CircleHubStats;
+  // Same slot as CashHubOverview's analytics prop: rendered as the card's
+  // last section instead of as a separate block elsewhere on the page.
+  analytics?: React.ReactNode;
 }) {
   const { t } = useTranslation("circles");
 
@@ -97,6 +101,8 @@ export function CircleHubOverview({
             </p>
           </div>
         </div>
+
+        {analytics && <div className="border-t pt-4">{analytics}</div>}
       </CardContent>
     </Card>
   );

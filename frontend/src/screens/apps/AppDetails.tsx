@@ -37,6 +37,7 @@ import {
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
 import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
 import { CircleHubOverview } from "src/components/circles/CircleHubOverview";
+import { OverviewCardSkeleton } from "src/components/OverviewCardSkeleton";
 import { useCircleHubStats } from "src/hooks/useCircleHubStats";
 import {
   CashHubAllocations,
@@ -660,12 +661,23 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   their wallets, not what the host earned — and it derives its
                   two figures by walking every transaction the hub ever had, a
                   page at a time, which the stats endpoint answers in one
-                  request. */}
-              {app.kind === "circle_hub" && circleStats ? (
-                <>
-                  <CircleHubOverview hub={app} stats={circleStats} />
-                  <CircleAnalytics hub={app} stats={circleStats} />
-                </>
+                  request. Analytics renders inside the overview card itself
+                  (its last section) instead of as a second, separate block —
+                  while circleStats is still loading, a skeleton of that same
+                  card takes its place instead of the unrelated AppUsage card
+                  flashing in first. */}
+              {app.kind === "circle_hub" ? (
+                circleStats ? (
+                  <CircleHubOverview
+                    hub={app}
+                    stats={circleStats}
+                    analytics={
+                      <CircleAnalytics hub={app} stats={circleStats} />
+                    }
+                  />
+                ) : (
+                  <OverviewCardSkeleton />
+                )
               ) : (
                 <AppUsage
                   key={`${app.id}-${app.updatedAt}-${app.balance}`}
