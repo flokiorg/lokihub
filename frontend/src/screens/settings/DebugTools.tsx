@@ -1,4 +1,4 @@
-import { ClipboardPasteIcon, InfoIcon } from "lucide-react";
+import { ClipboardPasteIcon, InfoIcon, SettingsIcon } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
 import { ResetRoutingDataDialogContent } from "src/components/ResetRoutingDataDialogContent";
@@ -17,7 +17,6 @@ import {
 import { Button } from "src/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -32,6 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "src/components/ui/tooltip";
+import { localStorageKeys } from "src/constants";
 import { useInfo } from "src/hooks/useInfo";
 import { useUnit } from "src/hooks/useUnit";
 
@@ -343,6 +343,56 @@ function GetNetworkGraphDialogContent({ apiRequest }: Props) {
   );
 }
 
+// LogSettingsDialogContent is its own, self-contained AlertDialog (not part
+// of the shared one the button grid uses) — there's exactly one possible
+// piece of content for it, so it doesn't need the grid's dialog-union state
+// to pick what to render.
+function LogSettingsDialogContent({
+  logMaxLen,
+  onSave,
+}: {
+  logMaxLen: string;
+  onSave: (value: string) => void;
+}) {
+  const [value, setValue] = React.useState(logMaxLen);
+
+  // Re-seed from the current saved value each time the dialog opens, so a
+  // cancelled edit doesn't leave stale typing behind for next time.
+  React.useEffect(() => {
+    setValue(logMaxLen);
+  }, [logMaxLen]);
+
+  return (
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Log Settings</AlertDialogTitle>
+        <AlertDialogDescription className="text-start">
+          <Label htmlFor="logMaxLength" className="block mb-2">
+            Max Length (characters)
+          </Label>
+          <Input
+            id="logMaxLength"
+            type="number"
+            min={1}
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value.trim())}
+          />
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogAction
+          disabled={!parseInt(value)}
+          onClick={() => onSave(value)}
+        >
+          Save
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  );
+}
+
 export default function DebugTools() {
   const [apiResponse, setApiResponse] = React.useState<string>("");
   const [dialog, setDialog] = React.useState<
@@ -352,12 +402,17 @@ export default function DebugTools() {
     | "getNetworkGraph"
     | "resetRoutingData"
   >();
-  // Log length is an always-visible parameter next to the fetch buttons
-  // rather than a value typed into a blocking dialog before every fetch —
-  // click Get App/Node Logs and it fetches immediately with whatever this
-  // is currently set to; change it and click again to refetch with a
-  // different cap.
-  const [logMaxLen, setLogMaxLen] = React.useState<string>("5000");
+  // Get App/Node Logs fetch immediately with whatever this is currently set
+  // to — it's configured separately (the Logs card's settings icon), not
+  // typed into a blocking dialog before every fetch — and persisted, so a
+  // value set to chase down something long doesn't reset on reload.
+  const [logMaxLen, setLogMaxLenState] = React.useState<string>(
+    () => localStorage.getItem(localStorageKeys.debugLogMaxLen) || "5000"
+  );
+  function setLogMaxLen(value: string) {
+    setLogMaxLenState(value);
+    localStorage.setItem(localStorageKeys.debugLogMaxLen, value);
+  }
 
   const { hasChannelManagement } = useInfo();
 
@@ -522,24 +577,25 @@ export default function DebugTools() {
         </AlertDialog>
       </div>
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Logs</CardTitle>
-          <CardDescription>
-            Max length applies to Get App Logs / Get Node Logs above.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 max-w-40">
-            <Label htmlFor="logMaxLength">Max Length (characters)</Label>
-            <Input
-              id="logMaxLength"
-              type="number"
-              min={1}
-              value={logMaxLen}
-              onChange={(e) => setLogMaxLen(e.target.value.trim())}
-            />
+        <CardHeader className="pb-3 flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">Logs</CardTitle>
+            <CardDescription>
+              Max length applies to Get App Logs / Get Node Logs above.
+            </CardDescription>
           </div>
-        </CardContent>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Log settings">
+                <SettingsIcon className="size-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <LogSettingsDialogContent
+              logMaxLen={logMaxLen}
+              onSave={setLogMaxLen}
+            />
+          </AlertDialog>
+        </CardHeader>
       </Card>
       {apiResponse && (
         <Textarea
