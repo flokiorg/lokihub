@@ -1,3 +1,4 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import {
   MedianDuration,
@@ -17,7 +18,15 @@ import { CashHubStats } from "src/types";
 // one thing on a dashboard and another on the list. What it deliberately
 // leaves out is everything hub-specific: an isolated balance, a budget and
 // its renewal belong to one hub and do not total into anything meaningful.
-export function CashHubsSummary({ stats }: { stats: CashHubStats }) {
+export function CashHubsSummary({
+  stats,
+  analytics,
+}: {
+  stats: CashHubStats;
+  // See CashHubOverview's own analytics prop — same reasoning, same slot
+  // shape, just totalled across every hub instead of one.
+  analytics?: React.ReactNode;
+}) {
   const { t } = useTranslation("circles");
   const { t: ta } = useTranslation("apps");
 
@@ -100,6 +109,8 @@ export function CashHubsSummary({ stats }: { stats: CashHubStats }) {
             </span>
           )}
         </div>
+
+        {analytics && <div className="border-t pt-4">{analytics}</div>}
       </CardContent>
     </Card>
   );

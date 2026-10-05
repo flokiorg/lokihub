@@ -295,6 +295,69 @@ function CashHubDashboardInternal({
   // of the three things being edited, so it sits with them near the top;
   // while reading it is settled configuration, so it sits below the bills,
   // the trends and the payments an operator actually came here for.
+  // Not a card: each chart brings its own, and a card inside a card just
+  // draws a second border around the same content. The trigger row carries
+  // the heading instead. Rendered inside CashHubOverview's own card (its
+  // last section) rather than as a separate block elsewhere on the page.
+  const analyticsSection = (
+    <Accordion
+      type="single"
+      collapsible
+      value={isAnalyticsOpen ? "analytics" : ""}
+      onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
+    >
+      <AccordionItem value="analytics" className="border-b-0">
+        {/* The checkbox is a sibling of the trigger, not a child: the
+            trigger is a <button>, and a second control nested inside it
+            could not be clicked without also toggling the section. Shown
+            only while open, since "keep open" is a decision you make
+            looking at the thing. */}
+        <div className="flex items-center gap-3 px-1">
+          <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
+            {t("circleHub.analyticsTitle")}
+          </AccordionTrigger>
+          {isAnalyticsOpen && (
+            <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
+              <Checkbox
+                checked={keepAnalyticsOpen}
+                onCheckedChange={(checked) =>
+                  toggleKeepAnalyticsOpen(checked === true)
+                }
+              />
+              {t("circleHub.keepAnalyticsOpen")}
+            </label>
+          )}
+        </div>
+        <AccordionContent className="pt-4 pb-0">
+          {/* Same four questions as the Cash Hubs list, scoped to this hub —
+              can it honour what it owes, what happens to that next, how it
+              got here, and what moved each day. The balance comes off the
+              hub's own App row; a single hub's stats response does not
+              carry one. */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Same rule as the Cash Hubs list: a card that is a few figures
+                rather than a plot takes the whole row instead of sitting
+                half-empty beside one, and the two time series go wide,
+                where a 30-day axis is readable. */}
+            <CashCoverage
+              className="lg:col-span-2"
+              backingMloki={stats.backing_mloki}
+              outstandingMloki={stats.outstanding_mloki}
+              shortfallMloki={stats.shortfall_mloki}
+              capacityMloki={hub.balance}
+            />
+            <CashExpiryRunway className="lg:col-span-2" stats={stats} />
+            <CashOutstandingChart
+              daily={stats.daily}
+              outstandingMloki={stats.outstanding_mloki}
+            />
+            <CashDailyFlow daily={stats.daily} />
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+
   const permissionsCard = (
     <Card>
       <CardHeader>
@@ -456,11 +519,13 @@ function CashHubDashboardInternal({
 
       {/* Page order is what an operator reaches for, in order: what the hub
           holds and owes, then the bills themselves plus the mint action,
-          then the trends, then raw payments. The two charts are ~300px each
-          and stack on a phone, so they sit behind a collapsed disclosure
-          rather than pushing the list — the thing this page exists for —
-          below the fold on every visit. */}
-      {!isEditing && <CashHubOverview hub={hub} stats={stats} />}
+          then raw payments. Analytics lives inside the Overview card itself
+          (its last section) rather than as its own block further down the
+          page — it used to sit between the Cash Wallets card and the
+          transaction list, disconnected from the figures it explains. */}
+      {!isEditing && (
+        <CashHubOverview hub={hub} stats={stats} analytics={analyticsSection} />
+      )}
 
       {isEditing && (
         <Card>
@@ -545,66 +610,6 @@ function CashHubDashboardInternal({
               />
             </CardContent>
           </Card>
-
-          {/* The section is not a card: each chart brings its own, and a
-              card inside a card just draws a second border around the same
-              content. The trigger row carries the heading instead. */}
-          <Accordion
-            type="single"
-            collapsible
-            value={isAnalyticsOpen ? "analytics" : ""}
-            onValueChange={(v) => setAnalyticsOpen(v === "analytics")}
-          >
-            <AccordionItem value="analytics" className="border-b-0">
-              {/* The checkbox is a sibling of the trigger, not a child: the
-                  trigger is a <button>, and a second control nested inside it
-                  could not be clicked without also toggling the section.
-                  Shown only while open, since "keep open" is a decision you
-                  make looking at the thing. */}
-              <div className="flex items-center gap-3 px-1">
-                <AccordionTrigger className="flex-1 py-0 text-base font-semibold">
-                  {t("circleHub.analyticsTitle")}
-                </AccordionTrigger>
-                {isAnalyticsOpen && (
-                  <label className="text-muted-foreground flex shrink-0 cursor-pointer items-center gap-2 text-sm font-normal">
-                    <Checkbox
-                      checked={keepAnalyticsOpen}
-                      onCheckedChange={(checked) =>
-                        toggleKeepAnalyticsOpen(checked === true)
-                      }
-                    />
-                    {t("circleHub.keepAnalyticsOpen")}
-                  </label>
-                )}
-              </div>
-              <AccordionContent className="pt-4 pb-0">
-                {/* Same four questions as the Cash Hubs list, scoped to this
-                    hub — can it honour what it owes, what happens to that
-                    next, how it got here, and what moved each day. The
-                    balance comes off the hub's own App row; a single hub's
-                    stats response does not carry one. */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {/* Same rule as the Cash Hubs list: a card that is a few
-                      figures rather than a plot takes the whole row instead
-                      of sitting half-empty beside one, and the two time
-                      series go wide, where a 30-day axis is readable. */}
-                  <CashCoverage
-                    className="lg:col-span-2"
-                    backingMloki={stats.backing_mloki}
-                    outstandingMloki={stats.outstanding_mloki}
-                    shortfallMloki={stats.shortfall_mloki}
-                    capacityMloki={hub.balance}
-                  />
-                  <CashExpiryRunway className="lg:col-span-2" stats={stats} />
-                  <CashOutstandingChart
-                    daily={stats.daily}
-                    outstandingMloki={stats.outstanding_mloki}
-                  />
-                  <CashDailyFlow daily={stats.daily} />
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
 
           <AppTransactionList appId={hub.id} />
 

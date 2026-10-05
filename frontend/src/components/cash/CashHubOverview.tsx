@@ -126,9 +126,18 @@ export function Stat({
 export function CashHubOverview({
   hub,
   stats,
+  analytics,
 }: {
   hub: App;
   stats: CashHubStats;
+  // Rendered as the card's last section, same border-t pt-4 separator as
+  // every other block here. Analytics used to be its own section elsewhere
+  // on the page — disconnected from the figures it explains — which is the
+  // "between other sections" complaint this prop exists to fix. It stays a
+  // slot rather than something this card builds itself, since the accordion
+  // and its "keep open" state are the caller's (per-hub vs. all-hubs keep
+  // their own localStorage key).
+  analytics?: React.ReactNode;
 }) {
   const { t } = useTranslation("circles");
   const { t: ta } = useTranslation("apps");
@@ -263,6 +272,8 @@ export function CashHubOverview({
             />
           </div>
         )}
+
+        {analytics && <div className="border-t pt-4">{analytics}</div>}
       </CardContent>
     </Card>
   );
