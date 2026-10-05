@@ -59,6 +59,61 @@ type privateTransport struct {
 	rejectedEnvelopes atomic.Int64
 }
 
+// PrivateTransportStatus is a point-in-time snapshot of the hub's
+// private-transport announcement — for display (e.g. a Services page) and
+// for diagnosing a client-reported ErrNoAnnouncement without reading hub
+// logs. The zero value means the hub hasn't attempted to start the private
+// transport yet.
+type PrivateTransportStatus struct {
+	NodeIdentity    string
+	InboxPubkey     string
+	Announced       bool
+	AnnouncedRelays int
+	TotalRelays     int
+	// Error is the last publishTransportAnnouncement failure, if any. Empty
+	// when Announced is true.
+	Error     string
+	UpdatedAt time.Time
+}
+
+// GetPrivateTransportStatus returns the hub's current private-transport
+// status. Safe to call before startPrivateTransport has run (returns the
+// zero value) and concurrently with it being updated.
+func (svc *service) GetPrivateTransportStatus() PrivateTransportStatus {
+	return svc.loadPrivateTransportStatus()
+}
+
+func (svc *service) loadPrivateTransportStatus() PrivateTransportStatus {
+	if p := svc.privateTransportStatus.Load(); p != nil {
+		return *p
+	}
+	return PrivateTransportStatus{}
+}
+
+// setPrivateTransportIdentity records the node/inbox identity as soon as
+// it's resolved — before the announcement is attempted — so a failed publish
+// still leaves the identity visible rather than the whole status blank.
+func (svc *service) setPrivateTransportIdentity(nodeXOnly, inboxXOnly string) {
+	status := svc.loadPrivateTransportStatus()
+	status.NodeIdentity = nodeXOnly
+	status.InboxPubkey = inboxXOnly
+	svc.privateTransportStatus.Store(&status)
+}
+
+func (svc *service) setPrivateTransportAnnounceResult(announcedRelays, totalRelays int, announceErr error) {
+	status := svc.loadPrivateTransportStatus()
+	status.Announced = announceErr == nil
+	status.AnnouncedRelays = announcedRelays
+	status.TotalRelays = totalRelays
+	if announceErr != nil {
+		status.Error = announceErr.Error()
+	} else {
+		status.Error = ""
+	}
+	status.UpdatedAt = time.Now()
+	svc.privateTransportStatus.Store(&status)
+}
+
 // minWrapBytes is a floor on an inbound envelope's ciphertext. Anything shorter
 // cannot be a NIP-44 payload carrying even an empty envelope, so it is rejected
 // without touching the decrypt path.
@@ -153,6 +208,7 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 	if err != nil {
 		return err
 	}
+	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inboxXOnly)
 
 	// Reclaim expired nonces so the set tracks the live window rather than
 	// growing toward its cap, where it would start refusing real envelopes.
@@ -182,62 +238,77 @@ func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.Simpl
 //
 // Once per startup. The node signature costs ~1.15 ms, which is why this is not
 // on any per-request path.
-func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport) error {
+func (svc *service) publishTransportAnnouncement(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport) (err error) {
+	relayURLs := svc.cfg.GetRelayUrls()
+	var publishedTo int
+	// Named return + defer so every exit path below — including the early
+	// ones that never reach the publish loop — updates the retained status
+	// the same way, instead of needing its own call before each return.
+	defer func() {
+		svc.setPrivateTransportAnnounceResult(publishedTo, len(relayURLs), err)
+	}()
+
 	signer, ok := svc.lnClient.(lnclient.TransportSigner)
 	if !ok {
-		return errors.New("this LN backend cannot sign the transport announcement (needs BIP340 over the node key)")
+		err = errors.New("this LN backend cannot sign the transport announcement (needs BIP340 over the node key)")
+		return err
 	}
 
-	ev, err := transport.NewAnnouncement(
-		pt.nodeXOnly, pt.inboxXOnly, svc.cfg.PrivateEnvelopeLimits(), svc.cfg.GetRelayUrls(),
+	ev, buildErr := transport.NewAnnouncement(
+		pt.nodeXOnly, pt.inboxXOnly, svc.cfg.PrivateEnvelopeLimits(), relayURLs,
 	)
-	if err != nil {
-		return fmt.Errorf("build announcement: %w", err)
+	if buildErr != nil {
+		err = fmt.Errorf("build announcement: %w", buildErr)
+		return err
 	}
 
 	// The node hashes what it is given, so it must receive the event's
 	// serialization, not its id — see AnnouncementSigningPayload. Handing over the
 	// id yields a valid signature over the wrong digest and fails verification
 	// with nothing indicating why.
-	payload, err := transport.AnnouncementSigningPayload(ev)
-	if err != nil {
-		return fmt.Errorf("serialize announcement: %w", err)
+	payload, payloadErr := transport.AnnouncementSigningPayload(ev)
+	if payloadErr != nil {
+		err = fmt.Errorf("serialize announcement: %w", payloadErr)
+		return err
 	}
-	sig, err := signer.SignSchnorrNodeKey(ctx, payload)
-	if err != nil {
-		return fmt.Errorf("node refused to sign the announcement: %w", err)
+	sig, signErr := signer.SignSchnorrNodeKey(ctx, payload)
+	if signErr != nil {
+		err = fmt.Errorf("node refused to sign the announcement: %w", signErr)
+		return err
 	}
 	ev.Sig = hex.EncodeToString(sig)
 
 	// Verify our own announcement before publishing it. A bad signature here is
 	// unrecoverable in production: every client would reject it and conclude the
 	// hub is unreachable, which is indistinguishable from the hub being down.
-	if _, err := transport.ParseAnnouncement(ev, pt.nodeXOnly); err != nil {
-		return fmt.Errorf("refusing to publish an announcement that does not verify: %w", err)
-	}
-
-	published, err := toGoNostrEvent(ev)
-	if err != nil {
+	if _, verifyErr := transport.ParseAnnouncement(ev, pt.nodeXOnly); verifyErr != nil {
+		err = fmt.Errorf("refusing to publish an announcement that does not verify: %w", verifyErr)
 		return err
 	}
 
-	var publishedTo int
-	for _, relayURL := range svc.cfg.GetRelayUrls() {
-		relay, err := pool.EnsureRelay(relayURL)
-		if err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", relayURL).
+	published, convErr := toGoNostrEvent(ev)
+	if convErr != nil {
+		err = convErr
+		return err
+	}
+
+	for _, relayURL := range relayURLs {
+		relay, relayErr := pool.EnsureRelay(relayURL)
+		if relayErr != nil {
+			logger.Logger.Warn().Err(relayErr).Str("relay", relayURL).
 				Msg("Could not reach relay to publish the transport announcement")
 			continue
 		}
-		if err := relay.Publish(ctx, *published); err != nil {
-			logger.Logger.Warn().Err(err).Str("relay", relayURL).
+		if pubErr := relay.Publish(ctx, *published); pubErr != nil {
+			logger.Logger.Warn().Err(pubErr).Str("relay", relayURL).
 				Msg("Failed to publish the transport announcement")
 			continue
 		}
 		publishedTo++
 	}
 	if publishedTo == 0 {
-		return errors.New("no relay accepted the transport announcement")
+		err = errors.New("no relay accepted the transport announcement")
+		return err
 	}
 
 	logger.Logger.Info().
@@ -307,57 +378,72 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 // wrapped event's created_at is randomised up to two days into the past, so a
 // `since` would silently drop a fraction of legitimate traffic.
 func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
-	eventsChannelClosed := make(chan struct{}, 1)
+	// Closed exactly once, by the drain goroutine below, on every exit path —
+	// including ctx cancellation. That used to not be true: the drain
+	// goroutine `return`ed directly on ctx.Done() without ever reaching its
+	// final signal, so this function's own ctx.Done() case raced ahead and
+	// returned while that goroutine (and whatever it was mid-logging or
+	// mid-dispatching) was still running. Nothing downstream — including
+	// nostrGroup.Wait() during shutdown, since the goroutine was also never
+	// registered with `group` — actually waited for it.
+	eventsChannelClosed := make(chan struct{})
 
-	go func() {
+	group.Go(func() error {
+		defer close(eventsChannelClosed)
 		for event := range eventsChannel {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				if !pt.acceptsPrivateEvent(event.Event) {
-					continue
-				}
-
-				envelope, conversationKey, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
-				if err != nil {
-					// Counted rather than logged per event: this path is one an
-					// attacker drives, and formatting a message for each is
-					// itself a denial of service. Debug for a working trail.
-					pt.rejectedEnvelopes.Add(1)
-					logger.Logger.Debug().Err(err).Str("id", event.Event.ID).
-						Msg("Rejected a private transport envelope")
-					continue
-				}
-
-				logger.Logger.Debug().
-					Str("id", event.Event.ID).
-					Int("items", len(envelope.Items)).
-					Msg("Unwrapped a private transport envelope")
-
-				// Dispatched on its own goroutine so one slow envelope — a redemption
-				// waiting on a Lightning payment, say — cannot stall every envelope
-				// queued behind it. Replay protection already happened inside unwrap,
-				// so a duplicate cannot slip past while this one is still in flight.
-				//
-				// No loop-variable capture to worry about: envelope and conversationKey
-				// are declared inside this iteration's body, not by the range clause.
-				group.Go(func() error {
-					svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey)
-					return nil
-				})
+			if ctx.Err() != nil {
+				// Keep draining rather than returning early: the point is to
+				// let eventsChannel close on its own (it does once every
+				// per-relay goroutine notices this same ctx is done — see
+				// SimplePool.subMany), so the `defer` above always fires
+				// instead of racing this function's caller.
+				continue
 			}
+			if !pt.acceptsPrivateEvent(event.Event) {
+				continue
+			}
+
+			envelope, conversationKey, err := pt.unwrap(event.Event, svc.cfg.PrivateEnvelopeLimits(), time.Now())
+			if err != nil {
+				// Counted rather than logged per event: this path is one an
+				// attacker drives, and formatting a message for each is
+				// itself a denial of service. Debug for a working trail.
+				pt.rejectedEnvelopes.Add(1)
+				logger.Logger.Debug().Err(err).Str("id", event.Event.ID).
+					Msg("Rejected a private transport envelope")
+				continue
+			}
+
+			logger.Logger.Debug().
+				Str("id", event.Event.ID).
+				Int("items", len(envelope.Items)).
+				Msg("Unwrapped a private transport envelope")
+
+			// Dispatched on its own goroutine so one slow envelope — a redemption
+			// waiting on a Lightning payment, say — cannot stall every envelope
+			// queued behind it. Replay protection already happened inside unwrap,
+			// so a duplicate cannot slip past while this one is still in flight.
+			//
+			// No loop-variable capture to worry about: envelope and conversationKey
+			// are declared inside this iteration's body, not by the range clause.
+			group.Go(func() error {
+				svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey)
+				return nil
+			})
 		}
 		logger.Logger.Debug().Msg("Private transport subscription events channel ended")
-		eventsChannelClosed <- struct{}{}
-	}()
-
-	select {
-	case <-ctx.Done():
 		return nil
-	case <-eventsChannelClosed:
-		return errors.New("private transport subscription exited abnormally")
+	})
+
+	// Always wait for the drain goroutine above to actually finish, whether
+	// this generation ended because ctx was cancelled or because the relay
+	// subscription died on its own. The two cases differ only in what we tell
+	// the retry loop in startPrivateTransportSubscription afterwards.
+	<-eventsChannelClosed
+	if ctx.Err() != nil {
+		return nil
 	}
+	return errors.New("private transport subscription exited abnormally")
 }
 
 // acceptsPrivateEvent is the wire gate: allocation-free, no crypto, no database.

@@ -953,35 +953,36 @@ type LSPInfo struct {
 }
 
 type InfoResponse struct {
-	BackendType                 string              `json:"backendType"`
-	SetupCompleted              bool                `json:"setupCompleted"`
-	Running                     bool                `json:"running"`
-	Unlocked                    bool                `json:"unlocked"`
-	Version                     string              `json:"version"`
-	Network                     string              `json:"network"`
-	StartupState                string              `json:"startupState"`
-	StartupError                string              `json:"startupError"`
-	StartupErrorTime            time.Time           `json:"startupErrorTime"`
-	AutoUnlockPasswordSupported bool                `json:"autoUnlockPasswordSupported"`
-	AutoUnlockPasswordEnabled   bool                `json:"autoUnlockPasswordEnabled"`
-	Currency                    string              `json:"currency"`
-	FlokicoinDisplayFormat      string              `json:"flokicoinDisplayFormat"`
-	Relays                      []InfoResponseRelay `json:"relays"`
-	Relay                       string              `json:"relay"`
-	GeneralRelay                string              `json:"generalRelay"`
-	TrustedNwcRelay             bool                `json:"trustedNwcRelay"`
-	PrivateEnvelope             PrivateEnvelopeInfo `json:"privateEnvelope"`
-	SearchRelay                 string              `json:"searchRelay"`
-	NodeAlias                   string              `json:"nodeAlias"`
-	MempoolUrl                  string              `json:"mempoolUrl"`
-	LSPs                        []LSPInfo           `json:"lsps"`
-	LokihubServicesURL          string              `json:"lokihubServicesURL"`
-	SwapServiceUrl              string              `json:"swapServiceUrl"`
-	MessageboardNwcUrl          string              `json:"messageboardNwcUrl"`
-	EnableSwap                  bool                `json:"enableSwap"`
-	EnableMessageboardNwc       bool                `json:"enableMessageboardNwc"`
-	WorkDir                     string              `json:"workDir"`
-	EnablePolling               bool                `json:"enablePolling"`
+	BackendType                 string               `json:"backendType"`
+	SetupCompleted              bool                 `json:"setupCompleted"`
+	Running                     bool                 `json:"running"`
+	Unlocked                    bool                 `json:"unlocked"`
+	Version                     string               `json:"version"`
+	Network                     string               `json:"network"`
+	StartupState                string               `json:"startupState"`
+	StartupError                string               `json:"startupError"`
+	StartupErrorTime            time.Time            `json:"startupErrorTime"`
+	AutoUnlockPasswordSupported bool                 `json:"autoUnlockPasswordSupported"`
+	AutoUnlockPasswordEnabled   bool                 `json:"autoUnlockPasswordEnabled"`
+	Currency                    string               `json:"currency"`
+	FlokicoinDisplayFormat      string               `json:"flokicoinDisplayFormat"`
+	Relays                      []InfoResponseRelay  `json:"relays"`
+	Relay                       string               `json:"relay"`
+	GeneralRelay                string               `json:"generalRelay"`
+	TrustedNwcRelay             bool                 `json:"trustedNwcRelay"`
+	PrivateEnvelope             PrivateEnvelopeInfo  `json:"privateEnvelope"`
+	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
+	SearchRelay                 string               `json:"searchRelay"`
+	NodeAlias                   string               `json:"nodeAlias"`
+	MempoolUrl                  string               `json:"mempoolUrl"`
+	LSPs                        []LSPInfo            `json:"lsps"`
+	LokihubServicesURL          string               `json:"lokihubServicesURL"`
+	SwapServiceUrl              string               `json:"swapServiceUrl"`
+	MessageboardNwcUrl          string               `json:"messageboardNwcUrl"`
+	EnableSwap                  bool                 `json:"enableSwap"`
+	EnableMessageboardNwc       bool                 `json:"enableMessageboardNwc"`
+	WorkDir                     string               `json:"workDir"`
+	EnablePolling               bool                 `json:"enablePolling"`
 }
 
 // RedactForUnauthenticated strips fields that let an unauthenticated caller
@@ -1004,6 +1005,7 @@ func (r *InfoResponse) RedactForUnauthenticated() {
 	r.Relays = []InfoResponseRelay{}
 	r.Relay = ""
 	r.GeneralRelay = ""
+	r.PrivateTransport = PrivateTransportInfo{}
 	r.SearchRelay = ""
 	r.NodeAlias = ""
 	r.MempoolUrl = ""
@@ -1039,6 +1041,22 @@ type PrivateEnvelopeInfo struct {
 	// consolidate item encodes to, so an operator can see the cap's real cost
 	// against MaxBytes rather than inferring it.
 	MaxConsolidateItemBytes int `json:"maxConsolidateItemBytes,omitempty"`
+}
+
+// PrivateTransportInfo is the hub's NIP-CASH private-transport announcement
+// status, read-only. Node/inbox identity are x-only hex (Nostr pubkey
+// format, not the LN node's compressed form). Announced is false — with
+// Error explaining why — when the hub's LN backend cannot sign the
+// announcement or no configured relay accepted it; bill methods
+// (cash_status/cash_redeem/cash_transfer/cash_consolidate) are unreachable
+// to any client that hasn't talked to this hub before until it is.
+type PrivateTransportInfo struct {
+	NodeIdentity    string `json:"nodeIdentity,omitempty"`
+	InboxPubkey     string `json:"inboxPubkey,omitempty"`
+	Announced       bool   `json:"announced"`
+	AnnouncedRelays int    `json:"announcedRelays"`
+	TotalRelays     int    `json:"totalRelays"`
+	Error           string `json:"error,omitempty"`
 }
 
 type UpdateSettingsRequest struct {

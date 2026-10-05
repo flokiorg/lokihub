@@ -39,6 +39,11 @@ type Service interface {
 	GetConfig() config.Config
 	GetKeys() keys.Keys
 	GetRelayStatuses() []RelayStatus
+	// GetPrivateTransportStatus returns the hub's current NIP-CASH
+	// private-transport announcement status — node/inbox identity and
+	// whether (and to how many relays) the announcement was published. The
+	// zero value means the hub hasn't attempted to start it yet.
+	GetPrivateTransportStatus() PrivateTransportStatus
 	GetStartupState() string
 	ReloadNostr() error
 	WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error)

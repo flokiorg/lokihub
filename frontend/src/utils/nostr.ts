@@ -10,6 +10,21 @@ export function safeNpubEncode(hex: string): string | undefined {
   }
 }
 
+// safeNprofileEncode never throws on a malformed hex pubkey — same
+// never-throw convention as safeNpubEncode. relays is the nprofile's
+// embedded relay hints (e.g. the hub's own general-relay list); pass an
+// empty array to encode a bare pubkey with no hints.
+export function safeNprofileEncode(
+  hex: string,
+  relays: string[] = []
+): string | undefined {
+  try {
+    return nip19.nprofileEncode({ pubkey: hex, relays });
+  } catch {
+    return undefined;
+  }
+}
+
 // shortenMiddle truncates a long identifier to its beginning and end (e.g.
 // "npub1sg6plzptd6…jsf1a2b3") instead of just its beginning — showing both
 // ends lets someone eyeball-match it against another display of the same

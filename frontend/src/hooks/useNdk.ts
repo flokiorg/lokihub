@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { getNdk } from "src/lib/ndk";
 import { useInfo } from "src/hooks/useInfo";
 
-function splitRelayUrls(value: string | undefined): string[] {
+export function splitRelayUrls(value: string | undefined): string[] {
   return (
     value
       ?.split(",")

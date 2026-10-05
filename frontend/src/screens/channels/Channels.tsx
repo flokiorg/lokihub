@@ -64,6 +64,7 @@ import { useLocale } from "src/hooks/useLocale";
 import { useInfo } from "src/hooks/useInfo";
 
 import { useNodeConnectionInfo } from "src/hooks/useNodeConnectionInfo.ts";
+import { useNodeIdentity } from "src/hooks/useNodeIdentity.ts";
 import { useNodeDetails } from "src/hooks/useNodeDetails";
 import { useSyncWallet } from "src/hooks/useSyncWallet.ts";
 import { copyToClipboard } from "src/lib/clipboard.ts";
@@ -81,6 +82,7 @@ export default function Channels() {
 
   const { data: channels } = useChannels(true);
   const { data: nodeConnectionInfo } = useNodeConnectionInfo();
+  const nodeIdentity = useNodeIdentity();
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances(true);
   const navigate = useNavigate();
@@ -188,6 +190,38 @@ export default function Channels() {
                         )}
                       </div>
                     </DropdownMenuItem>
+                    {nodeIdentity.npub && (
+                      <DropdownMenuItem>
+                        <div
+                          className="flex flex-row gap-2 items-center w-full cursor-pointer"
+                          onClick={() => {
+                            copyToClipboard(nodeIdentity.npub!);
+                          }}
+                        >
+                          <div>{t("menu.nostrNpub")}</div>
+                          <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
+                            {nodeIdentity.npub}
+                          </div>
+                          <CopyIcon className="shrink-0 size-4" />
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    {nodeIdentity.nprofile && (
+                      <DropdownMenuItem>
+                        <div
+                          className="flex flex-row gap-2 items-center w-full cursor-pointer"
+                          onClick={() => {
+                            copyToClipboard(nodeIdentity.nprofile!);
+                          }}
+                        >
+                          <div>{t("menu.nostrNprofile")}</div>
+                          <div className="overflow-hidden text-ellipsis flex-1 text-muted-foreground text-xs">
+                            {nodeIdentity.nprofile}
+                          </div>
+                          <CopyIcon className="shrink-0 size-4" />
+                        </div>
+                      </DropdownMenuItem>
+                    )}
                     {nodeConnectionInfo?.address &&
                       nodeConnectionInfo?.port && (
                         <DropdownMenuItem>

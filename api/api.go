@@ -1566,6 +1566,15 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		EstimatedWireBytes:      privateEnvelope.EstimatedWireBytes(),
 		MaxConsolidateItemBytes: transport.EstimatedConsolidateItemBytes(privateEnvelope.MaxConsolidateSources),
 	}
+	privateTransportStatus := api.svc.GetPrivateTransportStatus()
+	info.PrivateTransport = PrivateTransportInfo{
+		NodeIdentity:    privateTransportStatus.NodeIdentity,
+		InboxPubkey:     privateTransportStatus.InboxPubkey,
+		Announced:       privateTransportStatus.Announced,
+		AnnouncedRelays: privateTransportStatus.AnnouncedRelays,
+		TotalRelays:     privateTransportStatus.TotalRelays,
+		Error:           privateTransportStatus.Error,
+	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
 	// Populate selected LSPs
