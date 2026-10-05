@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.5.0-rc.3
+	github.com/ohstr/nmilat v0.5.0-rc.5
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.59.0
@@ -239,7 +239,7 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/labstack/echo-jwt/v4 v4.3.1
