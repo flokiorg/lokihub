@@ -117,14 +117,7 @@
   "criticalError": {
     "title": "重大なエラー",
     "description": "問題が発生し、Lokihubを続行できません。",
-    "hideConfig": "設定を非表示",
-    "updateConfig": "設定を更新",
-    "loadingConfig": "設定を読み込み中...",
-    "saveReload": "保存してアプリを再読み込み",
-    "reloadApp": "アプリを再読み込み",
-    "configUpdated": "設定が更新されました。再読み込み中...",
-    "failedToLoad": "現在の設定の読み込みに失敗しました",
-    "failedToUpdate": "設定の更新に失敗しました"
+    "reloadApp": "アプリを再読み込み"
   },
   "startupError": {
     "title": "Lokihubを起動できませんでした",

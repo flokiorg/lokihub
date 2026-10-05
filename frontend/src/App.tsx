@@ -51,7 +51,14 @@ function App() {
               ) : (
                 <GlobalError error={error} />
               ))}
-            {info && (
+            {/* !error, not just info: SWR keeps the last successful /api/info
+                response around after a later fetch fails, so info alone
+                stays truthy once the backend goes down post-load. Without
+                this, the router (and AppLayout's own health-check-driven
+                GlobalError) mounted alongside this error branch rather than
+                in its place — two "Critical Error" cards stacked on one
+                page for the same failure. */}
+            {info && !error && (
               <LSPEventProvider>
                 <ErrorBoundary>
                   <RouterProvider router={router} />

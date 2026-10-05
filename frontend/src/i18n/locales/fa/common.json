@@ -123,14 +123,7 @@
   "criticalError": {
     "title": "خطای بحرانی",
     "description": "مشکلی پیش آمد و Lokihub نمی‌تواند ادامه دهد.",
-    "hideConfig": "پنهان کردن پیکربندی",
-    "updateConfig": "به‌روزرسانی پیکربندی",
-    "loadingConfig": "در حال بارگذاری پیکربندی...",
-    "saveReload": "ذخیره و بارگذاری مجدد برنامه",
-    "reloadApp": "بارگذاری مجدد برنامه",
-    "configUpdated": "پیکربندی به‌روز شد. در حال بارگذاری مجدد...",
-    "failedToLoad": "بارگذاری پیکربندی فعلی ناموفق بود",
-    "failedToUpdate": "به‌روزرسانی پیکربندی ناموفق بود"
+    "reloadApp": "بارگذاری مجدد برنامه"
   },
   "startupError": {
     "title": "Lokihub اجرا نشد",
