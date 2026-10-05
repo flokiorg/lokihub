@@ -1,8 +1,19 @@
 import React from "react";
 import useSWRInfinite from "swr/infinite";
+import type { NDKEvent } from "@nostr-dev-kit/ndk";
 
 import { useNdk } from "src/hooks/useNdk";
 import { getRelaySetForPubkey } from "src/lib/nostrRelaySet";
+
+// NDK's own fetchEvents() resolves only on the subscription's "eose" event
+// (see its implementation: `new Promise((resolve) => { ...; sub.on("eose",
+// () => resolve(...)) })`) — there is no native timeout or rejection path.
+// If a relay never sends EOSE for this query (down, slow, or just doesn't
+// answer a kind:1/zero-results query cleanly), the promise hangs forever,
+// which left this hook's `data` — and therefore `isLoading` — stuck
+// indefinitely. Racing it against a timeout is the only way to guarantee
+// this ever settles.
+const FETCH_TIMEOUT_MS = 10_000;
 
 export interface NostrNote {
   id: string;
@@ -55,16 +66,21 @@ export function useNostrNotes(pubkey?: string, pageSize = 20) {
         authorPubkey,
         relayUrls
       );
-      const events = await ndk!.fetchEvents(
-        {
-          kinds: [1],
-          authors: [authorPubkey],
-          limit: pageSize,
-          ...(until ? { until } : {}),
-        },
-        {},
-        relaySet
-      );
+      const events = await Promise.race([
+        ndk!.fetchEvents(
+          {
+            kinds: [1],
+            authors: [authorPubkey],
+            limit: pageSize,
+            ...(until ? { until } : {}),
+          },
+          {},
+          relaySet
+        ),
+        new Promise<Set<NDKEvent>>((resolve) => {
+          setTimeout(() => resolve(new Set()), FETCH_TIMEOUT_MS);
+        }),
+      ]);
       return Array.from(events)
         .map((event) => ({
           id: event.id,
