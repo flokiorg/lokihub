@@ -290,6 +290,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.POST("/autoswap", httpSvc.enableAutoSwapOutHandler)
 	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
+	fullAccessApiGroup.POST("/node/profile", httpSvc.publishNodeProfileHandler)
 	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
 
 	fullAccessApiGroup.GET("/lsps", httpSvc.listLSPsHandler)
@@ -1618,6 +1619,24 @@ func (httpSvc *HttpService) setNodeAliasHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to set node alias: %s", err.Error()),
+		})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) publishNodeProfileHandler(c echo.Context) error {
+	var publishNodeProfileRequest api.PublishNodeProfileRequest
+	if err := c.Bind(&publishNodeProfileRequest); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: fmt.Sprintf("Bad request: %s", err.Error()),
+		})
+	}
+
+	err := httpSvc.api.PublishNodeProfile(c.Request().Context(), publishNodeProfileRequest)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: fmt.Sprintf("Failed to publish node profile: %s", err.Error()),
 		})
 	}
 

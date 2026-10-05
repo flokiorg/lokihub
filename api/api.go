@@ -1794,6 +1794,19 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	return nil
 }
 
+func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error {
+	if api.svc.GetLNClient() == nil {
+		return errors.New("LNClient not started")
+	}
+	return api.svc.PublishNodeProfile(ctx, service.NodeProfileMetadata{
+		Name:    request.Name,
+		About:   request.About,
+		Picture: request.Picture,
+		Nip05:   request.Nip05,
+		Lud16:   request.Lud16,
+	})
+}
+
 func (api *api) SetNodeAlias(ctx context.Context, nodeAlias string) error {
 	err := api.cfg.SetUpdate("NodeAlias", nodeAlias, "")
 	if err != nil {

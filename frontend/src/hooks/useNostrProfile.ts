@@ -15,7 +15,7 @@ import { getRelaySetForPubkey } from "src/lib/nostrRelaySet";
 export function useNostrProfile(pubkey?: string, relayHints: string[] = []) {
   const { ndk, relayUrls } = useNdk();
 
-  const { data, isLoading } = useSWR<NostrProfile | null>(
+  const { data, isLoading, mutate } = useSWR<NostrProfile | null>(
     ndk && pubkey ? nostrProfileCacheKey(pubkey, relayUrls) : null,
     async () => {
       const relaySet = await getRelaySetForPubkey(
@@ -41,5 +41,5 @@ export function useNostrProfile(pubkey?: string, relayHints: string[] = []) {
     { revalidateOnFocus: false, dedupingInterval: 5 * 60 * 1000 }
   );
 
-  return { profile: data ?? undefined, isLoading };
+  return { profile: data ?? undefined, isLoading, mutate };
 }

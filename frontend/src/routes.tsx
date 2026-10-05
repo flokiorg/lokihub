@@ -61,6 +61,7 @@ import { SubwalletCreated } from "src/screens/subwallets/SubwalletCreated";
 import { SubwalletList } from "src/screens/subwallets/SubwalletList";
 import Wallet from "src/screens/wallet";
 import NodeAlias from "src/screens/wallet/NodeAlias";
+import NodeProfile from "src/screens/wallet/NodeProfile";
 import Receive from "src/screens/wallet/Receive";
 import Send from "src/screens/wallet/Send";
 import SignMessage from "src/screens/wallet/SignMessage";
@@ -196,6 +197,11 @@ const routes: RouteObject[] = [
                 path: "node-alias",
                 element: <NodeAlias />,
                 handle: { crumb: () => "Node Alias" },
+              },
+              {
+                path: "node-profile",
+                element: <NodeProfile />,
+                handle: { crumb: () => "Profile" },
               },
               {
                 path: "withdraw",

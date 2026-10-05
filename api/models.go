@@ -114,6 +114,7 @@ type API interface {
 	EnableAutoSwapOut(ctx context.Context, autoSwapRequest *EnableAutoSwapRequest) error
 	DisableAutoSwap() error
 	SetNodeAlias(ctx context.Context, nodeAlias string) error
+	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
 	GetCustomNodeCommands() (*CustomNodeCommandsResponse, error)
 	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
 	SendEvent(event string, properties interface{})
@@ -1090,6 +1091,17 @@ type LSPSettingInput struct {
 
 type SetNodeAliasRequest struct {
 	NodeAlias string `json:"nodeAlias"`
+}
+
+// PublishNodeProfileRequest is the full kind-0 profile to publish for the
+// hub's own node identity — kind 0 is replaceable, so this replaces rather
+// than patches; a caller that wants to keep an existing field must resend it.
+type PublishNodeProfileRequest struct {
+	Name    string `json:"name"`
+	About   string `json:"about"`
+	Picture string `json:"picture"`
+	Nip05   string `json:"nip05"`
+	Lud16   string `json:"lud16"`
 }
 
 type MnemonicRequest struct {

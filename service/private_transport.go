@@ -119,22 +119,33 @@ func (svc *service) setPrivateTransportAnnounceResult(announcedRelays, totalRela
 // without touching the decrypt path.
 const minWrapBytes = 128
 
-// newPrivateTransport resolves the inbox key and the node identity.
+// nodeXOnlyIdentity derives the hub's Nostr-format identity from the LN
+// node's cached GetPubkey (compressed, 66 hex) by dropping the prefix byte.
+// That conversion is exact rather than lossy: BIP340 treats an x-only key as
+// its even-Y lift, and since ECDH and schnorr verification both agree with
+// that lift, the map from an LN identity to a Nostr identity is one-to-one.
 //
-// The node identity is taken from the LN client's cached GetPubkey (compressed,
-// 66 hex) and converted to x-only by dropping the prefix byte. That conversion is
-// exact rather than lossy: BIP340 treats an x-only key as its even-Y lift, and
-// since ECDH and schnorr verification both agree with that lift, the map from an
-// LN identity to a Nostr identity is one-to-one.
+// Shared by every caller that needs this identity (private-transport setup,
+// node profile publishing) so they derive it identically. Callers are
+// responsible for checking svc.lnClient is non-nil first, with their own
+// context-appropriate error message.
+func (svc *service) nodeXOnlyIdentity() (string, error) {
+	compressed := svc.lnClient.GetPubkey()
+	if len(compressed) != 66 {
+		return "", fmt.Errorf("node pubkey is %d hex characters, want 66 (compressed)", len(compressed))
+	}
+	return compressed[2:], nil
+}
+
+// newPrivateTransport resolves the inbox key and the node identity.
 func (svc *service) newPrivateTransport() (*privateTransport, error) {
 	if svc.lnClient == nil {
 		return nil, errors.New("private transport needs an LN client for the hub's node identity")
 	}
-	compressed := svc.lnClient.GetPubkey()
-	if len(compressed) != 66 {
-		return nil, fmt.Errorf("node pubkey is %d hex characters, want 66 (compressed)", len(compressed))
+	nodeXOnly, err := svc.nodeXOnlyIdentity()
+	if err != nil {
+		return nil, err
 	}
-	nodeXOnly := compressed[2:]
 
 	inboxPrivKey, err := svc.keys.GetPrivateTransportKey(privateTransportKeyIndex)
 	if err != nil {
