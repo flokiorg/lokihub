@@ -9,11 +9,6 @@
       "count": 1
     }
   },
-  "src/components/GlobalError.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
   "src/components/LSPManagementCard.tsx": {
     "curly": {
       "count": 3

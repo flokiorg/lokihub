@@ -123,14 +123,7 @@
   "criticalError": {
     "title": "严重错误",
     "description": "出现了问题，Lokihub 无法继续运行。",
-    "hideConfig": "隐藏配置",
-    "updateConfig": "更新配置",
-    "loadingConfig": "正在加载配置...",
-    "saveReload": "保存并重新加载应用",
-    "reloadApp": "重新加载应用",
-    "configUpdated": "配置已更新。正在重新加载...",
-    "failedToLoad": "加载当前配置失败",
-    "failedToUpdate": "更新配置失败"
+    "reloadApp": "重新加载应用"
   },
   "startupError": {
     "title": "Lokihub 无法启动",

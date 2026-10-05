@@ -117,14 +117,7 @@
   "criticalError": {
     "title": "심각한 오류",
     "description": "문제가 발생하여 Lokihub를 계속 실행할 수 없습니다.",
-    "hideConfig": "설정 숨기기",
-    "updateConfig": "설정 업데이트",
-    "loadingConfig": "설정 불러오는 중...",
-    "saveReload": "저장하고 앱 새로고침",
-    "reloadApp": "앱 새로고침",
-    "configUpdated": "설정이 업데이트되었습니다. 새로고침 중...",
-    "failedToLoad": "현재 설정 불러오기 실패",
-    "failedToUpdate": "설정 업데이트 실패"
+    "reloadApp": "앱 새로고침"
   },
   "startupError": {
     "title": "Lokihub를 시작할 수 없습니다",

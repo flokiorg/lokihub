@@ -81,14 +81,7 @@
   "criticalError": {
     "title": "Critical Error",
     "description": "Something went wrong and Lokihub cannot continue.",
-    "hideConfig": "Hide Configuration",
-    "updateConfig": "Update Configuration",
-    "loadingConfig": "Loading configuration...",
-    "saveReload": "Save & Reload App",
-    "reloadApp": "Reload App",
-    "configUpdated": "Configuration updated. Reloading...",
-    "failedToLoad": "Failed to load current configuration",
-    "failedToUpdate": "Failed to update configuration"
+    "reloadApp": "Reload App"
   },
   "startupError": {
     "title": "Lokihub couldn't start",

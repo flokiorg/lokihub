@@ -123,14 +123,7 @@
   "criticalError": {
     "title": "خطأ فادح",
     "description": "حدث خطأ ما ولا يمكن لـ Lokihub الاستمرار.",
-    "hideConfig": "إخفاء الإعدادات",
-    "updateConfig": "تحديث الإعدادات",
-    "loadingConfig": "جاري تحميل الإعدادات...",
-    "saveReload": "حفظ وإعادة تحميل التطبيق",
-    "reloadApp": "إعادة تحميل التطبيق",
-    "configUpdated": "تم تحديث الإعدادات. جاري إعادة التحميل...",
-    "failedToLoad": "فشل تحميل الإعدادات الحالية",
-    "failedToUpdate": "فشل تحديث الإعدادات"
+    "reloadApp": "إعادة تحميل التطبيق"
   },
   "startupError": {
     "title": "تعذّر تشغيل Lokihub",
