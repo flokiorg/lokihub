@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.10` on 2026-10-08._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.11` on 2026-10-08._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -14,7 +14,8 @@ around redemption, fees and the cash-to-identity split. rc.9 just picks up
 the published `nmilat` SDK the audited wire changes already depend on.
 rc.10 gives the hub's own Nostr identity a profile page, surfaces whether
 the private-transport announcement actually published, and tidies Debug
-Tools and the dashboard overview cards.
+Tools and the dashboard overview cards. rc.11 only picks up `nmilat`
+v0.5.0-rc.12.
 
 ### Added
 
@@ -139,9 +140,10 @@ Tools and the dashboard overview cards.
   packages that version touches (the embeddable relay SDK and its
   `POST /query` HTTP bridge), so there is no behavior change here — this
   just keeps the SDK current.
-- Bumped `nmilat` dependency to v0.5.0-rc.11. As above, none of the
-  packages lokihub builds in changed between rc.5 and rc.11; the release
-  carries relay-side NIP-29/NIP-42/NIP-43 fixes lokihub does not use.
+- Bumped `nmilat` dependency to v0.5.0-rc.11, then v0.5.0-rc.12. As
+  above, none of the packages lokihub builds in changed between rc.5 and
+  rc.12; those releases carry relay-side NIP-29/NIP-42/NIP-43 and relay
+  write-path fixes lokihub does not use.
 - Analytics sit inside the Cash Hub and Circle Hub overview cards they
   explain, instead of as a separate section further down the page, and
   those cards show a skeleton while loading instead of nothing.
