@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.9` on 2026-10-04._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.10` on 2026-10-08._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -12,6 +12,9 @@ bill methods onto NIP-CASH's private transport, closing a real order-forgery
 gap in LSPS5 notifications and several money-safety and disclosure bugs
 around redemption, fees and the cash-to-identity split. rc.9 just picks up
 the published `nmilat` SDK the audited wire changes already depend on.
+rc.10 gives the hub's own Nostr identity a profile page, surfaces whether
+the private-transport announcement actually published, and tidies Debug
+Tools and the dashboard overview cards.
 
 ### Added
 
@@ -58,14 +61,23 @@ the published `nmilat` SDK the audited wire changes already depend on.
   retried after a timeout no longer mints and funds a second wallet. A
   repeat is refused rather than replayed, because a cash-mode secret exists
   only in the reply the caller missed; a failed mint releases its key.
+- A node profile page for the hub's own Nostr identity: its published
+  kind-0 profile (banner, avatar, bio, NIP-05, lightning address) with QR
+  codes for its npub and nprofile, its recent notes, and an edit form that
+  publishes a new profile. Signing stays on the backend; the node's key
+  never reaches the browser.
+- Settings › Services shows whether the hub's private-transport
+  announcement published — how many relays accepted it, and the last
+  error if not. A client could previously see only that it was missing. The
+  node's hex, npub and nprofile also appear under Channels.
 
 ### Changed
 
 - Migrated onto `nmilat`'s own published `nipcash`/`nipcw` request/response
   types and method-name constants instead of maintaining parallel copies.
   Bumped `github.com/ohstr/nmilat` from v0.3.0 to v0.4.0 (cash-mode rename)
-  to v0.5.0-rc.2 (private transport becomes client-usable) to **v0.5.0-rc.3**
-  (current), dropping the temporary local `replace` directive used while
+  to v0.5.0-rc.2 (private transport becomes client-usable) to v0.5.0-rc.3
+  and on, dropping the temporary local `replace` directive used while
   wire changes were still unpublished at each step. (#102)
 - `cash_transfer`'s partial split mints two fresh wallets (carved and
   remainder) instead of shrinking the source in place — a wallet's
@@ -127,6 +139,16 @@ the published `nmilat` SDK the audited wire changes already depend on.
   packages that version touches (the embeddable relay SDK and its
   `POST /query` HTTP bridge), so there is no behavior change here — this
   just keeps the SDK current.
+- Bumped `nmilat` dependency to v0.5.0-rc.11. As above, none of the
+  packages lokihub builds in changed between rc.5 and rc.11; the release
+  carries relay-side NIP-29/NIP-42/NIP-43 fixes lokihub does not use.
+- Analytics sit inside the Cash Hub and Circle Hub overview cards they
+  explain, instead of as a separate section further down the page, and
+  those cards show a skeleton while loading instead of nothing.
+- Debug Tools: "Execute Node Command" is removed; Get App/Node Logs fetch
+  straight away, with the maximum log length set from a settings icon on
+  the response and remembered across reloads.
+- The critical-error page no longer offers an "Update Configuration" form.
 
 ### Fixed
 
@@ -228,6 +250,8 @@ the published `nmilat` SDK the audited wire changes already depend on.
 - Two throughput-measurement tests now skip under `-race`, where the race
   detector's 5-20x slowdown made them compare a measured rate against a
   threshold that assumed full speed, independent of any real regression.
+- A backend outage after the app had loaded showed the "Critical Error"
+  card twice, stacked on the same page.
 
 ## [0.4.0]
 
