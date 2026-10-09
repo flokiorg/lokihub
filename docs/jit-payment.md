@@ -80,5 +80,5 @@ invoice may not be the right call — this is unresolved.
 - **[Notifications](lokihub-notifications.md)** — a "payment coming in" nudge over this channel
   is what tells the wallet to reconnect to the LSP so a JIT open in progress can actually finish, if it
   wasn't already connected.
-- **[NIP-CASH (Cash Hub)](nips/NIP-CASH.md)** — a different feature (pre-funded, transferable lokicash
+- **[NIP-CASH (Cash Hub)](https://github.com/ohstr/nips/blob/main/NIP-CASH.md)** — a different feature (pre-funded, transferable lokicash
   payouts); no longer shares the "JIT" name with this document since its rename.

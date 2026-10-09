@@ -89,5 +89,5 @@ liquidity-buying.
   flow described here reads from it.
 - **[JIT Payment](jit-payment.md)** — the full LSPS2 story.
 - **[Notifications](lokihub-notifications.md)** — the full LSPS5 story.
-- **[NIP-CASH (Cash Hub)](nips/NIP-CASH.md)** — unrelated to any of this; formerly named "JIT Wallet,"
+- **[NIP-CASH (Cash Hub)](https://github.com/ohstr/nips/blob/main/NIP-CASH.md)** — unrelated to any of this; formerly named "JIT Wallet,"
   which collided with the "JIT" in this document's LSPS2 story before its rename.

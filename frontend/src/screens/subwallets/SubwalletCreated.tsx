@@ -42,7 +42,7 @@ export function SubwalletCreated() {
     connectionSecret += `&lud16=${app.metadata.lud16}`;
   }
 
-  // Default to whichever Hub token is present (docs/nips/NIP-CASH.md /
+  // Default to whichever Hub token is present (ohstr/nips NIP-CASH.md /
   // NIP-CW.md "Recommended presentation") — ConnectAppCard's own toggle lets
   // the user switch to the classic NWC URI from there.
   const primaryFormat: "cashhub" | "circlehub" | "nwc" =

@@ -1,7 +1,7 @@
 package api
 
 // Covers the new CashHubToken/CircleHubToken fields on CreateAppResponse
-// (docs/nips/NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
+// (ohstr/nips NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
 // Wallet Hub Connection): populated only for the matching app kind, and
 // decoding back to the exact same wallet pubkey/relay/secret PairingUri
 // itself decodes to.
