@@ -426,7 +426,7 @@ export interface CreateAppResponse {
   lud16: string;
   returnTo: string;
   // Alternative bech32 encoding of the same pairing data as pairingUri
-  // (docs/nips/NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
+  // (ohstr/nips NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
   // Wallet Hub Connection) — present only when kind is cash_hub/circle_hub
   // respectively.
   cashHubToken?: string;

@@ -24,7 +24,7 @@ for a new user.
 | Block explorer | on-chain data, mempool-style API |
 | Swap service | on-chain ⇄ Lightning swaps |
 | Messageboard relay (optional) | an experimental nostr-messageboard integration |
-| Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](nips/NIP-CASH.md) |
+| Identity Authorities | who's trusted to vouch for a Cash Hub connection-key claim — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) |
 
 ## The built-in defaults list
 
@@ -67,7 +67,7 @@ it's *authorized to do*. Even LSP connections are just request/response protocol
 unilateral way to reach in and take funds.
 
 The one row with real teeth is Identity Authorities. Trusting one means trusting it to vouch for who's
-allowed to claim a slice out of a shared Cash Wallet — see [NIP-CASH](nips/NIP-CASH.md) for what that
+allowed to claim a slice out of a shared Cash Wallet — see [NIP-CASH](https://github.com/ohstr/nips/blob/main/NIP-CASH.md) for what that
 hands a counterparty, and why revoking a bad Identity Authority has to take effect immediately, everywhere
 it ever vouched for anyone.
 
@@ -75,7 +75,7 @@ it ever vouched for anyone.
 
 - **[App Store](lokihub-appstore.md)** — same "small manifest, cached locally" mechanism, but for apps
   connecting *in* to the wallet rather than services it connects *out* to.
-- **[NIP-CASH (Cash Hub)](nips/NIP-CASH.md)** — what the Identity Authority allowlist actually protects.
+- **[NIP-CASH (Cash Hub)](https://github.com/ohstr/nips/blob/main/NIP-CASH.md)** — what the Identity Authority allowlist actually protects.
 - **[JIT Payment](jit-payment.md)** — a different "JIT": the LSP row above is where that document's
   just-in-time channel buys get their LSP from.
 - **[LSP Support](lokihub-lsp.md)** — the LSP `active` flag configured here is what every LSPS0/1/2/5 flow

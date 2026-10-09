@@ -166,7 +166,7 @@ const (
 )
 
 // Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string
-// (docs/nips/NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
+// (ohstr/nips NIP-CASH.md §The Cash Hub Connection, NIP-CW.md §The Circle
 // Wallet Hub Connection) — an alternative encoding of the same pairing data
 // as PairingUri, built via nipcash.EncodeCashHubConnection /
 // nipcw.EncodeCircleHubConnection. Aliased the same way NIP47Method* above
