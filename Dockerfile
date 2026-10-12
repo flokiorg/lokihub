@@ -13,12 +13,13 @@ COPY frontend ./frontend
 RUN echo "Building frontend with base path $BASE_PATH"
 RUN cd frontend && yarn install --network-timeout 3000000 && yarn build:http
 
-# Pinned by digest (golang:1.26.8) - see frontend stage's comment above for why.
+# Pinned by digest (golang:1.26.9) - see frontend stage's comment above for why.
 # Was golang:1.24, which no longer builds this repo at all: go.mod requires
 # go >= 1.26.1 and GOTOOLCHAIN=local in this image can't satisfy that. Re-bumped
 # from the 1.26.5 this digest used to resolve to when go.mod's own `go` directive
-# moved to 1.26.8 (nmilat migration, PR #90) for the same reason.
-FROM golang@sha256:9d2f36f06329b2a141b9db99ffa32765cf695ee57b813ca29e245e8670bcbfff AS builder
+# moved to 1.26.8 (nmilat migration, PR #90) for the same reason, and again to
+# 1.26.9 when nmilat v0.5.0-rc.17 started requiring it.
+FROM golang@sha256:d7722066f0b60ceccb6c0643cbed1f5f9e15506ac237146c95333504d7805d89 AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
