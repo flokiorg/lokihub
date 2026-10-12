@@ -61,11 +61,14 @@ export default function NodeProfile() {
     isLoadingMore: isLoadingMoreNotes,
     hasMore: hasMoreNotes,
     loadMore: loadMoreNotes,
+    addNote,
   } = useNostrNotes(nodeIdentity.nostrHex);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<ProfileForm>(emptyForm);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [isPosting, setIsPosting] = useState(false);
 
   const hasProfile = !!(
     profile?.name ||
@@ -128,6 +131,38 @@ export default function NodeProfile() {
       handleRequestError("Failed to publish profile", error);
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handlePostNote(e: React.FormEvent) {
+    e.preventDefault();
+    const content = noteDraft.trim();
+    if (!content) {
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const response = await request<{ id: string; createdAt: number }>(
+        "/api/node/note",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        }
+      );
+      if (response) {
+        addNote({
+          id: response.id,
+          content,
+          createdAt: response.createdAt,
+        });
+      }
+      setNoteDraft("");
+      toast("Note published.");
+    } catch (error) {
+      handleRequestError("Failed to publish note", error);
+    } finally {
+      setIsPosting(false);
     }
   }
 
@@ -308,6 +343,21 @@ export default function NodeProfile() {
           plain-button pagination conventions elsewhere. */}
       <div className="grid gap-3 px-4">
         <Label>Notes</Label>
+        <form onSubmit={handlePostNote} className="grid gap-2">
+          <Textarea
+            placeholder="Post a note..."
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            disabled={isPosting}
+          />
+          <Button
+            type="submit"
+            className="w-fit"
+            disabled={isPosting || !noteDraft.trim()}
+          >
+            {isPosting ? "Posting..." : "Post"}
+          </Button>
+        </form>
         {isNotesLoading && (
           <div className="grid gap-2">
             <Skeleton className="h-16 w-full" />

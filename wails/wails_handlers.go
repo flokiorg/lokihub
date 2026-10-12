@@ -1893,6 +1893,48 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	case "/api/node/profile":
+		publishNodeProfileRequest := &api.PublishNodeProfileRequest{}
+		err := json.Unmarshal([]byte(body), publishNodeProfileRequest)
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+				"body":   body,
+			}).Err(err).Msg("Failed to decode request to wails router")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+
+		err = app.api.PublishNodeProfile(ctx, *publishNodeProfileRequest)
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+			}).Err(err).Msg("Failed to publish node profile")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	case "/api/node/note":
+		publishNodeNoteRequest := &api.PublishNodeNoteRequest{}
+		err := json.Unmarshal([]byte(body), publishNodeNoteRequest)
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+				"body":   body,
+			}).Err(err).Msg("Failed to decode request to wails router")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+
+		published, err := app.api.PublishNodeNote(ctx, *publishNodeNoteRequest)
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+			}).Err(err).Msg("Failed to publish node note")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: published, Error: ""}
 	case "/api/event":
 		switch method {
 		case "POST":

@@ -48,6 +48,10 @@ type Service interface {
 	// own node identity to the General relay pool. Returns an error if the
 	// LN backend cannot sign (no TransportSigner) or no relay accepted it.
 	PublishNodeProfile(ctx context.Context, metadata NodeProfileMetadata) error
+	// PublishNodeNote signs and publishes a kind-1 text note for the hub's
+	// own node identity, same relay pool and signing identity as
+	// PublishNodeProfile. First version: plain text only.
+	PublishNodeNote(ctx context.Context, content string) (*PublishedNodeEvent, error)
 	GetStartupState() string
 	ReloadNostr() error
 	WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error)

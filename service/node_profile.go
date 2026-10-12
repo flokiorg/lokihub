@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 
@@ -26,38 +27,67 @@ type NodeProfileMetadata struct {
 	Lud16   string `json:"lud16,omitempty"`
 }
 
+// PublishedNodeEvent is what a caller needs to show the just-published
+// event immediately (e.g. prepend it into a notes feed) without waiting on
+// relay propagation/outbox indexing to read it back.
+type PublishedNodeEvent struct {
+	ID        string
+	CreatedAt int64
+}
+
 // PublishNodeProfile signs and publishes a kind-0 event for the hub's own
-// node identity (the same nodeXOnly that signs the private-transport
-// announcement) to the General relay pool — where every other profile in
+// node identity to the General relay pool — where every other profile in
 // this app already lives, per GetGeneralRelayUrls's own doc comment.
-//
-// Deliberately independent of whether the private transport itself started:
-// a hub that cannot (or has not yet) announced should still be able to
-// publish a profile, so this re-derives the identity itself rather than
-// reading it off a *privateTransport.
 func (svc *service) PublishNodeProfile(ctx context.Context, metadata NodeProfileMetadata) error {
-	if svc.lnClient == nil {
-		return errors.New("publishing a node profile needs an LN client for the hub's node identity")
-	}
-	nodeXOnly, err := svc.nodeXOnlyIdentity()
-	if err != nil {
-		return err
-	}
-
-	signer, ok := svc.lnClient.(lnclient.TransportSigner)
-	if !ok {
-		return errors.New("this LN backend cannot sign a node profile (needs BIP340 over the node key)")
-	}
-
 	content, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("marshal profile metadata: %w", err)
 	}
+	_, err = svc.publishNodeEvent(ctx, nostr.KindProfileMetadata, string(content))
+	return err
+}
 
-	ev := nmilatnip01.NewUnsignedEvent(nostr.KindProfileMetadata, nodeXOnly, string(content))
+// PublishNodeNote signs and publishes a kind-1 text note for the hub's own
+// node identity, same relay pool and identity as PublishNodeProfile. First
+// version: plain text only, no media/attachments.
+func (svc *service) PublishNodeNote(ctx context.Context, content string) (*PublishedNodeEvent, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, errors.New("note content cannot be empty")
+	}
+	return svc.publishNodeEvent(ctx, nostr.KindTextNote, content)
+}
+
+// publishNodeEvent builds, signs, verifies, converts and publishes an
+// arbitrary nip01 event authored by the hub's own node identity — the
+// generic core PublishNodeProfile and PublishNodeNote both share. Always
+// signed with nodeXOnlyIdentity() (the LN node's own key, recoverable from
+// a bill's mint signature and the same key the private-transport
+// announcement signs with) — never the private-transport inbox key
+// (*privateTransport.inboxXOnly), which this function never even has
+// access to: it is scoped to *privateTransport, not *service, and nothing
+// here reads it. Deliberately independent of whether the private transport
+// itself started: a hub that cannot (or has not yet) announced should still
+// be able to publish a profile or a note, so this re-derives the identity
+// itself rather than reading it off a *privateTransport.
+func (svc *service) publishNodeEvent(ctx context.Context, kind int, content string) (*PublishedNodeEvent, error) {
+	if svc.lnClient == nil {
+		return nil, errors.New("publishing a node event needs an LN client for the hub's node identity")
+	}
+	nodeXOnly, err := svc.nodeXOnlyIdentity()
+	if err != nil {
+		return nil, err
+	}
+
+	signer, ok := svc.lnClient.(lnclient.TransportSigner)
+	if !ok {
+		return nil, errors.New("this LN backend cannot sign a node event (needs BIP340 over the node key)")
+	}
+
+	ev := nmilatnip01.NewUnsignedEvent(kind, nodeXOnly, content)
 	id, err := ev.HashID()
 	if err != nil {
-		return fmt.Errorf("hash profile event: %w", err)
+		return nil, fmt.Errorf("hash node event: %w", err)
 	}
 	ev.ID = hex.EncodeToString(id)
 
@@ -67,57 +97,59 @@ func (svc *service) PublishNodeProfile(ctx context.Context, metadata NodeProfile
 	// would sign sha256(id), a valid signature over the wrong digest.
 	payload, err := ev.Serialize()
 	if err != nil {
-		return fmt.Errorf("serialize profile event: %w", err)
+		return nil, fmt.Errorf("serialize node event: %w", err)
 	}
 	sig, err := signer.SignSchnorrNodeKey(ctx, payload)
 	if err != nil {
-		return fmt.Errorf("node refused to sign the profile: %w", err)
+		return nil, fmt.Errorf("node refused to sign the event: %w", err)
 	}
 	ev.Sig = hex.EncodeToString(sig)
 
 	// Verify our own event before publishing it, same reasoning as the
 	// announcement: a bad signature here is unrecoverable in production.
 	if err := ev.Verify(nmilatnip01.WithoutPowCheck()); err != nil {
-		return fmt.Errorf("refusing to publish a profile that does not verify: %w", err)
+		return nil, fmt.Errorf("refusing to publish an event that does not verify: %w", err)
 	}
 
 	published, err := toGoNostrEvent(ev)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	relayURLs := svc.cfg.GetGeneralRelayUrls()
 	if len(relayURLs) == 0 {
-		return errors.New("no general relays configured to publish the profile to")
+		return nil, errors.New("no general relays configured to publish to")
 	}
 
 	// A fresh, short-lived pool: unlike the announcement (signed once at
 	// startup, while the service's long-lived pool is already in scope),
-	// publishing a profile is a rare, on-demand HTTP-triggered action with
-	// no existing pool to reuse — svc holds no pool field past startup.
+	// publishing here is a rare, on-demand HTTP-triggered action with no
+	// existing pool to reuse — svc holds no pool field past startup.
 	pool := nostr.NewSimplePool(ctx)
 	var publishedTo int
 	for _, relayURL := range relayURLs {
 		relay, relayErr := pool.EnsureRelay(relayURL)
 		if relayErr != nil {
 			logger.Logger.Warn().Err(relayErr).Str("relay", relayURL).
-				Msg("Could not reach relay to publish the node profile")
+				Msg("Could not reach relay to publish the node event")
 			continue
 		}
 		if pubErr := relay.Publish(ctx, *published); pubErr != nil {
 			logger.Logger.Warn().Err(pubErr).Str("relay", relayURL).
-				Msg("Failed to publish the node profile")
+				Msg("Failed to publish the node event")
 			continue
 		}
 		publishedTo++
 	}
 	if publishedTo == 0 {
-		return errors.New("no relay accepted the node profile")
+		return nil, errors.New("no relay accepted the node event")
 	}
 
 	logger.Logger.Info().
 		Str("node", nodeXOnly).
+		Int("kind", kind).
 		Int("relays", publishedTo).
-		Msg("Published node profile")
-	return nil
+		Msg("Published node event")
+
+	return &PublishedNodeEvent{ID: ev.ID, CreatedAt: int64(ev.CreatedAt)}, nil //nolint:gosec // CreatedAt is a unix timestamp in seconds, nowhere near MaxInt64
 }
