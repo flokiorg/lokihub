@@ -168,23 +168,17 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 //     limiter is neither a global lock (which would be a DoS lever) nor
 //     bypassable in a way that lets one wallet borrow another's allowance.
 //
-// Set CASH_TRANSFER_RATELIMIT_TEST=1 to run.
-//
-// NOTE: the dev stack this audit runs against sets
-// CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0, which the limiter treats as
-// "disabled — every call allowed" (nip47/controllers/rate_limiter.go). So on
-// this stack the loop below never trips; the test detects that and SKIPS
-// rather than failing, since a disabled limit here is a deliberate
-// environment config, not a code defect. It becomes a live assertion only on a
-// stack with a positive limit configured.
+// Opt-in like the other rate-limit tests: dev's .env sets
+// CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0, which the limiter treats as "disabled"
+// (nip47/controllers/rate_limiter.go). `just test integration-ratelimits` sets it to
+// 20 and runs this with INTEGRATION_RUN_RATE_LIMIT_TESTS=1.
 func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
-	skipIfEnvUnset(t, "CASH_TRANSFER_RATELIMIT_TEST")
+	skipIfEnvUnset(t, "INTEGRATION_RUN_RATE_LIMIT_TESTS")
 	cfg := requireConfig(t)
 	hub, _, _ := createEphemeralCashHub(t, cfg, "audit-transfer-ratelimit", nil)
 	hubClient := mustConnect(t, hub.Connection)
 
-	// A wallet with plenty of headroom to keep partial-splitting until the
-	// limiter — not the balance — stops us.
+	// The wallet whose budget the loop below spends.
 	curPriv := newTestPrivkey(t)
 	curPub := mustPubkey(t, curPriv)
 	const fullAmount = uint64(1_000_000)
@@ -195,33 +189,30 @@ func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {
 	}, &created))
 	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
 
-	// Fire partial splits until the limiter trips (or a generous ceiling — the
-	// default budget is 20/hour, so 40 attempts is ample headroom).
-	rateLimited := false
-	for i := 0; i < 40; i++ {
-		newPub := mustPubkey(t, newTestPrivkey(t))
-		amt := uint64(1_000)
-		proof := buildTransferProofEvent(t, curPriv, created.WalletPubkey, "pubkey", newPub, "", amt, nil, time.Now())
+	// Real splits cannot exhaust it: a partial split moves the caller's change into
+	// a fresh remainder wallet and destroys this one, so every split lands on a new
+	// limiter key. Instead, ask for more than the slice holds. That request is
+	// well-formed, so the limiter charges it (cash_transfer_controller.go step 4),
+	// then step 6 refuses it and the bill survives for the next attempt. With the
+	// budget at 20/hour, attempts 1-20 are refused on amount and the 21st on rate.
+	newPub := mustPubkey(t, newTestPrivkey(t))
+	tooMuch := fullAmount + 1
+	proof := buildTransferProofEvent(t, curPriv, created.WalletPubkey, "pubkey", newPub, "", tooMuch, nil, time.Now())
+	params := CashTransferParams{
+		IdentityType:  "pubkey",
+		IdentityValue: curPub,
+		IdentityEvent: eventJSON(t, proof),
+		NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
+		AmountMillis:  &tooMuch,
+	}
+	for i := 1; i <= 20; i++ {
 		var res CashTransferResult
-		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, CashTransferParams{
-			IdentityType:  "pubkey",
-			IdentityValue: curPub,
-			IdentityEvent: eventJSON(t, proof),
-			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
-			AmountMillis:  &amt,
-		}, &res)
-		if err != nil {
-			t.Logf("attempt %d errored: %v", i, err)
-			requireNWCErrorCode(t, err, constants.ERROR_RATE_LIMITED)
-			rateLimited = true
-			break
-		}
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &res)
+		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	}
-	if !rateLimited {
-		t.Skip("skipping: this stack has CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0 " +
-			"(rate limit disabled — 40 cash_transfer calls all succeeded); rerun against " +
-			"a stack with a positive limit to exercise the per-wallet limiter live")
-	}
+	var res CashTransferResult
+	err := shared.Call(ctxT(t), constants.NIP47MethodCashTransfer, params, &res)
+	requireNWCErrorCode(t, err, constants.ERROR_RATE_LIMITED)
 
 	// A DIFFERENT wallet is unaffected — the limiter is per-wallet, not global.
 	otherPriv := newTestPrivkey(t)

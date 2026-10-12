@@ -615,28 +615,37 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 	t.Run("RateLimiting_TwentyFirstClaimIsRateLimited", func(t *testing.T) {
 		skipIfEnvUnset(t, "INTEGRATION_RUN_RATE_LIMIT_TESTS")
 
-		beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
-		require.NoError(t, err)
+		beneficiaryPriv := newTestPrivkey(t)
+		beneficiaryPub := mustPubkey(t, beneficiaryPriv)
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
 
-		// cash_redeem' rate limiter (per calling connection) is checked
-		// before any param validation — see cash_redeem_controller.go step
-		// 2 — so deliberately empty/invalid calls are enough to exhaust it
-		// without minting a real invoice for every attempt.
-		var lastErr error
-		for i := 0; i < 21; i++ {
-			var result ClaimFundsResult
-			lastErr = shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{}, &result)
-			if lastErr != nil {
-				t.Logf("claim #%d/21: error: %v", i+1, lastErr)
-			}
+		// cash_redeem charges its per-bill limiter only once a request is
+		// well-formed (cash_redeem_controller.go step 4): a decodable invoice and
+		// every identity field present. Malformed requests are free, so empty
+		// params can no longer exhaust it. An identity_event that is not JSON gets
+		// past the charge and is refused at proof verification (step 6), so each
+		// attempt costs one unit without redeeming anything, and one invoice
+		// serves all 21.
+		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration redeem rate-limit test")
+		params := ClaimFundsParams{
+			Invoice:       invoice.Invoice,
+			IdentityType:  "pubkey",
+			IdentityValue: beneficiaryPub,
+			IdentityEvent: "not json",
 		}
-		requireNWCErrorCode(t, lastErr, constants.ERROR_RATE_LIMITED)
+		for i := 1; i <= 20; i++ {
+			var result ClaimFundsResult
+			err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, params, &result)
+			requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		}
+		var result ClaimFundsResult
+		err := shared.Call(ctxT(t), constants.NIP47MethodCashRedeem, params, &result)
+		requireNWCErrorCode(t, err, constants.ERROR_RATE_LIMITED)
 	})
 
 	t.Run("WalletExpired_ClaimRejected", func(t *testing.T) {
