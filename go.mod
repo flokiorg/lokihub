@@ -1,6 +1,6 @@
 module github.com/flokiorg/lokihub
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/adrg/xdg v0.5.3
@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.5.0-rc.13
+	github.com/ohstr/nmilat v0.5.0-rc.17
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
 	golang.org/x/net v0.59.0
