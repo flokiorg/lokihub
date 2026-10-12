@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.13` on 2026-10-12._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.14` on 2026-10-12._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -17,7 +17,8 @@ the private-transport announcement actually published, and tidies Debug
 Tools and the dashboard overview cards. rc.11 and rc.12 only pick up
 `nmilat` v0.5.0-rc.12 and v0.5.0-rc.13. rc.13 moves to `nmilat`
 v0.5.0-rc.17 and Go 1.26.9, and fixes four reachable HTTP/2 server
-advisories in `golang.org/x/net`.
+advisories in `golang.org/x/net`. rc.14 lets the node profile page post
+text notes, and fixes publishing that profile from the desktop app.
 
 ### Added
 
@@ -69,6 +70,9 @@ advisories in `golang.org/x/net`.
   codes for its npub and nprofile, its recent notes, and an edit form that
   publishes a new profile. Signing stays on the backend; the node's key
   never reaches the browser.
+- The node profile page can post a plain-text note as the hub's node
+  identity, signed the same way as its profile, and shows it in the notes
+  feed straight away instead of waiting for relays to echo it back.
 - Settings › Services shows whether the hub's private-transport
   announcement published — how many relays accepted it, and the last
   error if not. A client could previously see only that it was missing. The
@@ -185,6 +189,8 @@ advisories in `golang.org/x/net`.
   HPACK encoder race), GO-2026-6612 (double flow-control refund),
   GO-2026-6611 (CPU exhaustion from repeated initial window changes) and
   GO-2026-6603 (memory exhaustion from trailer headers).
+- Publishing the node profile from the desktop app failed with "Unhandled
+  route"; it now works there as it does in the browser.
 - Fixed the sidebar's logo/header rendering underneath the window controls
   instead of below them.
 - macOS: fixed the native window's own corner background showing a
