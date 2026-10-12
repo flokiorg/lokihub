@@ -43,7 +43,7 @@ require (
 	github.com/ohstr/nmilat v0.5.0-rc.17
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
