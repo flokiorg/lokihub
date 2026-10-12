@@ -62,15 +62,16 @@ failing.
 
 ### Running everything, with zero skips
 
-A plain run above always skips exactly 2 tests:
-`TestJITHubs/.../RateLimiting_EleventhCreateIsRateLimited` and
-`TestClaimFunds/.../RateLimiting_TwentyFirstClaimIsRateLimited`. That's not a
+A plain run above always skips the 3 rate-limit tests:
+`TestCashHubs/RateLimiting_EleventhCreateIsRateLimited`,
+`TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited` and
+`TestAudit_CashTransferRateLimit_PerWallet`. That's not a
 suite limitation — it's because the dev stack's `.env` ships with
 `CASH_WALLET_RATE_LIMIT_PER_HOUR`/`CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR`/
 `CIRCLE_WALLET_RATE_LIMIT_PER_HOUR` all set to `0` ("disabled", not "zero
 allowed" — see `rate_limiter.go`'s `Allow()`), so an operator can hammer
 `create_jit_wallet`/`claim_funds`/`create_circle_wallet` from the frontend
-during manual testing without tripping anything. These two tests need the
+during manual testing without tripping anything. These tests need the
 opposite: real, nonzero limits, so the 11th/21st call in their loop actually
 gets rejected. Setting `INTEGRATION_RUN_RATE_LIMIT_TESTS=1` alone is **not**
 enough against dev's default config — the test will run instead of skip, but
@@ -78,13 +79,13 @@ then fail, because the limit never trips.
 
 The two `just test` subcommands below handle this for you — the second
 temporarily flips those three `.env` values on, restarts the backend, runs
-just the two rate-limit tests, then restores `.env` and restarts again
+just the three rate-limit tests, then restores `.env` and restarts again
 regardless of outcome (a shell `trap ... EXIT`, so a test failure or Ctrl-C
 still leaves dev back in its default disabled-limits state):
 
 ```sh
-just test integration             # normal full run (skips the 2 rate-limit tests)
-just test integration-ratelimits  # just those 2, with real limits temporarily on
+just test integration             # normal full run (skips the 3 rate-limit tests)
+just test integration-ratelimits  # just those 3, with real limits temporarily on
 just test integration-all         # both of the above, back to back - zero skips overall
 ```
 

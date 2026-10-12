@@ -215,11 +215,10 @@ test subcommand="unit" *args:
             go test -race -count=1 ./...
             ;;
         integration)
-            # Runs against dev's default config. Skips 16 subtests: 2 need
-            # real (nonzero) NWC rate limits to exercise (dev's .env
-            # disables them by default - see integration-ratelimits below),
-            # and 14 are deliberately-redundant policy variants left as
-            # documented skips elsewhere in the suite. Requires: dev stack
+            # Runs against dev's default config. Skips 4 tests: the 3 that
+            # need real (nonzero) NWC rate limits (dev's .env disables them
+            # by default - see integration-ratelimits below), and the opt-in
+            # TestZZZZ_SweepLeakedEphemeralFixtures. Requires: dev stack
             # up (`just dev up`) with a real LN backend, and
             # integration/config.local.yaml pointing at an admin API token
             # (see integration/README.md).
@@ -248,10 +247,13 @@ test subcommand="unit" *args:
             go test -tags integration -count=1 -timeout 20m ./integration/...
             ;;
         integration-ratelimits)
-            # Runs only the 2 rate-limit tests, with dev's NWC rate limits
+            # Runs only the 3 rate-limit tests, with dev's NWC rate limits
             # temporarily switched on (they're 0/disabled by default -
             # handy for manual frontend testing, but it means the
             # 11th/21st call in these tests never actually gets rejected).
+            # The backend-ready wait only accepts a "http server started"
+            # logged after the restart: an unfiltered `docker logs` matches
+            # the previous start's line at once, so it never really waited.
             # Restores .env and restarts the backend again afterwards
             # regardless of outcome (trap on EXIT), so dev is never left
             # with limits on.
@@ -271,15 +273,16 @@ test subcommand="unit" *args:
                 -e 's/^CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=.*/CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=20/' \
                 -e 's/^CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=.*/CIRCLE_WALLET_RATE_LIMIT_PER_HOUR=3/' \
                 .env
+            restarted_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             {{DOCKER_COMPOSE_DEV}} restart backend >/dev/null
             echo "waiting for backend to come back up with real rate limits..."
-            for i in $(seq 1 30); do
-                docker logs lokihub-dev-backend 2>&1 | grep -q "http server started" && break
-                sleep 1
+            for i in $(seq 1 60); do
+                docker logs lokihub-dev-backend --since "$restarted_at" 2>&1 | grep -q "http server started" && break
+                sleep 2
             done
 
             INTEGRATION_RUN_RATE_LIMIT_TESTS=1 go test -tags integration -count=1 -timeout 3m \
-                -run 'TestCashHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited' \
+                -run 'TestCashHubs/RateLimiting_EleventhCreateIsRateLimited|TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited|TestAudit_CashTransferRateLimit_PerWallet' \
                 -v ./integration/...
             ;;
         integration-all)
@@ -297,7 +300,7 @@ test subcommand="unit" *args:
     subcommands:
       unit                    (default) go vet + go test -race ./... - hermetic, no dependencies
       integration             black-box NWC integration suite against dev's default config
-      integration-ratelimits  the 2 tests needing real (nonzero) NWC rate limits
+      integration-ratelimits  the 3 tests needing real (nonzero) NWC rate limits
       integration-all         both integration suites back to back - zero skips overall
     USAGE
             ;;
