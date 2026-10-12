@@ -291,6 +291,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/autoswap", httpSvc.disableAutoSwapOutHandler)
 	fullAccessApiGroup.POST("/node/alias", httpSvc.setNodeAliasHandler)
 	fullAccessApiGroup.POST("/node/profile", httpSvc.publishNodeProfileHandler)
+	fullAccessApiGroup.POST("/node/note", httpSvc.publishNodeNoteHandler)
 	fullAccessApiGroup.POST("/lsps2/buy", httpSvc.buyLSPS2LiquidityHandler)
 
 	fullAccessApiGroup.GET("/lsps", httpSvc.listLSPsHandler)
@@ -1641,6 +1642,24 @@ func (httpSvc *HttpService) publishNodeProfileHandler(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) publishNodeNoteHandler(c echo.Context) error {
+	var publishNodeNoteRequest api.PublishNodeNoteRequest
+	if err := c.Bind(&publishNodeNoteRequest); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: fmt.Sprintf("Bad request: %s", err.Error()),
+		})
+	}
+
+	response, err := httpSvc.api.PublishNodeNote(c.Request().Context(), publishNodeNoteRequest)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: fmt.Sprintf("Failed to publish node note: %s", err.Error()),
+		})
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 func (httpSvc *HttpService) forwardsHandler(c echo.Context) error {

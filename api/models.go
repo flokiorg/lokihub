@@ -115,6 +115,7 @@ type API interface {
 	DisableAutoSwap() error
 	SetNodeAlias(ctx context.Context, nodeAlias string) error
 	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
+	PublishNodeNote(ctx context.Context, request PublishNodeNoteRequest) (*PublishNodeNoteResponse, error)
 	GetCustomNodeCommands() (*CustomNodeCommandsResponse, error)
 	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
 	SendEvent(event string, properties interface{})
@@ -1103,6 +1104,17 @@ type PublishNodeProfileRequest struct {
 	Banner  string `json:"banner"`
 	Nip05   string `json:"nip05"`
 	Lud16   string `json:"lud16"`
+}
+
+// PublishNodeNoteRequest is a plain-text kind-1 note to publish for the
+// hub's own node identity. First version: text only, no media/attachments.
+type PublishNodeNoteRequest struct {
+	Content string `json:"content"`
+}
+
+type PublishNodeNoteResponse struct {
+	ID        string `json:"id"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
 type MnemonicRequest struct {

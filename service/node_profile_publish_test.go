@@ -26,7 +26,7 @@ func TestPublishNodeProfile_RequiresLNClient(t *testing.T) {
 
 	svc := &service{cfg: ts.Cfg, keys: ts.Keys}
 	err = svc.PublishNodeProfile(context.Background(), NodeProfileMetadata{Name: "Hub"})
-	require.ErrorContains(t, err, "publishing a node profile needs an LN client")
+	require.ErrorContains(t, err, "publishing a node event needs an LN client")
 }
 
 func TestPublishNodeProfile_RequiresTransportSigner(t *testing.T) {
@@ -46,7 +46,7 @@ func TestPublishNodeProfile_RequiresTransportSigner(t *testing.T) {
 
 	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ts.LNClient}
 	err = svc.PublishNodeProfile(context.Background(), NodeProfileMetadata{Name: "Hub"})
-	require.ErrorContains(t, err, "this LN backend cannot sign a node profile")
+	require.ErrorContains(t, err, "this LN backend cannot sign a node event")
 }
 
 func TestPublishNodeProfile_PropagatesSignerError(t *testing.T) {
@@ -61,7 +61,7 @@ func TestPublishNodeProfile_PropagatesSignerError(t *testing.T) {
 
 	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
 	err = svc.PublishNodeProfile(context.Background(), NodeProfileMetadata{Name: "Hub"})
-	require.ErrorContains(t, err, "node refused to sign the profile")
+	require.ErrorContains(t, err, "node refused to sign the event")
 	require.ErrorContains(t, err, "node locked")
 }
 
@@ -95,7 +95,7 @@ func TestPublishNodeProfile_NoRelayAcceptedIsAnError(t *testing.T) {
 
 	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
 	err = svc.PublishNodeProfile(context.Background(), NodeProfileMetadata{Name: "Hub"})
-	require.ErrorContains(t, err, "no relay accepted the node profile")
+	require.ErrorContains(t, err, "no relay accepted the node event")
 }
 
 // TestPublishNodeProfile_SucceedsWhenAtLeastOneRelayAccepts proves one

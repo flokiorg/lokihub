@@ -1808,6 +1808,17 @@ func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfi
 	})
 }
 
+func (api *api) PublishNodeNote(ctx context.Context, request PublishNodeNoteRequest) (*PublishNodeNoteResponse, error) {
+	if api.svc.GetLNClient() == nil {
+		return nil, errors.New("LNClient not started")
+	}
+	published, err := api.svc.PublishNodeNote(ctx, request.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &PublishNodeNoteResponse{ID: published.ID, CreatedAt: published.CreatedAt}, nil
+}
+
 func (api *api) SetNodeAlias(ctx context.Context, nodeAlias string) error {
 	err := api.cfg.SetUpdate("NodeAlias", nodeAlias, "")
 	if err != nil {

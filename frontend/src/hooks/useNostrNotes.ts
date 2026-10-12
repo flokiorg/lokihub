@@ -57,7 +57,9 @@ export function useNostrNotes(pubkey?: string, pageSize = 20) {
     [ndk, pubkey, relayUrls, pageSize]
   );
 
-  const { data, isValidating, size, setSize } = useSWRInfinite<NostrNote[]>(
+  const { data, isValidating, size, setSize, mutate } = useSWRInfinite<
+    NostrNote[]
+  >(
     getKey,
     async (key: NoteKey) => {
       const [, authorPubkey, , until] = key;
@@ -124,11 +126,30 @@ export function useNostrNotes(pubkey?: string, pageSize = 20) {
   // forever instead of settling into the empty state.
   const canFetch = !!pubkey && relayUrls.length > 0;
 
+  // Prepends a just-published note into the first (newest) page without
+  // waiting for relay propagation/outbox indexing — the caller has the real
+  // id/createdAt back from the publish response already, so there's nothing
+  // to refetch; `notes`'s own id-based dedup keeps it from double-showing
+  // once a later revalidation does pick it up from a relay.
+  const addNote = React.useCallback(
+    (note: NostrNote) => {
+      void mutate(
+        (pages) => {
+          const [firstPage, ...rest] = pages ?? [[]];
+          return [[note, ...(firstPage ?? [])], ...rest];
+        },
+        { revalidate: false }
+      );
+    },
+    [mutate]
+  );
+
   return {
     notes,
     isLoading: canFetch && data === undefined,
     isLoadingMore: isValidating && data !== undefined,
     hasMore,
     loadMore,
+    addNote,
   };
 }
