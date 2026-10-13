@@ -190,6 +190,8 @@ text notes, and fixes publishing that profile from the desktop app.
   HPACK encoder race), GO-2026-6612 (double flow-control refund),
   GO-2026-6611 (CPU exhaustion from repeated initial window changes) and
   GO-2026-6603 (memory exhaustion from trailer headers). (f02d0c22)
+- Uses flokiorg's fork of `flokicoinjs-lib` (v7.1.1), which moves `valibot`
+  to 1.5.0 and clears GHSA-vqpr-j7v3-hqw9 and GHSA-5qjj-4xww-7phc.
 - Publishing the node profile from the desktop app failed with "Unhandled
   route"; it now works there as it does in the browser. (05b50513)
 - Fixed the sidebar's logo/header rendering underneath the window controls

@@ -4658,17 +4658,16 @@ flatted@^3.2.9:
   resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.4.4.tgz#aeeca2a506303f0cee61c59e6c9f2a88d2f29fc6"
   integrity sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==
 
-flokicoinjs-lib@^7.1.0:
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/flokicoinjs-lib/-/flokicoinjs-lib-7.1.0.tgz#84528bdd46d32facb8567c03c6bdfb1f45bc50ff"
-  integrity sha512-tapXiNQ89eBBUU63nrv2NNi3jdxxdUML2QXIVQqP0gpzT7R4JjH7v0I0tCjQBD/6RyQOlePWe5mU/crRgnHkFg==
+"flokicoinjs-lib@github:flokiorg/flokicoinjs-lib#v7.1.1":
+  version "7.1.1"
+  resolved "https://codeload.github.com/flokiorg/flokicoinjs-lib/tar.gz/8a5fa863113339c26098a76a07a283b24f5f917f"
   dependencies:
     "@noble/hashes" "^1.2.0"
     bech32 "^2.0.0"
     bip174 "^3.0.0-rc.0"
     bs58check "^4.0.0"
     uint8array-tools "^0.0.9"
-    valibot "^0.38.0"
+    valibot "^1.5.0"
     varuint-bitcoin "^2.0.0"
 
 for-each@^0.3.3, for-each@^0.3.5:
@@ -7821,10 +7820,10 @@ util-deprecate@^1.0.2:
   resolved "https://registry.yarnpkg.com/util-deprecate/-/util-deprecate-1.0.2.tgz#450d4dc9fa70de732762fbd2d4a28981419a0ccf"
   integrity sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==
 
-valibot@^0.38.0:
-  version "0.38.0"
-  resolved "https://registry.yarnpkg.com/valibot/-/valibot-0.38.0.tgz#2d035d2a5bd36e8ea8b48b56d44552ace1a7616f"
-  integrity sha512-RCJa0fetnzp+h+KN9BdgYOgtsMAG9bfoJ9JSjIhFHobKWVWyzM3jjaeNTdpFK9tQtf3q1sguXeERJ/LcmdFE7w==
+valibot@^1.5.0:
+  version "1.5.0"
+  resolved "https://registry.yarnpkg.com/valibot/-/valibot-1.5.0.tgz#c05adda6b2823807bb0248e2952c35e1a50046fd"
+  integrity sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==
 
 varuint-bitcoin@^2.0.0:
   version "2.0.0"
