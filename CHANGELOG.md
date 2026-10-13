@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.14` on 2026-10-12._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.15` on 2026-10-13._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -18,7 +18,8 @@ Tools and the dashboard overview cards. rc.11 and rc.12 only pick up
 `nmilat` v0.5.0-rc.12 and v0.5.0-rc.13. rc.13 moves to `nmilat`
 v0.5.0-rc.17 and Go 1.26.9, and fixes four reachable HTTP/2 server
 advisories in `golang.org/x/net`. rc.14 lets the node profile page post
-text notes, and fixes publishing that profile from the desktop app.
+text notes, and fixes publishing that profile from the desktop app. rc.15
+takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 
 ### Added
 
