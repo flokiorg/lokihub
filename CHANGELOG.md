@@ -276,14 +276,14 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   card twice, stacked on the same page.
 - Fixes `cash_redeem` when the node can't report a payment's outcome: the
   slice now stays claimed until the payment settles or fails, instead of
-  being released at once.
+  being released at once. (#119)
 - Stops writing NIP-47 request parameters to the log: a request that fails
-  to decode is now logged with its method and error only.
+  to decode is now logged with its method and error only. (#119)
 - Fixes `cash_status` on a cash-mode bill: an item without a slice proof is
-  now answered only when its `cash_secret` matches one of the bill's slices.
+  now answered only when its `cash_secret` matches one of the bill's slices. (#119)
 - Makes refusing a request for a recently destroyed bill cost the same as
   refusing one for a bill the hub never issued. Bills destroyed before this
-  release no longer get a "spent" answer.
+  release no longer get a "spent" answer. (#119)
 
 ## [0.4.0]
 
