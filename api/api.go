@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/go-flokicoin/chainutil"
@@ -233,32 +234,52 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	}
 	responseBody.PairingUri = nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, extra)
 
+	// The hub is already saved and this is the only time its secret is shown, so a
+	// token that cannot be encoded is left out rather than failing the response:
+	// the pairing URI above carries the same connection.
 	switch kind {
 	case db.AppKindCashHub:
 		hubToken, err := nipcash.EncodeCashHubConnection(nipcash.CashHubConnection{
 			WalletPubkey: *app.WalletPubkey,
 			Secret:       pairingSecretKey,
 			RelayURLs:    relayUrls,
-			Label:        app.Name,
+			Label:        hubLabel(app.Name),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode cash hub connection token: %w", err)
+			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the cash hub connection token; returning the pairing URI only")
+		} else {
+			responseBody.CashHubToken = &hubToken
 		}
-		responseBody.CashHubToken = &hubToken
 	case db.AppKindCircleHub:
 		hubToken, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
 			WalletPubkey: *app.WalletPubkey,
 			Secret:       pairingSecretKey,
 			RelayURLs:    relayUrls,
-			Label:        app.Name,
+			Label:        hubLabel(app.Name),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode circle hub connection token: %w", err)
+			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the circle hub connection token; returning the pairing URI only")
+		} else {
+			responseBody.CircleHubToken = &hubToken
 		}
-		responseBody.CircleHubToken = &hubToken
 	}
 
 	return responseBody, nil
+}
+
+// hubLabel fits an app name into a hub token's optional label (one length byte),
+// cutting at a UTF-8 boundary. New hubs are refused a longer name, but a
+// de-duplicated name (" (2)") can still grow past the limit.
+func hubLabel(name string) string {
+	const maxLabelBytes = 255
+	if len(name) <= maxLabelBytes {
+		return name
+	}
+	cut := maxLabelBytes
+	for cut > 0 && !utf8.RuneStart(name[cut]) {
+		cut--
+	}
+	return name[:cut]
 }
 
 func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error) {
