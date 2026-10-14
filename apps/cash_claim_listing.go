@@ -68,6 +68,9 @@ type CashClaimRow struct {
 	RedeemFeeMloki  int64
 	RoutingFeeMloki int64
 	SettledAt       *time.Time
+	// RetainedUntil is set only for an archived bill: until then its token still
+	// gets a "spent" answer to cash_status, so it is still a credential.
+	RetainedUntil *time.Time
 }
 
 // cashClaimUnionSQL is the merged row source: live claims and archived slices
@@ -113,7 +116,8 @@ SELECT
   c.preimage AS preimage,
   c.redeem_fee_mloki AS redeem_fee_mloki,
   c.routing_fee_mloki AS routing_fee_mloki,
-  c.settled_at AS settled_at
+  c.settled_at AS settled_at,
+  NULL AS retained_until
 FROM cash_wallet_claims c
 JOIN apps a ON a.id = c.wallet_app_id
 WHERE a.parent_app_id = ? AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
@@ -128,7 +132,8 @@ SELECT
   s.wallet_expires_at, COALESCE(s.wallet_pubkey, ''),
   COALESCE(b.cash_token, ''),
   s.outcome,
-  s.payment_hash, s.preimage, s.redeem_fee_mloki, s.routing_fee_mloki, s.settled_at
+  s.payment_hash, s.preimage, s.redeem_fee_mloki, s.routing_fee_mloki, s.settled_at,
+  b.retained_until
 FROM cash_bill_slice_archives s
 LEFT JOIN cash_bill_archives b
        ON b.wallet_app_id = s.wallet_app_id AND b.hub_app_id = s.hub_app_id

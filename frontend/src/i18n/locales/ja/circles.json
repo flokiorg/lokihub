@@ -252,6 +252,7 @@
     "connectionKeyModeHelper": "検証済みのアイデンティティのみが引き換え可能です。",
     "copyLokicash": "Lokicash をコピー",
     "copyDestroyedLokicash": "破棄された紙幣の Lokicash をコピー",
+    "archivedTokenStillLive": "{{date}} まで cash_status に応答します。それまでは有効な認証情報として扱ってください。",
     "tokenStatusUnredeemed": "未引き換え",
     "tokenStatusFullyRedeemed": "全て引き換え済み",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} 件引き換え済み",

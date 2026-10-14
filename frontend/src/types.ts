@@ -970,6 +970,9 @@ export interface CashWalletClaim {
   // dedupe map, a delete URL — must pair it with this, and an archived row
   // must never offer a delete action.
   archived: boolean;
+  // Unix seconds. Set for an archived bill whose Hub still answers cash_status
+  // about it: until then its token is a live credential, not just a record.
+  retained_until?: number;
   // The bill's own pubkey. Present on every row, and the only identifier an
   // archived one has (see cash_token above).
   wallet_pubkey?: string;

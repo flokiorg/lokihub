@@ -20,8 +20,9 @@ import (
 // that matches a row against a support ticket or an offline record, and it
 // bought nothing: the bill is deleted, so the token moves no value, and a
 // caller who presents it over NWC gets the cash_status tombstone inside the
-// retention window and silence outside it. It is a record here, not a
-// credential (NIP-CASH §Archival on Deletion).
+// retention window and silence outside it. Inside that window it is still a
+// credential (NIP-CASH §Archival on Deletion), which is what the row's
+// retained_until tells the UI; after it, only a record.
 //
 // Verbatim, not re-minted, is the load-bearing part. The token embeds the
 // relay hints in effect at mint time, so a string encoded now could differ
