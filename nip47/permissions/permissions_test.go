@@ -367,3 +367,22 @@ func TestGetPermittedMethods_CircleWalletScope(t *testing.T) {
 	assert.Contains(t, result, constants.NIP47MethodCreateCircleWallet)
 	assert.NotContains(t, result, constants.NIP47MethodMintCash)
 }
+
+// A cash_wallet refuses get_budget (its connection is shared, and the budget would
+// reveal the bill's total), so get_info must not advertise it there; every other
+// connection still gets it as an always-granted method.
+func TestGetPermittedMethods_CashWalletDoesNotAdvertiseGetBudget(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+
+	bill, _, err := svc.AppsService.CreateApp("bill", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE}, db.AppKindCashWallet, nil, "", nil)
+	require.NoError(t, err)
+	assert.NotContains(t, permissionsSvc.GetPermittedMethods(bill, svc.LNClient), models.GET_BUDGET_METHOD)
+
+	standard, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+	assert.Contains(t, permissionsSvc.GetPermittedMethods(standard, svc.LNClient), models.GET_BUDGET_METHOD)
+}
