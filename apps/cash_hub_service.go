@@ -9,6 +9,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/logger"
 	"gorm.io/gorm"
 )
 
@@ -549,19 +550,17 @@ func (svc *appsService) DeleteCashBill(app *db.App, outcome string) error {
 	return nil
 }
 
-// DeleteCashClaim removes an unclaimed slice. The caller is responsible
-// for sweeping its AmountMloki back to the hub before calling this — the
-// returned row gives the caller the amount to sweep.
+// DeleteCashClaim removes an unclaimed slice and, through sweep, returns its
+// amount to the Cash Hub — as one step from the recipient's side (NIP-CASH
+// §Removing a Recipient): the slice is claimed first, so no redemption can
+// race the sweep; if sweep fails it is released untouched; only once sweep
+// succeeds is it deleted and archived as "reclaimed". A nil sweep removes
+// without moving funds.
 //
-// The delete itself is conditioned on "AND claimed_at IS NULL", the same
-// guard ClaimCashSlice's own update uses, so a claim that gets claimed
-// concurrently — after this function's own read above but before its delete
-// runs — is never removed out from under the payout that just claimed it.
-// Without that guard on the delete statement, that race can double-count
-// funds: the concurrent claim pays the recipient, and this function still
-// reports success to a caller who then sweeps the same amount back to the
-// hub, since the row it read a moment ago still had claimed_at == nil.
-func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error) {
+// The claim is conditioned on "AND claimed_at IS NULL", the same guard
+// ClaimCashSlice uses, so a slice claimed concurrently by a payout is never
+// removed out from under it, and its amount never swept back twice.
+func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint, sweep func(claim *db.CashWalletClaim) error) (*db.CashWalletClaim, error) {
 	var claim db.CashWalletClaim
 	if err := svc.db.Where("id = ? AND wallet_app_id = ?", claimID, walletAppID).First(&claim).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -584,14 +583,31 @@ func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint) (*db.Cas
 	// ever owed anything, which is exactly the gap an operator later needs
 	// explained. "reclaimed", not "expired": their window had not passed, they
 	// were cut off.
-	if err := svc.db.Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("id = ? AND claimed_at IS NULL", claim.ID).Delete(&db.CashWalletClaim{})
-		if result.Error != nil {
-			return result.Error
+	held := svc.db.Model(&db.CashWalletClaim{}).
+		Where("id = ? AND claimed_at IS NULL", claim.ID).
+		Update("claimed_at", time.Now())
+	if held.Error != nil {
+		return nil, held.Error
+	}
+	if held.RowsAffected == 0 {
+		// Lost a race against a concurrent claim between the read above and this update.
+		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
+	}
+
+	if sweep != nil {
+		if err := sweep(&claim); err != nil {
+			if releaseErr := svc.db.Model(&db.CashWalletClaim{}).Where("id = ?", claim.ID).
+				Update("claimed_at", nil).Error; releaseErr != nil {
+				logger.Logger.Error().Err(releaseErr).Uint("claim_id", claim.ID).
+					Msg("Failed to release a slice after its removal sweep failed; it stays claimed")
+			}
+			return nil, err
 		}
-		if result.RowsAffected == 0 {
-			// Lost a race against a concurrent claim between the read above and this delete.
-			return fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
+	}
+
+	if err := svc.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ? AND claimed_at IS NOT NULL", claim.ID).Delete(&db.CashWalletClaim{}).Error; err != nil {
+			return err
 		}
 		return archive.ArchiveCashSliceTx(tx, &wallet, claim, db.CashSliceStatusReclaimed, time.Now())
 	}); err != nil {

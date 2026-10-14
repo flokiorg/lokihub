@@ -549,7 +549,7 @@ func TestDeleteCashClaim_Unclaimed(t *testing.T) {
 	var claim db.CashWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&claim).Error)
 
-	deleted, err := svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID)
+	deleted, err := svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1000), deleted.AmountMloki)
 
@@ -575,7 +575,7 @@ func TestDeleteCashClaim_AlreadyClaimed_Rejected(t *testing.T) {
 	var claim db.CashWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", wallet.ID).First(&claim).Error)
 
-	_, err = svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID)
+	_, err = svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID, nil)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
@@ -594,7 +594,7 @@ func TestDeleteCashClaim_WrongWallet(t *testing.T) {
 	var claim db.CashWalletClaim
 	require.NoError(t, svc.DB.Where("wallet_app_id = ?", walletA.ID).First(&claim).Error)
 
-	_, err = svc.AppsService.DeleteCashClaim(walletB.ID, claim.ID)
+	_, err = svc.AppsService.DeleteCashClaim(walletB.ID, claim.ID, nil)
 	assert.Error(t, err)
 }
 
@@ -641,7 +641,7 @@ func TestClaimAndDeleteCashClaim_ConcurrentRace_NeverBothSucceed(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-ready
-			_, deleteErr = svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID)
+			_, deleteErr = svc.AppsService.DeleteCashClaim(wallet.ID, claim.ID, nil)
 		}()
 		close(ready)
 		wg.Wait()

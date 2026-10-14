@@ -76,7 +76,7 @@ func TestSecA_CashInPlace_AfterCoRecipientDeleted_SpinsOffInstead(t *testing.T) 
 	// documented admin action. This DELETES B's claim row; B nonetheless still
 	// holds the (unchanged, underivable-otherwise) shared connection secret.
 	bClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, bPubkey)
-	_, err = svc.AppsService.DeleteCashClaim(wallet.ID, bClaim.ID)
+	_, err = svc.AppsService.DeleteCashClaim(wallet.ID, bClaim.ID, nil)
 	require.NoError(t, err)
 
 	claimsAfter, err := svc.AppsService.ListClaimsForWallet(wallet.ID)

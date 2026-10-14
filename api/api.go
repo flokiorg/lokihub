@@ -3344,12 +3344,12 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		return err
 	}
 
-	claim, err := api.appsSvc.DeleteCashClaim(walletAppID, claimID)
-	if err != nil {
-		return err
-	}
-
-	if claim.AmountMloki > 0 && wallet.ParentAppID != nil {
+	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):
+	// if it fails, the slice stays exactly as it was.
+	sweepToHub := func(claim *db.CashWalletClaim) error {
+		if claim.AmountMloki <= 0 || wallet.ParentAppID == nil {
+			return nil
+		}
 		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
 			context.Background(), uint64(claim.AmountMloki), "cash claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
 			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
@@ -3364,6 +3364,10 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		); err != nil {
 			return fmt.Errorf("failed to sweep removed claim's balance back to hub: %w", err)
 		}
+		return nil
+	}
+	if _, err := api.appsSvc.DeleteCashClaim(walletAppID, claimID, sweepToHub); err != nil {
+		return err
 	}
 
 	remainingClaims, err := api.appsSvc.ListClaimsForWallet(walletAppID)
