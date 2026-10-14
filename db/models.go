@@ -415,7 +415,7 @@ type CashMintIdempotency struct {
 // operator has manually swept the funds back — nil means still outstanding.
 type CashStrandedFund struct {
 	ID                  uint   `gorm:"primaryKey"`
-	Operation           string `gorm:"not null"` // "consolidate" | "split"
+	Operation           string `gorm:"not null"` // "consolidate" | "split" | "mint" (an unfunded wallet a failed mint could not delete; AmountMloki 0)
 	SourceWalletAppID   uint   `gorm:"not null;index"`
 	RetainedWalletAppID uint   `gorm:"not null;index"`
 	AmountMloki         uint64 `gorm:"not null"`
