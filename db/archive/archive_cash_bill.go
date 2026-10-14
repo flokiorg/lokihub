@@ -218,9 +218,9 @@ func ArchiveCashSliceTx(tx *gorm.DB, wallet *db.App, claim db.CashWalletClaim, o
 // UNCLAIMED when it died.
 func DeriveSliceOutcome(claim db.CashWalletClaim, billOutcome string) string {
 	if claim.ClaimedAt != nil {
-		// ClaimedAt is set by exactly two things: ClaimCashSlice (a Lightning
-		// payout) and SplitCashSliceAmount's full-split branch (value moved
-		// into another bill, which records SpunOffToWalletAppID). A failed
+		// ClaimedAt is set by ClaimCashSlice, for a Lightning payout or for a
+		// split (value moved into other bills, which records
+		// SpunOffToWalletAppID via SetCashSliceSplitTarget). A failed
 		// payout is always rolled back by UnclaimCashSlice, so a claimed slice
 		// with no spin-off target really was paid out — even if the
 		// best-effort payment-fact write did not land.

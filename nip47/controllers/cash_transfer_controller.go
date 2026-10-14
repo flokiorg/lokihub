@@ -66,7 +66,7 @@ type cashTransferParams struct {
 	// in change" model (NIP-CASH §Transferring and Splitting a Slice). The carved-off amount,
 	// and any nonzero remainder left behind, must each be at least this
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
-	// AppsService.SplitCashSliceAmount.
+	// handleCashTransferSplit.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
 }
 
@@ -280,11 +280,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// slice's current full amount as read just above, means "transfer it
 	// all". Anything less is a partial split. This read is a best-effort
 	// bound only — the atomic operation below (ReassignCashSliceIdentity or
-	// SplitCashSliceAmount) always re-validates against the slice's live
-	// state with its own fresh read, so a stale value here (a concurrent
-	// split shrinking the slice between this read and that one) can only
-	// ever produce a safe rejection under a genuine race, never an incorrect
-	// transfer.
+	// ClaimCashSlice) always re-validates against the slice's live state with
+	// its own fresh read, so a concurrent transfer between this read and that
+	// one can only ever produce a safe rejection, never an incorrect transfer.
 	//
 	// Only the request's own shape is checked here. Whether the amount fits the
 	// slice's balance waits until the caller is authenticated (step 7): NIP-CASH
@@ -643,10 +641,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // response itself travels over.
 //
 // Ordering mirrors cash_redeem_controller.go's own claim-then-pay-then-
-// rollback-on-failure shape: the source slice is claimed or decremented
-// FIRST (an exclusive, atomic commit point — see SplitCashSliceAmount), then
-// the new wallet is created and funded; any failure after that rolls it back
-// (UnclaimCashSlice for a full split, UndoCashSliceSplit for a partial one),
+// rollback-on-failure shape: the source slice is claimed FIRST (an exclusive,
+// atomic commit point — see ClaimCashSlice), then the new wallets are created
+// and funded; any failure after that rolls the claim back (UnclaimCashSlice),
 // so a caller who hits an error here can safely retry — including with the
 // exact same identity_event, since rollback also releases proofEventID's
 // single-use guard (db.CashTransferProof) rather than leaving a proof that
@@ -658,9 +655,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
 	// carve off, or leave behind, unmovable dust is rejected before anything is
-	// claimed (NIP-CASH §Transferring and Splitting a Slice). The old decrement-based path
-	// enforced this inside SplitCashSliceAmount; the terminal-claim path does it
-	// here. claim.AmountMloki is immutable (no operation rewrites it in place),
+	// claimed (NIP-CASH §Transferring and Splitting a Slice). claim.AmountMloki is immutable (no operation rewrites it in place),
 	// so this pre-claim read can't be raced smaller underneath the claim below.
 	if floor := uint64(claim.MinTransferMloki); floor > 0 { //nolint:gosec // MinTransferMloki is non-negative
 		remainder := uint64(claim.AmountMloki) - requestedAmount //nolint:gosec // requestedAmount <= claim.AmountMloki, bounded by step 6

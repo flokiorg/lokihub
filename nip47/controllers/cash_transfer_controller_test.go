@@ -880,7 +880,7 @@ func TestMaybeAutoDeleteDrainedCashWallet_DeletesWhenFullyDrained(t *testing.T) 
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000},
 	}))
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 1000)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
 	require.NoError(t, err)
 	// The real split path records the spin-off target right after funding the
 	// new wallet (see handleCashTransferSplit). Mirrored here because the
@@ -930,7 +930,7 @@ func TestMaybeAutoDeleteDrainedCashWallet_KeepsAliveWithOtherUnclaimedSlice(t *t
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimedPubkey, AmountMloki: 1000},
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: unclaimedPubkey, AmountMloki: 1000},
 	}))
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, claimedPubkey, 1000)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, claimedPubkey)
 	require.NoError(t, err)
 
 	controller := NewTestNip47Controller(svc)
@@ -963,7 +963,7 @@ func TestMaybeAutoDeleteDrainedCashWallet_KeepsAliveWithNonzeroBalance(t *testin
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000},
 	}))
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 1000)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
 	require.NoError(t, err)
 	// Simulate a stray nonzero balance (shouldn't normally happen — this is
 	// exactly the defensive case the balance re-check guards against).
