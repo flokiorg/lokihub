@@ -139,3 +139,36 @@ func TestCommit_FundInternalFails_DeleteAppRetrySucceedsAfterTransientFailure(t 
 		"expected exactly %d DeleteApp attempts: %d injected failures then one success",
 		compensatingDeleteMaxAttempts, compensatingDeleteMaxAttempts-1)
 }
+
+// NIP-CASH §Data Model: no intermediate state where a wallet exists but isn't
+// funded. When even the compensating delete keeps failing, the leftover wallet is
+// recorded for the operator rather than only logged.
+func TestCommit_FundInternalFails_DeleteAlwaysFails_LeftoverIsRecorded(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	mockLN := svc.LNClient.(*tests.MockLn)
+	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
+	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+
+	deps := newTestDeps(svc)
+	deps.AppsService = &failingCommitAppsService{AppsService: deps.AppsService, failDeleteNTimes: compensatingDeleteMaxAttempts}
+
+	_, err = Create(context.TODO(), deps, Params{HubApp: hub, Recipients: onePubkeyRecipient(1000), ExpirySecs: 1800})
+	require.Error(t, err)
+
+	var leftover db.App
+	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).First(&leftover).Error)
+
+	records, err := svc.AppsService.ListCashStrandedFunds(true)
+	require.NoError(t, err)
+	require.Len(t, records, 1, "the leftover wallet is recorded for cleanup")
+	assert.Equal(t, "mint", records[0].Operation)
+	assert.Equal(t, hub.ID, records[0].SourceWalletAppID)
+	assert.Equal(t, leftover.ID, records[0].RetainedWalletAppID)
+	assert.Zero(t, records[0].AmountMloki, "nothing was funded")
+}

@@ -539,7 +539,18 @@ func deleteAppWithRetry(deps Deps, app *db.App) {
 		Uint("cash_wallet_id", app.ID).
 		Int("attempts", compensatingDeleteMaxAttempts).
 		Msg("Cash wallet funding failed and the compensating cleanup delete also failed after retries — " +
-			"an unfunded, claim-less cash_wallet app row is stranded and needs manual operator cleanup")
+			"an unfunded cash_wallet and its claims are left behind and need manual operator cleanup")
+
+	// Recorded as well, so the cleanup is driven by a query rather than by finding
+	// this log line. Amount 0: nothing was funded, only the rows remain.
+	hubID := uint(0)
+	if app.ParentAppID != nil {
+		hubID = *app.ParentAppID
+	}
+	if err := deps.AppsService.RecordCashStrandedFund("mint", hubID, app.ID, 0); err != nil {
+		logger.Logger.Error().Err(err).Uint("cash_wallet_id", app.ID).
+			Msg("Failed to record the unfunded cash_wallet left behind; the log line above is the only record")
+	}
 }
 
 // Commit creates one spend-only cash_wallet child of resolved.HubApp serving
