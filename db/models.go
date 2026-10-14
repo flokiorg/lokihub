@@ -208,10 +208,10 @@ type CashWalletClaim struct {
 	AmountMloki int64  `gorm:"not null"`
 	ClaimedAt   *time.Time
 	// TransferCount is an internal optimistic-concurrency version number,
-	// incremented atomically by every cash_transfer (reassignment or split)
-	// against this row — pinned in each atomic update's WHERE clause so two
-	// concurrent transfers of the same slice can never both succeed (see
-	// AppsService.ReassignCashSliceIdentity/SplitCashSliceAmount). It is not
+	// incremented atomically by every in-place cash_transfer against this row
+	// — pinned in each atomic update's WHERE clause so two concurrent
+	// operations on the same slice can never both succeed (see
+	// AppsService.ReassignCashSliceIdentity/ClaimCashSlice). It is not
 	// a user-facing cap (there is no transfer limit): a wallet created by
 	// splitting starts its own TransferCount at 0, since it's a fresh row
 	// with its own concurrency history, not a continuation of the source
@@ -247,7 +247,7 @@ type CashWalletClaim struct {
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see
-	// AppsService.SplitCashSliceAmount. Purely informational: every atomic
+	// AppsService.SetCashSliceSplitTarget. Purely informational: every atomic
 	// guard elsewhere already treats ClaimedAt != nil as terminal regardless
 	// of which mechanism set it, so this column is never read by any guard,
 	// only by callers (e.g. cash_status) that want to explain *why* a

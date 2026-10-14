@@ -774,10 +774,9 @@ type SplitParams struct {
 	HubApp          *db.App
 	SourceWalletApp *db.App
 	// AmountMloki is the exact value moved into the new wallet — either the
-	// source slice's full remaining amount or a partial piece of it, already
-	// validated (including the MinTransferMloki floor on both the split
-	// amount and whatever's left behind) by the caller
-	// (AppsService.SplitCashSliceAmount) before this is called.
+	// source slice's full amount or a piece of it, already validated
+	// (including the MinTransferMloki floor on both the piece and whatever is
+	// left) by the caller before this is called.
 	AmountMloki uint64
 	// NewIdentityType/NewIdentityValue/NewIAPubkey describe the new wallet's
 	// sole recipient — any identity mode (pubkey, connection_key, or
@@ -838,12 +837,10 @@ type SplitResult struct {
 // function's doc comment for the rationale), just with the parent and the
 // funding source split into two different apps instead of one.
 //
-// The caller is responsible for having already exclusively claimed or
-// decremented the source slice (AppsService.SplitCashSliceAmount) before
-// calling this, and for rolling that back (UnclaimCashSlice for a full
-// split, UndoCashSliceSplit for a partial one) if this returns an error —
-// Split itself never touches the source wallet's CashWalletClaim rows, only
-// its balance.
+// The caller is responsible for having already exclusively claimed the
+// source slice (AppsService.ClaimCashSlice) before calling this, and for
+// rolling that back (UnclaimCashSlice) if this returns an error — Split itself
+// never touches the source wallet's CashWalletClaim rows, only its balance.
 func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, error) {
 	prepared, err := prepareSplit(ctx, deps, params)
 	if err != nil {
