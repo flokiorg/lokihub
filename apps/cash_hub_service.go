@@ -489,6 +489,26 @@ func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType
 		}).Error
 }
 
+// RecordCashSliceRedeemSettlement records a redeem payout's facts on the slice
+// that paid it, found by payment hash, for a payout that settled after
+// cash_redeem had already answered (or that the reconcile found settled at
+// startup). Only a claimed slice still missing its preimage is written, so a
+// slice cash_redeem has already recorded is left exactly as it is.
+func (svc *appsService) RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error {
+	if payment.PaymentHash == "" || payment.Preimage == "" {
+		return nil
+	}
+	return svc.db.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND payment_hash = ? AND claimed_at IS NOT NULL AND preimage = ?",
+			walletAppID, payment.PaymentHash, "").
+		Updates(map[string]interface{}{
+			"preimage":          payment.Preimage,
+			"redeem_fee_mloki":  payment.RedeemFeeMloki,
+			"routing_fee_mloki": payment.RoutingFeeMloki,
+			"settled_at":        payment.SettledAt,
+		}).Error
+}
+
 // SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 // source cash_wallet it was split from — purely informational (see
 // db.App.SplitFromWalletAppID doc comment), the reverse of
