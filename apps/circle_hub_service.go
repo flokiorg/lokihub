@@ -39,6 +39,9 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	if config.MaxExpSecs <= 0 || config.PerWalletMaxMloki <= 0 {
 		return nil, "", fmt.Errorf("%w: max_exp_secs and per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
 	}
+	if err := validateHubLabel(name); err != nil {
+		return nil, "", err
+	}
 	if config.FeesPpm < 0 || config.FeesPpm > constants.MAX_FEES_PPM {
 		return nil, "", fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
 	}

@@ -37,6 +37,20 @@ func validateTransferFloorCoversFee(minTransferMloki, redeemFeeBaseMloki int64) 
 	return nil
 }
 
+// maxHubLabelBytes is the cashhub1/circlehub1 label TLV's limit (NIP-CASH §The Cash
+// Hub Connection, NIP-CW §The Circle Wallet Hub Connection): one length byte.
+const maxHubLabelBytes = 255
+
+// validateHubLabel refuses a hub name its connection token could not carry. The
+// token is only encoded after the hub is saved, so a longer name used to leave a
+// hub whose one-time connection secret was never shown.
+func validateHubLabel(name string) error {
+	if len(name) > maxHubLabelBytes {
+		return fmt.Errorf("%w: a hub name can be at most %d bytes, got %d", constants.ErrInvalidParams, maxHubLabelBytes, len(name))
+	}
+	return nil
+}
+
 func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	config db.CashHubConfig) (*db.App, string, error) {
@@ -71,6 +85,9 @@ func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki 
 		return nil, "", fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
 	}
 	if err := validateTransferFloorCoversFee(config.MinTransferMloki, config.RedeemFeeBaseMloki); err != nil {
+		return nil, "", err
+	}
+	if err := validateHubLabel(name); err != nil {
 		return nil, "", err
 	}
 

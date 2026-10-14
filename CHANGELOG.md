@@ -296,6 +296,10 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   empty token after funding a bill: a bill whose token can't be produced is
   now refused before any funds move, and split-off and consolidated bills
   store their token like minted ones.
+- Refuses a Cash Hub or Circle Hub name longer than its `cashhub1` /
+  `circlehub1` connection can carry (255 bytes), instead of saving a hub whose
+  connection was never shown; hubs created from the generic new-app screen
+  now show that connection first too.
 
 ## [0.4.0]
 
