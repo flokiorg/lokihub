@@ -285,20 +285,18 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// split shrinking the slice between this read and that one) can only
 	// ever produce a safe rejection under a genuine race, never an incorrect
 	// transfer.
+	//
+	// Only the request's own shape is checked here. Whether the amount fits the
+	// slice's balance waits until the caller is authenticated (step 7): NIP-CASH
+	// orders the proof first, and an answer naming the balance would otherwise
+	// tell anyone holding the connection what the slice holds.
 	requestedAmount := uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
-	isFullTransfer := true
 	if params.AmountMillis != nil {
 		if *params.AmountMillis == 0 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "amount_millis must be positive")
 			return
 		}
-		if *params.AmountMillis > requestedAmount {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", *params.AmountMillis, requestedAmount))
-			return
-		}
 		requestedAmount = *params.AmountMillis
-		isFullTransfer = requestedAmount == uint64(claim.AmountMloki) //nolint:gosec
 	}
 
 	// 7. Verify the caller is authorized to transfer this slice.
@@ -382,6 +380,15 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 	// isCashCurrent: nothing further to verify — step 5's hash-matched
 	// lookup was the entire proof, identical in spirit to a cash-mode redeem.
+
+	// 7b. The caller is authenticated, so the amount can now be bounded by the
+	// slice's balance, and the error may name it.
+	if requestedAmount > uint64(claim.AmountMloki) { //nolint:gosec // AmountMloki is always non-negative
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", requestedAmount, claim.AmountMloki))
+		return
+	}
+	isFullTransfer := requestedAmount == uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
 
 	// 8. Validate new_identity now that the caller is authenticated:
 	// pubkey/connection_key shape + live IA trust (reuses exactly the
