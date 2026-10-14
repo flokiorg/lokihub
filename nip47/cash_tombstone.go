@@ -55,35 +55,23 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 	// The deadline is read here rather than calling SpentBillStillAnswerable
 	// because the response carries it as retained_until, so it is needed either
 	// way and a second query would be wasted.
-	retainedUntil, ok := db.SpentBillRetainedUntil(svc.db, walletPubkey)
+	tombstone, ok := db.SpentBillTombstoneFor(svc.db, walletPubkey)
+	retainedUntil := tombstone.RetainedUntil
 	if !ok || !db.RetentionWindowOpen(retainedUntil, time.Now()) {
 		return false
 	}
 
-	var bill db.CashBillArchive
-	if err := svc.db.Where("wallet_pubkey = ?", walletPubkey).First(&bill).Error; err != nil {
+	// Gate 3. The bill's connection pubkey, stored at archive time, is the
+	// only one that ever legitimately addressed this bill. Compared rather
+	// than re-derived, so this costs the same as a miss.
+	if tombstone.ConnectionPubkey == "" || tombstone.ConnectionPubkey != event.PubKey {
 		return false
 	}
 
-	// Gate 3. The bill's client pairing key is deterministic from its app id,
-	// so the pubkey that key produces is the only one that ever legitimately
-	// addressed this bill.
-	pairingKey, err := svc.keys.GetCashPairingKey(bill.WalletAppID)
+	walletPrivKey, err := svc.keys.GetAppWalletKey(tombstone.WalletAppID)
 	if err != nil {
 		logger.Logger.Error().Err(err).
-			Uint("walletAppId", bill.WalletAppID).
-			Msg("Failed to derive a spent bill's pairing key")
-		return false
-	}
-	expectedPubkey, err := nostr.GetPublicKey(pairingKey)
-	if err != nil || expectedPubkey != event.PubKey {
-		return false
-	}
-
-	walletPrivKey, err := svc.keys.GetAppWalletKey(bill.WalletAppID)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Uint("walletAppId", bill.WalletAppID).
+			Uint("walletAppId", tombstone.WalletAppID).
 			Msg("Failed to derive a spent bill's wallet key")
 		return false
 	}

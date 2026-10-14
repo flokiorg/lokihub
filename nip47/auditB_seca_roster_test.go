@@ -207,14 +207,16 @@ func TestAuditBSecA_CashStatusPublishesTheCashSecretCommitment(t *testing.T) {
 	hubXOnly := tests.RandomHex32()
 	nonce, err := transport.NewNonce()
 	require.NoError(t, err)
+	// A proofless item is served only with a matching secret, so the reader here is
+	// that slice's own holder. On a bill with several cash slices, scope "all" hands
+	// them every co-recipient's commitment just the same.
 	item := transport.Item{
 		ID: "1", Target: walletPubkey, Method: nipcash.MethodCashStatus,
-		Params: json.RawMessage(`{"scope":"all"}`),
+		Params: json.RawMessage(`{"cash_secret":"` + hex.EncodeToString([]byte(secret)) + `","scope":"all"}`),
 	}
 	notAfter := time.Now().Add(60 * time.Second).Unix()
 	b := billProofBinding(t, item, hubXOnly, nonce, notAfter)
-	// Possession only: the bill proof. No slice proof, which is what a caller who
-	// holds the TOKEN but not the SECRET has (cashctl's "no_embedded_secret" case).
+	// The bill proof plus the secret, and no slice proof.
 	item.BillProof, err = transport.BuildBillProof(connPriv, b)
 	require.NoError(t, err)
 

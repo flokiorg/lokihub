@@ -11,8 +11,9 @@ import (
 func decodeRequest(request *models.Request, methodParams interface{}) *models.Response {
 	err := json.Unmarshal(request.Params, methodParams)
 	if err != nil {
+		// Params are never logged: they can carry a cash secret or a proof.
 		logger.Logger.Error().Err(err).
-			Interface("request", request).
+			Str("method", request.Method).
 			Msg("Failed to decode NIP-47 request")
 		return &models.Response{
 			ResultType: request.Method,

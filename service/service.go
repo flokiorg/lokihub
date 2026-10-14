@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/db/migrations"
@@ -67,6 +69,10 @@ type service struct {
 	// read by GetPrivateTransportStatus. A pointer so a read never races a
 	// concurrent update of the whole snapshot.
 	privateTransportStatus atomic.Pointer[PrivateTransportStatus]
+	// privateTransportStatusMu serialises the read-modify-write updates, now
+	// that the inbox's liveness watcher updates the snapshot concurrently with
+	// startup.
+	privateTransportStatusMu sync.Mutex
 }
 
 func NewService(ctx context.Context) (*service, error) {
@@ -168,6 +174,9 @@ func NewService(ctx context.Context) (*service, error) {
 
 	eventPublisher.RegisterSubscriber(&paymentForwardedConsumer{
 		db: gormDB,
+	})
+	eventPublisher.RegisterSubscriber(&cashRedeemFailureConsumer{
+		appsService: apps.NewAppsService(gormDB, eventPublisher, keys, cfg),
 	})
 
 	svc.appStoreSvc = appstore.NewAppStoreService(cfg)
