@@ -114,6 +114,7 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 		// with (App.CashToken, stored at mint). Empty for a bill minted before
 		// that column existed.
 		CashToken:            live.CashToken,
+		ConnectionPubkey:     live.AppPubkey,
 		MintedAt:             live.CreatedAt,
 		EndedAt:              now,
 		ExpiresAt:            live.ExpiresAt,

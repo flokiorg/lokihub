@@ -40,6 +40,11 @@ func seedDestroyedBill(t *testing.T, svc *tests.TestService, endedAt time.Time, 
 	require.NoError(t, err)
 	walletPubkey, err = nostr.GetPublicKey(walletKey)
 	require.NoError(t, err)
+	// The bill's App.AppPubkey, which archiving copies onto the row.
+	pairingKey, err := svc.Keys.GetCashPairingKey(walletAppID)
+	require.NoError(t, err)
+	connectionPubkey, err := nostr.GetPublicKey(pairingKey)
+	require.NoError(t, err)
 
 	// RetainedUntil is materialised on the row, exactly as archive.CashBill does
 	// it in production — a fixture that leaves it nil is a bill with no
@@ -52,14 +57,15 @@ func seedDestroyedBill(t *testing.T, svc *tests.TestService, endedAt time.Time, 
 	}
 
 	require.NoError(t, svc.DB.Create(&db.CashBillArchive{
-		WalletAppID:   walletAppID,
-		HubAppID:      hub.ID,
-		WalletPubkey:  walletPubkey,
-		EndedAt:       endedAt,
-		RetainedUntil: retainedUntil,
-		Outcome:       db.CashBillOutcomeDrained,
-		TotalMloki:    1000,
-		FundedMloki:   1000,
+		WalletAppID:      walletAppID,
+		HubAppID:         hub.ID,
+		WalletPubkey:     walletPubkey,
+		ConnectionPubkey: connectionPubkey,
+		EndedAt:          endedAt,
+		RetainedUntil:    retainedUntil,
+		Outcome:          db.CashBillOutcomeDrained,
+		TotalMloki:       1000,
+		FundedMloki:      1000,
 	}).Error)
 	return walletAppID, walletPubkey
 }
