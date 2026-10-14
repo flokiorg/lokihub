@@ -292,6 +292,10 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Fixes a private-transport envelope with one malformed item going
   unanswered: that item is now dropped and the rest are served, using
   `nmilat` v0.5.0-rc.22.
+- Fixes `mint_cash`, `cash_transfer` and `cash_consolidate` returning an
+  empty token after funding a bill: a bill whose token can't be produced is
+  now refused before any funds move, and split-off and consolidated bills
+  store their token like minted ones.
 
 ## [0.4.0]
 
