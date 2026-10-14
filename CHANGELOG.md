@@ -300,6 +300,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   `circlehub1` connection can carry (255 bytes), instead of saving a hub whose
   connection was never shown; hubs created from the generic new-app screen
   now show that connection first too.
+- Fixes a following-policy Circle Hub refusing real members as "not
+  authorized" when its relays had not yet returned the provider's follow
+  list: it now answers `NOT_READY` until the list is fetched.
 
 ## [0.4.0]
 
