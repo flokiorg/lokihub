@@ -312,6 +312,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   admin API, instead of silently replacing it with a Hub-generated one.
 - `cash_transfer` now verifies the caller before checking the amount against
   the slice, so a refused request no longer reveals the slice's balance.
+- Refuses bill methods on the standard NWC transport with `NOT_IMPLEMENTED`
+  whatever the connection's scopes or expiry, as NIP-CASH requires.
 
 ## [0.4.0]
 
