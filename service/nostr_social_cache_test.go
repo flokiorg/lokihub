@@ -372,11 +372,14 @@ func TestRunSocialCacheRefresh_SkipsBadProvider_ContinuesSweep(t *testing.T) {
 	defer svc.Remove()
 	useAnsweringRelay(t, svc)
 
-	// A following-policy identity with no ProviderPubkey configured must be
-	// skipped rather than aborting the sweep.
+	// A following-policy identity with no ProviderPubkey must be skipped rather
+	// than aborting the sweep. It can no longer be created, so it is seeded
+	// directly, as a row saved before that check existed.
+	legacy := db.CircleIdentity{Name: "no-pubkey-circle", Policy: db.CirclePolicyFollowing}
+	require.NoError(t, svc.DB.Create(&legacy).Error)
 	_, _, err := svc.AppsService.CreateCircleHub("no-pubkey-circle", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "no-pubkey-circle", Policy: db.CirclePolicyFollowing, ProviderPubkey: ""},
+		apps.CircleIdentityRef{ExistingID: &legacy.ID},
 		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 	)
 	require.NoError(t, err)
