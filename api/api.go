@@ -1568,12 +1568,18 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 	privateTransportStatus := api.svc.GetPrivateTransportStatus()
 	info.PrivateTransport = PrivateTransportInfo{
-		NodeIdentity:    privateTransportStatus.NodeIdentity,
-		InboxPubkey:     privateTransportStatus.InboxPubkey,
-		Announced:       privateTransportStatus.Announced,
-		AnnouncedRelays: privateTransportStatus.AnnouncedRelays,
-		TotalRelays:     privateTransportStatus.TotalRelays,
-		Error:           privateTransportStatus.Error,
+		NodeIdentity:      privateTransportStatus.NodeIdentity,
+		InboxPubkey:       privateTransportStatus.InboxPubkey,
+		Announced:         privateTransportStatus.Announced,
+		AnnouncedRelays:   privateTransportStatus.AnnouncedRelays,
+		TotalRelays:       privateTransportStatus.TotalRelays,
+		Error:             privateTransportStatus.Error,
+		InboxDelivering:   privateTransportStatus.InboxDelivering,
+		InboxResubscribes: privateTransportStatus.InboxResubscribes,
+	}
+	if !privateTransportStatus.InboxCheckedAt.IsZero() {
+		checkedAt := privateTransportStatus.InboxCheckedAt
+		info.PrivateTransport.InboxCheckedAt = &checkedAt
 	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 

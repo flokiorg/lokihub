@@ -1059,6 +1059,11 @@ type PrivateTransportInfo struct {
 	AnnouncedRelays int    `json:"announcedRelays"`
 	TotalRelays     int    `json:"totalRelays"`
 	Error           string `json:"error,omitempty"`
+	// InboxDelivering is whether the inbox's last self-probe came back from
+	// every relay that accepted it; meaningful once InboxCheckedAt is set.
+	InboxDelivering   bool       `json:"inboxDelivering"`
+	InboxCheckedAt    *time.Time `json:"inboxCheckedAt,omitempty"`
+	InboxResubscribes int        `json:"inboxResubscribes"`
 }
 
 type UpdateSettingsRequest struct {
