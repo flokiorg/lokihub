@@ -505,13 +505,14 @@ type CashBillArchive struct {
 	// time, so re-deriving one later could produce a different string from the
 	// one its holder actually has.
 	//
-	// Stored, never rendered and never returned over NWC. Keeping it grants no
-	// capability that did not already exist: a cash bill's pairing key is
-	// deterministically derivable from its app id (keys.GetCashPairingKey), so
-	// anyone with database access could already reconstruct this. NIP-CASH
-	// §Archival on Deletion's rule is against *presenting* a token for a
-	// destroyed bill — one that looks spendable and is not — which is why this
-	// column is excluded from every listing response.
+	// Stored, never returned over NWC. The pairing secret inside it is
+	// derivable from the app id only with the node's key material
+	// (keys.GetCashPairingKey), so a database-only reader does learn it — but
+	// it proves possession of the bill and nothing more: every method that moves
+	// value or reads a slice also needs a slice proof or the cash secret, and
+	// only the cash secret's hash is stored. NIP-CASH §Archival on Deletion
+	// asks operators to treat a displayed token as live for the retention window
+	// and as a record after, which is how the operator's bills list shows it.
 	CashToken string
 	// ConnectionPubkey is the bill's App.AppPubkey: the public half of the
 	// connection secret inside its token, and the only key whose proof earns a
