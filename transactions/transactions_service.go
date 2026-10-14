@@ -971,9 +971,9 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 
 const stalePendingTTL = 48 * time.Hour
 
-// isCashRedeemPayout reports whether t is a cash_redeem payout, which
+// IsCashRedeemPayout reports whether t is a cash_redeem payout, which
 // cash_redeem_controller.go marks with cash_claim_slice.
-func isCashRedeemPayout(t *db.Transaction) bool {
+func IsCashRedeemPayout(t *db.Transaction) bool {
 	var metadata map[string]interface{}
 	if len(t.Metadata) == 0 || json.Unmarshal(t.Metadata, &metadata) != nil {
 		return false
@@ -991,7 +991,7 @@ func (svc *transactionsService) PendingCashRedeems() ([]db.Transaction, error) {
 	}
 	redeems := pending[:0]
 	for _, t := range pending {
-		if isCashRedeemPayout(&t) {
+		if IsCashRedeemPayout(&t) {
 			redeems = append(redeems, t)
 		}
 	}

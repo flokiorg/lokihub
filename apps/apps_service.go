@@ -218,6 +218,10 @@ type AppsService interface {
 	// already been claimed. The caller is responsible for sweeping the slice's
 	// AmountMloki back to the hub before calling this.
 	DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error)
+	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
+	// facts on its slice, found by payment hash; a slice already recorded is
+	// left alone.
+	RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error
 
 	// RecordCashStrandedFund durably logs one compensating-saga reversal that
 	// itself failed (cashwallet.Consolidate/SplitInTwo), so an operator sweep

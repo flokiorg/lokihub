@@ -324,6 +324,16 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Resolves `cash_redeem` payouts whose outcome arrived while lokihub was
   down: at startup and periodically the node is asked, a failed payout
   releases its slice, and the node info reports how many are still pending. (#120)
+- A drained Cash bill is now deleted on every drain, as NIP-CASH requires,
+  including a `cash_transfer` whose new connection could not be delivered, a
+  `cash_redeem` whose node returned no preimage, and a payout that settled
+  only after `cash_redeem` answered. Before, these stayed live until the
+  expiry sweep. A late-settling payout's preimage and fees are also recorded
+  on its slice. (#120)
+- Operator note: a Cash Hub created before the destroyed-bill retention
+  setting existed keeps a retention of 0, so its destroyed bills answer
+  nothing. This is not migrated, since 0 is also a valid deliberate choice.
+  Set a retention in the hub's settings to answer `cash_status` for them. (#120)
 
 ## [0.4.0]
 

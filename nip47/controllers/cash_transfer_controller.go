@@ -13,14 +13,10 @@ import (
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/db/archive"
-	"github.com/flokiorg/lokihub/db/queries"
-	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
-	"gorm.io/gorm"
 )
 
 // cashTransferNewIdentityParam/cashTransferParams below are no longer used to
@@ -782,6 +778,13 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		return
 	}
 
+	// The funds have moved, so the source slice is terminal on every path from
+	// here, including a connection that can't be delivered below. A drained
+	// source is auto-deleted after the response either way (NIP-CASH
+	// §Lifecycle and Deletion: one policy for every drain mechanism).
+	// Best-effort; the expiry sweep remains the fallback.
+	defer controller.maybeAutoDeleteDrainedCashWallet(app)
+
 	// deliver returns a new wallet's clear pubkey plus its token — nested-
 	// encrypted to the caller's proof pubkey (so no co-recipient of THIS shared
 	// connection can read it, exactly as before), or in the clear for a
@@ -862,11 +865,6 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		Msg("Cash wallet slice split off into fresh dedicated wallet(s)")
 
 	publishResponse(&models.Response{ResultType: nip47Request.Method, Result: resp}, tags)
-
-	// The source slice is now terminal; auto-delete the source wallet if this
-	// was its last unclaimed slice and its real balance is zero. Best-effort,
-	// after the response — the expiry sweep remains the fallback.
-	controller.maybeAutoDeleteDrainedCashWallet(app)
 }
 
 // maybeAutoDeleteDrainedCashWallet deletes app if it has no unclaimed slices
@@ -875,54 +873,25 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 // because one recipient's slice fully split away, since the wallet's real
 // balance still legitimately backs those other slices. Best-effort: logged,
 // never fails the caller's request, and the periodic expiry-sweep ticker
-// (service.runCashCleanup) remains the fallback if this check's own balance
-// read is ever unexpectedly nonzero (structurally shouldn't be, given the
-// invariant that a cash_wallet's balance always equals the sum of its
-// unclaimed slices' AmountMloki, but defensive rather than trusting that
-// blindly and force-deleting a wallet that still holds real funds).
-// cashDrainGuards wires the ledger reads the drain check needs. db/archive
-// takes them as functions so it can stay a leaf package — see its own comment.
-func cashDrainGuards() archive.DrainGuards {
-	return archive.DrainGuards{
-		IsolatedBalance:    queries.GetIsolatedBalance,
-		HasPendingIncoming: queries.HasPendingIncoming,
-	}
-}
-
+// (service.runCashCleanup) remains the fallback. The policy itself lives in
+// cashwallet.AutoDeleteDrained, shared with the redeem payouts
+// that settle only after cash_redeem has answered.
 func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App) {
-	// The guard now runs inside the same transaction as the archive and the
-	// delete, so a concurrent UnclaimCashSlice rollback can no longer restore
-	// an unclaimed slice between the check and the delete.
-	err := controller.db.Transaction(func(tx *gorm.DB) error {
-		return archive.ArchiveAndDeleteDrainedCashBillTx(tx, app, cashDrainGuards(), time.Now())
-	})
-	switch {
-	case errors.Is(err, archive.ErrBillNotDrained):
-		// Expected: another slice is still unclaimed, or the balance is not
-		// zero. Either way the bill legitimately stays alive, and the expiry
-		// sweep remains the fallback.
-		logger.Logger.Debug().Err(err).Uint("app_id", app.ID).
-			Msg("Cash wallet not fully drained; leaving it alive")
-		return
-	case err != nil:
+	deleted, err := cashwallet.AutoDeleteDrained(controller.db, controller.eventPublisher, app.ID)
+	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
 			Msg("Failed to archive and auto-delete fully-drained Cash wallet")
 		return
 	}
-
-	// Published after the commit, so the consumer's own lookup over a separate
-	// connection cannot race the transaction. This is what drops the wallet
-	// from the registry.
-	controller.eventPublisher.Publish(&events.Event{
-		Event: "nwc_app_deleted",
-		Properties: map[string]interface{}{
-			"name": app.Name,
-			"id":   app.ID,
-		},
-	})
-
+	if !deleted {
+		// Expected: another slice is still unclaimed, or the balance is not
+		// zero. Either way the bill legitimately stays alive.
+		logger.Logger.Debug().Uint("app_id", app.ID).
+			Msg("Cash wallet not fully drained; leaving it alive")
+		return
+	}
 	logger.Logger.Info().Uint("app_id", app.ID).
-		Msg("Archived and auto-deleted Cash wallet after its last slice was fully split away")
+		Msg("Archived and auto-deleted fully-drained Cash wallet")
 }
 
 // verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same

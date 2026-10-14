@@ -175,8 +175,10 @@ func NewService(ctx context.Context) (*service, error) {
 	eventPublisher.RegisterSubscriber(&paymentForwardedConsumer{
 		db: gormDB,
 	})
-	eventPublisher.RegisterSubscriber(&cashRedeemFailureConsumer{
-		appsService: apps.NewAppsService(gormDB, eventPublisher, keys, cfg),
+	eventPublisher.RegisterSubscriber(&cashRedeemOutcomeConsumer{
+		appsService:    apps.NewAppsService(gormDB, eventPublisher, keys, cfg),
+		db:             gormDB,
+		eventPublisher: eventPublisher,
 	})
 
 	svc.appStoreSvc = appstore.NewAppStoreService(cfg)
