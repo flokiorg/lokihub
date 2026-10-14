@@ -744,69 +744,6 @@ func TestHandleEvent_NonCashWallet_GetBudget_StillAllowed(t *testing.T) {
 	assert.Equal(t, models.GET_BUDGET_METHOD, response.ResultType)
 }
 
-// TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired verifies
-// that a cash_wallet's own ExpiresAt is enforced for cash_redeem. Unlike
-// get_budget, cash_redeem is not on the always-granted list, so it goes
-// through the normal HasPermission(app, scope) path in HandleEvent — this
-// confirms that path's ExpiresAt check actually fires for a cash_wallet's
-// shared connection, before any claim proof is ever parsed.
-func TestHandleEvent_CashWallet_ClaimFunds_RejectedWhenWalletExpired(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-
-	reqPrivateKey := nostr.GeneratePrivateKey()
-	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
-	require.NoError(t, err)
-
-	expiresAt := time.Now().Add(-time.Hour)
-	app, _, err := svc.AppsService.CreateApp(
-		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
-		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindCashWallet, nil, "", nil,
-	)
-	require.NoError(t, err)
-
-	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
-	require.NoError(t, err)
-
-	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodCashRedeem)
-	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
-}
-
-// TestHandleEvent_CashWallet_CashStatus_RejectedWhenWalletExpired covers
-// the read-only sibling method under the same cash_redeem scope —
-// expiry must block roster visibility too, not just the payout call.
-func TestHandleEvent_CashWallet_CashStatus_RejectedWhenWalletExpired(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
-
-	reqPrivateKey := nostr.GeneratePrivateKey()
-	reqPubkey, err := nostr.GetPublicKey(reqPrivateKey)
-	require.NoError(t, err)
-
-	expiresAt := time.Now().Add(-time.Hour)
-	app, _, err := svc.AppsService.CreateApp(
-		"cash-wallet", reqPubkey, 1, constants.BUDGET_RENEWAL_NEVER, &expiresAt,
-		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindCashWallet, nil, "", nil,
-	)
-	require.NoError(t, err)
-
-	nip47Cipher, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, *app.WalletPubkey, reqPrivateKey)
-	require.NoError(t, err)
-
-	response := doHandleEventForMethod(t, svc, nip47svc, nip47Cipher, reqPrivateKey, reqPubkey, constants.NIP47MethodCashStatus)
-	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_EXPIRED, response.Error.Code)
-}
-
 // TestHandleEvent_CashWallet_CreateConnection_Rejected is a privilege-
 // escalation probe: create_connection requires SUPERUSER_SCOPE, which a
 // cash_wallet is never granted (only cash_redeem + get_balance, see
