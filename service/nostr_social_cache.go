@@ -189,6 +189,17 @@ func warmRelays(pool *nostr.SimplePool, relayUrls []string) {
 // QuerySingle regardless of a shorter ctx deadline. Racing against ctx.Done()
 // fixes that; the abandoned goroutine keeps running in the background,
 // self-bounded by go-nostr's own timeout, but nothing here waits on it.
+// anyRelayConnected reports whether pool holds a live connection to any of
+// relayUrls. A query that came back empty early, with one connected, was answered.
+func anyRelayConnected(pool *nostr.SimplePool, relayUrls []string) bool {
+	for _, relayUrl := range relayUrls {
+		if relay, ok := pool.Relays.Load(nostr.NormalizeURL(relayUrl)); ok && relay != nil && relay.IsConnected() {
+			return true
+		}
+	}
+	return false
+}
+
 func queryRelaysBounded(ctx context.Context, pool *nostr.SimplePool, relayUrls []string, filter nostr.Filter) *nostr.RelayEvent {
 	result := make(chan *nostr.RelayEvent, 1)
 	go func() {
@@ -344,7 +355,13 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 			return existing.pubkeys, nil
 		}
 
-		// True first-ever fetch with nothing to fall back on.
+		// First-ever fetch with nothing to fall back on. Only a relay that actually
+		// answered "no such event" resolves the list as empty; a query that ran out
+		// of time, or reached no relay, leaves it unresolved, which NIP-CW forbids
+		// treating as empty. Nothing is cached then, so the next request retries.
+		if fetchCtx.Err() != nil || !anyRelayConnected(pool, relayUrls) {
+			return nil, constants.ErrCircleMembershipUnresolved
+		}
 		pubkeys := make(map[string]struct{})
 		s.cache[ownerPubkey] = &contactEntry{pubkeys: pubkeys, fetchedAt: time.Now()}
 		return pubkeys, nil

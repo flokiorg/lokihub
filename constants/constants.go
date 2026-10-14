@@ -30,6 +30,12 @@ var (
 	// without importing service (see the service→nip47→nip47/controllers cycle
 	// note on controllers.NostrSocialCache).
 	ErrSocialCacheWarmingUp = errors.New("social cache is still warming up")
+
+	// ErrCircleMembershipUnresolved is returned by a following-policy
+	// authorization check when the provider's contact list has never been
+	// fetched successfully. NIP-CW forbids treating an unresolved list as an
+	// empty one, so callers answer NOT_READY, not "not a member".
+	ErrCircleMembershipUnresolved = errors.New("circle membership list is not resolved yet")
 )
 
 // shared constants used by multiple packages

@@ -675,10 +675,14 @@ func (api *api) buildCircleIdentityCounts(ctx context.Context, identity *db.Circ
 	case db.CirclePolicyFollowing:
 		if allowBlockingFetch {
 			count, err := api.svc.ContactCount(ctx, identity.ProviderPubkey)
-			if err != nil {
+			switch {
+			case errors.Is(err, constants.ErrCircleMembershipUnresolved):
+				// Not fetched yet: the count is unknown, not zero.
+			case err != nil:
 				return nil, err
+			default:
+				summary.FollowingCount = &count
 			}
-			summary.FollowingCount = &count
 		} else if count, ok := api.svc.PeekContactCount(identity.ProviderPubkey); ok {
 			summary.FollowingCount = &count
 		}
