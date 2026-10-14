@@ -146,6 +146,10 @@ type MockLn struct {
 	MockLookupInvoiceError error
 	// SendKeysendError, when non-nil, is returned by SendKeysend instead of a success response.
 	SendKeysendError error
+	// PaymentLookups answers LookupPayment per payment hash; a hash not in it is
+	// reported in flight. PaymentLookupError, when non-nil, is returned instead.
+	PaymentLookups     map[string]*lnclient.PaymentLookup
+	PaymentLookupError error
 	// SigningKey makes SignMessage produce a real LND-style zbase32 recoverable
 	// signature over the message (compact sig over its double-SHA256). Set Pubkey to
 	// this key's compressed hex when a test needs GetPubkey to match the signer.
@@ -244,6 +248,17 @@ func NewMockLn() (*MockLn, error) {
 		return nil, err
 	}
 	return &MockLn{SigningKey: key}, nil
+}
+
+// LookupPayment implements lnclient.PaymentLooker from PaymentLookups.
+func (mln *MockLn) LookupPayment(_ context.Context, paymentHash string) (*lnclient.PaymentLookup, error) {
+	if mln.PaymentLookupError != nil {
+		return nil, mln.PaymentLookupError
+	}
+	if lookup, ok := mln.PaymentLookups[paymentHash]; ok {
+		return lookup, nil
+	}
+	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
 }
 
 func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki *uint64) (*lnclient.PayInvoiceResponse, error) {

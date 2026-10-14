@@ -74,6 +74,14 @@ func (s *stubTransactionsService) SetLiquidityManager(_ *manager.LiquidityManage
 func (s *stubTransactionsService) SweepStalePendingOutgoing(_ context.Context, _ lnclient.LNClient) {
 }
 
+func (s *stubTransactionsService) ReconcilePendingCashRedeems(_ context.Context, _ lnclient.LNClient) int {
+	return 0
+}
+
+func (s *stubTransactionsService) PendingCashRedeems() ([]db.Transaction, error) {
+	return nil, nil
+}
+
 func (s *stubTransactionsService) EstimateFee(_ string) (uint64, error) {
 	panic("EstimateFee: unexpected call in test")
 }

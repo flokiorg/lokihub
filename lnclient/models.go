@@ -297,6 +297,35 @@ func NewCustomNodeCommandResponseEmpty() *CustomNodeCommandResponse {
 
 var ErrUnknownCustomNodeCommand = errors.New("unknown custom node command")
 
+// PaymentStatus is what a backend knows about an outgoing payment's outcome.
+type PaymentStatus string
+
+const (
+	PaymentStatusSucceeded PaymentStatus = "succeeded"
+	// PaymentStatusFailed means the payment definitely did not complete:
+	// it failed, or the node never started it.
+	PaymentStatusFailed PaymentStatus = "failed"
+	// PaymentStatusInFlight means the outcome is not known yet.
+	PaymentStatusInFlight PaymentStatus = "in_flight"
+)
+
+// PaymentLookup is one outgoing payment's state.
+type PaymentLookup struct {
+	Status        PaymentStatus
+	Preimage      string
+	FeeMloki      uint64
+	FailureReason string
+}
+
+// PaymentLooker is implemented by backends that can report an outgoing
+// payment's state by its hash. Kept out of LNClient for the same reason as
+// TransportSigner: adding a method there means updating every hand-written
+// LNClient double. Callers type-assert and treat a backend without it as
+// unable to say.
+type PaymentLooker interface {
+	LookupPayment(ctx context.Context, paymentHash string) (*PaymentLookup, error)
+}
+
 // ErrPaymentPending is returned (wrapped) by SendPaymentSync when the payment
 // reached the node but its outcome could not be learned, so it may still
 // settle. Callers must not treat it as a failure.
