@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	decodepay "github.com/flokiorg/lokihub/decodepay"
+	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/transactions"
@@ -355,7 +357,27 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	metadata["cash_claim_slice"] = true
 	metadata["cash_redeem_fee_mloki"] = hubFeeMloki
 
+	// Recorded before paying so a failure learned only later can find this
+	// slice again (ReleaseCashSliceForFailedPayment).
+	if err := controller.appsService.SetCashSliceRedeemPaymentHash(app.ID, identityType, identityValue, paymentRequest.PaymentHash); err != nil {
+		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
+			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after recording its payment hash failed")
+		}
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to record cash_redeem payment hash")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to start the redemption")
+		return
+	}
+
 	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, params.Amount, metadata, controller.lnClient, &app.ID, &requestEventId)
+	if err != nil && errors.Is(err, lnclient.ErrPaymentPending) {
+		// The payment may still settle, so the slice stays claimed. If it
+		// fails instead, the payment-failed event releases it.
+		logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentRequest.PaymentHash).
+			Msg("cash_redeem payment outcome unknown; slice held until it resolves")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+			"the payment's outcome is not known yet; this slice stays claimed until the payment settles or fails")
+		return
+	}
 	if err != nil {
 		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after payment failure")

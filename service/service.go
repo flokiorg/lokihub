@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/db/migrations"
@@ -168,6 +169,9 @@ func NewService(ctx context.Context) (*service, error) {
 
 	eventPublisher.RegisterSubscriber(&paymentForwardedConsumer{
 		db: gormDB,
+	})
+	eventPublisher.RegisterSubscriber(&cashRedeemFailureConsumer{
+		appsService: apps.NewAppsService(gormDB, eventPublisher, keys, cfg),
 	})
 
 	svc.appStoreSvc = appstore.NewAppStoreService(cfg)

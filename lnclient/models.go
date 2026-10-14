@@ -297,6 +297,11 @@ func NewCustomNodeCommandResponseEmpty() *CustomNodeCommandResponse {
 
 var ErrUnknownCustomNodeCommand = errors.New("unknown custom node command")
 
+// ErrPaymentPending is returned (wrapped) by SendPaymentSync when the payment
+// reached the node but its outcome could not be learned, so it may still
+// settle. Callers must not treat it as a failure.
+var ErrPaymentPending = errors.New("payment outcome unknown, it may still be in flight")
+
 // default invoice expiry in seconds (1 day)
 const DEFAULT_INVOICE_EXPIRY = 86400
 
