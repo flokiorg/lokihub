@@ -15,8 +15,13 @@ func (svc *appsService) CreateCircleIdentity(name, policy, providerPubkey string
 		return nil, fmt.Errorf("%w: circle policy must be %q or %q", constants.ErrInvalidParams,
 			db.CirclePolicyFollowing, db.CirclePolicyAllowlist)
 	}
-	// providerPubkey is optional (allowlist-policy identities commonly leave
-	// it empty), but when set it must be a well-formed 64-char lowercase-hex
+	// NIP-CW §Data Model: a following circle records the provider pubkey it
+	// follows. Without one, it admits nobody and can never be fixed in place.
+	if policy == db.CirclePolicyFollowing && providerPubkey == "" {
+		return nil, fmt.Errorf("%w: a following circle needs the provider_pubkey whose follow list it admits", constants.ErrInvalidParams)
+	}
+	// providerPubkey is optional for an allowlist circle, but when set it
+	// must be a well-formed 64-char lowercase-hex
 	// Nostr pubkey — the same format every other circle write path
 	// (ReplaceCircleAllowlist, RemoveCircleAllowedPubkey,
 	// create_circle_wallet_controller.go) already enforces, so a malformed
