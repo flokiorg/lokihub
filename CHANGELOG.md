@@ -308,6 +308,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Fixes a Circle Wallet's receive cap: invoices it has issued and that can
   still be paid now count toward the cap, and concurrent `make_invoice`
   requests can no longer each pass the check.
+- Refuses a `cash_secret` supplied by the caller when minting, over NWC and the
+  admin API, instead of silently replacing it with a Hub-generated one.
 
 ## [0.4.0]
 
