@@ -303,6 +303,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Fixes a following-policy Circle Hub refusing real members as "not
   authorized" when its relays had not yet returned the provider's follow
   list: it now answers `NOT_READY` until the list is fetched.
+- Fixes Circle Hubs created from lokihub's own UI leaving the
+  `circle_wallet` block out of `get_info`: every Circle Hub now includes it.
 
 ## [0.4.0]
 

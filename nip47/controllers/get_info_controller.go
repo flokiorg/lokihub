@@ -117,23 +117,25 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 
 			responsePayload.Metadata = metadata
 		}
+	}
 
-		// For circle_hub apps, expose terms so callers can discover the wallet policy.
-		if app.Kind == db.AppKindCircleHub {
-			balance := queries.GetIsolatedBalance(controller.db, app.ID)
-			commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
-			available := balance - commitment
-			if available < 0 {
-				available = 0
-			}
-			providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
-			if err == nil {
-				responsePayload.CircleWallet = &circleWalletInfo{
-					AvailableMillis: available,
-					MaxExpSecs:      providerConfig.MaxExpSecs,
-					FeesPpm:         providerConfig.FeesPpm,
-					CirclePolicy:    providerConfig.CircleIdentity.Policy,
-				}
+	// A circle_hub always answers with its terms, whatever its scopes: NIP-CW makes
+	// the circle_wallet block what identifies a Hub at all, and hubs created from
+	// lokihub's own UI hold no get_info scope.
+	if app != nil && app.Kind == db.AppKindCircleHub {
+		balance := queries.GetIsolatedBalance(controller.db, app.ID)
+		commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
+		available := balance - commitment
+		if available < 0 {
+			available = 0
+		}
+		providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
+		if err == nil {
+			responsePayload.CircleWallet = &circleWalletInfo{
+				AvailableMillis: available,
+				MaxExpSecs:      providerConfig.MaxExpSecs,
+				FeesPpm:         providerConfig.FeesPpm,
+				CirclePolicy:    providerConfig.CircleIdentity.Policy,
 			}
 		}
 	}
