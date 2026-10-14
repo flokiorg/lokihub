@@ -314,6 +314,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   the slice, so a refused request no longer reveals the slice's balance.
 - Refuses bill methods on the standard NWC transport with `NOT_IMPLEMENTED`
   whatever the connection's scopes or expiry, as NIP-CASH requires.
+- Refuses a private-envelope padding bucket below 2048 bytes in settings: one
+  that small broke the Hub's private-transport announcement, so it stopped
+  being published.
 
 ## [0.4.0]
 

@@ -148,6 +148,24 @@ func TestSetPrivateEnvelopeLimits_RefusesAboveTheNIP44Ceiling(t *testing.T) {
 	assert.Equal(t, transport.DefaultLimits(), cfg.PrivateEnvelopeLimits())
 }
 
+// NIP-CASH §The Hub Announcement: a Hub MUST NOT announce a pad_bucket_bytes below
+// one maximal item. The stored policy is what gets announced, and the Hub refuses
+// to publish an announcement that breaks the floor, so storing one would silently
+// stop the Hub announcing at all.
+func TestSetPrivateEnvelopeLimits_RefusesPadBelowTheAnnouncementFloor(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, nil)
+
+	bad := transport.DefaultLimits()
+	bad.PadBucketBytes = 1
+	require.Error(t, cfg.SetPrivateEnvelopeLimits(bad))
+	assert.Equal(t, transport.DefaultLimits(), cfg.PrivateEnvelopeLimits(), "nothing was stored")
+}
+
+func TestPrivateEnvelopeLimits_EnvPadBelowTheAnnouncementFloor_FallsBackToDefaults(t *testing.T) {
+	cfg := newEnvelopeTestConfig(t, &AppConfig{PrivateEnvelopePadBucketBytes: 1})
+	assert.Equal(t, transport.DefaultLimits(), cfg.PrivateEnvelopeLimits())
+}
+
 func TestSetPrivateEnvelopeLimits_RefusesIncoherentPolicy(t *testing.T) {
 	cfg := newEnvelopeTestConfig(t, nil)
 

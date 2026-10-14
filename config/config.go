@@ -810,7 +810,10 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 		MaxConsolidateSources: cfg.privateEnvelopeInt(privateEnvelopeMaxConsolidateKey, env.PrivateEnvelopeMaxConsolidateSources, defaultSources),
 	}
 
-	if err := limits.Validate(); err != nil {
+	// ValidateAnnounced, not just Validate: this policy is what the hub announces,
+	// and an announcement below the padding floor fails the hub's own check, so it
+	// would stop announcing altogether.
+	if err := limits.ValidateAnnounced(); err != nil {
 		logger.Logger.Error().Err(err).
 			Interface("limits", limits).
 			Msg("Stored private envelope limits are invalid; falling back to defaults")
@@ -850,7 +853,7 @@ func (cfg *config) privateEnvelopeInt(key string, envValue, defaultValue int) in
 // SetTrustedNwcRelay, because the limits are read per request rather than baked
 // into the subscription shape.
 func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
-	if err := limits.Validate(); err != nil {
+	if err := limits.ValidateAnnounced(); err != nil {
 		return fmt.Errorf("refusing to store an invalid private envelope policy: %w", err)
 	}
 
