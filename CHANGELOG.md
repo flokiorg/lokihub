@@ -305,6 +305,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   list: it now answers `NOT_READY` until the list is fetched.
 - Fixes Circle Hubs created from lokihub's own UI leaving the
   `circle_wallet` block out of `get_info`: every Circle Hub now includes it.
+- Fixes a Circle Wallet's receive cap: invoices it has issued and that can
+  still be paid now count toward the cap, and concurrent `make_invoice`
+  requests can no longer each pass the check.
 
 ## [0.4.0]
 
