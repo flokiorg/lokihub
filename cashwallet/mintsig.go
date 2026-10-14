@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lokicash"
@@ -51,11 +52,10 @@ const mintSigRawLen = 65
 // encodeCashToken builds a lokicash token for a freshly-created wallet, attaching the
 // mint provenance already obtained by MintProvenance.
 //
-// Pure and infallible-by-contract: it never returns an error because a token is
-// metadata layered over PairingURI (always sufficient on its own), and by this point
-// funds have moved, so an error return would tell the caller creation failed when it
-// succeeded. Everything that CAN genuinely fail — the node signature — happened before
-// the money did.
+// It can fail (a relay URL or label too long for the format, no usable relay), so
+// every caller encodes BEFORE moving funds and fails the operation on an error:
+// NIP-CASH forbids returning an empty token, and a refusal must cost the caller
+// nothing.
 //
 // amountMillis is the wallet's total committed amount, the value mintSig attests.
 // hubPubkey is the issuing Hub app's own pubkey. It is hashed and truncated into
@@ -68,7 +68,7 @@ const mintSigRawLen = 65
 // fingerprint is ungrouped, which is correct and merely inconvenient, whereas a
 // fingerprint every Hub shares would group bills across Hubs and guarantee the
 // refusal this exists to avoid.
-func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) string {
+func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) (string, error) {
 	amt := amountMillis
 	var hubGroup []byte
 	if hubPubkey != "" {
@@ -84,11 +84,18 @@ func encodeCashToken(walletPubkey, secret string, relayURLs []string, identityRe
 		AttestedAmount:   &amt,
 		HubGroup:         hubGroup,
 	}
-	token, err := lokicash.Encode(tok)
-	if err != nil {
-		logger.Logger.Error().Err(err).Str("wallet_pubkey", walletPubkey).
-			Msg("Failed to encode lokicash token for already-funded Cash wallet")
-		return ""
+	return lokicash.Encode(tok)
+}
+
+// storeCashToken persists a freshly issued bill's token verbatim, so the archive
+// keeps the exact string the bill was issued with once it is destroyed
+// (db.App.CashToken). Re-deriving it later is not equivalent: the token embeds the
+// relay hints in effect right now, and config can change. Best-effort: a bill
+// that is otherwise fully minted and funded must not fail over its own audit copy.
+func storeCashToken(deps Deps, walletAppID uint, token string) {
+	if err := deps.DB.Model(&db.App{}).Where("id = ?", walletAppID).
+		Update("cash_token", token).Error; err != nil {
+		logger.Logger.Warn().Err(err).Uint("cash_wallet_id", walletAppID).
+			Msg("Failed to store Cash bill token for the audit archive")
 	}
-	return token
 }

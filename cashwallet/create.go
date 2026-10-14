@@ -698,6 +698,13 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	if err != nil {
 		return nil, fmt.Errorf("refusing to mint a bill without provenance: %w", err)
 	}
+	// The token too, for the same reason: it can fail (a relay URL too long for the
+	// format, say), and NIP-CASH forbids returning an empty one, so it must fail here,
+	// while nothing has moved.
+	lokicashToken, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum, resolved.HubApp.AppPubkey)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to mint a bill whose token cannot be encoded: %w", err)
+	}
 
 	// Transfer funds from Cash Hub to Cash wallet. This is the one genuinely
 	// irreversible step in this function, which is why it happens last: by
@@ -727,29 +734,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		recipientResults[i] = result
 	}
 
-	// walletPubkey and pairingSecretKey are both derived internally (never
-	// user input), so lokicash.Encode can't fail on them in practice. Funds
-	// have already moved (fundsTransferred, above) by this point, so even a
-	// defensive failure here must not turn into an error return — that would
-	// tell the caller wallet creation failed when it actually succeeded,
-	// leaving a funded wallet the caller doesn't know exists. Degrade to an
-	// empty token instead; PairingURI alone is still a fully functional
-	// connection string.
-	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum, resolved.HubApp.AppPubkey)
-
-	// Persist the token verbatim so the archive can keep the exact string this
-	// bill was issued with once it is destroyed (db.App.CashToken). Re-deriving
-	// it later is not equivalent: the token embeds the relay hints in effect
-	// right now, and config can change. Best-effort — a bill that is otherwise
-	// fully minted and funded must not fail over its own audit copy.
-	if lokicashToken != "" {
-		if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
-			Update("cash_token", lokicashToken).Error; err != nil {
-			logger.Logger.Warn().Err(err).
-				Uint("cash_wallet_id", newApp.ID).
-				Msg("Failed to store Cash bill token for the audit archive")
-		}
-	}
+	storeCashToken(deps, newApp.ID, lokicashToken)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).
@@ -849,6 +834,17 @@ type SplitResult struct {
 // Split itself never touches the source wallet's CashWalletClaim rows, only
 // its balance.
 func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, error) {
+	prepared, err := prepareSplit(ctx, deps, params)
+	if err != nil {
+		return nil, err
+	}
+	return prepared.fund(ctx, deps)
+}
+
+// prepareSplit does everything Split does short of moving funds, so a caller
+// splitting into several bills can have every one signed before any is funded.
+// On error nothing is left behind.
+func prepareSplit(ctx context.Context, deps Deps, params SplitParams) (prepared *preparedSplit, err error) {
 	newApp, _, err := deps.AppsService.CreateApp(
 		apps.GenerateChildName(params.HubApp.Name, params.NewIdentityValue),
 		"", // generate a temporary random keypair; overridden immediately below
@@ -865,14 +861,12 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 		return nil, fmt.Errorf("failed to create split-off Cash wallet app: %w", err)
 	}
 
-	// Same reversible-until-funded shape as Commit: everything below is
-	// undone by deleting newApp unless the transfer at the very end succeeds.
-	fundsTransferred := false
+	// Same reversible-until-funded shape as Commit: on any error below, the bill
+	// is deleted; on success the caller funds or abandons it.
 	defer func() {
-		if fundsTransferred {
-			return
+		if err != nil {
+			_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
 		}
-		_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
 	}()
 
 	pairingSecretKey, err := deps.Keys.GetCashPairingKey(newApp.ID)
@@ -912,37 +906,53 @@ func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, er
 	if err != nil {
 		return nil, fmt.Errorf("refusing to split off a bill without provenance: %w", err)
 	}
+	lokicashToken, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki, params.HubApp.AppPubkey)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to split off a bill whose token cannot be encoded: %w", err)
+	}
 
-	// The one irreversible step, done last for the same reason Commit does:
-	// once funds move, nothing after this can fail and leave the new wallet
-	// stranded or invisible. Pays from SourceWalletApp (an isolated-balance
-	// cash_wallet), not HubApp — validateCanPay's isolated-balance check and
-	// enforceCashFullDrain both key off the PAYING app, and internal_transfer
-	// metadata (stripped at every external NWC entry point) exempts this
-	// privileged, Go-level-only transfer from both the full-drain guard and
-	// the pay_invoice-scope requirement a cash_wallet's real NWC connection
-	// deliberately never has.
-	if err := fundInternal(ctx, deps, params.SourceWalletApp.ID, newApp.ID, params.AmountMloki, "cash split"); err != nil {
+	return &preparedSplit{app: newApp, token: lokicashToken, params: params}, nil
+}
+
+// preparedSplit is a split-off bill that exists, is signed and has its token, but
+// holds no funds yet: fund it, or abandon it.
+type preparedSplit struct {
+	app    *db.App
+	token  string
+	params SplitParams
+}
+
+// abandon deletes a prepared bill that will not be funded.
+func (p *preparedSplit) abandon(deps Deps) {
+	_ = deps.AppsService.DeleteCashBill(p.app, db.CashBillOutcomeVoid)
+}
+
+// fund is the one irreversible step, done last for the same reason Commit does:
+// once funds move, nothing after this can fail and leave the new wallet stranded
+// or invisible. Pays from SourceWalletApp (an isolated-balance cash_wallet), not
+// HubApp — validateCanPay's isolated-balance check and enforceCashFullDrain both
+// key off the PAYING app, and internal_transfer metadata (stripped at every
+// external NWC entry point) exempts this privileged, Go-level-only transfer from
+// both the full-drain guard and the pay_invoice-scope requirement a cash_wallet's
+// real NWC connection deliberately never has.
+func (p *preparedSplit) fund(ctx context.Context, deps Deps) (*SplitResult, error) {
+	if err := fundInternal(ctx, deps, p.params.SourceWalletApp.ID, p.app.ID, p.params.AmountMloki, "cash split"); err != nil {
+		p.abandon(deps)
 		return nil, fmt.Errorf("failed to fund split-off Cash wallet via transfer: %w", err)
 	}
-	fundsTransferred = true
 
-	// Encoding only — everything fallible already happened above the transfer. A
-	// defensive encode failure still must not become an error return: funds have
-	// moved, and saying the split failed would leave a funded wallet the caller does
-	// not know exists (recoverable via the admin API either way).
-	lokicashToken := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki, params.HubApp.AppPubkey)
+	storeCashToken(deps, p.app.ID, p.token)
 
 	logger.Logger.Info().
-		Uint("cash_wallet_id", newApp.ID).
-		Uint("parent_app_id", params.HubApp.ID).
-		Uint("source_wallet_id", params.SourceWalletApp.ID).
-		Uint64("amount_mloki", params.AmountMloki).
+		Uint("cash_wallet_id", p.app.ID).
+		Uint("parent_app_id", p.params.HubApp.ID).
+		Uint("source_wallet_id", p.params.SourceWalletApp.ID).
+		Uint64("amount_mloki", p.params.AmountMloki).
 		Msg("Slice split off into a new dedicated Cash wallet")
 
 	return &SplitResult{
-		WalletApp: newApp,
-		CashToken: lokicashToken,
+		WalletApp: p.app,
+		CashToken: p.token,
 	}, nil
 }
 
