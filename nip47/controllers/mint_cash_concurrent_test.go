@@ -19,8 +19,7 @@ import (
 
 // TestHandleMintCashEvent_ConcurrentCreation_ExactlyOneSucceeds is a
 // regression test for cashwallet.LockHub: mint_cash previously had no
-// concurrency guard at all (unlike create_circle_wallet's
-// activeCircleInvoices), so two concurrent requests against the same cash_hub
+// concurrency guard at all, so two concurrent requests against the same cash_hub
 // could both pass cashwallet.Resolve's balance pre-check against the same
 // stale balance before either one's Commit actually transferred funds out -
 // a real TOCTOU gap between the pre-check and the transfer, only
