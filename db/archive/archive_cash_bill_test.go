@@ -54,6 +54,7 @@ func newCashBill(t *testing.T, gormDB *gorm.DB, hub *db.App, fundedMloki int64, 
 	pubkey := randomHex32(t)
 	bill := db.App{
 		Name:         "bill-" + pubkey[:8],
+		AppPubkey:    randomHex32(t),
 		Kind:         db.AppKindCashWallet,
 		ParentAppID:  &hub.ID,
 		ParentKind:   db.ParentKindCash,
@@ -122,6 +123,8 @@ func TestArchiveAndDeleteCashBillTx_RoundTrip(t *testing.T) {
 	require.NoError(t, gormDB.Where("wallet_app_id = ?", bill.ID).First(&archived).Error)
 	assert.Equal(t, hub.ID, archived.HubAppID)
 	assert.Equal(t, *bill.WalletPubkey, archived.WalletPubkey)
+	assert.NotEmpty(t, archived.ConnectionPubkey)
+	assert.Equal(t, bill.AppPubkey, archived.ConnectionPubkey, "the tombstone holder check compares against it")
 	assert.Equal(t, db.CashBillOutcomeExpired, archived.Outcome)
 	assert.EqualValues(t, 5000, archived.TotalMloki, "sum of the archived slices")
 	assert.EqualValues(t, 5000, archived.FundedMloki, "settled incoming, read before the cascade")

@@ -549,6 +549,12 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			Str("bolt11", payReq).
 			Msg("Failed to send payment")
 
+		// The payment may still settle, so the row stays PENDING and the node's
+		// payment subscription settles or fails it later.
+		if errors.Is(rpcErr, lnclient.ErrPaymentPending) {
+			return nil, rpcErr
+		}
+
 		var failedTransaction *db.Transaction
 		dbErr := svc.db.Transaction(func(tx *gorm.DB) error {
 			var markErr error

@@ -2,8 +2,12 @@ package nip47
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -169,6 +173,11 @@ func (svc *nip47Service) ServePrivateItem(
 		if !item.HasProof() && !item.IsBearer() {
 			code, message = constants.ERROR_BAD_REQUEST,
 				"this item carries no slice proof, and this bill is identity-bound"
+			if billIsCashMode {
+				message = "this item carries neither a slice proof nor a cash secret"
+			}
+		} else if !item.HasProof() && billIsCashMode {
+			message = "no slice of this bill matches this cash secret"
 		}
 		return transport.Result{
 			ID:         item.ID,
@@ -286,29 +295,15 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// Gate 2, using db.RetentionWindowOpen rather than a local comparison so this
 	// path and the relay gate agree exactly at the boundary — they did not when each
 	// wrote the comparison itself.
-	retainedUntil, ok := db.SpentBillRetainedUntil(svc.db, item.Target)
+	tombstone, ok := db.SpentBillTombstoneFor(svc.db, item.Target)
+	retainedUntil := tombstone.RetainedUntil
 	if !ok || !db.RetentionWindowOpen(retainedUntil, time.Now()) {
 		return transport.Result{}, false
 	}
 
-	var bill db.CashBillArchive
-	if err := svc.db.Where("wallet_pubkey = ?", item.Target).First(&bill).Error; err != nil {
-		return transport.Result{}, false
-	}
-
-	// Gate 3.
-	pairingKey, err := svc.keys.GetCashPairingKey(bill.WalletAppID)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Uint("walletAppId", bill.WalletAppID).
-			Msg("Failed to derive a spent bill's pairing key")
-		return transport.Result{}, false
-	}
-	expectedPubkey, err := nostr.GetPublicKey(pairingKey)
-	if err != nil {
-		return transport.Result{}, false
-	}
-	if !billProofHolder(signer, expectedPubkey) {
+	// Gate 3, against the pubkey stored at archive time: deriving it here cost
+	// enough to tell a recently destroyed bill from one never served.
+	if tombstone.ConnectionPubkey == "" || !billProofHolder(signer, tombstone.ConnectionPubkey) {
 		return transport.Result{}, false
 	}
 
@@ -337,7 +332,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 // wantPubkey is db.App.AppPubkey for a live bill, which is the deterministic
 // pairing pubkey derived from the bill's app id (cashwallet.Create) — i.e. exactly
 // the pubkey of the connection secret inside the bill's token. For a destroyed bill
-// the same pubkey is re-derived from the archive; see tryPrivateSpentBill.
+// the same pubkey is read from the archive; see tryPrivateSpentBill.
 //
 // The KIND matters as much as the signature. A slice proof binds to the same six
 // fields, so accepting either kind here would let anyone who can sign anything
@@ -453,6 +448,30 @@ func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.
 	return "", false
 }
 
+// cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
+// behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
+func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) bool {
+	var params struct {
+		CashSecret string `json:"cash_secret"`
+	}
+	if err := json.Unmarshal(item.Params, &params); err != nil {
+		return false
+	}
+	secret, err := hex.DecodeString(params.CashSecret)
+	if err != nil || len(secret) == 0 {
+		return false
+	}
+	sum := sha256.Sum256(secret)
+	commitment := []byte(hex.EncodeToString(sum[:]))
+	for _, claim := range claims {
+		if claim.IdentityType == db.CashIdentityCash &&
+			subtle.ConstantTimeCompare(commitment, []byte(strings.ToLower(claim.IdentityValue))) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // privateItemIsAuthorized checks one item's authorization against the bill it names, and
 // reports WHO it authorized.
 //
@@ -498,7 +517,11 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// A length check read that as a proof present-but-unverifiable, so every
 		// proofless bearer item was refused and cash-mode bills could not be served
 		// over this transport at all.
-		return "", billIsCashMode, billIsCashMode
+		//
+		// The secret must also match one of this bill's cash-mode slices (NIP-CASH
+		// §Bearer Items). Not every controller checks it — cash_status never did — so it
+		// is checked here, once, for every method.
+		return "", billIsCashMode, billIsCashMode && cashSecretMatchesBill(item, claims)
 	}
 
 	paramsHash, err := transport.CanonicalParamsHash(item.Params)

@@ -368,7 +368,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		Int("eventKind", event.Kind).
 		Uint("appId", app.ID).
 		Str("method", nip47Request.Method).
-		Interface("params", nip47Request.Params).
 		Msg("Handling NIP-47 request")
 
 	// cash_wallet apps carve out get_budget from the system-wide always-granted

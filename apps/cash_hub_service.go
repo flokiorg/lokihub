@@ -353,7 +353,48 @@ func (svc *appsService) UnclaimCashSlice(walletAppID uint, identityType, identit
 	return svc.db.Model(&db.CashWalletClaim{}).
 		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL",
 			walletAppID, identityType, identityValue).
-		Update("claimed_at", nil).Error
+		Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""}).Error
+}
+
+func (svc *appsService) SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error {
+	return svc.db.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
+			walletAppID, identityType, identityValue, "").
+		Update("payment_hash", paymentHash).Error
+}
+
+// ReleaseCashSliceForFailedPayment is how a slice comes back after cash_redeem
+// had to keep it claimed because its payment's outcome was unknown. The ledger
+// must show that payment FAILED and nothing pending or settled under its hash,
+// so a payout that went through is never reopened.
+func (svc *appsService) ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (bool, error) {
+	if paymentHash == "" {
+		return false, nil
+	}
+	var released int64
+	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		var failed, live int64
+		ledger := func() *gorm.DB {
+			return tx.Model(&db.Transaction{}).Where("app_id = ? AND type = ? AND payment_hash = ?",
+				walletAppID, constants.TRANSACTION_TYPE_OUTGOING, paymentHash)
+		}
+		if err := ledger().Where("state = ?", constants.TRANSACTION_STATE_FAILED).Count(&failed).Error; err != nil {
+			return err
+		}
+		if err := ledger().Where("state IN ?", []string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_SETTLED}).Count(&live).Error; err != nil {
+			return err
+		}
+		if failed == 0 || live > 0 {
+			return nil
+		}
+		result := tx.Model(&db.CashWalletClaim{}).
+			Where("wallet_app_id = ? AND payment_hash = ? AND preimage = ? AND claimed_at IS NOT NULL",
+				walletAppID, paymentHash, "").
+			Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""})
+		released = result.RowsAffected
+		return result.Error
+	})
+	return released > 0, err
 }
 
 // ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
@@ -557,8 +598,8 @@ func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, 
 // instead of reaching here.
 func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error {
 	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
-			walletAppID, identityType, identityValue, "").
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash IN ?",
+			walletAppID, identityType, identityValue, []string{"", payment.PaymentHash}).
 		Updates(map[string]interface{}{
 			"payment_hash":      payment.PaymentHash,
 			"preimage":          payment.Preimage,
