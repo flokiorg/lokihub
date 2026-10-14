@@ -64,6 +64,8 @@ type TransactionsService interface {
 	SetLiquidityManager(lm *manager.LiquidityManager)
 	EstimateFee(payReq string) (uint64, error)
 	SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient)
+	ReconcilePendingCashRedeems(ctx context.Context, lnClient lnclient.LNClient) int
+	PendingCashRedeems() ([]db.Transaction, error)
 }
 
 const (
@@ -968,6 +970,100 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 }
 
 const stalePendingTTL = 48 * time.Hour
+
+// isCashRedeemPayout reports whether t is a cash_redeem payout, which
+// cash_redeem_controller.go marks with cash_claim_slice.
+func isCashRedeemPayout(t *db.Transaction) bool {
+	var metadata map[string]interface{}
+	if len(t.Metadata) == 0 || json.Unmarshal(t.Metadata, &metadata) != nil {
+		return false
+	}
+	isCashRedeem, _ := metadata["cash_claim_slice"].(bool)
+	return isCashRedeem
+}
+
+// PendingCashRedeems returns the cash_redeem payouts still PENDING.
+func (svc *transactionsService) PendingCashRedeems() ([]db.Transaction, error) {
+	var pending []db.Transaction
+	if err := svc.db.Where("type = ? AND state = ?",
+		constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING).Find(&pending).Error; err != nil {
+		return nil, err
+	}
+	redeems := pending[:0]
+	for _, t := range pending {
+		if isCashRedeemPayout(&t) {
+			redeems = append(redeems, t)
+		}
+	}
+	return redeems, nil
+}
+
+// ReconcilePendingCashRedeems asks the node about every cash_redeem payout
+// still PENDING — one whose outcome the node could not report when it was paid,
+// so its slice stayed claimed — and settles or fails it. A failure releases the
+// slice through the nwc_payment_failed event; an outcome still unknown is left
+// alone. Returns how many stay unresolved.
+//
+// Needed because the node's payment subscription only reports outcomes that
+// happen while lokihub is running: one reached during a restart is never sent.
+func (svc *transactionsService) ReconcilePendingCashRedeems(ctx context.Context, lnClient lnclient.LNClient) int {
+	pending, err := svc.PendingCashRedeems()
+	if err != nil {
+		svc.logger.Error().Err(err).Msg("Failed to list pending cash_redeem payouts")
+		return 0
+	}
+	looker, canLookUp := lnClient.(lnclient.PaymentLooker)
+
+	unresolved := 0
+	for i := range pending {
+		payout := &pending[i]
+		if !canLookUp {
+			unresolved++
+			continue
+		}
+		lookup, lookupErr := looker.LookupPayment(ctx, payout.PaymentHash)
+		if lookupErr != nil || lookup.Status == lnclient.PaymentStatusInFlight {
+			unresolved++
+			continue
+		}
+
+		var dbErr error
+		switch lookup.Status {
+		case lnclient.PaymentStatusSucceeded:
+			var settled *db.Transaction
+			dbErr = svc.db.Transaction(func(tx *gorm.DB) error {
+				var txErr error
+				settled, txErr = svc.markTransactionSettled(tx, payout, lookup.Preimage, lookup.FeeMloki, false)
+				return txErr
+			})
+			if dbErr == nil && settled != nil {
+				svc.publishSettleEvent(settled)
+			}
+		case lnclient.PaymentStatusFailed:
+			reason := lookup.FailureReason
+			if reason == "" {
+				reason = "the node has no record of this payment"
+			}
+			dbErr = svc.db.Transaction(func(tx *gorm.DB) error {
+				_, txErr := svc.markPaymentFailed(tx, payout, reason)
+				return txErr
+			})
+		case lnclient.PaymentStatusInFlight:
+			// Counted as unresolved before the switch.
+		}
+		if dbErr != nil {
+			svc.logger.Error().Err(dbErr).Str("payment_hash", payout.PaymentHash).
+				Msg("Failed to record a reconciled cash_redeem payout")
+			unresolved++
+		}
+	}
+
+	if unresolved > 0 {
+		svc.logger.Warn().Int("unresolved", unresolved).
+			Msg("Some cash_redeem payouts still have no known outcome; their slices stay claimed")
+	}
+	return unresolved
+}
 
 // SweepStalePendingOutgoing cancels outgoing payments that have been stuck in
 // PENDING state for longer than stalePendingTTL (2× the practical HTLC expiry

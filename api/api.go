@@ -1591,6 +1591,11 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 		EstimatedWireBytes:      privateEnvelope.EstimatedWireBytes(),
 		MaxConsolidateItemBytes: transport.EstimatedConsolidateItemBytes(privateEnvelope.MaxConsolidateSources),
 	}
+	if transactionsSvc := api.svc.GetTransactionsService(); transactionsSvc != nil {
+		if pending, err := transactionsSvc.PendingCashRedeems(); err == nil {
+			info.PendingCashRedeems = len(pending)
+		}
+	}
 	privateTransportStatus := api.svc.GetPrivateTransportStatus()
 	info.PrivateTransport = PrivateTransportInfo{
 		NodeIdentity:      privateTransportStatus.NodeIdentity,

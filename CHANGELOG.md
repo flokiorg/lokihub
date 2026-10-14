@@ -321,6 +321,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - The Cash Hub bills list warns that a destroyed bill's token still answers
   `cash_status` until its retention window ends, so it should be treated as
   live until then.
+- Resolves `cash_redeem` payouts whose outcome arrived while lokihub was
+  down: at startup and periodically the node is asked, a failed payout
+  releases its slice, and the node info reports how many are still pending.
 
 ## [0.4.0]
 

@@ -978,17 +978,20 @@ type InfoResponse struct {
 	TrustedNwcRelay             bool                 `json:"trustedNwcRelay"`
 	PrivateEnvelope             PrivateEnvelopeInfo  `json:"privateEnvelope"`
 	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
-	SearchRelay                 string               `json:"searchRelay"`
-	NodeAlias                   string               `json:"nodeAlias"`
-	MempoolUrl                  string               `json:"mempoolUrl"`
-	LSPs                        []LSPInfo            `json:"lsps"`
-	LokihubServicesURL          string               `json:"lokihubServicesURL"`
-	SwapServiceUrl              string               `json:"swapServiceUrl"`
-	MessageboardNwcUrl          string               `json:"messageboardNwcUrl"`
-	EnableSwap                  bool                 `json:"enableSwap"`
-	EnableMessageboardNwc       bool                 `json:"enableMessageboardNwc"`
-	WorkDir                     string               `json:"workDir"`
-	EnablePolling               bool                 `json:"enablePolling"`
+	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
+	// yet; each one's slice stays claimed until it settles or fails.
+	PendingCashRedeems    int       `json:"pendingCashRedeems"`
+	SearchRelay           string    `json:"searchRelay"`
+	NodeAlias             string    `json:"nodeAlias"`
+	MempoolUrl            string    `json:"mempoolUrl"`
+	LSPs                  []LSPInfo `json:"lsps"`
+	LokihubServicesURL    string    `json:"lokihubServicesURL"`
+	SwapServiceUrl        string    `json:"swapServiceUrl"`
+	MessageboardNwcUrl    string    `json:"messageboardNwcUrl"`
+	EnableSwap            bool      `json:"enableSwap"`
+	EnableMessageboardNwc bool      `json:"enableMessageboardNwc"`
+	WorkDir               string    `json:"workDir"`
+	EnablePolling         bool      `json:"enablePolling"`
 }
 
 // RedactForUnauthenticated strips fields that let an unauthenticated caller
