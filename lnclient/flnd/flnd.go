@@ -17,6 +17,7 @@ import (
 
 	"github.com/flokiorg/go-flokicoin/chaincfg/chainhash"
 	"github.com/flokiorg/lokihub/decodepay"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/flokiorg/flnd/lnrpc"
@@ -517,13 +518,13 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 	payStream, err := svc.client.SendPayment(svc.ctx, sendRequest)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("SendPayment failed")
-		return nil, err
+		return svc.lookupPaymentAfterError(paymentRequest.PaymentHash, err)
 	}
 
 	resp, err := svc.getPaymentResult(payStream)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("bolt11", payReq).Msg("Couldn't get response from paystream")
-		return nil, err
+		return svc.lookupPaymentAfterError(paymentRequest.PaymentHash, err)
 	}
 
 	if resp.Status != lnrpc.Payment_SUCCEEDED {
@@ -537,7 +538,7 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 
 	if resp.PaymentPreimage == "" {
 		logger.Logger.Error().Str("bolt11", payReq).Msg("No payment preimage in response")
-		return nil, errors.New("no preimage in response")
+		return nil, fmt.Errorf("%w: no preimage in response", lnclient.ErrPaymentPending)
 	}
 
 	return &lnclient.PayInvoiceResponse{
@@ -639,6 +640,44 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 	return &lnclient.PayKeysendResponse{
 		Fee: uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
 	}, nil
+}
+
+// lookupPaymentAfterError asks the node for a payment's state by hash after
+// the call or stream that was reporting it failed. The HTLC may still be in
+// flight then, so a failure is returned only when the node says the payment
+// failed or never started; anything else wraps lnclient.ErrPaymentPending.
+func (svc *FLNDService) lookupPaymentAfterError(paymentHash string, callErr error) (*lnclient.PayInvoiceResponse, error) {
+	pending := fmt.Errorf("%w: %w", lnclient.ErrPaymentPending, callErr)
+	hash, err := hex.DecodeString(paymentHash)
+	if err != nil {
+		return nil, pending
+	}
+
+	ctx, cancel := context.WithTimeout(svc.ctx, 10*time.Second)
+	defer cancel()
+	var payment *lnrpc.Payment
+	stream, err := svc.client.SubscribePayment(ctx, &routerrpc.TrackPaymentRequest{PaymentHash: hash})
+	if err == nil {
+		payment, err = stream.Recv()
+	}
+	if status.Code(err) == codes.NotFound {
+		return nil, callErr
+	}
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("payment_hash", paymentHash).Msg("Payment lookup failed, outcome unknown")
+		return nil, pending
+	}
+
+	switch {
+	case payment.Status == lnrpc.Payment_SUCCEEDED && payment.PaymentPreimage != "":
+		return &lnclient.PayInvoiceResponse{
+			Preimage: payment.PaymentPreimage,
+			Fee:      uint64(payment.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
+		}, nil
+	case payment.Status == lnrpc.Payment_FAILED:
+		return nil, errors.New(payment.FailureReason.String())
+	}
+	return nil, pending
 }
 
 func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {

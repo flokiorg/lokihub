@@ -228,6 +228,14 @@ type AppsService interface {
 	// SetCashSliceSplitTarget, and equally informational. Call only after
 	// SendPaymentSync has returned a settled transaction.
 	SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error
+	// SetCashSliceRedeemPaymentHash records, on a claimed slice, the hash of the
+	// payment about to redeem it, so ReleaseCashSliceForFailedPayment can find
+	// the slice again if that payment's outcome is only learned later.
+	SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error
+	// ReleaseCashSliceForFailedPayment reopens a slice whose redeem payment has
+	// definitely failed. A no-op unless walletAppID has a claimed slice whose
+	// payment carries paymentHash and recorded no preimage.
+	ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (released bool, err error)
 	// DeleteCashBill archives a cash bill's history and hard-deletes it in one
 	// transaction, then publishes nwc_app_deleted. This is the ONLY way to
 	// delete a cash_wallet — DeleteApp refuses that kind — so no delete path

@@ -274,6 +274,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   threshold that assumed full speed, independent of any real regression.
 - A backend outage after the app had loaded showed the "Critical Error"
   card twice, stacked on the same page.
+- Fixes `cash_redeem` when the node can't report a payment's outcome: the
+  slice now stays claimed until the payment settles or fails, instead of
+  being released at once.
 
 ## [0.4.0]
 
