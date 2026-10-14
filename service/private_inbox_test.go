@@ -25,6 +25,8 @@ import (
 type scriptedRelay struct {
 	url  string
 	reqs chan nostr.Filter
+	// published receives every event a client publishes, in order.
+	published chan *nostr.Event
 
 	mu    sync.Mutex
 	conns map[*relayConn]bool
@@ -46,7 +48,7 @@ func (c *relayConn) send(msg ...any) {
 
 func newScriptedRelay(t *testing.T) *scriptedRelay {
 	t.Helper()
-	r := &scriptedRelay{reqs: make(chan nostr.Filter, 64), conns: map[*relayConn]bool{}}
+	r := &scriptedRelay{reqs: make(chan nostr.Filter, 64), published: make(chan *nostr.Event, 64), conns: map[*relayConn]bool{}}
 	upgrader := websocket.Upgrader{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ws, err := upgrader.Upgrade(w, req, nil)
@@ -106,6 +108,10 @@ func (r *scriptedRelay) handle(c *relayConn, data []byte) {
 			return
 		}
 		c.send("OK", event.ID, true, "")
+		select {
+		case r.published <- &event:
+		default:
+		}
 		r.deliver(&event)
 	}
 }
