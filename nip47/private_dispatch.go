@@ -2,8 +2,12 @@ package nip47
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -169,6 +173,11 @@ func (svc *nip47Service) ServePrivateItem(
 		if !item.HasProof() && !item.IsBearer() {
 			code, message = constants.ERROR_BAD_REQUEST,
 				"this item carries no slice proof, and this bill is identity-bound"
+			if billIsCashMode {
+				message = "this item carries neither a slice proof nor a cash secret"
+			}
+		} else if !item.HasProof() && billIsCashMode {
+			message = "no slice of this bill matches this cash secret"
 		}
 		return transport.Result{
 			ID:         item.ID,
@@ -453,6 +462,30 @@ func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.
 	return "", false
 }
 
+// cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
+// behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
+func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) bool {
+	var params struct {
+		CashSecret string `json:"cash_secret"`
+	}
+	if err := json.Unmarshal(item.Params, &params); err != nil {
+		return false
+	}
+	secret, err := hex.DecodeString(params.CashSecret)
+	if err != nil || len(secret) == 0 {
+		return false
+	}
+	sum := sha256.Sum256(secret)
+	commitment := []byte(hex.EncodeToString(sum[:]))
+	for _, claim := range claims {
+		if claim.IdentityType == db.CashIdentityCash &&
+			subtle.ConstantTimeCompare(commitment, []byte(strings.ToLower(claim.IdentityValue))) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // privateItemIsAuthorized checks one item's authorization against the bill it names, and
 // reports WHO it authorized.
 //
@@ -498,7 +531,11 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// A length check read that as a proof present-but-unverifiable, so every
 		// proofless bearer item was refused and cash-mode bills could not be served
 		// over this transport at all.
-		return "", billIsCashMode, billIsCashMode
+		//
+		// The secret must also match one of this bill's cash-mode slices (NIP-CASH
+		// §Bearer Items). Not every controller checks it — cash_status never did — so it
+		// is checked here, once, for every method.
+		return "", billIsCashMode, billIsCashMode && cashSecretMatchesBill(item, claims)
 	}
 
 	paramsHash, err := transport.CanonicalParamsHash(item.Params)
