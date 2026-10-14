@@ -284,6 +284,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Makes refusing a request for a recently destroyed bill cost the same as
   refusing one for a bill the hub never issued. Bills destroyed before this
   release no longer get a "spent" answer. (#119)
+- Fixes the private-transport inbox going quiet after a relay reconnect: it
+  now resubscribes with its original filter and checks itself with a
+  periodic probe, shown in the node info as `inboxDelivering`. (#119)
 
 ## [0.4.0]
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -68,6 +69,10 @@ type service struct {
 	// read by GetPrivateTransportStatus. A pointer so a read never races a
 	// concurrent update of the whole snapshot.
 	privateTransportStatus atomic.Pointer[PrivateTransportStatus]
+	// privateTransportStatusMu serialises the read-modify-write updates, now
+	// that the inbox's liveness watcher updates the snapshot concurrently with
+	// startup.
+	privateTransportStatusMu sync.Mutex
 }
 
 func NewService(ctx context.Context) (*service, error) {

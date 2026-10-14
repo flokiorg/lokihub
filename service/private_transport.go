@@ -57,6 +57,12 @@ type privateTransport struct {
 	// because these are the expensive rejections — each already cost an ECDH — so
 	// the two numbers answer different operational questions.
 	rejectedEnvelopes atomic.Int64
+
+	// liveness and the probe settings keep the inbox subscription honest; see
+	// watchInboxLiveness. Zero values fall back to the inboxProbe* defaults.
+	liveness      *inboxLiveness
+	probeInterval time.Duration
+	probeTimeout  time.Duration
 }
 
 // PrivateTransportStatus is a point-in-time snapshot of the hub's
@@ -74,6 +80,30 @@ type PrivateTransportStatus struct {
 	// when Announced is true.
 	Error     string
 	UpdatedAt time.Time
+	// InboxDelivering is the last liveness probe's verdict: whether every relay
+	// that accepted a probe to the hub's own inbox delivered it back.
+	// InboxCheckedAt is zero until the first probe.
+	InboxDelivering bool
+	InboxCheckedAt  time.Time
+	// InboxResubscribes counts inbox resubscriptions since startup.
+	InboxResubscribes int
+}
+
+func (svc *service) setPrivateTransportInboxHealth(delivering bool) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.InboxDelivering = delivering
+	status.InboxCheckedAt = time.Now()
+	svc.privateTransportStatus.Store(&status)
+}
+
+func (svc *service) countPrivateTransportResubscribe() {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	status := svc.loadPrivateTransportStatus()
+	status.InboxResubscribes++
+	svc.privateTransportStatus.Store(&status)
 }
 
 // GetPrivateTransportStatus returns the hub's current private-transport
@@ -94,6 +124,8 @@ func (svc *service) loadPrivateTransportStatus() PrivateTransportStatus {
 // it's resolved — before the announcement is attempted — so a failed publish
 // still leaves the identity visible rather than the whole status blank.
 func (svc *service) setPrivateTransportIdentity(nodeXOnly, inboxXOnly string) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
 	status := svc.loadPrivateTransportStatus()
 	status.NodeIdentity = nodeXOnly
 	status.InboxPubkey = inboxXOnly
@@ -101,6 +133,8 @@ func (svc *service) setPrivateTransportIdentity(nodeXOnly, inboxXOnly string) {
 }
 
 func (svc *service) setPrivateTransportAnnounceResult(announcedRelays, totalRelays int, announceErr error) {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
 	status := svc.loadPrivateTransportStatus()
 	status.Announced = announceErr == nil
 	status.AnnouncedRelays = announcedRelays
@@ -358,6 +392,15 @@ func toGoNostrEvent(ev *nmilatnip01.Event) (*nostr.Event, error) {
 // here would otherwise cost a decryption attempt per event.
 func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool *nostr.SimplePool, pt *privateTransport, group *errgroup.Group) error {
 	pt.logDroppedEventsPeriodically(ctx, group)
+	if pt.liveness == nil {
+		pt.liveness = newInboxLiveness()
+	}
+	if pt.probeInterval <= 0 {
+		pt.probeInterval = inboxProbeInterval
+	}
+	if pt.probeTimeout <= 0 {
+		pt.probeTimeout = inboxProbeTimeout
+	}
 
 	filter := nostr.Filter{
 		Kinds: []int{transport.KindPrivateRequest},
@@ -366,18 +409,28 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 
 	for {
 		subCtx, cancelSubscription := context.WithCancel(ctx)
-		eventsChannel := pool.SubscribeMany(subCtx, svc.cfg.GetRelayUrls(), filter)
+		eventsChannel := subscribeInbox(subCtx, pool, svc.cfg.GetRelayUrls(), filter)
+		group.Go(func() error {
+			svc.watchInboxLiveness(subCtx, pool, pt, cancelSubscription)
+			return nil
+		})
 
 		err := svc.watchPrivateSubscription(subCtx, pool, eventsChannel, pt, group)
 		cancelSubscription()
-
-		if err != nil && ctx.Err() == nil {
-			logger.Logger.Error().Err(err).
-				Msg("got an error from the relay while listening to the private transport subscription, resubscribing")
-			time.Sleep(3 * time.Second)
-			continue
+		if ctx.Err() != nil {
+			return nil
 		}
-		return nil
+
+		// Every other end resubscribes: the stream closing, or the liveness
+		// probe finding the inbox deaf. Returning here left the inbox
+		// unsubscribed until the next restart.
+		svc.countPrivateTransportResubscribe()
+		logger.Logger.Error().Err(err).Msg("Private transport subscription ended, resubscribing")
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(3 * time.Second):
+		}
 	}
 }
 
@@ -388,7 +441,7 @@ func (svc *service) startPrivateTransportSubscription(ctx context.Context, pool 
 // Note there is deliberately no `since` on the filter and none may be added: a
 // wrapped event's created_at is randomised up to two days into the past, so a
 // `since` would silently drop a fraction of legitimate traffic.
-func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
+func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.SimplePool, eventsChannel <-chan nostr.RelayEvent, pt *privateTransport, group *errgroup.Group) error {
 	// Closed exactly once, by the drain goroutine below, on every exit path —
 	// including ctx cancellation. That used to not be true: the drain
 	// goroutine `return`ed directly on ctx.Done() without ever reaching its
@@ -408,6 +461,9 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.Si
 				// per-relay goroutine notices this same ctx is done — see
 				// SimplePool.subMany), so the `defer` above always fires
 				// instead of racing this function's caller.
+				continue
+			}
+			if pt.liveness != nil && pt.liveness.observe(event) {
 				continue
 			}
 			if !pt.acceptsPrivateEvent(event.Event) {
