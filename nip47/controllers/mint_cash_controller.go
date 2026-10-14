@@ -102,8 +102,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	// (across this NWC path and the admin HTTP path, api.CreateCashWallet) so
 	// two racing requests can't both pass Resolve's balance pre-check against
 	// the same stale balance before either one's Commit actually transfers
-	// funds out. Mirrors create_circle_wallet_controller.go's
-	// activeCircleInvoices guard.
+	// funds out.
 	release, ok := cashwallet.LockHub(app.ID)
 	if !ok {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "wallet creation already in progress for this hub, please retry shortly")

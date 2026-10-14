@@ -49,16 +49,15 @@ import (
 // balance read. Lives here (package-level, not on either caller) because
 // both callers must share the same lock/key space; app IDs are globally
 // unique across every app kind in the single `apps` table, so keying on
-// hubAppID alone is safe. Mirrors create_circle_wallet_controller.go's
-// activeCircleInvoices, which only needs to be controller-local because
-// circle wallet creation has exactly one call site — Cash wallet creation has
-// two, so the guard has to live where both can reach it.
+// hubAppID alone is safe. Package-level, not per controller: production
+// builds a new controller per request, so a controller-local guard would
+// never see a second request.
 var activeHubCommits sync.Map // map[uint]struct{}
 
 // LockHub attempts to acquire the in-process creation slot for hubAppID. ok
 // is false if another mint_cash call for this hub is already in
-// flight; the caller should reject the request rather than block, mirroring
-// activeCircleInvoices's behavior. Callers should defer release() immediately
+// flight; the caller should reject the request rather than block. Callers
+// should defer release() immediately
 // after a successful acquire, once Resolve and Commit have both finished (or
 // failed).
 func LockHub(hubAppID uint) (release func(), ok bool) {
