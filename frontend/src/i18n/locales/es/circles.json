@@ -252,6 +252,7 @@
     "connectionKeyModeHelper": "Solo una identidad verificada puede canjearlo.",
     "copyLokicash": "Copiar Lokicash",
     "copyDestroyedLokicash": "Copiar el Lokicash de este billete destruido",
+    "archivedTokenStillLive": "Sigue respondiendo a cash_status hasta el {{date}}: trátalo como una credencial activa hasta entonces.",
     "tokenStatusUnredeemed": "Sin canjear",
     "tokenStatusFullyRedeemed": "Totalmente canjeado",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} canjeados",

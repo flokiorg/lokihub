@@ -3229,6 +3229,10 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			// branch below mints its token instead, so this is the only
 			// place an archived row gets one.
 			r.CashToken = row.CashToken
+			if row.RetainedUntil != nil {
+				retainedUntil := row.RetainedUntil.Unix()
+				r.RetainedUntil = &retainedUntil
+			}
 		}
 		if row.SettledAt != nil {
 			settledAt := row.SettledAt.Unix()

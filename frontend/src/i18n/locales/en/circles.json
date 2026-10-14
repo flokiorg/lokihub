@@ -231,6 +231,7 @@
     "connectionKeyModeHelper": "Only a verified identity can redeem it.",
     "copyLokicash": "Copy Lokicash",
     "copyDestroyedLokicash": "Copy this destroyed bill's Lokicash",
+    "archivedTokenStillLive": "Still answers cash_status until {{date}}: treat it as a live credential until then.",
     "tokenStatusUnredeemed": "Unredeemed",
     "tokenStatusFullyRedeemed": "Fully redeemed",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} redeemed",

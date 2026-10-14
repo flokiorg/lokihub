@@ -534,6 +534,10 @@ type CashWalletClaimResponse struct {
 	// keying on ID alone — a dedupe map, a delete URL — must pair it with
 	// this, and must not offer to delete an archived row.
 	Archived bool `json:"archived"`
+	// RetainedUntil (unix seconds) is set for an archived bill whose Hub keeps
+	// answering cash_status about it: until then its token is still a live
+	// credential (NIP-CASH §Archival on Deletion), not just a record.
+	RetainedUntil *int64 `json:"retained_until,omitempty"`
 	// WalletPubkey identifies the bill itself. Populated for every row, and
 	// the identifier to correlate with relay logs — and the fallback label
 	// for an archived bill old enough that no token was stored for it.

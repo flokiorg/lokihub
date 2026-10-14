@@ -318,6 +318,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   that small broke the Hub's private-transport announcement, so it stopped
   being published.
 - A Cash wallet's `get_info` no longer lists `get_budget`, which it refuses.
+- The Cash Hub bills list warns that a destroyed bill's token still answers
+  `cash_status` until its retention window ends, so it should be treated as
+  live until then.
 
 ## [0.4.0]
 
