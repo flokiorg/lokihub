@@ -34,6 +34,10 @@ func (svc *service) dispatchEnvelope(
 		NotAfter: envelope.NotAfter,
 	}
 
+	// Items Decode dropped as malformed are omitted too: each item stands on its own,
+	// so the rest of the envelope is still served.
+	pt.omittedItems.Add(int64(len(envelope.Rejected)))
+
 	results := make([]transport.Result, 0, len(envelope.Items))
 	for _, item := range envelope.Items {
 		result, served := svc.nip47Service.ServePrivateItem(ctx, lnClient, item, binding)

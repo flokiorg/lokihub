@@ -289,6 +289,9 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   periodic probe, shown in the node info as `inboxDelivering`. (#119)
 - Requires a private-transport circle join's item proof to be signed by the
   pubkey that is joining, as NIP-CW now specifies.
+- Fixes a private-transport envelope with one malformed item going
+  unanswered: that item is now dropped and the rest are served, using
+  `nmilat` v0.5.0-rc.22.
 
 ## [0.4.0]
 
