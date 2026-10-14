@@ -222,6 +222,10 @@ func (svc *service) spentBillRetained(walletPubkey string) bool {
 // exists at all still comes from the join, so a hub whose retention was disabled
 // or whose config is gone drops out live. Same shape as db.SpentBillRetainedUntil,
 // deliberately: one definition of "still answerable", expressed once in SQL.
+// registryNow is the clock the two retention-boundary queries below read. A
+// variable only so a test can stand exactly on retained_until.
+var registryNow = time.Now
+
 func (svc *service) retainedSpentBillPubkeys() []string {
 	if svc.db == nil {
 		return nil
@@ -235,7 +239,7 @@ func (svc *service) retainedSpentBillPubkeys() []string {
 		// before the replier stopped answering, so at exactly retained_until the bill
 		// was unregistered while still contractually answerable — the caller got
 		// silence at the one instant the tombstone exists to cover.
-		Where("cash_bill_archives.retained_until >= ?", time.Now()).
+		Where("cash_bill_archives.retained_until >= ?", registryNow()).
 		Pluck("cash_bill_archives.wallet_pubkey", &pubkeys).Error
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to reload retained spent-bill wallets")
@@ -267,7 +271,7 @@ func (svc *service) PruneExpiredSpentBills() {
 	err := svc.db.Table("cash_bill_archives").
 		// < not <=, the mirror of the gate above: a bill is reclaimable only once the
 		// window has actually closed, and at exactly retained_until it has not.
-		Where("retained_until IS NOT NULL AND retained_until < ?", time.Now()).
+		Where("retained_until IS NOT NULL AND retained_until < ?", registryNow()).
 		Limit(pruneExpiredSpentBillsBatch).
 		Pluck("wallet_pubkey", &expired).Error
 	if err != nil {
