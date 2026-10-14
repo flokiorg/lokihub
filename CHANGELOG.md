@@ -279,6 +279,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   being released at once.
 - Stops writing NIP-47 request parameters to the log: a request that fails
   to decode is now logged with its method and error only.
+- Fixes `cash_status` on a cash-mode bill: an item without a slice proof is
+  now answered only when its `cash_secret` matches one of the bill's slices.
 
 ## [0.4.0]
 

@@ -2,6 +2,8 @@ package nip47
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -207,18 +209,13 @@ func TestAuditB_ConnectionKeyBill_ScopeMineIsACompositionOracle(t *testing.T) {
 	}
 }
 
-// TestAuditB_CashModeBill_ProoflessStatusNeedsNoSecret
+// TestAuditB_CashModeBill_ProoflessStatusNeedsTheSecret
 //
-// A cash-mode bill's money is gated on the cash SECRET. cash_status is not: a proofless
-// item carrying only a bill proof (i.e. nothing but possession of the token string) is
-// authorized, and returns the slice's amount, claimed flag and claimed_at.
-//
-// So every party that ever held the token — including a giver who handed token#secret on
-// and kept a copy of the token — can watch whether and exactly WHEN the current holder
-// redeemed, for as long as the bill lives. Recorded rather than rated: NIP-CASH
-// §Archival on Deletion already concedes that a token holder can compose a valid
-// cash_status. The point of the test is that NO secret is involved at any point.
-func TestAuditB_CashModeBill_ProoflessStatusNeedsNoSecret(t *testing.T) {
+// A proofless item is served only if the bill is cash-mode AND its cash_secret matches
+// one of the bill's slices (NIP-CASH §Bearer Items). Holding the token string alone —
+// as a giver who kept a copy does — must not reveal whether or when the slice was
+// redeemed. §Archival on Deletion's concession covers destroyed bills only.
+func TestAuditB_CashModeBill_ProoflessStatusNeedsTheSecret(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -227,38 +224,41 @@ func TestAuditB_CashModeBill_ProoflessStatusNeedsNoSecret(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtx")
 
+	secret := strings.Repeat("11", 32)
+	secretBytes, _ := hex.DecodeString(secret)
+	commitment := sha256.Sum256(secretBytes)
 	claimedAt := time.Now().Add(-90 * time.Minute).Truncate(time.Second)
 	walletPubkey, connPriv, walletID := auditBBill(t, svc, hub.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityCash, IdentityValue: strings.Repeat("55", 32), AmountMloki: 4200},
+		{IdentityType: db.CashIdentityCash, IdentityValue: hex.EncodeToString(commitment[:]), AmountMloki: 4200},
 	})
 	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).
 		Where("wallet_app_id = ?", walletID).Update("claimed_at", claimedAt).Error)
 
 	hubXOnly := strings.Repeat("ab", 32)
-	nonce := strings.Repeat("ef", 32)
 	notAfter := time.Now().Add(time.Minute).Unix()
+	ask := func(nonce, params string) transport.Result {
+		hash, err := transport.CanonicalParamsHash(json.RawMessage(params))
+		require.NoError(t, err)
+		billProof, err := transport.BuildBillProof(connPriv, transport.ProofBinding{Target: walletPubkey,
+			HubXOnly: hubXOnly, Method: constants.NIP47MethodCashStatus, ParamsHash: hash, Nonce: nonce, NotAfter: notAfter})
+		require.NoError(t, err)
+		item := transport.Item{ID: "p1", Target: walletPubkey, Method: constants.NIP47MethodCashStatus,
+			Params: json.RawMessage(params), BillProof: billProof}
+		require.False(t, item.HasProof(), "the item deliberately carries no slice proof")
+		res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient,
+			item, PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
+		require.True(t, served, "a bill holder gets an answer either way")
+		return res
+	}
 
-	// No slice proof, no cash secret: possession of the token is the whole item.
-	hash, err := transport.CanonicalParamsHash(json.RawMessage(`{"scope":"mine"}`))
-	require.NoError(t, err)
-	pb := transport.ProofBinding{Target: walletPubkey, HubXOnly: hubXOnly,
-		Method: constants.NIP47MethodCashStatus, ParamsHash: hash, Nonce: nonce, NotAfter: notAfter}
-	billProof, err := transport.BuildBillProof(connPriv, pb)
-	require.NoError(t, err)
-	item := transport.Item{ID: "p1", Target: walletPubkey, Method: constants.NIP47MethodCashStatus,
-		Params: json.RawMessage(`{"scope":"mine"}`), BillProof: billProof}
-	require.False(t, item.HasProof(), "the item deliberately carries no slice proof")
-	require.False(t, item.IsBearer(), "and no cash secret either")
+	tokenOnly := ask(strings.Repeat("e1", 32), `{"scope":"mine"}`)
+	require.NotNil(t, tokenOnly.Error, "the token string alone is not enough")
+	require.Nil(t, tokenOnly.Result)
 
-	res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient,
-		item, PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
-	require.True(t, served)
-	require.Nil(t, res.Error, "%v", res.Error)
+	withSecret := ask(strings.Repeat("e2", 32), `{"cash_secret":"`+secret+`","scope":"all"}`)
+	require.Nil(t, withSecret.Error, "%v", withSecret.Error)
 	var out nipcash.CashStatusResult
-	require.NoError(t, json.Unmarshal(res.Result, &out))
+	require.NoError(t, json.Unmarshal(withSecret.Result, &out))
 	require.Len(t, out.Recipients, 1)
-	t.Logf("AUDITB token-only cash_status: amount=%d claimed=%v claimed_at=%v",
-		out.Recipients[0].AmountMillis, out.Recipients[0].Claimed, out.Recipients[0].ClaimedAt)
-	require.NotNil(t, out.Recipients[0].ClaimedAt,
-		"the exact redemption instant is disclosed to anyone holding the token")
+	require.NotNil(t, out.Recipients[0].ClaimedAt, "the secret's holder still sees their slice's state")
 }
