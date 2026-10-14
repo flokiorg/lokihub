@@ -288,42 +288,42 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   now resubscribes with its original filter and checks itself with a
   periodic probe, shown in the node info as `inboxDelivering`. (#119)
 - Requires a private-transport circle join's item proof to be signed by the
-  pubkey that is joining, as NIP-CW now specifies.
+  pubkey that is joining, as NIP-CW now specifies. (#120)
 - Fixes a private-transport envelope with one malformed item going
   unanswered: that item is now dropped and the rest are served, using
-  `nmilat` v0.5.0-rc.22.
+  `nmilat` v0.5.0-rc.22. (#120)
 - Fixes `mint_cash`, `cash_transfer` and `cash_consolidate` returning an
   empty token after funding a bill: a bill whose token can't be produced is
   now refused before any funds move, and split-off and consolidated bills
-  store their token like minted ones.
+  store their token like minted ones. (#120)
 - Refuses a Cash Hub or Circle Hub name longer than its `cashhub1` /
   `circlehub1` connection can carry (255 bytes), instead of saving a hub whose
   connection was never shown; hubs created from the generic new-app screen
-  now show that connection first too.
+  now show that connection first too. (#120)
 - Fixes a following-policy Circle Hub refusing real members as "not
   authorized" when its relays had not yet returned the provider's follow
-  list: it now answers `NOT_READY` until the list is fetched.
+  list: it now answers `NOT_READY` until the list is fetched. (#120)
 - Fixes Circle Hubs created from lokihub's own UI leaving the
-  `circle_wallet` block out of `get_info`: every Circle Hub now includes it.
+  `circle_wallet` block out of `get_info`: every Circle Hub now includes it. (#120)
 - Fixes a Circle Wallet's receive cap: invoices it has issued and that can
   still be paid now count toward the cap, and concurrent `make_invoice`
-  requests can no longer each pass the check.
+  requests can no longer each pass the check. (#120)
 - Refuses a `cash_secret` supplied by the caller when minting, over NWC and the
-  admin API, instead of silently replacing it with a Hub-generated one.
+  admin API, instead of silently replacing it with a Hub-generated one. (#120)
 - `cash_transfer` now verifies the caller before checking the amount against
-  the slice, so a refused request no longer reveals the slice's balance.
+  the slice, so a refused request no longer reveals the slice's balance. (#120)
 - Refuses bill methods on the standard NWC transport with `NOT_IMPLEMENTED`
-  whatever the connection's scopes or expiry, as NIP-CASH requires.
+  whatever the connection's scopes or expiry, as NIP-CASH requires. (#120)
 - Refuses a private-envelope padding bucket below 2048 bytes in settings: one
   that small broke the Hub's private-transport announcement, so it stopped
-  being published.
-- A Cash wallet's `get_info` no longer lists `get_budget`, which it refuses.
+  being published. (#120)
+- A Cash wallet's `get_info` no longer lists `get_budget`, which it refuses. (#120)
 - The Cash Hub bills list warns that a destroyed bill's token still answers
   `cash_status` until its retention window ends, so it should be treated as
-  live until then.
+  live until then. (#120)
 - Resolves `cash_redeem` payouts whose outcome arrived while lokihub was
   down: at startup and periodically the node is asked, a failed payout
-  releases its slice, and the node info reports how many are still pending.
+  releases its slice, and the node info reports how many are still pending. (#120)
 
 ## [0.4.0]
 
