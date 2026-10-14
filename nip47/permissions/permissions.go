@@ -85,6 +85,11 @@ func (svc *permissionsService) GetPermittedMethods(app *db.App, lnClient lnclien
 	requestMethods := scopesToRequestMethods(scopes)
 
 	for _, method := range GetAlwaysGrantedMethods() {
+		// A cash_wallet refuses get_budget (nip47/event_handler.go), so it must not
+		// advertise it either.
+		if method == models.GET_BUDGET_METHOD && app.Kind == db.AppKindCashWallet {
+			continue
+		}
 		if !slices.Contains(requestMethods, method) {
 			requestMethods = append(requestMethods, method)
 		}

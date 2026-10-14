@@ -317,6 +317,7 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Refuses a private-envelope padding bucket below 2048 bytes in settings: one
   that small broke the Hub's private-transport announcement, so it stopped
   being published.
+- A Cash wallet's `get_info` no longer lists `get_budget`, which it refuses.
 
 ## [0.4.0]
 
