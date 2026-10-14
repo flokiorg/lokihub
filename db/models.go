@@ -513,7 +513,13 @@ type CashBillArchive struct {
 	// destroyed bill — one that looks spendable and is not — which is why this
 	// column is excluded from every listing response.
 	CashToken string
-	MintedAt  time.Time
+	// ConnectionPubkey is the bill's App.AppPubkey: the public half of the
+	// connection secret inside its token, and the only key whose proof earns a
+	// tombstone answer. Stored so that check is a comparison, costing the same
+	// as the miss for a pubkey the Hub never served. Empty on rows that predate
+	// the column, which then get no tombstone.
+	ConnectionPubkey string
+	MintedAt         time.Time
 	// EndedAt is when the bill was deleted. Second column of the composite
 	// index so a per-hub listing is index-ordered rather than filesorting a
 	// forever-growing table.

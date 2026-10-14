@@ -37,25 +37,48 @@ import (
 // post-delete grace that keeps an in-flight request reachable is a separate
 // concern about the relay gate, applied at that gate.
 func SpentBillRetainedUntil(tx *gorm.DB, walletPubkey string) (time.Time, bool) {
+	tombstone, ok := SpentBillTombstoneFor(tx, walletPubkey)
+	return tombstone.RetainedUntil, ok
+}
+
+// SpentBillTombstone is what answering about a destroyed bill needs, read in
+// one statement so a bill inside its window costs the same as an unknown one.
+type SpentBillTombstone struct {
+	RetainedUntil    time.Time
+	ConnectionPubkey string
+	WalletAppID      uint
+}
+
+// SpentBillTombstoneFor is SpentBillRetainedUntil plus the bill's stored
+// connection pubkey and app id, under the same rules.
+func SpentBillTombstoneFor(tx *gorm.DB, walletPubkey string) (SpentBillTombstone, bool) {
 	if tx == nil || walletPubkey == "" {
-		return time.Time{}, false
+		return SpentBillTombstone{}, false
 	}
 
-	var retainedUntil *time.Time
+	var row struct {
+		RetainedUntil    *time.Time
+		ConnectionPubkey string
+		WalletAppID      uint
+	}
 	err := tx.Table("cash_bill_archives").
-		Select("cash_bill_archives.retained_until").
+		Select("cash_bill_archives.retained_until, cash_bill_archives.connection_pubkey, cash_bill_archives.wallet_app_id").
 		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
 		Where("cash_bill_archives.wallet_pubkey = ?", walletPubkey).
 		Where("cash_hub_configs.spent_retention_secs > 0").
 		Limit(1).
-		Scan(&retainedUntil).Error
-	if err != nil || retainedUntil == nil {
+		Scan(&row).Error
+	if err != nil || row.RetainedUntil == nil {
 		// No row, no hub config, retention disabled, or a row predating the
 		// column — all of which mean no tombstone applies.
-		return time.Time{}, false
+		return SpentBillTombstone{}, false
 	}
 
-	return *retainedUntil, true
+	return SpentBillTombstone{
+		RetainedUntil:    *row.RetainedUntil,
+		ConnectionPubkey: row.ConnectionPubkey,
+		WalletAppID:      row.WalletAppID,
+	}, true
 }
 
 // RetentionWindowOpen is the ONE definition of the retention boundary: is a

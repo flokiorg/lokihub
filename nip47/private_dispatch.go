@@ -295,29 +295,15 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// Gate 2, using db.RetentionWindowOpen rather than a local comparison so this
 	// path and the relay gate agree exactly at the boundary — they did not when each
 	// wrote the comparison itself.
-	retainedUntil, ok := db.SpentBillRetainedUntil(svc.db, item.Target)
+	tombstone, ok := db.SpentBillTombstoneFor(svc.db, item.Target)
+	retainedUntil := tombstone.RetainedUntil
 	if !ok || !db.RetentionWindowOpen(retainedUntil, time.Now()) {
 		return transport.Result{}, false
 	}
 
-	var bill db.CashBillArchive
-	if err := svc.db.Where("wallet_pubkey = ?", item.Target).First(&bill).Error; err != nil {
-		return transport.Result{}, false
-	}
-
-	// Gate 3.
-	pairingKey, err := svc.keys.GetCashPairingKey(bill.WalletAppID)
-	if err != nil {
-		logger.Logger.Error().Err(err).
-			Uint("walletAppId", bill.WalletAppID).
-			Msg("Failed to derive a spent bill's pairing key")
-		return transport.Result{}, false
-	}
-	expectedPubkey, err := nostr.GetPublicKey(pairingKey)
-	if err != nil {
-		return transport.Result{}, false
-	}
-	if !billProofHolder(signer, expectedPubkey) {
+	// Gate 3, against the pubkey stored at archive time: deriving it here cost
+	// enough to tell a recently destroyed bill from one never served.
+	if tombstone.ConnectionPubkey == "" || !billProofHolder(signer, tombstone.ConnectionPubkey) {
 		return transport.Result{}, false
 	}
 
@@ -346,7 +332,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 // wantPubkey is db.App.AppPubkey for a live bill, which is the deterministic
 // pairing pubkey derived from the bill's app id (cashwallet.Create) — i.e. exactly
 // the pubkey of the connection secret inside the bill's token. For a destroyed bill
-// the same pubkey is re-derived from the archive; see tryPrivateSpentBill.
+// the same pubkey is read from the archive; see tryPrivateSpentBill.
 //
 // The KIND matters as much as the signature. A slice proof binds to the same six
 // fields, so accepting either kind here would let anyone who can sign anything
