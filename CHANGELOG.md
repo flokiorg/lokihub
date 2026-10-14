@@ -287,6 +287,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Fixes the private-transport inbox going quiet after a relay reconnect: it
   now resubscribes with its original filter and checks itself with a
   periodic probe, shown in the node info as `inboxDelivering`. (#119)
+- Requires a private-transport circle join's item proof to be signed by the
+  pubkey that is joining, as NIP-CW now specifies.
 
 ## [0.4.0]
 
