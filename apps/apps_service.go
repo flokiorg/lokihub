@@ -463,6 +463,12 @@ func (svc *appsService) saveAppTx(tx *gorm.DB, app *db.App, scopes []string, max
 	}
 
 	if err := tx.Save(app).Error; err != nil {
+		// idx_apps_app_pubkey_unique is the only unique index on apps besides the
+		// primary key: a duplicate here is the same refusal prepareApp's own
+		// read-then-insert check gives, lost to a concurrent creation.
+		if db.IsDuplicateKeyError(err) {
+			return ErrDuplicateAppPubkey
+		}
 		return err
 	}
 
