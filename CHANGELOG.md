@@ -168,6 +168,11 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Removing a recipient from a Cash bill is now all-or-nothing: if returning
   their amount to the Cash Hub fails, their slice stays exactly as it was
   instead of being removed with the funds left behind. (#122)
+- A Circle Hub answers `create_circle_wallet` with the NIP-CW error codes:
+  `WALLET_EXISTS` when the identity already holds a Circle Wallet (was
+  `RESTRICTED`), and `NOT_READY` whenever membership can't be checked yet
+  (was `INTERNAL` for unexpected failures). The join response now reports the
+  resolved `max_amount` inside `encrypted_details`.
 
 ### Fixed
 
