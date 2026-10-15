@@ -19,7 +19,7 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// NIP-CW §Request and §Identity Proof (SD-24): the member generates the
+// NIP-CW §Request and §Identity Proof: the member generates the
 // wallet's connection key and sends only connection_pubkey, which the identity
 // proof binds with a connection tag. These are the refusals, each checked to
 // leave nothing behind and, where the spec orders it, to happen before
