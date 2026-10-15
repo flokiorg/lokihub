@@ -2,7 +2,16 @@
 
 package integration
 
-import "github.com/flokiorg/lokihub/nip47/models"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/url"
+
+	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/flokiorg/lokihub/nip47/models"
+)
 
 // The structs below mirror the unexported request/response param shapes
 // defined in nip47/controllers (which can't be imported directly from an
@@ -211,14 +220,56 @@ type CashStatusResult struct {
 // --- create_circle_wallet ---
 
 type CreateCircleWalletParams struct {
-	Pubkey        string `json:"pubkey"`
-	MaxAmount     uint64 `json:"max_amount"`
-	Expiry        int    `json:"expiry"`
-	BudgetRenewal string `json:"budget_renewal,omitempty"`
+	Pubkey string `json:"pubkey"`
+	// ConnectionPubkey is the member-generated connection key (NIP-CW §Request).
+	// Left empty, it is sent as circleConnectionPubkey(Pubkey), the key the
+	// proof helpers in shared_test.go also tag, so a test sets it only to send
+	// something else.
+	ConnectionPubkey string `json:"connection_pubkey"`
+	MaxAmount        uint64 `json:"max_amount"`
+	Expiry           int    `json:"expiry"`
+	BudgetRenewal    string `json:"budget_renewal,omitempty"`
 	// IdentityEvent is a JSON-encoded, freshly-signed kind-23199 proof that
 	// the caller controls Pubkey, bound to this specific hub via its d-tag
-	// (see nip47/controllers/create_circle_wallet_identity.go).
+	// and to ConnectionPubkey via its connection tag (see
+	// nip47/controllers/create_circle_wallet_identity.go).
 	IdentityEvent string `json:"identity_event"`
+}
+
+func (p CreateCircleWalletParams) MarshalJSON() ([]byte, error) {
+	type wire CreateCircleWalletParams
+	if p.ConnectionPubkey == "" {
+		p.ConnectionPubkey = circleConnectionPubkey(p.Pubkey)
+	}
+	return json.Marshal(wire(p))
+}
+
+// circleConnectionSecret and circleConnectionPubkey are the connection key this
+// suite generates for a member: derived from the member's pubkey so a request,
+// its proof and the later connection all agree without passing it around.
+func circleConnectionSecret(memberPubkey string) string {
+	sum := sha256.Sum256([]byte("connection:" + memberPubkey))
+	return hex.EncodeToString(sum[:])
+}
+
+func circleConnectionPubkey(memberPubkey string) string {
+	pub, err := nostr.GetPublicKey(circleConnectionSecret(memberPubkey))
+	if err != nil {
+		panic(err)
+	}
+	return pub
+}
+
+// CircleWalletURI is the connection string the member builds for itself from
+// the join's details and its own secret (NIP-CW §Response): the Hub sends
+// neither.
+func CircleWalletURI(details CircleWalletDetails, memberPubkey string) string {
+	query := url.Values{}
+	for _, relay := range details.Relays {
+		query.Add("relay", relay)
+	}
+	query.Set("secret", circleConnectionSecret(memberPubkey))
+	return "nostr+walletconnect://" + details.WalletPubkey + "?" + query.Encode()
 }
 
 // CreateCircleWalletResult carries exactly one field on purpose: the join is
@@ -232,11 +283,12 @@ type CreateCircleWalletResult struct {
 // CircleWalletDetails is the plaintext inside CreateCircleWalletResult's
 // encrypted_details — the joining member's own wallet identity and terms.
 type CircleWalletDetails struct {
-	PairingURI    string `json:"pairing_uri"`
-	WalletPubkey  string `json:"wallet_pubkey"`
-	ExpiresAt     int64  `json:"expires_at"`
-	FeesPpm       int    `json:"fees_ppm"`
-	BudgetRenewal string `json:"budget_renewal"`
+	WalletPubkey  string   `json:"wallet_pubkey"`
+	Relays        []string `json:"relays"`
+	MaxAmount     uint64   `json:"max_amount"`
+	ExpiresAt     int64    `json:"expires_at"`
+	FeesPpm       int      `json:"fees_ppm"`
+	BudgetRenewal string   `json:"budget_renewal"`
 }
 
 // --- generic NWC methods ---

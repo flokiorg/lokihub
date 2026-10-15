@@ -52,7 +52,7 @@ const nostrKindCircleIdentityProof = nipcw.KindCircleIdentityProof
 // to app.AppPubkey instead (an internal id derived from the connection's
 // secret, never exposed to a member) made this call unusable by any real
 // client until fixed.
-func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubWalletPubkey string) error {
+func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, connectionPubkey, hubWalletPubkey string) error {
 	if ev.Kind != nostrKindCircleIdentityProof {
 		return fmt.Errorf("identity_event must be kind %d, got %d", nostrKindCircleIdentityProof, ev.Kind)
 	}
@@ -80,6 +80,19 @@ func verifyCircleWalletIdentityEvent(ev *nostr.Event, requesterPubkey, hubWallet
 	dTag := ev.Tags.Find("d")
 	if len(dTag) < 2 || dTag[1] != hubWalletPubkey {
 		return fmt.Errorf("identity_event d-tag does not match this circle hub")
+	}
+	// NIP-CW §Identity Proof check 6: exactly one connection tag, equal to the
+	// request's connection_pubkey. It binds the member's identity to the key the
+	// wallet is issued to, so whoever sees the request cannot have the wallet
+	// issued to a key of their own instead.
+	var connectionTags []nostr.Tag
+	for _, tag := range ev.Tags {
+		if len(tag) > 0 && tag[0] == "connection" {
+			connectionTags = append(connectionTags, tag)
+		}
+	}
+	if len(connectionTags) != 1 || len(connectionTags[0]) < 2 || connectionTags[0][1] != connectionPubkey {
+		return fmt.Errorf("identity_event must carry exactly one connection tag equal to connection_pubkey")
 	}
 	now := time.Now()
 	evTime := ev.CreatedAt.Time()

@@ -68,7 +68,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	spendOnce := func(description string) {
@@ -141,7 +141,7 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 
 			circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 			require.NoError(t, err)
-			pairingURI := circleDetails.PairingURI
+			pairingURI := CircleWalletURI(circleDetails, pubkey)
 			require.Equal(t, renewal, circleDetails.BudgetRenewal)
 			child := mustConnect(t, pairingURI)
 

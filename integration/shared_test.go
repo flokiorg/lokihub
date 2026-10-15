@@ -147,7 +147,7 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPub
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubWalletPubkey}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, requesterPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
 	return ev
@@ -162,7 +162,7 @@ func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Timestamp(createdAt.Unix()),
-		Tags:      nostr.Tags{{"d", dTagValue}},
+		Tags:      nostr.Tags{{"d", dTagValue}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
 	return ev
@@ -183,7 +183,7 @@ func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubWalletPub
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"disambiguator", disambiguator}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
 	return ev

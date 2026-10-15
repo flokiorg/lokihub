@@ -398,7 +398,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 						"an omitted expiry must default to the hub's own max_exp_secs, not produce an already-expired wallet")
 				}
 
-				pairingURI := details.PairingURI
+				pairingURI := CircleWalletURI(details, member.pub)
 
 				child := mustConnect(t, pairingURI)
 

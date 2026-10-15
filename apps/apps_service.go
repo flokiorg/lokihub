@@ -339,6 +339,10 @@ func (svc *appsService) NotifyAppCreated(app *db.App) {
 	})
 }
 
+// ErrDuplicateAppPubkey is returned when the requested client pubkey is already
+// authorized for another connection on this node.
+var ErrDuplicateAppPubkey = errors.New("duplicated key not allowed")
+
 // prepareApp validates inputs, resolves the pairing keypair and a free name,
 // and builds the App row — everything that doesn't need to happen inside the
 // eventual save transaction. Shared by CreateApp and CreateAppTx. queryDB is
@@ -427,7 +431,7 @@ func (svc *appsService) prepareApp(queryDB *gorm.DB, name string, pubkey string,
 	var existingByPubkey db.App
 	err = queryDB.Where("app_pubkey = ?", pairingPublicKey).First(&existingByPubkey).Error
 	if err == nil {
-		return nil, "", errors.New("duplicated key not allowed")
+		return nil, "", ErrDuplicateAppPubkey
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, "", err

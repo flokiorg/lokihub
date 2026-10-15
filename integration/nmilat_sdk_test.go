@@ -357,8 +357,13 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(circleHubClient.Close)
 
+	// The member generates the wallet's connection key; the Hub only ever sees
+	// its public half (NIP-CW §Request).
+	connection, err := nipcw.NewConnectionKey()
+	require.NoError(t, err)
 	resp, err := circleHubClient.CreateCircleWallet(ctxT(t), nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
+		Connection:      connection,
 		MaxAmountMillis: nmilatHappyPathAmountMillis,
 		Expiry:          nmilatHappyPathExpiry,
 	})

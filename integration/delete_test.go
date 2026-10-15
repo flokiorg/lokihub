@@ -119,7 +119,7 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	const fundAmountMloki = 3000
@@ -255,7 +255,7 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	var invoice MakeInvoiceResult
