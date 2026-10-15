@@ -40,7 +40,7 @@ func TestHandleCreateCircleWalletEvent_Membership_SecondAttemptWhileActive_Rejec
 
 	second := callCreateCircleWallet(t, svc, provider, distinctCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, "second", 100_000, 3600))
 	require.NotNil(t, second.Error, "a second mint for the same identity while the first wallet is active must be rejected")
-	assert.Equal(t, constants.ERROR_RESTRICTED, second.Error.Code)
+	assert.Equal(t, nipcw.ErrWalletExists, second.Error.Code)
 
 	var childCount int64
 	svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", provider.ID, db.AppKindCircleWallet).Count(&childCount)
@@ -66,7 +66,7 @@ func TestHandleCreateCircleWalletEvent_Membership_RepeatedAttempts_NeverExceedsP
 		if resp.Error == nil {
 			successes++
 		} else {
-			assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
+			assert.Equal(t, nipcw.ErrWalletExists, resp.Error.Code)
 		}
 	}
 	assert.Equal(t, 1, successes, "only the first of N repeated attempts for the same identity should succeed")

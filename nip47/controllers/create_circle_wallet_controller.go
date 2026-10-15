@@ -67,8 +67,11 @@ var errCircleMemberAlreadyHasWallet = errors.New("identity already has an active
 // The terms travel alongside it because they describe this member's wallet
 // specifically, not the circle.
 type circleWalletDetails struct {
-	PairingURI    string `json:"pairing_uri"`
-	WalletPubkey  string `json:"wallet_pubkey"`
+	PairingURI   string `json:"pairing_uri"`
+	WalletPubkey string `json:"wallet_pubkey"`
+	// MaxAmount is the cap the Hub actually set (NIP-CW): the request floored
+	// to whole loki, which is the unit the wallet's budget is stored in.
+	MaxAmount     uint64 `json:"max_amount"`
 	ExpiresAt     int64  `json:"expires_at"`
 	FeesPpm       int    `json:"fees_ppm"`
 	BudgetRenewal string `json:"budget_renewal"`
@@ -166,19 +169,21 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		if errors.Is(err, constants.ErrSocialCacheWarmingUp) {
 			// Expected right after hub startup, not a bug — the requester just
 			// needs to retry once the initial cache warm-up finishes.
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "hub is starting up, please retry shortly")
+			respondError(publishResponse, nip47Request.Method, nipcw.ErrNotReady, "hub is starting up, please retry shortly")
 			return
 		}
 		if errors.Is(err, constants.ErrCircleMembershipUnresolved) {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "the circle's membership list could not be fetched yet, please retry shortly")
+			respondError(publishResponse, nip47Request.Method, nipcw.ErrNotReady, "the circle's membership list could not be fetched yet, please retry shortly")
 			return
 		}
+		// Any other failure also means membership can't be decided right now,
+		// which NIP-CW answers with NOT_READY, never with a refusal.
 		logger.Logger.Error().Err(err).Str("requester", params.Pubkey).Msg("Social cache authorization check failed")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "authorization check failed")
+		respondError(publishResponse, nip47Request.Method, nipcw.ErrNotReady, "membership could not be checked yet, please retry shortly")
 		return
 	}
 	if !authorized {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "requester is not authorized by the circle policy")
+		respondError(publishResponse, nip47Request.Method, nipcw.ErrRestricted, "requester is not authorized by the circle policy")
 		return
 	}
 
@@ -195,7 +200,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 	if existingMembershipCount > 0 {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, errCircleMemberAlreadyHasWallet.Error())
+		respondError(publishResponse, nip47Request.Method, nipcw.ErrWalletExists, errCircleMemberAlreadyHasWallet.Error())
 		return
 	}
 
@@ -270,7 +275,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 	// 5. Rate limit per requester pubkey.
 	if !controller.circleRateLimiter.Allow(params.Pubkey, controller.cfg.GetEnv().CircleWalletRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for create_circle_wallet")
+		respondError(publishResponse, nip47Request.Method, nipcw.ErrRateLimited, "rate limit exceeded for create_circle_wallet")
 		return
 	}
 
@@ -374,7 +379,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 	if errors.Is(err, errCircleMemberAlreadyHasWallet) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, errCircleMemberAlreadyHasWallet.Error())
+		respondError(publishResponse, nip47Request.Method, nipcw.ErrWalletExists, errCircleMemberAlreadyHasWallet.Error())
 		return
 	}
 	if err != nil {
@@ -415,6 +420,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	detailsJSON, err := json.Marshal(circleWalletDetails{
 		PairingURI:    pairingURI,
 		WalletPubkey:  walletPubkey,
+		MaxAmount:     params.MaxAmount / 1000 * 1000,
 		ExpiresAt:     expiresAt.Unix(),
 		FeesPpm:       providerConfig.FeesPpm,
 		BudgetRenewal: resolvedBudgetRenewal,
