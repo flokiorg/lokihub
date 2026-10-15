@@ -466,7 +466,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
-	encryptedDetails, err := encryptPairingURI(params.Pubkey, hubWalletPrivKey, string(detailsJSON))
+	encryptedDetails, err := encryptForRecipient(params.Pubkey, hubWalletPrivKey, string(detailsJSON))
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to encrypt circle wallet details")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to encrypt wallet details")
