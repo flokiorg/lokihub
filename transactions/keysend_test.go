@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -539,14 +540,17 @@ func TestSendKeysend_IsolatedAppToIsolatedApp(t *testing.T) {
 	// expect app2 to receive the payment
 	assert.Equal(t, int64(123000), queries.GetIsolatedBalance(svc.DB, app2.ID))
 
-	// check notifications
-	assert.Equal(t, 2, len(mockEventConsumer.GetConsumedEvents()))
-
-	assert.Equal(t, "nwc_payment_sent", mockEventConsumer.GetConsumedEvents()[1].Event)
-	settledTransaction := mockEventConsumer.GetConsumedEvents()[1].Properties.(*db.Transaction)
-	assert.Equal(t, transaction.ID, settledTransaction.ID)
-
-	assert.Equal(t, "nwc_payment_received", mockEventConsumer.GetConsumedEvents()[0].Event)
-	receivedTransaction := mockEventConsumer.GetConsumedEvents()[0].Properties.(*db.Transaction)
-	assert.Equal(t, incomingTransaction.ID, receivedTransaction.ID)
+	// check notifications. Each is delivered on its own goroutine, so neither
+	// their arrival time nor their order is fixed: wait for both, then match
+	// them by name.
+	require.Eventually(t, func() bool { return len(mockEventConsumer.GetConsumedEvents()) == 2 },
+		5*time.Second, 10*time.Millisecond)
+	byName := map[string]*db.Transaction{}
+	for _, event := range mockEventConsumer.GetConsumedEvents() {
+		byName[event.Event] = event.Properties.(*db.Transaction)
+	}
+	require.Contains(t, byName, "nwc_payment_sent")
+	assert.Equal(t, transaction.ID, byName["nwc_payment_sent"].ID)
+	require.Contains(t, byName, "nwc_payment_received")
+	assert.Equal(t, incomingTransaction.ID, byName["nwc_payment_received"].ID)
 }
