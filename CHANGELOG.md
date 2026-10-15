@@ -339,6 +339,8 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   requires. Before, the caller's amount was handed to the node.
 - Refuses a following Circle Identity with no provider pubkey over the API,
   as the UI already did: such a circle admits nobody.
+- Makes refusing a private `cash_status` for a live bill cost the same as
+  refusing one for a bill the hub never issued.
 
 ## [0.4.0]
 

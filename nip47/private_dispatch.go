@@ -77,6 +77,16 @@ func (svc *nip47Service) ServePrivateItem(
 		return transport.Result{}, false
 	}
 
+	// The destroyed-bill record is read for every cash_status item, live bill or not,
+	// and only used below when there is no live bill. Read only on a miss, it made a
+	// target this hub never served cost one more query than a live one, which is
+	// measurable.
+	var tombstone db.SpentBillTombstone
+	var tombstoned bool
+	if item.Method == nipcash.MethodCashStatus {
+		tombstone, tombstoned = db.SpentBillTombstoneFor(svc.db, item.Target)
+	}
+
 	// 3. Resolve the bill by wallet_pubkey ALONE. There is no app_pubkey to use — the
 	// envelope's outer key is ephemeral — which is why apps.wallet_pubkey carries its own
 	// index; the composite one leads with app_pubkey and cannot serve this.
@@ -91,7 +101,7 @@ func (svc *nip47Service) ServePrivateItem(
 		// standard transport has answered that since tombstones existed; this is the
 		// same answer, reached through the bill proof instead of through a request
 		// encrypted to the bill.
-		if result, ok := svc.tryPrivateSpentBill(item, binding, signer); ok {
+		if result, ok := svc.tryPrivateSpentBill(item, signer, tombstone, tombstoned); ok {
 			return result, true
 		}
 		omitted(item, "no bill with this target wallet_pubkey")
@@ -289,7 +299,7 @@ func (svc *nip47Service) ServePrivateItem(
 // bill keeps its silence, exactly as on the standard transport: the agreed design is
 // three outcomes on the STATUS method, and answering the others would return a
 // result_type that does not match the request.
-func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding PrivateItemBinding, signer string) (transport.Result, bool) {
+func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
 	if item.Method != nipcash.MethodCashStatus {
 		return transport.Result{}, false
 	}
@@ -297,7 +307,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// Gate 2, using db.RetentionWindowOpen rather than a local comparison so this
 	// path and the relay gate agree exactly at the boundary — they did not when each
 	// wrote the comparison itself.
-	tombstone, ok := db.SpentBillTombstoneFor(svc.db, item.Target)
+	// The record was read by the caller, for every cash_status item (see ServePrivateItem).
 	retainedUntil := tombstone.RetainedUntil
 	if !ok || !db.RetentionWindowOpen(retainedUntil, time.Now()) {
 		return transport.Result{}, false
