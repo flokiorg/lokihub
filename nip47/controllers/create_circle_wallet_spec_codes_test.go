@@ -17,7 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// NIP-CW §Errors and the join response (SD-17, SD-20).
+// NIP-CW §Errors and the join response.
 
 func joinCircleWith(t *testing.T, svc *tests.TestService, provider *db.App, cache NostrSocialCache, requesterKey string, maxAmountMloki uint64) *models.Response {
 	t.Helper()
