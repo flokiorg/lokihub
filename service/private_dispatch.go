@@ -17,7 +17,8 @@ import (
 //
 // The per-item work lives in nip47.ServePrivateItem, where the controllers and their
 // dependencies already are. What stays here is what only this layer knows: the envelope, the
-// conversation key it arrived under, and the relays to answer on.
+// conversation key it arrived under, and the relay it arrived on, which is where the
+// reply goes.
 func (svc *service) dispatchEnvelope(
 	ctx context.Context,
 	pool *nostr.SimplePool,
@@ -25,6 +26,7 @@ func (svc *service) dispatchEnvelope(
 	lnClient lnclient.LNClient,
 	envelope *transport.Envelope,
 	conversationKey [32]byte,
+	arrivedOn string,
 ) {
 	binding := nip47.PrivateItemBinding{
 		// The hub's IDENTITY key, which proofs bind to — not the inbox key the envelope
@@ -51,7 +53,7 @@ func (svc *service) dispatchEnvelope(
 		results = append(results, result)
 	}
 
-	if err := svc.publishPrivateReply(ctx, pool, envelope, conversationKey, results); err != nil {
+	if err := svc.publishPrivateReply(ctx, pool, envelope, conversationKey, arrivedOn, results); err != nil {
 		// Error level because by now the items have RUN. For cash_redeem that means money
 		// moved and the caller is about to see silence, which is the one outcome chunked
 		// replies exist to avoid.
@@ -64,11 +66,20 @@ func (svc *service) dispatchEnvelope(
 
 // publishPrivateReply encrypts and publishes the reply, splitting across events when one
 // will not hold it.
+//
+// Every chunk goes to arrivedOn, the relay the request came in on: that is the one relay
+// the client is known to be using, and a client subscribes for its reply where it sent the
+// request. Publishing to "the first configured relay that accepts" instead put the reply
+// wherever this hub's relay list happened to start, which a client that sent the request to
+// another of the hub's relays never sees. Only if arrivedOn refuses, or is unknown, does a
+// chunk fall back to the other configured relays: a reply the client may miss is still
+// better than none once the items have run.
 func (svc *service) publishPrivateReply(
 	ctx context.Context,
 	pool *nostr.SimplePool,
 	envelope *transport.Envelope,
 	conversationKey [32]byte,
+	arrivedOn string,
 	results []transport.Result,
 ) error {
 	limits := svc.cfg.PrivateEnvelopeLimits()
@@ -112,7 +123,22 @@ func (svc *service) publishPrivateReply(
 		}
 
 		published := false
+		if arrivedOn != "" {
+			if relay, err := pool.EnsureRelay(arrivedOn); err != nil {
+				logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("Could not reach the relay a private request arrived on to reply")
+			} else if err := relay.Publish(ctx, reply); err != nil {
+				logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("The relay a private request arrived on refused its reply")
+			} else {
+				published = true
+			}
+		}
 		for _, relayURL := range svc.cfg.GetRelayUrls() {
+			if published {
+				break
+			}
+			if relayURL == arrivedOn {
+				continue
+			}
 			relay, err := pool.EnsureRelay(relayURL)
 			if err != nil {
 				continue
@@ -121,7 +147,6 @@ func (svc *service) publishPrivateReply(
 				continue
 			}
 			published = true
-			break
 		}
 		if !published {
 			return fmt.Errorf("no relay accepted reply %d/%d", chunk.Seq, chunk.Total)

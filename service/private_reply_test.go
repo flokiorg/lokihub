@@ -37,7 +37,7 @@ func TestPublishPrivateReply_ClientFindsAndOpensIt(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	require.NoError(t, svc.publishPrivateReply(ctx, nostr.NewSimplePool(ctx), envelope, conversationKey, results))
+	require.NoError(t, svc.publishPrivateReply(ctx, nostr.NewSimplePool(ctx), envelope, conversationKey, relay.url, results))
 
 	var reply *nostr.Event
 	select {
