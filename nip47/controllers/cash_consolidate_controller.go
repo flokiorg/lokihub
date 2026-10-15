@@ -90,7 +90,7 @@ type resolvedConsolidateSource struct {
 //
 // SECURITY / STATUS: the validation, custody, same-hub, proof, sum/ceiling and
 // earliest-expiry checks below are the novel surface; the fund movement and
-// nested-encrypted delivery reuse cashwallet.Consolidate and encryptPairingURI,
+// nested-encrypted delivery reuse cashwallet.Consolidate and encryptForRecipient,
 // which are covered elsewhere. Covered end to end against a live node by
 // integration/cash_consolidate_test.go and cash_consolidate_adversarial_test.go,
 // on top of the unit/guard suites in this package and cashwallet.
@@ -465,7 +465,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")
 			return
 		}
-		enc, encErr := encryptPairingURI(resolved[0].proofPubkey, newWalletPrivKey, result.CashToken)
+		enc, encErr := encryptForRecipient(resolved[0].proofPubkey, newWalletPrivKey, result.CashToken)
 		if encErr != nil {
 			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", result.WalletApp.ID).Msg("Consolidated but could not encrypt token")
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "consolidated but its connection could not be delivered; contact the wallet operator")

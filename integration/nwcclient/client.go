@@ -328,23 +328,6 @@ func short(s string) string {
 	return s[:n] + "…"
 }
 
-// DecryptPairingURI decrypts a NIP-44 payload that is known to be a bare
-// nostr+walletconnect:// URI, using the beneficiary/requester's own private key.
-//
-// It no longer corresponds to any live response field. create_circle_wallet now
-// returns a single encrypted_details ciphertext whose plaintext is a JSON object
-// with pairing_uri inside it (NIP-CW §Response), which is what DecryptPayload
-// plus integration/circle_details.go handles. Nothing calls this helper today —
-// kept only as the thin wrapper it always was, in case a future response
-// encrypts a bare URI again.
-func DecryptPairingURI(recipientPrivkey, walletPubkey, encryptedURI string) (string, error) {
-	uri, err := DecryptPayload(recipientPrivkey, walletPubkey, encryptedURI)
-	if err != nil {
-		return "", fmt.Errorf("decrypt pairing uri: %w", err)
-	}
-	return uri, nil
-}
-
 // DecryptPayload opens any NIP-44 payload a hub nested inside a response for one
 // specific recipient — a pairing URI, a cash token, or a circle join's
 // encrypted_details JSON. walletPubkey is the sender's (the hub's) wallet
