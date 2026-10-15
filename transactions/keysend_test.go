@@ -528,8 +528,9 @@ func TestSendKeysend_IsolatedAppToIsolatedApp(t *testing.T) {
 
 	// receiving app should have the same data as what was sent
 	assert.Equal(t, transaction.Description, incomingTransaction.Description)
-	assert.Equal(t, transaction.Metadata, incomingTransaction.Metadata)
-	assert.Equal(t, transaction.Boostagram, incomingTransaction.Boostagram)
+	// Compared as JSON, not bytes: postgres stores jsonb and re-serialises it.
+	assert.JSONEq(t, string(transaction.Metadata), string(incomingTransaction.Metadata))
+	assert.JSONEq(t, string(transaction.Boostagram), string(incomingTransaction.Boostagram))
 
 	transactions := []db.Transaction{}
 	result := svc.DB.Find(&transactions)
