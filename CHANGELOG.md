@@ -162,6 +162,12 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   straight away, with the maximum log length set from a settings icon on
   the response and remembered across reloads.
 - The critical-error page no longer offers an "Update Configuration" form.
+- A Circle Wallet keeps the fee rate in force when its member joined: changing
+  a Circle Hub's fee now applies only to members who join afterwards (NIP-CW
+  §Fees). (#122)
+- Removing a recipient from a Cash bill is now all-or-nothing: if returning
+  their amount to the Cash Hub fails, their slice stays exactly as it was
+  instead of being removed with the funds left behind. (#122)
 
 ### Fixed
 

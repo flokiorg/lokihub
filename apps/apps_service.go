@@ -213,11 +213,12 @@ type AppsService interface {
 	// db.App.SplitFromWalletAppID), the reverse of SetCashSliceSplitTarget.
 	// Call only after the new wallet has been created and funded.
 	SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error
-	// DeleteCashClaim removes an unclaimed slice from a cash_wallet. Returns
-	// an error if the claim is not found, belongs to a different wallet, or has
-	// already been claimed. The caller is responsible for sweeping the slice's
-	// AmountMloki back to the hub before calling this.
-	DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error)
+	// DeleteCashClaim removes an unclaimed slice from a cash_wallet, calling
+	// sweep (if non-nil) to return its amount to the hub while the slice is
+	// held; if sweep fails the slice is released untouched. Returns an error if
+	// the claim is not found, belongs to a different wallet, or has already
+	// been claimed.
+	DeleteCashClaim(walletAppID uint, claimID uint, sweep func(claim *db.CashWalletClaim) error) (*db.CashWalletClaim, error)
 	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
 	// facts on its slice, found by payment hash; a slice already recorded is
 	// left alone.
