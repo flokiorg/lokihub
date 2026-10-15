@@ -1099,6 +1099,8 @@ func (svc *transactionsService) applyPaymentLookup(payment *db.Transaction, look
 			return txErr
 		})
 		return err == nil, err
+	case lnclient.PaymentStatusInFlight:
+		// Still in flight: leave the row as it is.
 	}
 	return false, nil
 }
