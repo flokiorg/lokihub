@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -207,7 +208,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 		Expiry:        happyPathExpirySecs,
 		IdentityEvent: eventJSON(t, ev2),
 	}, &second)
-	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
+	requireNWCErrorCode(t, err, nipcw.ErrWalletExists)
 
 	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
