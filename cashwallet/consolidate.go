@@ -2,6 +2,7 @@ package cashwallet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +41,21 @@ func fundInternal(ctx context.Context, deps Deps, fromAppID, toAppID uint, amoun
 		map[string]interface{}{"internal_transfer": true},
 		deps.LNClient, &fromAppID, nil,
 	); err != nil {
+		// Sent but not recorded: the funds have moved (the paying app's balance
+		// already counts the pending row), so this is a completed transfer. Every
+		// saga above treats an error as "nothing moved" and compensates —
+		// deleting a wallet that now holds the funds, or restoring a source claim
+		// whose value already left — so reporting it as a failure would create
+		// value twice.
+		if errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
+			logger.Logger.Error().Err(err).
+				Uint("from_app_id", fromAppID).
+				Uint("to_app_id", toAppID).
+				Uint64("amount_mloki", amountMloki).
+				Str("memo", memo).
+				Msg("Internal transfer sent but not recorded; treating it as moved, outgoing row left pending for the operator")
+			return nil
+		}
 		return fmt.Errorf("failed to fund via internal transfer: %w", err)
 	}
 	return nil
