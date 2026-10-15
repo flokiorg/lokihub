@@ -113,6 +113,7 @@ func TestHasPendingIncoming(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gormDB, err := testdb.NewDB(t)
 			require.NoError(t, err)
+			t.Cleanup(func() { testdb.CloseDB(gormDB) })
 
 			appID := newWalletApp(t, gormDB, "wallet-"+tt.name)
 			seedIncoming(t, gormDB, appID, tt.state, tt.expiresAt)
@@ -128,6 +129,7 @@ func TestHasPendingIncoming(t *testing.T) {
 func TestHasPendingIncoming_OneLivePaymentAmongDeadOnesStillBlocks(t *testing.T) {
 	gormDB, err := testdb.NewDB(t)
 	require.NoError(t, err)
+	t.Cleanup(func() { testdb.CloseDB(gormDB) })
 
 	appID := newWalletApp(t, gormDB, "wallet-mixed")
 	longExpired := time.Now().Add(-48 * time.Hour)
@@ -146,6 +148,7 @@ func TestHasPendingIncoming_OneLivePaymentAmongDeadOnesStillBlocks(t *testing.T)
 func TestHasPendingIncoming_IgnoresOtherAppsPayments(t *testing.T) {
 	gormDB, err := testdb.NewDB(t)
 	require.NoError(t, err)
+	t.Cleanup(func() { testdb.CloseDB(gormDB) })
 
 	mine := newWalletApp(t, gormDB, "wallet-mine")
 	theirs := newWalletApp(t, gormDB, "wallet-theirs")
