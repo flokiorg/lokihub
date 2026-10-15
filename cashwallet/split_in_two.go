@@ -66,7 +66,9 @@ type SplitInTwoResult struct {
 // double-count. On success (nil error), sourceFundsIntact is meaningless: the
 // source was consumed terminal by design and MUST NOT be restored regardless.
 func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result *SplitInTwoResult, sourceFundsIntact bool, err error) {
-	carved, err := Split(ctx, deps, SplitParams{
+	// Both bills are created, signed and encoded before either is funded: NIP-CASH
+	// requires a signing refusal to fail the operation before any funds move.
+	preparedCarved, err := prepareSplit(ctx, deps, SplitParams{
 		HubApp:             params.HubApp,
 		SourceWalletApp:    params.SourceWalletApp,
 		AmountMloki:        params.CarvedAmountMloki,
@@ -84,10 +86,14 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 	}
 
 	if params.RemainderAmountMloki == 0 {
+		carved, err := preparedCarved.fund(ctx, deps)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to spin off the carved piece: %w", err)
+		}
 		return &SplitInTwoResult{Carved: carved}, false, nil
 	}
 
-	remainder, err := Split(ctx, deps, SplitParams{
+	preparedRemainder, err := prepareSplit(ctx, deps, SplitParams{
 		HubApp:             params.HubApp,
 		SourceWalletApp:    params.SourceWalletApp,
 		AmountMloki:        params.RemainderAmountMloki,
@@ -99,6 +105,19 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result
 		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 		ExpiresAt:          params.ExpiresAt,
 	})
+	if err != nil {
+		// Neither bill is funded yet, so nothing has left the source.
+		preparedCarved.abandon(deps)
+		return nil, true, fmt.Errorf("failed to spin off the remainder: %w", err)
+	}
+
+	carved, err := preparedCarved.fund(ctx, deps)
+	if err != nil {
+		preparedRemainder.abandon(deps)
+		return nil, true, fmt.Errorf("failed to spin off the carved piece: %w", err)
+	}
+
+	remainder, err := preparedRemainder.fund(ctx, deps)
 	if err != nil {
 		// Compensate the carved spin-off: move its funds back to the source,
 		// then delete the emptied wallet. Reversal must precede deletion so the

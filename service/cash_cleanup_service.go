@@ -53,6 +53,23 @@ func resetCleanupInProgress(gormDB *gorm.DB, appID uint) {
 // whose retention window has passed. Optional so tests and non-trusted-relay
 // setups can pass nil.
 func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, pruneRetainedWallets func()) {
+	// Once at startup, as soon as the node is up: a cash_redeem payout whose
+	// outcome arrived while lokihub was down is otherwise never resolved, and its
+	// slice stays claimed.
+	go func() {
+		for {
+			if lnClient := getLNClient(); lnClient != nil {
+				transactionsSvc.ReconcilePendingCashRedeems(ctx, lnClient)
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}()
+
 	go func() {
 		ticker := time.NewTicker(cashCleanupInterval)
 		defer ticker.Stop()
@@ -66,6 +83,9 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 					continue
 				}
 				runCashCleanup(ctx, gormDB, transactionsSvc, lnClient, eventPublisher)
+				// Before the stale sweep, which fails an old PENDING payment
+				// without asking the node or releasing its slice.
+				transactionsSvc.ReconcilePendingCashRedeems(ctx, lnClient)
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneStaleCashTransferProofs(gormDB)

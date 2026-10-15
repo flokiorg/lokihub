@@ -160,14 +160,10 @@ type AppsService interface {
 	GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error)
 	// ClaimCashSlice atomically marks one recipient's slice claimed, guarded
 	// by "WHERE claimed_at IS NULL" so concurrent/replayed claims can't double-pay,
-	// AND by an optimistic lock on the slice's current TransferCount — closing a
-	// TOCTOU race against a concurrent SplitCashSliceAmount call, which can shrink
-	// this same row's AmountMloki (via a partial split) without ever touching
-	// ClaimedAt or the registered identity. Without pinning TransferCount too, a
-	// redeem racing a partial split could commit against the row's PRE-split
-	// (too-large) AmountMloki even though the update itself still matches on
-	// identity+claimed_at alone — paying out more than the slice's real remaining
-	// balance backs. Returns the claimed row's AmountMloki, or a
+	// AND by an optimistic lock on the slice's current TransferCount, which every
+	// in-place cash_transfer bumps — so a claim can't commit against a row a
+	// concurrent transfer changed between the read and the update. A slice's
+	// AmountMloki is never rewritten in place. Returns the claimed row's AmountMloki, or a
 	// constants.ErrNotFound-wrapped error if no matching unclaimed row exists
 	// (never existed, wrong identity, already claimed, or raced against a
 	// concurrent split/transfer — all look identical to the caller by design).
@@ -183,41 +179,10 @@ type AppsService interface {
 	// TransferCount — so two concurrent transfers of the same slice can never
 	// both succeed. Returns the slice's unchanged AmountMloki on success. Used
 	// ONLY for the narrow "lifetime-solo wallet, full-amount transfer" fast
-	// path (cash_transfer_controller.go) — every other transfer/split outcome
-	// goes through SplitCashSliceAmount instead.
+	// path (cash_transfer_controller.go) — every other outcome claims the slice
+	// (ClaimCashSlice) and re-issues its value as new bills (cashwallet.SplitInTwo).
 	ReassignCashSliceIdentity(walletAppID uint, currentIdentityType, currentIdentityValue,
 		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
-	// SplitCashSliceAmount atomically moves splitMloki out of one unclaimed
-	// slice, guarded by "claimed_at IS NULL" plus an optimistic lock on
-	// TransferCount (same pattern as ReassignCashSliceIdentity — a concurrent
-	// split/transfer/redeem of the same row invalidates a stale read, reported
-	// as constants.ErrNotFound). Two outcomes, both atomic:
-	//   - splitMloki == the slice's current AmountMloki: a full split — the
-	//     slice is claimed/terminal exactly like a redemption, its AmountMloki
-	//     untouched (the whole value is leaving, nothing to shrink).
-	//     Result.FullyDrained is true.
-	//   - splitMloki < AmountMloki: a partial split — AmountMloki is decremented
-	//     by splitMloki, TransferCount increments, the slice stays unclaimed
-	//     under its SAME registered identity with the remainder, redeemable/
-	//     transferable again later. Result.FullyDrained is false.
-	// splitMloki must be positive and MinTransferMloki-or-more (0 = no floor);
-	// for a partial split, the remainder left behind must ALSO be either
-	// exactly 0 or at least MinTransferMloki — a split that would leave
-	// unmovable dust behind is rejected (constants.ErrInvalidParams) rather
-	// than silently stranding it. Returns the source slice's own
-	// MinTransferMloki for the caller to pass into cashwallet.Split so the
-	// new wallet inherits it.
-	SplitCashSliceAmount(walletAppID uint, identityType, identityValue string, splitMloki int64) (CashSliceSplitResult, error)
-	// UndoCashSliceSplit reverts a PARTIAL SplitCashSliceAmount call (adds
-	// splitMloki back, decrements TransferCount), guarded by "claimed_at IS
-	// NULL" so it can only apply to a slice that's still alive — used to roll
-	// back when the new dedicated wallet's creation/funding subsequently
-	// fails. Mirrors UnclaimCashSlice's rollback posture but for the amount
-	// dimension rather than the ClaimedAt one; do not call this for a FULL
-	// split's rollback — use UnclaimCashSlice for that instead (SplitCashSliceAmount's
-	// full-split branch never touches AmountMloki, so UnclaimCashSlice alone
-	// correctly restores it).
-	UndoCashSliceSplit(walletAppID uint, identityType, identityValue string, splitMloki int64) error
 	// SetCashSliceSplitTarget records which new wallet a
 	// just-claimed slice's value was spun off into. Purely informational
 	// (see db.CashWalletClaim.SpunOffToWalletAppID) — call only after the
@@ -253,6 +218,10 @@ type AppsService interface {
 	// already been claimed. The caller is responsible for sweeping the slice's
 	// AmountMloki back to the hub before calling this.
 	DeleteCashClaim(walletAppID uint, claimID uint) (*db.CashWalletClaim, error)
+	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
+	// facts on its slice, found by payment hash; a slice already recorded is
+	// left alone.
+	RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error
 
 	// RecordCashStrandedFund durably logs one compensating-saga reversal that
 	// itself failed (cashwallet.Consolidate/SplitInTwo), so an operator sweep
@@ -268,28 +237,6 @@ type AppsService interface {
 	// has manually swept its funds back. Idempotent: a no-op (not an error) if
 	// already resolved.
 	ResolveCashStrandedFund(id uint) error
-}
-
-// CashSliceSplitResult is returned by AppsService.SplitCashSliceAmount.
-type CashSliceSplitResult struct {
-	// SplitAmountMloki is the amount moving to the new dedicated wallet —
-	// what the caller should fund the new wallet with.
-	SplitAmountMloki int64
-	// FullyDrained is true when the split consumed the slice's entire
-	// remaining AmountMloki — the source slice is now claimed/terminal, and
-	// the source wallet may be eligible for auto-deletion if this was its
-	// last unclaimed slice.
-	FullyDrained bool
-	// RemainingAmountMloki is what's left on the source slice after this
-	// split — always 0 when FullyDrained is true.
-	RemainingAmountMloki int64
-	// MinTransferMloki is the SOURCE slice's own value, for the caller to
-	// pass into cashwallet.Split so the new wallet inherits it — never reset
-	// to the hub's own current config.
-	MinTransferMloki int64
-	// RedeemFeePpm is likewise the SOURCE slice's own value, for the caller
-	// to pass into cashwallet.Split so the new wallet inherits it unchanged.
-	RedeemFeePpm int
 }
 
 // CashSliceRedeemPayment carries the payout facts SetCashSliceRedeemPayment

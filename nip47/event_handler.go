@@ -398,6 +398,36 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		return
 	}
 
+	// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
+	// Private Transport), which requires refusing them here with NOT_IMPLEMENTED —
+	// before the permission check, so a connection without the scope, or an
+	// expired one, gets that same answer rather than RESTRICTED or EXPIRED.
+	//
+	// Not "unknown method", which the dispatch's default case would say: the method
+	// exists and this hub serves it, just not on this transport. A client author
+	// reading that would look for a typo instead of for the announcement.
+	//
+	// The reason they moved is that this transport cannot carry them privately:
+	// every request here is p-tagged with its own bill's wallet pubkey, so a
+	// holder's bills are a public, linkable set, and no amount of encryption
+	// changes that. mint_cash stays on this transport because it is the hub
+	// owner's method on the hub's own connection, and NIP-CASH keeps it off the
+	// private transport for its own reasons.
+	switch nip47Request.Method {
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus:
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code: constants.ERROR_NOT_IMPLEMENTED,
+				Message: fmt.Sprintf(
+					"%s is served over the private transport only — find this hub's kind-11190 announcement and send a kind-23190 request (NIP-CASH §The Private Transport)",
+					nip47Request.Method),
+			},
+		}, nostr.Tags{})
+		return
+	}
+
 	if !slices.Contains(permissions.GetAlwaysGrantedMethods(), nip47Request.Method) {
 		scope, err := permissions.RequestMethodToScope(nip47Request.Method)
 		if err != nil {
@@ -498,30 +528,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodMintCash:
 		controller.
 			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
-	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
-		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus:
-		// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
-		// Private Transport). They are refused here rather than dispatched.
-		//
-		// Not "unknown method", which the default case below would say: the method
-		// exists and this hub serves it, just not on this transport. A client author
-		// reading that would look for a typo instead of for the announcement.
-		//
-		// The reason they moved is that this transport cannot carry them privately:
-		// every request here is p-tagged with its own bill's wallet pubkey, so a
-		// holder's bills are a public, linkable set, and no amount of encryption
-		// changes that. mint_cash stays below because it is the hub owner's method on
-		// the hub's own connection, and NIP-CASH keeps it off the private transport
-		// for its own reasons.
-		publishResponse(&models.Response{
-			ResultType: nip47Request.Method,
-			Error: &models.Error{
-				Code: constants.ERROR_NOT_IMPLEMENTED,
-				Message: fmt.Sprintf(
-					"%s is served over the private transport only — find this hub's kind-11190 announcement and send a kind-23190 request (NIP-CASH §The Private Transport)",
-					nip47Request.Method),
-			},
-		}, nostr.Tags{})
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.
 			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)

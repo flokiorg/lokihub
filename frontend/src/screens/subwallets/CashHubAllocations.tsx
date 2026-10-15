@@ -933,6 +933,10 @@ export const CashHubAllocations = React.forwardRef<
   // id and an archive id come from different sequences and WILL collide (see
   // CashWalletClaim.archived), so a bare id makes a duplicate React key and,
   // worse, a delete URL pointing at someone else's row.
+  // Read once: whether an archived bill's retention window is still open only
+  // needs to be right when the list is shown.
+  const [renderedAt] = React.useState(() => Date.now());
+
   const walletGroups = React.useMemo(() => {
     const order: string[] = [];
     const byWallet = new Map<string, CashWalletClaim[]>();
@@ -950,6 +954,7 @@ export const CashHubAllocations = React.forwardRef<
         key,
         walletAppId: groupClaims[0].wallet_app_id,
         archived: groupClaims[0].archived,
+        retainedUntil: groupClaims[0].retained_until,
         claims: groupClaims,
       };
     });
@@ -1539,17 +1544,16 @@ export const CashHubAllocations = React.forwardRef<
                             would just be the same action twice. */}
                         {lokicashToken ? (
                           // Shown for an archived bill too, muted rather than
-                          // withheld. There it is a record, not a credential:
-                          // the bill is destroyed, so the string moves no
-                          // money, and a caller who tries it over NWC gets the
-                          // "spent" tombstone inside the retention window and
-                          // silence after it (NIP-CASH §Cash Status). Hiding
-                          // it only cost the operator the one identifier that
-                          // matches this row against a support ticket or an
-                          // offline record — which is why the archive keeps
-                          // the string at all. The row's own "archived" badge
-                          // is what says it is dead; the muted styling keeps
-                          // it from reading as a live token at a glance.
+                          // withheld. The bill is destroyed, so the string
+                          // moves no money, and a caller who tries it over NWC
+                          // gets the "spent" tombstone inside the retention
+                          // window and silence after it (NIP-CASH §Cash
+                          // Status) — so within the window it is still a
+                          // credential, which the line below says, and only a
+                          // record after. Hiding it only cost the operator the
+                          // one identifier that matches this row against a
+                          // support ticket or an offline record — which is why
+                          // the archive keeps the string at all.
                           <button
                             type="button"
                             className={`block max-w-full truncate rounded font-mono text-sm hover:underline ${
@@ -1596,6 +1600,21 @@ export const CashHubAllocations = React.forwardRef<
                             )}
                           </button>
                         )}
+                        {/* Until its retention window ends, a destroyed
+                            bill's token still gets a "spent" answer to
+                            cash_status, so it is a live credential, not
+                            only a record (NIP-CASH §Archival on Deletion). */}
+                        {group.archived &&
+                          group.retainedUntil !== undefined &&
+                          group.retainedUntil * 1000 > renderedAt && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {t("cashHubAllocations.archivedTokenStillLive", {
+                                date: new Date(
+                                  group.retainedUntil * 1000
+                                ).toLocaleDateString(),
+                              })}
+                            </p>
+                          )}
                         {/* Identity pills — a small icon (or, for a pubkey
                             with a set profile picture, the recipient's own
                             avatar) plus a short identifier, deliberately no

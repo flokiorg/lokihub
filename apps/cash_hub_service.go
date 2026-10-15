@@ -37,6 +37,20 @@ func validateTransferFloorCoversFee(minTransferMloki, redeemFeeBaseMloki int64) 
 	return nil
 }
 
+// maxHubLabelBytes is the cashhub1/circlehub1 label TLV's limit (NIP-CASH §The Cash
+// Hub Connection, NIP-CW §The Circle Wallet Hub Connection): one length byte.
+const maxHubLabelBytes = 255
+
+// validateHubLabel refuses a hub name its connection token could not carry. The
+// token is only encoded after the hub is saved, so a longer name used to leave a
+// hub whose one-time connection secret was never shown.
+func validateHubLabel(name string) error {
+	if len(name) > maxHubLabelBytes {
+		return fmt.Errorf("%w: a hub name can be at most %d bytes, got %d", constants.ErrInvalidParams, maxHubLabelBytes, len(name))
+	}
+	return nil
+}
+
 func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	config db.CashHubConfig) (*db.App, string, error) {
@@ -71,6 +85,9 @@ func (svc *appsService) CreateCashHub(name string, pubkey string, maxAmountLoki 
 		return nil, "", fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
 	}
 	if err := validateTransferFloorCoversFee(config.MinTransferMloki, config.RedeemFeeBaseMloki); err != nil {
+		return nil, "", err
+	}
+	if err := validateHubLabel(name); err != nil {
 		return nil, "", err
 	}
 
@@ -318,17 +335,11 @@ func (svc *appsService) ClaimCashSlice(walletAppID uint, identityType, identityV
 	// this update would still match on id alone and pay out the PRE-transfer
 	// caller — a phantom transfer.
 	//
-	// The transfer_count re-check closes a SEPARATE, newer race: a concurrent
-	// SplitCashSliceAmount call can shrink this row's AmountMloki (a partial
-	// split) WITHOUT changing identity_type/identity_value or claimed_at at
-	// all — the identity re-check above does nothing to catch that. Pinning
-	// transfer_count (which SplitCashSliceAmount always increments, on both
-	// its full and partial branches, exactly like ReassignCashSliceIdentity
-	// does) means any concurrent mutation to this row between the read above
-	// and this update — identity reassignment OR amount split — invalidates
-	// this claim attempt, so the AmountMloki this function returns is always
-	// the row's true, current value, never a stale pre-split snapshot that
-	// would let a redeem pay out more than the slice's real remaining balance.
+	// The transfer_count re-check pins the row version too, which
+	// ReassignCashSliceIdentity increments, so any concurrent in-place transfer
+	// between the read above and this update invalidates this claim attempt.
+	// AmountMloki itself is never rewritten in place, so the value returned is
+	// the slice's true amount.
 	result := svc.db.Model(&db.CashWalletClaim{}).
 		Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ?",
 			claim.ID, identityType, identityValue, claim.TransferCount).
@@ -438,143 +449,12 @@ func (svc *appsService) ReassignCashSliceIdentity(walletAppID uint, currentIdent
 	return claim.AmountMloki, nil
 }
 
-// SplitCashSliceAmount atomically moves splitMloki out of one unclaimed
-// slice — either fully (claiming it terminal, exactly like a real redemption)
-// or partially (decrementing its AmountMloki, leaving it alive under the same
-// identity with the remainder). See the AppsService interface doc comment for
-// the full contract; this is the one place both cash_transfer outcomes (full
-// split and partial split) share their atomicity guard, so they can't drift
-// apart the way two separate methods eventually would.
-//
-// Race-safety: the read below captures TransferCount and AmountMloki, then
-// the committing UPDATE pins BOTH of them in its WHERE clause as an
-// optimistic lock — mirroring ReassignCashSliceIdentity's TransferCount pin,
-// extended to also cover AmountMloki since this is the one method that
-// mutates it. Any concurrent mutation of this row (a redeem, a reassignment,
-// or another split) between the read and this update changes at least one of
-// those two columns, so the loser's update always matches zero rows and
-// reports ErrNotFound — never a stale, silently-wrong amount.
-func (svc *appsService) SplitCashSliceAmount(walletAppID uint, identityType, identityValue string, splitMloki int64) (CashSliceSplitResult, error) {
-	if splitMloki <= 0 {
-		return CashSliceSplitResult{}, fmt.Errorf("%w: amount_mloki must be positive", constants.ErrInvalidParams)
-	}
-	var claim db.CashWalletClaim
-	if err := svc.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL",
-		walletAppID, identityType, identityValue).First(&claim).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return CashSliceSplitResult{}, fmt.Errorf("%w: no slice registered for this identity", constants.ErrNotFound)
-		}
-		return CashSliceSplitResult{}, err
-	}
-	if splitMloki > claim.AmountMloki {
-		return CashSliceSplitResult{}, fmt.Errorf("%w: amount_mloki %d exceeds this slice's own balance of %d",
-			constants.ErrInvalidParams, splitMloki, claim.AmountMloki)
-	}
-	remainder := claim.AmountMloki - splitMloki
-	// MinTransferMloki floors BOTH sides of a split: the piece being carved
-	// off, and whatever's left behind (unless the remainder is exactly zero —
-	// a full split leaves nothing to be dust). Without the remainder check, a
-	// split could strand an unmovable sliver on the source slice that could
-	// never itself be split further, only redeemed or transferred whole.
-	if claim.MinTransferMloki > 0 {
-		if splitMloki < claim.MinTransferMloki {
-			return CashSliceSplitResult{}, fmt.Errorf("%w: amount_mloki %d is below this slice's min_transfer_mloki %d",
-				constants.ErrInvalidParams, splitMloki, claim.MinTransferMloki)
-		}
-		if remainder > 0 && remainder < claim.MinTransferMloki {
-			return CashSliceSplitResult{}, fmt.Errorf(
-				"%w: this split would leave a remainder of %d, below min_transfer_mloki %d — transfer it all instead, or transfer less",
-				constants.ErrInvalidParams, remainder, claim.MinTransferMloki)
-		}
-	}
-
-	result := CashSliceSplitResult{
-		SplitAmountMloki:     splitMloki,
-		FullyDrained:         remainder == 0,
-		RemainingAmountMloki: remainder,
-		MinTransferMloki:     claim.MinTransferMloki,
-		RedeemFeePpm:         claim.RedeemFeePpm,
-	}
-
-	var dbResult *gorm.DB
-	if remainder == 0 {
-		// Full split: claim the slice terminal, same shape as a redemption.
-		// AmountMloki is untouched (the whole value is leaving, nothing to
-		// shrink) — still pinned in the WHERE clause below as the optimistic
-		// lock, so a concurrent PARTIAL split that shrank this row between the
-		// read above and this update correctly invalidates this attempt
-		// instead of claiming a stale, too-large amount as if it were current.
-		dbResult = svc.db.Model(&db.CashWalletClaim{}).
-			Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ? AND amount_mloki = ?",
-				claim.ID, identityType, identityValue, claim.TransferCount, claim.AmountMloki).
-			Update("claimed_at", time.Now())
-	} else {
-		// Partial split: decrement AmountMloki by splitMloki using the value
-		// read above (not live SQL arithmetic) — race-safety comes from
-		// pinning both TransferCount and AmountMloki in the WHERE clause as an
-		// optimistic lock, exactly like every other atomic method here, not
-		// from evaluating the subtraction against the database's live value.
-		dbResult = svc.db.Model(&db.CashWalletClaim{}).
-			Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ? AND amount_mloki = ?",
-				claim.ID, identityType, identityValue, claim.TransferCount, claim.AmountMloki).
-			Updates(map[string]interface{}{
-				"amount_mloki":   remainder,
-				"transfer_count": claim.TransferCount + 1,
-			})
-	}
-	if dbResult.Error != nil {
-		return CashSliceSplitResult{}, dbResult.Error
-	}
-	if dbResult.RowsAffected == 0 {
-		// Lost a race against a concurrent claim, transfer, or split of this
-		// same row between the read above and this update.
-		return CashSliceSplitResult{}, fmt.Errorf("%w: this slice has already been redeemed or transferred", constants.ErrNotFound)
-	}
-	return result, nil
-}
-
-// UndoCashSliceSplit reverts a PARTIAL SplitCashSliceAmount call: adds
-// splitMloki back to the slice's AmountMloki and decrements TransferCount,
-// guarded by "claimed_at IS NULL" so it can only apply to a slice that's
-// still alive. Used when the new dedicated wallet's creation/funding
-// subsequently fails, mirroring UnclaimCashSlice's rollback posture but for
-// the amount dimension. Do not call this to roll back a FULL split — that
-// path never touches AmountMloki/TransferCount at all until the row is
-// claimed, so a plain UnclaimCashSlice call already restores it correctly.
-//
-// Returns an error wrapping constants.ErrNotFound (matching every sibling
-// atomic method's "lost the race" convention) if the row was legitimately
-// claimed/transferred/split again in the window between the failed split's
-// own decrement and this rollback — RowsAffected == 0 is NOT silently
-// treated as success (it used to be, silently stranding the carved-off
-// amount with no matching CashWalletClaim row anywhere, though the real
-// ledger balance stays untouched and is eventually recovered by the expiry
-// sweep regardless). Callers MUST log this case at
-// Error level with enough detail to locate and manually sweep the balance
-// immediately rather than waiting on that sweep.
-func (svc *appsService) UndoCashSliceSplit(walletAppID uint, identityType, identityValue string, splitMloki int64) error {
-	result := svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL",
-			walletAppID, identityType, identityValue).
-		Updates(map[string]interface{}{
-			"amount_mloki":   gorm.Expr("amount_mloki + ?", splitMloki),
-			"transfer_count": gorm.Expr("transfer_count - 1"),
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("%w: slice was claimed/mutated again before the split rollback could run", constants.ErrNotFound)
-	}
-	return nil
-}
-
 // SetCashSliceSplitTarget records which new wallet a just-claimed
 // slice's value was spun off into — purely informational (see
 // db.CashWalletClaim.SpunOffToWalletAppID doc comment). Called only after the
 // new wallet has been successfully created and funded, so the guard here is
 // defensive rather than load-bearing: nothing else can be racing this exact
-// row once SplitCashSliceAmount's full-split branch has claimed it.
+// row once the split has claimed it (ClaimCashSlice).
 func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error {
 	return svc.db.Model(&db.CashWalletClaim{}).
 		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NULL",
@@ -602,6 +482,26 @@ func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType
 			walletAppID, identityType, identityValue, []string{"", payment.PaymentHash}).
 		Updates(map[string]interface{}{
 			"payment_hash":      payment.PaymentHash,
+			"preimage":          payment.Preimage,
+			"redeem_fee_mloki":  payment.RedeemFeeMloki,
+			"routing_fee_mloki": payment.RoutingFeeMloki,
+			"settled_at":        payment.SettledAt,
+		}).Error
+}
+
+// RecordCashSliceRedeemSettlement records a redeem payout's facts on the slice
+// that paid it, found by payment hash, for a payout that settled after
+// cash_redeem had already answered (or that the reconcile found settled at
+// startup). Only a claimed slice still missing its preimage is written, so a
+// slice cash_redeem has already recorded is left exactly as it is.
+func (svc *appsService) RecordCashSliceRedeemSettlement(walletAppID uint, payment CashSliceRedeemPayment) error {
+	if payment.PaymentHash == "" || payment.Preimage == "" {
+		return nil
+	}
+	return svc.db.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND payment_hash = ? AND claimed_at IS NOT NULL AND preimage = ?",
+			walletAppID, payment.PaymentHash, "").
+		Updates(map[string]interface{}{
 			"preimage":          payment.Preimage,
 			"redeem_fee_mloki":  payment.RedeemFeeMloki,
 			"routing_fee_mloki": payment.RoutingFeeMloki,

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/websocket"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
 
@@ -385,21 +386,19 @@ func TestQueryAndStore_OneRelayUnreachable_OtherRelayEventStillFound(t *testing.
 	assert.Contains(t, contacts, requesterPubkey, "one unreachable relay must not blank out a hit from another configured relay")
 }
 
-func TestQueryAndStore_AllRelaysUnreachable_MissLooksLikeNoEvent(t *testing.T) {
+func TestQueryAndStore_AllRelaysUnreachable_IsUnresolved(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	// Documents a real observability gap: a relay-connection failure and a
-	// relay that is reachable but genuinely has no event both surface as the
-	// exact same outcome here (empty set, nil error) — and thus the same
-	// "No kind:3 event found for pubkey" warning in queryAndStore. From the
-	// warning alone there is no way to tell "the contact has no kind:3" apart
-	// from "every configured relay was unreachable".
+	// No relay could be reached, so nobody said the owner has no kind:3: the list
+	// is unresolved, not empty (NIP-CW §Membership), and nothing is cached.
 	require.NoError(t, svc.Cfg.SetGeneralRelay(strings.Join([]string{"ws://127.0.0.1:1", "ws://127.0.0.1:2"}, ",")))
 
 	contacts, err := cache.getContactList(context.Background(), requesterPubkey)
-	require.NoError(t, err)
-	assert.Empty(t, contacts)
+	require.ErrorIs(t, err, constants.ErrCircleMembershipUnresolved)
+	assert.Nil(t, contacts)
+	_, cached := cache.peek(requesterPubkey)
+	assert.False(t, cached)
 }
 
 // newSlowConnectFakeRelay is like newFakeRelay but delays the HTTP handler
@@ -479,15 +478,15 @@ func TestQueryAndStore_SlowToConnectRelayHoldingOnlyEvent_BoundedByCtxDeadline(t
 	require.NoError(t, svc.Cfg.SetGeneralRelay(strings.Join([]string{slowRelay.URL, fastRelay.URL}, ",")))
 
 	// Caller's own ctx has no deadline — RelayQueryTimeout alone must bound
-	// this call, and (being a genuine relay-side miss, not caller cancellation)
-	// must still succeed with an empty, cached result rather than an error.
+	// this call. The slow relay holds the real event and never got to answer,
+	// so the list is unresolved, not empty.
 	pool := nostr.NewSimplePool(context.Background())
 	start := time.Now()
 	contacts, err := cache.queryAndStore(context.Background(), pool, owner)
 	elapsed := time.Since(start)
 
-	require.NoError(t, err)
-	assert.Empty(t, contacts, "the slow relay's real event still arrives too late to be seen — bounding the call doesn't make the event appear, it only stops the caller from hanging")
+	require.ErrorIs(t, err, constants.ErrCircleMembershipUnresolved)
+	assert.Nil(t, contacts, "the slow relay's real event still arrives too late to be seen — bounding the call doesn't make the event appear, it only stops the caller from hanging")
 	assert.Less(t, elapsed, connectDelay,
 		"queryAndStore must return once RelayQueryTimeout expires instead of waiting out the slow relay's full connect time")
 }
@@ -575,8 +574,9 @@ func TestQueryAndStore_CallerCtxExpires_BoundedAndReturnsError(t *testing.T) {
 
 // TestQueryAndStore_RelayQueryTimeoutExpires_CallerCtxStillValid is the
 // contrast to the test above: RelayQueryTimeout itself (lowered here for
-// speed) cuts the query short while the caller's own ctx has no deadline —
-// a genuine relay-side miss, so it must log/cache normally, not error.
+// speed) cuts the query short while the caller's own ctx has no deadline.
+// The relay never answered, so the list is unresolved: a distinct error, and
+// still nothing cached, so the next request retries.
 func TestQueryAndStore_RelayQueryTimeoutExpires_CallerCtxStillValid(t *testing.T) {
 	original := RelayQueryTimeout
 	RelayQueryTimeout = 300 * time.Millisecond
@@ -595,10 +595,10 @@ func TestQueryAndStore_RelayQueryTimeoutExpires_CallerCtxStillValid(t *testing.T
 	pool := nostr.NewSimplePool(context.Background())
 	contacts, err := cache.queryAndStore(context.Background(), pool, requesterPubkey)
 
-	require.NoError(t, err, "a genuine RelayQueryTimeout expiry (caller ctx still valid) must not surface as an error — same contract as before this distinction existed")
-	assert.Empty(t, contacts)
+	require.ErrorIs(t, err, constants.ErrCircleMembershipUnresolved,
+		"a relay that never answered leaves the list unresolved, which NIP-CW forbids treating as empty")
+	assert.Nil(t, contacts)
 
-	entry, ok := cache.cache[requesterPubkey]
-	assert.True(t, ok, "a genuine relay-side miss must still populate the cache, unlike a caller-side cancellation")
-	assert.WithinDuration(t, time.Now(), entry.fetchedAt, 5*time.Second)
+	_, ok := cache.cache[requesterPubkey]
+	assert.False(t, ok, "an unresolved list is not cached")
 }

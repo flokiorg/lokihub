@@ -648,12 +648,34 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 // failed or never started; anything else wraps lnclient.ErrPaymentPending.
 func (svc *FLNDService) lookupPaymentAfterError(paymentHash string, callErr error) (*lnclient.PayInvoiceResponse, error) {
 	pending := fmt.Errorf("%w: %w", lnclient.ErrPaymentPending, callErr)
-	hash, err := hex.DecodeString(paymentHash)
+	lookup, err := svc.LookupPayment(svc.ctx, paymentHash)
 	if err != nil {
+		logger.Logger.Warn().Err(err).Str("payment_hash", paymentHash).Msg("Payment lookup failed, outcome unknown")
 		return nil, pending
 	}
+	switch lookup.Status {
+	case lnclient.PaymentStatusSucceeded:
+		return &lnclient.PayInvoiceResponse{Preimage: lookup.Preimage, Fee: lookup.FeeMloki}, nil
+	case lnclient.PaymentStatusFailed:
+		if lookup.FailureReason == "" {
+			return nil, callErr
+		}
+		return nil, errors.New(lookup.FailureReason)
+	case lnclient.PaymentStatusInFlight:
+	}
+	return nil, pending
+}
 
-	ctx, cancel := context.WithTimeout(svc.ctx, 10*time.Second)
+// LookupPayment asks the node for an outgoing payment's state by hash
+// (lnclient.PaymentLooker). A payment the node has no record of never started,
+// which is a definite failure with no reason given.
+func (svc *FLNDService) LookupPayment(ctx context.Context, paymentHash string) (*lnclient.PaymentLookup, error) {
+	hash, err := hex.DecodeString(paymentHash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payment hash: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var payment *lnrpc.Payment
 	stream, err := svc.client.SubscribePayment(ctx, &routerrpc.TrackPaymentRequest{PaymentHash: hash})
@@ -661,23 +683,23 @@ func (svc *FLNDService) lookupPaymentAfterError(paymentHash string, callErr erro
 		payment, err = stream.Recv()
 	}
 	if status.Code(err) == codes.NotFound {
-		return nil, callErr
+		return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusFailed}, nil
 	}
 	if err != nil {
-		logger.Logger.Warn().Err(err).Str("payment_hash", paymentHash).Msg("Payment lookup failed, outcome unknown")
-		return nil, pending
+		return nil, err
 	}
 
 	switch {
 	case payment.Status == lnrpc.Payment_SUCCEEDED && payment.PaymentPreimage != "":
-		return &lnclient.PayInvoiceResponse{
+		return &lnclient.PaymentLookup{
+			Status:   lnclient.PaymentStatusSucceeded,
 			Preimage: payment.PaymentPreimage,
-			Fee:      uint64(payment.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
+			FeeMloki: uint64(payment.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
 		}, nil
 	case payment.Status == lnrpc.Payment_FAILED:
-		return nil, errors.New(payment.FailureReason.String())
+		return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusFailed, FailureReason: payment.FailureReason.String()}, nil
 	}
-	return nil, pending
+	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
 }
 
 func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {

@@ -178,6 +178,8 @@ func (svc *nip47Service) ServePrivateItem(
 			}
 		} else if !item.HasProof() && billIsCashMode {
 			message = "no slice of this bill matches this cash secret"
+		} else if item.Method == constants.NIP47MethodCreateCircleWallet {
+			message = "a join's item proof must be signed by the pubkey that is joining"
 		}
 		return transport.Result{
 			ID:         item.ID,
@@ -540,6 +542,15 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		return "", billIsCashMode, false
 	}
 	if isCircleJoin {
+		// NIP-CW §Private Join: the item proof's signer MUST be the joining pubkey.
+		// Otherwise whoever assembled the envelope could keep a member's 23199 proof
+		// and re-point the join at params of its own choosing.
+		var join struct {
+			Pubkey string `json:"pubkey"`
+		}
+		if err := json.Unmarshal(item.Params, &join); err != nil || join.Pubkey != signer {
+			return "", billIsCashMode, false
+		}
 		return signer, billIsCashMode, true
 	}
 

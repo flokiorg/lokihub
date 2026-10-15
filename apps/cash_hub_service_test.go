@@ -517,9 +517,8 @@ func TestUnclaimCashSlice_RollsBackSpinOffClaim(t *testing.T) {
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
 	}))
-	splitResult, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
 	require.NoError(t, err)
-	require.True(t, splitResult.FullyDrained)
 
 	require.NoError(t, svc.AppsService.UnclaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey))
 
@@ -758,463 +757,43 @@ func TestListClaimsForWallet_ReturnsClaimedAndUnclaimed(t *testing.T) {
 
 // --- SplitCashSliceAmount ---
 
-func TestSplitCashSliceAmount_Full_Success(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-
-	result, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000), result.SplitAmountMloki)
-	assert.True(t, result.FullyDrained)
-
-	// The slice is now terminal — GetCashWalletClaim only ever returns
-	// unclaimed rows, so it must report nothing found.
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	assert.Nil(t, claim)
-}
-
 // TestSplitCashSliceAmount_Partial_Success verifies the core new behavior:
 // splitting less than the slice's full amount leaves the remainder alive,
 // under the SAME identity, still redeemable/splittable again later.
-func TestSplitCashSliceAmount_Partial_Success(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-
-	result, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 2000)
-	require.NoError(t, err)
-	assert.Equal(t, int64(2000), result.SplitAmountMloki)
-	assert.False(t, result.FullyDrained)
-
-	// The remainder must still be there, unclaimed, same identity, reduced
-	// AmountMloki, TransferCount incremented.
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-	assert.Equal(t, int64(3000), claim.AmountMloki)
-	assert.Equal(t, 1, claim.TransferCount)
-
-	// The remainder must itself still be fully usable — redeemable...
-	amount, err := svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	assert.Equal(t, int64(3000), amount)
-}
 
 // TestSplitCashSliceAmount_Partial_RemainderStaysSplittable verifies a
 // remainder left behind by one split can itself be split again later.
-func TestSplitCashSliceAmount_Partial_RemainderStaysSplittable(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 9000},
-	}))
-
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 3000)
-	require.NoError(t, err)
-	result2, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 3000)
-	require.NoError(t, err)
-	assert.False(t, result2.FullyDrained)
-
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-	assert.Equal(t, int64(3000), claim.AmountMloki)
-	assert.Equal(t, 2, claim.TransferCount)
-}
-
-func TestSplitCashSliceAmount_ExceedsBalance_Rejected(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000},
-	}))
-
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 1001)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-}
-
-func TestSplitCashSliceAmount_ZeroOrNegative_Rejected(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000},
-	}))
-
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 0)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, -1)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-}
 
 // TestSplitCashSliceAmount_MinTransferFloor_SplitAmountTooSmall_Rejected
 // verifies the floor applies to the piece being carved off.
-func TestSplitCashSliceAmount_MinTransferFloor_SplitAmountTooSmall_Rejected(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000, MinTransferMloki: 1000},
-	}))
-
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 500)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-
-	// Untouched.
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-	assert.Equal(t, int64(5000), claim.AmountMloki)
-}
 
 // TestSplitCashSliceAmount_MinTransferFloor_RemainderTooSmall_Rejected
 // verifies the floor ALSO applies to what's left behind — a split that would
 // leave unmovable dust must be rejected, not silently allowed.
-func TestSplitCashSliceAmount_MinTransferFloor_RemainderTooSmall_Rejected(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000, MinTransferMloki: 1000},
-	}))
-
-	// Splitting off 4500 would leave a 500 remainder — below the 1000 floor.
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 4500)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-
-	// A full split (nothing left behind) must still be allowed regardless of
-	// the floor — there's no remainder to be dust.
-	result, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
-	require.NoError(t, err)
-	assert.True(t, result.FullyDrained)
-}
-
-func TestSplitCashSliceAmount_AlreadyClaimed_Rejected(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-
-	_, err = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 1000)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, constants.ErrNotFound)
-}
 
 // TestSplitCashSliceAmount_ConcurrentRace_ExactlyOneWinner mirrors
 // TestClaimCashSlice_ConcurrentRace_ExactlyOneWinner: two concurrent
 // full splits of the same slice must never both succeed.
-func TestSplitCashSliceAmount_ConcurrentRace_ExactlyOneWinner(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-
-	const goroutines = 5
-	errs := make(chan error, goroutines)
-	ready := make(chan struct{})
-	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
-			errs <- err
-		}()
-	}
-	close(ready)
-	wg.Wait()
-	close(errs)
-
-	var successes int
-	for e := range errs {
-		if e == nil {
-			successes++
-		} else {
-			assert.ErrorIs(t, e, constants.ErrNotFound)
-		}
-	}
-	assert.Equal(t, 1, successes, "exactly one goroutine must win the full split")
-}
 
 // TestSplitCashSliceAmount_ConcurrentPartialSplits_NeverOverdraw races two
 // PARTIAL splits, each individually valid against the slice's starting
 // balance but together exceeding it, and asserts the losing side is rejected
 // rather than silently overdrawing the slice below zero.
-func TestSplitCashSliceAmount_ConcurrentPartialSplits_NeverOverdraw(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 1_000_000, 3600)
-
-	trials := raceTrials(200)
-	for trial := 0; trial < trials; trial++ {
-		wallet := newCashWallet(t, svc, hub)
-		pubkey := randomHex32()
-		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-			{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-		}))
-
-		ready := make(chan struct{})
-		var wg sync.WaitGroup
-		var errA, errB error
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, errA = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 3000)
-		}()
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, errB = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 3000)
-		}()
-		close(ready)
-		wg.Wait()
-
-		aWon := errA == nil
-		bWon := errB == nil
-		require.Falsef(t, aWon && bWon, "trial %d: both partial splits (3000+3000 > 5000) succeeded — overdrawn slice", trial)
-		require.Truef(t, aWon || bWon, "trial %d: neither split succeeded (errA=%v errB=%v)", trial, errA, errB)
-
-		// Whichever won, the remainder must be exactly 2000 — never negative,
-		// never double-decremented.
-		claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-		require.NoError(t, err)
-		require.NotNil(t, claim, "trial %d", trial)
-		assert.Equal(t, int64(2000), claim.AmountMloki, "trial %d", trial)
-	}
-}
 
 // TestSplitAndClaimCashSlice_ConcurrentRace_NeverBothSucceed races a FULL
 // split against the real redemption path, ClaimCashSlice, for the same
 // slice — both are exclusive-consumption operations on the same
 // "claimed_at IS NULL" guard, so at most one may ever win.
-func TestSplitAndClaimCashSlice_ConcurrentRace_NeverBothSucceed(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	trials := raceTrials(200)
-	for trial := 0; trial < trials; trial++ {
-		hub := newCashHub(t, svc, 10_000, 3600)
-		wallet := newCashWallet(t, svc, hub)
-		pubkey := randomHex32()
-		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-			{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-		}))
-
-		ready := make(chan struct{})
-		var wg sync.WaitGroup
-		var splitErr, claimErr error
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, splitErr = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
-		}()
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, claimErr = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-		}()
-		close(ready)
-		wg.Wait()
-
-		splitWon := splitErr == nil
-		claimWon := claimErr == nil
-		require.Falsef(t, splitWon && claimWon, "trial %d: split and redeem both reported success for the same slice", trial)
-		require.Truef(t, splitWon || claimWon, "trial %d: neither op succeeded (splitErr=%v claimErr=%v)", trial, splitErr, claimErr)
-	}
-}
 
 // TestSplitAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed
 // mirrors TestClaimAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed,
 // this time racing a FULL split against an in-place cash_transfer.
-func TestSplitAndReassignCashSliceIdentity_ConcurrentRace_NeverBothSucceed(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	trials := raceTrials(200)
-	for trial := 0; trial < trials; trial++ {
-		hub := newCashHub(t, svc, 1_000_000, 3600)
-		wallet := newCashWallet(t, svc, hub)
-		pubkey := randomHex32()
-		newPubkey := randomHex32()
-		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-			{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-		}))
-
-		ready := make(chan struct{})
-		var wg sync.WaitGroup
-		var splitErr, transferErr error
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, splitErr = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
-		}()
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, transferErr = svc.AppsService.ReassignCashSliceIdentity(wallet.ID, db.CashIdentityPubkey, pubkey, db.CashIdentityPubkey, newPubkey, "")
-		}()
-		close(ready)
-		wg.Wait()
-
-		splitWon := splitErr == nil
-		transferWon := transferErr == nil
-		require.Falsef(t, splitWon && transferWon, "trial %d: split and transfer both reported success for the same slice", trial)
-		require.Truef(t, splitWon || transferWon, "trial %d: neither op succeeded (splitErr=%v transferErr=%v)", trial, splitErr, transferErr)
-		if transferWon {
-			claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, newPubkey)
-			require.NoError(t, err)
-			require.NotNil(t, claim, "trial %d: a winning transfer must leave its new identity claimable", trial)
-		}
-	}
-}
 
 // TestSplitAndReassignCashSliceIdentity_PartialVsTransfer_NeverBothSucceed
 // races a PARTIAL split against an in-place transfer of the SAME slice —
 // the transfer reassigns identity (and bumps TransferCount), the split
 // decrements AmountMloki (and bumps TransferCount) — asserting the two are
 // still mutually exclusive under the shared TransferCount optimistic lock.
-func TestSplitAndReassignCashSliceIdentity_PartialVsTransfer_NeverBothSucceed(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	trials := raceTrials(200)
-	for trial := 0; trial < trials; trial++ {
-		hub := newCashHub(t, svc, 1_000_000, 3600)
-		wallet := newCashWallet(t, svc, hub)
-		pubkey := randomHex32()
-		newPubkey := randomHex32()
-		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-			{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-		}))
-
-		ready := make(chan struct{})
-		var wg sync.WaitGroup
-		var splitErr, transferErr error
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, splitErr = svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 2000)
-		}()
-		go func() {
-			defer wg.Done()
-			<-ready
-			_, transferErr = svc.AppsService.ReassignCashSliceIdentity(wallet.ID, db.CashIdentityPubkey, pubkey, db.CashIdentityPubkey, newPubkey, "")
-		}()
-		close(ready)
-		wg.Wait()
-
-		splitWon := splitErr == nil
-		transferWon := transferErr == nil
-		require.Truef(t, splitWon || transferWon, "trial %d: neither op succeeded (splitErr=%v transferErr=%v)", trial, splitErr, transferErr)
-
-		// Conservation, asserted on EVERY trial — this is what the comment that
-		// used to stand here promised and then skipped (audit finding D-QA-2).
-		//
-		// Both CAN legitimately succeed here, unlike the full-split case above,
-		// if they serialize: TransferCount's optimistic lock makes the second to
-		// commit re-read and retry in the controller layer, but at the bare
-		// AppsService layer a second call with a fresh read is a separate, valid
-		// call. So "both won" is not itself a defect. Silent overdraw is, and
-		// that is checked here instead of being described in prose.
-		//
-		// Deliberately OUTSIDE an `if splitWon && transferWon` guard. The t.Skip
-		// this replaces sat inside one, and that branch is measured at **0 of 200
-		// trials** on this machine — so the skip never actually fired, and an
-		// assertion placed there would be dead code wearing the shape of
-		// coverage. (The audit report's claim that this test "skips on every run"
-		// does not hold, and nothing was being "abandoned"; what was true, and
-		// worse, is that the test asserted nothing beyond splitWon||transferWon.)
-		//
-		// What this check is NOT: a detector for a weakened optimistic lock.
-		// Measured, not assumed — against the documented mutation that strips
-		// identity and transfer_count from the partial branch's WHERE clause,
-		// conservation still holds and this test still passes. The assertion that
-		// catches that mutation is the transfer-HONESTY one in
-		// TestAuditDQA_PartialSplitVsTransfer_ConservesTheSliceAmount: it compares
-		// ReassignCashSliceIdentity's returned amount, which is the value it read
-		// BEFORE the race, against what the new identity actually holds. Totals
-		// can balance while the transfer's own report is a lie, so conservation
-		// and honesty are genuinely two different invariants. Read that test for
-		// the full set; this one stays focused on mutual exclusion and keeps the
-		// cheap conservation guard so it is no longer asserting almost nothing.
-		var live []db.CashWalletClaim
-		require.NoError(t, svc.DB.Where("wallet_app_id = ? AND claimed_at IS NULL", wallet.ID).Find(&live).Error)
-		var stillHeld int64
-		for _, c := range live {
-			stillHeld += c.AmountMloki
-		}
-		carvedOff := int64(0)
-		if splitWon {
-			carvedOff = 2000
-		}
-		require.Equalf(t, int64(5000), stillHeld+carvedOff,
-			"trial %d: OVERDRAW — the slice held 5000, %d is still claimable and %d was carved off "+
-				"(split won=%v, transfer won=%v), so %d mloki came out of a lost update",
-			trial, stillHeld, carvedOff, splitWon, transferWon, stillHeld+carvedOff-5000)
-	}
-}
 
 // --- SetCashWalletSplitSource ---
 
@@ -1256,31 +835,6 @@ func TestSetCashWalletSplitSource_NoOpIfAlreadySet(t *testing.T) {
 
 // --- UndoCashSliceSplit ---
 
-func TestUndoCashSliceSplit_RestoresAmountAndTransferCount(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-
-	result, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 2000)
-	require.NoError(t, err)
-	require.False(t, result.FullyDrained)
-
-	require.NoError(t, svc.AppsService.UndoCashSliceSplit(wallet.ID, db.CashIdentityPubkey, pubkey, 2000))
-
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-	assert.Equal(t, int64(5000), claim.AmountMloki, "amount must be fully restored")
-	assert.Equal(t, 0, claim.TransferCount, "transfer_count must be decremented back")
-}
-
 // --- SetCashSliceSplitTarget ---
 
 func TestSetCashSliceSplitTarget_Success(t *testing.T) {
@@ -1295,9 +849,8 @@ func TestSetCashSliceSplitTarget_Success(t *testing.T) {
 	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
 	}))
-	splitResult, err := svc.AppsService.SplitCashSliceAmount(wallet.ID, db.CashIdentityPubkey, pubkey, 5000)
+	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
 	require.NoError(t, err)
-	require.True(t, splitResult.FullyDrained)
 
 	require.NoError(t, svc.AppsService.SetCashSliceSplitTarget(wallet.ID, db.CashIdentityPubkey, pubkey, newWallet.ID))
 

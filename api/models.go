@@ -534,6 +534,10 @@ type CashWalletClaimResponse struct {
 	// keying on ID alone — a dedupe map, a delete URL — must pair it with
 	// this, and must not offer to delete an archived row.
 	Archived bool `json:"archived"`
+	// RetainedUntil (unix seconds) is set for an archived bill whose Hub keeps
+	// answering cash_status about it: until then its token is still a live
+	// credential (NIP-CASH §Archival on Deletion), not just a record.
+	RetainedUntil *int64 `json:"retained_until,omitempty"`
 	// WalletPubkey identifies the bill itself. Populated for every row, and
 	// the identifier to correlate with relay logs — and the fallback label
 	// for an archived bill old enough that no token was stored for it.
@@ -974,17 +978,20 @@ type InfoResponse struct {
 	TrustedNwcRelay             bool                 `json:"trustedNwcRelay"`
 	PrivateEnvelope             PrivateEnvelopeInfo  `json:"privateEnvelope"`
 	PrivateTransport            PrivateTransportInfo `json:"privateTransport"`
-	SearchRelay                 string               `json:"searchRelay"`
-	NodeAlias                   string               `json:"nodeAlias"`
-	MempoolUrl                  string               `json:"mempoolUrl"`
-	LSPs                        []LSPInfo            `json:"lsps"`
-	LokihubServicesURL          string               `json:"lokihubServicesURL"`
-	SwapServiceUrl              string               `json:"swapServiceUrl"`
-	MessageboardNwcUrl          string               `json:"messageboardNwcUrl"`
-	EnableSwap                  bool                 `json:"enableSwap"`
-	EnableMessageboardNwc       bool                 `json:"enableMessageboardNwc"`
-	WorkDir                     string               `json:"workDir"`
-	EnablePolling               bool                 `json:"enablePolling"`
+	// PendingCashRedeems counts cash_redeem payouts whose outcome is not known
+	// yet; each one's slice stays claimed until it settles or fails.
+	PendingCashRedeems    int       `json:"pendingCashRedeems"`
+	SearchRelay           string    `json:"searchRelay"`
+	NodeAlias             string    `json:"nodeAlias"`
+	MempoolUrl            string    `json:"mempoolUrl"`
+	LSPs                  []LSPInfo `json:"lsps"`
+	LokihubServicesURL    string    `json:"lokihubServicesURL"`
+	SwapServiceUrl        string    `json:"swapServiceUrl"`
+	MessageboardNwcUrl    string    `json:"messageboardNwcUrl"`
+	EnableSwap            bool      `json:"enableSwap"`
+	EnableMessageboardNwc bool      `json:"enableMessageboardNwc"`
+	WorkDir               string    `json:"workDir"`
+	EnablePolling         bool      `json:"enablePolling"`
 }
 
 // RedactForUnauthenticated strips fields that let an unauthenticated caller
