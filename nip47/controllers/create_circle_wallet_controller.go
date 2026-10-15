@@ -274,16 +274,12 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
-	// 6. In-process fast-path guard: avoids two goroutines in this same process
-	// both entering the transaction below for the same provider at once. This
-	// alone is not sufficient across multiple processes/instances sharing the
-	// database — the Postgres advisory lock taken inside the transaction is
-	// what makes the commitment check + creation atomic in that case.
-	if _, existed := controller.activeCircleInvoices.LoadOrStore(app.ID, struct{}{}); existed {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "wallet creation already in progress for this provider")
-		return
-	}
-	defer controller.activeCircleInvoices.Delete(app.ID)
+	// 6. Concurrent requests for the same Hub are serialised by the database,
+	// not in process: production builds a new controller per request, so a
+	// controller-local guard would never see a second request. The transaction
+	// below takes a Hub-scoped lock (a Postgres advisory lock; SQLite opens
+	// every write transaction with BEGIN IMMEDIATE), and the membership row's
+	// unique index is the authoritative one-wallet-per-identity guard.
 
 	circleScopes := []string{
 		constants.MAKE_INVOICE_SCOPE,

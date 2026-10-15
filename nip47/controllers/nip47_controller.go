@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"sync"
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwallet"
@@ -36,11 +35,6 @@ type nip47Controller struct {
 	cashClaimLimiter    RateLimiter
 	circleRateLimiter   RateLimiter
 	iaChecker           cashwallet.IATrustChecker
-
-	// activeCircleInvoices guards per-app balance cap checks. An entry is held
-	// from just before the balance read until MakeInvoice completes, preventing
-	// two concurrent requests from both passing the cap check on the same stale balance.
-	activeCircleInvoices sync.Map // map[uint]struct{}
 
 	cfg config.Config
 }

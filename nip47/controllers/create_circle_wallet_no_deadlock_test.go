@@ -28,9 +28,9 @@ import (
 //
 // A single serial call rarely triggers the stall (there's no contending
 // transaction to race against) - reproducing it needs multiple overlapping
-// CreateAppTx calls contending for the pool at once. The controller's own
-// in-process guard (activeCircleInvoices) serializes concurrent creates
-// against one hub, so this uses a separate hub per goroutine instead - still
+// CreateAppTx calls contending for the pool at once. Concurrent creates
+// against one hub are serialized by its database lock, so this uses a
+// separate hub per goroutine instead - still
 // many overlapping controller.db.Transaction calls hitting the same
 // underlying *gorm.DB/connection pool at once, which is what actually
 // produces the contention, not sharing one hub. On the buggy code, this test

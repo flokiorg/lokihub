@@ -334,6 +334,13 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   setting existed keeps a retention of 0, so its destroyed bills answer
   nothing. This is not migrated, since 0 is also a valid deliberate choice.
   Set a retention in the hub's settings to answer `cash_status` for them. (#120)
+- `cash_redeem` refuses an `amount` that differs from a fixed-amount
+  invoice's own, and pays such an invoice for exactly its amount, as NIP-CASH
+  requires. Before, the caller's amount was handed to the node. (#121)
+- Refuses a following Circle Identity with no provider pubkey over the API,
+  as the UI already did: such a circle admits nobody. (#121)
+- Makes refusing a private `cash_status` for a live bill cost the same as
+  refusing one for a bill the hub never issued. (#121)
 
 ## [0.4.0]
 

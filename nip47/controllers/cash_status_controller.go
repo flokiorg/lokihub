@@ -25,11 +25,11 @@ import (
 //     non-negative by construction (same invariant the former int64 fields'
 //     own //nolint:gosec comments already documented).
 //   - RecipientStatus.IdentityValue carries `omitempty`, the former local
-//     type's didn't - a cash-mode slice's identity_value (always "") is now
-//     omitted from the response entirely rather than sent as an empty
-//     string. No existing test asserts the raw JSON shape of this field, and
-//     any reasonable JSON consumer treats an omitted optional field and an
-//     empty one identically.
+//     type's didn't, so an empty identity_value is omitted rather than sent
+//     as "". A cash-mode row is not empty: its identity_value is the slice's
+//     secret commitment, and it is sent. Only that slice's own holder can
+//     read it, because a cash slice is always alone on its bill
+//     (cashwallet.Resolve) and a proofless read needs the matching secret.
 //
 // CashStatusCaller is which recipient is asking. Always known, and never nil in
 // practice: cash_status is served over the private transport only, where every

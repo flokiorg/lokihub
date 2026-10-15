@@ -59,6 +59,22 @@ func TestCreateCircleIdentity_MalformedProviderPubkey_Rejected(t *testing.T) {
 	}
 }
 
+// NIP-CW §Data Model: a Circle Identity records the data its admission
+// mechanism needs, and for following that is the provider pubkey. An allowlist
+// circle still needs none.
+func TestCreateCircleIdentity_FollowingWithoutProvider_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	_, err = svc.AppsService.CreateCircleIdentity("no-provider", db.CirclePolicyFollowing, "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+
+	_, err = svc.AppsService.CreateCircleIdentity("allowlist", db.CirclePolicyAllowlist, "")
+	require.NoError(t, err)
+}
+
 func TestGetCircleIdentity_NotFound(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
