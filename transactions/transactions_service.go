@@ -1567,7 +1567,10 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	// deliberately never NWC-granted pay_invoice — see
 	// create_circle_wallet_controller.go) has no such row by design.
 	result := tx.Table("apps").
-		Select("apps.name AS app_name, apps.kind AS app_kind, apps.parent_kind AS parent_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id, COALESCE(chc.fees_ppm, 0) AS fees_ppm").
+		// A circle_wallet pays the rate fixed when its member joined
+		// (apps.circle_fees_ppm, NIP-CW §Fees); only a wallet that predates that
+		// column falls back to the Hub's current rate.
+		Select("apps.name AS app_name, apps.kind AS app_kind, apps.parent_kind AS parent_kind, ap.max_amount_loki, ap.budget_renewal, ap.app_id AS perm_app_id, COALESCE(apps.circle_fees_ppm, chc.fees_ppm, 0) AS fees_ppm").
 		Joins("LEFT JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope IN ?", constants.PayCapableScopes).
 		Joins("LEFT JOIN circle_hub_configs chc ON chc.app_id = apps.parent_app_id").
 		Where("apps.id = ?", *appId).

@@ -343,6 +343,12 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			return err
 		}
 
+		// NIP-CW §Fees: the member's rate is the one in force now, and stays.
+		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).
+			Update("circle_fees_ppm", providerConfig.FeesPpm).Error; err != nil {
+			return fmt.Errorf("failed to record the member's fee rate: %w", err)
+		}
+
 		// One active wallet per identity per hub, atomic guard: a unique-
 		// constraint violation here means a concurrent request for the same
 		// identity won the race since the pre-check above — roll back the

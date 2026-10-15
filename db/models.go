@@ -110,6 +110,12 @@ type App struct {
 	// on the NEW wallet, which wallet it came from). Never read by any
 	// atomic guard, only by callers wanting to show lineage.
 	SplitFromWalletAppID *uint
+
+	// CircleFeesPpm is a circle_wallet's forwarding-fee rate, fixed when the
+	// member joined (NIP-CW §Fees): a host changing the Hub's rate later
+	// affects only new members. Nil on wallets created before the column
+	// existed, which keep paying the Hub's current rate.
+	CircleFeesPpm *int
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
