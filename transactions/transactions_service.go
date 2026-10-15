@@ -756,6 +756,12 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			Uint64("amount", amount).
 			Msg("Failed to send payment")
 
+		// The payment may still settle, so the row stays PENDING and the node's
+		// payment subscription (or the stale sweep's lookup) resolves it later.
+		if errors.Is(rpcErr, lnclient.ErrPaymentPending) {
+			return nil, rpcErr
+		}
+
 		// Route through markPaymentFailed (not a raw Updates() call) so this
 		// shares its guard against downgrading an already-SETTLED transaction -
 		// the async payment-sent-event subscription can settle this same
