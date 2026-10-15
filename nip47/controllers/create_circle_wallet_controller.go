@@ -169,6 +169,10 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "hub is starting up, please retry shortly")
 			return
 		}
+		if errors.Is(err, constants.ErrCircleMembershipUnresolved) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "the circle's membership list could not be fetched yet, please retry shortly")
+			return
+		}
 		logger.Logger.Error().Err(err).Str("requester", params.Pubkey).Msg("Social cache authorization check failed")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "authorization check failed")
 		return

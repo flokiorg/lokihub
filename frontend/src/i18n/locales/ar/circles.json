@@ -331,6 +331,7 @@
     "connectionKeyModeHelper": "يمكن لهوية موثّقة فقط استرداده.",
     "copyLokicash": "نسخ Lokicash",
     "copyDestroyedLokicash": "نسخ Lokicash لهذه الورقة المتلفة",
+    "archivedTokenStillLive": "يستمر في الرد على cash_status حتى {{date}}: تعامل معه كبيانات اعتماد نشطة حتى ذلك الحين.",
     "tokenStatusUnredeemed": "لم يُسترد",
     "tokenStatusFullyRedeemed": "تم استرداده بالكامل",
     "tokenStatusPartiallyRedeemed": "تم استرداد {{claimed}}/{{count}}",

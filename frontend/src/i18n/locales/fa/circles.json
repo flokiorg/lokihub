@@ -252,6 +252,7 @@
     "connectionKeyModeHelper": "فقط یک هویت تأییدشده می‌تواند آن را بازخرید کند.",
     "copyLokicash": "کپی Lokicash",
     "copyDestroyedLokicash": "کپی Lokicash این اسکناس نابودشده",
+    "archivedTokenStillLive": "تا {{date}} همچنان به cash_status پاسخ می‌دهد: تا آن زمان آن را یک اعتبارنامهٔ فعال بدانید.",
     "tokenStatusUnredeemed": "بازخرید‌نشده",
     "tokenStatusFullyRedeemed": "کاملاً بازخرید شده",
     "tokenStatusPartiallyRedeemed": "{{claimed}}/{{count}} بازخرید شده",

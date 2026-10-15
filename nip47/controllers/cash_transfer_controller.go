@@ -13,14 +13,10 @@ import (
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/db/archive"
-	"github.com/flokiorg/lokihub/db/queries"
-	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
-	"gorm.io/gorm"
 )
 
 // cashTransferNewIdentityParam/cashTransferParams below are no longer used to
@@ -66,7 +62,7 @@ type cashTransferParams struct {
 	// in change" model (NIP-CASH §Transferring and Splitting a Slice). The carved-off amount,
 	// and any nonzero remainder left behind, must each be at least this
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
-	// AppsService.SplitCashSliceAmount.
+	// handleCashTransferSplit.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
 }
 
@@ -280,25 +276,21 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// slice's current full amount as read just above, means "transfer it
 	// all". Anything less is a partial split. This read is a best-effort
 	// bound only — the atomic operation below (ReassignCashSliceIdentity or
-	// SplitCashSliceAmount) always re-validates against the slice's live
-	// state with its own fresh read, so a stale value here (a concurrent
-	// split shrinking the slice between this read and that one) can only
-	// ever produce a safe rejection under a genuine race, never an incorrect
-	// transfer.
+	// ClaimCashSlice) always re-validates against the slice's live state with
+	// its own fresh read, so a concurrent transfer between this read and that
+	// one can only ever produce a safe rejection, never an incorrect transfer.
+	//
+	// Only the request's own shape is checked here. Whether the amount fits the
+	// slice's balance waits until the caller is authenticated (step 7): NIP-CASH
+	// orders the proof first, and an answer naming the balance would otherwise
+	// tell anyone holding the connection what the slice holds.
 	requestedAmount := uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
-	isFullTransfer := true
 	if params.AmountMillis != nil {
 		if *params.AmountMillis == 0 {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "amount_millis must be positive")
 			return
 		}
-		if *params.AmountMillis > requestedAmount {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", *params.AmountMillis, requestedAmount))
-			return
-		}
 		requestedAmount = *params.AmountMillis
-		isFullTransfer = requestedAmount == uint64(claim.AmountMloki) //nolint:gosec
 	}
 
 	// 7. Verify the caller is authorized to transfer this slice.
@@ -382,6 +374,15 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 	// isCashCurrent: nothing further to verify — step 5's hash-matched
 	// lookup was the entire proof, identical in spirit to a cash-mode redeem.
+
+	// 7b. The caller is authenticated, so the amount can now be bounded by the
+	// slice's balance, and the error may name it.
+	if requestedAmount > uint64(claim.AmountMloki) { //nolint:gosec // AmountMloki is always non-negative
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			fmt.Sprintf("amount_millis %d exceeds this slice's own balance of %d", requestedAmount, claim.AmountMloki))
+		return
+	}
+	isFullTransfer := requestedAmount == uint64(claim.AmountMloki) //nolint:gosec // AmountMloki is always non-negative
 
 	// 8. Validate new_identity now that the caller is authenticated:
 	// pubkey/connection_key shape + live IA trust (reuses exactly the
@@ -636,10 +637,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // response itself travels over.
 //
 // Ordering mirrors cash_redeem_controller.go's own claim-then-pay-then-
-// rollback-on-failure shape: the source slice is claimed or decremented
-// FIRST (an exclusive, atomic commit point — see SplitCashSliceAmount), then
-// the new wallet is created and funded; any failure after that rolls it back
-// (UnclaimCashSlice for a full split, UndoCashSliceSplit for a partial one),
+// rollback-on-failure shape: the source slice is claimed FIRST (an exclusive,
+// atomic commit point — see ClaimCashSlice), then the new wallets are created
+// and funded; any failure after that rolls the claim back (UnclaimCashSlice),
 // so a caller who hits an error here can safely retry — including with the
 // exact same identity_event, since rollback also releases proofEventID's
 // single-use guard (db.CashTransferProof) rather than leaving a proof that
@@ -651,9 +651,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
 	// carve off, or leave behind, unmovable dust is rejected before anything is
-	// claimed (NIP-CASH §Transferring and Splitting a Slice). The old decrement-based path
-	// enforced this inside SplitCashSliceAmount; the terminal-claim path does it
-	// here. claim.AmountMloki is immutable (no operation rewrites it in place),
+	// claimed (NIP-CASH §Transferring and Splitting a Slice). claim.AmountMloki is immutable (no operation rewrites it in place),
 	// so this pre-claim read can't be raced smaller underneath the claim below.
 	if floor := uint64(claim.MinTransferMloki); floor > 0 { //nolint:gosec // MinTransferMloki is non-negative
 		remainder := uint64(claim.AmountMloki) - requestedAmount //nolint:gosec // requestedAmount <= claim.AmountMloki, bounded by step 6
@@ -780,6 +778,13 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		return
 	}
 
+	// The funds have moved, so the source slice is terminal on every path from
+	// here, including a connection that can't be delivered below. A drained
+	// source is auto-deleted after the response either way (NIP-CASH
+	// §Lifecycle and Deletion: one policy for every drain mechanism).
+	// Best-effort; the expiry sweep remains the fallback.
+	defer controller.maybeAutoDeleteDrainedCashWallet(app)
+
 	// deliver returns a new wallet's clear pubkey plus its token — nested-
 	// encrypted to the caller's proof pubkey (so no co-recipient of THIS shared
 	// connection can read it, exactly as before), or in the clear for a
@@ -860,11 +865,6 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		Msg("Cash wallet slice split off into fresh dedicated wallet(s)")
 
 	publishResponse(&models.Response{ResultType: nip47Request.Method, Result: resp}, tags)
-
-	// The source slice is now terminal; auto-delete the source wallet if this
-	// was its last unclaimed slice and its real balance is zero. Best-effort,
-	// after the response — the expiry sweep remains the fallback.
-	controller.maybeAutoDeleteDrainedCashWallet(app)
 }
 
 // maybeAutoDeleteDrainedCashWallet deletes app if it has no unclaimed slices
@@ -873,54 +873,25 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 // because one recipient's slice fully split away, since the wallet's real
 // balance still legitimately backs those other slices. Best-effort: logged,
 // never fails the caller's request, and the periodic expiry-sweep ticker
-// (service.runCashCleanup) remains the fallback if this check's own balance
-// read is ever unexpectedly nonzero (structurally shouldn't be, given the
-// invariant that a cash_wallet's balance always equals the sum of its
-// unclaimed slices' AmountMloki, but defensive rather than trusting that
-// blindly and force-deleting a wallet that still holds real funds).
-// cashDrainGuards wires the ledger reads the drain check needs. db/archive
-// takes them as functions so it can stay a leaf package — see its own comment.
-func cashDrainGuards() archive.DrainGuards {
-	return archive.DrainGuards{
-		IsolatedBalance:    queries.GetIsolatedBalance,
-		HasPendingIncoming: queries.HasPendingIncoming,
-	}
-}
-
+// (service.runCashCleanup) remains the fallback. The policy itself lives in
+// cashwallet.AutoDeleteDrained, shared with the redeem payouts
+// that settle only after cash_redeem has answered.
 func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App) {
-	// The guard now runs inside the same transaction as the archive and the
-	// delete, so a concurrent UnclaimCashSlice rollback can no longer restore
-	// an unclaimed slice between the check and the delete.
-	err := controller.db.Transaction(func(tx *gorm.DB) error {
-		return archive.ArchiveAndDeleteDrainedCashBillTx(tx, app, cashDrainGuards(), time.Now())
-	})
-	switch {
-	case errors.Is(err, archive.ErrBillNotDrained):
-		// Expected: another slice is still unclaimed, or the balance is not
-		// zero. Either way the bill legitimately stays alive, and the expiry
-		// sweep remains the fallback.
-		logger.Logger.Debug().Err(err).Uint("app_id", app.ID).
-			Msg("Cash wallet not fully drained; leaving it alive")
-		return
-	case err != nil:
+	deleted, err := cashwallet.AutoDeleteDrained(controller.db, controller.eventPublisher, app.ID)
+	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
 			Msg("Failed to archive and auto-delete fully-drained Cash wallet")
 		return
 	}
-
-	// Published after the commit, so the consumer's own lookup over a separate
-	// connection cannot race the transaction. This is what drops the wallet
-	// from the registry.
-	controller.eventPublisher.Publish(&events.Event{
-		Event: "nwc_app_deleted",
-		Properties: map[string]interface{}{
-			"name": app.Name,
-			"id":   app.ID,
-		},
-	})
-
+	if !deleted {
+		// Expected: another slice is still unclaimed, or the balance is not
+		// zero. Either way the bill legitimately stays alive.
+		logger.Logger.Debug().Uint("app_id", app.ID).
+			Msg("Cash wallet not fully drained; leaving it alive")
+		return
+	}
 	logger.Logger.Info().Uint("app_id", app.ID).
-		Msg("Archived and auto-deleted Cash wallet after its last slice was fully split away")
+		Msg("Archived and auto-deleted fully-drained Cash wallet")
 }
 
 // verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same

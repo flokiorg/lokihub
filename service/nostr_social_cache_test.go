@@ -264,6 +264,7 @@ func TestGetContactList_StaleEntry_ServedWithoutRefetch(t *testing.T) {
 func TestGetContactList_ColdMiss_TriggersFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
+	useAnsweringRelay(t, svc)
 
 	_, ok := cache.cache[requesterPubkey]
 	require.False(t, ok, "precondition: nothing cached yet for this pubkey")
@@ -279,6 +280,7 @@ func TestGetContactList_ColdMiss_TriggersFetch(t *testing.T) {
 func TestWarmFollowingCache_PopulatesCache(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
+	useAnsweringRelay(t, svc)
 
 	contacts, err := cache.WarmFollowingCache(context.TODO(), providerPubkey)
 	require.NoError(t, err)
@@ -351,6 +353,7 @@ func TestPeekContactCount_CacheHit_ReturnsCount(t *testing.T) {
 func TestContactCount_ColdFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
+	useAnsweringRelay(t, svc)
 
 	count, err := cache.ContactCount(context.TODO(), requesterPubkey)
 	require.NoError(t, err)
@@ -367,6 +370,7 @@ func TestContactCount_ColdFetch(t *testing.T) {
 func TestRunSocialCacheRefresh_SkipsBadProvider_ContinuesSweep(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
+	useAnsweringRelay(t, svc)
 
 	// A following-policy identity with no ProviderPubkey configured must be
 	// skipped rather than aborting the sweep.

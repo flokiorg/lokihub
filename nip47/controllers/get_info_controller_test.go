@@ -518,3 +518,35 @@ func TestHandleGetInfoEvent_NonCircleAdmin_NoCircleWalletBlock(t *testing.T) {
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	assert.Nil(t, nodeInfo.CircleWallet, "non-circle_admin app must not have circle_wallet block")
 }
+
+// NIP-CW §The Circle Wallet Hub Connection: a Hub MUST answer get_info with a
+// circle_wallet block. lokihub's own UI creates hubs with only the circle_wallet
+// scope (NewCircleHub.tsx), so the block cannot depend on a get_info grant.
+func TestHandleGetInfoEvent_CircleHubWithoutGetInfoScope_StillHasCircleWalletBlock(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub, _, err := svc.AppsService.CreateCircleHub("UI Circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE}, nil,
+		apps.CircleIdentityRef{Name: "UI Circle", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 7200, FeesPpm: 500, PerWalletMaxMloki: 100_000})
+	require.NoError(t, err)
+
+	nip47Request := &models.Request{}
+	require.NoError(t, json.Unmarshal([]byte(nip47GetInfoJson), nip47Request))
+	dbRequestEvent := &db.RequestEvent{}
+	svc.DB.Create(&dbRequestEvent)
+
+	var published *models.Response
+	NewTestNip47Controller(svc).HandleGetInfoEvent(context.TODO(), nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+		published = r
+	})
+
+	require.Nil(t, published.Error)
+	info := published.Result.(*getInfoResponse)
+	require.NotNil(t, info.CircleWallet, "a hub answers get_info with its circle_wallet block, whatever its scopes")
+	assert.Equal(t, 7200, info.CircleWallet.MaxExpSecs)
+	assert.Equal(t, 500, info.CircleWallet.FeesPpm)
+	assert.Nil(t, info.Alias, "node details still need the get_info scope")
+}

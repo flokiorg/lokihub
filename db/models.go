@@ -208,10 +208,10 @@ type CashWalletClaim struct {
 	AmountMloki int64  `gorm:"not null"`
 	ClaimedAt   *time.Time
 	// TransferCount is an internal optimistic-concurrency version number,
-	// incremented atomically by every cash_transfer (reassignment or split)
-	// against this row — pinned in each atomic update's WHERE clause so two
-	// concurrent transfers of the same slice can never both succeed (see
-	// AppsService.ReassignCashSliceIdentity/SplitCashSliceAmount). It is not
+	// incremented atomically by every in-place cash_transfer against this row
+	// — pinned in each atomic update's WHERE clause so two concurrent
+	// operations on the same slice can never both succeed (see
+	// AppsService.ReassignCashSliceIdentity/ClaimCashSlice). It is not
 	// a user-facing cap (there is no transfer limit): a wallet created by
 	// splitting starts its own TransferCount at 0, since it's a fresh row
 	// with its own concurrency history, not a continuation of the source
@@ -247,7 +247,7 @@ type CashWalletClaim struct {
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see
-	// AppsService.SplitCashSliceAmount. Purely informational: every atomic
+	// AppsService.SetCashSliceSplitTarget. Purely informational: every atomic
 	// guard elsewhere already treats ClaimedAt != nil as terminal regardless
 	// of which mechanism set it, so this column is never read by any guard,
 	// only by callers (e.g. cash_status) that want to explain *why* a
@@ -415,7 +415,7 @@ type CashMintIdempotency struct {
 // operator has manually swept the funds back — nil means still outstanding.
 type CashStrandedFund struct {
 	ID                  uint   `gorm:"primaryKey"`
-	Operation           string `gorm:"not null"` // "consolidate" | "split"
+	Operation           string `gorm:"not null"` // "consolidate" | "split" | "mint" (an unfunded wallet a failed mint could not delete; AmountMloki 0)
 	SourceWalletAppID   uint   `gorm:"not null;index"`
 	RetainedWalletAppID uint   `gorm:"not null;index"`
 	AmountMloki         uint64 `gorm:"not null"`
@@ -505,13 +505,14 @@ type CashBillArchive struct {
 	// time, so re-deriving one later could produce a different string from the
 	// one its holder actually has.
 	//
-	// Stored, never rendered and never returned over NWC. Keeping it grants no
-	// capability that did not already exist: a cash bill's pairing key is
-	// deterministically derivable from its app id (keys.GetCashPairingKey), so
-	// anyone with database access could already reconstruct this. NIP-CASH
-	// §Archival on Deletion's rule is against *presenting* a token for a
-	// destroyed bill — one that looks spendable and is not — which is why this
-	// column is excluded from every listing response.
+	// Stored, never returned over NWC. The pairing secret inside it is
+	// derivable from the app id only with the node's key material
+	// (keys.GetCashPairingKey), so a database-only reader does learn it — but
+	// it proves possession of the bill and nothing more: every method that moves
+	// value or reads a slice also needs a slice proof or the cash secret, and
+	// only the cash secret's hash is stored. NIP-CASH §Archival on Deletion
+	// asks operators to treat a displayed token as live for the retention window
+	// and as a record after, which is how the operator's bills list shows it.
 	CashToken string
 	// ConnectionPubkey is the bill's App.AppPubkey: the public half of the
 	// connection secret inside its token, and the only key whose proof earns a

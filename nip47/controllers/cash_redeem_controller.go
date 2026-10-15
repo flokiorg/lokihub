@@ -393,6 +393,9 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	if transaction == nil || transaction.Preimage == nil {
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_redeem payment succeeded but transaction or preimage is nil")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "payment completed but preimage unavailable")
+		// The payment went through, so the slice is spent: a drained bill is
+		// auto-deleted here exactly as on the success path below.
+		controller.maybeAutoDeleteDrainedCashWallet(app)
 		return
 	}
 

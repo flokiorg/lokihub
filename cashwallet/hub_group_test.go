@@ -66,9 +66,9 @@ func TestEncodeCashToken_StampsTheHubFingerprint(t *testing.T) {
 	relays := []string{"wss://relay.test"}
 	hubA, hubB := "hub-pubkey-aaaa", "hub-pubkey-bbbb"
 
-	tokenA := encodeCashToken(walletHex(1), secretHex(1), relays, &identityRequired, fakeMintSig(), 1000, hubA)
-	tokenA2 := encodeCashToken(walletHex(2), secretHex(2), relays, &identityRequired, fakeMintSig(), 2000, hubA)
-	tokenB := encodeCashToken(walletHex(3), secretHex(3), relays, &identityRequired, fakeMintSig(), 1000, hubB)
+	tokenA := mustEncodeCashToken(t, walletHex(1), secretHex(1), relays, &identityRequired, fakeMintSig(), 1000, hubA)
+	tokenA2 := mustEncodeCashToken(t, walletHex(2), secretHex(2), relays, &identityRequired, fakeMintSig(), 2000, hubA)
+	tokenB := mustEncodeCashToken(t, walletHex(3), secretHex(3), relays, &identityRequired, fakeMintSig(), 1000, hubB)
 
 	a, err := lokicash.Decode(tokenA)
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestEncodeCashToken_StampsTheHubFingerprint(t *testing.T) {
 // field exists to prevent, which is strictly worse than not grouping at all.
 func TestEncodeCashToken_NoHubPubkeyMeansNoFingerprint(t *testing.T) {
 	identityRequired := true
-	token := encodeCashToken(walletHex(9), secretHex(9), []string{"wss://relay.test"}, &identityRequired, fakeMintSig(), 1000, "")
+	token := mustEncodeCashToken(t, walletHex(9), secretHex(9), []string{"wss://relay.test"}, &identityRequired, fakeMintSig(), 1000, "")
 
 	tok, err := lokicash.Decode(token)
 	require.NoError(t, err)
@@ -114,3 +114,10 @@ func secretHex(n byte) string { return hex.EncodeToString(bytes.Repeat([]byte{0x
 // assert on the hub-group TLV, not on provenance — but provenance is mandatory, so
 // encodeCashToken refuses to produce a token without something of the right shape.
 func fakeMintSig() []byte { return bytes.Repeat([]byte{0x01}, 65) }
+
+func mustEncodeCashToken(t *testing.T, walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) string {
+	t.Helper()
+	token, err := encodeCashToken(walletPubkey, secret, relayURLs, identityRequired, mintSig, amountMillis, hubPubkey)
+	require.NoError(t, err)
+	return token
+}

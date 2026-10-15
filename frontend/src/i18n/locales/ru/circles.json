@@ -286,6 +286,7 @@
     "connectionKeyModeHelper": "Обменять может только подтверждённая личность.",
     "copyLokicash": "Скопировать Lokicash",
     "copyDestroyedLokicash": "Скопировать Lokicash уничтоженной купюры",
+    "archivedTokenStillLive": "Продолжает отвечать на cash_status до {{date}}: до этого момента считайте его действующими учётными данными.",
     "tokenStatusUnredeemed": "Не обменяно",
     "tokenStatusFullyRedeemed": "Полностью обменяно",
     "tokenStatusPartiallyRedeemed": "Обменяно {{claimed}}/{{count}}",

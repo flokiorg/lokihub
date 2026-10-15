@@ -686,6 +686,17 @@ function FinalizeConnection({
             app={app}
             pairingUri={pairingUri}
             appStoreApp={appStoreApp}
+            // A hub created here is shown as cashhub1/circlehub1 first, as in
+            // SubwalletCreated; the card's toggle still offers the NWC URI.
+            cashHubToken={createAppResponse.cashHubToken}
+            circleHubToken={createAppResponse.circleHubToken}
+            primaryFormat={
+              createAppResponse.cashHubToken
+                ? "cashhub"
+                : createAppResponse.circleHubToken
+                  ? "circlehub"
+                  : "nwc"
+            }
           />
         )}
       </div>

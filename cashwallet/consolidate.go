@@ -220,6 +220,10 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	if err != nil {
 		return nil, nil, fmt.Errorf("refusing to consolidate into a bill without provenance: %w", err)
 	}
+	token, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total, params.HubApp.AppPubkey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("refusing to consolidate into a bill whose token cannot be encoded: %w", err)
+	}
 
 	// Fund the merged wallet from each source in turn. A failure here returns,
 	// and the defer compensates every transfer that already completed.
@@ -230,8 +234,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 		funded = append(funded, s)
 	}
 	fullyFunded = true
-
-	token := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total, params.HubApp.AppPubkey)
+	storeCashToken(deps, newApp.ID, token)
 
 	logger.Logger.Info().
 		Uint("cash_wallet_id", newApp.ID).
