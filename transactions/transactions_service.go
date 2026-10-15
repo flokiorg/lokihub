@@ -124,6 +124,16 @@ func (sn StringOrNumber) String() string {
 	return fmt.Sprintf("%d", sn.NumberData)
 }
 
+// ErrPaymentSentNotRecorded is returned (wrapped) by SendPaymentSync when the
+// node reported the payment as succeeded but recording that outcome failed —
+// most often because the node's response carried no preimage. The money has
+// left: this is NOT a failed payment, and a caller must never undo whatever it
+// did on the payment's behalf (release a cash slice, delete a funded wallet,
+// restore a source claim). The outgoing row stays PENDING so the payment
+// subscription or startup reconciliation can settle it once the outcome is
+// known.
+var ErrPaymentSentNotRecorded = errors.New("payment sent but its outcome could not be recorded")
+
 type notFoundError struct {
 }
 
@@ -596,7 +606,14 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		return err
 	})
 	if err != nil {
-		return nil, err
+		// The node said the payment went out, so this must not read as a
+		// failure: callers roll back on failure, and rolling back here would
+		// hand out value that has already been paid. The row stays PENDING.
+		svc.logger.Error().Err(err).
+			Str("payment_hash", dbTransaction.PaymentHash).
+			Bool("self_payment", selfPayment).
+			Msg("Payment succeeded but recording it failed; transaction left pending for reconciliation")
+		return nil, fmt.Errorf("%w: %w", ErrPaymentSentNotRecorded, err)
 	}
 	if settledTransaction != nil {
 		svc.publishSettleEvent(settledTransaction)

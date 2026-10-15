@@ -394,6 +394,18 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 			"the payment's outcome is not known yet; this slice stays claimed until the payment settles or fails")
 		return
 	}
+	if err != nil && errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
+		// The node reported the payout as sent but it could not be recorded
+		// (e.g. no preimage came back). The money has left, so the slice stays
+		// claimed: releasing it would let the same slice be redeemed twice. The
+		// payment subscription or startup reconciliation settles the row and
+		// records the payout facts once the preimage is known.
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentRequest.PaymentHash).
+			Msg("cash_redeem payout sent but not recorded; slice kept claimed, needs operator attention")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
+			"the payment was sent but could not be recorded; this slice stays claimed — do not retry")
+		return
+	}
 	if err != nil {
 		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
 			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after payment failure")
