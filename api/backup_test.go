@@ -116,6 +116,11 @@ func TestRestoreBackup_ZipSlipRejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
+	if svc.DB.Name() != "sqlite" {
+		// Restore is refused outright on other backends, before any archive is
+		// opened, so the guard under test is never reached there.
+		t.Skip("backup restore is supported on sqlite only")
+	}
 
 	workDir := t.TempDir()
 	svc.Cfg.GetEnv().Workdir = workDir

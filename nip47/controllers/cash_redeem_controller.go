@@ -247,6 +247,16 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		}
 	}
 
+	// NIP-CASH §Redeeming a Slice: amount is only for an amountless invoice and
+	// MUST NOT alter one that already carries an amount. A matching value is
+	// harmless; a different one is refused before anything is claimed.
+	if paymentRequest.AmountMloki != 0 && params.Amount != nil &&
+		*params.Amount != uint64(paymentRequest.AmountMloki) { //nolint:gosec // mloki amounts are always far below int64/uint64 range
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			"amount must not differ from the amount the invoice already carries")
+		return
+	}
+
 	// 8. Atomically claim the slice — guards the actual payout against races
 	// and replays. RowsAffected==0 here means a concurrent redeem/transfer won
 	// since step 5's lookup. Reported with a distinct message from step 5's
@@ -368,7 +378,13 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 		return
 	}
 
-	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, params.Amount, metadata, controller.lnClient, &app.ID, &requestEventId)
+	// Only an amountless invoice takes the caller's amount; a fixed-amount one
+	// is paid for exactly what it says.
+	var payAmount *uint64
+	if paymentRequest.AmountMloki == 0 {
+		payAmount = params.Amount
+	}
+	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, payAmount, metadata, controller.lnClient, &app.ID, &requestEventId)
 	if err != nil && errors.Is(err, lnclient.ErrPaymentPending) {
 		// The payment may still settle, so the slice stays claimed. If it
 		// fails instead, the payment-failed event releases it.

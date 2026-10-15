@@ -76,6 +76,7 @@ it ever vouched for anyone.
 - **[App Store](lokihub-appstore.md)** — same "small manifest, cached locally" mechanism, but for apps
   connecting *in* to the wallet rather than services it connects *out* to.
 - **[NIP-CASH (Cash Hub)](https://github.com/ohstr/nips/blob/main/NIP-CASH.md)** — what the Identity Authority allowlist actually protects.
+- **[Cash privacy](cash-privacy.md)** — what a Cash Hub's relays, and the Hub itself, can still see.
 - **[JIT Payment](jit-payment.md)** — a different "JIT": the LSP row above is where that document's
   just-in-time channel buys get their LSP from.
 - **[LSP Support](lokihub-lsp.md)** — the LSP `active` flag configured here is what every LSPS0/1/2/5 flow
