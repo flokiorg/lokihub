@@ -81,7 +81,7 @@ func TestCreateCircleWallet_DetailsUnreadableByCoMember(t *testing.T) {
 	// Alice — the joiner — can read her own details.
 	details := decryptCircleWalletDetails(t, aliceKey, *provider.WalletPubkey, result.EncryptedDetails)
 	assert.NotEmpty(t, details.WalletPubkey, "the joiner must be able to recover her wallet pubkey")
-	assert.NotEmpty(t, details.PairingURI)
+	assert.NotEmpty(t, details.Relays)
 
 	// Bob holds the same shared circle hub connection, so he sees this exact
 	// response on the wire. He must not be able to open it.

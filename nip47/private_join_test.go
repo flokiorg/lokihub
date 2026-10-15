@@ -58,13 +58,20 @@ func newJoinHub(t *testing.T, allowed ...string) *joinHub {
 	}
 }
 
+// joinParams builds a join exactly as nmilat's client does, with a fresh
+// member-generated connection key (NIP-CW §Request).
 func joinParams(t *testing.T, memberPriv, hubWalletPubkey string, maxAmount uint64) string {
 	t.Helper()
-	pub, _ := nostr.GetPublicKey(memberPriv)
-	ev := &nostr.Event{Kind: nipcw.KindCircleIdentityProof, CreatedAt: nostr.Now(), Tags: nostr.Tags{{"d", hubWalletPubkey}}}
-	require.NoError(t, ev.Sign(memberPriv))
-	raw, _ := json.Marshal(ev)
-	b, err := json.Marshal(nipcw.CreateCircleWalletRequest{Pubkey: pub, MaxAmount: maxAmount, Expiry: 3600, IdentityEvent: string(raw)})
+	connection, err := nipcw.NewConnectionKey()
+	require.NoError(t, err)
+	req, err := nipcw.CreateCircleWalletParams{
+		Credential:      nipcw.BySigning(memberPriv),
+		Connection:      connection,
+		MaxAmountMillis: maxAmount,
+		Expiry:          time.Hour,
+	}.Request(hubWalletPubkey)
+	require.NoError(t, err)
+	b, err := json.Marshal(req)
 	require.NoError(t, err)
 	return string(b)
 }

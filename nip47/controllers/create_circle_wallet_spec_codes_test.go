@@ -100,7 +100,10 @@ func TestCreateCircleWallet_ResolvedMaxAmountInEncryptedDetails(t *testing.T) {
 		response.Result.(createCircleWalletResponse).EncryptedDetails)
 	assert.Equal(t, uint64(100_000), details.MaxAmount)
 
-	parsed, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), MaxAmountMillis: 100_500}.
+	memberPub, _ := nostr.GetPublicKey(member)
+	connection, err := nipcw.ConnectionKeyFromSecret(testConnectionSecret(memberPub))
+	require.NoError(t, err)
+	parsed, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection, MaxAmountMillis: 100_500}.
 		ParseResult(*provider.WalletPubkey, raw)
 	require.NoError(t, err)
 	require.NotNil(t, parsed.MaxAmountMillis)

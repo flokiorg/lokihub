@@ -55,7 +55,7 @@ func mintCircleChild(t *testing.T, hub CircleHubConfig) *nwcclient.Client {
 
 	details, err := DecryptCircleWalletDetails(authorizedPrivkey, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	return mustConnect(t, details.PairingURI)
+	return mustConnect(t, CircleWalletURI(details, authorizedPub))
 }
 
 // cashChildFixture is a freshly-minted, single-recipient shared Cash wallet:

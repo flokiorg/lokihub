@@ -138,15 +138,16 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 	identityEvent := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"disambiguator", disambiguator}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, identityEvent.Sign(requesterPrivkey))
 
 	params := nipcw.CreateCircleWalletRequest{
-		Pubkey:        requesterPubkey,
-		MaxAmount:     maxAmountMloki,
-		Expiry:        expirationSecs,
-		IdentityEvent: mustMarshal(t, identityEvent),
+		Pubkey:           requesterPubkey,
+		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
+		MaxAmount:        maxAmountMloki,
+		Expiry:           expirationSecs,
+		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)

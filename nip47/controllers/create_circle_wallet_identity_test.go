@@ -41,10 +41,11 @@ func callCreateCircleWallet(t *testing.T, svc *tests.TestService, provider *db.A
 func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs int, identityEventJSON string) string {
 	t.Helper()
 	params := nipcw.CreateCircleWalletRequest{
-		Pubkey:        requesterPubkey,
-		MaxAmount:     maxAmountMloki,
-		Expiry:        expirationSecs,
-		IdentityEvent: identityEventJSON,
+		Pubkey:           requesterPubkey,
+		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
+		MaxAmount:        maxAmountMloki,
+		Expiry:           expirationSecs,
+		IdentityEvent:    identityEventJSON,
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)
