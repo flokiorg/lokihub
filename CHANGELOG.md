@@ -359,6 +359,16 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   as the UI already did: such a circle admits nobody. (#121)
 - Makes refusing a private `cash_status` for a live bill cost the same as
   refusing one for a bill the hub never issued. (#121)
+- Keeps a payment the node reports as sent, but which could not be recorded,
+  as sent: a `cash_redeem` slice stays claimed, and a split, consolidate or
+  removed-recipient sweep counts the funds as moved, instead of rolling back.
+- Resolves an outgoing payment left pending for 48 hours by asking the node
+  instead of failing it by age, and keeps a keysend pending when the node
+  can't say whether it went out.
+- Publishes a private-transport reply on the relay its request arrived on;
+  before, it went to the first configured relay that accepted it.
+- Makes an app's connection pubkey unique in the database, not only in the
+  check before inserting it.
 
 ## [0.4.0]
 
