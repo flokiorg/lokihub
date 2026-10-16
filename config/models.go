@@ -57,6 +57,12 @@ type AppConfig struct {
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
+	// CashSplitLinkRetentionDays is how long an archived cash slice keeps the
+	// link to the bill its value moved into (a split or a consolidation). A
+	// consolidation's links say which bills shared a holder, and NIP-CASH says a
+	// Hub SHOULD NOT keep that longer than its audit policy needs. Amounts and
+	// outcomes stay. 0 keeps the links forever.
+	CashSplitLinkRetentionDays int `envconfig:"CASH_SPLIT_LINK_RETENTION_DAYS" default:"90"`
 
 	// The four knobs below bound one private-transport batch envelope. They are
 	// node-level rather than per-Cash-Hub on purpose: the transport gate runs
