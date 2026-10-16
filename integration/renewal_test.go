@@ -116,7 +116,7 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 
 	details, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	child := mustConnect(t, details.PairingURI)
+	child := mustConnect(t, CircleWalletURI(details, pubkey))
 
 	var budget GetBudgetResult
 	require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))

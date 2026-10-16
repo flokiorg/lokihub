@@ -168,6 +168,14 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Removing a recipient from a Cash bill is now all-or-nothing: if returning
   their amount to the Cash Hub fails, their slice stays exactly as it was
   instead of being removed with the funds left behind. (#122)
+- Answers `create_circle_wallet` with the NIP-CW error codes, `WALLET_EXISTS`
+  for a second join and `NOT_READY` while membership can't be checked, and
+  reports the resolved `max_amount` inside `encrypted_details`. (#124)
+- Breaking: issues each Circle Wallet to a connection key the member
+  generates, so `create_circle_wallet` now requires `connection_pubkey` and a
+  matching `connection` tag on its identity proof. The Hub never holds the
+  member's secret, and `encrypted_details` carries `wallet_pubkey` and
+  `relays` instead of a `pairing_uri`. (#124)
 
 ### Fixed
 
@@ -347,6 +355,16 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
   as the UI already did: such a circle admits nobody. (#121)
 - Makes refusing a private `cash_status` for a live bill cost the same as
   refusing one for a bill the hub never issued. (#121)
+- Keeps a payment the node reports as sent, but which could not be recorded,
+  as sent: a `cash_redeem` slice stays claimed, and a split, consolidate or
+  removed-recipient sweep counts the funds as moved, instead of rolling back. (#124)
+- Resolves an outgoing payment left pending for 48 hours by asking the node
+  instead of failing it by age, and keeps a keysend pending when the node
+  can't say whether it went out. (#124)
+- Publishes a private-transport reply on the relay its request arrived on;
+  before, it went to the first configured relay that accepted it. (#124)
+- Makes an app's connection pubkey unique in the database, not only in the
+  check before inserting it. (#124)
 
 ## [0.4.0]
 

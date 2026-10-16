@@ -3362,6 +3362,14 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 			invoice.PaymentRequest, nil, map[string]interface{}{"internal_transfer": true},
 			api.svc.GetLNClient(), &walletAppID, nil,
 		); err != nil {
+			// Sent but not recorded: the slice's funds are already at the hub. Keeping
+			// the slice would let a retry sweep the same amount again, out of the other
+			// recipients' share of this wallet, so the removal goes ahead.
+			if errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
+				logger.Logger.Error().Err(err).Uint("wallet_app_id", walletAppID).Uint("claim_id", claimID).
+					Msg("Removed claim's sweep was sent but not recorded; treating it as swept, outgoing row left pending for the operator")
+				return nil
+			}
 			return fmt.Errorf("failed to sweep removed claim's balance back to hub: %w", err)
 		}
 		return nil

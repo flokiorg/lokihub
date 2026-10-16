@@ -40,7 +40,7 @@ func TestHandleCreateCircleWalletEvent_Membership_SecondAttemptWhileActive_Rejec
 
 	second := callCreateCircleWallet(t, svc, provider, distinctCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, "second", 100_000, 3600))
 	require.NotNil(t, second.Error, "a second mint for the same identity while the first wallet is active must be rejected")
-	assert.Equal(t, constants.ERROR_RESTRICTED, second.Error.Code)
+	assert.Equal(t, nipcw.ErrWalletExists, second.Error.Code)
 
 	var childCount int64
 	svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", provider.ID, db.AppKindCircleWallet).Count(&childCount)
@@ -66,7 +66,7 @@ func TestHandleCreateCircleWalletEvent_Membership_RepeatedAttempts_NeverExceedsP
 		if resp.Error == nil {
 			successes++
 		} else {
-			assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
+			assert.Equal(t, nipcw.ErrWalletExists, resp.Error.Code)
 		}
 	}
 	assert.Equal(t, 1, successes, "only the first of N repeated attempts for the same identity should succeed")
@@ -138,15 +138,16 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 	identityEvent := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"disambiguator", disambiguator}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, identityEvent.Sign(requesterPrivkey))
 
 	params := nipcw.CreateCircleWalletRequest{
-		Pubkey:        requesterPubkey,
-		MaxAmount:     maxAmountMloki,
-		Expiry:        expirationSecs,
-		IdentityEvent: mustMarshal(t, identityEvent),
+		Pubkey:           requesterPubkey,
+		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
+		MaxAmount:        maxAmountMloki,
+		Expiry:           expirationSecs,
+		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)

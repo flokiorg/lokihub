@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -398,7 +399,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 						"an omitted expiry must default to the hub's own max_exp_secs, not produce an already-expired wallet")
 				}
 
-				pairingURI := details.PairingURI
+				pairingURI := CircleWalletURI(details, member.pub)
 
 				child := mustConnect(t, pairingURI)
 
@@ -429,7 +430,8 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
+		// NIP-CW §Errors: an existing active wallet is WALLET_EXISTS, not RESTRICTED.
+		requireNWCErrorCode(t, err, nipcw.ErrWalletExists)
 	})
 
 	t.Run("GetInfo_HubAdvertisesCreateCircleWallet", func(t *testing.T) {

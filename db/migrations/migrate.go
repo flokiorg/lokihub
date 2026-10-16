@@ -103,6 +103,12 @@ func Migrate(gormDB *gorm.DB) error {
 		return err
 	}
 
+	// Unique apps.app_pubkey, so a duplicate insert is refused by the database and
+	// not only by prepareApp's read-then-insert check.
+	if err := MigrateAppsAppPubkeyUnique(gormDB); err != nil {
+		return err
+	}
+
 	// Backfills cash_bill_archives.retained_until, which AutoMigrate has just
 	// added as an empty column.
 	return MigrateCashArchiveRetainedUntil(gormDB)
