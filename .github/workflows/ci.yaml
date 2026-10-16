@@ -83,6 +83,15 @@ jobs:
       - name: Test (race)
         run: go test -race -count=1 ./...
 
+      # The connection-drop resubscription test skips under -race: a server-side
+      # drop trips go-nostr's own data race on Relay.Connection (still in the
+      # latest release). Without this step CI never runs it at all. -v so the log
+      # shows it passed rather than skipped.
+      - name: Test (connection drop, no race detector)
+        run: |
+          go test -count=1 -v -run '^TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering$' ./service/ | tee drop.log
+          grep -q -- '--- PASS: TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering' drop.log
+
   lint-go:
     name: golangci-lint
     needs: build-frontend
