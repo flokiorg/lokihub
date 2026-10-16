@@ -31,7 +31,7 @@ func secondProcess(t *testing.T, svc *tests.TestService) *tests.TestService {
 	if !ok {
 		t.Skip("postgres only: run with TEST_DATABASE_URI pointing at a postgres database")
 	}
-	pool, err := db.NewDBWithConfig(&db.Config{URI: dialector.Config.DSN})
+	pool, err := db.NewDBWithConfig(&db.Config{URI: dialector.DSN})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Stop(pool) })
 	other := *svc
