@@ -3,7 +3,6 @@ package nip47
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/nbd-wtf/go-nostr"
-	"gorm.io/gorm"
 )
 
 func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
@@ -57,7 +55,9 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	requestEvent := db.RequestEvent{AppId: nil, NostrId: event.ID, State: db.REQUEST_EVENT_STATE_HANDLER_EXECUTING}
 	err = svc.db.Create(&requestEvent).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
+		// Not gorm.ErrDuplicatedKey alone: on sqlite (modernc) the violation
+		// arrives untranslated, and a replayed event was logged as a failure.
+		if db.IsDuplicateKeyError(err) {
 			logger.Logger.Warn().
 				Str("requestEventNostrId", event.ID).
 				Msg("Event already processed")

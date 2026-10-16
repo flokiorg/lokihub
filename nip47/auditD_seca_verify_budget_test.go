@@ -150,25 +150,16 @@ func TestAuditD_SecA_VerificationCostIgnoresPerClaimAttestationReverification(t 
 		limits.MaxItems, 2*limits.MaxItems, limits.MaxVerifyBudget)
 }
 
-// TestAuditD_SecA_AttestationIsReverifiedOncePerClaim is the demonstrated half: the real
-// cost, measured, as a function of the bill's claim count.
+// TestAuditD_SecA_AttestationIsReverifiedOncePerClaim pins the fix for a cost that
+// grew with the bill's claim count: the attestation's signature used to be verified
+// once per connection_key claim, so a 100-claim bill cost ~100 verifications for ONE
+// item against a transport budget that believes an item costs 2.
 //
-// Measured rather than counted because there is no hook to count verifications without
-// editing tracked source, which this round forbids. The measurement is made robust by
-// calibrating against a reference nip01.Event.Verify() of the SAME event in the SAME
-// process, and by taking several claim counts so the shape — linear in the claim count —
-// is what is asserted, not any single absolute number.
-// FIXED 2026-10-01: ParseClaimAttestation/MatchClaimAttestation split the signature
-// verification out of the per-claim loop in attestedConnectionKey, so the cost no longer
-// grows with the claim count. This test now asserts the ABSENCE of the growth it was
-// written to demonstrate.
-//
-// The original assertion also could not be kept as-is for a second reason: it required
-// monotonicity across single timing samples at 1/25/50/100 claims, and the measured run
-// was non-monotone from load alone (25 claims -> 12.4 ms, 50 claims -> 10.2 ms). A
-// timing threshold that flakes cannot be trusted in either direction — the same problem
-// Auditor B's throughput test had. Comparing 1 against 100 is a 100x difference in work
-// and survives noise; the intermediate steps do not.
+// Counted, not timed. It used to compare wall-clock time for 1 and 100 claims against
+// a reference verification, and that failed under a parallel `go test ./...` from
+// load alone (9.2 ms measured against a 6.0 ms ceiling). The parse that carries the
+// verification is now behind parseClaimAttestation, so the test counts it directly:
+// exactly one per item, whatever the claim count.
 func TestAuditD_SecA_AttestationIsReverifiedOncePerClaim(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -181,17 +172,7 @@ func TestAuditD_SecA_AttestationIsReverifiedOncePerClaim(t *testing.T) {
 	attackerPriv := nostr.GeneratePrivateKey()
 	attackerPub, err := nostr.GetPublicKey(attackerPriv)
 	require.NoError(t, err)
-	attestation, attestationEvent := auditDSecAAttestation(t, attackerPriv, attackerPub)
-
-	// Reference cost of one verification of this exact event, in this process.
-	const refRuns = 200
-	start := time.Now()
-	for i := 0; i < refRuns; i++ {
-		_ = attestationEvent.Verify()
-	}
-	refVerify := time.Since(start) / refRuns
-	t.Logf("reference: one nip01.Event.Verify() of this attestation = %v", refVerify)
-	require.Greater(t, refVerify, time.Duration(0))
+	attestation, _ := auditDSecAAttestation(t, attackerPriv, attackerPub)
 
 	params, err := json.Marshal(map[string]any{
 		"scope":             "mine",
@@ -202,10 +183,15 @@ func TestAuditD_SecA_AttestationIsReverifiedOncePerClaim(t *testing.T) {
 
 	hubXOnly := strings.Repeat("ab", 32)
 
-	// serve runs one cash_status item against a bill with n connection_key claims and
-	// returns how long the hub took.
-	serve := func(t *testing.T, n int) (time.Duration, transport.Result, bool) {
-		t.Helper()
+	var parses int
+	real := parseClaimAttestation
+	t.Cleanup(func() { parseClaimAttestation = real })
+	parseClaimAttestation = func(ev *nostr.Event) (*nipIC.Attestation, error) {
+		parses++
+		return real(ev)
+	}
+
+	for _, n := range []int{1, 25, 50, 100} {
 		walletPubkey, connPriv := auditDSecABillWithConnectionKeyClaims(t, svc, hub.ID, n)
 		nonce := tests.RandomHex32()
 		notAfter := time.Now().Add(time.Minute).Unix()
@@ -213,50 +199,15 @@ func TestAuditD_SecA_AttestationIsReverifiedOncePerClaim(t *testing.T) {
 			attackerPriv, connPriv, hubXOnly, nonce, notAfter)
 		binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
 
-		// Warm the path once on a throwaway nonce so the first-call costs (gorm statement
-		// preparation, lazy init) are not attributed to the claim count.
-		start := time.Now()
+		parses = 0
 		result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
-		return time.Since(start), result, served
-	}
-
-	// A warm-up bill, so nothing below pays one-time costs.
-	_, _, _ = serve(t, 1)
-
-	counts := []int{1, 25, 50, 100}
-	elapsed := map[int]time.Duration{}
-	for _, n := range counts {
-		d, result, served := serve(t, n)
-		elapsed[n] = d
 		require.True(t, served, "n=%d: an item with a valid bill proof is answered, not omitted", n)
 		require.NotNil(t, result.Error, "n=%d: the attacker holds no slice, so this must refuse", n)
 		require.Equal(t, constants.ERROR_NOT_FOUND, result.Error.Code,
-			"n=%d: the refusal is NOT_FOUND — the hub spent the CPU and then declined", n)
-		t.Logf("claims=%3d  ServePrivateItem=%v  (refused: %s)", n, d, result.Error.Code)
+			"n=%d: the refusal is NOT_FOUND — the hub did the work and then declined", n)
+		require.Equal(t, 1, parses,
+			"n=%d claims: the attestation was parsed and verified %d times for one item, want once", n, parses)
 	}
-
-	// The shape: the extra time between a 1-claim bill and a 100-claim bill must be at
-	// least most of 99 reference verifications. A conservative 50 of them keeps this from
-	// flaking on a loaded machine while still being impossible to satisfy if the
-	// attestation were verified once, or verified lazily after the cheap comparisons.
-	extra := elapsed[100] - elapsed[1]
-	// The ceiling the fix buys: 99 further claims must cost far LESS than the ~99
-	// verifications they used to. 20 is generous — it allows real per-claim work (the
-	// comparisons, the IsTrusted lookup, the DB rows) while being impossible to satisfy
-	// if the signature were still verified per claim.
-	ceiling := 20 * refVerify
-	t.Logf("extra cost of 99 further claims: %v  (ceiling for the assertion: %v, i.e. 20 verifications)", extra, ceiling)
-	require.Less(t, extra, ceiling,
-		"99 further claims still cost ~a verification each, so the attestation is being "+
-			"re-verified per claim; got %v extra against a reference verify of %v", extra, refVerify)
-
-	// What the fix is worth, using the hub's OWN announced limits. Pre-fix an item
-	// against a 100-claim bill cost 2 + 100 verifications; now it costs 2 + 1.
-	limits := transport.DefaultLimits()
-	t.Logf("pre-fix: one %d-item envelope against a 100-claim bill = %d real verifications "+
-		"against an announced budget of %d (%.0fx). Post-fix: %d, which is what the budget believes.",
-		limits.MaxItems, limits.MaxItems*(2+100), limits.MaxVerifyBudget,
-		float64(limits.MaxItems*(2+100))/float64(limits.MaxVerifyBudget), limits.MaxItems*(2+1))
 }
 
 // TestAuditD_SecA_ManyItemsOnOneBillAreNotDuplicates closes the only step of the exploit
