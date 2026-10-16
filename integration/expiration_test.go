@@ -68,7 +68,7 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	// Sanity: fully live before expiry, so what we observe afterward is
@@ -208,7 +208,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 	}, &created))
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	waitPastExpiry()

@@ -71,7 +71,7 @@ func TestDispatchEnvelope_ServesItemsAfterOmittedAndMalformedOnes(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	svc.dispatchEnvelope(ctx, nostr.NewSimplePool(ctx), pt, ts.LNClient, envelope, conversationKey)
+	svc.dispatchEnvelope(ctx, nostr.NewSimplePool(ctx), pt, ts.LNClient, envelope, conversationKey, relay.url)
 
 	var reply *nostr.Event
 	select {

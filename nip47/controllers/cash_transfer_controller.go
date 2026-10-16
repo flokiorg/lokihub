@@ -805,7 +805,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 				Msg("Failed to derive split-off wallet key; funds moved but could not be delivered")
 			return "", "", false
 		}
-		enc, encErr := encryptPairingURI(recipientPubkey, privKey, w.CashToken)
+		enc, encErr := encryptForRecipient(recipientPubkey, privKey, w.CashToken)
 		if encErr != nil {
 			logger.Logger.Error().Err(encErr).Uint("new_wallet_id", w.WalletApp.ID).
 				Msg("Failed to encrypt split-off wallet token; funds moved but could not be delivered")

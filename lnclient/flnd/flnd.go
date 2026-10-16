@@ -603,7 +603,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 			Str("payment_hash", paymentHash).
 			Str("preimage", preimage).
 			Msg("Failed to make keysend payment")
-		return nil, err
+		return svc.keysendOutcomeAfterError(paymentHash, err)
 	}
 
 	resp, err := svc.getPaymentResult(payStream)
@@ -612,7 +612,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 			Str("payment_hash", paymentHash).
 			Str("preimage", preimage).
 			Msg("Couldn't get response from paystream")
-		return nil, err
+		return svc.keysendOutcomeAfterError(paymentHash, err)
 	}
 
 	if resp.Status != lnrpc.Payment_SUCCEEDED {
@@ -640,6 +640,17 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 	return &lnclient.PayKeysendResponse{
 		Fee: uint64(resp.FeeMsat), //nolint:gosec // msat amounts are always far below int64/uint64 range
 	}, nil
+}
+
+// keysendOutcomeAfterError is lookupPaymentAfterError for a keysend: a broken
+// call or stream is not a failed payment, so it is reported as one only when the
+// node says so, and as lnclient.ErrPaymentPending when it can't tell.
+func (svc *FLNDService) keysendOutcomeAfterError(paymentHash string, callErr error) (*lnclient.PayKeysendResponse, error) {
+	resp, err := svc.lookupPaymentAfterError(paymentHash, callErr)
+	if err != nil {
+		return nil, err
+	}
+	return &lnclient.PayKeysendResponse{Fee: resp.Fee}, nil
 }
 
 // lookupPaymentAfterError asks the node for a payment's state by hash after

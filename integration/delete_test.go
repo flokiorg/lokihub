@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -119,7 +120,7 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	const fundAmountMloki = 3000
@@ -207,7 +208,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 		Expiry:        happyPathExpirySecs,
 		IdentityEvent: eventJSON(t, ev2),
 	}, &second)
-	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
+	requireNWCErrorCode(t, err, nipcw.ErrWalletExists)
 
 	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
@@ -255,7 +256,7 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := circleDetails.PairingURI
+	pairingURI := CircleWalletURI(circleDetails, pubkey)
 	child := mustConnect(t, pairingURI)
 
 	var invoice MakeInvoiceResult

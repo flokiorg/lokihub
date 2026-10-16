@@ -124,6 +124,16 @@ func (sn StringOrNumber) String() string {
 	return fmt.Sprintf("%d", sn.NumberData)
 }
 
+// ErrPaymentSentNotRecorded is returned (wrapped) by SendPaymentSync when the
+// node reported the payment as succeeded but recording that outcome failed —
+// most often because the node's response carried no preimage. The money has
+// left: this is NOT a failed payment, and a caller must never undo whatever it
+// did on the payment's behalf (release a cash slice, delete a funded wallet,
+// restore a source claim). The outgoing row stays PENDING so the payment
+// subscription or startup reconciliation can settle it once the outcome is
+// known.
+var ErrPaymentSentNotRecorded = errors.New("payment sent but its outcome could not be recorded")
+
 type notFoundError struct {
 }
 
@@ -596,7 +606,14 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		return err
 	})
 	if err != nil {
-		return nil, err
+		// The node said the payment went out, so this must not read as a
+		// failure: callers roll back on failure, and rolling back here would
+		// hand out value that has already been paid. The row stays PENDING.
+		svc.logger.Error().Err(err).
+			Str("payment_hash", dbTransaction.PaymentHash).
+			Bool("self_payment", selfPayment).
+			Msg("Payment succeeded but recording it failed; transaction left pending for reconciliation")
+		return nil, fmt.Errorf("%w: %w", ErrPaymentSentNotRecorded, err)
 	}
 	if settledTransaction != nil {
 		svc.publishSettleEvent(settledTransaction)
@@ -738,6 +755,12 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			Str("destination", destination).
 			Uint64("amount", amount).
 			Msg("Failed to send payment")
+
+		// The payment may still settle, so the row stays PENDING and the node's
+		// payment subscription (or the stale sweep's lookup) resolves it later.
+		if errors.Is(rpcErr, lnclient.ErrPaymentPending) {
+			return nil, rpcErr
+		}
 
 		// Route through markPaymentFailed (not a raw Updates() call) so this
 		// shares its guard against downgrading an already-SETTLED transaction -
@@ -1027,33 +1050,14 @@ func (svc *transactionsService) ReconcilePendingCashRedeems(ctx context.Context,
 			continue
 		}
 
-		var dbErr error
-		switch lookup.Status {
-		case lnclient.PaymentStatusSucceeded:
-			var settled *db.Transaction
-			dbErr = svc.db.Transaction(func(tx *gorm.DB) error {
-				var txErr error
-				settled, txErr = svc.markTransactionSettled(tx, payout, lookup.Preimage, lookup.FeeMloki, false)
-				return txErr
-			})
-			if dbErr == nil && settled != nil {
-				svc.publishSettleEvent(settled)
-			}
-		case lnclient.PaymentStatusFailed:
-			reason := lookup.FailureReason
-			if reason == "" {
-				reason = "the node has no record of this payment"
-			}
-			dbErr = svc.db.Transaction(func(tx *gorm.DB) error {
-				_, txErr := svc.markPaymentFailed(tx, payout, reason)
-				return txErr
-			})
-		case lnclient.PaymentStatusInFlight:
-			// Counted as unresolved before the switch.
-		}
+		resolved, dbErr := svc.applyPaymentLookup(payout, lookup)
 		if dbErr != nil {
 			svc.logger.Error().Err(dbErr).Str("payment_hash", payout.PaymentHash).
 				Msg("Failed to record a reconciled cash_redeem payout")
+			unresolved++
+		} else if !resolved {
+			// Reported succeeded but without a preimage: it went out, so the
+			// slice stays claimed until the preimage is known.
 			unresolved++
 		}
 	}
@@ -1065,10 +1069,56 @@ func (svc *transactionsService) ReconcilePendingCashRedeems(ctx context.Context,
 	return unresolved
 }
 
-// SweepStalePendingOutgoing cancels outgoing payments that have been stuck in
+// applyPaymentLookup records what the node reported for an outgoing payment:
+// settled (with its preimage and fee) or failed. Anything else — still in flight,
+// or "succeeded" without a preimage — leaves the row as it is and reports
+// resolved=false.
+func (svc *transactionsService) applyPaymentLookup(payment *db.Transaction, lookup *lnclient.PaymentLookup) (resolved bool, err error) {
+	switch lookup.Status {
+	case lnclient.PaymentStatusSucceeded:
+		if lookup.Preimage == "" {
+			return false, nil
+		}
+		var settled *db.Transaction
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			var txErr error
+			settled, txErr = svc.markTransactionSettled(tx, payment, lookup.Preimage, lookup.FeeMloki, false)
+			return txErr
+		})
+		if err == nil && settled != nil {
+			svc.publishSettleEvent(settled)
+		}
+		return err == nil, err
+	case lnclient.PaymentStatusFailed:
+		reason := lookup.FailureReason
+		if reason == "" {
+			reason = "the node has no record of this payment"
+		}
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			_, txErr := svc.markPaymentFailed(tx, payment, reason)
+			return txErr
+		})
+		return err == nil, err
+	case lnclient.PaymentStatusInFlight:
+		// Still in flight: leave the row as it is.
+	}
+	return false, nil
+}
+
+// SweepStalePendingOutgoing resolves outgoing payments that have been stuck in
 // PENDING state for longer than stalePendingTTL (2× the practical HTLC expiry
-// window). Before cancelling, it attempts LN reconciliation so that a payment
-// which did settle is correctly marked as successful rather than failed.
+// window). Each one is resolved from what actually happened, never by age alone:
+// failing a payment drops it out of the payer's balance, so failing one that went
+// out credits back money that has left.
+//
+//   - A payment to another node is looked up on the node by its hash: settled →
+//     recorded settled with its preimage and fee; definitively failed → failed
+//     (which releases a cash_redeem's slice); in flight, "succeeded" without a
+//     preimage, a lookup error, or a backend that can't look payments up → left
+//     PENDING and logged for the operator.
+//   - A self-payment never reached the node, so its own incoming leg is the
+//     record: settled → this leg is settled with the same preimage; failed or
+//     missing → failed; still open → left PENDING.
 func (svc *transactionsService) SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient) {
 	var stale []db.Transaction
 	cutoff := time.Now().Add(-stalePendingTTL)
@@ -1092,13 +1142,85 @@ func (svc *transactionsService) SweepStalePendingOutgoing(ctx context.Context, l
 		if err := svc.db.First(&refreshed, stale[i].ID).Error; err != nil {
 			continue
 		}
-		if refreshed.State == constants.TRANSACTION_STATE_PENDING {
-			if err := svc.db.Model(&refreshed).Update("state", constants.TRANSACTION_STATE_FAILED).Error; err != nil {
-				svc.logger.Error().Err(err).Uint("tx_id", refreshed.ID).Msg("SweepStalePendingOutgoing: failed to cancel stale transaction")
-			} else {
-				svc.logger.Warn().Uint("tx_id", refreshed.ID).Str("payment_hash", refreshed.PaymentHash).Msg("SweepStalePendingOutgoing: cancelled stale pending outgoing payment")
-			}
+		if refreshed.State != constants.TRANSACTION_STATE_PENDING {
+			continue
 		}
+		svc.resolveStalePendingOutgoing(ctx, &refreshed, lnClient)
+	}
+}
+
+func (svc *transactionsService) resolveStalePendingOutgoing(ctx context.Context, payment *db.Transaction, lnClient lnclient.LNClient) {
+	logLeft := func(err error, why string) {
+		svc.logger.Warn().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: left pending — " + why + "; needs operator attention")
+	}
+
+	if payment.SelfPayment {
+		svc.resolveStaleSelfPayment(payment, logLeft)
+		return
+	}
+
+	looker, canLookUp := lnClient.(lnclient.PaymentLooker)
+	if !canLookUp {
+		logLeft(nil, "this backend cannot look payments up")
+		return
+	}
+	lookup, err := looker.LookupPayment(ctx, payment.PaymentHash)
+	if err != nil {
+		logLeft(err, "payment lookup failed, outcome unknown")
+		return
+	}
+	resolved, err := svc.applyPaymentLookup(payment, lookup)
+	if err != nil {
+		svc.logger.Error().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: failed to record the node's answer")
+		return
+	}
+	if !resolved {
+		logLeft(nil, "the node does not report a final outcome with a preimage")
+		return
+	}
+	svc.logger.Warn().Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).Str("status", string(lookup.Status)).
+		Msg("SweepStalePendingOutgoing: resolved a stale pending payment from the node")
+}
+
+// resolveStaleSelfPayment settles or fails a stale self-payment's outgoing leg
+// from its incoming leg, the only record of whether the value moved.
+func (svc *transactionsService) resolveStaleSelfPayment(payment *db.Transaction, logLeft func(error, string)) {
+	var incoming db.Transaction
+	result := svc.db.Limit(1).Find(&incoming, &db.Transaction{
+		Type:        constants.TRANSACTION_TYPE_INCOMING,
+		PaymentHash: payment.PaymentHash,
+	})
+	if result.Error != nil {
+		logLeft(result.Error, "could not read the self-payment's incoming leg")
+		return
+	}
+
+	var err error
+	switch {
+	case result.RowsAffected > 0 && incoming.State == constants.TRANSACTION_STATE_SETTLED && incoming.Preimage != nil:
+		var settled *db.Transaction
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			var txErr error
+			settled, txErr = svc.markTransactionSettled(tx, payment, *incoming.Preimage, 0, true)
+			return txErr
+		})
+		if err == nil && settled != nil {
+			svc.publishSettleEvent(settled)
+		}
+	case result.RowsAffected == 0 || incoming.State == constants.TRANSACTION_STATE_FAILED:
+		err = svc.db.Transaction(func(tx *gorm.DB) error {
+			_, txErr := svc.markPaymentFailed(tx, payment, "self-payment: the incoming leg was never credited")
+			return txErr
+		})
+	default:
+		logLeft(nil, "the self-payment's incoming leg is still open")
+		return
+	}
+	if err != nil {
+		svc.logger.Error().Err(err).Uint("tx_id", payment.ID).Str("payment_hash", payment.PaymentHash).
+			Msg("SweepStalePendingOutgoing: failed to resolve a stale self-payment")
 	}
 }
 

@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -25,13 +27,32 @@ import (
 // simpler circle case (always self-proof, no invoice/attestation binding).
 func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPubkey string) *nostr.Event {
 	t.Helper()
+	requesterPubkey, err := nostr.GetPublicKey(requesterPrivkey)
+	require.NoError(t, err)
 	ev := &nostr.Event{
 		Kind:      nostrKindCircleIdentityProof,
 		CreatedAt: nostr.Now(),
-		Tags:      nostr.Tags{{"d", hubWalletPubkey}},
+		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
 	return ev
+}
+
+// testConnectionSecret and testConnectionPubkey are the member-generated
+// connection key (NIP-CW §Request) the test helpers use for a requester. It is
+// derived from the requester's pubkey, so every helper and every hand-built
+// proof agrees on it without passing it around. Real clients generate a fresh
+// one per request; the nmilat-built tests do exactly that.
+func testConnectionSecret(requesterPubkey string) string {
+	sum := sha256.Sum256([]byte("connection:" + requesterPubkey))
+	return hex.EncodeToString(sum[:])
+}
+
+func testConnectionPubkey(t testing.TB, requesterPubkey string) string {
+	t.Helper()
+	pub, err := nostr.GetPublicKey(testConnectionSecret(requesterPubkey))
+	require.NoError(t, err)
+	return pub
 }
 
 // makeCircleWalletRequest builds a create_circle_wallet request JSON signed
@@ -43,10 +64,11 @@ func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey str
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	params := nipcw.CreateCircleWalletRequest{
-		Pubkey:        requesterPubkey,
-		MaxAmount:     maxAmountMloki,
-		Expiry:        expirationSecs,
-		IdentityEvent: mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
+		Pubkey:           requesterPubkey,
+		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
+		MaxAmount:        maxAmountMloki,
+		Expiry:           expirationSecs,
+		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)
@@ -406,7 +428,7 @@ func TestHandleCreateCircleWalletEvent_HappyPath(t *testing.T) {
 	result := publishedResponse.Result.(createCircleWalletResponse)
 	assert.NotEmpty(t, result.EncryptedDetails)
 	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, result.EncryptedDetails)
-	assert.NotEmpty(t, details.PairingURI)
+	assert.NotEmpty(t, details.Relays)
 	assert.NotEmpty(t, details.WalletPubkey)
 	assert.Greater(t, details.ExpiresAt, time.Now().Unix())
 	assert.Equal(t, 0, details.FeesPpm)
@@ -635,11 +657,12 @@ func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubWalle
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	params := nipcw.CreateCircleWalletRequest{
-		Pubkey:        requesterPubkey,
-		MaxAmount:     maxAmountMloki,
-		Expiry:        expirationSecs,
-		BudgetRenewal: budgetRenewal,
-		IdentityEvent: mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
+		Pubkey:           requesterPubkey,
+		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
+		MaxAmount:        maxAmountMloki,
+		Expiry:           expirationSecs,
+		BudgetRenewal:    budgetRenewal,
+		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
 	b, err := json.Marshal(content)

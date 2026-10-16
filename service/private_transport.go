@@ -493,8 +493,13 @@ func (svc *service) watchPrivateSubscription(ctx context.Context, pool *nostr.Si
 			//
 			// No loop-variable capture to worry about: envelope and conversationKey
 			// are declared inside this iteration's body, not by the range clause.
+			// The reply goes back to the relay this request arrived on.
+			var arrivedOn string
+			if event.Relay != nil {
+				arrivedOn = event.Relay.URL
+			}
 			group.Go(func() error {
-				svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey)
+				svc.dispatchEnvelope(ctx, pool, pt, svc.lnClient, envelope, conversationKey, arrivedOn)
 				return nil
 			})
 		}

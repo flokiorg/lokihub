@@ -17,13 +17,15 @@ func respondError(publishResponse publishFunc, method, code, message string) {
 	}, nostr.Tags{})
 }
 
-// encryptPairingURI NIP-44 encrypts the pairing URI for the recipient.
-// recipientPubkey is the nostr public key (hex); senderPrivKey is the wallet's
-// private key used to derive the shared secret.
-func encryptPairingURI(recipientPubkey, senderPrivKey, uri string) (string, error) {
+// encryptForRecipient NIP-44 encrypts plaintext for the recipient: a circle
+// wallet's encrypted_details JSON, or a cash token handed over by
+// cash_transfer/cash_consolidate. recipientPubkey is the nostr public key
+// (hex); senderPrivKey is the wallet's private key used to derive the shared
+// secret.
+func encryptForRecipient(recipientPubkey, senderPrivKey, plaintext string) (string, error) {
 	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, recipientPubkey, senderPrivKey)
 	if err != nil {
 		return "", err
 	}
-	return c.Encrypt(uri)
+	return c.Encrypt(plaintext)
 }
