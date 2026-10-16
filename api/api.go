@@ -1740,9 +1740,11 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		// here — they are derived, so accepting them would let a caller state a
 		// ceiling that is not the real one.
 		//
-		// No ReloadNostr: unlike TrustedNwcRelay, the limits are read per
-		// envelope rather than baked into the subscription shape, so a change
-		// applies to the next request.
+		// The Hub reads the limits per envelope, but clients learn them only from
+		// the kind-11190 announcement, published once per Nostr start. Without a
+		// reload, clients kept the old limits until a restart: lower
+		// max_consolidate_sources and every merge sized to the announced value
+		// was refused.
 		if err := api.cfg.SetPrivateEnvelopeLimits(transport.Limits{
 			MaxEnvelopeBytes:      requested.MaxBytes,
 			MaxItems:              requested.MaxItems,
@@ -1751,6 +1753,9 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 			MaxVerifyBudget:       requested.MaxVerifyBudget,
 		}); err != nil {
 			return fmt.Errorf("failed to set private envelope limits: %w", err)
+		}
+		if err := api.svc.ReloadNostr(); err != nil {
+			return fmt.Errorf("failed to reload nostr after changing the private envelope limits: %w", err)
 		}
 	}
 
