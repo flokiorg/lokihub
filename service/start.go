@@ -127,7 +127,8 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 	svc.nip47Service.StartNotifier(ctx, pool)
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
-	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher, svc.PruneExpiredSpentBills)
+	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher, svc.PruneExpiredSpentBills,
+		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
 
 	// Start LSPS5 listener

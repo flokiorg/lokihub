@@ -164,6 +164,7 @@ The following configuration options can be set as environment variables or in a 
 - `BASE_URL`: Base URL for the application.
 - `FRONTEND_URL`: URL for the frontend.
 - `GO_PROFILER_ADDR`: Address for the Go profiler.
+- `CASH_SPLIT_LINK_RETENTION_DAYS`: How long an archived cash slice keeps the link to the bill it was split or consolidated into (default: 90; 0 keeps it forever). Amounts and outcomes are kept either way.
 
 
 ### Migrating the database (Sqlite <-> Postgres)
