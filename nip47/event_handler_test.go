@@ -1,6 +1,7 @@
 package nip47
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"slices"
@@ -8,11 +9,13 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -241,10 +244,18 @@ func doTestHandleResponse_DuplicateRequest(t *testing.T, svc *tests.TestService,
 
 	pool.PublishedEvents = nil
 
+	// The replay is recognised as one on every backend (sqlite's violation
+	// arrives untranslated), not logged as a failure to save.
+	var logs bytes.Buffer
+	saved := logger.Logger
+	logger.Logger = zerolog.New(&logs)
 	nip47svc.HandleEvent(context.TODO(), pool, reqEvent, svc.LNClient)
+	logger.Logger = saved
 
 	// second time it should not publish
 	assert.Nil(t, pool.PublishedEvents)
+	assert.Contains(t, logs.String(), "Event already processed")
+	assert.NotContains(t, logs.String(), "Failed to save nostr event")
 }
 
 func TestHandleResponse_Nip04_NoPermission(t *testing.T) {
