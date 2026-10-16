@@ -83,6 +83,60 @@ jobs:
       - name: Test (race)
         run: go test -race -count=1 ./...
 
+      # The connection-drop resubscription test skips under -race: a server-side
+      # drop trips go-nostr's own data race on Relay.Connection (still in the
+      # latest release). Without this step CI never runs it at all. -v so the log
+      # shows it passed rather than skipped.
+      - name: Test (connection drop, no race detector)
+        run: |
+          go test -count=1 -v -run '^TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering$' ./service/ | tee drop.log
+          grep -q -- '--- PASS: TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering' drop.log
+
+  # The same suite on postgres. The constraints that keep concurrent circle-wallet
+  # creation safe, the unique index on app pubkeys and the row locks behave
+  # differently there than on sqlite, which was all CI ran.
+  test-go-postgres:
+    name: Go test (postgres)
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URI: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The two nonce-set throughput demonstrations measure CPU speed, not the
+      # database: they assert one sender can fill the set before the ingest loop
+      # saturates, which a shared CI runner is too slow to show. They skip under
+      # -race, so the main job never runs them either; run them on real hardware.
+      - name: Test (postgres)
+        run: go test -count=1 -skip '^TestAuditDSecB_(UnpaddedFloodFillsTheNonceSetFasterThanTheIngestLoopSaturates|UnwrapThroughputReachesCapacityBeforeSaturation)$' ./...
+
   lint-go:
     name: golangci-lint
     needs: build-frontend
