@@ -366,10 +366,10 @@ takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
 - Makes an app's connection pubkey unique in the database, not only in the
   check before inserting it. (#124)
 - Republishes the private-transport announcement when its envelope limits
-  change in settings; clients kept the old limits until a restart.
+  change in settings; clients kept the old limits until a restart. (#126)
 - Forgets, after 90 days by default (`CASH_SPLIT_LINK_RETENTION_DAYS`), which
   bill an archived cash slice was split or consolidated into; it was kept
-  forever. Amounts and outcomes stay.
+  forever. Amounts and outcomes stay. (#126)
 
 ## [0.4.0]
 
