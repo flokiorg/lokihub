@@ -92,6 +92,47 @@ jobs:
           go test -count=1 -v -run '^TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering$' ./service/ | tee drop.log
           grep -q -- '--- PASS: TestSubscribeInbox_ConnectionDrops_ResubscribesAndKeepsDelivering' drop.log
 
+  # The same suite on postgres. The constraints that keep concurrent circle-wallet
+  # creation safe, the unique index on app pubkeys and the row locks behave
+  # differently there than on sqlite, which was all CI ran.
+  test-go-postgres:
+    name: Go test (postgres)
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URI: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test (postgres)
+        run: go test -count=1 ./...
+
   lint-go:
     name: golangci-lint
     needs: build-frontend
