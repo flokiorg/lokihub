@@ -435,7 +435,7 @@ func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.
 	// a bill with 100 connection_key claims cost ~100 secp256k1 verifications for ONE
 	// item, against a transport budget that believes an item costs 2. Same shape, same
 	// fix, as the proof split that closed the bill-existence timing leak.
-	parsed, err := controllers.ParseClaimAttestation(&attestation)
+	parsed, err := parseClaimAttestation(&attestation)
 	if err != nil {
 		return "", false
 	}
@@ -459,6 +459,10 @@ func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.
 	}
 	return "", false
 }
+
+// parseClaimAttestation is controllers.ParseClaimAttestation, behind a variable so a
+// test can count how often an item pays for it: once, whatever the claim count.
+var parseClaimAttestation = controllers.ParseClaimAttestation
 
 // cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
 // behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
