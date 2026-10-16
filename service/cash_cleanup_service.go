@@ -52,7 +52,7 @@ func resetCleanupInProgress(gormDB *gorm.DB, appID uint) {
 // pruneRetainedWallets is called on every sweep to drop spent-bill wallets
 // whose retention window has passed. Optional so tests and non-trusted-relay
 // setups can pass nil.
-func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, pruneRetainedWallets func()) {
+func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, pruneRetainedWallets func(), splitLinkRetention time.Duration) {
 	// Once at startup, as soon as the node is up: a cash_redeem payout whose
 	// outcome arrived while lokihub was down is otherwise never resolved, and its
 	// slice stays claimed.
@@ -89,6 +89,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneStaleCashTransferProofs(gormDB)
+				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
 				if pruneRetainedWallets != nil {
 					pruneRetainedWallets()
 				}
@@ -183,6 +184,18 @@ func pruneStaleCashTransferProofs(gormDB *gorm.DB) {
 	if err := gormDB.Where("created_at < ?", time.Now().Add(-cashTransferProofRetention)).
 		Delete(&db.CashTransferProof{}).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale cash transfer proofs")
+	}
+}
+
+// pruneArchivedSplitLinks clears archived slices' links to the bill their value
+// moved into once they are older than retention (CASH_SPLIT_LINK_RETENTION_DAYS;
+// 0 keeps them forever). See db.ClearArchivedSplitLinks.
+func pruneArchivedSplitLinks(gormDB *gorm.DB, retention time.Duration) {
+	if retention <= 0 {
+		return
+	}
+	if _, err := db.ClearArchivedSplitLinks(gormDB, time.Now().Add(-retention)); err != nil {
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to clear archived split links")
 	}
 }
 
