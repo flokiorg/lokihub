@@ -2,6 +2,7 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Loading from "src/components/Loading";
 import { localStorageKeys } from "src/constants";
+import { safeReturnPath } from "src/utils/safeReturnPath";
 import { useInfo } from "src/hooks/useInfo";
 
 export function HomeRedirect() {
@@ -14,20 +15,20 @@ export function HomeRedirect() {
       return;
     }
 
-    const setupReturnTo = window.localStorage.getItem(
-      localStorageKeys.setupReturnTo
+    const setupReturnTo = safeReturnPath(
+      window.localStorage.getItem(localStorageKeys.setupReturnTo)
     );
 
     let to: string;
+    window.localStorage.removeItem(localStorageKeys.setupReturnTo);
     if (setupReturnTo) {
       to = setupReturnTo;
-      window.localStorage.removeItem(localStorageKeys.setupReturnTo);
     } else if (info.setupCompleted && info.running) {
       if (info.unlocked) {
-        const returnTo = window.localStorage.getItem(localStorageKeys.returnTo);
-        if (returnTo) {
-          window.localStorage.removeItem(localStorageKeys.returnTo);
-        }
+        const returnTo = safeReturnPath(
+          window.localStorage.getItem(localStorageKeys.returnTo)
+        );
+        window.localStorage.removeItem(localStorageKeys.returnTo);
         to = returnTo || "/home";
       } else {
         to = "/unlock";
