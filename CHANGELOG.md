@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.15` on 2026-10-13._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.16` on 2026-10-17._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -20,6 +20,12 @@ v0.5.0-rc.17 and Go 1.26.9, and fixes four reachable HTTP/2 server
 advisories in `golang.org/x/net`. rc.14 lets the node profile page post
 text notes, and fixes publishing that profile from the desktop app. rc.15
 takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
+rc.16 issues each Circle Wallet to a connection key the member generates,
+answers joins with NIP-CW's error codes, keeps a payment the node sent as sent
+when recording it failed, publishes private-transport replies on the relay
+the request arrived on, makes app pubkeys unique, republishes the transport
+announcement when its limits change, forgets archived split links after 90
+days by default, and moves to `nmilat` v0.5.0-rc.24.
 
 ### Added
 
