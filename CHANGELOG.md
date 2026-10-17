@@ -377,7 +377,7 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   bill an archived cash slice was split or consolidated into; it was kept
   forever. Amounts and outcomes stay. (#126)
 - Returns to the page you opened before unlocking only when it is a page of
-  this app; a link naming another site now lands on the home page.
+  this app; a link naming another site now lands on the home page. (#128)
 
 ## [0.4.0]
 
