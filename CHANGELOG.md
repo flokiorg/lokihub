@@ -409,6 +409,8 @@ private-transport request ended.
 - Marks a private-transport request `executed` or `error` once its handler
   ends; it stayed `executing` forever, unlike the same request sent over the
   standard transport. (#140)
+- Holds a Circle Wallet's hold invoices to the same receive cap as ordinary
+  invoices; before, `make_hold_invoice` could take in any amount.
 
 ## [0.4.0]
 
