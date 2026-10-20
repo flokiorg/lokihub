@@ -310,22 +310,42 @@ type adminCreateAppRequest struct {
 	// apps.CircleIdentityRef. CircleIdentityName/CirclePolicy/ProviderPubkey
 	// are only used to create a fresh identity (this suite never reuses an
 	// existing one via circleIdentityId - every ephemeral hub gets its own).
-	// ProviderPubkey is required iff CirclePolicy is "following"; for
-	// "allowlist" it's left empty and members are granted afterward via
-	// addCircleAllowlistMember.
-	CircleIdentityName      string `json:"circleIdentityName,omitempty"`
-	CirclePolicy            string `json:"circlePolicy,omitempty"`
-	ProviderPubkey          string `json:"providerPubkey,omitempty"`
-	CircleMaxExpSecs        int    `json:"circleMaxExpSecs,omitempty"`
-	CircleFeesPpm           int    `json:"circleFeesPpm,omitempty"`
-	CirclePerWalletMaxMloki int    `json:"circlePerWalletMaxMloki,omitempty"`
-	CircleMinBudgetRenewal  string `json:"circleMinBudgetRenewal,omitempty"`
+	// For "follow_set", ProviderPubkey names the set's author and FollowSetD
+	// its d identifier. An empty ProviderPubkey means the node identity, and
+	// FollowSet is then published by the hub before the circle is created.
+	// For "allowlist" both are left empty and members are granted afterward
+	// via addCircleAllowlistMember.
+	CircleIdentityName      string          `json:"circleIdentityName,omitempty"`
+	CirclePolicy            string          `json:"circlePolicy,omitempty"`
+	ProviderPubkey          string          `json:"providerPubkey,omitempty"`
+	FollowSetD              string          `json:"followSetD,omitempty"`
+	FollowSet               *adminFollowSet `json:"followSet,omitempty"`
+	CircleMaxExpSecs        int             `json:"circleMaxExpSecs,omitempty"`
+	CircleFeesPpm           int             `json:"circleFeesPpm,omitempty"`
+	CirclePerWalletMaxMloki int             `json:"circlePerWalletMaxMloki,omitempty"`
+	CircleMinBudgetRenewal  string          `json:"circleMinBudgetRenewal,omitempty"`
+}
+
+// adminFollowSet mirrors api.FollowSetRequest: a version of a follow set the
+// hub publishes as its node identity.
+type adminFollowSet struct {
+	Title         string   `json:"title"`
+	Description   string   `json:"description"`
+	PublicMembers []string `json:"publicMembers"`
+	HiddenMembers []string `json:"hiddenMembers"`
 }
 
 type adminCreateAppResponse struct {
-	ID           uint   `json:"id"`
-	WalletPubkey string `json:"walletPubkey"`
-	PairingUri   string `json:"pairingUri"`
+	ID             uint   `json:"id"`
+	WalletPubkey   string `json:"walletPubkey"`
+	PairingUri     string `json:"pairingUri"`
+	CircleHubToken string `json:"circleHubToken"`
+}
+
+// publishFollowSet publishes a new version of a follow set the hub authors
+// (PUT /api/circle-identities/:id/follow-set).
+func (c *adminClient) publishFollowSet(identityID uint, set adminFollowSet) error {
+	return c.doBody(http.MethodPut, fmt.Sprintf("/api/circle-identities/%d/follow-set", identityID), set, nil)
 }
 
 // createApp creates a new app via the admin API (POST /api/apps) with a
