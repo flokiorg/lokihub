@@ -422,6 +422,8 @@ private-transport request ended.
 - Keeps a Circle Hub, and any of its wallets with a live invoice or a payment
   in flight, when you delete it with "empty wallets only"; a zero balance alone
   let such a wallet be removed mid-payment. (#144)
+- Shows a Circle Hub's stats in the desktop app; the page asked for them on a
+  route the desktop app answered with the app list. (#144)
 
 ## [0.4.0]
 
