@@ -201,6 +201,8 @@
     "description": "Billeteras ya creadas para los miembros de este círculo.",
     "empty": "Aún no se han creado billeteras de círculo.",
     "selectWallet": "Seleccionar billetera de círculo",
+    "frozenBadge": "Congelada",
+    "frozenHint": "Este miembro salió del círculo. La billetera no puede pagar ni crear facturas nuevas hasta que se le vuelva a añadir.",
     "removeTitle": "¿Eliminar esta billetera de círculo?",
     "removeDescription": "Su saldo restante se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Esto no se puede deshacer.",
     "removeSelectedTitle_one": "¿Eliminar {{count}} billetera de círculo?",

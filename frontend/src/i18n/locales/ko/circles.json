@@ -201,6 +201,8 @@
     "description": "이 서클의 멤버를 위해 이미 생성된 지갑입니다.",
     "empty": "아직 생성된 서클 지갑이 없습니다.",
     "selectWallet": "서클 지갑 선택",
+    "frozenBadge": "동결됨",
+    "frozenHint": "이 멤버는 서클을 떠났습니다. 다시 추가될 때까지 이 지갑은 결제하거나 새 인보이스를 만들 수 없습니다.",
     "removeTitle": "이 서클 지갑을 제거하시겠습니까?",
     "removeDescription": "남은 잔액은 이 허브로 반환되며, NWC 연결은 즉시 작동을 멈춥니다. 되돌릴 수 없습니다.",
     "removeSelectedTitle_one": "서클 지갑 {{count}}개를 제거하시겠습니까?",

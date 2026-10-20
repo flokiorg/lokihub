@@ -101,6 +101,8 @@ private-transport request ended.
   and hidden members, a title and a description. Hidden members are encrypted
   so only the hub can read them, and the invite takes the set's title as its
   label. (#139)
+- Marks a Circle member's wallet as frozen in the hub's wallet list once they
+  leave the circle, so you can see which wallets can no longer pay. (#148)
 
 ### Changed
 

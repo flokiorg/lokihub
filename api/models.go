@@ -957,6 +957,10 @@ type CircleChildBalance struct {
 	RequesterPubkey string `json:"requesterPubkey"`
 	AppPubkey       string `json:"appPubkey"`
 	BalanceMloki    int64  `json:"balanceMloki"`
+	// Frozen is true once the member has left the circle, so the wallet can't
+	// pay or take new invoices. Nil when membership isn't known without a relay
+	// fetch (a follow set not cached yet).
+	Frozen *bool `json:"frozen,omitempty"`
 }
 
 // ListCircleChildrenBalancesResponse is the paginated response for

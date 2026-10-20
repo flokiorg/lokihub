@@ -45,6 +45,16 @@ type FollowSet struct {
 }
 
 // IsMember reports whether pubkey is a public or hidden member.
+// NewFollowSet builds a set from its members, for callers that hold the
+// lists rather than the event.
+func NewFollowSet(provider, d string, public, hidden []string) *FollowSet {
+	set := &FollowSet{Provider: provider, D: d, Public: public, Hidden: hidden, members: make(map[string]struct{})}
+	for _, pubkey := range append(append([]string{}, public...), hidden...) {
+		set.members[pubkey] = struct{}{}
+	}
+	return set
+}
+
 func (fs *FollowSet) IsMember(pubkey string) bool {
 	_, ok := fs.members[pubkey]
 	return ok

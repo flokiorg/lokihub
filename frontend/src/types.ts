@@ -470,6 +470,8 @@ export interface CircleChildBalance {
   requesterPubkey: string;
   appPubkey: string;
   balanceMloki: number;
+  // True once the member has left the circle; absent while unknown.
+  frozen?: boolean;
 }
 
 export interface ListCircleChildrenBalancesResponse {
