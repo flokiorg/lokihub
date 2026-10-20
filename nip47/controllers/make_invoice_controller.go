@@ -70,6 +70,13 @@ func (controller *nip47Controller) reserveCircleReceiveCap(appId uint, amountMlo
 	if maxMloki <= 0 {
 		return noop, nil
 	}
+	// A zero-amount invoice lets the payer choose the amount, so no cap could hold.
+	if amountMloki == 0 {
+		return noop, &models.Error{
+			Code:    constants.ERROR_BAD_REQUEST,
+			Message: "a circle wallet invoice needs an amount",
+		}
+	}
 	if _, loaded := circleInvoiceGuard.LoadOrStore(appId, struct{}{}); loaded {
 		return noop, &models.Error{
 			Code:    constants.ERROR_RATE_LIMITED,
