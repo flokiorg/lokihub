@@ -453,6 +453,9 @@ private-transport request ended.
 - Saves nothing when a Circle or Cash Hub settings change is rejected; before,
   a bad fee rate still saved the new name and budget from the same form.
   (#148)
+- Shows Nostr profile pictures in the desktop app, which showed initials
+  everywhere because it had no login token to put on the image request.
+  (#148)
 
 ## [0.4.0]
 
