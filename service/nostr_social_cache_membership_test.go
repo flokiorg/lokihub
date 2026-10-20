@@ -249,10 +249,13 @@ func TestParseFollowSet_NothingElseDecidesMembership(t *testing.T) {
 // A pubkey listed both publicly and hidden is one member, reported as public.
 // NIP-01 pubkeys are lowercase hex. A provider's uppercase `p` entry is
 // dropped, not lowercased: it never admits anyone, which fails closed.
-func TestParseFollowSet_UppercasePTagIsIgnored(t *testing.T) {
+func TestParseFollowSet_NonCanonicalPTagsAreIgnored(t *testing.T) {
 	providerSK, _ := newKeypair(t)
 	upper := strings.ToUpper(requesterPubkey)
-	ev := signedFollowSetEvent(t, providerSK, testD, []string{upper, unrelatedPubkey})
+	ev := signedFollowSetEvent(t, providerSK, testD, []string{upper, unrelatedPubkey},
+		nostr.Tag{"p", "npub1notahexkey"},
+		nostr.Tag{"p", requesterPubkey[:63]},
+	)
 
 	set := parseFollowSet(&ev, testD, "")
 	assert.False(t, set.IsMember(upper))
