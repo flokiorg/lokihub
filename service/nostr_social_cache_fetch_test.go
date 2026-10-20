@@ -349,6 +349,24 @@ func TestQueryAndStore_FailedRefresh_PreservesPreviousGoodCache(t *testing.T) {
 	assert.Equal(t, before.FetchedAt, entry.FetchedAt, "FetchedAt must still reflect the last real confirmation, not this failed attempt")
 }
 
+// NIP-CW §Membership: staleness MUST be bounded. Once a cached set is older
+// than the eviction cutoff, a refresh that still finds nothing drops it, so
+// the set is unresolved instead of admitting its old members indefinitely.
+func TestQueryAndStore_FailedRefresh_StaleBeyondCutoff_IsUnresolved(t *testing.T) {
+	cache, svc := newSocialCacheForTest(t)
+	defer svc.Remove()
+
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, 2*socialCacheTTL+time.Minute)
+	useRelayServing(t, svc)
+
+	pool := nostr.NewSimplePool(context.Background())
+	set, err := cache.queryAndStore(context.Background(), pool, providerPubkey, testD)
+	require.ErrorIs(t, err, constants.ErrCircleMembershipUnresolved)
+	assert.Nil(t, set)
+	_, ok := cached(cache, providerPubkey, testD)
+	assert.False(t, ok, "the stale set is evicted")
+}
+
 func TestQueryAndStore_OneRelayUnreachable_OtherRelayEventStillFound(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()

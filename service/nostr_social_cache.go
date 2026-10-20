@@ -477,7 +477,13 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 		// Preserve the last known-good set instead of dropping it — a
 		// transient relay hiccup must not look like the owner revoked
 		// everyone. A genuine change still lands on the next successful fetch.
-		if existing, ok := s.peek(provider, d); ok {
+		// Stale entries are evicted first, so relays that stay unreachable
+		// can't keep an old set, and the members it lists, alive forever.
+		s.mu.Lock()
+		s.evictStaleUnlocked()
+		existing, ok := s.cache[followSetKey(provider, d)]
+		s.mu.Unlock()
+		if ok {
 			return existing, nil
 		}
 		// NIP-CW §Membership: a set not found yet is unresolved, never empty.
