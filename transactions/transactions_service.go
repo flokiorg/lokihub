@@ -1805,9 +1805,9 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	return isolatedBalance, row.ParentKind, feeSkimMloki, nil
 }
 
-// max of 1% or 10000 milliloki (10 loki)
+// max of 1% or constants.MIN_FEE_RESERVE_MLOKI (10 loki)
 func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
-	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), 10000))
+	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), constants.MIN_FEE_RESERVE_MLOKI))
 }
 
 // CalculateRedeemFeeMloki computes a cash slice's redeem fee: a flat base plus a

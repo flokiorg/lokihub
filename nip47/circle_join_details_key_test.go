@@ -36,7 +36,7 @@ func TestCircleJoin_EncryptedDetailsFromHubConnectionKeyOnBothTransports(t *test
 	require.NoError(t, err)
 	require.Equal(t, *h.app.WalletPubkey, hubWalletPub, "the Hub connection key is the circle_hub's app wallet key")
 
-	res, served := h.serve(t, "p", joinParams(t, privateMember, hubWalletPub, 10_000), privateMember, strings.Repeat("0a", 32))
+	res, served := h.serve(t, "p", joinParams(t, privateMember, hubWalletPub, 20_000), privateMember, strings.Repeat("0a", 32))
 	require.True(t, served)
 	require.Nil(t, res.Error, "%+v", res.Error)
 	var privateBody struct {
@@ -46,7 +46,7 @@ func TestCircleJoin_EncryptedDetailsFromHubConnectionKeyOnBothTransports(t *test
 
 	response := sendOverStandardTransport(t, h.ts, h.svc, hubWalletPub, h.connPriv, map[string]interface{}{
 		"method": constants.NIP47MethodCreateCircleWallet,
-		"params": json.RawMessage(joinParams(t, standardMember, hubWalletPub, 10_000)),
+		"params": json.RawMessage(joinParams(t, standardMember, hubWalletPub, 20_000)),
 	})
 	require.Nil(t, response.Error, "%+v", response.Error)
 	raw, err := json.Marshal(response.Result)

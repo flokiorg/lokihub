@@ -288,6 +288,7 @@
     "identityNamePlaceholder": "e.g. Family circle",
     "identityNameHelper": "Used only to identify this saved identity when reused across circles — not published anywhere.",
     "maxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet",
+    "minWalletBudgetHint": "At least {{min}} loki. Any less, and the 10-loki Lightning fee reserve would leave a wallet unable to pay out.",
     "maxExpiryHelper": "Maximum lifetime for issued circle wallets",
     "hubBudgetLabel": "Hub Budget (optional)",
     "hubBudgetHelper": "Caps the combined budget of every wallet this circle can have live at once. Leave blank for no cap beyond this hub's real balance.",

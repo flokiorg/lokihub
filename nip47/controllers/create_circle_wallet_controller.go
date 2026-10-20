@@ -264,18 +264,15 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
-	// 4a2. Reject a max_amount that would floor to 0 whole loki on the /1000
-	// conversion below (any value in [0, 999] mloki). NIP-CW requires
-	// max_amount on every request — there is no "0 means unlimited" wire
-	// convention for this method, unlike other optional ceilings elsewhere
-	// in this codebase — so a value this small can only be an accidental
-	// sub-loki request, never a deliberate "no cap." Silently accepting it
-	// used to store MaxAmountLoki == 0, which validateCanPay treats as no
-	// cap at all: a full, silent bypass of the member's own quoted spend cap
-	// and the Hub's aggregate-exposure accounting.
-	if params.MaxAmount < 1000 {
+	// 4a2. Reject a max_amount the fee reserve would swallow. Paying out over
+	// Lightning holds back at least MIN_FEE_RESERVE_MLOKI on top of the amount,
+	// and that counts against this cap, so any less than reserve + 1 loki makes
+	// a wallet that can never pay outside this node. It also keeps max_amount
+	// clear of the /1000 conversion below, where a sub-loki value used to floor
+	// to MaxAmountLoki == 0, which validateCanPay treats as no cap at all.
+	if params.MaxAmount < constants.MIN_CIRCLE_WALLET_MAX_MLOKI {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("max_amount %d is below the minimum enforceable cap of 1000 mloki (1 loki)", params.MaxAmount))
+			fmt.Sprintf("max_amount %d is below the minimum of %d mloki: the 10-loki fee reserve plus 1 loki", params.MaxAmount, constants.MIN_CIRCLE_WALLET_MAX_MLOKI))
 		return
 	}
 

@@ -309,6 +309,7 @@
     "identityNamePlaceholder": "예: 가족 서클",
     "identityNameHelper": "여러 서클에서 재사용할 때 이 저장된 아이덴티티를 식별하는 용도로만 사용되며, 어디에도 게시되지 않습니다.",
     "maxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산",
+    "minWalletBudgetHint": "최소 {{min}} loki. 이보다 적으면 10 loki의 Lightning 수수료 예약 때문에 지갑에서 송금할 수 없습니다.",
     "maxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간",
     "hubBudgetLabel": "허브 예산 (선택 사항)",
     "hubBudgetHelper": "이 서클이 동시에 보유할 수 있는 모든 지갑의 총 예산 상한을 설정합니다. 비워두면 이 허브의 실제 잔액 외에는 상한이 없습니다.",

@@ -36,8 +36,11 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error) {
 
-	if config.MaxExpSecs <= 0 || config.PerWalletMaxMloki <= 0 {
-		return nil, "", fmt.Errorf("%w: max_exp_secs and per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
+	if config.MaxExpSecs <= 0 {
+		return nil, "", fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
+	}
+	if err := validatePerWalletMaxMloki(config.PerWalletMaxMloki); err != nil {
+		return nil, "", err
 	}
 	if err := validateHubLabel(name); err != nil {
 		return nil, "", err
@@ -111,8 +114,8 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 		updates["fees_ppm"] = *feesPpm
 	}
 	if perWalletMaxMloki != nil {
-		if *perWalletMaxMloki <= 0 {
-			return fmt.Errorf("%w: per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
+		if err := validatePerWalletMaxMloki(*perWalletMaxMloki); err != nil {
+			return err
 		}
 		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
 	}
@@ -132,6 +135,17 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("circle hub config not found for app %d", appID)
+	}
+	return nil
+}
+
+// validatePerWalletMaxMloki refuses a per-wallet ceiling below the smallest cap a
+// member could usefully join with (constants.MIN_CIRCLE_WALLET_MAX_MLOKI): no
+// wallet under it could ever pay outside this node.
+func validatePerWalletMaxMloki(perWalletMaxMloki int) error {
+	if perWalletMaxMloki < constants.MIN_CIRCLE_WALLET_MAX_MLOKI {
+		return fmt.Errorf("%w: per_wallet_max_mloki must be at least %d (the 10-loki fee reserve plus 1 loki)",
+			constants.ErrInvalidParams, constants.MIN_CIRCLE_WALLET_MAX_MLOKI)
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ func createCircleWalletExpectingCode(t *testing.T, cfg *Config, floor, requested
 	var result CreateCircleWalletResult
 	err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: requested,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -108,7 +108,7 @@ func TestCircleHub_CreateWallet_BudgetRenewalNever_ReportsNoRenewsAt(t *testing.
 	var result CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),

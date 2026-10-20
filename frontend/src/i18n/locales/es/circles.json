@@ -309,6 +309,7 @@
     "identityNamePlaceholder": "p. ej. Círculo familiar",
     "identityNameHelper": "Se usa solo para identificar esta identidad guardada cuando se reutiliza en varios círculos — no se publica en ningún sitio.",
     "maxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo",
+    "minWalletBudgetHint": "Al menos {{min}} loki. Con menos, la reserva de 10 loki para comisiones de Lightning dejaría la billetera sin poder pagar.",
     "maxExpiryHelper": "Vida útil máxima de las billeteras de círculo emitidas",
     "hubBudgetLabel": "Presupuesto del hub (opcional)",
     "hubBudgetHelper": "Limita el presupuesto combinado de todas las billeteras que este círculo puede tener activas a la vez. Déjalo en blanco para no tener más límite que el saldo real de este hub.",

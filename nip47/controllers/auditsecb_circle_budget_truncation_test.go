@@ -30,9 +30,9 @@ import (
 // This file originally proved the bug (a sub-loki max_amount silently
 // disabled a Circle Wallet's spend cap entirely — 246x overspend
 // demonstrated live). It now proves the fix: every sub-loki request (0 and
-// [1, 999] mloki) is rejected with BAD_REQUEST before any wallet is created,
-// and the boundary at exactly 1000 mloki still succeeds and is still fully
-// enforced (the pre-existing control test below, unchanged).
+// [1, 999] mloki) is rejected with BAD_REQUEST before any wallet is created.
+// The join floor has since risen to constants.MIN_CIRCLE_WALLET_MAX_MLOKI
+// (fee reserve + 1 loki), so the controls below use that floor.
 func TestHandleCreateCircleWalletEvent_SubLokiMaxAmount_Rejected(t *testing.T) {
 	ctx := context.TODO()
 
@@ -90,10 +90,10 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t 
 	provider := createCircleHubWithCaps(t, svc, 3600, 10_000_000, 1_000_000_000, "")
 	requesterKey := nostr.GeneratePrivateKey()
 
-	// The smallest amount the fix still accepts: exactly 1 loki.
+	// The smallest amount a join accepts: the fee-reserve floor.
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 1000, 3600)), nip47Request))
+		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, 3600)), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
@@ -116,29 +116,29 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t 
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
-	require.Equal(t, 1, perm.MaxAmountLoki, "1000 mloki must floor to exactly 1 whole loki, not 0")
+	require.Equal(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI/1000, perm.MaxAmountLoki, "the floor converts to whole loki exactly, never 0")
 
-	// The hub's aggregate-commitment accounting now correctly sees this
-	// wallet's real 1000 mloki commitment (not silently undercounted to 0).
+	// The hub's aggregate-commitment accounting sees this wallet's real
+	// commitment (not silently undercounted to 0).
 	var commitment int64
 	require.NoError(t, svc.DB.Table("apps").
 		Select("COALESCE(SUM(ap.max_amount_loki * 1000), 0)").
 		Joins("JOIN app_permissions ap ON ap.app_id = apps.id AND ap.scope = ?", constants.PAY_INVOICE_SCOPE).
 		Where("apps.parent_app_id = ? AND apps.parent_kind = ?", provider.ID, db.ParentKindCircle).
 		Scan(&commitment).Error)
-	assert.Equal(t, int64(1000), commitment)
+	assert.Equal(t, int64(constants.MIN_CIRCLE_WALLET_MAX_MLOKI), commitment)
 
 	tests.FundApp(svc, walletApp.ID, 200_000, tests.RandomHex32())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
 	// tests.MockInvoice resolves to a fixed 123,000 mloki payment -- far
-	// beyond the 1000 mloki cap, even though the wallet holds 200,000 mloki.
+	// beyond the 11,000 mloki cap, even though the wallet holds 200,000 mloki.
 	_, err = transactionsSvc.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &walletApp.ID, nil)
-	require.Error(t, err, "a 1-loki-capped circle_wallet must not be able to pay out 123,000 mloki, even once funded well beyond its cap")
+	require.Error(t, err, "an 11-loki-capped circle_wallet must not be able to pay out 123,000 mloki, even once funded well beyond its cap")
 }
 
-// Control case: the exact same scenario, but max_amount is a whole loki
-// (1000 mloki) so it does NOT truncate to zero. The same oversized payment
+// Control case: the exact same scenario, but max_amount is the join floor,
+// a whole number of loki, so it does NOT truncate to zero. The same oversized payment
 // must now be rejected on budget grounds -- proving the bug above is
 // specifically the sub-loki truncation, not a general failure of the
 // per-wallet budget cap mechanism.
@@ -152,10 +152,10 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *t
 
 	requesterKey := nostr.GeneratePrivateKey()
 
-	// 1000 mloki == exactly 1 loki: the smallest amount that does NOT floor to zero.
+	// The smallest amount a join accepts: the fee-reserve floor.
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal(
-		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 1000, 3600)), nip47Request))
+		[]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, 3600)), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
@@ -178,11 +178,11 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *t
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", walletApp.ID, constants.PAY_INVOICE_SCOPE).First(&perm).Error)
-	require.Equal(t, 1, perm.MaxAmountLoki, "1000 mloki must floor to exactly 1 whole loki, not 0")
+	require.Equal(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI/1000, perm.MaxAmountLoki, "the floor converts to whole loki exactly, never 0")
 
 	tests.FundApp(svc, walletApp.ID, 200_000, tests.RandomHex32())
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
 	_, err = transactionsSvc.SendPaymentSync(tests.MockInvoice, nil, nil, svc.LNClient, &walletApp.ID, nil)
-	require.Error(t, err, "a 1-loki-capped circle_wallet must not be able to pay out 123,000 mloki")
+	require.Error(t, err, "an 11-loki-capped circle_wallet must not be able to pay out 123,000 mloki")
 }
