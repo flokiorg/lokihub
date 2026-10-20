@@ -6,6 +6,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -145,5 +146,33 @@ func TestPrivateJoin_ItemProofSignedByAnotherKey_Refused(t *testing.T) {
 	ok, served := h.serve(t, "m", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("07", 32))
 	require.True(t, served)
 	require.Nil(t, ok.Error, "%+v", ok.Error)
+	assert.Len(t, h.children(t), 1)
+}
+
+// The hub failing to read its own records is temporary: the join gets
+// NOT_READY, which NIP-CW clients retry, not a definite refusal, and the same
+// member joins once the database recovers.
+func TestPrivateJoin_ClaimsLookupFailure_IsNotReady(t *testing.T) {
+	member := nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+
+	failing := true
+	require.NoError(t, h.ts.DB.Callback().Query().Before("gorm:query").Register("test:fail_claims", func(tx *gorm.DB) {
+		if failing && tx.Statement.Table == "cash_wallet_claims" {
+			_ = tx.AddError(errors.New("database is locked"))
+		}
+	}))
+
+	res, served := h.serve(t, "j1", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("07", 32))
+	require.True(t, served, "the sender proved it holds the hub connection, so it gets an answer")
+	require.NotNil(t, res.Error)
+	assert.Equal(t, nipcw.ErrNotReady, res.Error.Code)
+	assert.Empty(t, h.children(t))
+
+	failing = false
+	res, served = h.serve(t, "j2", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("08", 32))
+	require.True(t, served)
+	assert.Nil(t, res.Error, "%+v", res.Error)
 	assert.Len(t, h.children(t), 1)
 }
