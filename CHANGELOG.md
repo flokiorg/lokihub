@@ -410,7 +410,7 @@ private-transport request ended.
   ends; it stayed `executing` forever, unlike the same request sent over the
   standard transport. (#140)
 - Holds a Circle Wallet's hold invoices to the same receive cap as ordinary
-  invoices; before, `make_hold_invoice` could take in any amount.
+  invoices; before, `make_hold_invoice` could take in any amount. (#144)
 - Refuses zero-amount invoices from a Circle Wallet; the payer could choose
   any amount and push the wallet past its cap. (#144)
 - Credits a keysend to a Circle Wallet only when it fits under the wallet's
