@@ -164,12 +164,6 @@ func requireWorking(t *testing.T, cfg *Config, child *nwcclient.Client) {
 	require.NotEmpty(t, paid.Preimage)
 }
 
-func balanceOf(t *testing.T, child *nwcclient.Client) int64 {
-	t.Helper()
-	var balance GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance))
-	return balance.Balance
-}
 
 func TestCircleMembershipAudit_AllowlistRemovalFreezesWallet(t *testing.T) {
 	cfg := requireConfig(t)

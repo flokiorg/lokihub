@@ -592,3 +592,11 @@ func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
 		time.Sleep(200 * time.Millisecond)
 	}
 }
+
+// balanceOf is c's balance in mloki, as get_balance reports it.
+func balanceOf(t *testing.T, c *nwcclient.Client) int64 {
+	t.Helper()
+	var b GetBalanceResult
+	require.NoError(t, c.Call(ctxT(t), "get_balance", struct{}{}, &b))
+	return b.Balance
+}
