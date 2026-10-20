@@ -2940,17 +2940,67 @@ func (api *api) ListCircleChildrenBalances(app *db.App, limit uint64, offset uin
 		return nil, 0, err
 	}
 
+	pagePubkeys := make([]string, 0, len(requesterPubkeysByID))
+	for _, pubkey := range requesterPubkeysByID {
+		pagePubkeys = append(pagePubkeys, pubkey)
+	}
+	isMember, err := api.circleMembershipWithoutFetch(app, pagePubkeys)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	balances := make([]CircleChildBalance, 0, len(children))
 	for _, child := range children {
-		balances = append(balances, CircleChildBalance{
+		requester := requesterPubkeysByID[child.ID]
+		balance := CircleChildBalance{
 			AppID:           child.ID,
 			Name:            child.Name,
-			RequesterPubkey: requesterPubkeysByID[child.ID],
+			RequesterPubkey: requester,
 			AppPubkey:       child.AppPubkey,
 			BalanceMloki:    balancesByID[child.ID],
-		})
+		}
+		if isMember != nil {
+			// No member on record is refused like a removed one.
+			frozen := requester == "" || !isMember(requester)
+			balance.Frozen = &frozen
+		}
+		balances = append(balances, balance)
 	}
 	return balances, totalCount, nil
+}
+
+// circleMembershipWithoutFetch returns which of pubkeys are still in hub's
+// circle, the same rule the circle wallet freeze applies, without waiting on a
+// relay. It returns nil when that isn't known yet (a follow set not cached).
+func (api *api) circleMembershipWithoutFetch(hub *db.App, pubkeys []string) (func(pubkey string) bool, error) {
+	cfg, err := api.appsSvc.GetCircleHubConfig(hub.ID)
+	if err != nil {
+		return nil, err
+	}
+	identity := cfg.CircleIdentity
+	switch identity.Policy {
+	case db.CirclePolicyAllowlist:
+		var listed []string
+		if err := api.db.Model(&db.CircleIdentityAllowedPubkey{}).
+			Where("circle_identity_id = ? AND pubkey IN ?", identity.ID, pubkeys).Pluck("pubkey", &listed).Error; err != nil {
+			return nil, err
+		}
+		members := make(map[string]struct{}, len(listed))
+		for _, pubkey := range listed {
+			members[pubkey] = struct{}{}
+		}
+		return func(pubkey string) bool {
+			_, ok := members[pubkey]
+			return ok
+		}, nil
+	case db.CirclePolicyFollowSet:
+		set, ok := api.svc.PeekFollowSet(identity.ProviderPubkey, identity.FollowSetD)
+		if !ok {
+			return nil, nil
+		}
+		return set.IsMember, nil
+	}
+	return nil, nil
 }
 
 // paginateSlice returns the [offset, offset+limit) window of s, clamped to
