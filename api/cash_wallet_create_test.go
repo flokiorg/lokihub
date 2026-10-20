@@ -38,12 +38,13 @@ func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
 	mockSvc.On("GetLNClient").Return(svc.LNClient).Maybe()
 
 	return &api{
-		db:        svc.DB,
-		appsSvc:   svc.AppsService,
-		keys:      svc.Keys,
-		cfg:       svc.Cfg,
-		svc:       mockSvc,
-		iaManager: apps.NewIdentityAuthorityManager(svc.DB),
+		db:             svc.DB,
+		appsSvc:        svc.AppsService,
+		keys:           svc.Keys,
+		cfg:            svc.Cfg,
+		svc:            mockSvc,
+		iaManager:      apps.NewIdentityAuthorityManager(svc.DB),
+		eventPublisher: svc.EventPublisher,
 	}
 }
 

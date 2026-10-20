@@ -443,7 +443,11 @@ private-transport request ended.
   balance and history stay readable. (#145)
 - Requires a Circle Wallet cap of at least 11 loki, on joins and in a hub's
   per-wallet limit; at 10 loki or less, the Lightning fee reserve left a
-  wallet unable to pay out at all. (#147)
+  wallet unable to pay out at all. (#148)
+- Moves every member wallet's balance and the hub's own balance to your main
+  balance when you delete a Circle Hub with "Delete All", as recorded
+  transfers; before, those funds vanished from every wallet with no record.
+  A wallet with a payment in flight keeps the hub until it ends. (#148)
 
 ## [0.4.0]
 

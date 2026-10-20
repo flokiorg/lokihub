@@ -190,7 +190,8 @@ func (api *api) Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, am
 		return err
 	}
 
-	_, err = api.svc.GetTransactionsService().SendPaymentSync(transaction.PaymentRequest, nil,
+	// The amount only applies when the invoice has none of its own.
+	_, err = api.svc.GetTransactionsService().SendPaymentSync(transaction.PaymentRequest, &amountMloki,
 		map[string]interface{}{"internal_transfer": true},
 		api.svc.GetLNClient(), fromAppId, nil)
 	return err

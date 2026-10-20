@@ -48,7 +48,9 @@ const KindFollowSet = 30000
 // Circle hub delete modes — how to handle circle_wallet children that
 // still hold a nonzero balance when their circle_hub is deleted.
 const (
-	// CircleDeleteModeAll deletes the provider and every child, regardless of balance.
+	// CircleDeleteModeAll sweeps every child's balance to the provider and the
+	// provider's to the main balance, then deletes them all. A child with a
+	// payment in flight keeps the provider intact until it ends.
 	CircleDeleteModeAll = "all"
 	// CircleDeleteModeEmptyOnly deletes only zero-balance children. If any child still
 	// has balance, the provider itself is left intact so the admin can retry later.

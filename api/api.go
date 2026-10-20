@@ -3009,11 +3009,13 @@ func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 }
 
 // DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
-// mode must be db.CircleDeleteModeAll (delete every child regardless of balance) or
+// mode must be db.CircleDeleteModeAll (sweep every child's balance back to the hub
+// and the hub's to the main balance, then delete; see sweepAndDeleteCircleHub) or
 // db.CircleDeleteModeEmptyOnly (delete only zero-balance children with no payment
-// in flight — if any child still has balance or a pending payment, the provider
-// itself is left intact so the admin can retry once the rest have drained). Guarded by the same per-provider advisory lock used by
-// create_circle_wallet, so this can't race a concurrent wallet creation on the app.
+// in flight). In both modes, a child that can't go yet leaves the provider itself
+// intact so the admin can retry once it has drained. Guarded by the same
+// per-provider advisory lock used by create_circle_wallet, so this can't race a
+// concurrent wallet creation on the app.
 func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error) {
 	if app.Kind != db.AppKindCircleHub {
 		return nil, fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
@@ -3021,6 +3023,9 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 	if mode != db.CircleDeleteModeAll && mode != db.CircleDeleteModeEmptyOnly {
 		return nil, fmt.Errorf("%w: mode must be %q or %q", constants.ErrInvalidParams,
 			db.CircleDeleteModeAll, db.CircleDeleteModeEmptyOnly)
+	}
+	if mode == db.CircleDeleteModeAll {
+		return api.sweepAndDeleteCircleHub(app)
 	}
 
 	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
@@ -3036,14 +3041,9 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 			return err
 		}
 
-		// Only mode=empty_only needs balances at all — mode=all deletes every
-		// child regardless, so skip the extra round-trip in the common case.
-		var balancesByID map[uint]int64
-		if mode == db.CircleDeleteModeEmptyOnly {
-			balancesByID, err = queries.GetIsolatedBalancesByAppIDs(tx, childAppIDs(children))
-			if err != nil {
-				return err
-			}
+		balancesByID, err := queries.GetIsolatedBalancesByAppIDs(tx, childAppIDs(children))
+		if err != nil {
+			return err
 		}
 
 		var idsToDelete []uint
@@ -3051,8 +3051,8 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 			// Empty also means nothing can still arrive or leave: deleting a child
 			// cascade-deletes a pending row, and its settlement would then have
 			// nowhere to land (the same rule ReclaimAndDeleteSubWallet applies).
-			if mode == db.CircleDeleteModeEmptyOnly && (balancesByID[child.ID] != 0 ||
-				queries.HasPendingIncoming(tx, child.ID) || queries.HasPendingOutgoing(tx, child.ID)) {
+			if balancesByID[child.ID] != 0 ||
+				queries.HasPendingIncoming(tx, child.ID) || queries.HasPendingOutgoing(tx, child.ID) {
 				result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
 				continue
 			}
@@ -3089,13 +3089,92 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 		})
 	}
 	if result.HubDeleted {
-		api.eventPublisher.Publish(&events.Event{
-			Event:      "nwc_app_deleted",
-			Properties: map[string]interface{}{"name": app.Name, "id": app.ID},
-		})
+		api.publishCircleHubDeleted(app)
 	}
 
 	return result, nil
+}
+
+// errCircleHubChanged aborts the final delete when a member joined or a
+// payment started after the sweep.
+var errCircleHubChanged = errors.New("circle hub changed while deleting")
+
+// sweepAndDeleteCircleHub is DeleteCircleHub's mode=all: each child's balance
+// goes back to the hub (ReclaimAndDeleteSubWallet, which also deletes the
+// child), then the hub's balance goes to the node's main balance as a recorded
+// transfer, and only then is the hub deleted. Lightning payments can't sit in
+// a DB transaction, so this can stop part-way: a child with a payment in flight
+// is skipped and the hub kept, and a retry picks up where this one left off.
+func (api *api) sweepAndDeleteCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
+	ctx := context.Background()
+	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
+
+	children, err := getCircleChildren(api.db, app.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, child := range children {
+		err := service.ReclaimAndDeleteSubWallet(ctx, api.db,
+			api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
+				Outcome:        db.CashBillOutcomeDeleted,
+				EventPublisher: api.eventPublisher,
+			})
+		switch {
+		case err == nil:
+			result.DeletedChildIDs = append(result.DeletedChildIDs, child.ID)
+		case errors.Is(err, constants.ErrInvalidParams):
+			// A payment is still in flight: retry once it ends.
+			result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
+		default:
+			return nil, fmt.Errorf("reclaim circle wallet %d: %w", child.ID, err)
+		}
+	}
+	if len(result.SkippedChildIDs) > 0 {
+		return result, nil
+	}
+
+	if queries.HasPendingIncoming(api.db, app.ID) || queries.HasPendingOutgoing(api.db, app.ID) {
+		return nil, fmt.Errorf("%w: a payment to or from this hub is still in flight, try again shortly", constants.ErrInvalidParams)
+	}
+	if balance := queries.GetIsolatedBalance(api.db, app.ID); balance > 0 {
+		if err := api.Transfer(ctx, &app.ID, nil, uint64(balance)); err != nil { //nolint:gosec // guarded by the balance > 0 check
+			return nil, fmt.Errorf("move the hub's balance to the main balance: %w", err)
+		}
+	}
+
+	err = api.db.Transaction(func(tx *gorm.DB) error {
+		if tx.Name() == "postgres" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
+				return fmt.Errorf("acquire circle delete lock: %w", err)
+			}
+		}
+		remaining, err := getCircleChildren(tx, app.ID)
+		if err != nil {
+			return err
+		}
+		if len(remaining) > 0 || queries.GetIsolatedBalance(tx, app.ID) != 0 ||
+			queries.HasPendingIncoming(tx, app.ID) || queries.HasPendingOutgoing(tx, app.ID) {
+			return errCircleHubChanged
+		}
+		return tx.Delete(app).Error
+	})
+	if errors.Is(err, errCircleHubChanged) {
+		return nil, fmt.Errorf("%w: a member joined or a payment arrived while deleting, try again", constants.ErrInvalidParams)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	result.HubDeleted = true
+	api.publishCircleHubDeleted(app)
+	return result, nil
+}
+
+func (api *api) publishCircleHubDeleted(app *db.App) {
+	api.eventPublisher.Publish(&events.Event{
+		Event:      "nwc_app_deleted",
+		Properties: map[string]interface{}{"name": app.Name, "id": app.ID},
+	})
 }
 
 // A slice's status has no Go-side derivation any more. The live-row CASE in
