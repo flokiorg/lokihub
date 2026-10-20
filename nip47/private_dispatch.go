@@ -231,6 +231,17 @@ func (svc *nip47Service) ServePrivateItem(
 		return transport.Result{}, false
 	}
 
+	// The row records how the handler ended, as the standard path's publishResponse
+	// does: executed once it answered, an error answer included, and error when it
+	// produced nothing usable. The reply itself goes out later, once per envelope, so a
+	// delivery failure is logged there rather than here.
+	finalState := db.REQUEST_EVENT_STATE_HANDLER_ERROR
+	defer func() {
+		if err := svc.db.Model(&requestEvent).Update("state", finalState).Error; err != nil {
+			logger.Logger.Error().Err(err).Str("item", item.ID).Msg("Failed to save a private item's request-event state")
+		}
+	}()
+
 	// 6. The EXISTING controller. cash_redeem, cash_transfer and cash_consolidate carry the
 	// money, and their atomicity and race guarantees hold precisely because there is one
 	// implementation of each — a second for this transport would be a second thing to keep
@@ -268,6 +279,9 @@ func (svc *nip47Service) ServePrivateItem(
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("item", item.ID).Msg("Failed to collect a private item's result")
 		return transport.Result{}, false
+	}
+	if ok {
+		finalState = db.REQUEST_EVENT_STATE_HANDLER_EXECUTED
 	}
 	return result, ok
 }
