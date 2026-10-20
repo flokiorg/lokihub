@@ -85,6 +85,9 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   announcement published — how many relays accepted it, and the last
   error if not. A client could previously see only that it was missing. The
   node's hex, npub and nprofile also appear under Channels.
+- `get_info` reports `circle_wallet.identity` so clients can join a circle
+  privately. It is the node key that signs the private-transport
+  announcement, and is omitted while that transport is not running.
 
 ### Changed
 

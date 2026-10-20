@@ -35,6 +35,9 @@ type nip47Controller struct {
 	cashClaimLimiter    RateLimiter
 	circleRateLimiter   RateLimiter
 	iaChecker           cashwallet.IATrustChecker
+	// privateIdentity returns the node identity get_info reports as
+	// circle_wallet.identity, or "" when the private transport is not running.
+	privateIdentity func() string
 
 	cfg config.Config
 }
@@ -68,4 +71,10 @@ func NewNip47Controller(
 		cfg:                 cfg,
 		iaChecker:           iaChecker,
 	}
+}
+
+// WithPrivateIdentity sets where get_info reads the Hub's private-transport identity from.
+func (controller *nip47Controller) WithPrivateIdentity(privateIdentity func() string) *nip47Controller {
+	controller.privateIdentity = privateIdentity
+	return controller
 }

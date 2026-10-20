@@ -162,6 +162,7 @@ func TestPublishNodeNote_SignsWithNodeIdentityNotInboxKey(t *testing.T) {
 }
 
 type capturedEvent struct {
+	Kind    int    `json:"kind"`
 	Pubkey  string `json:"pubkey"`
 	Content string `json:"content"`
 }
@@ -209,6 +210,7 @@ func newCapturingRelay(t *testing.T) *capturingRelay {
 			}
 			var ev struct {
 				ID      string `json:"id"`
+				Kind    int    `json:"kind"`
 				Pubkey  string `json:"pubkey"`
 				Content string `json:"content"`
 			}
@@ -216,7 +218,7 @@ func newCapturingRelay(t *testing.T) *capturingRelay {
 				continue
 			}
 			r.mu.Lock()
-			r.evs = append(r.evs, capturedEvent{Pubkey: ev.Pubkey, Content: ev.Content})
+			r.evs = append(r.evs, capturedEvent{Kind: ev.Kind, Pubkey: ev.Pubkey, Content: ev.Content})
 			r.mu.Unlock()
 			_ = conn.WriteMessage(websocket.TextMessage, []byte(`["OK","`+ev.ID+`",true,""]`))
 		}
