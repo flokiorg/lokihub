@@ -6,7 +6,7 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";

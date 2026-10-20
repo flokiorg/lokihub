@@ -1,6 +1,6 @@
 import { HandCoinsIcon, ShieldAlertIcon, UnlockIcon } from "lucide-react";
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import Loading from "src/components/Loading";
 import { SetupLayout } from "./SetupLayout";

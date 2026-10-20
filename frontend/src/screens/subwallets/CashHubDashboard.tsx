@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 import AppAvatar from "src/components/AppAvatar";
 import AppHeader from "src/components/AppHeader";

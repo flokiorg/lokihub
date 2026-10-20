@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useBlocker } from "react-router-dom";
+import { useBlocker } from "react-router";
 import { toast } from "sonner";
 import Loading from "src/components/Loading";
 import {

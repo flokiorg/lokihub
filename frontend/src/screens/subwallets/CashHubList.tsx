@@ -3,7 +3,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { BanknoteIcon, ChevronRightIcon, CirclePlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import AppAvatar from "src/components/AppAvatar";
 import AppHeader from "src/components/AppHeader";
 import { CustomPagination } from "src/components/CustomPagination";

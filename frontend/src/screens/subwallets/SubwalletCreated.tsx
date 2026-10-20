@@ -1,6 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import AppHeader from "src/components/AppHeader";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";

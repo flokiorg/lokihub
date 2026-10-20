@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { cn } from "src/lib/utils";
 import { isHttpMode } from "src/utils/isHttpMode";
 import { openLink } from "src/utils/openLink";

@@ -3,7 +3,7 @@ import { LightningAddress } from "@lightz/lightning-tools/lnurl";
 import { address, networks } from "flokicoinjs-lib";
 import { ClipboardPasteIcon } from "lucide-react";
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";

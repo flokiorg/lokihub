@@ -1,6 +1,6 @@
 import { ChevronRightIcon } from "lucide-react";
 import { ReactElement } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Card } from "src/components/ui/card";
 
 type Props = {
