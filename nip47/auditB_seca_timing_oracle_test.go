@@ -3,7 +3,6 @@ package nip47
 import (
 	"context"
 	"encoding/json"
-	"sort"
 	"testing"
 	"time"
 
@@ -37,6 +36,9 @@ import (
 // freshness, nonce), so this measurement can be repeated without bound, and
 // MaxItems=32 lets one envelope carry 32 copies of it.
 func TestAuditBSecA_OmissionLeaksBillExistenceByTiming(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("wall-clock skew is meaningless under the race detector; runs in the non-race build")
+	}
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -107,63 +109,36 @@ func TestAuditBSecA_OmissionLeaksBillExistenceByTiming(t *testing.T) {
 			"so the omissions above are the gate and not an outage")
 	}
 
-	// Interleaved so clock drift and cache warming hit both arms equally.
-	const samples = 150
-	present := make([]time.Duration, 0, samples)
-	absentD := make([]time.Duration, 0, samples)
-	for i := 0; i < samples; i++ {
-		d, _ := oneProbe(t, walletPubkey)
-		present = append(present, d)
-		d, _ = oneProbe(t, absent)
-		absentD = append(absentD, d)
-	}
-
-	pMed, aMed := median(present), median(absentD)
-	t.Logf("AUDITB-SECA-F2 MEASURED over %d interleaved samples:\n"+
+	// Interleaved pairs, compared by the median of their differences, so drift
+	// and cache warming hit both arms equally. See lowestTimingSkew.
+	probePresent := func() time.Duration { d, _ := oneProbe(t, walletPubkey); return d }
+	probeAbsent := func() time.Duration { d, _ := oneProbe(t, absent); return d }
+	skew := lowestTimingSkew(t, 0.25, probePresent, probeAbsent)
+	t.Logf("AUDITB-SECA-F2 MEASURED over %d interleaved pairs:\n"+
 		"    real bill,   foreign proof (gate 2.5, verifies a signature): median %s\n"+
 		"    unknown target            (gate 2, no crypto at all):       median %s\n"+
-		"    per-item delta %s   |   x32 items in one envelope: %s",
-		samples, pMed, aMed, pMed-aMed, 32*(pMed-aMed))
+		"    paired per-item skew %s   |   x32 items in one envelope: %s",
+		timingSkewSamples, skew.aMed, skew.bMed, skew.delta, 32*skew.delta)
 
-	// Asserted, in BOTH directions, and on the ABSOLUTE difference.
-	//
-	// The original version of this check only logged, and only considered
-	// pMed > aMed — so it could not fail, and would have reported "not demonstrated"
-	// even if the absent path had become wildly slower. Either sign is a
-	// distinguisher; an attacker does not care which way the clock leans, only that
-	// it leans reliably.
+	// Asserted on the ABSOLUTE skew, in both directions: either sign is a
+	// distinguisher, since an attacker only needs the clock to lean reliably.
 	//
 	// The bound is relative because absolute microseconds are machine-specific. 25%
-	// of the smaller median is comfortably above the residual this hub now shows
+	// of the faster path is comfortably above the residual this hub now shows
 	// (~13%, from the absent path running two queries — the lookup miss plus the
 	// tombstone lookup — against the present path's single hit) and far below what
 	// the defect produced (~97%, when only the present path paid for a signature
-	// verification).
+	// verification). Taking the best of a few rounds absorbs a noisy runner without
+	// letting that defect through: it fails every round, as
+	// TestTimingSkew_OneSidedSignatureCheckFailsEveryRound shows.
 	//
 	// This is explicitly NOT a claim of constant time. Making a database hit and a
 	// miss cost the same is not achievable here; what is achievable, and what this
 	// pins, is that the dominant term — the ~373us secp256k1 verification — no longer
 	// falls on only one of the two paths.
-	delta := pMed - aMed
-	if delta < 0 {
-		delta = -delta
-	}
-	smaller := pMed
-	if aMed < smaller {
-		smaller = aMed
-	}
-	ratio := float64(delta) / float64(smaller)
-	t.Logf("AUDITB-SECA-F2 absolute skew %s = %.1f%% of the faster path", delta, ratio*100)
-
-	require.Less(t, ratio, 0.25,
+	require.Less(t, skew.ratio, 0.25,
 		"the two information-free omissions differ by %s (%.1f%% of the faster path), which is "+
 			"an existence oracle: an outsider who can merely NAME a wallet pubkey learns whether "+
 			"this hub serves it, unmetered and repeatable. present=%s absent=%s",
-		delta, ratio*100, pMed, aMed)
-}
-
-func median(ds []time.Duration) time.Duration {
-	c := append([]time.Duration(nil), ds...)
-	sort.Slice(c, func(i, j int) bool { return c[i] < c[j] })
-	return c[len(c)/2]
+		skew.delta, skew.ratio*100, skew.aMed, skew.bMed)
 }

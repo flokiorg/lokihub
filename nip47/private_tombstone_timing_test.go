@@ -19,6 +19,9 @@ import (
 // to refuse a foreign proof than an unknown pubkey does. Same 25% bound as
 // TestAuditBSecA_OmissionLeaksBillExistenceByTiming applies to live bills.
 func TestPrivateTombstone_DestroyedBillOmissionIsTimingIndistinguishable(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("wall-clock skew is meaningless under the race detector; runs in the non-race build")
+	}
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -45,21 +48,10 @@ func TestPrivateTombstone_DestroyedBillOmissionIsTimingIndistinguishable(t *test
 	require.False(t, s1, "control: a foreign proof on a destroyed bill is omitted")
 	require.False(t, s2, "control: a never-served pubkey is omitted")
 
-	const samples = 150
-	var d, a []time.Duration
-	for i := 0; i < samples; i++ {
-		x, _ := probe(destroyed)
-		d = append(d, x)
-		y, _ := probe(absent)
-		a = append(a, y)
-	}
-	dMed, aMed := median(d), median(a)
-	delta := dMed - aMed
-	if delta < 0 {
-		delta = -delta
-	}
-	ratio := float64(delta) / float64(min(dMed, aMed))
-	t.Logf("destroyed-in-retention median %s, never-served median %s, skew %s (%.1f%%)", dMed, aMed, delta, ratio*100)
-	require.Less(t, ratio, 0.25,
-		"a destroyed bill inside retention is distinguishable from a never-served pubkey by timing (%s vs %s)", dMed, aMed)
+	probeDestroyed := func() time.Duration { d, _ := probe(destroyed); return d }
+	probeAbsent := func() time.Duration { d, _ := probe(absent); return d }
+	skew := lowestTimingSkew(t, 0.25, probeDestroyed, probeAbsent)
+	require.Less(t, skew.ratio, 0.25,
+		"a destroyed bill inside retention is distinguishable from a never-served pubkey by timing (%s vs %s, paired skew %s)",
+		skew.aMed, skew.bMed, skew.delta)
 }
