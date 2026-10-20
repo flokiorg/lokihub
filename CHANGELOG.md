@@ -87,7 +87,7 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   node's hex, npub and nprofile also appear under Channels.
 - `get_info` reports `circle_wallet.identity` so clients can join a circle
   privately. It is the node key that signs the private-transport
-  announcement, and is omitted while that transport is not running.
+  announcement, and is omitted while that transport is not running. (#129)
 
 ### Changed
 
