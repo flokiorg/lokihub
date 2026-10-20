@@ -411,6 +411,10 @@ private-transport request ended.
   standard transport. (#140)
 - Ignores a follow-set event whose id doesn't match its content; a relay could
   forge one to choose which of two same-second versions decides membership.
+  (#145)
+- Refetches a follow set cached more than two hours ago instead of admitting
+  members from it; without the background refresh, a removed member stayed in.
+  (#145)
 
 ## [0.4.0]
 
