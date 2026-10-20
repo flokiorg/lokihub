@@ -520,19 +520,33 @@ func TestSendPaymentSync_PendingHasFeeReserve(t *testing.T) {
 	defer svc.Remove()
 
 	// fake a delay to ensure the payment is still pending
-	delay := 10 * time.Second
+	delay := 200 * time.Millisecond
 	svc.LNClient.(*tests.MockLn).PaymentDelay = &delay
 
 	transactionsService := NewTransactionsService(svc.DB, svc.EventPublisher)
+	// Joined before svc.Remove runs (defers run last-first), so the payment
+	// never outlives the test and its DB.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		_, _ = transactionsService.SendPaymentSync(tests.MockLNClientTransaction.Invoice, nil, nil, svc.LNClient, nil, nil)
 	}()
-	// ensure the goroutine above runs first
-	time.Sleep(10 * time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		var pending db.Transaction
+		return svc.DB.Where(&db.Transaction{
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			PaymentHash: tests.MockLNClientTransaction.PaymentHash,
+		}).First(&pending).Error == nil
+	}, 2*time.Second, 2*time.Millisecond, "PENDING transaction row was never created")
 
 	transactionType := constants.TRANSACTION_TYPE_OUTGOING
 	transaction, err := transactionsService.LookupTransaction(context.TODO(), tests.MockLNClientTransaction.PaymentHash, &transactionType, svc.LNClient, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, transaction)
 
 	assert.Equal(t, uint64(123000), transaction.AmountMloki)
 	assert.Equal(t, constants.TRANSACTION_STATE_PENDING, transaction.State)
