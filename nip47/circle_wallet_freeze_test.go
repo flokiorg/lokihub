@@ -2,6 +2,8 @@ package nip47
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -364,5 +366,38 @@ func TestCircleWalletFreeze_PrivateTransportDoesNotServeWalletMethods(t *testing
 		_, served := c.nip47svc.ServePrivateItem(context.TODO(), c.svc.LNClient, item,
 			PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
 		assert.False(t, served, "%s is not served over the private transport", method)
+	}
+}
+
+// Decided, not an oversight: a hold invoice issued before the member was
+// removed can still settle. It only brings money in, capped when it was made,
+// and refusing would leave the payer's funds held until the HTLC times out.
+func TestCircleWalletFreeze_RemovedMember_CanSettleHoldInvoiceIssuedBefore(t *testing.T) {
+	for _, policy := range freezePolicies {
+		t.Run(policy, func(t *testing.T) {
+			c := newFreezeCircle(t, policy)
+			member := nostr.GeneratePrivateKey()
+			memberPub, _ := nostr.GetPublicKey(member)
+			c.add(memberPub)
+			w := c.join(member)
+
+			preimage := tests.RandomHex32()
+			preimageBytes, err := hex.DecodeString(preimage)
+			require.NoError(t, err)
+			hash := sha256.Sum256(preimageBytes)
+			paymentHash := hex.EncodeToString(hash[:])
+			hold := w.call(models.MAKE_HOLD_INVOICE_METHOD, map[string]interface{}{"amount": 1000, "payment_hash": paymentHash})
+			require.Nil(t, hold.Error, "%+v", hold.Error)
+			// The payer's HTLC arrives and is held.
+			require.NoError(t, c.svc.DB.Model(&db.Transaction{}).
+				Where("app_id = ? AND payment_hash = ?", w.app.ID, paymentHash).
+				Update("state", constants.TRANSACTION_STATE_ACCEPTED).Error)
+
+			c.remove(memberPub)
+
+			settle := w.call(models.SETTLE_HOLD_INVOICE_METHOD, map[string]interface{}{"preimage": preimage})
+			assert.Nil(t, settle.Error, "%+v", settle.Error)
+			assert.Contains(t, c.svc.LNClient.(*tests.MockLn).SettleHoldPreimages(), preimage)
+		})
 	}
 }
