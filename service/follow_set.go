@@ -130,8 +130,11 @@ func (svc *service) PublishFollowSet(ctx context.Context, d string, content Foll
 	}
 	unsigned := nmilatnip01.NewUnsignedEvent(db.KindFollowSet, nodeXOnly, eventContent, rawTags...)
 	// The new version must supersede the current one, even within one second.
-	if previous != nil && unsigned.CreatedAt <= uint64(previous.CreatedAt) {
-		unsigned.CreatedAt = uint64(previous.CreatedAt) + 1
+	if previous != nil {
+		previousCreatedAt := uint64(previous.CreatedAt) //nolint:gosec // a unix timestamp in seconds, never negative
+		if unsigned.CreatedAt <= previousCreatedAt {
+			unsigned.CreatedAt = previousCreatedAt + 1
+		}
 	}
 
 	signed, err := svc.signNodeEvent(ctx, unsigned)
