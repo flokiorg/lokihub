@@ -20,6 +20,7 @@ import (
 
 	"github.com/flokiorg/lokihub/api"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -492,6 +493,33 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: authority, Error: ""}
 		}
+	}
+
+	// Profile pictures: the web app loads /api/circle/avatar-proxy straight
+	// into an <img> with its login token in the URL, but the desktop app has
+	// no token, so it asks here and shows the bytes as a data URL. Same host
+	// checks as the web route (http.FetchAvatar).
+	if strings.HasPrefix(route, "/api/circle/avatar-proxy") && method == "GET" {
+		parsedRoute, err := url.Parse(route)
+		if err != nil || parsedRoute.Path != "/api/circle/avatar-proxy" {
+			return WailsRequestRouterResponse{Body: nil, Error: "invalid avatar route"}
+		}
+		rawURL := parsedRoute.Query().Get("url")
+		if rawURL == "" {
+			return WailsRequestRouterResponse{Body: nil, Error: "url is required"}
+		}
+		fetchCtx := ctx
+		if fetchCtx == nil {
+			fetchCtx = context.Background()
+		}
+		image, err := http.FetchAvatar(fetchCtx, rawURL)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: map[string]string{
+			"contentType": image.ContentType,
+			"data":        base64.StdEncoding.EncodeToString(image.Data),
+		}, Error: ""}
 	}
 
 	appLogoRegex := regexp.MustCompile(

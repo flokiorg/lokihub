@@ -65,7 +65,7 @@ func tagValue(tags nostr.Tags, name string) string {
 func joinParams(memberPriv string) nipcw.CreateCircleWalletParams {
 	return nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
-		MaxAmountMillis: nmilatHappyPathAmountMillis,
+		MaxAmountMillis: circleHappyPathAmountMloki,
 		Expiry:          nmilatHappyPathExpiry,
 	}
 }

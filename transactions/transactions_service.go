@@ -1805,9 +1805,9 @@ func (svc *transactionsService) validateCanPay(tx *gorm.DB, appId *uint, amount 
 	return isolatedBalance, row.ParentKind, feeSkimMloki, nil
 }
 
-// max of 1% or 10000 milliloki (10 loki)
+// max of 1% or constants.MIN_FEE_RESERVE_MLOKI (10 loki)
 func CalculateFeeReserveMloki(amountMloki uint64) uint64 {
-	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), 10000))
+	return uint64(math.Max(math.Ceil(float64(amountMloki)*0.01), constants.MIN_FEE_RESERVE_MLOKI))
 }
 
 // CalculateRedeemFeeMloki computes a cash slice's redeem fee: a flat base plus a
@@ -2231,6 +2231,19 @@ func (svc *transactionsService) creditCircleHubFeeSkim(tx *gorm.DB, dbTransactio
 		// never silently skim into the void if lineage is somehow missing.
 		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).
 			Msg("circle_wallet has FeeSkimMloki but no parent hub app; skipping fee credit")
+		return nil
+	}
+	// The hub row may be gone by the time the payment settles. The credit has
+	// nowhere to go then, and failing here would leave the member's own
+	// payment unrecorded, so the skim is skipped instead.
+	var hubCount int64
+	if err := tx.Model(&db.App{}).Where("id = ?", *childApp.ParentAppID).Count(&hubCount).Error; err != nil {
+		return err
+	}
+	if hubCount == 0 {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).Uint("parent_app_id", *childApp.ParentAppID).
+			Uint64("fee_skim_mloki", dbTransaction.FeeSkimMloki).
+			Msg("circle_wallet's parent hub no longer exists; skipping fee credit")
 		return nil
 	}
 

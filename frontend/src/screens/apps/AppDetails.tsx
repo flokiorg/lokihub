@@ -89,6 +89,7 @@ import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
   LOKI_ACCOUNT_APP_NAME,
+  MIN_CIRCLE_WALLET_MAX_LOKI,
   SUBWALLET_APPSTORE_APP_ID,
   SUBWALLET_HUB_CHILD_KINDS,
   SUBWALLET_HUB_KINDS,
@@ -154,6 +155,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
     React.useState(false);
   const { t } = useTranslation("apps");
   const { t: tc } = useTranslation("common");
+  const { t: tCircles } = useTranslation("circles");
 
   const [name, setName] = React.useState(app.name);
   const [permissions, setPermissions] = React.useState<AppPermissions>({
@@ -803,10 +805,16 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     inputUnit={inputUnit}
                     onInputUnitChange={setInputUnit}
                     required
-                    min={1}
+                    min={scaleInputAmount(
+                      MIN_CIRCLE_WALLET_MAX_LOKI,
+                      inputUnit
+                    )}
                   />
                   <p className="text-muted-foreground text-sm">
-                    {t("circleHub.circleMaxWalletBudgetHelper")}
+                    {t("circleHub.circleMaxWalletBudgetHelper")}{" "}
+                    {tCircles("newCircleHub.minWalletBudgetHint", {
+                      min: MIN_CIRCLE_WALLET_MAX_LOKI,
+                    })}
                   </p>
                 </div>
                 <div className="w-full grid gap-1.5">

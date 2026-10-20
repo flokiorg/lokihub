@@ -101,6 +101,8 @@ private-transport request ended.
   and hidden members, a title and a description. Hidden members are encrypted
   so only the hub can read them, and the invite takes the set's title as its
   label. (#139)
+- Marks a Circle member's wallet as frozen in the hub's wallet list once they
+  leave the circle, so you can see which wallets can no longer pay. (#148)
 
 ### Changed
 
@@ -441,6 +443,21 @@ private-transport request ended.
 - Freezes a circle wallet once its member leaves the allowlist or follow set:
   payments and new invoices are refused until they are added back, while the
   balance and history stay readable. (#145)
+- Requires a Circle Wallet cap of at least 11 loki, on joins and in a hub's
+  per-wallet limit; at 10 loki or less, the Lightning fee reserve left a
+  wallet unable to pay out at all. (#148)
+- Moves every member wallet's balance and the hub's own balance to your main
+  balance when you delete a Circle Hub with "Delete All", as recorded
+  transfers; before, those funds vanished from every wallet with no record.
+  A wallet with a payment in flight keeps the hub until it ends. (#148)
+- Saves nothing when a Circle or Cash Hub settings change is rejected; before,
+  a bad fee rate still saved the new name and budget from the same form.
+  (#148)
+- Shows Nostr profile pictures in the desktop app, which showed initials
+  everywhere because it had no login token to put on the image request.
+  (#148)
+- Counts a payment made at the exact moment a budget period starts against
+  that period; it counted against neither, so it escaped the budget. (#148)
 
 ## [0.4.0]
 

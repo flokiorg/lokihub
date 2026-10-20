@@ -386,7 +386,7 @@ func TestHandleCreateCircleWalletEvent_RateLimited(t *testing.T) {
 	}
 
 	nip47Request := &models.Request{}
-	err = json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 10_000, 3600)), nip47Request)
+	err = json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 20_000, 3600)), nip47Request)
 	require.NoError(t, err)
 
 	dbRequestEvent := &db.RequestEvent{}
@@ -739,7 +739,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_AtOrLooserThanFloor_Accepte
 		requesterKey := nostr.GeneratePrivateKey()
 
 		nip47Request := &models.Request{}
-		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 1000, 3600, renewal)), nip47Request))
+		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 11_000, 3600, renewal)), nip47Request))
 
 		dbRequestEvent := &db.RequestEvent{}
 		svc.DB.Create(&dbRequestEvent)
@@ -776,7 +776,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_TighterThanFloor_Rejected(t
 		requesterKey := nostr.GeneratePrivateKey()
 
 		nip47Request := &models.Request{}
-		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 1000, 3600, renewal)), nip47Request))
+		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 11_000, 3600, renewal)), nip47Request))
 
 		dbRequestEvent := &db.RequestEvent{}
 		svc.DB.Create(&dbRequestEvent)
@@ -805,7 +805,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_Omitted_DefaultsToNever(t *
 	requesterKey := nostr.GeneratePrivateKey()
 
 	nip47Request := &models.Request{}
-	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 1000, 3600)), nip47Request))
+	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 11_000, 3600)), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
@@ -833,7 +833,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_InvalidValue_Rejected(t *te
 	requesterKey := nostr.GeneratePrivateKey()
 
 	nip47Request := &models.Request{}
-	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 1000, 3600, "fortnightly")), nip47Request))
+	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 11_000, 3600, "fortnightly")), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
@@ -862,7 +862,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_FloorChangeIsNotRetroactive
 
 	requesterKey := nostr.GeneratePrivateKey()
 	nip47Request := &models.Request{}
-	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 1000, 3600, constants.BUDGET_RENEWAL_YEARLY)), nip47Request))
+	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequestWithRenewal(t, requesterKey, *provider.WalletPubkey, 11_000, 3600, constants.BUDGET_RENEWAL_YEARLY)), nip47Request))
 	dbRequestEvent := &db.RequestEvent{}
 	svc.DB.Create(&dbRequestEvent)
 
