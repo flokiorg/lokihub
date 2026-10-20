@@ -1,5 +1,4 @@
-import { TFunction } from "i18next";
-import { Check, Users, UserPlus } from "lucide-react";
+import { Check, Globe, ListChecks, Server, UserPlus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -29,59 +28,105 @@ import {
   SelectTrigger,
   SelectValue,
 } from "src/components/ui/select";
-import { FollowingPreview } from "src/components/circles/FollowingPreview";
+import { FollowSetFields } from "src/components/circles/FollowSetFields";
 import { ManageIdentitiesDialog } from "src/components/circles/ManageIdentitiesDialog";
 import { MemberPicker } from "src/components/circles/MemberPicker";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
+import { WarningAlert } from "src/components/circles/WarningAlert";
 import { SUBWALLET_APPSTORE_APP_ID, WEEK_SCALE_PRESETS } from "src/constants";
 import { useCircleIdentities } from "src/hooks/useCircleIdentities";
+import { useInfo } from "src/hooks/useInfo";
+import { useNodeIdentity } from "src/hooks/useNodeIdentity";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
 import { createApp } from "src/requests/createApp";
-import { BudgetRenewalType, CreateAppRequest } from "src/types";
+import {
+  BudgetRenewalType,
+  CreateAppRequest,
+  FollowSetRequest,
+} from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
 import { request } from "src/utils/request";
 
-type MemberMode = "sync" | "pinned";
+// UI never shows raw backend policy names ("follow_set"/"allowlist") — the
+// mode selector below uses outcome-focused copy and maps to these internally.
+type MemberMode = "followSet" | "pinned";
+// Where a follow set comes from: published by this hub as its node identity,
+// or published by another account and only read here.
+type FollowSetSource = "managed" | "external";
 
-function getMemberModeOptions(t: TFunction<"circles">): {
-  mode: MemberMode;
-  icon: typeof Users;
+const EMPTY_FOLLOW_SET: FollowSetRequest = {
+  title: "",
+  description: "",
+  publicMembers: [],
+  hiddenMembers: [],
+};
+
+type OptionCard<T extends string> = {
+  value: T;
+  icon: typeof UserPlus;
   title: string;
   description: string;
-}[] {
-  return [
-    {
-      mode: "sync",
-      icon: Users,
-      title: t("newCircleHub.modeSyncTitle"),
-      description: t("newCircleHub.modeSyncDescription"),
-    },
-    {
-      mode: "pinned",
-      icon: UserPlus,
-      title: t("newCircleHub.modePinnedTitle"),
-      description: t("newCircleHub.modePinnedDescription"),
-    },
-  ];
-}
-
-// UI never shows raw backend policy names ("following"/"allowlist") — the
-// mode selector below uses outcome-focused copy and maps to these internally.
-const MEMBER_MODE_TO_POLICY: Record<MemberMode, string> = {
-  sync: "following",
-  pinned: "allowlist",
 };
+
+function OptionCards<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: OptionCard<T>[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {options.map(({ value: option, icon: Icon, title, description }) => {
+        const isSelected = value === option;
+        return (
+          <button
+            type="button"
+            key={option}
+            onClick={() => onChange(option)}
+            className={cn(
+              "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
+              isSelected
+                ? "border-primary ring-1 ring-primary shadow-sm"
+                : "border-border hover:border-primary/50"
+            )}
+          >
+            {isSelected && (
+              <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
+                <Check className="h-3 w-3" />
+              </div>
+            )}
+            <Icon
+              className={cn(
+                "h-4 w-4",
+                isSelected ? "text-primary" : "text-muted-foreground"
+              )}
+            />
+            <span className="text-sm font-semibold">{title}</span>
+            <p className="text-xs leading-snug text-muted-foreground">
+              {description}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function NewCircleHub() {
   const { t } = useTranslation("circles");
   const { t: tc } = useTranslation("common");
   const navigate = useNavigate();
-  const memberModeOptions = getMemberModeOptions(t);
   const { data: identitiesData } = useCircleIdentities();
   const identities = identitiesData?.identities ?? [];
   const hasSavedIdentities = identities.length > 0;
+  const { nostrHex: nodePubkeyHex } = useNodeIdentity();
+  const { data: info } = useInfo();
+  const hiddenMembersAvailable = !!info?.privateTransport?.nodeIdentity;
 
   const [name, setName] = React.useState("");
   const [identityMode, setIdentityMode] = React.useState<"new" | "existing">(
@@ -95,7 +140,12 @@ export function NewCircleHub() {
   const [resolvedPubkeyHex, setResolvedPubkeyHex] = React.useState<
     string | undefined
   >(undefined);
-  const [memberMode, setMemberMode] = React.useState<MemberMode>("sync");
+  const [memberMode, setMemberMode] = React.useState<MemberMode>("followSet");
+  const [followSetSource, setFollowSetSource] =
+    React.useState<FollowSetSource>("managed");
+  const [followSetD, setFollowSetD] = React.useState("");
+  const [followSet, setFollowSet] =
+    React.useState<FollowSetRequest>(EMPTY_FOLLOW_SET);
   const [selectedMemberPubkeys, setSelectedMemberPubkeys] = React.useState<
     string[]
   >([]);
@@ -118,13 +168,15 @@ export function NewCircleHub() {
   const { profile: ownerProfile } = useNostrProfile(resolvedPubkeyHex);
 
   const isNewIdentity = identityMode === "new" || !hasSavedIdentities;
+  const isManagedFollowSet =
+    memberMode === "followSet" && followSetSource === "managed";
+  // A set this hub publishes is signed by the node identity; every other
+  // mode names its account explicitly.
+  const needsProviderInput = !isManagedFollowSet;
 
   // Single source of truth for what blocks submission — isSubmitDisabled and
-  // submitHint both derive from this list instead of maintaining two
-  // separately hand-synced condition trees. A rule's `hint` is left
-  // undefined when its own inline message elsewhere on the form already
-  // explains it (unresolved identity / empty member list show their own
-  // message right where they occur).
+  // submitHint both derive from this list. A rule's `hint` is left undefined
+  // when its own inline message elsewhere on the form already explains it.
   const validationIssues: { blocked: boolean; hint?: string }[] = !isNewIdentity
     ? [
         {
@@ -134,7 +186,12 @@ export function NewCircleHub() {
       ]
     : [
         { blocked: !name, hint: t("newCircleHub.enterNameHint") },
-        { blocked: !resolvedPubkeyHex },
+        { blocked: needsProviderInput && !resolvedPubkeyHex },
+        { blocked: isManagedFollowSet && !nodePubkeyHex },
+        {
+          blocked: memberMode === "followSet" && !followSetD.trim(),
+          hint: t("newCircleHub.enterDHint"),
+        },
         {
           blocked:
             memberMode === "pinned" && selectedMemberPubkeys.length === 0,
@@ -147,10 +204,44 @@ export function NewCircleHub() {
   )?.hint;
 
   const identityNamePlaceholder =
+    (isManagedFollowSet && followSet.title) ||
     ownerProfile?.displayName ||
     ownerProfile?.name ||
     name ||
     t("newCircleHub.identityNamePlaceholder");
+
+  const newIdentityFields = (): Partial<CreateAppRequest> => {
+    const base = {
+      circleIdentityName: identityName || identityNamePlaceholder,
+    };
+    if (memberMode === "pinned") {
+      return {
+        ...base,
+        circlePolicy: "allowlist",
+        providerPubkey: resolvedPubkeyHex,
+      };
+    }
+    if (followSetSource === "external") {
+      return {
+        ...base,
+        circlePolicy: "follow_set",
+        providerPubkey: resolvedPubkeyHex,
+        followSetD: followSetD.trim(),
+      };
+    }
+    // An empty provider means the node identity: the hub publishes the set
+    // before it creates the circle.
+    return {
+      ...base,
+      circlePolicy: "follow_set",
+      followSetD: followSetD.trim(),
+      followSet: {
+        ...followSet,
+        title: followSet.title.trim(),
+        description: followSet.description.trim(),
+      },
+    };
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -172,11 +263,7 @@ export function NewCircleHub() {
         metadata: { app_store_app_id: SUBWALLET_APPSTORE_APP_ID },
         ...(!isNewIdentity
           ? { circleIdentityId: Number(selectedIdentityId) }
-          : {
-              circleIdentityName: identityName || identityNamePlaceholder,
-              circlePolicy: MEMBER_MODE_TO_POLICY[memberMode],
-              providerPubkey: resolvedPubkeyHex,
-            }),
+          : newIdentityFields()),
       };
       const response = await createApp(req);
 
@@ -206,6 +293,37 @@ export function NewCircleHub() {
     }
     setLoading(false);
   };
+
+  const memberModeOptions: OptionCard<MemberMode>[] = [
+    {
+      value: "followSet",
+      icon: ListChecks,
+      title: t("newCircleHub.modeFollowSetTitle"),
+      description: t("newCircleHub.modeFollowSetDescription"),
+    },
+    {
+      value: "pinned",
+      icon: UserPlus,
+      title: t("newCircleHub.modePinnedTitle"),
+      description: t("newCircleHub.modePinnedDescription"),
+    },
+  ];
+  const followSetSourceOptions: OptionCard<FollowSetSource>[] = [
+    {
+      value: "managed",
+      icon: Server,
+      title: t("followSet.sourceManagedTitle"),
+      description: t("followSet.sourceManagedDescription"),
+    },
+    {
+      value: "external",
+      icon: Globe,
+      title: t("followSet.sourceExternalTitle"),
+      description: t("followSet.sourceExternalDescription"),
+    },
+  ];
+
+  const isFormLocked = needsProviderInput && !resolvedPubkeyHex;
 
   return (
     <div className="grid gap-5">
@@ -289,71 +407,85 @@ export function NewCircleHub() {
         )}
 
         {isNewIdentity ? (
-          <>
-            <NostrPubkeyInput
-              id="providerPubkey"
-              value={providerPubkeyInput}
-              onChange={setProviderPubkeyInput}
-              onResolved={setResolvedPubkeyHex}
-            />
+          <div className="w-full grid gap-4 rounded-lg border p-4">
+            <div className="w-full grid gap-1.5">
+              <Label>{t("newCircleHub.memberModeLabel")}</Label>
+              <OptionCards
+                options={memberModeOptions}
+                value={memberMode}
+                onChange={setMemberMode}
+              />
+            </div>
+
+            {memberMode === "followSet" && (
+              <div className="w-full grid gap-1.5">
+                <Label>{t("followSet.sourceLabel")}</Label>
+                <OptionCards
+                  options={followSetSourceOptions}
+                  value={followSetSource}
+                  onChange={setFollowSetSource}
+                />
+              </div>
+            )}
+
+            {needsProviderInput && (
+              <NostrPubkeyInput
+                id="providerPubkey"
+                value={providerPubkeyInput}
+                onChange={setProviderPubkeyInput}
+                onResolved={setResolvedPubkeyHex}
+                {...(memberMode === "followSet" && {
+                  label: t("followSet.externalProviderLabel"),
+                  helperText: t("followSet.externalProviderHelper"),
+                })}
+              />
+            )}
 
             <div
-              className={
-                "w-full grid gap-4 rounded-lg border p-4" +
-                (resolvedPubkeyHex ? "" : " opacity-50 pointer-events-none")
-              }
+              className={cn(
+                "w-full grid gap-4",
+                isFormLocked && "opacity-50 pointer-events-none"
+              )}
             >
-              {!resolvedPubkeyHex && (
+              {isFormLocked && (
                 <p className="text-sm text-muted-foreground -mt-2">
                   {t("newCircleHub.enterIdentityHelper")}
                 </p>
               )}
 
-              <div className="w-full grid gap-1.5">
-                <Label>{t("newCircleHub.memberModeLabel")}</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {memberModeOptions.map(
-                    ({ mode, icon: Icon, title, description }) => {
-                      const isSelected = memberMode === mode;
-                      return (
-                        <button
-                          type="button"
-                          key={mode}
-                          onClick={() => setMemberMode(mode)}
-                          className={cn(
-                            "relative flex flex-col gap-2 rounded-lg border p-3 text-start transition-all",
-                            isSelected
-                              ? "border-primary ring-1 ring-primary shadow-sm"
-                              : "border-border hover:border-primary/50"
-                          )}
-                        >
-                          {isSelected && (
-                            <div className="absolute top-2 end-2 rounded-full bg-primary p-0.5 text-primary-foreground">
-                              <Check className="h-3 w-3" />
-                            </div>
-                          )}
-                          <Icon
-                            className={cn(
-                              "h-4 w-4",
-                              isSelected
-                                ? "text-primary"
-                                : "text-muted-foreground"
-                            )}
-                          />
-                          <span className="text-sm font-semibold">{title}</span>
-                          <p className="text-xs leading-snug text-muted-foreground">
-                            {description}
-                          </p>
-                        </button>
-                      );
-                    }
-                  )}
+              {memberMode === "followSet" && (
+                <div className="w-full grid gap-1.5">
+                  <Label htmlFor="followSetD">{t("followSet.dLabel")}</Label>
+                  <Input
+                    id="followSetD"
+                    value={followSetD}
+                    maxLength={64}
+                    onChange={(e) => setFollowSetD(e.target.value)}
+                    placeholder={t("followSet.dPlaceholder")}
+                    autoComplete="off"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {isManagedFollowSet
+                      ? t("followSet.dHelper")
+                      : t("followSet.dExternalHelper")}
+                  </p>
                 </div>
-              </div>
+              )}
 
-              {memberMode === "sync" ? (
-                <FollowingPreview ownerPubkeyHex={resolvedPubkeyHex} />
-              ) : (
+              {isManagedFollowSet && (
+                <FollowSetFields
+                  value={followSet}
+                  onChange={setFollowSet}
+                  authorPubkeyHex={nodePubkeyHex}
+                  hiddenMembersAvailable={hiddenMembersAvailable}
+                />
+              )}
+
+              {memberMode === "followSet" && !isManagedFollowSet && (
+                <WarningAlert>{t("followSet.externalWarning")}</WarningAlert>
+              )}
+
+              {memberMode === "pinned" && (
                 <>
                   <MemberPicker
                     ownerPubkeyHex={resolvedPubkeyHex}
@@ -385,7 +517,7 @@ export function NewCircleHub() {
                 </p>
               </div>
             </div>
-          </>
+          </div>
         ) : null}
 
         <Accordion type="single" collapsible className="w-full">

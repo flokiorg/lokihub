@@ -19,16 +19,15 @@
     "advancedSettings": "Advanced settings",
     "inUse": "In use",
     "hexPlaceholder": "64-character hex string",
-    "syncingFollowing": "Syncing following list…",
+    "readingFollowSet": "Reading the follow set…",
     "sync": "Sync",
-    "following": "{{count}} following",
     "synced": "Synced {{time}}",
     "updated": "Updated {{time}}",
     "total": "total",
     "anonymous": "Anonymous"
   },
   "policyLabel": {
-    "following": "Following",
+    "follow_set": "Follow set",
     "allowlist": "Allowlist"
   },
   "identityType": {
@@ -50,7 +49,7 @@
   },
   "pubkeyInput": {
     "defaultLabel": "Your Nostr Identity",
-    "defaultHelper": "Used to resolve your following list for member authorization",
+    "defaultHelper": "The Nostr account that runs this circle",
     "invalidHelper": "Doesn't look like a valid npub, hex pubkey, nprofile, or NIP-05 address",
     "placeholder": "npub1..., hex, nprofile1..., you@domain.com, or search a name",
     "change": "Change"
@@ -67,10 +66,42 @@
     "resolving": "Resolving…",
     "searchHint": "Search by name, NIP-05, npub, or paste a pubkey."
   },
-  "followingPreview": {
-    "empty": "This identity isn't following anyone yet — members will be authorized automatically as they're followed.",
-    "summary_one": "{{count}} person will be authorized now, and the list stays in sync automatically as this identity follows or unfollows others.",
-    "summary_other": "{{count}} people will be authorized now, and the list stays in sync automatically as this identity follows or unfollows others."
+  "followSet": {
+    "sourceLabel": "Who publishes the set",
+    "sourceManagedTitle": "This hub",
+    "sourceManagedDescription": "Signed by this hub's node identity. Supports hidden members.",
+    "sourceExternalTitle": "Another account",
+    "sourceExternalDescription": "A set someone already publishes. This hub only reads it.",
+    "externalProviderLabel": "Set author",
+    "externalProviderHelper": "The Nostr account that publishes the follow set",
+    "externalWarning": "Edit the set in a Nostr client that supports follow sets. A client that doesn't know hidden members may drop them when it saves the set.",
+    "dLabel": "Set name",
+    "dPlaceholder": "family",
+    "dHelper": "The set's d identifier. It names this circle on Nostr and can't be changed later.",
+    "dExternalHelper": "The set's d identifier, exactly as its author published it.",
+    "titleLabel": "Title",
+    "titlePlaceholder": "e.g. Ada's Family Circle",
+    "titleHelper": "Shown as the circle's name in invites.",
+    "descriptionLabel": "Description (optional)",
+    "publicMembersLabel": "Public members",
+    "publicMembersHelper": "Listed openly in the published set.",
+    "hiddenMembersLabel": "Hidden members",
+    "hiddenMembersHelper": "Encrypted so only this hub can read them. Ask them to join from a client that supports private join, or their pubkey shows on the shared connection.",
+    "hiddenUnavailable": "Hidden members need the private transport, which isn't running on this hub. See Settings › Services.",
+    "publicWarning": "The title, description and public members are published to Nostr relays, where anyone can read them.",
+    "addressLabel": "Follow set “{{d}}”",
+    "unresolved": "No relay has this follow set yet. Members can't join until it's found.",
+    "readOnly": "Another account publishes this set. Edit it in a Nostr client that supports follow sets.",
+    "hiddenCount_one": "{{count}} hidden",
+    "hiddenCount_other": "{{count}} hidden",
+    "editTrigger": "Edit set",
+    "editTitle": "Edit follow set",
+    "editDescription": "Saving publishes a new version of the set. Anyone you remove can no longer request a wallet.",
+    "save": "Publish",
+    "savedToast": "Follow set published",
+    "errors": {
+      "publish": "Failed to publish the follow set"
+    }
   },
   "claimBadge": {
     "claimed": "Redeemed",
@@ -112,9 +143,9 @@
     "delete": "Delete"
   },
   "circleIdentityCard": {
-    "syncedToast": "Following list synced",
+    "syncedToast": "Follow set synced",
     "errors": {
-      "sync": "Failed to sync following list"
+      "sync": "Failed to sync the follow set"
     }
   },
   "circleAllowlist": {
@@ -248,13 +279,13 @@
     "identityReuseHelper": "An identity (policy + members) can be reused across multiple circles, which then stay in sync automatically.",
     "enterIdentityHelper": "Enter a valid Nostr identity above to continue.",
     "memberModeLabel": "Who can request a wallet from this circle",
-    "modeSyncTitle": "Anyone I follow",
-    "modeSyncDescription": "Automatic — everyone this identity follows, now or later. Nothing to manage.",
+    "modeFollowSetTitle": "Follow set",
+    "modeFollowSetDescription": "Members of a Nostr follow set. Add or remove people by editing the set.",
     "modePinnedTitle": "Custom members",
     "modePinnedDescription": "Search Nostr and hand-pick exactly who's allowed.",
-    "pinMemberHelper": "Pin at least one member, or switch to Anyone I follow.",
+    "pinMemberHelper": "Pin at least one member, or switch to Follow set.",
     "identityNameLabel": "Label for this identity (optional)",
-    "identityNamePlaceholder": "e.g. My following circle",
+    "identityNamePlaceholder": "e.g. Family circle",
     "identityNameHelper": "Used only to identify this saved identity when reused across circles — not published anywhere.",
     "maxWalletBudgetHelper": "Maximum budget a member may request for their circle wallet",
     "maxExpiryHelper": "Maximum lifetime for issued circle wallets",
@@ -267,6 +298,7 @@
     "submit": "Create Circle Wallet Hub",
     "selectExistingHint": "Select an existing identity to continue.",
     "enterNameHint": "Enter a name to continue.",
+    "enterDHint": "Enter the set name to continue.",
     "createdToast": "Circle Wallet Hub \"{{name}}\" created",
     "allowlistSeedFailedToast": "Circle Wallet Hub \"{{name}}\" created, but seeding the member list failed — add members from the hub's Allowlist page.",
     "errors": {

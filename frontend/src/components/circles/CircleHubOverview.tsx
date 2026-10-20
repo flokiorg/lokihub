@@ -89,10 +89,10 @@ export function CircleHubOverview({
             </p>
             <p className="text-xl font-semibold">{stats.members_count}</p>
             <p className="text-muted-foreground mt-1 text-xs">
-              {/* A following-policy circle has no eligible count this hub can
-                  give: its members come from the host's live contact list,
-                  which is not stored here. Saying so beats printing a stale
-                  number, and beats a 0 that would read as "nobody". */}
+              {/* A follow-set circle has no eligible count this hub can
+                  give: its members come from a set on relays, which is not
+                  stored here. Saying so beats printing a stale number, and
+                  beats a 0 that would read as "nobody". */}
               {stats.eligible_count === null
                 ? t("circleCharts.eligibleUnknown")
                 : t("circleCharts.eligibleCount", {

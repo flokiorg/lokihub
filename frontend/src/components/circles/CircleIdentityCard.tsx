@@ -7,11 +7,14 @@ import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 
 import { AvatarStack } from "src/components/circles/AvatarStack";
+import { FollowSetEditDialog } from "src/components/circles/FollowSetEditDialog";
 import { NostrIdentityHeader } from "src/components/circles/NostrIdentityHeader";
+import { WarningAlert } from "src/components/circles/WarningAlert";
 import { Card, CardContent, CardHeader } from "src/components/ui/card";
 import { LoadingButton } from "src/components/ui/custom/loading-button";
 import { Separator } from "src/components/ui/separator";
 import { useCircleAllowlist } from "src/hooks/useCircleAllowlist";
+import { useCircleFollowSet } from "src/hooks/useCircleFollowSet";
 import { useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { CircleIdentitySummary } from "src/types";
 import { handleRequestError } from "src/utils/handleRequestError";
@@ -27,32 +30,41 @@ dayjs.extend(relativeTime);
 // Allowlist sections further down. Shows both NIP-05 and npub (not just
 // whichever one exists) since a NIP-05 alone doesn't let anyone verify
 // the identity against another Nostr client without the raw pubkey.
-// For "following" policy the count already comes from our db (identity.
-// followingCount) and is plain text below — unlike allowlist it's not a
-// visual member list, so it doesn't need its own separator/section, and we
-// don't re-fetch the following list/profiles just to render avatars for it.
+// For a follow set, the header is the set's author, and the members are
+// the set as this hub reads it, hidden members included.
 export function CircleIdentityCard({
   appId,
   identity,
 }: {
   appId: number;
   identity: CircleIdentitySummary & {
-    followingCount?: number;
+    memberCount?: number;
+    followSetTitle?: string;
     allowlistCount: number;
     policySyncedAt?: string;
   };
 }) {
   const { t } = useTranslation("circles");
-  const isFollowing = identity.policy === "following";
+  const isFollowSet = identity.policy === "follow_set";
 
   const { mutate } = useSWRConfig();
   const [isSyncing, setSyncing] = React.useState(false);
+
+  const { data: followSet, isLoading: isFollowSetLoading } = useCircleFollowSet(
+    isFollowSet ? identity.id : undefined
+  );
+  const followSetMembers = React.useMemo(
+    () =>
+      followSet ? [...followSet.publicMembers, ...followSet.hiddenMembers] : [],
+    [followSet]
+  );
 
   const handleSync = async () => {
     setSyncing(true);
     try {
       await request(`/api/apps/${appId}/circle/refresh`, { method: "POST" });
       await mutate(`/api/apps/${appId}`);
+      await mutate(`/api/circle-identities/${identity.id}/follow-set`);
       toast(t("circleIdentityCard.syncedToast"));
     } catch (error) {
       handleRequestError(t("circleIdentityCard.errors.sync"), error);
@@ -61,12 +73,16 @@ export function CircleIdentityCard({
   };
 
   const { data: allowlistData, isLoading: isAllowlistLoading } =
-    useCircleAllowlist(appId, !isFollowing);
-  const allowlistPubkeys = allowlistData?.pubkeys ?? [];
-  const { profiles: allowlistProfiles, isLoading: isAllowlistProfilesLoading } =
-    useNostrProfiles(!isFollowing ? allowlistPubkeys : []);
+    useCircleAllowlist(appId, !isFollowSet);
+  const memberPubkeys = isFollowSet
+    ? followSetMembers
+    : (allowlistData?.pubkeys ?? []);
+  const { profiles, isLoading: isProfilesLoading } =
+    useNostrProfiles(memberPubkeys);
 
-  const isMembersLoading = isAllowlistLoading || isAllowlistProfilesLoading;
+  const isMembersLoading =
+    (isFollowSet ? isFollowSetLoading : isAllowlistLoading) ||
+    isProfilesLoading;
 
   return (
     <Card>
@@ -74,16 +90,42 @@ export function CircleIdentityCard({
         <NostrIdentityHeader pubkey={identity.providerPubkey} />
       </CardHeader>
       <CardContent className="grid gap-3">
-        {isFollowing ? (
-          identity.followingCount === undefined ? (
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("common.syncingFollowing")}
-            </span>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
+        {isFollowSet ? (
+          <>
+            <div className="grid gap-0.5">
+              {identity.followSetTitle && (
+                <span className="font-medium">{identity.followSetTitle}</span>
+              )}
+              <span className="font-mono text-xs text-muted-foreground break-all">
+                {t("followSet.addressLabel", { d: identity.followSetD })}
+              </span>
+            </div>
+            {followSet && !followSet.resolved && (
+              <WarningAlert>{t("followSet.unresolved")}</WarningAlert>
+            )}
+            <Separator />
+            <AvatarStack
+              pubkeys={memberPubkeys}
+              profiles={profiles}
+              isLoading={isMembersLoading}
+            />
+            {identity.memberCount === undefined ? (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("common.readingFollowSet")}
+              </span>
+            ) : (
               <span className="text-sm text-muted-foreground">
-                {t("common.following", { count: identity.followingCount })}
+                {t("circleCard.member", { count: identity.memberCount })}
+                {!!followSet?.hiddenMembers.length && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    {t("followSet.hiddenCount", {
+                      count: followSet.hiddenMembers.length,
+                    })}
+                  </>
+                )}
                 {identity.policySyncedAt && (
                   <>
                     {" "}
@@ -94,6 +136,8 @@ export function CircleIdentityCard({
                   </>
                 )}
               </span>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
               <LoadingButton
                 variant="outline"
                 size="sm"
@@ -102,14 +146,25 @@ export function CircleIdentityCard({
               >
                 <RefreshCwIcon className="size-3.5" /> {t("common.sync")}
               </LoadingButton>
+              {identity.managed && followSet && (
+                <FollowSetEditDialog
+                  identityId={identity.id}
+                  followSet={followSet}
+                />
+              )}
             </div>
-          )
+            {!identity.managed && (
+              <p className="text-sm text-muted-foreground">
+                {t("followSet.readOnly")}
+              </p>
+            )}
+          </>
         ) : (
           <>
             <Separator />
             <AvatarStack
-              pubkeys={allowlistPubkeys}
-              profiles={allowlistProfiles}
+              pubkeys={memberPubkeys}
+              profiles={profiles}
               isLoading={isMembersLoading}
             />
             <span className="text-sm text-muted-foreground">

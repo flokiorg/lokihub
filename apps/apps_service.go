@@ -84,7 +84,8 @@ type AppsService interface {
 	// field unchanged.
 	UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
 	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
-	CreateCircleIdentity(name, policy, providerPubkey string) (*db.CircleIdentity, error)
+	// followSetD is the set's `d` identifier, required for follow_set only.
+	CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error)
 	// GetCircleIdentity returns a CircleIdentity by ID.
 	GetCircleIdentity(id uint) (*db.CircleIdentity, error)
 	// ListCircleIdentities returns every CircleIdentity, ordered by ID.

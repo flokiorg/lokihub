@@ -26,17 +26,16 @@ type socialGraph struct {
 
 // loadFixedSocialGraph reads testdata/social_graph.json - real, dedicated
 // Nostr identities generated once for this suite's own use (see that file's
-// own "_comment"), whose provider->members kind:3 follow list is (re-)
-// published to this instance's own relay by cmd/seedrelay (via `just dev
-// seed-relay` / `just dev reset`), not by this suite at test time.
+// own "_comment"), whose provider->members follow set (d = "integration")
+// is (re-)published to this instance's own relay by cmd/seedrelay (via `just
+// dev seed-relay` / `just dev reset`), not by this suite at test time.
 //
-// A test that wants a "following"-policy identity already known-authorized,
-// without paying for a fresh keypair + a live publishFollowList round trip,
-// can build its circle_hub with ProviderPubkey: graph.Provider.Pubkey and
-// authorize graph.Members[i].Privkey directly - skip the publishFollowList
-// call entirely in that case, since cmd/seedrelay already put it there. A
-// pubkey that's simply not in graph.Members (e.g. newTestPrivkey(t)'s) is a
-// ready-made "not followed" identity for rejection-path tests.
+// A test that wants a follow_set identity already known-authorized, without
+// paying for a fresh keypair + a live publishFollowSet round trip, can build
+// its circle_hub with ProviderPubkey: graph.Provider.Pubkey and FollowSetD:
+// "integration", and authorize graph.Members[i].Privkey directly. A pubkey
+// that's simply not in graph.Members (e.g. newTestPrivkey(t)'s) is a
+// ready-made non-member for rejection-path tests.
 func loadFixedSocialGraph(t *testing.T) socialGraph {
 	t.Helper()
 

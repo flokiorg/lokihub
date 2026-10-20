@@ -20,13 +20,15 @@ type API interface {
 	DeleteApp(app *db.App) error
 	ReplaceCircleAllowlist(app *db.App, pubkeys []string) error
 	RemoveCircleAllowedPubkey(app *db.App, pubkey string) error
-	RefreshCircleAllowlist(ctx context.Context, app *db.App) error
-	// PreviewCircleRefresh re-fetches the provider's kind:3 contacts and reports
-	// how they'd differ from the currently-stored allowlist, without applying
-	// anything — lets a caller show the delta and get confirmation before
-	// calling RefreshCircleAllowlist to actually replace the list.
-	PreviewCircleRefresh(ctx context.Context, app *db.App) (*CircleRefreshPreview, error)
+	// RefreshCircleFollowSet re-fetches a follow_set circle's set from relays.
+	RefreshCircleFollowSet(ctx context.Context, app *db.App) error
 	ListCircleAllowlist(app *db.App) ([]string, error)
+	// GetCircleIdentityFollowSet returns a follow_set identity's set as this
+	// hub reads it, hidden members included.
+	GetCircleIdentityFollowSet(ctx context.Context, id uint) (*FollowSetResponse, error)
+	// PublishCircleIdentityFollowSet publishes a new version of a follow set
+	// this hub authors (the provider is the node identity).
+	PublishCircleIdentityFollowSet(ctx context.Context, id uint, request *FollowSetRequest) (*FollowSetResponse, error)
 	// ListCircleChildrenBalances returns a page of a circle_hub's circle_wallet
 	// children, each with its current isolated balance. limit == 0 returns
 	// every child unpaginated (used by the pre-delete confirmation UI).
@@ -46,7 +48,7 @@ type API interface {
 	// (ErrInvalidParams) if any circle_hub app still references it.
 	DeleteCircleIdentity(id uint) error
 	// GetApp returns full detail for a single app — for a circle_hub app with
-	// a following-policy identity, this may cold-fetch the follower count
+	// a follow_set identity, this may cold-fetch the member count
 	// once (single deliberate target, like GetCircleIdentity), unlike ListApps
 	// which never blocks on a whole page of apps.
 	GetApp(ctx context.Context, app *db.App) *App
@@ -273,24 +275,57 @@ type CircleIdentitySummary struct {
 	Name           string `json:"name"`
 	Policy         string `json:"policy"`
 	ProviderPubkey string `json:"providerPubkey"`
-	UsedByCount    int    `json:"usedByCount"`
+	// FollowSetD is a follow_set identity's `d` identifier.
+	FollowSetD string `json:"followSetD,omitempty"`
+	// Managed is true for a follow set this hub publishes, as the node
+	// identity. Any other follow set is only read.
+	Managed     bool `json:"managed"`
+	UsedByCount int  `json:"usedByCount"`
 }
 
 // CircleIdentitySummaryWithCounts adds policy-specific counts, used when an
-// identity is embedded inline on an App (list/get). FollowingCount is only
-// populated from a non-blocking cache peek — nil means "not yet known," not
-// "zero" — the frontend should render a loading state in that case rather
+// identity is embedded inline on an App (list/get). MemberCount is only
+// populated once the follow set has been read — nil means "not yet known,"
+// not "zero" — the frontend should render a loading state in that case rather
 // than treating it as an authoritative zero.
 type CircleIdentitySummaryWithCounts struct {
 	CircleIdentitySummary
-	FollowingCount *int `json:"followingCount,omitempty"`
-	AllowlistCount int  `json:"allowlistCount"`
+	MemberCount    *int   `json:"memberCount,omitempty"`
+	FollowSetTitle string `json:"followSetTitle,omitempty"`
+	AllowlistCount int    `json:"allowlistCount"`
 	// PolicySyncedAt is "last policy update" — when the current membership was
-	// last confirmed from its source of truth: for "following", the relay
-	// cache's last fetch time (nil if not yet cached, same semantics as
-	// FollowingCount); for "allowlist", the last time a pubkey was added or
+	// last confirmed from its source of truth: for "follow_set", the relay
+	// cache's last fetch time (nil if not yet read, same semantics as
+	// MemberCount); for "allowlist", the last time a pubkey was added or
 	// removed (nil if the allowlist has never been populated).
 	PolicySyncedAt *time.Time `json:"policySyncedAt,omitempty"`
+}
+
+// FollowSetRequest is a new version of a follow set this hub publishes.
+type FollowSetRequest struct {
+	Title         string   `json:"title"`
+	Description   string   `json:"description"`
+	PublicMembers []string `json:"publicMembers"`
+	HiddenMembers []string `json:"hiddenMembers"`
+}
+
+// FollowSetResponse is a follow_set identity's set as this hub reads it.
+type FollowSetResponse struct {
+	Address        string `json:"address"`
+	ProviderPubkey string `json:"providerPubkey"`
+	D              string `json:"d"`
+	Managed        bool   `json:"managed"`
+	// Resolved is false while the set hasn't been found on any relay. The
+	// circle then answers NOT_READY, and the fields below are empty.
+	Resolved      bool       `json:"resolved"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	PublicMembers []string   `json:"publicMembers"`
+	HiddenMembers []string   `json:"hiddenMembers"`
+	SyncedAt      *time.Time `json:"syncedAt,omitempty"`
+	// HiddenMembersAvailable is whether this hub can publish hidden members:
+	// they need the private transport running.
+	HiddenMembersAvailable bool `json:"hiddenMembersAvailable"`
 }
 
 // CircleIdentityResponse is the full single-identity detail response —
@@ -394,11 +429,17 @@ type CreateAppRequest struct {
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`
-	// CircleIdentityName/CirclePolicy/ProviderPubkey create a brand-new
-	// CircleIdentity — used only when CircleIdentityId is nil.
+	// CircleIdentityName/CirclePolicy/ProviderPubkey/FollowSetD create a
+	// brand-new CircleIdentity — used only when CircleIdentityId is nil.
 	CircleIdentityName string `json:"circleIdentityName"`
 	CirclePolicy       string `json:"circlePolicy"`
-	ProviderPubkey     string `json:"providerPubkey"`
+	// ProviderPubkey may be empty for a follow_set circle, meaning the node
+	// identity, which lets this hub publish the set itself.
+	ProviderPubkey string `json:"providerPubkey"`
+	FollowSetD     string `json:"followSetD"`
+	// FollowSet, when set, is published as the new identity's set before the
+	// hub is created. Only for a set the node identity authors.
+	FollowSet *FollowSetRequest `json:"followSet"`
 }
 
 type CreateLightningAddressRequest struct {
@@ -638,9 +679,9 @@ type CashHubStatsResponse struct {
 // up, or one member spending far more than the rest — rather than insolvency.
 type CircleHubStatsResponse struct {
 	MembersCount uint64 `json:"members_count"`
-	// EligibleCount is null for a "following"-policy circle, whose eligible
-	// set is the host's live contact list rather than anything this hub
-	// stores. Null means "not knowable here", never zero.
+	// EligibleCount is null for a "follow_set"-policy circle, whose eligible
+	// set is a follow set on relays rather than anything this hub stores.
+	// Null means "not knowable here", never zero.
 	EligibleCount *uint64 `json:"eligible_count"`
 	// AllocatedMloki is what members currently hold between them.
 	AllocatedMloki int64 `json:"allocated_mloki"`
@@ -923,16 +964,6 @@ type CircleChildBalance struct {
 type ListCircleChildrenBalancesResponse struct {
 	Children   []CircleChildBalance `json:"children"`
 	TotalCount uint64               `json:"totalCount"`
-}
-
-// CircleRefreshPreview reports the delta a following-policy refresh would
-// apply — Added/Removed relative to the currently-stored allowlist — plus
-// the full freshly-fetched list, so a confirmed refresh can act on exactly
-// what was previewed without a second relay round-trip.
-type CircleRefreshPreview struct {
-	Pubkeys []string `json:"pubkeys"`
-	Added   []string `json:"added"`
-	Removed []string `json:"removed"`
 }
 
 // DeleteCircleHubResult reports what DeleteCircleHub actually did:

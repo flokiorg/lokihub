@@ -22,7 +22,7 @@ func newCircleHubForAPI(t *testing.T, svc *tests.TestService, policy string) *db
 		"test-circle-hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
 		[]string{constants.CIRCLE_WALLET_SCOPE, constants.PAY_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
 		nil,
-		apps.CircleIdentityRef{Name: "test-identity", Policy: policy, ProviderPubkey: tests.RandomHex32()},
+		apps.CircleIdentityRef{Name: "test-identity", Policy: policy, ProviderPubkey: tests.RandomHex32(), FollowSetD: "test"},
 		db.CircleHubConfig{PerWalletMaxMloki: 1_000_000, MaxExpSecs: 3600},
 	)
 	require.NoError(t, err)
