@@ -93,6 +93,10 @@ when the node cannot sign, moves the frontend to react-router v7, and moves to
 - `get_info` reports `circle_wallet.identity` so clients can join a circle
   privately. It is the node key that signs the private-transport
   announcement, and is omitted while that transport is not running. (#129)
+- Adds follow-set circles the hub publishes as its node identity, with public
+  and hidden members, a title and a description. Hidden members are encrypted
+  so only the hub can read them, and the invite takes the set's title as its
+  label.
 
 ### Changed
 

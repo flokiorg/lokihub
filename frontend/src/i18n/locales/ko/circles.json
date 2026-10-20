@@ -19,16 +19,15 @@
     "advancedSettings": "고급 설정",
     "inUse": "사용 중",
     "hexPlaceholder": "64자리 16진수 문자열",
-    "syncingFollowing": "팔로잉 목록 동기화 중…",
+    "readingFollowSet": "팔로우 세트를 읽는 중…",
     "sync": "동기화",
-    "following": "팔로잉 {{count}}명",
     "synced": "{{time}} 동기화됨",
     "updated": "{{time}} 업데이트됨",
     "total": "전체",
     "anonymous": "익명"
   },
   "policyLabel": {
-    "following": "팔로잉 기반",
+    "follow_set": "팔로우 세트",
     "allowlist": "허용 목록"
   },
   "identityType": {
@@ -50,7 +49,7 @@
   },
   "pubkeyInput": {
     "defaultLabel": "회원님의 Nostr 아이덴티티",
-    "defaultHelper": "멤버 승인을 위해 팔로잉 목록을 확인하는 데 사용됩니다",
+    "defaultHelper": "이 서클을 운영하는 Nostr 계정",
     "invalidHelper": "유효한 npub, 16진수 공개 키, nprofile 또는 NIP-05 주소가 아닌 것 같습니다",
     "placeholder": "npub1..., 16진수, nprofile1..., you@domain.com, 또는 이름으로 검색",
     "change": "변경"
@@ -67,10 +66,42 @@
     "resolving": "확인 중…",
     "searchHint": "이름, NIP-05, npub으로 검색하거나 공개 키를 붙여넣으세요."
   },
-  "followingPreview": {
-    "empty": "이 아이덴티티는 아직 아무도 팔로우하고 있지 않습니다 — 팔로우하는 즉시 멤버가 자동으로 승인됩니다.",
-    "summary_one": "지금 {{count}}명이 승인되며, 이 아이덴티티가 팔로우하거나 언팔로우할 때마다 목록이 자동으로 동기화됩니다.",
-    "summary_other": "지금 {{count}}명이 승인되며, 이 아이덴티티가 팔로우하거나 언팔로우할 때마다 목록이 자동으로 동기화됩니다."
+  "followSet": {
+    "sourceLabel": "세트를 게시하는 주체",
+    "sourceManagedTitle": "이 허브",
+    "sourceManagedDescription": "이 허브의 노드 아이덴티티로 서명합니다. 숨김 멤버를 지원합니다.",
+    "sourceExternalTitle": "다른 계정",
+    "sourceExternalDescription": "다른 사람이 이미 게시한 세트입니다. 이 허브는 읽기만 합니다.",
+    "externalProviderLabel": "세트 작성자",
+    "externalProviderHelper": "팔로우 세트를 게시하는 Nostr 계정",
+    "externalWarning": "팔로우 세트를 지원하는 Nostr 클라이언트에서 세트를 편집하세요. 숨김 멤버를 모르는 클라이언트는 세트를 저장할 때 이를 삭제할 수 있습니다.",
+    "dLabel": "세트 이름",
+    "dPlaceholder": "family",
+    "dHelper": "세트의 d 식별자입니다. Nostr에서 이 서클의 이름이 되며 나중에 바꿀 수 없습니다.",
+    "dExternalHelper": "작성자가 게시한 그대로의 세트 d 식별자입니다.",
+    "titleLabel": "제목",
+    "titlePlaceholder": "예: Ada의 가족 서클",
+    "titleHelper": "초대에서 서클 이름으로 표시됩니다.",
+    "descriptionLabel": "설명 (선택)",
+    "publicMembersLabel": "공개 멤버",
+    "publicMembersHelper": "게시된 세트에 공개적으로 나열됩니다.",
+    "hiddenMembersLabel": "숨김 멤버",
+    "hiddenMembersHelper": "이 허브만 읽을 수 있도록 암호화됩니다. 비공개 참여를 지원하는 클라이언트로 참여하도록 안내하세요. 그렇지 않으면 공유 연결에 공개 키가 드러납니다.",
+    "hiddenUnavailable": "숨김 멤버에는 비공개 전송이 필요하지만 이 허브에서 실행 중이 아닙니다. 설정 › 서비스를 확인하세요.",
+    "publicWarning": "제목, 설명, 공개 멤버는 Nostr 릴레이에 게시되어 누구나 읽을 수 있습니다.",
+    "addressLabel": "팔로우 세트 “{{d}}”",
+    "unresolved": "아직 이 팔로우 세트를 가진 릴레이가 없습니다. 찾을 때까지 멤버가 참여할 수 없습니다.",
+    "readOnly": "다른 계정이 이 세트를 게시합니다. 팔로우 세트를 지원하는 Nostr 클라이언트에서 편집하세요.",
+    "hiddenCount_one": "숨김 {{count}}명",
+    "hiddenCount_other": "숨김 {{count}}명",
+    "editTrigger": "세트 편집",
+    "editTitle": "팔로우 세트 편집",
+    "editDescription": "저장하면 세트의 새 버전이 게시됩니다. 제거한 사람은 더 이상 지갑을 요청할 수 없습니다.",
+    "save": "게시",
+    "savedToast": "팔로우 세트가 게시되었습니다",
+    "errors": {
+      "publish": "팔로우 세트를 게시하지 못했습니다"
+    }
   },
   "claimBadge": {
     "claimed": "교환됨",
@@ -139,9 +170,9 @@
     "delete": "삭제"
   },
   "circleIdentityCard": {
-    "syncedToast": "팔로잉 목록이 동기화되었습니다",
+    "syncedToast": "팔로우 세트가 동기화되었습니다",
     "errors": {
-      "sync": "팔로잉 목록 동기화에 실패했습니다"
+      "sync": "팔로우 세트를 동기화하지 못했습니다"
     }
   },
   "circleAllowlist": {
@@ -269,13 +300,13 @@
     "identityReuseHelper": "아이덴티티(정책 + 멤버)는 여러 서클에서 재사용할 수 있으며, 이후 자동으로 동기화됩니다.",
     "enterIdentityHelper": "계속하려면 위에 유효한 Nostr 아이덴티티를 입력하세요.",
     "memberModeLabel": "이 서클에서 지갑을 요청할 수 있는 사람",
-    "modeSyncTitle": "내가 팔로우하는 모든 사람",
-    "modeSyncDescription": "자동 — 지금이든 나중이든 이 아이덴티티가 팔로우하는 모든 사람. 관리할 필요가 없습니다.",
+    "modeFollowSetTitle": "팔로우 세트",
+    "modeFollowSetDescription": "Nostr 팔로우 세트의 멤버입니다. 세트를 편집해 사람을 추가하거나 제거합니다.",
     "modePinnedTitle": "커스텀 멤버",
     "modePinnedDescription": "Nostr에서 검색하여 허용할 대상을 직접 선택합니다.",
-    "pinMemberHelper": "멤버를 최소 한 명 고정하거나 '내가 팔로우하는 모든 사람'으로 전환하세요.",
+    "pinMemberHelper": "멤버를 한 명 이상 고정하거나 팔로우 세트로 전환하세요.",
     "identityNameLabel": "이 아이덴티티의 라벨 (선택 사항)",
-    "identityNamePlaceholder": "예: 내 팔로잉 서클",
+    "identityNamePlaceholder": "예: 가족 서클",
     "identityNameHelper": "여러 서클에서 재사용할 때 이 저장된 아이덴티티를 식별하는 용도로만 사용되며, 어디에도 게시되지 않습니다.",
     "maxWalletBudgetHelper": "멤버가 자신의 서클 지갑에 대해 요청할 수 있는 최대 예산",
     "maxExpiryHelper": "발급된 서클 지갑의 최대 유효 기간",
@@ -288,6 +319,7 @@
     "submit": "서클 지갑 허브 생성",
     "selectExistingHint": "계속하려면 기존 아이덴티티를 선택하세요.",
     "enterNameHint": "계속하려면 이름을 입력하세요.",
+    "enterDHint": "계속하려면 세트 이름을 입력하세요.",
     "createdToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었습니다",
     "allowlistSeedFailedToast": "서클 지갑 허브 \"{{name}}\"이(가) 생성되었지만 멤버 목록 초기화에 실패했습니다 — 허브의 허용 목록 페이지에서 멤버를 추가하세요.",
     "errors": {

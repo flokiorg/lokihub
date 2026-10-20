@@ -22,24 +22,29 @@ export function useApps(
   isEnabled = true
 ) {
   const offset = (page - 1) * limit;
+  const followSetPolls = React.useRef(0);
   return useSWR<ListAppsResponse>(
     isEnabled
       ? `/api/apps?limit=${limit}&offset=${offset}&filters=${JSON.stringify(filters || {})}&order_by=${orderBy || ""}`
       : undefined,
     swrFetcher,
     {
-      // Circle Hub cards show a "following count" enriched from a
-      // non-blocking cache peek (see CircleIdentitySummaryWithCounts) that
-      // may still be unpopulated on the first response — poll until it
-      // resolves instead of leaving the card's skeleton stuck forever.
-      refreshInterval: (data) =>
-        data?.apps.some(
+      // Circle Hub cards show a member count from a non-blocking cache peek
+      // (see CircleIdentitySummaryWithCounts) that may still be unpopulated
+      // on the first response — poll briefly until it resolves. The cap
+      // stops a set that isn't on any relay from keeping this polling forever.
+      refreshInterval: (data) => {
+        const waiting = data?.apps.some(
           (app) =>
-            app.circleIdentity?.policy === "following" &&
-            app.circleIdentity.followingCount === undefined
-        )
-          ? 3000
-          : 0,
+            app.circleIdentity?.policy === "follow_set" &&
+            app.circleIdentity.memberCount === undefined
+        );
+        if (waiting && followSetPolls.current < 20) {
+          followSetPolls.current++;
+          return 3000;
+        }
+        return 0;
+      },
     }
   );
 }
