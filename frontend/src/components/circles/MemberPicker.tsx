@@ -22,9 +22,8 @@ import { primaryProfileLabel } from "src/utils/nostrProfileLabel";
 // resolution, or a NIP-50 relay search for free text — via
 // useNostrIdentityLookup, the same hook NostrPubkeyInput uses) and lets the
 // owner hand-pick specific people as authorized circle members, rendered as
-// removable chips. It's deliberately not scoped to the owner's following
-// list at all — that's the "Anyone I follow" mode's job (see
-// FollowingPreview), which is fully automatic and has no picker of its own.
+// removable chips. Used for allowlist members and for a follow set's public
+// and hidden members (see FollowSetFields).
 export function MemberPicker({
   ownerPubkeyHex,
   selected,
