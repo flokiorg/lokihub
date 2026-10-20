@@ -164,7 +164,6 @@ func requireWorking(t *testing.T, cfg *Config, child *nwcclient.Client) {
 	require.NotEmpty(t, paid.Preimage)
 }
 
-
 func TestCircleMembershipAudit_AllowlistRemovalFreezesWallet(t *testing.T) {
 	cfg := requireConfig(t)
 	memberPriv := newTestPrivkey(t)
