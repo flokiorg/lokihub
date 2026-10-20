@@ -6,10 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -31,25 +28,6 @@ type makeInvoiceResponse struct {
 // checks the cap and issues the invoice.
 var circleInvoiceGuard sync.Map // map[uint]struct{}
 
-// outstandingIncomingMloki sums appID's incoming invoices that can still be paid.
-// Expiry is compared in Go: the sqlite driver stores times in a form SQL date
-// functions can't read.
-func outstandingIncomingMloki(tx *gorm.DB, appID uint, now time.Time) int64 {
-	var pending []db.Transaction
-	tx.Model(&db.Transaction{}).
-		Select("amount_mloki", "expires_at").
-		Where("app_id = ? AND type = ? AND state IN ?", appID, constants.TRANSACTION_TYPE_INCOMING,
-			[]string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_ACCEPTED}).
-		Find(&pending)
-	var sum int64
-	for _, t := range pending {
-		if t.ExpiresAt == nil || t.ExpiresAt.After(now) {
-			sum += int64(t.AmountMloki) //nolint:gosec // invoice amounts are far below int64 range
-		}
-	}
-	return sum
-}
-
 // reserveCircleReceiveCap checks that an invoice of amountMloki keeps a circle
 // wallet within its MaxAmountLoki cap. Every way to receive (make_invoice,
 // make_hold_invoice) goes through it. On success the caller holds the wallet's
@@ -59,15 +37,7 @@ func outstandingIncomingMloki(tx *gorm.DB, appID uint, now time.Time) int64 {
 // A non-nil refusal is the error to publish.
 func (controller *nip47Controller) reserveCircleReceiveCap(appId uint, amountMloki uint64) (release func(), refusal *models.Error) {
 	noop := func() {}
-	var circleApp db.App
-	if controller.db.Where("id = ? AND parent_kind = ?", appId, db.ParentKindCircle).Limit(1).Find(&circleApp).RowsAffected == 0 {
-		return noop, nil
-	}
-	var maxMloki int64
-	controller.db.Model(&db.AppPermission{}).
-		Where("app_id = ? AND scope = ?", appId, constants.MAKE_INVOICE_SCOPE).
-		Pluck("max_amount_loki * 1000", &maxMloki)
-	if maxMloki <= 0 {
+	if _, capped := queries.CircleReceiveRoomMloki(controller.db, appId, time.Now()); !capped {
 		return noop, nil
 	}
 	// A zero-amount invoice lets the payer choose the amount, so no cap could hold.
@@ -85,12 +55,12 @@ func (controller *nip47Controller) reserveCircleReceiveCap(appId uint, amountMlo
 	}
 	release = func() { circleInvoiceGuard.Delete(appId) }
 
-	// Invoices already issued and still payable count too: each can still
-	// bring its amount in, and settling one re-checks nothing.
-	committed := queries.GetIsolatedBalance(controller.db, appId) + outstandingIncomingMloki(controller.db, appId, time.Now())
-	// The amount is caller-suppliable; a value beyond int64 range would wrap
-	// negative and bypass the cap check, so fail closed on the overflow itself.
-	if amountMloki > math.MaxInt64 || committed+int64(amountMloki) > maxMloki {
+	// The room is read under the guard. Invoices already issued and still
+	// payable count against it: each can still bring its amount in, and
+	// settling one re-checks nothing. The amount is caller-suppliable; a value
+	// beyond int64 range would wrap negative, so fail closed on the overflow.
+	room, _ := queries.CircleReceiveRoomMloki(controller.db, appId, time.Now())
+	if amountMloki > math.MaxInt64 || int64(amountMloki) > room {
 		release()
 		return noop, &models.Error{
 			Code:    constants.ERROR_QUOTA_EXCEEDED,

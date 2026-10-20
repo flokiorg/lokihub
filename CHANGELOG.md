@@ -413,6 +413,9 @@ private-transport request ended.
   invoices; before, `make_hold_invoice` could take in any amount.
 - Refuses zero-amount invoices from a Circle Wallet; the payer could choose
   any amount and push the wallet past its cap. (#144)
+- Credits a keysend to a Circle Wallet only when it fits under the wallet's
+  cap; a larger one stays with the node, and one sent from this node is
+  refused. Anyone could name the wallet's ID and push it past its cap. (#144)
 
 ## [0.4.0]
 
