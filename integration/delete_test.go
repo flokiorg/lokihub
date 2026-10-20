@@ -53,7 +53,7 @@ func TestDeleteCircleHub_RefusedWhileChildrenExist(t *testing.T) {
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -112,7 +112,7 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -194,7 +194,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	var first CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, ev1),
@@ -204,7 +204,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	var second CreateCircleWalletResult
 	err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		IdentityEvent: eventJSON(t, ev2),
 	}, &second)
@@ -217,7 +217,7 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	var third CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, ev3),
@@ -248,7 +248,7 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -293,7 +293,7 @@ func TestDeleteCircleChild_AlreadyDeleted_Errors(t *testing.T) {
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),

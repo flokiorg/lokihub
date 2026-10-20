@@ -464,3 +464,49 @@ func TestUpdateCircleHubConfig_FeesPpm_AboveMaxRejected(t *testing.T) {
 	require.NoError(t, cfgErr)
 	assert.Equal(t, 5_000, cfg.FeesPpm)
 }
+
+// --- Per-wallet ceiling floor: the 10-loki fee reserve plus 1 loki ---
+
+func TestCreateCircleHub_PerWalletMaxBelowFeeReserveFloor_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	_, _, err = svc.AppsService.CreateCircleHub(
+		"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 10_999},
+	)
+	require.ErrorIs(t, err, constants.ErrInvalidParams)
+
+	_, _, err = svc.AppsService.CreateCircleHub(
+		"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "test circle at floor", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 11_000},
+	)
+	require.NoError(t, err)
+}
+
+func TestUpdateCircleHubConfig_PerWalletMaxBelowFeeReserveFloor_Rejected(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	provider, _, err := svc.AppsService.CreateCircleHub(
+		"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
+	)
+	require.NoError(t, err)
+
+	below := 10_999
+	require.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &below, nil), constants.ErrInvalidParams)
+	atFloor := 11_000
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &atFloor, nil))
+}

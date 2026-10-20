@@ -309,6 +309,7 @@
     "identityNamePlaceholder": "例: 家族のサークル",
     "identityNameHelper": "複数のサークルで再利用する際にこの保存済みアイデンティティを識別するためだけに使用され、どこにも公開されません。",
     "maxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算",
+    "minWalletBudgetHint": "{{min}} loki 以上。これより少ないと、10 loki の Lightning 手数料の予約のためにウォレットから支払いができなくなります。",
     "maxExpiryHelper": "発行されたサークルウォレットの最長有効期限",
     "hubBudgetLabel": "ハブの予算（任意）",
     "hubBudgetHelper": "このサークルが同時に保持できるすべてのウォレットの合計予算に上限を設けます。空欄の場合、このハブの実際の残高以外に上限はありません。",

@@ -89,7 +89,7 @@ func TestCircleMoneyAudit(t *testing.T) {
 		var result CreateCircleWalletResult
 		err = a.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        mustPubkey(t, stranger),
-			MaxAmount:     1_000,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, buildCircleWalletIdentityEvent(t, stranger, a.WalletPubkey())),
 		}, &result)

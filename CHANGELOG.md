@@ -441,6 +441,9 @@ private-transport request ended.
 - Freezes a circle wallet once its member leaves the allowlist or follow set:
   payments and new invoices are refused until they are added back, while the
   balance and history stay readable. (#145)
+- Requires a Circle Wallet cap of at least 11 loki, on joins and in a hub's
+  per-wallet limit; at 10 loki or less, the Lightning fee reserve left a
+  wallet unable to pay out at all. (#147)
 
 ## [0.4.0]
 

@@ -309,6 +309,7 @@
     "identityNamePlaceholder": "例如：家庭圈子",
     "identityNameHelper": "仅用于在多个圈子中重复使用时识别此已保存的身份 —— 不会在任何地方公开发布。",
     "maxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算",
+    "minWalletBudgetHint": "至少 {{min}} loki。低于此值时，10 loki 的 Lightning 手续费预留会让钱包无法对外付款。",
     "maxExpiryHelper": "已发放圈子钱包的最长有效期",
     "hubBudgetLabel": "中心预算（可选）",
     "hubBudgetHelper": "限制此圈子同时存在的所有钱包的总预算上限。留空则不设上限，仅受此中心实际余额的限制。",

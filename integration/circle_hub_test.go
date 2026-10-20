@@ -26,6 +26,11 @@ import (
 // rules out any bug that only manifests for one specific pubkey value).
 const numGeneratedUnauthorizedIdentities = 5
 
+// circleHappyPathAmountMloki is the max_amount a test member joins with: twice
+// the smallest cap a join accepts (fee reserve + 1 loki), so it clears the
+// floor with room for a payment.
+const circleHappyPathAmountMloki = 2 * constants.MIN_CIRCLE_WALLET_MAX_MLOKI
+
 func TestCircleHubs(t *testing.T) {
 	cfg := requireConfig(t)
 	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowSet} {
@@ -115,7 +120,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			BudgetRenewal: constants.BUDGET_RENEWAL_DAILY,
 			IdentityEvent: eventJSON(t, identityEvent),
@@ -127,7 +132,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:    member0Pub,
-			MaxAmount: happyPathAmountMloki,
+			MaxAmount: circleHappyPathAmountMloki,
 			Expiry:    happyPathExpirySecs,
 			// IdentityEvent intentionally omitted.
 		}, &result)
@@ -138,7 +143,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: "not valid json",
 		}, &result)
@@ -155,7 +160,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, forged),
 		}, &result)
@@ -173,7 +178,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
@@ -186,7 +191,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
@@ -199,7 +204,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
@@ -220,7 +225,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: tamperedJSON,
 		}, &result)
@@ -251,7 +256,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var second CreateCircleWalletResult
 		err2 := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: evJSON,
 		}, &second)
@@ -272,7 +277,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 				var result CreateCircleWalletResult
 				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 					Pubkey:    badPubkey,
-					MaxAmount: happyPathAmountMloki,
+					MaxAmount: circleHappyPathAmountMloki,
 					Expiry:    happyPathExpirySecs,
 				}, &result)
 				requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
@@ -286,7 +291,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			BudgetRenewal: "fortnightly",
 			IdentityEvent: eventJSON(t, ev),
@@ -327,7 +332,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 			var result CreateCircleWalletResult
 			err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 				Pubkey:        targetPubkey,
-				MaxAmount:     happyPathAmountMloki,
+				MaxAmount:     circleHappyPathAmountMloki,
 				Expiry:        happyPathExpirySecs,
 				IdentityEvent: eventJSON(t, forged),
 			}, &result)
@@ -365,7 +370,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 
 				params := CreateCircleWalletParams{
 					Pubkey:        member.pub,
-					MaxAmount:     happyPathAmountMloki,
+					MaxAmount:     circleHappyPathAmountMloki,
 					Expiry:        happyPathExpirySecs,
 					BudgetRenewal: constants.BUDGET_RENEWAL_MONTHLY,
 					IdentityEvent: eventJSON(t, identityEvent),
@@ -426,7 +431,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        member0Pub,
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, ev),
 		}, &result)
@@ -450,7 +455,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 				var result CreateCircleWalletResult
 				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 					Pubkey:        unauthorizedPub,
-					MaxAmount:     happyPathAmountMloki,
+					MaxAmount:     circleHappyPathAmountMloki,
 					Expiry:        happyPathExpirySecs,
 					IdentityEvent: eventJSON(t, identityEvent),
 				}, &result)
