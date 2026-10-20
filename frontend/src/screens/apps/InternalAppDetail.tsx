@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import AppHeader from "src/components/AppHeader";
 import { AboutAppCard } from "src/components/connections/AboutAppCard";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";

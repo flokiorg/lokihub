@@ -14,7 +14,7 @@ import {
 import { TFunction } from "i18next";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import {
   CashStatusBadge,

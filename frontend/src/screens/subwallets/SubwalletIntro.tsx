@@ -6,7 +6,7 @@ import {
   Wallet2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import AppHeader from "src/components/AppHeader";
 
 import SubWalletDark from "src/assets/illustrations/sub-wallet-dark.svg?react";

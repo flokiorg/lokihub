@@ -1,6 +1,6 @@
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Button } from "src/components/ui/button";
 import { cn } from "src/lib/utils";
 import { useLocale } from "src/hooks/useLocale";

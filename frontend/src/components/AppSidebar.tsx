@@ -13,7 +13,7 @@ import {
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 
 import { LokihubLogo } from "src/components/icons/LokihubLogo";
 import SidebarHint from "src/components/SidebarHint";

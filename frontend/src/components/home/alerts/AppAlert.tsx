@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import {
   Card,

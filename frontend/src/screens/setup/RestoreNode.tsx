@@ -1,6 +1,6 @@
 import { PowerCircleIcon } from "lucide-react";
 import React, { ChangeEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import Loading from "src/components/Loading";
 import PasswordInput from "src/components/password/PasswordInput";

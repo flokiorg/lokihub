@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ExternalLinkIcon, HandCoinsIcon } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 import FormattedFiatAmount from "src/components/FormattedFiatAmount";
 import { FormattedFlokicoinAmount } from "src/components/FormattedFlokicoinAmount";
 import {
