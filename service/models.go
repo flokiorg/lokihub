@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -54,23 +53,25 @@ type Service interface {
 	PublishNodeNote(ctx context.Context, content string) (*PublishedNodeEvent, error)
 	GetStartupState() string
 	ReloadNostr() error
-	WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error)
 	// WarmGeneralRelays re-connects the shared Nostr pool to the current
 	// General relay list — call after the user updates that setting so the
-	// next kind:3 fetch (periodic refresh or manual Sync) doesn't have to
+	// next follow-set fetch (periodic refresh or manual Sync) doesn't have to
 	// cold-dial a newly-added relay from scratch.
 	WarmGeneralRelays()
-	// ContactCount returns the number of pubkeys in ownerPubkey's cached (or
-	// freshly-fetched-on-miss) kind:3 contact list.
-	ContactCount(ctx context.Context, ownerPubkey string) (int, error)
-	// PeekContactCount returns the cached contact count without ever fetching —
-	// ok is false on a true cache miss. Safe to call from hot/list-style paths.
-	PeekContactCount(ownerPubkey string) (count int, ok bool)
-	// PeekContactSyncedAt returns when ownerPubkey's contact list was last
-	// fetched from relays, without ever fetching — same peek-only contract as
-	// PeekContactCount, used to report "last policy update" for following-policy
-	// CircleIdentities.
-	PeekContactSyncedAt(ownerPubkey string) (syncedAt time.Time, ok bool)
+	// RefreshFollowSet fetches the follow set at (provider, d) now, whatever
+	// is cached. ErrCircleMembershipUnresolved means it wasn't found.
+	RefreshFollowSet(ctx context.Context, provider, d string) (*FollowSet, error)
+	// FollowSet returns the cached follow set, fetching it once on a miss.
+	FollowSet(ctx context.Context, provider, d string) (*FollowSet, error)
+	// PeekFollowSet returns the cached follow set without ever fetching. ok is
+	// false on a miss. Safe to call from hot/list-style paths.
+	PeekFollowSet(provider, d string) (*FollowSet, bool)
+	// PublishFollowSet signs the follow set d as the node identity and
+	// publishes it to the General relays.
+	PublishFollowSet(ctx context.Context, d string, content FollowSetContent) (*FollowSet, error)
+	// NodeNostrIdentity is the node identity in Nostr form (x-only hex), the
+	// author of every follow set PublishFollowSet publishes.
+	NodeNostrIdentity() (string, error)
 	GetAppStoreSvc() appstore.Service
 	GetLiquidityManager() *manager.LiquidityManager
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,26 +18,37 @@ import (
 )
 
 // Well-formed 64-char lowercase-hex placeholders — apps.CreateCircleIdentity
-// now validates ProviderPubkey's format, so a short opaque placeholder like
-// the old "aaa1" no longer round-trips through CreateCircleHub.
+// validates ProviderPubkey's format, so a short opaque placeholder no longer
+// round-trips through CreateCircleHub.
 const (
 	providerPubkey  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	requesterPubkey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	unrelatedPubkey = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 )
 
-// seedCache injects a contact list directly into the cache, bypassing relay calls.
-func seedCache(s *nostrSocialCache, ownerPubkey string, contacts []string, age time.Duration) {
-	pubkeys := make(map[string]struct{}, len(contacts))
-	for _, p := range contacts {
-		pubkeys[p] = struct{}{}
+// testD is the `d` identifier most tests' follow set uses.
+const testD = "family"
+
+// seedCache injects a resolved set directly into the cache, bypassing relays.
+func seedCache(s *nostrSocialCache, provider, d string, members []string, age time.Duration) {
+	set := &FollowSet{
+		Provider:  provider,
+		D:         d,
+		Public:    members,
+		Event:     &nostr.Event{PubKey: provider, Kind: db.KindFollowSet, CreatedAt: nostr.Now() - nostr.Timestamp(age.Seconds())},
+		FetchedAt: time.Now().Add(-age),
+		members:   make(map[string]struct{}, len(members)),
+	}
+	for _, p := range members {
+		set.members[p] = struct{}{}
 	}
 	s.mu.Lock()
-	s.cache[ownerPubkey] = &contactEntry{
-		pubkeys:   pubkeys,
-		fetchedAt: time.Now().Add(-age),
-	}
+	s.cache[followSetKey(provider, d)] = set
 	s.mu.Unlock()
+}
+
+func cached(s *nostrSocialCache, provider, d string) (*FollowSet, bool) {
+	return s.peek(provider, d)
 }
 
 func newSocialCacheForTest(t *testing.T) (*nostrSocialCache, *tests.TestService) {
@@ -47,12 +59,13 @@ func newSocialCacheForTest(t *testing.T) (*nostrSocialCache, *tests.TestService)
 	return cache, svc
 }
 
-// makeIdentity builds a CircleIdentity for social-graph policy tests where no
-// DB lookup is needed (ID is irrelevant).
+// makeIdentity builds a CircleIdentity for follow-set tests where no DB lookup
+// is needed (ID is irrelevant).
 func makeIdentity(policy, provPubkey string) *db.CircleIdentity {
 	return &db.CircleIdentity{
 		Policy:         policy,
 		ProviderPubkey: provPubkey,
+		FollowSetD:     testD,
 	}
 }
 
@@ -120,77 +133,90 @@ func TestIsAuthorized_Allowlist_EmptyList(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Following policy: provider's contact list must contain requesterPubkey
+// follow_set policy: the provider's set must list requesterPubkey
 // ---------------------------------------------------------------------------
 
-func TestIsAuthorized_Following_Allowed(t *testing.T) {
+func TestIsAuthorized_FollowSet_Allowed(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, providerPubkey, []string{requesterPubkey}, 0)
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, 0)
 
-	identity := makeIdentity(db.CirclePolicyFollowing, providerPubkey)
+	identity := makeIdentity(db.CirclePolicyFollowSet, providerPubkey)
 	ok, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
 	require.NoError(t, err)
 	assert.True(t, ok)
 }
 
-func TestIsAuthorized_Following_Denied(t *testing.T) {
+func TestIsAuthorized_FollowSet_Denied(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, providerPubkey, []string{unrelatedPubkey}, 0)
+	seedCache(cache, providerPubkey, testD, []string{unrelatedPubkey}, 0)
 
-	identity := makeIdentity(db.CirclePolicyFollowing, providerPubkey)
+	identity := makeIdentity(db.CirclePolicyFollowSet, providerPubkey)
 	ok, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
 
-// TestIsAuthorized_Following_NotReady_ReturnsWarmingUp covers the hub-still-
-// starting-up case: a fresh cache (ready defaults to false until
-// StartNostrSocialCacheRefresher's initial pass completes) with no entry yet
-// for this provider must refuse fast with ErrSocialCacheWarmingUp instead of
-// attempting a relay fetch — GetGeneralRelayUrls() is empty in this test env
-// (see newSocialCacheForTest), so if this test did fall through to a relay
-// fetch it would still resolve quickly to "not authorized", making that bug
-// easy to miss without asserting the specific error.
-func TestIsAuthorized_Following_NotReady_ReturnsWarmingUp(t *testing.T) {
+// One provider can run several circles, one per `d`. Membership in one set
+// must not admit anyone to another.
+func TestIsAuthorized_FollowSet_ScopedToItsD(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	_, ok := cache.cache[providerPubkey]
-	require.False(t, ok, "precondition: nothing cached yet for this pubkey")
+	seedCache(cache, providerPubkey, "family", []string{requesterPubkey}, 0)
+	seedCache(cache, providerPubkey, "work", []string{unrelatedPubkey}, 0)
 
-	identity := makeIdentity(db.CirclePolicyFollowing, providerPubkey)
+	family := &db.CircleIdentity{Policy: db.CirclePolicyFollowSet, ProviderPubkey: providerPubkey, FollowSetD: "family"}
+	work := &db.CircleIdentity{Policy: db.CirclePolicyFollowSet, ProviderPubkey: providerPubkey, FollowSetD: "work"}
+
+	ok, err := cache.IsAuthorized(context.TODO(), requesterPubkey, family, svc.DB)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	ok, err = cache.IsAuthorized(context.TODO(), requesterPubkey, work, svc.DB)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+// TestIsAuthorized_FollowSet_NotReady_ReturnsWarmingUp covers the hub-still-
+// starting-up case: a fresh cache (ready defaults to false until
+// StartNostrSocialCacheRefresher's initial pass completes) with no entry yet
+// for this set must refuse fast with ErrSocialCacheWarmingUp instead of
+// attempting a relay fetch.
+func TestIsAuthorized_FollowSet_NotReady_ReturnsWarmingUp(t *testing.T) {
+	cache, svc := newSocialCacheForTest(t)
+	defer svc.Remove()
+
+	_, ok := cached(cache, providerPubkey, testD)
+	require.False(t, ok, "precondition: nothing cached yet for this set")
+
+	identity := makeIdentity(db.CirclePolicyFollowSet, providerPubkey)
 	authorized, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
 	assert.ErrorIs(t, err, constants.ErrSocialCacheWarmingUp)
 	assert.False(t, authorized)
 
-	_, ok = cache.cache[providerPubkey]
+	_, ok = cached(cache, providerPubkey, testD)
 	assert.False(t, ok, "the readiness gate must not itself populate the cache")
 }
 
-// TestIsAuthorized_Following_NotReady_ButCached_EvaluatesNormally proves the
-// gate only blocks a true "never fetched" case: once this specific provider
-// has any cached entry, the overall ready flag doesn't matter — matches
-// TestIsAuthorized_Following_Allowed/Denied above, which also run with
-// ready == false, just seeded.
-func TestIsAuthorized_Following_NotReady_ButCached_EvaluatesNormally(t *testing.T) {
+// The gate only blocks a true "never fetched" case: once this set has any
+// cached entry, the overall ready flag doesn't matter.
+func TestIsAuthorized_FollowSet_NotReady_ButCached_EvaluatesNormally(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, providerPubkey, []string{requesterPubkey}, 0)
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, 0)
 
-	identity := makeIdentity(db.CirclePolicyFollowing, providerPubkey)
+	identity := makeIdentity(db.CirclePolicyFollowSet, providerPubkey)
 	authorized, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
 	require.NoError(t, err)
 	assert.True(t, authorized)
 }
 
-// TestIsAuthorized_Allowlist_NotReady_Unaffected proves the readiness gate is
-// scoped to CirclePolicyFollowing only — allowlist authorization (a plain DB
-// query) must never be gated on the Nostr social cache's warm-up state.
+// The readiness gate is scoped to follow_set only — allowlist authorization
+// (a plain DB query) must never be gated on the cache's warm-up state.
 func TestIsAuthorized_Allowlist_NotReady_Unaffected(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
@@ -212,203 +238,207 @@ func TestIsAuthorized_Allowlist_NotReady_Unaffected(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Unsupported policy: "followers"/"both" were removed because they check the
-// requester's own self-published contact list, which provides no real access
-// control (anyone can fabricate one for free). IsAuthorized must deny by
-// default for any policy value it doesn't recognize.
+// requester's own self-published lists, which provide no real access control
+// (anyone can fabricate one for free), and "following" (kind:3) was replaced
+// by follow_set. IsAuthorized must deny any policy value it doesn't recognize.
 // ---------------------------------------------------------------------------
 
 func TestIsAuthorized_UnsupportedPolicy_Denied(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	identity := makeIdentity("followers", providerPubkey)
-	ok, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
-	require.NoError(t, err)
-	assert.False(t, ok)
+	for _, policy := range []string{"followers", "following"} {
+		seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, 0)
+		identity := makeIdentity(policy, providerPubkey)
+		ok, err := cache.IsAuthorized(context.TODO(), requesterPubkey, identity, svc.DB)
+		require.NoError(t, err)
+		assert.False(t, ok, "policy %q must not admit anyone", policy)
+	}
 }
 
 // ---------------------------------------------------------------------------
 // Cache behaviour
 // ---------------------------------------------------------------------------
 
-func TestGetContactList_CacheHit_NoRefetch(t *testing.T) {
+func TestGetFollowSet_CacheHit_NoRefetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, requesterPubkey, []string{providerPubkey}, 0)
-	before := cache.cache[requesterPubkey].fetchedAt
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, 0)
+	before, _ := cached(cache, providerPubkey, testD)
 
-	contacts, err := cache.getContactList(context.TODO(), requesterPubkey)
+	set, err := cache.getFollowSet(context.TODO(), providerPubkey, testD)
 	require.NoError(t, err)
-	assert.Contains(t, contacts, providerPubkey)
+	assert.True(t, set.IsMember(requesterPubkey))
 
-	after := cache.cache[requesterPubkey].fetchedAt
-	assert.Equal(t, before, after, "cache hit must not update fetchedAt")
+	after, _ := cached(cache, providerPubkey, testD)
+	assert.Equal(t, before.FetchedAt, after.FetchedAt, "cache hit must not update FetchedAt")
 }
 
-func TestGetContactList_StaleEntry_ServedWithoutRefetch(t *testing.T) {
+func TestGetFollowSet_StaleEntry_ServedWithoutRefetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, requesterPubkey, []string{providerPubkey}, socialCacheTTL+time.Second)
-	before := cache.cache[requesterPubkey].fetchedAt
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey}, socialCacheTTL+time.Second)
+	before, _ := cached(cache, providerPubkey, testD)
 
-	contacts, err := cache.getContactList(context.TODO(), requesterPubkey)
+	set, err := cache.getFollowSet(context.TODO(), providerPubkey, testD)
 	require.NoError(t, err)
-	assert.Contains(t, contacts, providerPubkey)
+	assert.True(t, set.IsMember(requesterPubkey))
 
-	after := cache.cache[requesterPubkey].fetchedAt
-	assert.Equal(t, before, after, "a stale-but-present entry must be served as-is, never refetched on the request path")
+	after, _ := cached(cache, providerPubkey, testD)
+	assert.Equal(t, before.FetchedAt, after.FetchedAt, "a stale-but-present entry must be served as-is, never refetched on the request path")
 }
 
-func TestGetContactList_ColdMiss_TriggersFetch(t *testing.T) {
+func TestGetFollowSet_ColdMiss_TriggersFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
-	useAnsweringRelay(t, svc)
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey})
+	useRelayServing(t, svc, evt)
 
-	_, ok := cache.cache[requesterPubkey]
-	require.False(t, ok, "precondition: nothing cached yet for this pubkey")
+	_, ok := cached(cache, provider, testD)
+	require.False(t, ok, "precondition: nothing cached yet for this set")
 
-	_, err := cache.getContactList(context.TODO(), requesterPubkey)
+	set, err := cache.getFollowSet(context.TODO(), provider, testD)
 	require.NoError(t, err)
+	assert.True(t, set.IsMember(requesterPubkey))
 
-	entry, ok := cache.cache[requesterPubkey]
+	entry, ok := cached(cache, provider, testD)
 	require.True(t, ok, "a true cold miss must populate the cache")
-	assert.WithinDuration(t, time.Now(), entry.fetchedAt, 5*time.Second)
+	assert.WithinDuration(t, time.Now(), entry.FetchedAt, 5*time.Second)
 }
 
-func TestWarmFollowingCache_PopulatesCache(t *testing.T) {
+func TestRefreshFollowSet_PopulatesCache(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
-	useAnsweringRelay(t, svc)
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey})
+	useRelayServing(t, svc, evt)
 
-	contacts, err := cache.WarmFollowingCache(context.TODO(), providerPubkey)
+	set, err := cache.RefreshFollowSet(context.TODO(), provider, testD)
 	require.NoError(t, err)
 
-	entry, ok := cache.cache[providerPubkey]
-	require.True(t, ok, "WarmFollowingCache must populate the cache for the given provider")
-	assert.Equal(t, entry.pubkeys, contacts, "the returned set must be the same one stored in the cache")
+	entry, ok := cached(cache, provider, testD)
+	require.True(t, ok, "RefreshFollowSet must populate the cache")
+	assert.Same(t, entry, set, "the returned set must be the one stored in the cache")
 }
 
 // TestRefreshOne_UpdatesStaleEntry_OnSuccessfulFetch exercises a refresh that
 // actually confirms something against a real relay. A refresh that finds
-// nothing (relay unreachable, or genuinely no event) must NOT be treated as
-// having updated the entry — see
-// TestQueryAndStore_FailedRefresh_PreservesPreviousGoodCache in
-// nostr_social_cache_fetch_test.go, which covers that failure path directly.
+// nothing must NOT be treated as having updated the entry — see
+// TestQueryAndStore_FailedRefresh_PreservesPreviousGoodCache.
 func TestRefreshOne_UpdatesStaleEntry_OnSuccessfulFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	sk := nostr.GeneratePrivateKey()
-	owner, err := nostr.GetPublicKey(sk)
-	require.NoError(t, err)
-	evt := signedContactListEvent(t, sk, owner, []string{requesterPubkey})
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey})
+	useRelayServing(t, svc, evt)
 
-	relay := newFakeRelay(t, func(conn *websocket.Conn, subID string, filter nostr.Filter) {
-		sendEvent(t, conn, subID, evt)
-	})
-	require.NoError(t, svc.Cfg.SetGeneralRelay(relay.URL))
-
-	seedCache(cache, owner, []string{unrelatedPubkey}, socialCacheTTL+time.Second)
-	before := cache.cache[owner].fetchedAt
+	seedCache(cache, provider, testD, []string{unrelatedPubkey}, socialCacheTTL+time.Second)
+	before, _ := cached(cache, provider, testD)
 
 	ctx := context.Background()
-	pool := nostr.NewSimplePool(ctx)
-	err = cache.refreshOne(ctx, pool, owner)
-	require.NoError(t, err)
+	require.NoError(t, cache.refreshOne(ctx, nostr.NewSimplePool(ctx), provider, testD))
 
-	after := cache.cache[owner].fetchedAt
-	assert.True(t, after.After(before), "refreshOne must replace a stale entry with a fresh fetch once the relay actually confirms one")
-	assert.Contains(t, cache.cache[owner].pubkeys, requesterPubkey)
+	after, _ := cached(cache, provider, testD)
+	assert.True(t, after.FetchedAt.After(before.FetchedAt), "refreshOne must replace a stale entry once the relay actually confirms one")
+	assert.True(t, after.IsMember(requesterPubkey))
+	assert.False(t, after.IsMember(unrelatedPubkey))
 }
 
 // ---------------------------------------------------------------------------
-// PeekContactCount / ContactCount
+// PeekFollowSet / FollowSet
 // ---------------------------------------------------------------------------
 
-func TestPeekContactCount_CacheMiss_NeverFetches(t *testing.T) {
+func TestPeekFollowSet_CacheMiss_NeverFetches(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	count, ok := cache.PeekContactCount(requesterPubkey)
+	_, ok := cache.PeekFollowSet(providerPubkey, testD)
 	assert.False(t, ok, "a true cache miss must report ok=false, never trigger a fetch")
-	assert.Equal(t, 0, count)
 
-	_, stillMissing := cache.cache[requesterPubkey]
-	assert.False(t, stillMissing, "PeekContactCount must never populate the cache")
+	_, stillMissing := cached(cache, providerPubkey, testD)
+	assert.False(t, stillMissing, "PeekFollowSet must never populate the cache")
 }
 
-func TestPeekContactCount_CacheHit_ReturnsCount(t *testing.T) {
+func TestPeekFollowSet_CacheHit_ReturnsCount(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
 
-	seedCache(cache, providerPubkey, []string{requesterPubkey, unrelatedPubkey}, 0)
+	seedCache(cache, providerPubkey, testD, []string{requesterPubkey, unrelatedPubkey}, 0)
 
-	count, ok := cache.PeekContactCount(providerPubkey)
+	set, ok := cache.PeekFollowSet(providerPubkey, testD)
 	require.True(t, ok)
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 2, set.MemberCount())
 }
 
-func TestContactCount_ColdFetch(t *testing.T) {
+func TestFollowSet_ColdFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
-	useAnsweringRelay(t, svc)
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey, unrelatedPubkey})
+	useRelayServing(t, svc, evt)
 
-	count, err := cache.ContactCount(context.TODO(), requesterPubkey)
+	set, err := cache.FollowSet(context.TODO(), provider, testD)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, count, 0)
+	assert.Equal(t, 2, set.MemberCount())
 
-	_, ok := cache.cache[requesterPubkey]
-	assert.True(t, ok, "ContactCount may cold-fetch, populating the cache")
+	_, ok := cached(cache, provider, testD)
+	assert.True(t, ok, "FollowSet may cold-fetch, populating the cache")
 }
 
 // ---------------------------------------------------------------------------
 // Periodic background refresh
 // ---------------------------------------------------------------------------
 
-func TestRunSocialCacheRefresh_SkipsBadProvider_ContinuesSweep(t *testing.T) {
+func TestRunSocialCacheRefresh_SkipsBadIdentity_ContinuesSweep(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
-	useAnsweringRelay(t, svc)
 
-	// A following-policy identity with no ProviderPubkey must be skipped rather
-	// than aborting the sweep. It can no longer be created, so it is seeded
-	// directly, as a row saved before that check existed.
-	legacy := db.CircleIdentity{Name: "no-pubkey-circle", Policy: db.CirclePolicyFollowing}
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey})
+	useRelayServing(t, svc, evt)
+
+	// A follow_set identity with no d must be skipped rather than aborting the
+	// sweep. It can't be created through the service, so it is seeded directly.
+	legacy := db.CircleIdentity{Name: "no-d-circle", Policy: db.CirclePolicyFollowSet, ProviderPubkey: provider}
 	require.NoError(t, svc.DB.Create(&legacy).Error)
-	_, _, err := svc.AppsService.CreateCircleHub("no-pubkey-circle", "", 0, "never", nil,
+	_, _, err := svc.AppsService.CreateCircleHub("no-d-circle", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, nil,
 		apps.CircleIdentityRef{ExistingID: &legacy.ID},
 		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 	)
 	require.NoError(t, err)
 
-	// A well-formed following-policy identity that comes after it in id order
-	// must still be refreshed.
+	// A well-formed identity that comes after it in id order must still be
+	// refreshed.
 	_, _, err = svc.AppsService.CreateCircleHub("good-circle", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "good-circle", Policy: db.CirclePolicyFollowing, ProviderPubkey: providerPubkey},
+		apps.CircleIdentityRef{Name: "good-circle", Policy: db.CirclePolicyFollowSet, ProviderPubkey: provider, FollowSetD: testD},
 		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 	)
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	pool := nostr.NewSimplePool(ctx)
-	nextOffset := runSocialCacheRefresh(ctx, svc.DB, cache, pool, 0)
+	nextOffset := runSocialCacheRefresh(ctx, svc.DB, cache, nostr.NewSimplePool(ctx), 0)
 
-	_, ok := cache.cache[providerPubkey]
+	_, ok := cached(cache, provider, testD)
 	assert.True(t, ok, "the well-formed identity after a bad one must still be refreshed")
 	assert.Equal(t, 0, nextOffset, "sweep must wrap back to offset 0 once it reaches the end of the table")
 }
 
 func TestRunSocialCacheRefresh_SharedIdentity_RefreshedOnce(t *testing.T) {
-	_, svc := newSocialCacheForTest(t)
+	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
+
+	provider, evt := newSignedFollowSet(t, testD, []string{requesterPubkey})
+	var requests atomic.Int32
+	relay := newFakeRelay(t, func(conn *websocket.Conn, subID string, filter nostr.Filter) {
+		requests.Add(1)
+		sendEvent(t, conn, subID, evt)
+	})
+	require.NoError(t, svc.Cfg.SetGeneralRelay(relay.URL))
 
 	first, _, err := svc.AppsService.CreateCircleHub("circle-a", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "shared", Policy: db.CirclePolicyFollowing, ProviderPubkey: providerPubkey},
+		apps.CircleIdentityRef{Name: "shared", Policy: db.CirclePolicyFollowSet, ProviderPubkey: provider, FollowSetD: testD},
 		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 	)
 	require.NoError(t, err)
@@ -423,15 +453,9 @@ func TestRunSocialCacheRefresh_SharedIdentity_RefreshedOnce(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Even though two circle_hub apps reference this identity, the
-	// following-policy identity table itself has exactly one row for it.
-	identities, err := svc.AppsService.ListCircleIdentities()
-	require.NoError(t, err)
-	matching := 0
-	for _, i := range identities {
-		if i.ID == sharedID {
-			matching++
-		}
-	}
-	assert.Equal(t, 1, matching, "a shared identity must appear once, not once per referencing provider")
+	ctx := context.Background()
+	runSocialCacheRefresh(ctx, svc.DB, cache, nostr.NewSimplePool(ctx), 0)
+	// One kind:10002 discovery plus one follow-set query: a shared identity is
+	// one row, so it is fetched once, not once per hub.
+	assert.Equal(t, int32(2), requests.Load())
 }

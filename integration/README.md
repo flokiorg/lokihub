@@ -11,7 +11,7 @@ It is gated behind the `integration` Go build tag, so it's completely
 invisible to normal `go build`/`go test ./...` runs.
 
 Every jit_hub/circle_hub/simple-wallet fixture a test needs — including a
-synthetic Nostr identity for circle "following" policy — is provisioned on
+synthetic Nostr identity for a circle "follow_set" policy — is provisioned on
 demand through the instance's own admin API and torn down again in its own
 `t.Cleanup` (see `ephemeral_test.go`). Nothing is hand-provisioned ahead of
 time.
@@ -38,8 +38,8 @@ time.
    `docker-compose.dev.yml`'s `relay` service in dev), and that relay must
    actually be one of this instance's `GeneralRelay` settings (`PATCH
    /api/settings`, `generalRelay` field) - that's what the backend's
-   "following" circle-policy check (`service/nostr_social_cache.go`)
-   queries kind:3 contact lists from. This suite deliberately never talks to
+   "follow_set" circle-policy check (`service/nostr_social_cache.go`)
+   queries follow sets from. This suite deliberately never talks to
    a public/third-party relay for anything - a real relay this suite
    doesn't control being slow, rate-limited, or unreachable should never be
    why it fails. Run `just dev seed-relay` (or `just dev reset`, which
@@ -113,9 +113,9 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   on: `createEphemeralJITHub`/`createEphemeralCircleHub` (either policy, via
   the admin API, root-funded through `adminClient.transfer`),
   `createEphemeralSimpleWallet`, `createEphemeralTrustedIA`, and
-  `publishFollowList` (a real signed kind:3 event making a synthetic
-  provider "follow" whichever pubkeys a test wants authorized under a
-  `following`-policy hub — see its own doc comment for why it must run
+  `publishFollowSet` (a real signed kind-30000 follow set listing
+  whichever pubkeys a test wants authorized under a synthetic provider's
+  `follow_set`-policy hub — see its own doc comment for why it must run
   *before* the hub is created; publishes to `config.local.yaml`'s
   `relay_url`, this suite's own dev relay, never a public one). Every
   builder registers `t.Cleanup` to reclaim any children it mints and then
@@ -124,10 +124,10 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   fixed, real (not synthetic) set of dedicated Nostr identities (one
   "provider", five "members") this suite generated once for its own use.
   `just dev seed-relay` (or `dev reset`, which already calls it) publishes
-  the provider's kind:3 follow list once, so a test that wants an
-  already-authorized "following"-policy identity can use
+  the provider's follow set once, so a test that wants an
+  already-authorized "follow_set"-policy identity can use
   `loadFixedSocialGraph(t)`'s pubkeys directly instead of paying for a fresh
-  keypair + a live `publishFollowList` round trip - existing tests weren't
+  keypair + a live `publishFollowSet` round trip - existing tests weren't
   migrated to this wholesale, it's available for new/rewritten ones. Any
   pubkey not in `graph.Members` (e.g. `newTestPrivkey(t)`'s) is a ready-made
   "not followed" identity for rejection-path tests.
@@ -198,10 +198,16 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   an actually-authorized and a definitely-unauthorized pubkey) proving the
   error code alone can't be used as an allowlist-membership oracle. All of
   these deep-validation scenarios run against both policies (they're
-  rejected before the controller ever reaches the following-vs-allowlist
+  rejected before the controller ever reaches the follow-set-vs-allowlist
   authorization check, so they'd behave identically either way, but they
-  run unconditionally rather than skipping under `following` — see
+  run unconditionally rather than skipping under `follow_set` — see
   "Running everything, with zero skips" above).
+- `follow_set_join_test.go` — a follow set the hub publishes itself
+  (`createEphemeralManagedFollowSetHub`), with one public and one hidden
+  member: the invite carries the set's title, the published event never
+  shows the hidden pubkey, the hidden member joins over the private
+  transport and the public one over the standard transport, a non-member is
+  refused on both, and a republished set revokes the member it drops.
 - `cross_test.go` — real money movement across hub types: a circle_wallet
   child mints an invoice, a jit_wallet child pays it as a real internal
   self-payment, and both sides' balances/transaction history are checked;

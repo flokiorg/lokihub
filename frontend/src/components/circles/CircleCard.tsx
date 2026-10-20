@@ -87,15 +87,15 @@ export function CircleCard({ app }: { app: App }) {
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-3 slashed-zero">
-        {identity.policy === "following" &&
-          (identity.followingCount === undefined ? (
+        {identity.policy === "follow_set" &&
+          (identity.memberCount === undefined ? (
             <span className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("common.syncingFollowing")}
+              {t("common.readingFollowSet")}
             </span>
           ) : (
             <span className="text-sm">
-              {t("common.following", { count: identity.followingCount })}
+              {t("circleCard.member", { count: identity.memberCount })}
               {identity.policySyncedAt && (
                 <>
                   {" "}

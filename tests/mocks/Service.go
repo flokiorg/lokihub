@@ -6,7 +6,6 @@ package mocks
 
 import (
 	"context"
-	"time"
 
 	"github.com/flokiorg/lokihub/appstore"
 	"github.com/flokiorg/lokihub/config"
@@ -862,59 +861,286 @@ func (_c *MockService_ReloadNostr_Call) RunAndReturn(run func() error) *MockServ
 	return _c
 }
 
-// WarmCircleFollowingCache provides a mock function for the type MockService
-func (_mock *MockService) WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error) {
-	ret := _mock.Called(ctx, providerPubkey)
+// RefreshFollowSet provides a mock function for the type MockService
+func (_mock *MockService) RefreshFollowSet(ctx context.Context, provider string, d string) (*service.FollowSet, error) {
+	ret := _mock.Called(ctx, provider, d)
 
 	if len(ret) == 0 {
-		panic("no return value specified for WarmCircleFollowingCache")
+		panic("no return value specified for RefreshFollowSet")
 	}
 
-	var r0 map[string]struct{}
+	var r0 *service.FollowSet
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (map[string]struct{}, error)); ok {
-		return returnFunc(ctx, providerPubkey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*service.FollowSet, error)); ok {
+		return returnFunc(ctx, provider, d)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) map[string]struct{}); ok {
-		r0 = returnFunc(ctx, providerPubkey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *service.FollowSet); ok {
+		r0 = returnFunc(ctx, provider, d)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]struct{})
+			r0 = ret.Get(0).(*service.FollowSet)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, providerPubkey)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, provider, d)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockService_WarmCircleFollowingCache_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WarmCircleFollowingCache'
-type MockService_WarmCircleFollowingCache_Call struct {
+// MockService_RefreshFollowSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RefreshFollowSet'
+type MockService_RefreshFollowSet_Call struct {
 	*mock.Call
 }
 
-// WarmCircleFollowingCache is a helper method to define mock.On call
+// RefreshFollowSet is a helper method to define mock.On call
 //   - ctx
-//   - providerPubkey
-func (_e *MockService_Expecter) WarmCircleFollowingCache(ctx interface{}, providerPubkey interface{}) *MockService_WarmCircleFollowingCache_Call {
-	return &MockService_WarmCircleFollowingCache_Call{Call: _e.mock.On("WarmCircleFollowingCache", ctx, providerPubkey)}
+//   - provider
+//   - d
+func (_e *MockService_Expecter) RefreshFollowSet(ctx interface{}, provider interface{}, d interface{}) *MockService_RefreshFollowSet_Call {
+	return &MockService_RefreshFollowSet_Call{Call: _e.mock.On("RefreshFollowSet", ctx, provider, d)}
 }
 
-func (_c *MockService_WarmCircleFollowingCache_Call) Run(run func(ctx context.Context, providerPubkey string)) *MockService_WarmCircleFollowingCache_Call {
+func (_c *MockService_RefreshFollowSet_Call) Run(run func(ctx context.Context, provider string, d string)) *MockService_RefreshFollowSet_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})
 	return _c
 }
 
-func (_c *MockService_WarmCircleFollowingCache_Call) Return(contacts map[string]struct{}, err error) *MockService_WarmCircleFollowingCache_Call {
-	_c.Call.Return(contacts, err)
+func (_c *MockService_RefreshFollowSet_Call) Return(followSet *service.FollowSet, err error) *MockService_RefreshFollowSet_Call {
+	_c.Call.Return(followSet, err)
 	return _c
 }
 
-func (_c *MockService_WarmCircleFollowingCache_Call) RunAndReturn(run func(ctx context.Context, providerPubkey string) (map[string]struct{}, error)) *MockService_WarmCircleFollowingCache_Call {
+func (_c *MockService_RefreshFollowSet_Call) RunAndReturn(run func(ctx context.Context, provider string, d string) (*service.FollowSet, error)) *MockService_RefreshFollowSet_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FollowSet provides a mock function for the type MockService
+func (_mock *MockService) FollowSet(ctx context.Context, provider string, d string) (*service.FollowSet, error) {
+	ret := _mock.Called(ctx, provider, d)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FollowSet")
+	}
+
+	var r0 *service.FollowSet
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*service.FollowSet, error)); ok {
+		return returnFunc(ctx, provider, d)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *service.FollowSet); ok {
+		r0 = returnFunc(ctx, provider, d)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*service.FollowSet)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, provider, d)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_FollowSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FollowSet'
+type MockService_FollowSet_Call struct {
+	*mock.Call
+}
+
+// FollowSet is a helper method to define mock.On call
+//   - ctx
+//   - provider
+//   - d
+func (_e *MockService_Expecter) FollowSet(ctx interface{}, provider interface{}, d interface{}) *MockService_FollowSet_Call {
+	return &MockService_FollowSet_Call{Call: _e.mock.On("FollowSet", ctx, provider, d)}
+}
+
+func (_c *MockService_FollowSet_Call) Run(run func(ctx context.Context, provider string, d string)) *MockService_FollowSet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_FollowSet_Call) Return(followSet *service.FollowSet, err error) *MockService_FollowSet_Call {
+	_c.Call.Return(followSet, err)
+	return _c
+}
+
+func (_c *MockService_FollowSet_Call) RunAndReturn(run func(ctx context.Context, provider string, d string) (*service.FollowSet, error)) *MockService_FollowSet_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PeekFollowSet provides a mock function for the type MockService
+func (_mock *MockService) PeekFollowSet(provider string, d string) (*service.FollowSet, bool) {
+	ret := _mock.Called(provider, d)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PeekFollowSet")
+	}
+
+	var r0 *service.FollowSet
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func(string, string) (*service.FollowSet, bool)); ok {
+		return returnFunc(provider, d)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string, string) *service.FollowSet); ok {
+		r0 = returnFunc(provider, d)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*service.FollowSet)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(string, string) bool); ok {
+		r1 = returnFunc(provider, d)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockService_PeekFollowSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PeekFollowSet'
+type MockService_PeekFollowSet_Call struct {
+	*mock.Call
+}
+
+// PeekFollowSet is a helper method to define mock.On call
+//   - provider
+//   - d
+func (_e *MockService_Expecter) PeekFollowSet(provider interface{}, d interface{}) *MockService_PeekFollowSet_Call {
+	return &MockService_PeekFollowSet_Call{Call: _e.mock.On("PeekFollowSet", provider, d)}
+}
+
+func (_c *MockService_PeekFollowSet_Call) Run(run func(provider string, d string)) *MockService_PeekFollowSet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_PeekFollowSet_Call) Return(followSet *service.FollowSet, ok bool) *MockService_PeekFollowSet_Call {
+	_c.Call.Return(followSet, ok)
+	return _c
+}
+
+func (_c *MockService_PeekFollowSet_Call) RunAndReturn(run func(provider string, d string) (*service.FollowSet, bool)) *MockService_PeekFollowSet_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PublishFollowSet provides a mock function for the type MockService
+func (_mock *MockService) PublishFollowSet(ctx context.Context, d string, content service.FollowSetContent) (*service.FollowSet, error) {
+	ret := _mock.Called(ctx, d, content)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PublishFollowSet")
+	}
+
+	var r0 *service.FollowSet
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, service.FollowSetContent) (*service.FollowSet, error)); ok {
+		return returnFunc(ctx, d, content)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, service.FollowSetContent) *service.FollowSet); ok {
+		r0 = returnFunc(ctx, d, content)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*service.FollowSet)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, service.FollowSetContent) error); ok {
+		r1 = returnFunc(ctx, d, content)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_PublishFollowSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PublishFollowSet'
+type MockService_PublishFollowSet_Call struct {
+	*mock.Call
+}
+
+// PublishFollowSet is a helper method to define mock.On call
+//   - ctx
+//   - d
+//   - content
+func (_e *MockService_Expecter) PublishFollowSet(ctx interface{}, d interface{}, content interface{}) *MockService_PublishFollowSet_Call {
+	return &MockService_PublishFollowSet_Call{Call: _e.mock.On("PublishFollowSet", ctx, d, content)}
+}
+
+func (_c *MockService_PublishFollowSet_Call) Run(run func(ctx context.Context, d string, content service.FollowSetContent)) *MockService_PublishFollowSet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(service.FollowSetContent))
+	})
+	return _c
+}
+
+func (_c *MockService_PublishFollowSet_Call) Return(followSet *service.FollowSet, err error) *MockService_PublishFollowSet_Call {
+	_c.Call.Return(followSet, err)
+	return _c
+}
+
+func (_c *MockService_PublishFollowSet_Call) RunAndReturn(run func(ctx context.Context, d string, content service.FollowSetContent) (*service.FollowSet, error)) *MockService_PublishFollowSet_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// NodeNostrIdentity provides a mock function for the type MockService
+func (_mock *MockService) NodeNostrIdentity() (string, error) {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for NodeNostrIdentity")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func() (string, error)); ok {
+		return returnFunc()
+	}
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func() error); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_NodeNostrIdentity_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NodeNostrIdentity'
+type MockService_NodeNostrIdentity_Call struct {
+	*mock.Call
+}
+
+// NodeNostrIdentity is a helper method to define mock.On call
+func (_e *MockService_Expecter) NodeNostrIdentity() *MockService_NodeNostrIdentity_Call {
+	return &MockService_NodeNostrIdentity_Call{Call: _e.mock.On("NodeNostrIdentity")}
+}
+
+func (_c *MockService_NodeNostrIdentity_Call) Run(run func()) *MockService_NodeNostrIdentity_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockService_NodeNostrIdentity_Call) Return(s string, err error) *MockService_NodeNostrIdentity_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockService_NodeNostrIdentity_Call) RunAndReturn(run func() (string, error)) *MockService_NodeNostrIdentity_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -949,168 +1175,5 @@ func (_c *MockService_WarmGeneralRelays_Call) Return() *MockService_WarmGeneralR
 
 func (_c *MockService_WarmGeneralRelays_Call) RunAndReturn(run func()) *MockService_WarmGeneralRelays_Call {
 	_c.Run(run)
-	return _c
-}
-
-// ContactCount provides a mock function for the type MockService
-func (_mock *MockService) ContactCount(ctx context.Context, ownerPubkey string) (int, error) {
-	ret := _mock.Called(ctx, ownerPubkey)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ContactCount")
-	}
-
-	var r0 int
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (int, error)); ok {
-		return returnFunc(ctx, ownerPubkey)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) int); ok {
-		r0 = returnFunc(ctx, ownerPubkey)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, ownerPubkey)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockService_ContactCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ContactCount'
-type MockService_ContactCount_Call struct {
-	*mock.Call
-}
-
-// ContactCount is a helper method to define mock.On call
-//   - ctx
-//   - ownerPubkey
-func (_e *MockService_Expecter) ContactCount(ctx interface{}, ownerPubkey interface{}) *MockService_ContactCount_Call {
-	return &MockService_ContactCount_Call{Call: _e.mock.On("ContactCount", ctx, ownerPubkey)}
-}
-
-func (_c *MockService_ContactCount_Call) Run(run func(ctx context.Context, ownerPubkey string)) *MockService_ContactCount_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
-	})
-	return _c
-}
-
-func (_c *MockService_ContactCount_Call) Return(count int, err error) *MockService_ContactCount_Call {
-	_c.Call.Return(count, err)
-	return _c
-}
-
-func (_c *MockService_ContactCount_Call) RunAndReturn(run func(ctx context.Context, ownerPubkey string) (int, error)) *MockService_ContactCount_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// PeekContactCount provides a mock function for the type MockService
-func (_mock *MockService) PeekContactCount(ownerPubkey string) (int, bool) {
-	ret := _mock.Called(ownerPubkey)
-
-	if len(ret) == 0 {
-		panic("no return value specified for PeekContactCount")
-	}
-
-	var r0 int
-	var r1 bool
-	if returnFunc, ok := ret.Get(0).(func(string) (int, bool)); ok {
-		return returnFunc(ownerPubkey)
-	}
-	if returnFunc, ok := ret.Get(0).(func(string) int); ok {
-		r0 = returnFunc(ownerPubkey)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
-		r1 = returnFunc(ownerPubkey)
-	} else {
-		r1 = ret.Get(1).(bool)
-	}
-	return r0, r1
-}
-
-// MockService_PeekContactCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PeekContactCount'
-type MockService_PeekContactCount_Call struct {
-	*mock.Call
-}
-
-// PeekContactCount is a helper method to define mock.On call
-//   - ownerPubkey
-func (_e *MockService_Expecter) PeekContactCount(ownerPubkey interface{}) *MockService_PeekContactCount_Call {
-	return &MockService_PeekContactCount_Call{Call: _e.mock.On("PeekContactCount", ownerPubkey)}
-}
-
-func (_c *MockService_PeekContactCount_Call) Run(run func(ownerPubkey string)) *MockService_PeekContactCount_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
-	})
-	return _c
-}
-
-func (_c *MockService_PeekContactCount_Call) Return(count int, ok bool) *MockService_PeekContactCount_Call {
-	_c.Call.Return(count, ok)
-	return _c
-}
-
-func (_c *MockService_PeekContactCount_Call) RunAndReturn(run func(ownerPubkey string) (int, bool)) *MockService_PeekContactCount_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// PeekContactSyncedAt provides a mock function for the type MockService
-func (_mock *MockService) PeekContactSyncedAt(ownerPubkey string) (time.Time, bool) {
-	ret := _mock.Called(ownerPubkey)
-
-	if len(ret) == 0 {
-		panic("no return value specified for PeekContactSyncedAt")
-	}
-
-	var r0 time.Time
-	var r1 bool
-	if returnFunc, ok := ret.Get(0).(func(string) (time.Time, bool)); ok {
-		return returnFunc(ownerPubkey)
-	}
-	if returnFunc, ok := ret.Get(0).(func(string) time.Time); ok {
-		r0 = returnFunc(ownerPubkey)
-	} else {
-		r0 = ret.Get(0).(time.Time)
-	}
-	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
-		r1 = returnFunc(ownerPubkey)
-	} else {
-		r1 = ret.Get(1).(bool)
-	}
-	return r0, r1
-}
-
-// MockService_PeekContactSyncedAt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PeekContactSyncedAt'
-type MockService_PeekContactSyncedAt_Call struct {
-	*mock.Call
-}
-
-// PeekContactSyncedAt is a helper method to define mock.On call
-//   - ownerPubkey
-func (_e *MockService_Expecter) PeekContactSyncedAt(ownerPubkey interface{}) *MockService_PeekContactSyncedAt_Call {
-	return &MockService_PeekContactSyncedAt_Call{Call: _e.mock.On("PeekContactSyncedAt", ownerPubkey)}
-}
-
-func (_c *MockService_PeekContactSyncedAt_Call) Run(run func(ownerPubkey string)) *MockService_PeekContactSyncedAt_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
-	})
-	return _c
-}
-
-func (_c *MockService_PeekContactSyncedAt_Call) Return(syncedAt time.Time, ok bool) *MockService_PeekContactSyncedAt_Call {
-	_c.Call.Return(syncedAt, ok)
-	return _c
-}
-
-func (_c *MockService_PeekContactSyncedAt_Call) RunAndReturn(run func(ownerPubkey string) (time.Time, bool)) *MockService_PeekContactSyncedAt_Call {
-	_c.Call.Return(run)
 	return _c
 }

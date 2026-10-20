@@ -2,8 +2,8 @@
 
 // ephemeral_test.go provides every throwaway, admin-API-provisioned fixture
 // this suite needs to be fully self-sufficient: fresh cash_hub/circle_hub
-// apps (either circle policy, including a synthetic Nostr identity for
-// "following"), a simple external-payer wallet, and root self-funding for
+// apps (either circle policy, including a synthetic Nostr identity that
+// publishes a "follow_set"), a simple external-payer wallet, and root self-funding for
 // all of them - so no test depends on config.local.yaml naming a real,
 // hand-provisioned, long-lived hub. Every helper here skips cleanly if
 // admin_api isn't configured.
@@ -26,54 +26,51 @@ import (
 // t.Cleanup left behind.
 const ephemeralFixtureNamePrefix = "integration ephemeral"
 
-// circlePolicyAllowlist/circlePolicyFollowing mirror db.CirclePolicyAllowlist/
-// db.CirclePolicyFollowing (db/models.go) as local string constants rather
+// circlePolicyAllowlist/circlePolicyFollowSet mirror db.CirclePolicyAllowlist/
+// db.CirclePolicyFollowSet (db/models.go) as local string constants rather
 // than importing the db package - this suite stays a black-box NWC/admin-API
 // client, not a consumer of internal server packages (see
 // integration/README.md).
 const (
 	circlePolicyAllowlist = "allowlist"
-	circlePolicyFollowing = "following"
+	circlePolicyFollowSet = "follow_set"
 )
 
-// publishFollowList publishes a real, signed kind:3 (NIP-02 contact list)
-// event from providerPrivkey naming every one of followedPubkeys, to cfg's
-// own RelayURL (config.local.yaml) - this is the entire authorization
-// mechanism for "following"-policy circle hubs: nostrSocialCache.IsAuthorized
-// treats "following" as "the provider follows the requester" (provider's own
-// kind:3 contains the requester), so publishing this makes followedPubkeys
-// (and only them) authorized under a circle_hub using providerPrivkey's
-// pubkey as its ProviderPubkey.
+// kindFollowSet is NIP-51's follow set, which a follow_set circle reads.
+const kindFollowSet = 30000
+
+// ephemeralFollowSetD is the d identifier every synthetic provider's set
+// uses. Each provider is a fresh keypair, so the address is unique anyway.
+const ephemeralFollowSetD = "integration"
+
+// publishFollowSet publishes a real, signed kind-30000 follow set from
+// providerPrivkey, with d = ephemeralFollowSetD, naming every one of
+// memberPubkeys as a public `p` member, to cfg's own RelayURL
+// (config.local.yaml). This is the entire authorization mechanism for a
+// follow_set circle the hub only reads (NIP-CW §Membership): publishing it
+// makes memberPubkeys (and only them) members of a circle_hub whose identity
+// names this provider and d.
 //
 // cfg.RelayURL must be one of the relays this lokihub instance's own
 // GetGeneralRelayUrls() setting (config/config.go) names - that's what the
-// backend's "following" circle-policy check (service/nostr_social_cache.go)
-// actually queries kind:3 from. Deliberately never a public/third-party
-// relay (this suite's own dev relay, docker-compose.dev.yml's `relay`
-// service, in dev) - a real relay this suite doesn't control being slow,
-// rate-limiting, or unreachable should never be why this suite fails. See
-// also cmd/seedrelay, which publishes testdata/social_graph.json's fixed
-// "provider"/"members" identities the same way, once, so tests that don't
-// need a fresh per-test identity can skip calling this at all.
+// backend's follow-set lookup (service/nostr_social_cache.go) queries.
+// Deliberately never a public/third-party relay - a real relay this suite
+// doesn't control being slow, rate-limiting, or unreachable should never be
+// why this suite fails.
 //
-// MUST be called before the circle_hub itself is created. api.CreateApp's
-// AppKindCircleHub branch calls WarmCircleFollowingCache immediately at
-// hub-creation time; if this event isn't live on the relay yet, that warm-up
-// caches an empty contact list, and the synchronous request path
-// (nostrSocialCache.getContactList's peek-first fast path) won't refetch
-// until the background refresher eventually runs - so a hub created before
-// this publish would see its members as unauthorized for an indeterminate
-// time, not immediately after this call returns.
-func publishFollowList(t *testing.T, cfg *Config, providerPrivkey string, followedPubkeys []string) {
+// MUST be called before the circle_hub itself is created: api.CreateApp
+// reads the set at hub-creation time, and a set it can't find yet answers
+// NOT_READY until the background refresher reads it again.
+func publishFollowSet(t *testing.T, cfg *Config, providerPrivkey string, memberPubkeys []string) {
 	t.Helper()
 	require.NotEmpty(t, cfg.RelayURL, "config.local.yaml: relay_url must be set - see config.example.yaml")
 
-	tags := make(nostr.Tags, 0, len(followedPubkeys))
-	for _, pubkey := range followedPubkeys {
+	tags := nostr.Tags{{"d", ephemeralFollowSetD}}
+	for _, pubkey := range memberPubkeys {
 		tags = append(tags, nostr.Tag{"p", pubkey})
 	}
 	ev := nostr.Event{
-		Kind:      nostr.KindFollowList, // kind 3 - NIP-02 contact list
+		Kind:      kindFollowSet,
 		CreatedAt: nostr.Now(),
 		Tags:      tags,
 	}
@@ -82,10 +79,10 @@ func publishFollowList(t *testing.T, cfg *Config, providerPrivkey string, follow
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	relay, err := nostr.RelayConnect(ctx, cfg.RelayURL)
-	require.NoError(t, err, "connect to %s to publish provider follow list", cfg.RelayURL)
+	require.NoError(t, err, "connect to %s to publish provider follow set", cfg.RelayURL)
 	defer relay.Close()
 
-	require.NoError(t, relay.Publish(ctx, ev), "publish provider kind:3 follow list")
+	require.NoError(t, relay.Publish(ctx, ev), "publish provider follow set")
 }
 
 // ephemeralCircleHubOpts configures an ephemeral circle_hub's own admin-set
@@ -115,17 +112,19 @@ func (o ephemeralCircleHubOpts) withDefaults() ephemeralCircleHubOpts {
 }
 
 // createEphemeralCircleHub provisions a throwaway circle_hub of the given
-// policy (circlePolicyAllowlist or circlePolicyFollowing) via the admin API,
+// policy (circlePolicyAllowlist or circlePolicyFollowSet) via the admin API,
 // with a brand-new CircleIdentity (never an existing/shared one), authorizes
 // each of authorizedPrivkeys under it, and root-funds it (see
 // adminClient.transfer) so it can actually mint children. Registers
 // t.Cleanup to reclaim every child it ever mints and then delete the hub
 // itself.
 //
-// For circlePolicyFollowing, the corresponding pubkeys are published as the
-// generated provider identity's kind:3 follow list BEFORE the hub is
-// created (see publishFollowList's own doc comment for why the ordering
-// matters) - the provider keypair itself is internal, callers never need it.
+// For circlePolicyFollowSet, the corresponding pubkeys are published as a
+// generated provider identity's follow set BEFORE the hub is created (see
+// publishFollowSet's own doc comment for why the ordering matters) - the
+// provider keypair itself is internal, callers never need it. The hub only
+// reads that set; see createEphemeralManagedFollowSetHub for a set the hub
+// publishes itself.
 // For circlePolicyAllowlist, the hub is created first and members are
 // granted afterward via addCircleAllowlistMember, which has no such
 // ordering constraint (a synchronous DB check, not a cache).
@@ -170,12 +169,33 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 		req.ExpiresAt = opts.ExpiresAt.Format(time.RFC3339)
 	}
 
-	if policy == circlePolicyFollowing {
+	if policy == circlePolicyFollowSet {
 		providerPrivkey := newTestPrivkey(t)
 		req.ProviderPubkey = mustPubkey(t, providerPrivkey)
-		publishFollowList(t, cfg, providerPrivkey, authorizedPubkeys)
+		req.FollowSetD = ephemeralFollowSetD
+		publishFollowSet(t, cfg, providerPrivkey, authorizedPubkeys)
 	}
 
+	resp := createEphemeralCircleHubApp(t, admin, req, opts)
+
+	if policy == circlePolicyAllowlist {
+		for _, pubkey := range authorizedPubkeys {
+			require.NoError(t, admin.addCircleAllowlistMember(resp.ID, pubkey))
+		}
+	}
+
+	return CircleHubConfig{
+		Name:       name,
+		Connection: resp.PairingUri,
+		Members:    CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
+	}, resp.ID, admin
+}
+
+// createEphemeralCircleHubApp creates the circle_hub described by req,
+// registers the cleanup that removes its children, the hub and its identity,
+// and root-funds it.
+func createEphemeralCircleHubApp(t *testing.T, admin *adminClient, req adminCreateAppRequest, opts ephemeralCircleHubOpts) adminCreateAppResponse {
+	t.Helper()
 	resp, err := admin.createApp(req)
 	require.NoError(t, err)
 
@@ -186,10 +206,10 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	// CircleIdentityId). Without this, the identity itself outlives the hub
 	// forever (see TestCreateCircleHub_IdentitySurvivesHubDeletion - by
 	// design, identities are meant to be reusable across hubs) and, for
-	// circlePolicyFollowing, keeps getting swept by the background social
+	// circlePolicyFollowSet, keeps getting swept by the background social
 	// cache refresher (nostr_social_cache.go's runSocialCacheRefresh) every
 	// 5 minutes indefinitely - this was found live accumulating hundreds of
-	// leaked "following"-policy identities, each still being re-queried
+	// leaked relay-backed identities, each still being re-queried
 	// against the general relays and contributing to the "too many
 	// concurrent REQs" notices/timeouts this suite has hit.
 	if identityID, err := admin.getCircleIdentityID(resp.ID); err != nil {
@@ -225,18 +245,34 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	})
 
 	require.NoError(t, admin.transfer(nil, resp.ID, opts.FundLoki))
+	return resp
+}
 
-	if policy == circlePolicyAllowlist {
-		for _, pubkey := range authorizedPubkeys {
-			require.NoError(t, admin.addCircleAllowlistMember(resp.ID, pubkey))
-		}
+// createEphemeralManagedFollowSetHub provisions a throwaway follow_set
+// circle_hub whose set the hub publishes itself, as its node identity, with
+// set as its first version and d as its identifier. Same cleanup and funding
+// as createEphemeralCircleHub.
+func createEphemeralManagedFollowSetHub(t *testing.T, cfg *Config, name, d string, set adminFollowSet, opts ephemeralCircleHubOpts) (adminCreateAppResponse, *adminClient) {
+	t.Helper()
+	admin, ok := newAdminClient(cfg)
+	if !ok {
+		t.Skip("skipping: admin_api not configured - see integration/README.md")
 	}
-
-	return CircleHubConfig{
-		Name:       name,
-		Connection: resp.PairingUri,
-		Members:    CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
-	}, resp.ID, admin
+	opts = opts.withDefaults()
+	resp := createEphemeralCircleHubApp(t, admin, adminCreateAppRequest{
+		Name:                    ephemeralFixtureNamePrefix + " " + name,
+		Scopes:                  []string{constants.CIRCLE_WALLET_SCOPE, constants.GET_INFO_SCOPE, constants.GET_BALANCE_SCOPE},
+		Kind:                    "circle_hub",
+		CircleIdentityName:      ephemeralFixtureNamePrefix + " " + name + " identity",
+		CirclePolicy:            circlePolicyFollowSet,
+		FollowSetD:              d,
+		FollowSet:               &set,
+		CircleMaxExpSecs:        opts.MaxExpSecs,
+		CircleFeesPpm:           opts.FeesPpm,
+		CirclePerWalletMaxMloki: opts.PerWalletMaxMloki,
+		CircleMinBudgetRenewal:  opts.MinBudgetRenewal,
+	}, opts)
+	return resp, admin
 }
 
 // ephemeralCashHubFundLoki is root-funded into every ephemeral cash_hub

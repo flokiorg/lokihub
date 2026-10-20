@@ -1,12 +1,12 @@
 // Command seedrelay publishes integration/testdata/social_graph.json's fixed
-// "provider" identity's kind:3 (NIP-02 contact list) follow list, naming
-// every fixed "member" identity, to a relay - so the dev relay always has
-// this suite's own known-good "following" identities live on it, without
-// any test needing to generate a fresh keypair and publish its own follow
-// list over the network at test time.
+// "provider" identity's NIP-51 follow set (kind 30000, d = "integration"),
+// naming every fixed "member" identity, to a relay - so the dev relay always
+// has this suite's own known-good follow_set circle members live on it,
+// without any test needing to generate a fresh keypair and publish its own
+// set over the network at test time.
 //
-// kind:3 is a replaceable event (NIP-01), so re-running this against a
-// relay that already has the previous publish is a no-op in effect (the
+// A follow set is an addressable event (NIP-01), so re-running this against
+// a relay that already has the previous publish is a no-op in effect (the
 // relay just keeps the newest one) - safe to call on every `just dev
 // reset`, not just once.
 //
@@ -36,6 +36,12 @@ type socialGraph struct {
 	Members  []identity `json:"members"`
 }
 
+// kindFollowSet is NIP-51's follow set, and followSetD the fixed set's d.
+const (
+	kindFollowSet = 30000
+	followSetD    = "integration"
+)
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: seedrelay <relay-ws-url>")
@@ -49,17 +55,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	tags := make(nostr.Tags, 0, len(graph.Members))
+	tags := nostr.Tags{{"d", followSetD}}
 	for _, m := range graph.Members {
 		tags = append(tags, nostr.Tag{"p", m.Pubkey})
 	}
 	ev := nostr.Event{
-		Kind:      nostr.KindFollowList,
+		Kind:      kindFollowSet,
 		CreatedAt: nostr.Now(),
 		Tags:      tags,
 	}
 	if err := ev.Sign(graph.Provider.Privkey); err != nil {
-		fmt.Fprintln(os.Stderr, "seedrelay: sign follow list:", err)
+		fmt.Fprintln(os.Stderr, "seedrelay: sign follow set:", err)
 		os.Exit(1)
 	}
 
@@ -73,11 +79,11 @@ func main() {
 	defer func() { _ = relay.Close() }()
 
 	if err := relay.Publish(ctx, ev); err != nil {
-		fmt.Fprintf(os.Stderr, "seedrelay: publish provider kind:3 follow list to %s: %v\n", relayURL, err)
+		fmt.Fprintf(os.Stderr, "seedrelay: publish provider follow set to %s: %v\n", relayURL, err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("seedrelay: provider %s now follows %d members on %s\n", graph.Provider.Pubkey, len(graph.Members), relayURL)
+	fmt.Printf("seedrelay: provider %s's follow set %q lists %d members on %s\n", graph.Provider.Pubkey, followSetD, len(graph.Members), relayURL)
 }
 
 // loadSocialGraph resolves social_graph.json relative to this source file

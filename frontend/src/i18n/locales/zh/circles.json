@@ -19,16 +19,15 @@
     "advancedSettings": "高级设置",
     "inUse": "使用中",
     "hexPlaceholder": "64 个字符的十六进制字符串",
-    "syncingFollowing": "正在同步关注列表…",
+    "readingFollowSet": "正在读取关注集…",
     "sync": "同步",
-    "following": "关注 {{count}} 人",
     "synced": "已同步 {{time}}",
     "updated": "已更新 {{time}}",
     "total": "总计",
     "anonymous": "匿名"
   },
   "policyLabel": {
-    "following": "按关注",
+    "follow_set": "关注集",
     "allowlist": "允许列表"
   },
   "identityType": {
@@ -50,7 +49,7 @@
   },
   "pubkeyInput": {
     "defaultLabel": "您的 Nostr 身份",
-    "defaultHelper": "用于解析您的关注列表以进行成员授权",
+    "defaultHelper": "运营此圈子的 Nostr 账户",
     "invalidHelper": "看起来不是有效的 npub、十六进制公钥、nprofile 或 NIP-05 地址",
     "placeholder": "npub1...、十六进制、nprofile1...、you@domain.com，或搜索名称",
     "change": "更改"
@@ -67,10 +66,42 @@
     "resolving": "正在解析…",
     "searchHint": "按名称、NIP-05、npub 搜索，或粘贴公钥。"
   },
-  "followingPreview": {
-    "empty": "该身份尚未关注任何人 —— 成员将在被关注后自动获得授权。",
-    "summary_one": "现在将授权 {{count}} 人，且该列表会随着该身份关注或取消关注他人而自动保持同步。",
-    "summary_other": "现在将授权 {{count}} 人，且该列表会随着该身份关注或取消关注他人而自动保持同步。"
+  "followSet": {
+    "sourceLabel": "由谁发布关注集",
+    "sourceManagedTitle": "此中心",
+    "sourceManagedDescription": "由此中心的节点身份签名。支持隐藏成员。",
+    "sourceExternalTitle": "其他账户",
+    "sourceExternalDescription": "他人已发布的关注集。此中心只读取它。",
+    "externalProviderLabel": "关注集作者",
+    "externalProviderHelper": "发布该关注集的 Nostr 账户",
+    "externalWarning": "请在支持关注集的 Nostr 客户端中编辑该集合。不了解隐藏成员的客户端在保存时可能会将其删除。",
+    "dLabel": "关注集名称",
+    "dPlaceholder": "family",
+    "dHelper": "关注集的 d 标识符。它是此圈子在 Nostr 上的名称，之后无法更改。",
+    "dExternalHelper": "关注集的 d 标识符，须与作者发布时完全一致。",
+    "titleLabel": "标题",
+    "titlePlaceholder": "例如：Ada 的家庭圈子",
+    "titleHelper": "在邀请中显示为圈子名称。",
+    "descriptionLabel": "描述（可选）",
+    "publicMembersLabel": "公开成员",
+    "publicMembersHelper": "在发布的关注集中公开列出。",
+    "hiddenMembersLabel": "隐藏成员",
+    "hiddenMembersHelper": "经过加密，只有此中心能读取。请让他们使用支持私密加入的客户端加入，否则其公钥会出现在共享连接上。",
+    "hiddenUnavailable": "隐藏成员需要私密传输，但此中心未运行私密传输。请查看 设置 › 服务。",
+    "publicWarning": "标题、描述和公开成员会发布到 Nostr 中继，任何人都能读取。",
+    "addressLabel": "关注集“{{d}}”",
+    "unresolved": "尚无中继拥有此关注集。在找到之前，成员无法加入。",
+    "readOnly": "此关注集由其他账户发布。请在支持关注集的 Nostr 客户端中编辑。",
+    "hiddenCount_one": "{{count}} 名隐藏",
+    "hiddenCount_other": "{{count}} 名隐藏",
+    "editTrigger": "编辑关注集",
+    "editTitle": "编辑关注集",
+    "editDescription": "保存后会发布关注集的新版本。被移除的人将无法再申请钱包。",
+    "save": "发布",
+    "savedToast": "关注集已发布",
+    "errors": {
+      "publish": "发布关注集失败"
+    }
   },
   "claimBadge": {
     "claimed": "已兑换",
@@ -139,9 +170,9 @@
     "delete": "删除"
   },
   "circleIdentityCard": {
-    "syncedToast": "关注列表已同步",
+    "syncedToast": "关注集已同步",
     "errors": {
-      "sync": "同步关注列表失败"
+      "sync": "同步关注集失败"
     }
   },
   "circleAllowlist": {
@@ -269,13 +300,13 @@
     "identityReuseHelper": "一个身份（策略 + 成员）可以在多个圈子中重复使用，这些圈子随后会自动保持同步。",
     "enterIdentityHelper": "请在上方输入有效的 Nostr 身份以继续。",
     "memberModeLabel": "谁可以从此圈子申请钱包",
-    "modeSyncTitle": "我关注的所有人",
-    "modeSyncDescription": "自动 —— 该身份当前或以后关注的所有人。无需任何管理。",
+    "modeFollowSetTitle": "关注集",
+    "modeFollowSetDescription": "Nostr 关注集中的成员。编辑关注集即可添加或移除成员。",
     "modePinnedTitle": "自定义成员",
     "modePinnedDescription": "在 Nostr 上搜索，并手动选择允许谁加入。",
-    "pinMemberHelper": "请至少固定一位成员，或切换到“我关注的所有人”。",
+    "pinMemberHelper": "请至少固定一名成员，或切换到“关注集”。",
     "identityNameLabel": "此身份的标签（可选）",
-    "identityNamePlaceholder": "例如：我的关注圈子",
+    "identityNamePlaceholder": "例如：家庭圈子",
     "identityNameHelper": "仅用于在多个圈子中重复使用时识别此已保存的身份 —— 不会在任何地方公开发布。",
     "maxWalletBudgetHelper": "成员为其圈子钱包可申请的最大预算",
     "maxExpiryHelper": "已发放圈子钱包的最长有效期",
@@ -288,6 +319,7 @@
     "submit": "创建圈子钱包中心",
     "selectExistingHint": "请选择一个现有身份以继续。",
     "enterNameHint": "请输入名称以继续。",
+    "enterDHint": "请输入关注集名称以继续。",
     "createdToast": "圈子钱包中心“{{name}}”已创建",
     "allowlistSeedFailedToast": "圈子钱包中心“{{name}}”已创建，但初始化成员列表失败 —— 请从该中心的允许列表页面添加成员。",
     "errors": {

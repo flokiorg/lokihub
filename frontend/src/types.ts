@@ -162,17 +162,17 @@ export interface App {
   // circleIdentity is set only for circle_hub apps — a lightweight
   // summary of the attached (possibly shared) identity plus policy-specific
   // counts, so the Circles card doesn't need an extra round-trip per app.
-  // followingCount is undefined (not 0) when not yet known — the backend
-  // only ever returns it from a non-blocking cache peek, never a live fetch,
-  // so a brand-new following-policy identity should render as still-loading
-  // rather than "0 following" until the periodic refresher populates it.
+  // memberCount is undefined (not 0) until the follow set has been read —
+  // the list endpoint only peeks at the cache, so a brand-new follow_set
+  // identity renders as still-loading rather than "0 members".
   circleIdentity?: CircleIdentitySummary & {
-    followingCount?: number;
+    memberCount?: number;
+    followSetTitle?: string;
     allowlistCount: number;
     // policySyncedAt is "last policy update" — when membership was last
-    // confirmed from its source of truth (relay fetch for "following", last
+    // confirmed from its source of truth (relay fetch for "follow_set", last
     // allowlist add/remove for "allowlist"). Undefined (not "never") when not
-    // yet known, same loading semantics as followingCount.
+    // yet known, same loading semantics as memberCount.
     policySyncedAt?: string;
   };
   // cashPerWalletMaxMloki/cashMaxExpSecs/cashMinTransferMloki/cashRedeemFeePpm
@@ -199,31 +199,54 @@ export interface App {
   circleMinBudgetRenewal?: BudgetRenewalType;
 }
 
+export type CirclePolicy = "follow_set" | "allowlist";
+
 export interface CircleIdentitySummary {
   id: number;
   name: string;
-  policy: "following" | "allowlist";
+  policy: CirclePolicy;
   providerPubkey: string;
+  // followSetD is a follow_set identity's `d` identifier.
+  followSetD?: string;
+  // managed is true for a follow set this hub publishes as its node
+  // identity. Any other follow set is only read.
+  managed: boolean;
   // How many circle_hub apps currently reference this identity — an
   // identity with usedByCount > 0 can't be deleted until those are removed.
   usedByCount: number;
 }
 
 export interface CircleIdentityResponse extends CircleIdentitySummary {
-  followingCount?: number;
+  memberCount?: number;
   allowlistCount: number;
   allowlistPubkeys?: string[];
   usedByCount: number;
 }
 
-// CircleRefreshPreview is the delta a following-policy allowlist refresh
-// would apply, plus the full freshly-fetched list — confirming applies
-// `pubkeys` directly rather than re-fetching from relays a second time, so
-// what's applied always matches exactly what was shown for review.
-export interface CircleRefreshPreview {
-  pubkeys: string[];
-  added: string[];
-  removed: string[];
+// FollowSetRequest is a new version of a follow set this hub publishes.
+export interface FollowSetRequest {
+  title: string;
+  description: string;
+  publicMembers: string[];
+  hiddenMembers: string[];
+}
+
+// FollowSetResponse is a follow_set identity's set as this hub reads it.
+// resolved is false while no relay has the set; the circle then answers
+// NOT_READY.
+export interface FollowSetResponse {
+  address: string;
+  providerPubkey: string;
+  d: string;
+  managed: boolean;
+  resolved: boolean;
+  title: string;
+  description: string;
+  publicMembers: string[];
+  hiddenMembers: string[];
+  syncedAt?: string;
+  // Hidden members need the private transport running.
+  hiddenMembersAvailable: boolean;
 }
 
 export interface AppPermissions {
@@ -406,11 +429,17 @@ export interface CreateAppRequest {
   // circleIdentityId reuses an existing CircleIdentity — when set,
   // circleIdentityName/circlePolicy/providerPubkey below are ignored.
   circleIdentityId?: number;
-  // circleIdentityName/circlePolicy/providerPubkey create a brand-new
-  // CircleIdentity — used only when circleIdentityId is not set.
+  // circleIdentityName/circlePolicy/providerPubkey/followSetD create a
+  // brand-new CircleIdentity — used only when circleIdentityId is not set.
   circleIdentityName?: string;
-  circlePolicy?: string;
+  circlePolicy?: CirclePolicy;
+  // Empty for a follow_set circle means the node identity, which lets this
+  // hub publish the set itself.
   providerPubkey?: string;
+  followSetD?: string;
+  // followSet is published as the new identity's set before the hub is
+  // created. Only for a set the node identity authors.
+  followSet?: FollowSetRequest;
   metadata?: AppMetadata;
   unlockPassword?: string; // required to create superuser apps
 }
@@ -1044,8 +1073,8 @@ export interface CircleMemberActivity {
 // member outspending the rest — rather than insolvency.
 export interface CircleHubStats {
   members_count: number;
-  // null for a "following"-policy circle, whose eligible set is the host's
-  // live contact list rather than anything the hub stores. null means "not
+  // null for a "follow_set"-policy circle, whose eligible set is a follow
+  // set on relays rather than anything the hub stores. null means "not
   // knowable here", never zero.
   eligible_count: number | null;
   allocated_mloki: number;

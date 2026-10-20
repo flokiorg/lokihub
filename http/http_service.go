@@ -236,14 +236,15 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/circle/allowlist", httpSvc.circleAllowlistListHandler)
 	fullAccessApiGroup.PUT("/apps/:id/circle/allowlist", httpSvc.circleAllowlistReplaceHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/allowlist/:pubkey", httpSvc.circleAllowlistRemoveHandler)
-	fullAccessApiGroup.POST("/apps/:id/circle/refresh/preview", httpSvc.circleAllowlistRefreshPreviewHandler)
-	fullAccessApiGroup.POST("/apps/:id/circle/refresh", httpSvc.circleAllowlistRefreshHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/refresh", httpSvc.circleFollowSetRefreshHandler)
 	fullAccessApiGroup.GET("/apps/:id/circle/children", httpSvc.circleChildrenListHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/children/:childId", httpSvc.circleChildDeleteHandler)
 	fullAccessApiGroup.POST("/apps/:id/circle/delete", httpSvc.circleHubDeleteHandler)
 	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
+	fullAccessApiGroup.GET("/circle-identities/:id/follow-set", httpSvc.circleIdentityFollowSetGetHandler)
+	fullAccessApiGroup.PUT("/circle-identities/:id/follow-set", httpSvc.circleIdentityFollowSetPublishHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
 	fullAccessApiGroup.GET("/cash-hubs/stats", httpSvc.allCashHubStatsHandler)
@@ -1984,33 +1985,66 @@ func (httpSvc *HttpService) circleAllowlistRemoveHandler(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (httpSvc *HttpService) circleAllowlistRefreshPreviewHandler(c echo.Context) error {
-	dbApp, err := httpSvc.getAppByIDParam(c, "id")
-	if err != nil {
-		return err
+// mapFollowSetError maps a follow-set read or publish failure. Unlike
+// mapCircleAllowlistError it keeps the message of other failures, such as a
+// node that refused to sign or no relay accepting the set, since the host
+// can act on them.
+func mapFollowSetError(err error) (int, string) {
+	switch {
+	case errors.Is(err, constants.ErrInvalidParams):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, constants.ErrCircleMembershipUnresolved):
+		return http.StatusServiceUnavailable, "the follow set was not found on any relay yet"
 	}
-
-	preview, previewErr := httpSvc.api.PreviewCircleRefresh(c.Request().Context(), dbApp)
-	if previewErr != nil {
-		httpSvc.logger.Error().Err(previewErr).Msg("Failed to preview circle allowlist refresh")
-		code, msg := mapCircleAllowlistError(previewErr)
-		return c.JSON(code, ErrorResponse{Message: msg})
-	}
-	return c.JSON(http.StatusOK, preview)
+	return http.StatusInternalServerError, err.Error()
 }
 
-func (httpSvc *HttpService) circleAllowlistRefreshHandler(c echo.Context) error {
+func (httpSvc *HttpService) circleFollowSetRefreshHandler(c echo.Context) error {
 	dbApp, err := httpSvc.getAppByIDParam(c, "id")
 	if err != nil {
 		return err
 	}
 
-	if err := httpSvc.api.RefreshCircleAllowlist(c.Request().Context(), dbApp); err != nil {
-		httpSvc.logger.Error().Err(err).Msg("Failed to refresh circle allowlist")
-		code, msg := mapCircleAllowlistError(err)
+	if err := httpSvc.api.RefreshCircleFollowSet(c.Request().Context(), dbApp); err != nil {
+		httpSvc.logger.Error().Err(err).Msg("Failed to refresh circle follow set")
+		code, msg := mapFollowSetError(err)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (httpSvc *HttpService) circleIdentityFollowSetGetHandler(c echo.Context) error {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid identity ID"})
+	}
+
+	resp, getErr := httpSvc.api.GetCircleIdentityFollowSet(c.Request().Context(), uint(id))
+	if getErr != nil {
+		httpSvc.logger.Error().Err(getErr).Uint64("identity_id", id).Msg("Failed to read circle follow set")
+		code, msg := mapFollowSetError(getErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (httpSvc *HttpService) circleIdentityFollowSetPublishHandler(c echo.Context) error {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid identity ID"})
+	}
+	var request api.FollowSetRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+
+	resp, publishErr := httpSvc.api.PublishCircleIdentityFollowSet(c.Request().Context(), uint(id), &request)
+	if publishErr != nil {
+		httpSvc.logger.Error().Err(publishErr).Uint64("identity_id", id).Msg("Failed to publish circle follow set")
+		code, msg := mapFollowSetError(publishErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (httpSvc *HttpService) circleChildrenListHandler(c echo.Context) error {

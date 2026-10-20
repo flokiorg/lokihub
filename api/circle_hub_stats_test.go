@@ -76,16 +76,16 @@ func TestGetCircleHubStats_MemberCapIsScaledOnceAndZeroMeansUncapped(t *testing.
 	assert.EqualValues(t, 0, byID[uncapped.ID], "0 means no cap, not a cap of nothing")
 }
 
-// A following-policy circle cannot report how many pubkeys are eligible: its
-// members come from the host's live contact list, which this hub does not
-// store. Null is the honest answer; zero would read as "nobody".
-func TestGetCircleHubStats_EligibleCountIsNullForFollowingPolicy(t *testing.T) {
+// A follow_set circle cannot report how many pubkeys are eligible here: its
+// members come from a set on relays, which this stats query does not read.
+// Null is the honest answer; zero would read as "nobody".
+func TestGetCircleHubStats_EligibleCountIsNullForFollowSetPolicy(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	following := newCircleHubForAPI(t, svc, db.CirclePolicyFollowing)
-	stats, err := newTestAPI(svc).GetCircleHubStats(following.ID)
+	followSet := newCircleHubForAPI(t, svc, db.CirclePolicyFollowSet)
+	stats, err := newTestAPI(svc).GetCircleHubStats(followSet.ID)
 	require.NoError(t, err)
 	assert.Nil(t, stats.EligibleCount)
 

@@ -19,16 +19,15 @@
     "advancedSettings": "詳細設定",
     "inUse": "使用中",
     "hexPlaceholder": "64文字の16進数文字列",
-    "syncingFollowing": "フォローリストを同期しています…",
+    "readingFollowSet": "フォローセットを読み込み中…",
     "sync": "同期",
-    "following": "フォロー {{count}} 人",
     "synced": "{{time}} に同期",
     "updated": "{{time}} に更新",
     "total": "合計",
     "anonymous": "匿名"
   },
   "policyLabel": {
-    "following": "フォローに基づく",
+    "follow_set": "フォローセット",
     "allowlist": "許可リスト"
   },
   "identityType": {
@@ -50,7 +49,7 @@
   },
   "pubkeyInput": {
     "defaultLabel": "あなたの Nostr アイデンティティ",
-    "defaultHelper": "メンバー認証のためにフォローリストを解決するために使用されます",
+    "defaultHelper": "このサークルを運営する Nostr アカウント",
     "invalidHelper": "有効な npub、16進数の公開鍵、nprofile、または NIP-05 アドレスではないようです",
     "placeholder": "npub1...、16進数、nprofile1...、you@domain.com、または名前で検索",
     "change": "変更"
@@ -67,10 +66,42 @@
     "resolving": "解決中…",
     "searchHint": "名前、NIP-05、npub で検索するか、公開鍵を貼り付けてください。"
   },
-  "followingPreview": {
-    "empty": "このアイデンティティはまだ誰もフォローしていません — フォローされ次第、メンバーは自動的に認証されます。",
-    "summary_one": "現在 {{count}} 人が認証されます。このアイデンティティがフォロー・フォロー解除するたびに、リストは自動的に同期され続けます。",
-    "summary_other": "現在 {{count}} 人が認証されます。このアイデンティティがフォロー・フォロー解除するたびに、リストは自動的に同期され続けます。"
+  "followSet": {
+    "sourceLabel": "セットを公開するのは",
+    "sourceManagedTitle": "このハブ",
+    "sourceManagedDescription": "このハブのノードアイデンティティで署名します。非公開メンバーに対応します。",
+    "sourceExternalTitle": "別のアカウント",
+    "sourceExternalDescription": "他の人がすでに公開しているセットです。このハブは読み取るだけです。",
+    "externalProviderLabel": "セットの作成者",
+    "externalProviderHelper": "フォローセットを公開している Nostr アカウント",
+    "externalWarning": "フォローセットに対応した Nostr クライアントでセットを編集してください。非公開メンバーを知らないクライアントは、保存時にそれらを削除することがあります。",
+    "dLabel": "セット名",
+    "dPlaceholder": "family",
+    "dHelper": "セットの d 識別子です。Nostr 上でこのサークルの名前になり、後から変更できません。",
+    "dExternalHelper": "作成者が公開したとおりの、セットの d 識別子です。",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "例: Ada の家族サークル",
+    "titleHelper": "招待でサークル名として表示されます。",
+    "descriptionLabel": "説明（任意）",
+    "publicMembersLabel": "公開メンバー",
+    "publicMembersHelper": "公開されたセットに誰でも見える形で記載されます。",
+    "hiddenMembersLabel": "非公開メンバー",
+    "hiddenMembersHelper": "暗号化され、このハブだけが読み取れます。プライベート参加に対応したクライアントから参加してもらってください。そうでないと、共有接続に公開鍵が表示されます。",
+    "hiddenUnavailable": "非公開メンバーにはプライベートトランスポートが必要ですが、このハブでは動作していません。設定 › サービス を確認してください。",
+    "publicWarning": "タイトル、説明、公開メンバーは Nostr リレーに公開され、誰でも読むことができます。",
+    "addressLabel": "フォローセット「{{d}}」",
+    "unresolved": "このフォローセットを持つリレーはまだありません。見つかるまでメンバーは参加できません。",
+    "readOnly": "このセットは別のアカウントが公開しています。フォローセットに対応した Nostr クライアントで編集してください。",
+    "hiddenCount_one": "非公開 {{count}} 人",
+    "hiddenCount_other": "非公開 {{count}} 人",
+    "editTrigger": "セットを編集",
+    "editTitle": "フォローセットを編集",
+    "editDescription": "保存するとセットの新しいバージョンが公開されます。削除した人はウォレットをリクエストできなくなります。",
+    "save": "公開",
+    "savedToast": "フォローセットを公開しました",
+    "errors": {
+      "publish": "フォローセットの公開に失敗しました"
+    }
   },
   "claimBadge": {
     "claimed": "引き換え済み",
@@ -139,9 +170,9 @@
     "delete": "削除"
   },
   "circleIdentityCard": {
-    "syncedToast": "フォローリストを同期しました",
+    "syncedToast": "フォローセットを同期しました",
     "errors": {
-      "sync": "フォローリストの同期に失敗しました"
+      "sync": "フォローセットの同期に失敗しました"
     }
   },
   "circleAllowlist": {
@@ -269,13 +300,13 @@
     "identityReuseHelper": "アイデンティティ（ポリシー＋メンバー）は複数のサークルで再利用でき、その後も自動的に同期され続けます。",
     "enterIdentityHelper": "続けるには、上に有効な Nostr アイデンティティを入力してください。",
     "memberModeLabel": "このサークルからウォレットをリクエストできる人",
-    "modeSyncTitle": "フォローしている全員",
-    "modeSyncDescription": "自動 — 現在または今後このアイデンティティがフォローする全員。管理は不要です。",
+    "modeFollowSetTitle": "フォローセット",
+    "modeFollowSetDescription": "Nostr フォローセットのメンバー。セットを編集して追加・削除します。",
     "modePinnedTitle": "カスタムメンバー",
     "modePinnedDescription": "Nostr を検索し、許可する相手を手動で選びます。",
-    "pinMemberHelper": "少なくとも1人のメンバーをピン留めするか、「フォローしている全員」に切り替えてください。",
+    "pinMemberHelper": "メンバーを 1 人以上ピン留めするか、「フォローセット」に切り替えてください。",
     "identityNameLabel": "このアイデンティティのラベル（任意）",
-    "identityNamePlaceholder": "例：フォロー中のサークル",
+    "identityNamePlaceholder": "例: 家族のサークル",
     "identityNameHelper": "複数のサークルで再利用する際にこの保存済みアイデンティティを識別するためだけに使用され、どこにも公開されません。",
     "maxWalletBudgetHelper": "メンバーがサークルウォレットに対してリクエストできる最大予算",
     "maxExpiryHelper": "発行されたサークルウォレットの最長有効期限",
@@ -288,6 +319,7 @@
     "submit": "サークルウォレットハブを作成",
     "selectExistingHint": "続けるには既存のアイデンティティを選択してください。",
     "enterNameHint": "続けるには名前を入力してください。",
+    "enterDHint": "続行するにはセット名を入力してください。",
     "createdToast": "サークルウォレットハブ「{{name}}」を作成しました",
     "allowlistSeedFailedToast": "サークルウォレットハブ「{{name}}」を作成しましたが、メンバーリストの初期設定に失敗しました — ハブの許可リストページからメンバーを追加してください。",
     "errors": {

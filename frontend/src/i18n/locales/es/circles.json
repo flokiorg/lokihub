@@ -19,16 +19,15 @@
     "advancedSettings": "Ajustes avanzados",
     "inUse": "En uso",
     "hexPlaceholder": "Cadena hexadecimal de 64 caracteres",
-    "syncingFollowing": "Sincronizando lista de seguidos…",
+    "readingFollowSet": "Leyendo el conjunto de seguidos…",
     "sync": "Sincronizar",
-    "following": "Sigue a {{count}}",
     "synced": "Sincronizado {{time}}",
     "updated": "Actualizado {{time}}",
     "total": "total",
     "anonymous": "Anónimo"
   },
   "policyLabel": {
-    "following": "Seguidos",
+    "follow_set": "Conjunto de seguidos",
     "allowlist": "Lista de permitidos"
   },
   "identityType": {
@@ -50,7 +49,7 @@
   },
   "pubkeyInput": {
     "defaultLabel": "Tu identidad de Nostr",
-    "defaultHelper": "Se usa para resolver tu lista de seguidos para la autorización de miembros",
+    "defaultHelper": "La cuenta de Nostr que gestiona este círculo",
     "invalidHelper": "No parece un npub, clave pública hex, nprofile o dirección NIP-05 válidos",
     "placeholder": "npub1..., hex, nprofile1..., tu@dominio.com, o busca un nombre",
     "change": "Cambiar"
@@ -67,10 +66,42 @@
     "resolving": "Resolviendo…",
     "searchHint": "Busca por nombre, NIP-05, npub, o pega una clave pública."
   },
-  "followingPreview": {
-    "empty": "Esta identidad aún no sigue a nadie — los miembros se autorizarán automáticamente a medida que los siga.",
-    "summary_one": "{{count}} persona será autorizada ahora, y la lista se mantendrá sincronizada automáticamente a medida que esta identidad siga o deje de seguir a otros.",
-    "summary_other": "{{count}} personas serán autorizadas ahora, y la lista se mantendrá sincronizada automáticamente a medida que esta identidad siga o deje de seguir a otros."
+  "followSet": {
+    "sourceLabel": "Quién publica el conjunto",
+    "sourceManagedTitle": "Este hub",
+    "sourceManagedDescription": "Firmado con la identidad del nodo de este hub. Admite miembros ocultos.",
+    "sourceExternalTitle": "Otra cuenta",
+    "sourceExternalDescription": "Un conjunto que otra persona ya publica. Este hub solo lo lee.",
+    "externalProviderLabel": "Autor del conjunto",
+    "externalProviderHelper": "La cuenta de Nostr que publica el conjunto de seguidos",
+    "externalWarning": "Edita el conjunto en un cliente de Nostr compatible con conjuntos de seguidos. Un cliente que no conozca los miembros ocultos puede eliminarlos al guardar el conjunto.",
+    "dLabel": "Nombre del conjunto",
+    "dPlaceholder": "familia",
+    "dHelper": "El identificador d del conjunto. Nombra este círculo en Nostr y no se puede cambiar después.",
+    "dExternalHelper": "El identificador d del conjunto, tal como lo publicó su autor.",
+    "titleLabel": "Título",
+    "titlePlaceholder": "p. ej. El círculo familiar de Ada",
+    "titleHelper": "Se muestra como nombre del círculo en las invitaciones.",
+    "descriptionLabel": "Descripción (opcional)",
+    "publicMembersLabel": "Miembros públicos",
+    "publicMembersHelper": "Aparecen abiertamente en el conjunto publicado.",
+    "hiddenMembersLabel": "Miembros ocultos",
+    "hiddenMembersHelper": "Cifrados para que solo este hub pueda leerlos. Pídeles que se unan desde un cliente compatible con la unión privada, o su clave pública aparecerá en la conexión compartida.",
+    "hiddenUnavailable": "Los miembros ocultos necesitan el transporte privado, que no está activo en este hub. Consulta Ajustes › Servicios.",
+    "publicWarning": "El título, la descripción y los miembros públicos se publican en relés de Nostr, donde cualquiera puede leerlos.",
+    "addressLabel": "Conjunto de seguidos «{{d}}»",
+    "unresolved": "Ningún relé tiene aún este conjunto de seguidos. Los miembros no pueden unirse hasta que se encuentre.",
+    "readOnly": "Otra cuenta publica este conjunto. Edítalo en un cliente de Nostr compatible con conjuntos de seguidos.",
+    "hiddenCount_one": "{{count}} oculto",
+    "hiddenCount_other": "{{count}} ocultos",
+    "editTrigger": "Editar conjunto",
+    "editTitle": "Editar conjunto de seguidos",
+    "editDescription": "Al guardar se publica una nueva versión del conjunto. Quien quites ya no podrá solicitar una billetera.",
+    "save": "Publicar",
+    "savedToast": "Conjunto de seguidos publicado",
+    "errors": {
+      "publish": "No se pudo publicar el conjunto de seguidos"
+    }
   },
   "claimBadge": {
     "claimed": "Canjeado",
@@ -139,9 +170,9 @@
     "delete": "Eliminar"
   },
   "circleIdentityCard": {
-    "syncedToast": "Lista de seguidos sincronizada",
+    "syncedToast": "Conjunto de seguidos sincronizado",
     "errors": {
-      "sync": "Error al sincronizar la lista de seguidos"
+      "sync": "No se pudo sincronizar el conjunto de seguidos"
     }
   },
   "circleAllowlist": {
@@ -269,13 +300,13 @@
     "identityReuseHelper": "Una identidad (política + miembros) se puede reutilizar en varios círculos, que luego se mantendrán sincronizados automáticamente.",
     "enterIdentityHelper": "Introduce una identidad Nostr válida arriba para continuar.",
     "memberModeLabel": "Quién puede solicitar una billetera de este círculo",
-    "modeSyncTitle": "Cualquiera que siga",
-    "modeSyncDescription": "Automático — todos los que esta identidad sigue, ahora o en el futuro. Nada que gestionar.",
+    "modeFollowSetTitle": "Conjunto de seguidos",
+    "modeFollowSetDescription": "Miembros de un conjunto de seguidos de Nostr. Añade o quita personas editando el conjunto.",
     "modePinnedTitle": "Miembros personalizados",
     "modePinnedDescription": "Busca en Nostr y elige exactamente a quién permitir.",
-    "pinMemberHelper": "Fija al menos un miembro, o cambia a Cualquiera que siga.",
+    "pinMemberHelper": "Fija al menos un miembro o cambia a Conjunto de seguidos.",
     "identityNameLabel": "Etiqueta para esta identidad (opcional)",
-    "identityNamePlaceholder": "p. ej. Mi círculo de seguidos",
+    "identityNamePlaceholder": "p. ej. Círculo familiar",
     "identityNameHelper": "Se usa solo para identificar esta identidad guardada cuando se reutiliza en varios círculos — no se publica en ningún sitio.",
     "maxWalletBudgetHelper": "Presupuesto máximo que un miembro puede solicitar para su billetera de círculo",
     "maxExpiryHelper": "Vida útil máxima de las billeteras de círculo emitidas",
@@ -288,6 +319,7 @@
     "submit": "Crear Hub de Billetera de Círculo",
     "selectExistingHint": "Selecciona una identidad existente para continuar.",
     "enterNameHint": "Introduce un nombre para continuar.",
+    "enterDHint": "Introduce el nombre del conjunto para continuar.",
     "createdToast": "Hub de Billetera de Círculo \"{{name}}\" creado",
     "allowlistSeedFailedToast": "Hub de Billetera de Círculo \"{{name}}\" creado, pero no se pudo sembrar la lista de miembros — añade miembros desde la página de Lista de Permitidos del hub.",
     "errors": {

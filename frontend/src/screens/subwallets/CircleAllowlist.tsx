@@ -42,8 +42,8 @@ export type CircleAllowlistHandle = {
 };
 
 // Only ever mounted for an allowlist-policy identity (AppDetails.tsx gates
-// on identity.policy) — a following-policy circle's authorization is the
-// live following-list check surfaced on CircleIdentityCard, not this table.
+// on identity.policy) — a follow-set circle's members are the follow set
+// surfaced on CircleIdentityCard, not this table.
 // The "Add member" trigger lives in AppDetails' CardHeader (top-right of the
 // section, next to the title) and drives this component via `ref`.
 export const CircleAllowlist = React.forwardRef<

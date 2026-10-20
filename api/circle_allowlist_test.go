@@ -1,6 +1,6 @@
 package api
 
-// Covers RemoveCircleAllowedPubkey, ListCircleAllowlist, and RefreshCircleAllowlist's
+// Covers RemoveCircleAllowedPubkey, ListCircleAllowlist, and RefreshCircleFollowSet's
 // validation paths — all had 0% test coverage per the Circle/Cash audit even though
 // ReplaceCircleAllowlist (the sibling endpoint) was already tested.
 
@@ -166,7 +166,7 @@ func TestListCircleAllowlist_SharedIdentity_VisibleFromBothProviders(t *testing.
 	assert.Equal(t, pubkeysFromFirst, pubkeysFromSecond, "a write via one provider must be immediately visible via the other's shared identity")
 }
 
-func TestRefreshCircleAllowlist_NonCircleHub_Rejected(t *testing.T) {
+func TestRefreshCircleFollowSet_NonCircleHub_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -175,17 +175,17 @@ func TestRefreshCircleAllowlist_NonCircleHub_Rejected(t *testing.T) {
 	require.NoError(t, svc.DB.Create(app).Error)
 
 	theAPI := &api{db: svc.DB, appsSvc: svc.AppsService, cfg: svc.Cfg}
-	require.Error(t, theAPI.RefreshCircleAllowlist(context.TODO(), app))
+	require.Error(t, theAPI.RefreshCircleFollowSet(context.TODO(), app))
 }
 
-func TestRefreshCircleAllowlist_NoProviderPubkey_Rejected(t *testing.T) {
+func TestRefreshCircleFollowSet_AllowlistCircle_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	provider := createTestCircleHub(t, svc, db.CirclePolicyAllowlist) // no ProviderPubkey set
+	provider := createTestCircleHub(t, svc, db.CirclePolicyAllowlist)
 
 	theAPI := &api{db: svc.DB, appsSvc: svc.AppsService, cfg: svc.Cfg}
-	err = theAPI.RefreshCircleAllowlist(context.TODO(), provider)
-	require.Error(t, err, "refresh must fail fast without hitting any relay when provider_pubkey is unset")
+	err = theAPI.RefreshCircleFollowSet(context.TODO(), provider)
+	require.ErrorIs(t, err, constants.ErrInvalidParams, "an allowlist circle has no set to refresh, so this fails without touching a relay")
 }

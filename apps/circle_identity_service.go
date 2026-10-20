@@ -10,15 +10,38 @@ import (
 	"gorm.io/gorm"
 )
 
-func (svc *appsService) CreateCircleIdentity(name, policy, providerPubkey string) (*db.CircleIdentity, error) {
-	if policy != db.CirclePolicyFollowing && policy != db.CirclePolicyAllowlist {
-		return nil, fmt.Errorf("%w: circle policy must be %q or %q", constants.ErrInvalidParams,
-			db.CirclePolicyFollowing, db.CirclePolicyAllowlist)
+// maxFollowSetDLength bounds a follow set's `d` identifier.
+const maxFollowSetDLength = 64
+
+// ValidateFollowSetD checks a follow set's `d` identifier: non-empty, at most
+// maxFollowSetDLength bytes, no surrounding spaces.
+func ValidateFollowSetD(d string) error {
+	if strings.TrimSpace(d) == "" {
+		return fmt.Errorf("%w: the follow set needs a name (its d identifier)", constants.ErrInvalidParams)
 	}
-	// NIP-CW §Data Model: a following circle records the provider pubkey it
-	// follows. Without one, it admits nobody and can never be fixed in place.
-	if policy == db.CirclePolicyFollowing && providerPubkey == "" {
-		return nil, fmt.Errorf("%w: a following circle needs the provider_pubkey whose follow list it admits", constants.ErrInvalidParams)
+	if d != strings.TrimSpace(d) || len(d) > maxFollowSetDLength {
+		return fmt.Errorf("%w: the follow set name must be at most %d characters, without surrounding spaces", constants.ErrInvalidParams, maxFollowSetDLength)
+	}
+	return nil
+}
+
+func (svc *appsService) CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error) {
+	if policy != db.CirclePolicyFollowSet && policy != db.CirclePolicyAllowlist {
+		return nil, fmt.Errorf("%w: circle policy must be %q or %q", constants.ErrInvalidParams,
+			db.CirclePolicyFollowSet, db.CirclePolicyAllowlist)
+	}
+	// NIP-CW §Data Model: a follow_set circle records the set's address, its
+	// provider pubkey and its d identifier. Without both it admits nobody and
+	// can never be fixed in place.
+	if policy == db.CirclePolicyFollowSet {
+		if providerPubkey == "" {
+			return nil, fmt.Errorf("%w: a follow_set circle needs the provider_pubkey that publishes the set", constants.ErrInvalidParams)
+		}
+		if err := ValidateFollowSetD(followSetD); err != nil {
+			return nil, err
+		}
+	} else {
+		followSetD = ""
 	}
 	// providerPubkey is optional for an allowlist circle, but when set it
 	// must be a well-formed 64-char lowercase-hex
@@ -35,7 +58,20 @@ func (svc *appsService) CreateCircleIdentity(name, policy, providerPubkey string
 			return nil, fmt.Errorf("%w: provider_pubkey must be a 64-char lowercase-hex string", constants.ErrInvalidParams)
 		}
 	}
-	identity := db.CircleIdentity{Name: name, Policy: policy, ProviderPubkey: providerPubkey}
+	if policy == db.CirclePolicyFollowSet {
+		// Two identities on one address would read the same set, and for a set
+		// this hub publishes, each edit would overwrite the other's.
+		var existing int64
+		if err := svc.db.Model(&db.CircleIdentity{}).
+			Where("policy = ? AND provider_pubkey = ? AND follow_set_d = ?", policy, providerPubkey, followSetD).
+			Count(&existing).Error; err != nil {
+			return nil, err
+		}
+		if existing > 0 {
+			return nil, fmt.Errorf("%w: a circle identity for this follow set already exists, reuse it instead", constants.ErrInvalidParams)
+		}
+	}
+	identity := db.CircleIdentity{Name: name, Policy: policy, ProviderPubkey: providerPubkey, FollowSetD: followSetD}
 	if err := svc.db.Create(&identity).Error; err != nil {
 		return nil, fmt.Errorf("failed to save Circle Identity: %w", err)
 	}

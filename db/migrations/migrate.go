@@ -70,6 +70,12 @@ func Migrate(gormDB *gorm.DB) error {
 		return err
 	}
 
+	// Delete circles using the retired kind:3 "following" policy, which NIP-CW
+	// replaced with follow_set.
+	if err := MigrateDropFollowingCircles(gormDB); err != nil {
+		return err
+	}
+
 	// AutoMigrate all core models (adds new columns declared in structs)
 	// Note: LSP model is migrated separately in LSPManager (via manager_db.go)
 	if err := gormDB.AutoMigrate(
