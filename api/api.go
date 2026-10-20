@@ -321,6 +321,34 @@ func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error
 }
 
 func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) error {
+	updatesCashHub := userApp.Kind == db.AppKindCashHub &&
+		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
+			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
+			updateAppRequest.CashRedeemFeeBaseMloki != nil ||
+			updateAppRequest.CashSpentRetentionSecs != nil)
+	updatesCircleHub := userApp.Kind == db.AppKindCircleHub &&
+		(updateAppRequest.CircleMaxExpSecs != nil || updateAppRequest.CircleFeesPpm != nil ||
+			updateAppRequest.CirclePerWalletMaxMloki != nil || updateAppRequest.CircleMinBudgetRenewal != nil)
+
+	// The hub settings are saved after the app itself, so check them first: a
+	// rejected setting must leave the whole request unsaved.
+	if updatesCashHub {
+		if err := api.appsSvc.ValidateCashHubConfigUpdate(userApp.ID,
+			updateAppRequest.CashPerWalletMaxMloki, updateAppRequest.CashMaxExpSecs,
+			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm,
+			updateAppRequest.CashRedeemFeeBaseMloki,
+			updateAppRequest.CashSpentRetentionSecs); err != nil {
+			return err
+		}
+	}
+	if updatesCircleHub {
+		if err := api.appsSvc.ValidateCircleHubConfigUpdate(
+			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
+			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+			return err
+		}
+	}
+
 	err := api.db.Transaction(func(tx *gorm.DB) error {
 		// Initialize name with current app name, update if provided
 		name := userApp.Name
@@ -500,11 +528,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		return err
 	}
 
-	if userApp.Kind == db.AppKindCashHub &&
-		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
-			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
-			updateAppRequest.CashRedeemFeeBaseMloki != nil ||
-			updateAppRequest.CashSpentRetentionSecs != nil) {
+	if updatesCashHub {
 		if err := api.appsSvc.UpdateCashHubConfig(userApp.ID,
 			updateAppRequest.CashPerWalletMaxMloki, updateAppRequest.CashMaxExpSecs,
 			updateAppRequest.CashMinTransferMloki, updateAppRequest.CashRedeemFeePpm,
@@ -514,9 +538,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		}
 	}
 
-	if userApp.Kind == db.AppKindCircleHub &&
-		(updateAppRequest.CircleMaxExpSecs != nil || updateAppRequest.CircleFeesPpm != nil ||
-			updateAppRequest.CirclePerWalletMaxMloki != nil || updateAppRequest.CircleMinBudgetRenewal != nil) {
+	if updatesCircleHub {
 		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID,
 			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
 			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
