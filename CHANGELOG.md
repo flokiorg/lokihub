@@ -396,7 +396,7 @@ when the node cannot sign, moves the frontend to react-router v7, and moves to
   transport failed with a bare "permission denied". (#132)
 - Marks a private-transport request `executed` or `error` once its handler
   ends; it stayed `executing` forever, unlike the same request sent over the
-  standard transport.
+  standard transport. (#140)
 
 ## [0.4.0]
 
