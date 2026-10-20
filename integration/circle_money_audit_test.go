@@ -33,12 +33,6 @@ func mintCircleChildFor(t *testing.T, hub CircleHubConfig, memberPriv string) *n
 	return mintCircleChild(t, one)
 }
 
-func balanceOf(t *testing.T, c *nwcclient.Client) int64 {
-	t.Helper()
-	var b GetBalanceResult
-	require.NoError(t, c.Call(ctxT(t), "get_balance", struct{}{}, &b))
-	return b.Balance
-}
 
 // roomOf is how much more c may receive: its cap less its balance. Only
 // accurate while c has no unpaid invoices.
