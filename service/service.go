@@ -169,6 +169,8 @@ func NewService(ctx context.Context) (*service, error) {
 		keys:                keys,
 	}
 
+	svc.nip47Service.SetPrivateIdentity(svc.privateJoinIdentity)
+
 	eventPublisher.RegisterSubscriber(svc.transactionsService)
 	eventPublisher.RegisterSubscriber(svc.nip47Service)
 
