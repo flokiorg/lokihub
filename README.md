@@ -189,6 +189,16 @@ _To configure via env, the following parameters must be provided:_
 - `FLND_CERT_FILE`: the location where FLND's `tls.cert` file can be found
 - `FLND_MACAROON_FILE`: the location where FLND's `admin.macaroon` file can be found
 
+The hub signs Nostr events as the node: its private-transport announcement and
+the node profile. These need a BIP340 Schnorr signature by the node key, which
+only the signer RPC (`signrpc.SignMessage`) can produce. Lightning's own
+message signing is ECDSA and cannot be used instead. So the macaroon must grant
+`signer:generate`. `admin.macaroon` does. A custom macaroon without it leaves
+the hub running, but clients that have never contacted it cannot find its
+private transport, so they cannot join circles privately or use bills. The
+failure shows on the Private Transport card under Settings > Services, and in
+the startup log.
+
 ## Application deeplink options
 
 ### `/apps/new` deeplink options
