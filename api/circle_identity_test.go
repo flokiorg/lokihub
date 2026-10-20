@@ -18,7 +18,7 @@ func TestListCircleIdentities_ReturnsSummaries(t *testing.T) {
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	_, err = svc.AppsService.CreateCircleIdentity("family", db.CirclePolicyAllowlist, "")
+	_, err = svc.AppsService.CreateCircleIdentity("family", db.CirclePolicyAllowlist, "", "")
 	require.NoError(t, err)
 
 	theAPI := &api{db: svc.DB, appsSvc: svc.AppsService}

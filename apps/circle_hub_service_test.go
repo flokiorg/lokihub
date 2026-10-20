@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateCircleHub_HappyPath_Following(t *testing.T) {
+func TestCreateCircleHub_HappyPath_FollowSet(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -20,7 +20,7 @@ func TestCreateCircleHub_HappyPath_Following(t *testing.T) {
 		"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
 		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
 		nil,
-		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyFollowing, ProviderPubkey: randomHex32()},
+		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyFollowSet, ProviderPubkey: randomHex32(), FollowSetD: "family"},
 		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 	)
 	require.NoError(t, err)

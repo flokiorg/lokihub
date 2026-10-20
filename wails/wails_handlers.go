@@ -153,21 +153,6 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 	}
 
-	circleRefreshPreviewRegex := regexp.MustCompile(
-		`^/api/apps/([0-9]+)/circle/refresh/preview$`,
-	)
-	if m := circleRefreshPreviewRegex.FindStringSubmatch(route); len(m) == 2 && method == "POST" {
-		dbApp, errResp := app.getAppOrErrorResponse(m[1])
-		if dbApp == nil {
-			return *errResp
-		}
-		preview, err := app.api.PreviewCircleRefresh(ctx, dbApp)
-		if err != nil {
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-		}
-		return WailsRequestRouterResponse{Body: preview, Error: ""}
-	}
-
 	circleRefreshRegex := regexp.MustCompile(
 		`^/api/apps/([0-9]+)/circle/refresh$`,
 	)
@@ -176,7 +161,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		if dbApp == nil {
 			return *errResp
 		}
-		if err := app.api.RefreshCircleAllowlist(ctx, dbApp); err != nil {
+		if err := app.api.RefreshCircleFollowSet(ctx, dbApp); err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
@@ -276,6 +261,34 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		}
+	}
+
+	circleIdentityFollowSetRegex := regexp.MustCompile(
+		`^/api/circle-identities/([0-9]+)/follow-set$`,
+	)
+	if m := circleIdentityFollowSetRegex.FindStringSubmatch(route); len(m) == 2 {
+		id, err := strconv.ParseUint(m[1], 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		switch method {
+		case "GET":
+			resp, err := app.api.GetCircleIdentityFollowSet(ctx, uint(id))
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
+		case "PUT":
+			var reqBody api.FollowSetRequest
+			if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			resp, err := app.api.PublishCircleIdentityFollowSet(ctx, uint(id), &reqBody)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: resp, Error: ""}
 		}
 	}
 

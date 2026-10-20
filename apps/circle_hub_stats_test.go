@@ -19,7 +19,7 @@ func newCircleHub(t *testing.T, svc *tests.TestService, policy string) *db.App {
 		"test-circle-hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
 		[]string{constants.CIRCLE_WALLET_SCOPE, constants.PAY_INVOICE_SCOPE, constants.GET_BALANCE_SCOPE},
 		nil,
-		apps.CircleIdentityRef{Name: "test-identity", Policy: policy, ProviderPubkey: randomHex32()},
+		apps.CircleIdentityRef{Name: "test-identity", Policy: policy, ProviderPubkey: randomHex32(), FollowSetD: "test"},
 		db.CircleHubConfig{PerWalletMaxMloki: 1_000_000, MaxExpSecs: 3600},
 	)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestGetCircleHubStats_IncludesMembersWhoNeverSpent(t *testing.T) {
 }
 
 // Only an allowlist circle can report how many pubkeys are eligible. A
-// "following" circle draws its members from the host's live contact list,
+// "follow_set" circle draws its members from a follow set on relays,
 // which this hub does not store and is not told about when it changes — so
 // the honest answer is "not knowable here", never a stale number or a zero
 // that would read as "nobody is eligible".
@@ -131,11 +131,11 @@ func TestGetCircleHubStats_EligibleCountOnlyForAllowlist(t *testing.T) {
 
 	now := time.Now()
 
-	following := newCircleHub(t, svc, db.CirclePolicyFollowing)
-	stats, err := svc.AppsService.GetCircleHubStats(following.ID, now)
+	followSet := newCircleHub(t, svc, db.CirclePolicyFollowSet)
+	stats, err := svc.AppsService.GetCircleHubStats(followSet.ID, now)
 	require.NoError(t, err)
 	assert.Nil(t, stats.EligibleCount,
-		"a following-policy circle must report unknown rather than zero")
+		"a follow_set circle must report unknown rather than zero")
 
 	allowlist := newCircleHub(t, svc, db.CirclePolicyAllowlist)
 	allowStats, err := svc.AppsService.GetCircleHubStats(allowlist.ID, now)
