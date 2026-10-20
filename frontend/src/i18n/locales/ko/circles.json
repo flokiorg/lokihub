@@ -353,8 +353,8 @@
     "deletedToast": "서클이 삭제되었습니다",
     "partialDeleteToast_one": "빈 지갑 {{count}}개가 삭제되었습니다",
     "partialDeleteToast_other": "빈 지갑 {{count}}개가 삭제되었습니다",
-    "partialDeleteDescription_one": "잔액이 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
-    "partialDeleteDescription_other": "잔액이 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
+    "partialDeleteDescription_one": "잔액 또는 진행 중인 결제가 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
+    "partialDeleteDescription_other": "잔액 또는 진행 중인 결제가 있는 지갑 {{count}}개는 그대로 유지되었습니다 — 서클은 삭제되지 않았습니다.",
     "errors": {
       "load": "서클 지갑을 불러오지 못했습니다",
       "delete": "서클을 삭제하지 못했습니다"

@@ -3010,9 +3010,9 @@ func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 
 // DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
 // mode must be db.CircleDeleteModeAll (delete every child regardless of balance) or
-// db.CircleDeleteModeEmptyOnly (delete only zero-balance children — if any child
-// still has balance, the provider itself is left intact so the admin can retry once
-// the rest have drained). Guarded by the same per-provider advisory lock used by
+// db.CircleDeleteModeEmptyOnly (delete only zero-balance children with no payment
+// in flight — if any child still has balance or a pending payment, the provider
+// itself is left intact so the admin can retry once the rest have drained). Guarded by the same per-provider advisory lock used by
 // create_circle_wallet, so this can't race a concurrent wallet creation on the app.
 func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error) {
 	if app.Kind != db.AppKindCircleHub {
@@ -3048,7 +3048,11 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 
 		var idsToDelete []uint
 		for _, child := range children {
-			if mode == db.CircleDeleteModeEmptyOnly && balancesByID[child.ID] != 0 {
+			// Empty also means nothing can still arrive or leave: deleting a child
+			// cascade-deletes a pending row, and its settlement would then have
+			// nowhere to land (the same rule ReclaimAndDeleteSubWallet applies).
+			if mode == db.CircleDeleteModeEmptyOnly && (balancesByID[child.ID] != 0 ||
+				queries.HasPendingIncoming(tx, child.ID) || queries.HasPendingOutgoing(tx, child.ID)) {
 				result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
 				continue
 			}

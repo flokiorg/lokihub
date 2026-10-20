@@ -419,6 +419,9 @@ private-transport request ended.
 - Keeps an expired or deleted Circle or Cash wallet until its outgoing payment
   ends; deleting it mid-payment lost the payment's record and the hub's fee
   credit. (#144)
+- Keeps a Circle Hub, and any of its wallets with a live invoice or a payment
+  in flight, when you delete it with "empty wallets only"; a zero balance alone
+  let such a wallet be removed mid-payment. (#144)
 
 ## [0.4.0]
 

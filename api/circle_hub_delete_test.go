@@ -6,6 +6,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -283,4 +284,40 @@ func TestDeleteCircleHub_NonCircleHub_Rejected(t *testing.T) {
 	_, err = theAPI.DeleteCircleHub(app, db.CircleDeleteModeAll)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+// "Empty" means nothing can still arrive or leave, not just a zero balance: a
+// child with a live invoice or a payment going out is skipped, so the hub stays.
+func TestDeleteCircleHub_PaymentInFlight_ModeEmptyOnly_ChildSkipped(t *testing.T) {
+	future := time.Now().Add(time.Hour)
+	for name, pending := range map[string]db.Transaction{
+		"live invoice": {Type: constants.TRANSACTION_TYPE_INCOMING, State: constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: 50_000, PaymentHash: "empty-only-in", ExpiresAt: &future},
+		"held payment": {Type: constants.TRANSACTION_TYPE_INCOMING, State: constants.TRANSACTION_STATE_ACCEPTED,
+			AmountMloki: 50_000, PaymentHash: "empty-only-held"},
+		"payment going out": {Type: constants.TRANSACTION_TYPE_OUTGOING, State: constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: 0, PaymentHash: "empty-only-out"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+
+			provider, _, err := svc.AppsService.CreateCircleHub("circle", "", 0, "never", nil,
+				[]string{constants.GET_BALANCE_SCOPE}, nil,
+				apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
+				db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
+			)
+			require.NoError(t, err)
+			busy := createCircleChild(t, svc, provider, "busy-child")
+			pending.AppId = &busy.ID
+			require.NoError(t, svc.DB.Create(&pending).Error)
+
+			result, err := newTestAPIForCircleDelete(svc).DeleteCircleHub(provider, db.CircleDeleteModeEmptyOnly)
+			require.NoError(t, err)
+			assert.False(t, result.HubDeleted)
+			assert.Equal(t, []uint{busy.ID}, result.SkippedChildIDs)
+			assert.NotNil(t, svc.AppsService.GetAppById(busy.ID))
+		})
+	}
 }
