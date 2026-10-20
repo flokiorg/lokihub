@@ -136,3 +136,46 @@ func TestMakeInvoice_CircleCap_UnpaidInvoiceCountsTowardCap(t *testing.T) {
 		t.Fatalf("circle wallet holds %d mloki against a 100_000 mloki cap after two sequential make_invoice calls", bal)
 	}
 }
+
+// A zero-amount invoice lets the payer choose the amount, so a capped circle
+// wallet could receive any sum through one. Both ways to receive refuse it.
+func TestMakeInvoice_CircleCap_ZeroAmountRefused(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	child := circleCapChild(t, svc, "cap-zero")
+
+	r := &models.Request{}
+	require.NoError(t, json.Unmarshal([]byte(makeInvoiceRequestJSON(0)), r))
+	ev := &db.RequestEvent{AppId: &child.ID, NostrId: tests.RandomHex32()}
+	require.NoError(t, svc.DB.Create(ev).Error)
+	var resp *models.Response
+	NewTestNip47Controller(svc).HandleMakeInvoiceEvent(ctx, r, ev.ID, child.ID, func(rr *models.Response, _ nostr.Tags) { resp = rr })
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Error, "a zero-amount invoice would let the payer pick any amount")
+	require.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+
+	hold := handleHoldInvoice(t, svc, child.ID, 0)
+	require.NotNil(t, hold.Error)
+	require.Equal(t, constants.ERROR_BAD_REQUEST, hold.Error.Code)
+}
+
+// A wallet with no circle parent may still issue zero-amount invoices.
+func TestMakeInvoice_NonCircleApp_ZeroAmountAllowed(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	app, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+
+	r := &models.Request{}
+	require.NoError(t, json.Unmarshal([]byte(makeInvoiceRequestJSON(0)), r))
+	ev := &db.RequestEvent{AppId: &app.ID, NostrId: tests.RandomHex32()}
+	require.NoError(t, svc.DB.Create(ev).Error)
+	var resp *models.Response
+	NewTestNip47Controller(svc).HandleMakeInvoiceEvent(ctx, r, ev.ID, app.ID, func(rr *models.Response, _ nostr.Tags) { resp = rr })
+	require.NotNil(t, resp)
+	require.Nil(t, resp.Error)
+}

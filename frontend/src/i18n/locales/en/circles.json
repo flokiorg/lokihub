@@ -332,8 +332,8 @@
     "deletedToast": "Circle deleted",
     "partialDeleteToast_one": "Deleted {{count}} empty wallet",
     "partialDeleteToast_other": "Deleted {{count}} empty wallets",
-    "partialDeleteDescription_one": "{{count}} wallet with balance was left untouched — the circle was not deleted.",
-    "partialDeleteDescription_other": "{{count}} wallets with balance were left untouched — the circle was not deleted.",
+    "partialDeleteDescription_one": "{{count}} wallet with a balance or a payment in progress was left untouched — the circle was not deleted.",
+    "partialDeleteDescription_other": "{{count}} wallets with a balance or a payment in progress were left untouched — the circle was not deleted.",
     "errors": {
       "load": "Failed to load circle wallets",
       "delete": "Failed to delete circle"

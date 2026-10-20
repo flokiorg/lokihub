@@ -223,6 +223,11 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 	if queries.HasPendingIncoming(gormDB, app.ID) {
 		return fmt.Errorf("%w: a payment is still settling into this wallet, try again shortly", constants.ErrInvalidParams)
 	}
+	// The same holds for a payment going out: its row must survive until the
+	// node reports how it ended.
+	if queries.HasPendingOutgoing(gormDB, app.ID) {
+		return fmt.Errorf("%w: a payment from this wallet is still in flight, try again shortly", constants.ErrInvalidParams)
+	}
 
 	// Atomically claim the cleanup slot (acts as a mutex per app row) so a
 	// concurrent expiry-cleanup tick and a manual delete can't both process

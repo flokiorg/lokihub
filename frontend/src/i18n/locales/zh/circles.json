@@ -353,8 +353,8 @@
     "deletedToast": "圈子已删除",
     "partialDeleteToast_one": "已删除 {{count}} 个空钱包",
     "partialDeleteToast_other": "已删除 {{count}} 个空钱包",
-    "partialDeleteDescription_one": "{{count}} 个有余额的钱包未被处理 —— 该圈子未被删除。",
-    "partialDeleteDescription_other": "{{count}} 个有余额的钱包未被处理 —— 该圈子未被删除。",
+    "partialDeleteDescription_one": "{{count}} 个有余额或进行中付款的钱包未被处理 —— 该圈子未被删除。",
+    "partialDeleteDescription_other": "{{count}} 个有余额或进行中付款的钱包未被处理 —— 该圈子未被删除。",
     "errors": {
       "load": "加载圈子钱包失败",
       "delete": "删除圈子失败"
