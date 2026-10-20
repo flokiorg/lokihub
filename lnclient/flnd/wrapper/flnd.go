@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/flokiorg/flnd/lnrpc"
 	"github.com/flokiorg/flnd/lnrpc/invoicesrpc"
@@ -15,7 +17,9 @@ import (
 	"github.com/flokiorg/flnd/lnrpc/walletrpc"
 	"github.com/flokiorg/flnd/macaroons"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon.v2"
 )
 
@@ -159,9 +163,22 @@ func (wrapper *FLNDWrapper) SignSchnorrNodeKey(ctx context.Context, msg []byte) 
 		DoubleHash: false,
 	})
 	if err != nil {
-		return nil, err
+		return nil, explainSignerError(err)
 	}
 	return resp.Signature, nil
+}
+
+// explainSignerError names what the node is missing when it cannot sign as itself.
+// Both failures otherwise surface as a bare "permission denied" or "unknown
+// service", which says nothing about the macaroon or the signer RPC.
+func explainSignerError(err error) error {
+	switch {
+	case status.Code(err) == codes.Unimplemented:
+		return fmt.Errorf("the node does not serve the signer RPC (signrpc), which signing as the node needs: %w", err)
+	case status.Code(err) == codes.PermissionDenied || strings.Contains(err.Error(), "permission denied"):
+		return fmt.Errorf("the node's macaroon does not grant signer:generate, which signing as the node needs; use admin.macaroon or bake one that includes it: %w", err)
+	}
+	return err
 }
 
 func (wrapper *FLNDWrapper) Close() error {
