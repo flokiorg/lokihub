@@ -444,12 +444,12 @@
     "partialDeleteToast_few": "تم حذف {{count}} محافظ فارغة",
     "partialDeleteToast_many": "تم حذف {{count}} محفظة فارغة",
     "partialDeleteToast_other": "تم حذف {{count}} محفظة فارغة",
-    "partialDeleteDescription_zero": "لم تُترَك أي محفظة تحتوي على رصيد دون تغيير — لم يتم حذف الدائرة.",
-    "partialDeleteDescription_one": "تُركت محفظة واحدة تحتوي على رصيد دون تغيير — لم يتم حذف الدائرة.",
-    "partialDeleteDescription_two": "تُركت محفظتان تحتويان على رصيد دون تغيير — لم يتم حذف الدائرة.",
-    "partialDeleteDescription_few": "تُركت {{count}} محافظ تحتوي على رصيد دون تغيير — لم يتم حذف الدائرة.",
-    "partialDeleteDescription_many": "تُركت {{count}} محفظة تحتوي على رصيد دون تغيير — لم يتم حذف الدائرة.",
-    "partialDeleteDescription_other": "تُركت {{count}} محفظة تحتوي على رصيد دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_zero": "لم تُترَك أي محفظة تحتوي على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_one": "تُركت محفظة واحدة تحتوي على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_two": "تُركت محفظتان تحتويان على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_few": "تُركت {{count}} محافظ تحتوي على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_many": "تُركت {{count}} محفظة تحتوي على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
+    "partialDeleteDescription_other": "تُركت {{count}} محفظة تحتوي على رصيد أو دفعة قيد التنفيذ دون تغيير — لم يتم حذف الدائرة.",
     "errors": {
       "load": "فشل تحميل محافظ الدائرة",
       "delete": "فشل حذف الدائرة"

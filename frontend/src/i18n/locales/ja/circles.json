@@ -353,8 +353,8 @@
     "deletedToast": "サークルを削除しました",
     "partialDeleteToast_one": "空のウォレットを {{count}} 件削除しました",
     "partialDeleteToast_other": "空のウォレットを {{count}} 件削除しました",
-    "partialDeleteDescription_one": "残高があるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
-    "partialDeleteDescription_other": "残高があるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
+    "partialDeleteDescription_one": "残高または処理中の支払いがあるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
+    "partialDeleteDescription_other": "残高または処理中の支払いがあるウォレットが {{count}} 件そのままになっています — サークルは削除されませんでした。",
     "errors": {
       "load": "サークルウォレットの読み込みに失敗しました",
       "delete": "サークルの削除に失敗しました"
