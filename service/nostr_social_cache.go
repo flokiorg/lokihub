@@ -152,21 +152,21 @@ func (s *nostrSocialCache) peek(provider, d string) (*FollowSet, bool) {
 	return entry, ok
 }
 
-// getFollowSet returns the cached set, fetching it only on a true cold miss.
-// Any cached entry is served immediately, however stale — freshness is
-// maintained by the periodic background refresh (see
-// StartNostrSocialCacheRefresher), so the request path never blocks on a relay
-// round-trip except on a first-time miss.
+// getFollowSet returns the cached set, fetching it on a miss or once the entry
+// is past the eviction cutoff. A stale entry inside that cutoff is served
+// as-is — freshness is maintained by the periodic background refresh (see
+// StartNostrSocialCacheRefresher), so the request path rarely blocks on a
+// relay round-trip.
 //
 // Revocation latency: as long as StartNostrSocialCacheRefresher is running,
 // every follow_set identity is refreshed at least once every
 // socialCacheRefreshInterval (5 minutes) while the identity count stays within
 // maxRefresherBatchesPerTick*refresherBatchSize; beyond that it wraps across
 // ticks (see runSocialCacheRefresh). If the refresher isn't running at all,
-// staleness is bounded by evictStaleUnlocked's 2×socialCacheTTL cutoff, after
-// which a cold miss forces a fresh fetch.
+// staleness is bounded by the 2×socialCacheTTL cutoff (staleCutoff), past which
+// the entry is refetched rather than served.
 func (s *nostrSocialCache) getFollowSet(ctx context.Context, provider, d string) (*FollowSet, error) {
-	if entry, ok := s.peek(provider, d); ok {
+	if entry, ok := s.peek(provider, d); ok && !entry.FetchedAt.Before(staleCutoff()) {
 		return entry, nil
 	}
 
@@ -588,10 +588,16 @@ func (s *nostrSocialCache) WarmGeneralRelays() {
 	warmRelays(pool, s.cfg.GetGeneralRelayUrls())
 }
 
-// evictStaleUnlocked removes cache entries older than 2×TTL.
+// staleCutoff is the fetch time before which a cached set is too old to
+// decide membership on: evicted, and refetched rather than served.
+func staleCutoff() time.Time {
+	return time.Now().Add(-2 * socialCacheTTL)
+}
+
+// evictStaleUnlocked removes cache entries fetched before staleCutoff.
 // Must be called with s.mu held for writing.
 func (s *nostrSocialCache) evictStaleUnlocked() {
-	cutoff := time.Now().Add(-2 * socialCacheTTL)
+	cutoff := staleCutoff()
 	for k, e := range s.cache {
 		if e.FetchedAt.Before(cutoff) {
 			delete(s.cache, k)
