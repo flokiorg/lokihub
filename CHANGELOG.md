@@ -415,6 +415,9 @@ private-transport request ended.
 - Refetches a follow set cached more than two hours ago instead of admitting
   members from it; without the background refresh, a removed member stayed in.
   (#145)
+- Answers a circle join with `INTERNAL` when the hub can't record its identity
+  proof; it said the proof was already used, which reads as the client's
+  mistake. (#145)
 
 ## [0.4.0]
 

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -207,6 +209,36 @@ func TestHandleCreateCircleWalletEvent_IdentityEvent_Replayed_Rejected(t *testin
 	second := callCreateCircleWallet(t, svc, provider, rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, identityEventJSON))
 	require.NotNil(t, second.Error, "a replayed identity_event must be rejected")
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, second.Error.Code)
+}
+
+// Only a duplicate proof is a replay. Any other failure to record it is the
+// hub's own fault: INTERNAL, not "already used", and the proof stays usable
+// once the database recovers.
+func TestHandleCreateCircleWalletEvent_IdentityEvent_RecordFailure_IsNotAReplay(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	provider := createCircleHub(t, svc, 7200, 10_000_000)
+	requesterKey := nostr.GeneratePrivateKey()
+	requesterPubkey, _ := nostr.GetPublicKey(requesterKey)
+	identityEventJSON := mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterKey, *provider.WalletPubkey))
+
+	failing := true
+	require.NoError(t, svc.DB.Callback().Create().Before("gorm:create").Register("test:fail_identity_proofs", func(tx *gorm.DB) {
+		if failing && tx.Statement.Table == "circle_wallet_identity_proofs" {
+			_ = tx.AddError(errors.New("disk I/O error"))
+		}
+	}))
+
+	resp := callCreateCircleWallet(t, svc, provider, rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, identityEventJSON))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, constants.ERROR_INTERNAL, resp.Error.Code)
+	assert.NotContains(t, resp.Error.Message, "already been used")
+
+	failing = false
+	retry := callCreateCircleWallet(t, svc, provider, rawCircleWalletRequest(t, requesterPubkey, 100_000, 3600, identityEventJSON))
+	assert.Nil(t, retry.Error, "the proof was never recorded, so it is still good")
 }
 
 // CRITICAL regression test: go-nostr's CheckSignature() verifies the
