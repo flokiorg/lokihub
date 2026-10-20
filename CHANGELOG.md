@@ -456,6 +456,8 @@ private-transport request ended.
 - Shows Nostr profile pictures in the desktop app, which showed initials
   everywhere because it had no login token to put on the image request.
   (#148)
+- Counts a payment made at the exact moment a budget period starts against
+  that period; it counted against neither, so it escaped the budget. (#148)
 
 ## [0.4.0]
 
