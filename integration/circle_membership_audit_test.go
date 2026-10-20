@@ -153,11 +153,11 @@ func requireFrozen(t *testing.T, cfg *Config, child *nwcclient.Client, balanceMl
 	require.NoError(t, child.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs), "and its history")
 }
 
-// requireWorking asserts the wallet can receive and spend.
+// requireWorking asserts the wallet can receive and spend. The invoice it
+// makes is paid, so no incoming payment is left pending to block cleanup.
 func requireWorking(t *testing.T, cfg *Config, child *nwcclient.Client) {
 	t.Helper()
-	var invoice MakeInvoiceResult
-	require.NoError(t, child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: 1000}, &invoice))
+	fundCircleChild(t, cfg, child, 1000, "circle wallet receives")
 	payee := mintInvoiceFromSimpleWallet(t, cfg, 1000, "circle wallet pays")
 	var paid PayInvoiceResult
 	require.NoError(t, child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: payee.Invoice}, &paid))
