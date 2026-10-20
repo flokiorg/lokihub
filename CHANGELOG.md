@@ -416,6 +416,9 @@ private-transport request ended.
 - Credits a keysend to a Circle Wallet only when it fits under the wallet's
   cap; a larger one stays with the node, and one sent from this node is
   refused. Anyone could name the wallet's ID and push it past its cap. (#144)
+- Keeps an expired or deleted Circle or Cash wallet until its outgoing payment
+  ends; deleting it mid-payment lost the payment's record and the hub's fee
+  credit. (#144)
 
 ## [0.4.0]
 
