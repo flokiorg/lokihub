@@ -353,8 +353,8 @@
     "deletedToast": "حلقه حذف شد",
     "partialDeleteToast_one": "{{count}} کیف‌پول خالی حذف شد",
     "partialDeleteToast_other": "{{count}} کیف‌پول خالی حذف شد",
-    "partialDeleteDescription_one": "{{count}} کیف‌پول دارای موجودی دست‌نخورده باقی ماند — حلقه حذف نشد.",
-    "partialDeleteDescription_other": "{{count}} کیف‌پول دارای موجودی دست‌نخورده باقی ماندند — حلقه حذف نشد.",
+    "partialDeleteDescription_one": "{{count}} کیف‌پول دارای موجودی یا پرداخت در جریان دست‌نخورده باقی ماند — حلقه حذف نشد.",
+    "partialDeleteDescription_other": "{{count}} کیف‌پول دارای موجودی یا پرداخت در جریان دست‌نخورده باقی ماندند — حلقه حذف نشد.",
     "errors": {
       "load": "بارگذاری کیف‌پول‌های حلقه ناموفق بود",
       "delete": "حذف حلقه ناموفق بود"

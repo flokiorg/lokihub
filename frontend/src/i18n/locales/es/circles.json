@@ -353,8 +353,8 @@
     "deletedToast": "Círculo eliminado",
     "partialDeleteToast_one": "{{count}} billetera vacía eliminada",
     "partialDeleteToast_other": "{{count}} billeteras vacías eliminadas",
-    "partialDeleteDescription_one": "{{count}} billetera con saldo se dejó intacta — el círculo no se eliminó.",
-    "partialDeleteDescription_other": "{{count}} billeteras con saldo se dejaron intactas — el círculo no se eliminó.",
+    "partialDeleteDescription_one": "{{count}} billetera con saldo o un pago en curso se dejó intacta — el círculo no se eliminó.",
+    "partialDeleteDescription_other": "{{count}} billeteras con saldo o un pago en curso se dejaron intactas — el círculo no se eliminó.",
     "errors": {
       "load": "Error al cargar las billeteras del círculo",
       "delete": "Error al eliminar el círculo"

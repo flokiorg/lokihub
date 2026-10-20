@@ -684,6 +684,11 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		if err != nil {
 			return err
 		}
+		// A self-payment naming a circle wallet with no room would leave the
+		// funds with the node, so refuse it before anything is sent.
+		if selfPayment && svc.namesCircleWalletWithoutRoom(tx, customRecords, amount) {
+			return NewQuotaExceededError()
+		}
 		// SendKeysend has no internal-transfer or cash_redeem path today (see enforceCashFullDrain doc).
 		if err := enforceCashFullDrain(parentKind, balance, amount, false, false); err != nil {
 			return err
@@ -719,7 +724,7 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 
 	if selfPayment {
 		// for keysend self-payments we need to create an incoming payment at the time of the payment
-		recipientAppId := svc.getAppIdFromCustomRecords(customRecords, svc.db)
+		recipientAppId := svc.getAppIdFromCustomRecords(customRecords, amount, svc.db)
 		dbTransaction := db.Transaction{
 			AppId:          recipientAppId,
 			RequestEventId: nil, // it is related to this request but for a different app
@@ -1263,7 +1268,7 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 						description = extractedDescription
 					}
 					// find app by custom key/value records
-					appId = svc.getAppIdFromCustomRecords(customRecords, tx)
+					appId = svc.getAppIdFromCustomRecords(customRecords, uint64(lnClientTransaction.Amount), tx) //nolint:gosec // LN-client-reported amount is always non-negative
 				}
 				var expiresAt *time.Time
 				if lnClientTransaction.ExpiresAt != nil {
@@ -1934,7 +1939,35 @@ func (svc *transactionsService) getDescriptionFromCustomRecords(customRecords []
 	return description
 }
 
-func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclient.TLVRecord, tx *gorm.DB) *uint {
+// namesCircleWalletWithoutRoom reports whether customRecords name a circle
+// wallet that has no room for amountMloki under its receive cap.
+func (svc *transactionsService) namesCircleWalletWithoutRoom(tx *gorm.DB, customRecords []lnclient.TLVRecord, amountMloki uint64) bool {
+	appID := svc.findCustomKeyApp(customRecords, tx)
+	return appID != nil && !circleWalletHasRoom(tx, *appID, amountMloki)
+}
+
+// getAppIdFromCustomRecords finds the app a keysend names in its custom key
+// record. Anyone can write that record, so a circle wallet is only named when
+// amountMloki fits under its receive cap; otherwise the payment stays with the
+// node.
+func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclient.TLVRecord, amountMloki uint64, tx *gorm.DB) *uint {
+	appID := svc.findCustomKeyApp(customRecords, tx)
+	if appID != nil && !circleWalletHasRoom(tx, *appID, amountMloki) {
+		svc.logger.Warn().Uint("app_id", *appID).Uint64("amount", amountMloki).
+			Msg("Keysend would exceed the circle wallet's cap, leaving it with the node")
+		return nil
+	}
+	return appID
+}
+
+// circleWalletHasRoom is false only for a circle wallet that amountMloki would
+// push past its receive cap.
+func circleWalletHasRoom(tx *gorm.DB, appID uint, amountMloki uint64) bool {
+	room, capped := queries.CircleReceiveRoomMloki(tx, appID, time.Now())
+	return !capped || (amountMloki <= math.MaxInt64 && int64(amountMloki) <= room)
+}
+
+func (svc *transactionsService) findCustomKeyApp(customRecords []lnclient.TLVRecord, tx *gorm.DB) *uint {
 	app := db.App{}
 	for _, record := range customRecords {
 		if record.Type == CustomKeyTlvType {

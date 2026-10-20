@@ -118,3 +118,26 @@ func TestDeleteCircleWalletChild_NonCircleHub_Rejected(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a circle_hub")
 }
+
+// A payment still going out of the wallet keeps it alive: deleting it would
+// cascade-delete the outgoing row before the node reports how it ended.
+func TestDeleteCircleWalletChild_PendingOutgoing_Refused(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := newCircleHub(t, svc, 300_000, 3600)
+	child := createCircleChild(t, svc, hub, "member")
+	tests.FundApp(svc, child.ID, 200_000, "pending-out-fund")
+	require.NoError(t, svc.DB.Create(&db.Transaction{
+		AppId: &child.ID, Type: constants.TRANSACTION_TYPE_OUTGOING,
+		State: constants.TRANSACTION_STATE_PENDING, AmountMloki: 50_000, PaymentHash: "child-pending-out",
+	}).Error)
+
+	err = newTestAPIWithService(t, svc).DeleteCircleWalletChild(hub.ID, child.ID)
+	require.ErrorIs(t, err, constants.ErrInvalidParams)
+
+	var count int64
+	svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Count(&count)
+	assert.Equal(t, int64(1), count, "the wallet stays until the payment ends")
+}
