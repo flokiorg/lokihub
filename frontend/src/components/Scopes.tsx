@@ -7,7 +7,7 @@ import {
   SquarePenIcon,
 } from "lucide-react";
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";

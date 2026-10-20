@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import LottieLoading from "src/components/LottieLoading";
 import { useInfo } from "src/hooks/useInfo";

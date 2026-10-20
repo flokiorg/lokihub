@@ -1,4 +1,4 @@
-import { Outlet, ScrollRestoration } from "react-router-dom";
+import { Outlet, ScrollRestoration } from "react-router";
 
 import { AppSidebar } from "src/components/AppSidebar";
 import { Banner } from "src/components/Banner";

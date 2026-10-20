@@ -1,6 +1,6 @@
 import { LayoutGrid } from "lucide-react";
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import EmptyState from "src/components/EmptyState";
 import Loading from "src/components/Loading";
 import { Badge } from "src/components/ui/badge";

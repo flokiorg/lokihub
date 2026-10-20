@@ -1,5 +1,5 @@
 import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import Loading from "src/components/Loading";
 import { localStorageKeys } from "src/constants";
 import { safeReturnPath } from "src/utils/safeReturnPath";
