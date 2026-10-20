@@ -393,10 +393,10 @@
     "partialDeleteToast_few": "Удалено {{count}} пустых кошелька",
     "partialDeleteToast_many": "Удалено {{count}} пустых кошельков",
     "partialDeleteToast_other": "Удалено {{count}} пустых кошелька",
-    "partialDeleteDescription_one": "{{count}} кошелёк с балансом остался нетронутым — круг не был удалён.",
-    "partialDeleteDescription_few": "{{count}} кошелька с балансом остались нетронутыми — круг не был удалён.",
-    "partialDeleteDescription_many": "{{count}} кошельков с балансом остались нетронутыми — круг не был удалён.",
-    "partialDeleteDescription_other": "{{count}} кошелька с балансом остались нетронутыми — круг не был удалён.",
+    "partialDeleteDescription_one": "{{count}} кошелёк с балансом или незавершённым платежом остался нетронутым — круг не был удалён.",
+    "partialDeleteDescription_few": "{{count}} кошелька с балансом или незавершённым платежом остались нетронутыми — круг не был удалён.",
+    "partialDeleteDescription_many": "{{count}} кошельков с балансом или незавершённым платежом остались нетронутыми — круг не был удалён.",
+    "partialDeleteDescription_other": "{{count}} кошелька с балансом или незавершённым платежом остались нетронутыми — круг не был удалён.",
     "errors": {
       "load": "Не удалось загрузить кошельки круга",
       "delete": "Не удалось удалить круг"
