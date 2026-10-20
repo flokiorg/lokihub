@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/datatypes"
@@ -31,17 +32,18 @@ const (
 	ParentKindCircle = "circle"
 )
 
-// Circle access policies. Only policies backed by a real, provider-controlled
-// authorization decision are supported: "following" is provider-controlled
-// (only the provider can add someone to their own contact list) and
-// "allowlist" is explicit. A "followers" (or "both", which includes it)
-// policy would check the *requester's* self-published contact list, which
-// anyone can fabricate for free — it provides no real access control and is
-// intentionally not offered.
+// Circle access policies (NIP-CW §Membership). Both are provider-controlled:
+// "follow_set" admits the members of one NIP-51 follow set the provider
+// publishes, and "allowlist" is explicit. A "followers" policy would check
+// the *requester's* self-published lists, which anyone can fabricate for
+// free, so it is intentionally not offered.
 const (
-	CirclePolicyFollowing = "following"
+	CirclePolicyFollowSet = "follow_set"
 	CirclePolicyAllowlist = "allowlist"
 )
+
+// KindFollowSet is NIP-51's follow set, the event a follow_set circle reads.
+const KindFollowSet = 30000
 
 // Circle hub delete modes — how to handle circle_wallet children that
 // still hold a nonzero balance when their circle_hub is deleted.
@@ -295,8 +297,16 @@ type CashWalletClaim struct {
 type CircleIdentity struct {
 	ID             uint   `gorm:"primaryKey"`
 	Name           string `gorm:"not null"`
-	Policy         string `gorm:"index"` // queried every tick by GetFollowingCircleIdentities
+	Policy         string `gorm:"index"` // queried every tick by GetFollowSetCircleIdentities
 	ProviderPubkey string
+	// FollowSetD is the set's `d` identifier, set only for the follow_set
+	// policy. ProviderPubkey and FollowSetD together are the set's address.
+	FollowSetD string
+}
+
+// FollowSetAddress is the NIP-01 address of a follow_set identity's set.
+func (identity *CircleIdentity) FollowSetAddress() string {
+	return fmt.Sprintf("%d:%s:%s", KindFollowSet, identity.ProviderPubkey, identity.FollowSetD)
 }
 
 // CircleIdentityAllowedPubkey records which nostr pubkeys are authorized under

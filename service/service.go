@@ -155,6 +155,9 @@ func NewService(ctx context.Context) (*service, error) {
 	transactionsSvc := transactions.NewTransactionsService(gormDB, eventPublisher)
 
 	socialCache := NewNostrSocialCache(cfg)
+	socialCache.inboxKey = func() (string, error) {
+		return keys.GetPrivateTransportKey(privateTransportKeyIndex)
+	}
 
 	svc := &service{
 		cfg:            cfg,
@@ -296,29 +299,22 @@ func (svc *service) GetNip47Service() nip47.Nip47Service {
 	return svc.nip47Service
 }
 
-// WarmCircleFollowingCache immediately fetches and caches providerPubkey's
-// contact list, returning the fetched set. Called right after creating a
-// following-policy Circle Hub, and reused by the manual "Sync" flow.
-func (svc *service) WarmCircleFollowingCache(ctx context.Context, providerPubkey string) (map[string]struct{}, error) {
-	return svc.socialCache.WarmFollowingCache(ctx, providerPubkey)
+func (svc *service) RefreshFollowSet(ctx context.Context, provider, d string) (*FollowSet, error) {
+	return svc.socialCache.RefreshFollowSet(ctx, provider, d)
+}
+
+func (svc *service) FollowSet(ctx context.Context, provider, d string) (*FollowSet, error) {
+	return svc.socialCache.FollowSet(ctx, provider, d)
+}
+
+func (svc *service) PeekFollowSet(provider, d string) (*FollowSet, bool) {
+	return svc.socialCache.PeekFollowSet(provider, d)
 }
 
 // WarmGeneralRelays re-connects the shared Nostr pool to the current General
 // relay list — call after the user updates that setting.
 func (svc *service) WarmGeneralRelays() {
 	svc.socialCache.WarmGeneralRelays()
-}
-
-func (svc *service) ContactCount(ctx context.Context, ownerPubkey string) (int, error) {
-	return svc.socialCache.ContactCount(ctx, ownerPubkey)
-}
-
-func (svc *service) PeekContactCount(ownerPubkey string) (int, bool) {
-	return svc.socialCache.PeekContactCount(ownerPubkey)
-}
-
-func (svc *service) PeekContactSyncedAt(ownerPubkey string) (time.Time, bool) {
-	return svc.socialCache.PeekContactSyncedAt(ownerPubkey)
 }
 
 func (svc *service) GetEventPublisher() events.EventPublisher {

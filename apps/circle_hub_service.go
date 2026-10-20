@@ -22,14 +22,14 @@ func validateBudgetRenewal(renewal string) error {
 }
 
 // CircleIdentityRef selects which CircleIdentity a new circle_hub should
-// use: either an existing one (ExistingID set — reused as-is, Name/Policy/
-// ProviderPubkey below are ignored), or a brand-new one created from the
-// remaining fields.
+// use: either an existing one (ExistingID set — reused as-is, the fields
+// below are ignored), or a brand-new one created from the remaining fields.
 type CircleIdentityRef struct {
 	ExistingID     *uint
 	Name           string
 	Policy         string
 	ProviderPubkey string
+	FollowSetD     string
 }
 
 func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
@@ -60,7 +60,7 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 		}
 		identityID = identity.ID
 	} else {
-		identity, err := svc.CreateCircleIdentity(identityRef.Name, identityRef.Policy, identityRef.ProviderPubkey)
+		identity, err := svc.CreateCircleIdentity(identityRef.Name, identityRef.Policy, identityRef.ProviderPubkey, identityRef.FollowSetD)
 		if err != nil {
 			return nil, "", err
 		}

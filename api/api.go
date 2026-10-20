@@ -149,6 +149,19 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			},
 		)
 	case db.AppKindCircleHub:
+		identityRef := apps.CircleIdentityRef{
+			ExistingID:     createAppRequest.CircleIdentityId,
+			Name:           createAppRequest.CircleIdentityName,
+			Policy:         createAppRequest.CirclePolicy,
+			ProviderPubkey: createAppRequest.ProviderPubkey,
+			FollowSetD:     createAppRequest.FollowSetD,
+		}
+		if identityRef.ExistingID == nil && identityRef.Policy == db.CirclePolicyFollowSet {
+			identityRef.ProviderPubkey, err = api.prepareNewFollowSet(createAppRequest)
+			if err != nil {
+				return nil, err
+			}
+		}
 		app, pairingSecretKey, err = api.appsSvc.CreateCircleHub(
 			createAppRequest.Name,
 			createAppRequest.Pubkey,
@@ -157,12 +170,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			expiresAt,
 			createAppRequest.Scopes,
 			createAppRequest.Metadata,
-			apps.CircleIdentityRef{
-				ExistingID:     createAppRequest.CircleIdentityId,
-				Name:           createAppRequest.CircleIdentityName,
-				Policy:         createAppRequest.CirclePolicy,
-				ProviderPubkey: createAppRequest.ProviderPubkey,
-			},
+			identityRef,
 			db.CircleHubConfig{
 				MaxExpSecs:        createAppRequest.CircleMaxExpSecs,
 				FeesPpm:           createAppRequest.CircleFeesPpm,
@@ -189,14 +197,25 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		return nil, err
 	}
 
+	// NIP-CW §Membership: the invite carries the set's title by default, so the
+	// invite and the set show the same name.
+	circleLabel := app.Name
 	if kind == db.AppKindCircleHub {
 		// Resolve the actual identity attached (whether newly created or reused)
-		// to find its real policy/pubkey — createAppRequest's circlePolicy/
-		// providerPubkey are only populated on the create-new-identity path.
-		if cfg, cfgErr := api.appsSvc.GetCircleHubConfig(app.ID); cfgErr == nil && cfg.CircleIdentity.Policy == db.CirclePolicyFollowing {
-			if _, err := api.svc.WarmCircleFollowingCache(context.Background(), cfg.CircleIdentity.ProviderPubkey); err != nil {
-				logger.Logger.Warn().Err(err).Uint("app_id", app.ID).
-					Msg("Failed to warm following-policy social cache at creation; will self-heal on next periodic refresh")
+		// to find its real policy and address — createAppRequest's fields are
+		// only populated on the create-new-identity path.
+		if cfg, cfgErr := api.appsSvc.GetCircleHubConfig(app.ID); cfgErr == nil && cfg.CircleIdentity.Policy == db.CirclePolicyFollowSet {
+			identity := cfg.CircleIdentity
+			set, ok := api.svc.PeekFollowSet(identity.ProviderPubkey, identity.FollowSetD)
+			if !ok {
+				set, err = api.svc.RefreshFollowSet(context.Background(), identity.ProviderPubkey, identity.FollowSetD)
+				if err != nil {
+					logger.Logger.Warn().Err(err).Uint("app_id", app.ID).
+						Msg("Failed to read the follow set at creation; will self-heal on next periodic refresh")
+				}
+			}
+			if set != nil && set.Title != "" {
+				circleLabel = set.Title
 			}
 		}
 	}
@@ -257,7 +276,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			WalletPubkey: *app.WalletPubkey,
 			Secret:       pairingSecretKey,
 			RelayURLs:    relayUrls,
-			Label:        hubLabel(app.Name),
+			Label:        hubLabel(circleLabel),
 		})
 		if err != nil {
 			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the circle hub connection token; returning the pairing URI only")
@@ -644,10 +663,10 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 
 // circleIdentitySummaryForApp resolves a circle_hub app's attached identity
 // and its policy-specific counts for inline enrichment. allowBlockingFetch
-// mirrors buildCircleIdentityCounts: ListApps passes false (PeekContactCount,
-// never fetches — a following-policy identity with no cached count yet
-// simply omits FollowingCount, which the frontend renders as still-loading),
-// while GetApp passes true since it's a single deliberate target.
+// mirrors buildCircleIdentityCounts: ListApps passes false (PeekFollowSet,
+// never fetches — a follow_set identity whose set isn't read yet simply
+// omits MemberCount, which the frontend renders as still-loading), while
+// GetApp passes true since it's a single deliberate target.
 func (api *api) circleIdentitySummaryForApp(ctx context.Context, appID uint, allowBlockingFetch bool) *CircleIdentitySummaryWithCounts {
 	cfg, err := api.appsSvc.GetCircleHubConfig(appID)
 	if err != nil {
@@ -661,34 +680,33 @@ func (api *api) circleIdentitySummaryForApp(ctx context.Context, appID uint, all
 }
 
 // buildCircleIdentityCounts computes policy-specific counts for identity.
-// allowBlockingFetch controls whether a following-policy count may cold-fetch
-// via a live relay query (GetCircleIdentity, a single deliberate target) or
-// must stay non-blocking (circleIdentitySummaryForApp, iterating many rows).
+// allowBlockingFetch controls whether a follow_set count may cold-fetch via a
+// live relay query (GetCircleIdentity, a single deliberate target) or must
+// stay non-blocking (circleIdentitySummaryForApp, iterating many rows).
 func (api *api) buildCircleIdentityCounts(ctx context.Context, identity *db.CircleIdentity, allowBlockingFetch bool) (*CircleIdentitySummaryWithCounts, error) {
 	summary := &CircleIdentitySummaryWithCounts{
-		CircleIdentitySummary: CircleIdentitySummary{
-			ID:             identity.ID,
-			Name:           identity.Name,
-			Policy:         identity.Policy,
-			ProviderPubkey: identity.ProviderPubkey,
-		},
+		CircleIdentitySummary: api.circleIdentitySummary(identity),
 	}
 	switch identity.Policy {
-	case db.CirclePolicyFollowing:
-		if allowBlockingFetch {
-			count, err := api.svc.ContactCount(ctx, identity.ProviderPubkey)
+	case db.CirclePolicyFollowSet:
+		set, ok := api.svc.PeekFollowSet(identity.ProviderPubkey, identity.FollowSetD)
+		if !ok && allowBlockingFetch {
+			var err error
+			set, err = api.svc.FollowSet(ctx, identity.ProviderPubkey, identity.FollowSetD)
 			switch {
 			case errors.Is(err, constants.ErrCircleMembershipUnresolved):
-				// Not fetched yet: the count is unknown, not zero.
+				// Not found yet: the count is unknown, not zero.
 			case err != nil:
 				return nil, err
 			default:
-				summary.FollowingCount = &count
+				ok = true
 			}
-		} else if count, ok := api.svc.PeekContactCount(identity.ProviderPubkey); ok {
-			summary.FollowingCount = &count
 		}
-		if syncedAt, ok := api.svc.PeekContactSyncedAt(identity.ProviderPubkey); ok {
+		if ok {
+			count := set.MemberCount()
+			summary.MemberCount = &count
+			summary.FollowSetTitle = set.Title
+			syncedAt := set.FetchedAt
 			summary.PolicySyncedAt = &syncedAt
 		}
 	case db.CirclePolicyAllowlist:
@@ -739,16 +757,23 @@ func (api *api) ListCircleIdentities() ([]CircleIdentitySummary, error) {
 	}
 
 	summaries := make([]CircleIdentitySummary, 0, len(identities))
-	for _, identity := range identities {
-		summaries = append(summaries, CircleIdentitySummary{
-			ID:             identity.ID,
-			Name:           identity.Name,
-			Policy:         identity.Policy,
-			ProviderPubkey: identity.ProviderPubkey,
-			UsedByCount:    usedByCount[identity.ID],
-		})
+	for i := range identities {
+		summary := api.circleIdentitySummary(&identities[i])
+		summary.UsedByCount = usedByCount[identities[i].ID]
+		summaries = append(summaries, summary)
 	}
 	return summaries, nil
+}
+
+func (api *api) circleIdentitySummary(identity *db.CircleIdentity) CircleIdentitySummary {
+	return CircleIdentitySummary{
+		ID:             identity.ID,
+		Name:           identity.Name,
+		Policy:         identity.Policy,
+		ProviderPubkey: identity.ProviderPubkey,
+		FollowSetD:     identity.FollowSetD,
+		Managed:        api.isManagedFollowSet(identity),
+	}
 }
 
 // DeleteCircleIdentity removes a standalone CircleIdentity — refuses
@@ -2871,107 +2896,6 @@ func (api *api) ListCircleAllowlist(app *db.App) ([]string, error) {
 		pubkeys = append(pubkeys, e.Pubkey)
 	}
 	return pubkeys, nil
-}
-
-// fetchCircleFollowingPubkeys re-fetches providerPubkey's kind:3 contact list
-// via the shared nostrSocialCache (WarmCircleFollowingCache), so the manual
-// "Sync"/refresh flow stays in agreement with the automatic following-policy
-// auth path instead of running its own separate relay query. Shared by
-// RefreshCircleAllowlist (which applies the result) and PreviewCircleRefresh
-// (which only diffs it).
-func (api *api) fetchCircleFollowingPubkeys(ctx context.Context, providerPubkey string) ([]string, error) {
-	contacts, err := api.svc.WarmCircleFollowingCache(ctx, providerPubkey)
-	if err != nil {
-		return nil, err
-	}
-	pubkeys := make([]string, 0, len(contacts))
-	for pubkey := range contacts {
-		pubkeys = append(pubkeys, pubkey)
-	}
-	return pubkeys, nil
-}
-
-// circleHubFollowingConfig loads app's CircleHubConfig and validates
-// it's eligible for a following-policy relay refresh — shared by
-// RefreshCircleAllowlist and PreviewCircleRefresh so both reject the same way
-// for an allowlist-policy circle (refreshing from relays would silently
-// clobber a manually-curated member list with the owner's raw following list,
-// which only makes sense for following-policy circles in the first place).
-func (api *api) circleHubFollowingConfig(app *db.App) (*db.CircleHubConfig, error) {
-	if app.Kind != db.AppKindCircleHub {
-		return nil, fmt.Errorf("app is not a circle_hub")
-	}
-	providerConfig, err := api.appsSvc.GetCircleHubConfig(app.ID)
-	if err != nil {
-		return nil, fmt.Errorf("circle_hub has no config: %w", err)
-	}
-	if providerConfig.CircleIdentity.Policy != db.CirclePolicyFollowing {
-		return nil, fmt.Errorf("%w: refresh from relays only applies to following-policy circles", constants.ErrInvalidParams)
-	}
-	if providerConfig.CircleIdentity.ProviderPubkey == "" {
-		return nil, fmt.Errorf("circle_hub has no provider_pubkey set")
-	}
-	return providerConfig, nil
-}
-
-// RefreshCircleAllowlist re-fetches the provider's kind:3 contacts from nostr relays
-// and rebuilds the allowlist for the CircleIdentity attached to this circle_hub app.
-// Only valid for following-policy circles — see circleHubFollowingConfig.
-func (api *api) RefreshCircleAllowlist(ctx context.Context, app *db.App) error {
-	providerConfig, err := api.circleHubFollowingConfig(app)
-	if err != nil {
-		return err
-	}
-	providerPubkey := providerConfig.CircleIdentity.ProviderPubkey
-	pubkeys, err := api.fetchCircleFollowingPubkeys(ctx, providerPubkey)
-	if err != nil {
-		return err
-	}
-	// fetchCircleFollowingPubkeys already warms the nostrSocialCache entry as
-	// part of this same fetch (see WarmCircleFollowingCache), so the
-	// following-count/synced-at shown on the app's detail page reflects this
-	// refresh immediately without a second, separate relay round-trip.
-	return api.ReplaceCircleAllowlist(app, pubkeys)
-}
-
-// PreviewCircleRefresh re-fetches the provider's kind:3 contacts and reports
-// how they'd differ from the currently-stored allowlist, without applying
-// anything. Only valid for following-policy circles — see
-// circleHubFollowingConfig.
-func (api *api) PreviewCircleRefresh(ctx context.Context, app *db.App) (*CircleRefreshPreview, error) {
-	providerConfig, err := api.circleHubFollowingConfig(app)
-	if err != nil {
-		return nil, err
-	}
-	fresh, err := api.fetchCircleFollowingPubkeys(ctx, providerConfig.CircleIdentity.ProviderPubkey)
-	if err != nil {
-		return nil, err
-	}
-	current, err := api.ListCircleAllowlist(app)
-	if err != nil {
-		return nil, err
-	}
-
-	currentSet := make(map[string]bool, len(current))
-	for _, pk := range current {
-		currentSet[pk] = true
-	}
-	freshSet := make(map[string]bool, len(fresh))
-	var added []string
-	for _, pk := range fresh {
-		freshSet[pk] = true
-		if !currentSet[pk] {
-			added = append(added, pk)
-		}
-	}
-	var removed []string
-	for _, pk := range current {
-		if !freshSet[pk] {
-			removed = append(removed, pk)
-		}
-	}
-
-	return &CircleRefreshPreview{Pubkeys: fresh, Added: added, Removed: removed}, nil
 }
 
 // getCircleChildren returns app's circle_wallet children, newest first, using

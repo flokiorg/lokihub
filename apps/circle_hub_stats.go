@@ -24,8 +24,8 @@ const circleStatsWindowDays = cashStatsWindowDays
 // far more than the rest.
 type CircleHubStats struct {
 	// MembersCount is how many circle_wallet children exist. EligibleCount is
-	// how many pubkeys may request one, and is nil for a "following"-policy
-	// circle, whose eligible set is the host's live contact list rather than
+	// how many pubkeys may request one, and is nil for a "follow_set"-policy
+	// circle, whose eligible set is a follow set on relays rather than
 	// anything this hub stores.
 	MembersCount  uint64
 	EligibleCount *uint64
@@ -194,10 +194,10 @@ func (svc *appsService) GetCircleHubStats(hubID uint, now time.Time) (*CircleHub
 
 // fillCircleEligibleCount reports how many pubkeys may request a wallet.
 //
-// Only an allowlist circle has an answer this hub can give. A "following"
-// circle draws its members from the host's live kind:3 contact list, which is
-// not stored here and can change without this hub being told — so the honest
-// value is "unknown" rather than a stale number presented as fact.
+// Only an allowlist circle has an answer this hub can give. A "follow_set"
+// circle draws its members from a follow set on relays, which is not stored
+// here and can change without this hub being told — so the honest value is
+// "unknown" rather than a stale number presented as fact.
 func (svc *appsService) fillCircleEligibleCount(stats *CircleHubStats, hubID uint) error {
 	var config db.CircleHubConfig
 	if err := svc.db.Preload("CircleIdentity").

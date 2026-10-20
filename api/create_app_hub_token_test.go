@@ -23,9 +23,8 @@ import (
 
 // newTestAPIForCreateApp wires a real DB/config/apps-service, matching what
 // CreateApp actually touches for cash_hub/circle_hub with an allowlist
-// identity: api.svc is only called for a *following*-policy circle_hub
-// (WarmCircleFollowingCache), which these tests don't exercise, so it's left
-// nil rather than mocked.
+// identity: api.svc is only called for a follow_set circle_hub, so it's left
+// nil here rather than mocked (see create_app_follow_set_test.go for those).
 func newTestAPIForCreateApp(t *testing.T, svc *tests.TestService) *api {
 	t.Helper()
 	return &api{db: svc.DB, appsSvc: svc.AppsService, cfg: svc.Cfg, keys: svc.Keys}

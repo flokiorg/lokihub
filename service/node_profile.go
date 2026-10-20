@@ -74,17 +74,46 @@ func (svc *service) publishNodeEvent(ctx context.Context, kind int, content stri
 	if svc.lnClient == nil {
 		return nil, errors.New("publishing a node event needs an LN client for the hub's node identity")
 	}
-	nodeXOnly, err := svc.nodeXOnlyIdentity()
+	nodeXOnly, err := svc.NodeNostrIdentity()
 	if err != nil {
 		return nil, err
 	}
 
+	published, err := svc.signNodeEvent(ctx, nmilatnip01.NewUnsignedEvent(kind, nodeXOnly, content))
+	if err != nil {
+		return nil, err
+	}
+	publishedTo, err := svc.publishToGeneralRelays(ctx, published)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Logger.Info().
+		Str("node", nodeXOnly).
+		Int("kind", kind).
+		Int("relays", publishedTo).
+		Msg("Published node event")
+
+	return &PublishedNodeEvent{ID: published.ID, CreatedAt: int64(published.CreatedAt)}, nil //nolint:gosec // CreatedAt is a unix timestamp in seconds, nowhere near MaxInt64
+}
+
+// NodeNostrIdentity is the hub's node identity in Nostr form (x-only hex), the
+// key signNodeEvent signs with.
+func (svc *service) NodeNostrIdentity() (string, error) {
+	if svc.lnClient == nil {
+		return "", errors.New("the hub's node identity needs an LN client")
+	}
+	return svc.nodeXOnlyIdentity()
+}
+
+// signNodeEvent signs ev, whose PubKey must be the node identity, with the
+// node key, verifies the result and returns it as a go-nostr event.
+func (svc *service) signNodeEvent(ctx context.Context, ev *nmilatnip01.Event) (*nostr.Event, error) {
 	signer, ok := svc.lnClient.(lnclient.TransportSigner)
 	if !ok {
 		return nil, errors.New("this LN backend cannot sign a node event (needs BIP340 over the node key)")
 	}
 
-	ev := nmilatnip01.NewUnsignedEvent(kind, nodeXOnly, content)
 	id, err := ev.HashID()
 	if err != nil {
 		return nil, fmt.Errorf("hash node event: %w", err)
@@ -111,14 +140,16 @@ func (svc *service) publishNodeEvent(ctx context.Context, kind int, content stri
 		return nil, fmt.Errorf("refusing to publish an event that does not verify: %w", err)
 	}
 
-	published, err := toGoNostrEvent(ev)
-	if err != nil {
-		return nil, err
-	}
+	return toGoNostrEvent(ev)
+}
 
+// publishToGeneralRelays publishes a signed event to the General relay pool,
+// where every other profile and follow set in this app is read from, and
+// returns how many relays accepted it.
+func (svc *service) publishToGeneralRelays(ctx context.Context, published *nostr.Event) (int, error) {
 	relayURLs := svc.cfg.GetGeneralRelayUrls()
 	if len(relayURLs) == 0 {
-		return nil, errors.New("no general relays configured to publish to")
+		return 0, errors.New("no general relays configured to publish to")
 	}
 
 	// A fresh, short-lived pool: unlike the announcement (signed once at
@@ -142,14 +173,7 @@ func (svc *service) publishNodeEvent(ctx context.Context, kind int, content stri
 		publishedTo++
 	}
 	if publishedTo == 0 {
-		return nil, errors.New("no relay accepted the node event")
+		return 0, errors.New("no relay accepted the node event")
 	}
-
-	logger.Logger.Info().
-		Str("node", nodeXOnly).
-		Int("kind", kind).
-		Int("relays", publishedTo).
-		Msg("Published node event")
-
-	return &PublishedNodeEvent{ID: ev.ID, CreatedAt: int64(ev.CreatedAt)}, nil //nolint:gosec // CreatedAt is a unix timestamp in seconds, nowhere near MaxInt64
+	return publishedTo, nil
 }
