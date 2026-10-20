@@ -2233,6 +2233,19 @@ func (svc *transactionsService) creditCircleHubFeeSkim(tx *gorm.DB, dbTransactio
 			Msg("circle_wallet has FeeSkimMloki but no parent hub app; skipping fee credit")
 		return nil
 	}
+	// The hub row may be gone by the time the payment settles. The credit has
+	// nowhere to go then, and failing here would leave the member's own
+	// payment unrecorded, so the skim is skipped instead.
+	var hubCount int64
+	if err := tx.Model(&db.App{}).Where("id = ?", *childApp.ParentAppID).Count(&hubCount).Error; err != nil {
+		return err
+	}
+	if hubCount == 0 {
+		svc.logger.Error().Uint("app_id", *dbTransaction.AppId).Uint("parent_app_id", *childApp.ParentAppID).
+			Uint64("fee_skim_mloki", dbTransaction.FeeSkimMloki).
+			Msg("circle_wallet's parent hub no longer exists; skipping fee credit")
+		return nil
+	}
 
 	metadataBytes, err := json.Marshal(map[string]interface{}{
 		"circle_fee_skim_source_app_id":       *dbTransaction.AppId,
