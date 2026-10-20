@@ -60,7 +60,7 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        shortLivedExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -117,7 +117,7 @@ func TestCircleWallet_Expiry_MoneyMovingScopesRejectedButBudgetAndInfoSurvive(t 
 		var result GetBudgetResult
 		require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &result),
 			"get_budget is always-granted too - an expired circle wallet's budget stays reportable even though it can no longer move money")
-		require.EqualValues(t, happyPathAmountMloki, result.TotalBudget)
+		require.EqualValues(t, circleHappyPathAmountMloki, result.TotalBudget)
 	})
 }
 
@@ -201,7 +201,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 	var created CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
-		MaxAmount:     happyPathAmountMloki,
+		MaxAmount:     circleHappyPathAmountMloki,
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),
@@ -219,7 +219,7 @@ func TestCircleHub_ParentExpiry_HubRejectedButAlreadyMintedChildKeepsWorking(t *
 		var result CreateCircleWalletResult
 		err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 			Pubkey:        mustPubkey(t, otherPriv),
-			MaxAmount:     happyPathAmountMloki,
+			MaxAmount:     circleHappyPathAmountMloki,
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, otherIdentityEvent),
 		}, &result)

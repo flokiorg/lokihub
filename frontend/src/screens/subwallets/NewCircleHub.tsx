@@ -33,7 +33,11 @@ import { ManageIdentitiesDialog } from "src/components/circles/ManageIdentitiesD
 import { MemberPicker } from "src/components/circles/MemberPicker";
 import { NostrPubkeyInput } from "src/components/circles/NostrPubkeyInput";
 import { WarningAlert } from "src/components/circles/WarningAlert";
-import { SUBWALLET_APPSTORE_APP_ID, WEEK_SCALE_PRESETS } from "src/constants";
+import {
+  MIN_CIRCLE_WALLET_MAX_LOKI,
+  SUBWALLET_APPSTORE_APP_ID,
+  WEEK_SCALE_PRESETS,
+} from "src/constants";
 import { useCircleIdentities } from "src/hooks/useCircleIdentities";
 import { useInfo } from "src/hooks/useInfo";
 import { useNodeIdentity } from "src/hooks/useNodeIdentity";
@@ -545,10 +549,13 @@ export function NewCircleHub() {
                   inputUnit={inputUnit}
                   onInputUnitChange={setInputUnit}
                   required
-                  min={1}
+                  min={scaleInputAmount(MIN_CIRCLE_WALLET_MAX_LOKI, inputUnit)}
                 />
                 <p className="text-muted-foreground text-sm">
-                  {t("newCircleHub.maxWalletBudgetHelper")}
+                  {t("newCircleHub.maxWalletBudgetHelper")}{" "}
+                  {t("newCircleHub.minWalletBudgetHint", {
+                    min: MIN_CIRCLE_WALLET_MAX_LOKI,
+                  })}
                 </p>
               </div>
               <div className="w-full grid gap-1.5">

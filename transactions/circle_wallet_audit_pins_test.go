@@ -97,23 +97,3 @@ func TestSendPaymentSync_CircleWallet_FailedPayment_NoSkim(t *testing.T) {
 	assert.Equal(t, int64(140_000), queries.GetIsolatedBalance(svc.DB, wallet.ID), "the member keeps everything, skim included")
 	assert.Equal(t, int64(0), queries.GetIsolatedBalance(svc.DB, hub.ID), "the hub earns nothing on a failed payment")
 }
-
-// Known limit, pinned so a change is deliberate: paying out over Lightning
-// reserves at least 10 loki for routing fees on top of the amount, and the
-// receive cap keeps the balance at or under the wallet's cap. So a wallet
-// capped at 10 loki or less can never pay out, even 1 loki. Joins accept caps
-// down to 1 loki.
-func TestSendPaymentSync_CircleWallet_CapBelowFeeReserve_CannotPayOut(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCircleHub(t, svc, 0)
-	wallet := newCircleWallet(t, svc, hub, 5, constants.BUDGET_RENEWAL_NEVER) // 5 loki cap
-	tests.FundApp(svc, wallet.ID, 5_000, tests.RandomHex32())
-
-	amount := uint64(1_000)
-	ts := NewTransactionsService(svc.DB, svc.EventPublisher)
-	_, err = ts.SendPaymentSync(tests.MockZeroAmountInvoice, &amount, nil, svc.LNClient, &wallet.ID, nil)
-	assert.ErrorIs(t, err, NewInsufficientBalanceError())
-}

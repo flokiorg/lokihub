@@ -48,8 +48,8 @@ func TestCircleWallet_Budget_PayInvoiceQuotaExceeded_DistinctFromInsufficientBal
 
 func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 	privkey := newTestPrivkey(t)
-	const maxAmountMloki = 5000
-	const paymentAmountMloki = 2000 // exact multiple of 1000 - see GetBudgetUsageSat's sat-rounding note in circle_wallet_scope_test.go
+	const maxAmountMloki = 15_000
+	const paymentAmountMloki = 6_000 // exact multiple of 1000 - see GetBudgetUsageSat's sat-rounding note in circle_wallet_scope_test.go
 
 	hub, _, _ := createEphemeralCircleHub(t, cfg, "budget-quota-"+policy, policy, []string{privkey},
 		ephemeralCircleHubOpts{FundLoki: 100_000})
@@ -78,7 +78,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 		require.NoError(t, child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice.Invoice}, &result))
 	}
 
-	// Two payments of 2000 each = 4000 cumulative, still under the 5000 cap.
+	// Two payments of 6000 each = 12000 cumulative, still under the 15000 cap.
 	spendOnce("integration budget-quota test cycle 1")
 	spendOnce("integration budget-quota test cycle 2")
 
@@ -133,7 +133,7 @@ func TestCircleWallet_Budget_RenewsAt_MatchesConfiguredPeriod(t *testing.T) {
 			var created CreateCircleWalletResult
 			require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 				Pubkey:        pubkey,
-				MaxAmount:     happyPathAmountMloki,
+				MaxAmount:     circleHappyPathAmountMloki,
 				Expiry:        happyPathExpirySecs,
 				BudgetRenewal: renewal,
 				IdentityEvent: eventJSON(t, identityEvent),

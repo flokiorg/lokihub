@@ -62,18 +62,17 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "src/components/ui/tabs";
 import { LIST_CASH_ALLOCATIONS_LIMIT } from "src/constants";
 import { useApp } from "src/hooks/useApp";
+import { useAvatarSrc } from "src/hooks/useAvatarSrc";
 import { useIdentityAuthorities } from "src/hooks/useIdentityAuthorities";
 import { useNip05Verification } from "src/hooks/useNip05Verification";
 import { useNostrProfile } from "src/hooks/useNostrProfile";
 import { NostrProfile, useNostrProfiles } from "src/hooks/useNostrProfiles";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
-import { getAuthToken } from "src/lib/auth";
 import { copyToClipboard } from "src/lib/clipboard";
 import { cn } from "src/lib/utils";
 import { formatClaimDeadline } from "src/utils/cashWallet";
 import { decodeNConnection } from "src/utils/nconnection";
 import { safeNpubEncode, shortenMiddle } from "src/utils/nostr";
-import { validateHTTPURL } from "src/utils/validation";
 import {
   App,
   CreateCashWalletRequest,
@@ -197,13 +196,7 @@ function recipientIdentityValue(row: RecipientRow): string | undefined {
 // names here.
 function PillIdentityGlyph({ profile }: { profile: NostrProfile | undefined }) {
   const [imageFailed, setImageFailed] = React.useState(false);
-  const authToken = getAuthToken();
-  const pictureUrl =
-    profile?.picture &&
-    validateHTTPURL(profile.picture, "profile picture") === null &&
-    authToken
-      ? `/api/circle/avatar-proxy?url=${encodeURIComponent(profile.picture)}&token=${encodeURIComponent(authToken)}`
-      : undefined;
+  const pictureUrl = useAvatarSrc(profile?.picture);
 
   if (!pictureUrl || imageFailed) {
     return <UserRoundIcon className="h-3 w-3 shrink-0" />;

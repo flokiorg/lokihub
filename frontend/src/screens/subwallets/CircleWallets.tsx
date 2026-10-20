@@ -13,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "src/components/ui/alert-dialog";
+import { Badge } from "src/components/ui/badge";
 import { Button } from "src/components/ui/button";
 import { Checkbox } from "src/components/ui/checkbox";
 import { CustomPagination } from "src/components/CustomPagination";
@@ -230,6 +231,14 @@ export function CircleWallets({ appId }: CircleWalletsProps) {
                     />
                   </div>
                   <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                    {child.frozen && (
+                      <Badge
+                        variant="warning"
+                        title={t("circleWallets.frozenHint")}
+                      >
+                        {t("circleWallets.frozenBadge")}
+                      </Badge>
+                    )}
                     <div className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
                       {(child.balanceMloki / 1000).toLocaleString()} loki
                     </div>

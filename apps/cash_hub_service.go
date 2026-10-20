@@ -115,79 +115,18 @@ func (svc *appsService) GetCashHubConfig(appID uint) (*db.CashHubConfig, error) 
 	return &cfg, nil
 }
 
+func (svc *appsService) ValidateCashHubConfigUpdate(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error {
+	_, err := svc.cashHubConfigUpdates(appID, perWalletMaxMloki, maxExpSecs, minTransferMloki, redeemFeePpm, redeemFeeBaseMloki, spentRetentionSecs)
+	return err
+}
+
 func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error {
-	updates := map[string]interface{}{}
-	if perWalletMaxMloki != nil {
-		if *perWalletMaxMloki <= 0 {
-			return fmt.Errorf("%w: per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
-		}
-		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
-	}
-	if maxExpSecs != nil {
-		// Unlike per_wallet_max_mloki above, 0 is a valid, meaningful value
-		// here ("never" — no ceiling on how long an issued wallet may remain
-		// unredeemed) — reject a negative one, or one large enough to
-		// overflow time.Duration's nanosecond range when later converted
-		// (cashwallet.Resolve) — see constants.MAX_EXPIRY_SECS.
-		if *maxExpSecs < 0 || *maxExpSecs > constants.MAX_EXPIRY_SECS {
-			return fmt.Errorf("%w: max_exp_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
-		}
-		updates["max_exp_secs"] = *maxExpSecs
-	}
-	if minTransferMloki != nil {
-		// Unlike the two floors above, 0 is a valid, meaningful value here
-		// ("no floor") — only reject a negative one.
-		if *minTransferMloki < 0 {
-			return fmt.Errorf("%w: min_transfer_mloki must not be negative", constants.ErrInvalidParams)
-		}
-		updates["min_transfer_mloki"] = *minTransferMloki
-	}
-	if redeemFeePpm != nil {
-		if *redeemFeePpm < 0 || *redeemFeePpm > constants.MAX_FEES_PPM {
-			return fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
-		}
-		updates["redeem_fee_ppm"] = *redeemFeePpm
-	}
-	if redeemFeeBaseMloki != nil {
-		// Only a floor. There is deliberately no ceiling beyond what a slice can bear:
-		// CalculateRedeemFeeMloki already caps the fee at the amount it is charged on,
-		// and an operator who sets a base larger than the bills they mint is quoting a
-		// zero payout, which is a pricing mistake rather than a safety one.
-		if *redeemFeeBaseMloki < 0 {
-			return fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
-		}
-		updates["redeem_fee_base_mloki"] = *redeemFeeBaseMloki
-	}
-	if spentRetentionSecs != nil {
-		// As on create: 0 means "no tombstone", not "unset".
-		if *spentRetentionSecs < 0 || *spentRetentionSecs > constants.MAX_EXPIRY_SECS {
-			return fmt.Errorf("%w: spent_retention_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
-		}
-		updates["spent_retention_secs"] = *spentRetentionSecs
+	updates, err := svc.cashHubConfigUpdates(appID, perWalletMaxMloki, maxExpSecs, minTransferMloki, redeemFeePpm, redeemFeeBaseMloki, spentRetentionSecs)
+	if err != nil {
+		return err
 	}
 	if len(updates) == 0 {
 		return nil
-	}
-	// Checked against the pair that will be IN FORCE afterwards, not against what this
-	// call happens to carry: either field may be updated alone, so raising the fee base
-	// on a hub with a low floor is just as incoherent as setting both at once, and
-	// checking only the supplied values would miss it.
-	if minTransferMloki != nil || redeemFeeBaseMloki != nil {
-		current, err := svc.GetCashHubConfig(appID)
-		if err != nil {
-			return err
-		}
-		effectiveFloor := current.MinTransferMloki
-		if minTransferMloki != nil {
-			effectiveFloor = *minTransferMloki
-		}
-		effectiveBase := current.RedeemFeeBaseMloki
-		if redeemFeeBaseMloki != nil {
-			effectiveBase = *redeemFeeBaseMloki
-		}
-		if err := validateTransferFloorCoversFee(effectiveFloor, effectiveBase); err != nil {
-			return err
-		}
 	}
 
 	result := svc.db.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
@@ -614,4 +553,84 @@ func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint, sweep fu
 		return nil, err
 	}
 	return &claim, nil
+}
+
+// cashHubConfigUpdates checks a cash hub settings update against the hub's
+// current settings and returns the columns it sets. A nil pointer leaves that
+// setting unchanged.
+func (svc *appsService) cashHubConfigUpdates(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) (map[string]interface{}, error) {
+	updates := map[string]interface{}{}
+	if perWalletMaxMloki != nil {
+		if *perWalletMaxMloki <= 0 {
+			return nil, fmt.Errorf("%w: per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
+		}
+		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
+	}
+	if maxExpSecs != nil {
+		// Unlike per_wallet_max_mloki above, 0 is a valid, meaningful value
+		// here ("never" — no ceiling on how long an issued wallet may remain
+		// unredeemed) — reject a negative one, or one large enough to
+		// overflow time.Duration's nanosecond range when later converted
+		// (cashwallet.Resolve) — see constants.MAX_EXPIRY_SECS.
+		if *maxExpSecs < 0 || *maxExpSecs > constants.MAX_EXPIRY_SECS {
+			return nil, fmt.Errorf("%w: max_exp_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+		}
+		updates["max_exp_secs"] = *maxExpSecs
+	}
+	if minTransferMloki != nil {
+		// Unlike the two floors above, 0 is a valid, meaningful value here
+		// ("no floor") — only reject a negative one.
+		if *minTransferMloki < 0 {
+			return nil, fmt.Errorf("%w: min_transfer_mloki must not be negative", constants.ErrInvalidParams)
+		}
+		updates["min_transfer_mloki"] = *minTransferMloki
+	}
+	if redeemFeePpm != nil {
+		if *redeemFeePpm < 0 || *redeemFeePpm > constants.MAX_FEES_PPM {
+			return nil, fmt.Errorf("%w: redeem_fee_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+		}
+		updates["redeem_fee_ppm"] = *redeemFeePpm
+	}
+	if redeemFeeBaseMloki != nil {
+		// Only a floor. There is deliberately no ceiling beyond what a slice can bear:
+		// CalculateRedeemFeeMloki already caps the fee at the amount it is charged on,
+		// and an operator who sets a base larger than the bills they mint is quoting a
+		// zero payout, which is a pricing mistake rather than a safety one.
+		if *redeemFeeBaseMloki < 0 {
+			return nil, fmt.Errorf("%w: redeem_fee_base_mloki must not be negative", constants.ErrInvalidParams)
+		}
+		updates["redeem_fee_base_mloki"] = *redeemFeeBaseMloki
+	}
+	if spentRetentionSecs != nil {
+		// As on create: 0 means "no tombstone", not "unset".
+		if *spentRetentionSecs < 0 || *spentRetentionSecs > constants.MAX_EXPIRY_SECS {
+			return nil, fmt.Errorf("%w: spent_retention_secs must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+		}
+		updates["spent_retention_secs"] = *spentRetentionSecs
+	}
+	if len(updates) == 0 {
+		return updates, nil
+	}
+	// Checked against the pair that will be IN FORCE afterwards, not against what this
+	// call happens to carry: either field may be updated alone, so raising the fee base
+	// on a hub with a low floor is just as incoherent as setting both at once, and
+	// checking only the supplied values would miss it.
+	if minTransferMloki != nil || redeemFeeBaseMloki != nil {
+		current, err := svc.GetCashHubConfig(appID)
+		if err != nil {
+			return nil, err
+		}
+		effectiveFloor := current.MinTransferMloki
+		if minTransferMloki != nil {
+			effectiveFloor = *minTransferMloki
+		}
+		effectiveBase := current.RedeemFeeBaseMloki
+		if redeemFeeBaseMloki != nil {
+			effectiveBase = *redeemFeeBaseMloki
+		}
+		if err := validateTransferFloorCoversFee(effectiveFloor, effectiveBase); err != nil {
+			return nil, err
+		}
+	}
+	return updates, nil
 }

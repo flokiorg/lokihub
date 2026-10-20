@@ -28,6 +28,10 @@ export const ONCHAIN_DUST_LOKI = 1000;
 export const LOKI_HIDE_HOSTED_BALANCE_BELOW = 100;
 export const LOKI_MIN_HOSTED_BALANCE_FOR_FIRST_CHANNEL = 10_000;
 
+// The smallest per-wallet cap a Circle Hub accepts: the 10-loki Lightning fee
+// reserve plus 1 loki (backend constants.MIN_CIRCLE_WALLET_MAX_MLOKI).
+export const MIN_CIRCLE_WALLET_MAX_LOKI = 11;
+
 export const LIST_TRANSACTIONS_LIMIT = 20;
 export const LIST_APPS_LIMIT = 20;
 export const LIST_CIRCLE_CHILDREN_LIMIT = 20;

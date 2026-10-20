@@ -203,6 +203,15 @@ const PPM_DIVISOR = 1_000_000
 // reject anything higher).
 const MAX_FEES_PPM = PPM_DIVISOR
 
+// MIN_FEE_RESERVE_MLOKI is the least an outgoing Lightning payment holds back
+// for routing fees (see transactions.CalculateFeeReserveMloki).
+const MIN_FEE_RESERVE_MLOKI = 10_000
+
+// MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:
+// the fee reserve plus 1 loki. Any less, and the reserve alone exceeds the cap,
+// so the wallet could never pay outside this node.
+const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
+
 // MAX_EXPIRY_SECS is the upper bound accepted for any config or request field
 // expressed in raw expiry seconds that eventually feeds into
 // time.Duration(secs) * time.Second (e.g. db.CashHubConfig.MaxExpSecs and a

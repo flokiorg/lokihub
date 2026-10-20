@@ -364,7 +364,7 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	resp, err := circleHubClient.CreateCircleWallet(ctxT(t), nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
 		Connection:      connection,
-		MaxAmountMillis: nmilatHappyPathAmountMillis,
+		MaxAmountMillis: circleHappyPathAmountMloki,
 		Expiry:          nmilatHappyPathExpiry,
 	})
 	require.NoError(t, err)

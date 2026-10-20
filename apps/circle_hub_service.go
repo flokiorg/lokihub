@@ -36,8 +36,11 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error) {
 
-	if config.MaxExpSecs <= 0 || config.PerWalletMaxMloki <= 0 {
-		return nil, "", fmt.Errorf("%w: max_exp_secs and per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
+	if config.MaxExpSecs <= 0 {
+		return nil, "", fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
+	}
+	if err := validatePerWalletMaxMloki(config.PerWalletMaxMloki); err != nil {
+		return nil, "", err
 	}
 	if err := validateHubLabel(name); err != nil {
 		return nil, "", err
@@ -95,32 +98,17 @@ func (svc *appsService) GetCircleHubConfig(appID uint) (*db.CircleHubConfig, err
 	return &cfg, nil
 }
 
+func (svc *appsService) ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int,
+	perWalletMaxMloki *int, minBudgetRenewal *string) error {
+	_, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+	return err
+}
+
 func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int,
 	perWalletMaxMloki *int, minBudgetRenewal *string) error {
-	updates := map[string]interface{}{}
-	if maxExpSecs != nil {
-		if *maxExpSecs <= 0 {
-			return fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
-		}
-		updates["max_exp_secs"] = *maxExpSecs
-	}
-	if feesPpm != nil {
-		if *feesPpm < 0 || *feesPpm > constants.MAX_FEES_PPM {
-			return fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
-		}
-		updates["fees_ppm"] = *feesPpm
-	}
-	if perWalletMaxMloki != nil {
-		if *perWalletMaxMloki <= 0 {
-			return fmt.Errorf("%w: per_wallet_max_mloki must be positive", constants.ErrInvalidParams)
-		}
-		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
-	}
-	if minBudgetRenewal != nil {
-		if err := validateBudgetRenewal(*minBudgetRenewal); err != nil {
-			return err
-		}
-		updates["min_budget_renewal"] = *minBudgetRenewal
+	updates, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+	if err != nil {
+		return err
 	}
 	if len(updates) == 0 {
 		return nil
@@ -132,6 +120,49 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("circle hub config not found for app %d", appID)
+	}
+	return nil
+}
+
+// circleHubConfigUpdates checks a circle hub settings update and returns the
+// columns it sets. A nil pointer leaves that setting unchanged.
+func circleHubConfigUpdates(maxExpSecs *int, feesPpm *int,
+	perWalletMaxMloki *int, minBudgetRenewal *string) (map[string]interface{}, error) {
+	updates := map[string]interface{}{}
+	if maxExpSecs != nil {
+		if *maxExpSecs <= 0 {
+			return nil, fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
+		}
+		updates["max_exp_secs"] = *maxExpSecs
+	}
+	if feesPpm != nil {
+		if *feesPpm < 0 || *feesPpm > constants.MAX_FEES_PPM {
+			return nil, fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+		}
+		updates["fees_ppm"] = *feesPpm
+	}
+	if perWalletMaxMloki != nil {
+		if err := validatePerWalletMaxMloki(*perWalletMaxMloki); err != nil {
+			return nil, err
+		}
+		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
+	}
+	if minBudgetRenewal != nil {
+		if err := validateBudgetRenewal(*minBudgetRenewal); err != nil {
+			return nil, err
+		}
+		updates["min_budget_renewal"] = *minBudgetRenewal
+	}
+	return updates, nil
+}
+
+// validatePerWalletMaxMloki refuses a per-wallet ceiling below the smallest cap a
+// member could usefully join with (constants.MIN_CIRCLE_WALLET_MAX_MLOKI): no
+// wallet under it could ever pay outside this node.
+func validatePerWalletMaxMloki(perWalletMaxMloki int) error {
+	if perWalletMaxMloki < constants.MIN_CIRCLE_WALLET_MAX_MLOKI {
+		return fmt.Errorf("%w: per_wallet_max_mloki must be at least %d (the 10-loki fee reserve plus 1 loki)",
+			constants.ErrInvalidParams, constants.MIN_CIRCLE_WALLET_MAX_MLOKI)
 	}
 	return nil
 }
