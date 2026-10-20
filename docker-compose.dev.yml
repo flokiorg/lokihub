@@ -1,6 +1,8 @@
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:rc
+    # Pinned rather than the floating `rc` tag: a local `rc` never updates on
+    # its own, so the integration relay silently stayed on an old ncli.
+    image: ghcr.io/ohstr/ncli:0.8.0-rc.31
     container_name: lokihub-dev-relay
     hostname: relay
     restart: unless-stopped
