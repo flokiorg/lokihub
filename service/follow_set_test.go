@@ -65,7 +65,7 @@ func newStoringRelay(t *testing.T) *storingRelay {
 				switch env := env.(type) {
 				case *nostr.EventEnvelope:
 					relay.put(env.Event)
-					ok := nostr.OKEnvelope{EventID: env.Event.ID, OK: true}
+					ok := nostr.OKEnvelope{EventID: env.ID, OK: true}
 					raw, _ := ok.MarshalJSON()
 					_ = websocket.Message.Send(conn, string(raw))
 				case *nostr.ReqEnvelope:
@@ -125,6 +125,14 @@ func randomMembers(t *testing.T, n int) []string {
 	return members
 }
 
+// tagValue is the value of the first tag named name, or "".
+func tagValue(tags nostr.Tags, name string) string {
+	if tag := tags.Find(name); len(tag) >= 2 {
+		return tag[1]
+	}
+	return ""
+}
+
 func hiddenPayloads(ev nostr.Event) []string {
 	var payloads []string
 	for _, tag := range ev.Tags {
@@ -158,8 +166,8 @@ func TestPublishFollowSet_SignedByNodeWithPublicAndHiddenMembers(t *testing.T) {
 	valid, err := ev.CheckSignature()
 	require.NoError(t, err)
 	assert.True(t, valid)
-	assert.Equal(t, "Ada's Family Circle", ev.Tags.GetFirst([]string{"title"}).Value())
-	assert.Equal(t, "Wallets for the family", ev.Tags.GetFirst([]string{"description"}).Value())
+	assert.Equal(t, "Ada's Family Circle", tagValue(ev.Tags, "title"))
+	assert.Equal(t, "Wallets for the family", tagValue(ev.Tags, "description"))
 
 	// The hidden member is never in a `p` tag, and its entry opens under the
 	// node/inbox conversation key only.
@@ -238,7 +246,7 @@ func TestPublishFollowSet_PreservesUnknownTagsAndSupersedes(t *testing.T) {
 	}
 	tags = append(tags, []string{"image", "https://example.com/a.png"}, []string{"x-custom", "keep me"})
 	unsigned := nmilatnip01.NewUnsignedEvent(db.KindFollowSet, node, "opaque-private-items", tags...)
-	unsigned.CreatedAt = uint64(first.Event.CreatedAt) + 1
+	unsigned.CreatedAt = uint64(first.Event.CreatedAt) + 1 //nolint:gosec // a unix timestamp in seconds, never negative
 	edited, err := svc.signNodeEvent(context.Background(), unsigned)
 	require.NoError(t, err)
 	relay.put(*edited)
@@ -250,10 +258,10 @@ func TestPublishFollowSet_PreservesUnknownTagsAndSupersedes(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, second.Event.ID, ev.ID)
 	assert.Greater(t, ev.CreatedAt, edited.CreatedAt, "the new version must supersede the one it edits")
-	assert.Equal(t, "https://example.com/a.png", ev.Tags.GetFirst([]string{"image"}).Value())
-	assert.Equal(t, "keep me", ev.Tags.GetFirst([]string{"x-custom"}).Value())
+	assert.Equal(t, "https://example.com/a.png", tagValue(ev.Tags, "image"))
+	assert.Equal(t, "keep me", tagValue(ev.Tags, "x-custom"))
 	assert.Equal(t, "opaque-private-items", ev.Content)
-	assert.Equal(t, "Family v2", ev.Tags.GetFirst([]string{"title"}).Value())
+	assert.Equal(t, "Family v2", tagValue(ev.Tags, "title"))
 	assert.Equal(t, []string{members[1]}, second.Public, "members are replaced, not merged")
 }
 

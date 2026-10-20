@@ -54,6 +54,14 @@ func fetchFollowSet(t *testing.T, cfg *Config, provider, d string) nostr.Event {
 	return *newest
 }
 
+// tagValue is the value of the first tag named name, or "".
+func tagValue(tags nostr.Tags, name string) string {
+	if tag := tags.Find(name); len(tag) >= 2 {
+		return tag[1]
+	}
+	return ""
+}
+
 func joinParams(memberPriv string) nipcw.CreateCircleWalletParams {
 	return nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
@@ -109,7 +117,7 @@ func TestFollowSetCircle_PublicAndHiddenMemberJoin(t *testing.T) {
 		ok, err := ev.CheckSignature()
 		require.NoError(t, err)
 		require.True(t, ok, "signed by the node identity")
-		assert.Equal(t, title, ev.Tags.GetFirst([]string{"title"}).Value())
+		assert.Equal(t, title, tagValue(ev.Tags, "title"))
 
 		var public []string
 		var hidden int
