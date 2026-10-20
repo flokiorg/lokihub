@@ -54,6 +54,62 @@ func avatarProxyClientPinnedTo(pinnedIP net.IP) *http.Client {
 	}
 }
 
+// Why FetchAvatar refused a URL. The HTTP handler maps them to status codes.
+var (
+	ErrAvatarBadURL         = errors.New("url must be an http(s) URL")
+	ErrAvatarHostNotAllowed = errors.New("url host is not allowed")
+	ErrAvatarUpstream       = errors.New("failed to fetch an image")
+)
+
+// AvatarImage is a fetched profile picture.
+type AvatarImage struct {
+	ContentType string
+	Data        []byte
+}
+
+// FetchAvatar fetches a remote profile picture server-side, refusing any host
+// that isn't public (see ensurePublicHost) and pinning the connection to the
+// address it checked. Shared by the HTTP route below and the desktop app,
+// which can't send a login token on an <img> request.
+func FetchAvatar(ctx context.Context, rawURL string) (*AvatarImage, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, ErrAvatarBadURL
+	}
+
+	pinnedIP, err := ensurePublicHost(ctx, parsed.Hostname())
+	if err != nil {
+		return nil, ErrAvatarHostNotAllowed
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, ErrAvatarUpstream
+	}
+	req.Header.Set("User-Agent", "lokihub-avatar-proxy/1.0")
+	req.Header.Set("Accept", "image/*")
+
+	resp, err := avatarProxyClientPinnedTo(pinnedIP).Do(req)
+	if err != nil {
+		return nil, ErrAvatarUpstream
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, ErrAvatarUpstream
+	}
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		return nil, ErrAvatarUpstream
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, avatarProxyMaxBytes))
+	if err != nil {
+		return nil, ErrAvatarUpstream
+	}
+	return &AvatarImage{ContentType: contentType, Data: data}, nil
+}
+
 // avatarProxyHandler fetches a remote image server-side and streams it back
 // to the frontend, so <img> tags for Nostr profile pictures (an unbounded
 // set of hosts, one per kind:0 event) never hotlink the browser directly to
@@ -67,44 +123,16 @@ func (httpSvc *HttpService) avatarProxyHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "url is required"})
 	}
 
-	parsed, err := url.Parse(rawURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "url must be an http(s) URL"})
-	}
-
-	pinnedIP, err := ensurePublicHost(c.Request().Context(), parsed.Hostname())
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "url host is not allowed"})
-	}
-
-	req, err := http.NewRequestWithContext(c.Request().Context(), http.MethodGet, parsed.String(), nil)
-	if err != nil {
-		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "failed to build upstream request"})
-	}
-	req.Header.Set("User-Agent", "lokihub-avatar-proxy/1.0")
-	req.Header.Set("Accept", "image/*")
-
-	resp, err := avatarProxyClientPinnedTo(pinnedIP).Do(req)
-	if err != nil {
-		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "failed to fetch image"})
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "upstream did not return an image"})
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: "upstream response was not an image"})
+	image, err := FetchAvatar(c.Request().Context(), rawURL)
+	switch {
+	case errors.Is(err, ErrAvatarBadURL), errors.Is(err, ErrAvatarHostNotAllowed):
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	case err != nil:
+		return c.JSON(http.StatusBadGateway, ErrorResponse{Message: err.Error()})
 	}
 
 	c.Response().Header().Set("Cache-Control", avatarProxyCache)
-	c.Response().Header().Set("Content-Type", contentType)
-	c.Response().WriteHeader(http.StatusOK)
-
-	_, err = io.Copy(c.Response().Writer, io.LimitReader(resp.Body, avatarProxyMaxBytes))
-	return err
+	return c.Blob(http.StatusOK, image.ContentType, image.Data)
 }
 
 // ensurePublicHost resolves host and rejects anything that isn't a public
