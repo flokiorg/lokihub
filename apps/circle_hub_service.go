@@ -98,32 +98,17 @@ func (svc *appsService) GetCircleHubConfig(appID uint) (*db.CircleHubConfig, err
 	return &cfg, nil
 }
 
+func (svc *appsService) ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int,
+	perWalletMaxMloki *int, minBudgetRenewal *string) error {
+	_, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+	return err
+}
+
 func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int,
 	perWalletMaxMloki *int, minBudgetRenewal *string) error {
-	updates := map[string]interface{}{}
-	if maxExpSecs != nil {
-		if *maxExpSecs <= 0 {
-			return fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
-		}
-		updates["max_exp_secs"] = *maxExpSecs
-	}
-	if feesPpm != nil {
-		if *feesPpm < 0 || *feesPpm > constants.MAX_FEES_PPM {
-			return fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
-		}
-		updates["fees_ppm"] = *feesPpm
-	}
-	if perWalletMaxMloki != nil {
-		if err := validatePerWalletMaxMloki(*perWalletMaxMloki); err != nil {
-			return err
-		}
-		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
-	}
-	if minBudgetRenewal != nil {
-		if err := validateBudgetRenewal(*minBudgetRenewal); err != nil {
-			return err
-		}
-		updates["min_budget_renewal"] = *minBudgetRenewal
+	updates, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+	if err != nil {
+		return err
 	}
 	if len(updates) == 0 {
 		return nil
@@ -137,6 +122,38 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 		return fmt.Errorf("circle hub config not found for app %d", appID)
 	}
 	return nil
+}
+
+// circleHubConfigUpdates checks a circle hub settings update and returns the
+// columns it sets. A nil pointer leaves that setting unchanged.
+func circleHubConfigUpdates(maxExpSecs *int, feesPpm *int,
+	perWalletMaxMloki *int, minBudgetRenewal *string) (map[string]interface{}, error) {
+	updates := map[string]interface{}{}
+	if maxExpSecs != nil {
+		if *maxExpSecs <= 0 {
+			return nil, fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
+		}
+		updates["max_exp_secs"] = *maxExpSecs
+	}
+	if feesPpm != nil {
+		if *feesPpm < 0 || *feesPpm > constants.MAX_FEES_PPM {
+			return nil, fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+		}
+		updates["fees_ppm"] = *feesPpm
+	}
+	if perWalletMaxMloki != nil {
+		if err := validatePerWalletMaxMloki(*perWalletMaxMloki); err != nil {
+			return nil, err
+		}
+		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
+	}
+	if minBudgetRenewal != nil {
+		if err := validateBudgetRenewal(*minBudgetRenewal); err != nil {
+			return nil, err
+		}
+		updates["min_budget_renewal"] = *minBudgetRenewal
+	}
+	return updates, nil
 }
 
 // validatePerWalletMaxMloki refuses a per-wallet ceiling below the smallest cap a

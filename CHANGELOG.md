@@ -450,6 +450,9 @@ private-transport request ended.
   balance when you delete a Circle Hub with "Delete All", as recorded
   transfers; before, those funds vanished from every wallet with no record.
   A wallet with a payment in flight keeps the hub until it ends. (#148)
+- Saves nothing when a Circle or Cash Hub settings change is rejected; before,
+  a bad fee rate still saved the new name and budget from the same form.
+  (#148)
 
 ## [0.4.0]
 

@@ -70,6 +70,9 @@ type AppsService interface {
 	// non-negative (0 = no floor is valid); RedeemFeePpm must be within
 	// 0..constants.MAX_FEES_PPM (0 = free).
 	UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error
+	// ValidateCashHubConfigUpdate runs UpdateCashHubConfig's checks without
+	// saving, so a caller can refuse a request before changing anything else.
+	ValidateCashHubConfigUpdate(appID uint, perWalletMaxMloki *int, maxExpSecs *int, minTransferMloki *int64, redeemFeePpm *int, redeemFeeBaseMloki *int64, spentRetentionSecs *int) error
 	// CreateCircleHub creates a circle_hub app and persists its CircleHubConfig,
 	// attaching it to either an existing CircleIdentity (identityRef.ExistingID) or a
 	// brand-new one created from identityRef's remaining fields.
@@ -83,6 +86,9 @@ type AppsService interface {
 	// PerWalletMaxMloki, and/or MinBudgetRenewal. A nil pointer leaves that
 	// field unchanged.
 	UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	// ValidateCircleHubConfigUpdate runs UpdateCircleHubConfig's checks without
+	// saving, so a caller can refuse a request before changing anything else.
+	ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
 	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
 	// followSetD is the set's `d` identifier, required for follow_set only.
 	CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error)
