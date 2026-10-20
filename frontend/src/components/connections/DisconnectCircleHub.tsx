@@ -88,6 +88,23 @@ export function DisconnectCircleHub({
         return;
       }
 
+      if (mode === "all") {
+        // Delete All moves every balance out first; only wallets with a
+        // payment still in flight are kept.
+        toast(
+          t("disconnectCircleHub.sweepPartialToast", {
+            count: result?.deletedChildIds?.length ?? 0,
+          }),
+          {
+            description: t("disconnectCircleHub.sweepPartialDescription", {
+              count: result?.skippedChildIds?.length ?? 0,
+            }),
+          }
+        );
+        onClose();
+        return;
+      }
+
       toast(
         t("disconnectCircleHub.partialDeleteToast", {
           count: result?.deletedChildIds?.length ?? 0,
@@ -108,7 +125,17 @@ export function DisconnectCircleHub({
 
   const nonEmpty = (children ?? []).filter((c) => c.balanceMloki !== 0);
   const totalLoki = nonEmpty.reduce((sum, c) => sum + c.balanceMloki / 1000, 0);
+  const hubLoki = (app.balance ?? 0) / 1000;
   const isLoading = children === null;
+  const sweepSummary =
+    totalLoki + hubLoki > 0 ? (
+      <p className="text-sm text-muted-foreground">
+        {t("disconnectCircleHub.sweepSummary", {
+          total: (totalLoki + hubLoki).toLocaleString(),
+          hub: hubLoki.toLocaleString(),
+        })}
+      </p>
+    ) : null;
 
   return (
     <AlertDialog open>
@@ -119,7 +146,10 @@ export function DisconnectCircleHub({
             {isLoading ? (
               <p>{t("disconnectCircleHub.checking")}</p>
             ) : nonEmpty.length === 0 ? (
-              <p>{t("disconnectCircleHub.allEmpty")}</p>
+              <div className="space-y-3">
+                <p>{t("disconnectCircleHub.allEmpty")}</p>
+                {sweepSummary}
+              </div>
             ) : (
               <div className="space-y-3">
                 <p>
@@ -159,6 +189,7 @@ export function DisconnectCircleHub({
                     count: nonEmpty.length,
                   })}
                 </p>
+                {sweepSummary}
               </div>
             )}
           </AlertDialogDescription>
