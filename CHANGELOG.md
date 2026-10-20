@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.17` on 2026-10-20._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.18` on 2026-10-20._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -31,6 +31,10 @@ privately, follows a `return_to` link only to another app or site, returns
 after unlock only to a page of this app, names the missing signer permission
 when the node cannot sign, moves the frontend to react-router v7, and moves to
 `nmilat` v0.5.0-rc.31.
+rc.18 admits circle members from a NIP-51 follow set instead of the host's
+kind:3 list, publishes those sets from the hub with hidden members only it can
+read, deletes circles on the old `following` policy, and records how a
+private-transport request ended.
 
 ### Added
 
