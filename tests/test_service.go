@@ -2,6 +2,7 @@ package tests
 
 import (
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -16,12 +17,17 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 )
 
+// loggerOnce initialises the global logger once per test binary. Re-running
+// logger.Init for every test service raced with goroutines a previous test
+// left logging.
+var loggerOnce sync.Once
+
 func CreateTestService(t *testing.T) (svc *TestService, err error) {
 	return CreateTestServiceWithMnemonic(t, "", "")
 }
 
 func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword string) (svc *TestService, err error) {
-	logger.Init(strconv.Itoa(int(4)))
+	loggerOnce.Do(func() { logger.Init(strconv.Itoa(4)) })
 
 	gormDb, err := db.NewDB(t)
 	if err != nil {
