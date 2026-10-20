@@ -3,6 +3,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -374,4 +376,32 @@ func TestServePrivateItem_UnscopedStatusReturnsOnlyTheCallersRow(t *testing.T) {
 	require.Len(t, roster.Recipients, 1)
 	assert.Equal(t, recipientPub, roster.Recipients[0].IdentityValue,
 		"the scoped row must be the proof signer's own")
+}
+
+// A holder whose bill's claims can't be read is told to retry, not that no
+// slice is theirs: the lookup failing says nothing about who signed.
+func TestServePrivateItem_ClaimsLookupFailure_IsRetryable(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
+	require.NoError(t, svc.DB.Callback().Query().Before("gorm:query").Register("test:fail_claims", func(tx *gorm.DB) {
+		if tx.Statement.Table == "cash_wallet_claims" {
+			_ = tx.AddError(errors.New("database is locked"))
+		}
+	}))
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("ce", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	item := buildItem(t, "s1", walletPubkey, constants.NIP47MethodCashStatus, `{}`,
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item,
+		PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
+	require.True(t, served)
+	require.NotNil(t, result.Error)
+	assert.Equal(t, constants.ERROR_INTERNAL, result.Error.Code)
 }

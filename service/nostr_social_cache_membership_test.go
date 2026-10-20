@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +98,34 @@ func TestSelectFollowSetEvent_NewestWins_TieGoesToLowestID(t *testing.T) {
 	}
 	assert.Equal(t, lowest.ID, selectFollowSetEvent([]nostr.Event{a, b}, provider, testD).ID)
 	assert.Equal(t, lowest.ID, selectFollowSetEvent([]nostr.Event{b, a}, provider, testD).ID)
+}
+
+// The signature covers the content, not the id field, so a relay can resend a
+// genuine version under a forged low id. That copy must not win the same-second
+// tie: the version that really has the lowest id does.
+func TestSelectFollowSetEvent_ForgedIDCannotWinTheTie(t *testing.T) {
+	providerSK, provider := newKeypair(t)
+
+	a := signedFollowSetEvent(t, providerSK, testD, []string{requesterPubkey}, nostr.Tag{"title", "a"})
+	b := signedFollowSetEvent(t, providerSK, testD, []string{unrelatedPubkey}, nostr.Tag{"title", "b"})
+	b.CreatedAt = a.CreatedAt
+	require.NoError(t, b.Sign(providerSK))
+	winner, loser := a, b
+	if b.ID < a.ID {
+		winner, loser = b, a
+	}
+
+	forged := loser
+	forged.ID = "0000000000000000000000000000000000000000000000000000000000000000"
+	ok, err := forged.CheckSignature()
+	require.NoError(t, err)
+	require.True(t, ok, "the signature still verifies, which is why the id must be checked too")
+
+	selected := selectFollowSetEvent([]nostr.Event{forged, winner}, provider, testD)
+	require.NotNil(t, selected)
+	assert.Equal(t, winner.ID, selected.ID)
+
+	assert.Nil(t, selectFollowSetEvent([]nostr.Event{forged}, provider, testD), "an event whose id doesn't match its content is not a version at all")
 }
 
 // --- Which members ---
@@ -218,6 +247,23 @@ func TestParseFollowSet_NothingElseDecidesMembership(t *testing.T) {
 }
 
 // A pubkey listed both publicly and hidden is one member, reported as public.
+// NIP-01 pubkeys are lowercase hex. A provider's uppercase `p` entry is
+// dropped, not lowercased: it never admits anyone, which fails closed.
+func TestParseFollowSet_NonCanonicalPTagsAreIgnored(t *testing.T) {
+	providerSK, _ := newKeypair(t)
+	upper := strings.ToUpper(requesterPubkey)
+	ev := signedFollowSetEvent(t, providerSK, testD, []string{upper, unrelatedPubkey},
+		nostr.Tag{"p", "npub1notahexkey"},
+		nostr.Tag{"p", requesterPubkey[:63]},
+	)
+
+	set := parseFollowSet(&ev, testD, "")
+	assert.False(t, set.IsMember(upper))
+	assert.False(t, set.IsMember(requesterPubkey), "it is not matched case-insensitively either")
+	assert.True(t, set.IsMember(unrelatedPubkey))
+	assert.Equal(t, 1, set.MemberCount())
+}
+
 func TestParseFollowSet_PublicAndHiddenDuplicateCountsOnce(t *testing.T) {
 	providerSK, _ := newKeypair(t)
 	inboxSK, inboxPub := newKeypair(t)

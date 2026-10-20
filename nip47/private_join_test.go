@@ -6,6 +6,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +139,7 @@ func TestPrivateJoin_ItemProofSignedByAnotherKey_Refused(t *testing.T) {
 	res, served := h.serve(t, "x", string(tampered), assembler, strings.Repeat("06", 32))
 	require.True(t, served, "the sender holds the hub connection, so the refusal is an error")
 	require.NotNil(t, res.Error, "a join signed by another key must not be served")
+	assert.Equal(t, constants.ERROR_NOT_FOUND, res.Error.Code)
 	assert.Nil(t, res.Result)
 	assert.Empty(t, h.children(t), "no wallet is issued")
 
@@ -145,5 +147,52 @@ func TestPrivateJoin_ItemProofSignedByAnotherKey_Refused(t *testing.T) {
 	ok, served := h.serve(t, "m", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("07", 32))
 	require.True(t, served)
 	require.Nil(t, ok.Error, "%+v", ok.Error)
+	assert.Len(t, h.children(t), 1)
+}
+
+// The hub failing to read its own records is temporary: the join gets
+// NOT_READY, which NIP-CW clients retry, not a definite refusal, and the same
+// member joins once the database recovers.
+func TestPrivateJoin_ClaimsLookupFailure_IsNotReady(t *testing.T) {
+	member := nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+
+	failing := true
+	require.NoError(t, h.ts.DB.Callback().Query().Before("gorm:query").Register("test:fail_claims", func(tx *gorm.DB) {
+		if failing && tx.Statement.Table == "cash_wallet_claims" {
+			_ = tx.AddError(errors.New("database is locked"))
+		}
+	}))
+
+	res, served := h.serve(t, "j1", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("07", 32))
+	require.True(t, served, "the sender proved it holds the hub connection, so it gets an answer")
+	require.NotNil(t, res.Error)
+	assert.Equal(t, nipcw.ErrNotReady, res.Error.Code)
+	assert.Empty(t, h.children(t))
+
+	failing = false
+	res, served = h.serve(t, "j2", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, strings.Repeat("08", 32))
+	require.True(t, served)
+	assert.Nil(t, res.Error, "%+v", res.Error)
+	assert.Len(t, h.children(t), 1)
+}
+
+// One envelope carrying the same member's join twice issues one wallet: the
+// second item is refused with WALLET_EXISTS, so batching is no way around
+// one wallet per member.
+func TestPrivateJoin_SameIdentityTwiceInOneBatch_OneWallet(t *testing.T) {
+	member := nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+	nonce := strings.Repeat("0a", 32)
+
+	first, served := h.serve(t, "a", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, nonce)
+	require.True(t, served)
+	require.Nil(t, first.Error, "%+v", first.Error)
+	second, served := h.serve(t, "b", joinParams(t, member, *h.app.WalletPubkey, 10_000), member, nonce)
+	require.True(t, served)
+	require.NotNil(t, second.Error)
+	assert.Equal(t, nipcw.ErrWalletExists, second.Error.Code)
 	assert.Len(t, h.children(t), 1)
 }

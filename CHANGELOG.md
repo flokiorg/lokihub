@@ -424,6 +424,23 @@ private-transport request ended.
   let such a wallet be removed mid-payment. (#144)
 - Shows a Circle Hub's stats in the desktop app; the page asked for them on a
   route the desktop app answered with the app list. (#144)
+- Ignores a follow-set event whose id doesn't match its content; a relay could
+  forge one to choose which of two same-second versions decides membership.
+  (#145)
+- Refetches a follow set cached more than two hours ago instead of admitting
+  members from it; without the background refresh, a removed member stayed in.
+  (#145)
+- Answers a circle join with `INTERNAL` when the hub can't record its identity
+  proof; it said the proof was already used, which reads as the client's
+  mistake. (#145)
+- Answers a private-transport item with a retryable error when the hub can't
+  read the wallet's records; a circle join got a final refusal, and a bill
+  holder was told no slice was theirs. (#145)
+- Keeps a member removed from a follow set out after a restart, even when the
+  relays still serve the older version that listed them. (#145)
+- Freezes a circle wallet once its member leaves the allowlist or follow set:
+  payments and new invoices are refused until they are added back, while the
+  balance and history stay readable. (#145)
 
 ## [0.4.0]
 
