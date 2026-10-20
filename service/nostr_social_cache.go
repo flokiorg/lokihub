@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -92,6 +93,13 @@ type nostrSocialCache struct {
 	// private transport's inbox key (NIP-CW §Hidden Members). Nil, or an
 	// error, means no hidden entry can be read.
 	inboxKey func() (string, error)
+
+	// floor is the newest version of each set read so far, keyed like cache
+	// and guarded by mu. Never evicted, and saved through persistDB, so a
+	// relay serving an older version can't roll membership back.
+	floor     map[string]*nostr.Event
+	persistDB atomic.Pointer[gorm.DB]
+	persistMu sync.Mutex
 }
 
 func NewNostrSocialCache(cfg config.Config) *nostrSocialCache {
@@ -99,6 +107,7 @@ func NewNostrSocialCache(cfg config.Config) *nostrSocialCache {
 		cfg:         cfg,
 		cache:       make(map[string]*FollowSet),
 		outboxCache: make(map[string]*outboxEntry),
+		floor:       make(map[string]*nostr.Event),
 	}
 }
 
@@ -503,26 +512,104 @@ func (s *nostrSocialCache) queryAndStore(ctx context.Context, pool *nostr.Simple
 	return s.store(set), nil
 }
 
-// store caches set unless a newer version of it is already cached, and returns
-// whichever is kept.
+// store caches set unless a newer version of it is already cached or was
+// read before, and returns whichever is kept. A version older than the floor
+// is replaced by the floor's, so neither eviction nor a restart lets relays
+// roll membership back.
 func (s *nostrSocialCache) store(set *FollowSet) *FollowSet {
+	key := followSetKey(set.Provider, set.D)
+	s.mu.RLock()
+	floor := s.floor[key]
+	s.mu.RUnlock()
+	if floor != nil && supersedes(floor, set.Event) {
+		set = parseFollowSet(floor, set.D, s.hiddenMemberKey())
+	}
+
+	kept := s.storeUnlessOlder(key, set)
+	s.persistFloor(set.Provider, set.D)
+	return kept
+}
+
+func (s *nostrSocialCache) storeUnlessOlder(key string, set *FollowSet) *FollowSet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// C2: evict entries older than 2×TTL while already holding the write lock.
 	defer s.evictStaleUnlocked()
 
-	key := followSetKey(set.Provider, set.D)
+	kept := set
 	if existing, ok := s.cache[key]; ok && supersedes(existing.Event, set.Event) {
 		// A relay still serving an older version must not roll back a newer
 		// one, such as the version this hub just published. The entry is
 		// copied, not updated in place, since readers hold it without a lock.
 		refreshed := *existing
 		refreshed.FetchedAt = time.Now()
-		s.cache[key] = &refreshed
-		return &refreshed
+		kept = &refreshed
 	}
-	s.cache[key] = set
-	return set
+	s.cache[key] = kept
+	if floor := s.floor[key]; floor == nil || supersedes(kept.Event, floor) {
+		s.floor[key] = kept.Event
+	}
+	return kept
+}
+
+// persistFloor saves the newest version read of the set at (provider, d) on
+// every identity using it, so loadFloor restores it after a restart. A no-op
+// until StartNostrSocialCacheRefresher supplies the database, and for rows
+// that already hold it.
+func (s *nostrSocialCache) persistFloor(provider, d string) {
+	gormDB := s.persistDB.Load()
+	if gormDB == nil {
+		return
+	}
+	// Serialized, and the floor read under it, so a slower write of an older
+	// version can't land after a newer one.
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	s.mu.RLock()
+	floor := s.floor[followSetKey(provider, d)]
+	s.mu.RUnlock()
+	if floor == nil {
+		return
+	}
+	raw, err := json.Marshal(floor)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to encode a follow set for saving")
+		return
+	}
+	err = gormDB.Model(&db.CircleIdentity{}).
+		Where("policy = ? AND provider_pubkey = ? AND follow_set_d = ?", db.CirclePolicyFollowSet, provider, d).
+		Where("last_follow_set_event IS NULL OR last_follow_set_event <> ?", string(raw)).
+		Update("last_follow_set_event", string(raw)).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("address", followSetKey(provider, d)).Msg("Failed to save the newest follow set version")
+	}
+}
+
+// loadFloor restores the newest version of each set saved by persistFloor.
+// The saved event must pass the same rule as one read from a relay.
+func (s *nostrSocialCache) loadFloor(gormDB *gorm.DB) {
+	var identities []db.CircleIdentity
+	if err := gormDB.Where("policy = ? AND last_follow_set_event IS NOT NULL", db.CirclePolicyFollowSet).
+		Find(&identities).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to load saved follow set versions")
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, identity := range identities {
+		var ev nostr.Event
+		if err := json.Unmarshal([]byte(*identity.LastFollowSetEvent), &ev); err != nil {
+			continue
+		}
+		selected := selectFollowSetEvent([]nostr.Event{ev}, identity.ProviderPubkey, identity.FollowSetD)
+		if selected == nil {
+			continue
+		}
+		key := followSetKey(identity.ProviderPubkey, identity.FollowSetD)
+		if floor := s.floor[key]; floor == nil || supersedes(selected, floor) {
+			s.floor[key] = selected
+		}
+	}
 }
 
 // fetchAndCache performs the relay query and stores the result. Reuses
@@ -646,6 +733,10 @@ func StartNostrSocialCacheRefresher(ctx context.Context, gormDB *gorm.DB, cache 
 	// Let cold-miss fetches (fetchAndCache) reuse this same already-warm pool
 	// too — see sharedPool's doc comment.
 	cache.sharedPool.Store(pool)
+	// Before the first fetch, so no relay can serve a version older than the
+	// last one this hub read before it restarted.
+	cache.loadFloor(gormDB)
+	cache.persistDB.Store(gormDB)
 	go func() {
 		ticker := time.NewTicker(socialCacheRefreshInterval)
 		defer ticker.Stop()
