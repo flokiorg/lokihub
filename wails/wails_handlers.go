@@ -362,6 +362,24 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: stats, Error: ""}
 	}
 
+	circleStatsRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/circle-stats(?:\?.*)?$`,
+	)
+	if m := circleStatsRegex.FindStringSubmatch(route); len(m) == 2 {
+		appId, err := strconv.ParseUint(m[1], 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		if method != "GET" {
+			return WailsRequestRouterResponse{Body: nil, Error: "Unsupported method"}
+		}
+		stats, err := app.api.GetCircleHubStats(uint(appId))
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: stats, Error: ""}
+	}
+
 	cashWalletsRegex := regexp.MustCompile(
 		`^/api/apps/([0-9]+)/cash-wallets(?:\?.*)?$`,
 	)

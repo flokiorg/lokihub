@@ -409,6 +409,21 @@ private-transport request ended.
 - Marks a private-transport request `executed` or `error` once its handler
   ends; it stayed `executing` forever, unlike the same request sent over the
   standard transport. (#140)
+- Holds a Circle Wallet's hold invoices to the same receive cap as ordinary
+  invoices; before, `make_hold_invoice` could take in any amount. (#144)
+- Refuses zero-amount invoices from a Circle Wallet; the payer could choose
+  any amount and push the wallet past its cap. (#144)
+- Credits a keysend to a Circle Wallet only when it fits under the wallet's
+  cap; a larger one stays with the node, and one sent from this node is
+  refused. Anyone could name the wallet's ID and push it past its cap. (#144)
+- Keeps an expired or deleted Circle or Cash wallet until its outgoing payment
+  ends; deleting it mid-payment lost the payment's record and the hub's fee
+  credit. (#144)
+- Keeps a Circle Hub, and any of its wallets with a live invoice or a payment
+  in flight, when you delete it with "empty wallets only"; a zero balance alone
+  let such a wallet be removed mid-payment. (#144)
+- Shows a Circle Hub's stats in the desktop app; the page asked for them on a
+  route the desktop app answered with the app list. (#144)
 
 ## [0.4.0]
 
