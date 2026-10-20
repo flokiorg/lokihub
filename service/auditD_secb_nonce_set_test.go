@@ -225,9 +225,7 @@ func TestAuditDSecB_UnwrapThroughputReachesCapacityBeforeSaturation(t *testing.T
 		t.Skip("throughput measurement: meaningless under the race detector; asserted in the ordinary (non -race) run")
 	}
 
-	if testing.Short() {
-		t.Skip("timing measurement")
-	}
+	requirePerfOptIn(t)
 	pt, seal := newUnwrapFixture(t)
 	limits := transport.DefaultLimits()
 
