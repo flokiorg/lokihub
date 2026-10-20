@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.16` on 2026-10-17._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.17` on 2026-10-20._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -26,6 +26,11 @@ when recording it failed, publishes private-transport replies on the relay
 the request arrived on, makes app pubkeys unique, republishes the transport
 announcement when its limits change, forgets archived split links after 90
 days by default, and moves to `nmilat` v0.5.0-rc.24.
+rc.17 reports the node key in a circle hub's `get_info` so clients can join
+privately, follows a `return_to` link only to another app or site, returns
+after unlock only to a page of this app, names the missing signer permission
+when the node cannot sign, moves the frontend to react-router v7, and moves to
+`nmilat` v0.5.0-rc.31.
 
 ### Added
 
