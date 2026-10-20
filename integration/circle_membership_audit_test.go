@@ -64,7 +64,7 @@ func publishRaw(cfg *Config, ev nostr.Event) error {
 	if err != nil {
 		return err
 	}
-	defer relay.Close()
+	defer func() { _ = relay.Close() }()
 	return relay.Publish(ctx, ev)
 }
 
@@ -306,7 +306,9 @@ func TestCircleMembershipAudit_RestartKeepsRemovedMemberOut(t *testing.T) {
 	_, err := joinCircle(t, resp.PairingUri, removedPriv)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
-	out, err := exec.Command("sh", "-c", restartCmd).CombinedOutput()
+	restartCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(restartCtx, "sh", "-c", restartCmd).CombinedOutput() //nolint:gosec // the operator's own opt-in hook
 	require.NoError(t, err, "restart command failed: %s", out)
 	require.NoError(t, publishRaw(cfg, older), "the emptied relay takes the older version")
 
