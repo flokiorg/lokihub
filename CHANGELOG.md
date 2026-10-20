@@ -96,7 +96,7 @@ when the node cannot sign, moves the frontend to react-router v7, and moves to
 - Adds follow-set circles the hub publishes as its node identity, with public
   and hidden members, a title and a description. Hidden members are encrypted
   so only the hub can read them, and the invite takes the set's title as its
-  label.
+  label. (#139)
 
 ### Changed
 
@@ -199,7 +199,7 @@ when the node cannot sign, moves the frontend to react-router v7, and moves to
 - Breaking: a circle admits the members of a NIP-51 follow set
   (`circle_policy: "follow_set"`) instead of the host's kind:3 contact list,
   so one account can run several circles. Circles using the old `following`
-  policy are deleted on upgrade.
+  policy are deleted on upgrade. (#139)
 
 ### Fixed
 
