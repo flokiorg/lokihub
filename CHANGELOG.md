@@ -423,6 +423,9 @@ private-transport request ended.
   holder was told no slice was theirs. (#145)
 - Keeps a member removed from a follow set out after a restart, even when the
   relays still serve the older version that listed them. (#145)
+- Freezes a circle wallet once its member leaves the allowlist or follow set:
+  payments and new invoices are refused until they are added back, while the
+  balance and history stay readable. (#145)
 
 ## [0.4.0]
 
