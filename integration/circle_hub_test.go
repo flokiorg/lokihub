@@ -28,7 +28,7 @@ const numGeneratedUnauthorizedIdentities = 5
 
 func TestCircleHubs(t *testing.T) {
 	cfg := requireConfig(t)
-	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowing} {
+	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowSet} {
 		t.Run(policy, func(t *testing.T) {
 			testCircleHub(t, cfg, policy)
 		})
@@ -42,8 +42,8 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	member1Pub := mustPubkey(t, member1Priv)
 
 	// Both members are named upfront (authorizedPubkeys), not added later -
-	// required for circlePolicyFollowing, whose membership is fixed by the
-	// provider's kind:3 list published before the hub itself is created (see
+	// required for circlePolicyFollowSet, whose membership is fixed by the
+	// provider's follow set published before the hub itself is created (see
 	// createEphemeralCircleHub's own doc comment); kept the same shape for
 	// circlePolicyAllowlist too rather than branching this test's own setup.
 	hub, _, _ := createEphemeralCircleHub(t, cfg, "circle-hub-"+policy, policy,
@@ -57,7 +57,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// unconditionally against both policies below - the goal is zero skipped
 	// tests in a normal suite run (see integration/README.md's "Running
 	// everything, with zero skips" section), and re-running them here is
-	// cheap since it's still the same allowlist-vs-following hub already
+	// cheap since it's still the same allowlist-vs-follow-set hub already
 	// created above, not an extra one. isAllowlist is kept only for the one
 	// remaining case below (the omitted-expiry/omitted-budget_renewal default
 	// check) that's still deliberately exercised once rather than twice.

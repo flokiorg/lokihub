@@ -149,10 +149,10 @@ dev subcommand="" *args:
             ;;
         seed-relay)
             # Publishes integration/testdata/social_graph.json's fixed
-            # "provider"/"members" identities' kind:3 follow list to the dev
-            # relay (see integration/cmd/seedrelay) - idempotent (kind:3 is
-            # replaceable), so this is safe to run on every `dev reset`, not
-            # just once. Keeps circle "following"-policy integration tests
+            # "provider"/"members" identities' follow set to the dev relay
+            # (see integration/cmd/seedrelay) - idempotent (a follow set is
+            # addressable), so this is safe to run on every `dev reset`, not
+            # just once. Keeps circle "follow_set"-policy integration tests
             # off any real third-party relay - see integration/README.md.
             go run ./integration/cmd/seedrelay "${RELAY:-ws://relay:5500}"
             ;;
@@ -177,7 +177,7 @@ dev subcommand="" *args:
       logs [service]        follow logs for the docker dev environment or a specific service
       status                show status of the docker dev environment
       reset                  restart relay + backend for a clean server-side session/subscription baseline, then reseed (`just test integration` already does this)
-      seed-relay             publish the fixed integration test identities' follow list to the dev relay (`dev reset` already does this)
+      seed-relay             publish the fixed integration test identities' follow set to the dev relay (`dev reset` already does this)
       flncli <args...>      run flncli commands against the dev flnd (e.g. `just dev flncli getinfo`)
       wails                 run the Wails desktop app locally (native alternative to the docker dev stack)
 

@@ -5,7 +5,7 @@
 // deletes things: set LOKIHUB_SWEEP_LEAKED_FIXTURES=1 to run it.
 //
 // It exists because the leak it cleans up is not hypothetical and not one-off.
-// A leaked "following"-policy circle identity keeps getting re-fetched from the
+// A leaked "follow_set"-policy circle identity keeps getting re-fetched from the
 // general relays by nostr_social_cache.go's background refresher, forever, and
 // has already been found live responsible for accumulated identities
 // contributing to "too many concurrent REQs" notices and timeouts elsewhere in

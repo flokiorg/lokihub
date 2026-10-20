@@ -39,7 +39,7 @@ import (
 // identically regardless of who's authorized to hold the wallet.
 func TestCircleWallet_Budget_PayInvoiceQuotaExceeded_DistinctFromInsufficientBalance(t *testing.T) {
 	cfg := requireConfig(t)
-	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowing} {
+	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowSet} {
 		t.Run(policy, func(t *testing.T) {
 			testBudgetQuotaExceeded(t, cfg, policy)
 		})

@@ -45,7 +45,7 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 // deletion (see TestCreateCircleHub_IdentitySurvivesHubDeletion), so
 // createEphemeralCircleHub's own t.Cleanup must explicitly delete the
 // identity it created too, not just the hub app. A missing/failing identity
-// cleanup here doesn't just bloat the DB - a leaked "following"-policy
+// cleanup here doesn't just bloat the DB - a leaked "follow_set"-policy
 // identity keeps getting re-fetched from the general relays by
 // nostr_social_cache.go's background refresher every
 // socialCacheRefreshInterval, indefinitely, and was found live responsible
