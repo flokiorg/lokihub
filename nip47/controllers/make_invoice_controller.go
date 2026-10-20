@@ -50,6 +50,49 @@ func outstandingIncomingMloki(tx *gorm.DB, appID uint, now time.Time) int64 {
 	return sum
 }
 
+// reserveCircleReceiveCap checks that an invoice of amountMloki keeps a circle
+// wallet within its MaxAmountLoki cap. Every way to receive (make_invoice,
+// make_hold_invoice) goes through it. On success the caller holds the wallet's
+// guard until it calls release, which covers both the cap read and issuing the
+// invoice, so two concurrent requests can't both pass on the same stale figure.
+// The guard is package-level: production builds a new controller per request.
+// A non-nil refusal is the error to publish.
+func (controller *nip47Controller) reserveCircleReceiveCap(appId uint, amountMloki uint64) (release func(), refusal *models.Error) {
+	noop := func() {}
+	var circleApp db.App
+	if controller.db.Where("id = ? AND parent_kind = ?", appId, db.ParentKindCircle).Limit(1).Find(&circleApp).RowsAffected == 0 {
+		return noop, nil
+	}
+	var maxMloki int64
+	controller.db.Model(&db.AppPermission{}).
+		Where("app_id = ? AND scope = ?", appId, constants.MAKE_INVOICE_SCOPE).
+		Pluck("max_amount_loki * 1000", &maxMloki)
+	if maxMloki <= 0 {
+		return noop, nil
+	}
+	if _, loaded := circleInvoiceGuard.LoadOrStore(appId, struct{}{}); loaded {
+		return noop, &models.Error{
+			Code:    constants.ERROR_RATE_LIMITED,
+			Message: "concurrent invoice creation in progress",
+		}
+	}
+	release = func() { circleInvoiceGuard.Delete(appId) }
+
+	// Invoices already issued and still payable count too: each can still
+	// bring its amount in, and settling one re-checks nothing.
+	committed := queries.GetIsolatedBalance(controller.db, appId) + outstandingIncomingMloki(controller.db, appId, time.Now())
+	// The amount is caller-suppliable; a value beyond int64 range would wrap
+	// negative and bypass the cap check, so fail closed on the overflow itself.
+	if amountMloki > math.MaxInt64 || committed+int64(amountMloki) > maxMloki {
+		release()
+		return noop, &models.Error{
+			Code:    constants.ERROR_QUOTA_EXCEEDED,
+			Message: "invoice amount would exceed circle wallet cap",
+		}
+	}
+	return release, nil
+}
+
 func (controller *nip47Controller) HandleMakeInvoiceEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, appId uint, publishResponse publishFunc) {
 
 	makeInvoiceParams := &makeInvoiceParams{}
@@ -69,48 +112,12 @@ func (controller *nip47Controller) HandleMakeInvoiceEvent(ctx context.Context, n
 		Interface("metadata", makeInvoiceParams.Metadata).
 		Msg("Handling make_invoice request")
 
-	// Circle child wallets cannot accumulate above their MaxAmountLoki cap. The
-	// per-app guard covers both the cap read and the MakeInvoice call below, so two
-	// concurrent requests can't both pass on the same stale figure (TOCTOU race).
-	// It is package-level: production builds a new controller per request, so a
-	// per-controller guard never saw a second request.
-	var circleApp db.App
-	if controller.db.Where("id = ? AND parent_kind = ?", appId, db.ParentKindCircle).Limit(1).Find(&circleApp).RowsAffected > 0 {
-		var maxMloki int64
-		controller.db.Model(&db.AppPermission{}).
-			Where("app_id = ? AND scope = ?", appId, constants.MAKE_INVOICE_SCOPE).
-			Pluck("max_amount_loki * 1000", &maxMloki)
-		if maxMloki > 0 {
-			if _, loaded := circleInvoiceGuard.LoadOrStore(appId, struct{}{}); loaded {
-				publishResponse(&models.Response{
-					ResultType: nip47Request.Method,
-					Error: &models.Error{
-						Code:    constants.ERROR_RATE_LIMITED,
-						Message: "concurrent invoice creation in progress",
-					},
-				}, nostr.Tags{})
-				return
-			}
-			defer circleInvoiceGuard.Delete(appId)
-
-			// Invoices already issued and still payable count too: each can still
-			// bring its amount in, and settling one re-checks nothing.
-			committed := queries.GetIsolatedBalance(controller.db, appId) + outstandingIncomingMloki(controller.db, appId, time.Now())
-			// makeInvoiceParams.Amount is caller-suppliable; a value beyond
-			// int64 range would wrap negative and bypass the cap check
-			// below, so fail closed on the overflow itself.
-			if makeInvoiceParams.Amount > math.MaxInt64 || committed+int64(makeInvoiceParams.Amount) > maxMloki {
-				publishResponse(&models.Response{
-					ResultType: nip47Request.Method,
-					Error: &models.Error{
-						Code:    constants.ERROR_QUOTA_EXCEEDED,
-						Message: "invoice amount would exceed circle wallet cap",
-					},
-				}, nostr.Tags{})
-				return
-			}
-		}
+	release, refusal := controller.reserveCircleReceiveCap(appId, makeInvoiceParams.Amount)
+	if refusal != nil {
+		publishResponse(&models.Response{ResultType: nip47Request.Method, Error: refusal}, nostr.Tags{})
+		return
 	}
+	defer release()
 
 	expiry := makeInvoiceParams.Expiry
 

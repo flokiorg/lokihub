@@ -44,6 +44,13 @@ func (controller *nip47Controller) HandleMakeHoldInvoiceEvent(ctx context.Contex
 		return
 	}
 
+	release, refusal := controller.reserveCircleReceiveCap(appId, makeHoldInvoiceParams.Amount)
+	if refusal != nil {
+		publishResponse(&models.Response{ResultType: nip47Request.Method, Error: refusal}, nostr.Tags{})
+		return
+	}
+	defer release()
+
 	logger.Logger.Info().
 		Interface("requestEventId", requestEventId).
 		Interface("appId", appId).
