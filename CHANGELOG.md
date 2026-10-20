@@ -386,7 +386,7 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   your session. (#131)
 - Names the missing `signer:generate` macaroon permission, or the missing
   signer RPC, when the node cannot sign as itself; before, the private
-  transport failed with a bare "permission denied".
+  transport failed with a bare "permission denied". (#132)
 
 ## [0.4.0]
 
