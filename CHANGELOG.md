@@ -421,6 +421,8 @@ private-transport request ended.
 - Answers a private-transport item with a retryable error when the hub can't
   read the wallet's records; a circle join got a final refusal, and a bill
   holder was told no slice was theirs. (#145)
+- Keeps a member removed from a follow set out after a restart, even when the
+  relays still serve the older version that listed them. (#145)
 
 ## [0.4.0]
 

@@ -302,6 +302,10 @@ type CircleIdentity struct {
 	// FollowSetD is the set's `d` identifier, set only for the follow_set
 	// policy. ProviderPubkey and FollowSetD together are the set's address.
 	FollowSetD string
+	// LastFollowSetEvent is the newest version of the set this hub has read,
+	// as JSON, so a restart can't roll membership back to an older version
+	// relays still serve. Follow_set policy only.
+	LastFollowSetEvent *string `json:"-"`
 }
 
 // FollowSetAddress is the NIP-01 address of a follow_set identity's set.
