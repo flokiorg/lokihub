@@ -39,6 +39,7 @@ type nip47Service struct {
 	cashClaimLimiter       controllers.RateLimiter
 	circleRateLimiter      controllers.RateLimiter
 	identityAuthorityMgr   *apps.IdentityAuthorityManager
+	privateIdentity        func() string
 }
 
 type Nip47Service interface {
@@ -55,6 +56,9 @@ type Nip47Service interface {
 	// return means OMIT it — see the implementation for why that is a protocol
 	// requirement rather than an error path.
 	ServePrivateItem(ctx context.Context, lnClient lnclient.LNClient, item transportpkg.Item, binding PrivateItemBinding) (transportpkg.Result, bool)
+	// SetPrivateIdentity sets the source of get_info's circle_wallet.identity. Call it
+	// before any event is handled; it returns "" while the private transport is down.
+	SetPrivateIdentity(privateIdentity func() string)
 }
 
 func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
@@ -75,6 +79,10 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 		circleRateLimiter:      controllers.NewRateLimiter(),
 		identityAuthorityMgr:   apps.NewIdentityAuthorityManager(db),
 	}
+}
+
+func (svc *nip47Service) SetPrivateIdentity(privateIdentity func() string) {
+	svc.privateIdentity = privateIdentity
 }
 
 func (svc *nip47Service) ConsumeEvent(ctx context.Context, event *events.Event, globalProperties map[string]interface{}) {
