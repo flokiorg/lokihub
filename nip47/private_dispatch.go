@@ -162,7 +162,21 @@ func (svc *nip47Service) ServePrivateItem(
 	// never from anything the item asserts about itself (NIP-CASH §Scoping the Roster). An
 	// item that could name its own scope subject could read a co-recipient's row by naming
 	// theirs.
-	signer, billIsCashMode, authorized := svc.privateItemIsAuthorized(item, binding, &app)
+	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app)
+	if lookupErr != nil {
+		// The hub could not read its own records, which says nothing about the
+		// sender: answer with a code a client retries, not a refusal. Circle
+		// joins use NIP-CW's NOT_READY.
+		code := constants.ERROR_INTERNAL
+		if item.Method == constants.NIP47MethodCreateCircleWallet {
+			code = constants.ERROR_NOT_READY
+		}
+		return transport.Result{
+			ID:         item.ID,
+			ResultType: item.Method,
+			Error:      &transport.ResultError{Code: code, Message: "the hub could not read this wallet's records, please retry"},
+		}, true
+	}
 	if !authorized {
 		// An ERROR now, not an omission, and only because gate 2.5 passed: the sender
 		// has proved they hold this bill, so telling them they hold no SLICE of it
@@ -512,11 +526,12 @@ func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) boo
 // signer is the verified proof's own signer, empty for a proofless cash-mode item — there is
 // no key to recover there, since the secret in params is the whole authorization.
 // billIsCashMode is read from the hub's own claim rows, never from the item.
+// lookupErr reports that those rows could not be read, which decides nothing.
 func (svc *nip47Service) privateItemIsAuthorized(
 	item transport.Item,
 	binding PrivateItemBinding,
 	app *db.App,
-) (signer string, billIsCashMode bool, authorized bool) {
+) (signer string, billIsCashMode bool, authorized bool, lookupErr error) {
 	// create_circle_wallet acts on a HUB rather than a bill, so there are no claims to
 	// match a signer against — the kind-23199 identity proof inside its own params is what
 	// authorizes it, and the controller checks that. Handled first because a hub
@@ -526,7 +541,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	claims, err := svc.appsService.ListClaimsForWallet(app.ID)
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to read a bill's claims")
-		return "", false, false
+		return "", false, false, err
 	}
 
 	// Cash-mode is a property of the BILL, read here, never asserted by the item.
@@ -551,12 +566,12 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// The secret must also match one of this bill's cash-mode slices (NIP-CASH
 		// §Bearer Items). Not every controller checks it — cash_status never did — so it
 		// is checked here, once, for every method.
-		return "", billIsCashMode, billIsCashMode && cashSecretMatchesBill(item, claims)
+		return "", billIsCashMode, billIsCashMode && cashSecretMatchesBill(item, claims), nil
 	}
 
 	paramsHash, err := transport.CanonicalParamsHash(item.Params)
 	if err != nil {
-		return "", billIsCashMode, false
+		return "", billIsCashMode, false, nil
 	}
 	signer, err = transport.VerifyItemProof(item.Proof, transport.ProofBinding{
 		Target:     item.Target,
@@ -567,7 +582,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		NotAfter:   binding.NotAfter,
 	}, time.Now())
 	if err != nil {
-		return "", billIsCashMode, false
+		return "", billIsCashMode, false, nil
 	}
 	if isCircleJoin {
 		// NIP-CW §Private Join: the item proof's signer MUST be the joining pubkey.
@@ -577,9 +592,9 @@ func (svc *nip47Service) privateItemIsAuthorized(
 			Pubkey string `json:"pubkey"`
 		}
 		if err := json.Unmarshal(item.Params, &join); err != nil || join.Pubkey != signer {
-			return "", billIsCashMode, false
+			return "", billIsCashMode, false, nil
 		}
-		return signer, billIsCashMode, true
+		return signer, billIsCashMode, true, nil
 	}
 
 	// The signer should hold a slice of this bill: a verified proof only shows somebody
@@ -611,7 +626,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	// consolidation by a caller who is not also one of its recipients — a shape the spec
 	// deliberately permits, and which the connection-key source tests exercise.
 	if item.Method == constants.NIP47MethodCashConsolidate {
-		return signer, billIsCashMode, true
+		return signer, billIsCashMode, true, nil
 	}
 
 	decidableHere := true
@@ -647,18 +662,18 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	// binding the gate could not otherwise see.
 	if !decidableHere && item.Method == constants.NIP47MethodCashStatus {
 		if identity, ok := svc.attestedConnectionKey(item, claims, signer); ok {
-			return identity, billIsCashMode, true
+			return identity, billIsCashMode, true, nil
 		}
 	}
 	if !decidableHere && item.Method != constants.NIP47MethodCashStatus {
-		return signer, billIsCashMode, true
+		return signer, billIsCashMode, true, nil
 	}
 	for _, claim := range claims {
 		if claim.IdentityType != db.CashIdentityCash && claim.IdentityValue == signer {
-			return signer, billIsCashMode, true
+			return signer, billIsCashMode, true, nil
 		}
 	}
-	return "", billIsCashMode, false
+	return "", billIsCashMode, false, nil
 }
 
 // omitted records WHY an item was dropped, at Debug only.

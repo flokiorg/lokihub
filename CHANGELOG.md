@@ -418,6 +418,9 @@ private-transport request ended.
 - Answers a circle join with `INTERNAL` when the hub can't record its identity
   proof; it said the proof was already used, which reads as the client's
   mistake. (#145)
+- Answers a private-transport item with a retryable error when the hub can't
+  read the wallet's records; a circle join got a final refusal, and a bill
+  holder was told no slice was theirs. (#145)
 
 ## [0.4.0]
 
