@@ -33,7 +33,6 @@ func mintCircleChildFor(t *testing.T, hub CircleHubConfig, memberPriv string) *n
 	return mintCircleChild(t, one)
 }
 
-
 // roomOf is how much more c may receive: its cap less its balance. Only
 // accurate while c has no unpaid invoices.
 func roomOf(t *testing.T, c *nwcclient.Client) uint64 {
