@@ -341,13 +341,18 @@ func mergeRelayUrls(base, extra []string) []string {
 }
 
 // selectFollowSetEvent applies NIP-CW §Membership's "which event" rule: only a
-// kind-30000 event whose signature verifies, authored by provider, whose `d`
-// tag is d. Of those, the highest created_at wins, and on a tie the lowest id.
+// kind-30000 event whose id and signature verify, authored by provider, whose
+// `d` tag is d. Of those, the highest created_at wins, and on a tie the lowest
+// id. The id is checked because the signature doesn't cover it, and the tie
+// break reads it.
 func selectFollowSetEvent(events []nostr.Event, provider, d string) *nostr.Event {
 	var best *nostr.Event
 	for i := range events {
 		ev := &events[i]
 		if ev.Kind != db.KindFollowSet || ev.PubKey != provider || ev.Tags.GetD() != d {
+			continue
+		}
+		if !ev.CheckID() {
 			continue
 		}
 		if ok, err := ev.CheckSignature(); !ok || err != nil {
