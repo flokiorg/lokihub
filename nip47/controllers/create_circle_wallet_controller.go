@@ -186,7 +186,14 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	// shared connection can decrypt every request sent over it, including
 	// this one) must not be resubmittable within its own freshness window.
 	if err := controller.db.Create(&db.CircleWalletIdentityProof{AppID: app.ID, EventID: identityEvent.ID}).Error; err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
+		// Only a duplicate is a replay; anything else left the proof unrecorded,
+		// so it stays usable once the database recovers.
+		if db.IsDuplicateKeyError(err) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
+			return
+		}
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to record a circle join's identity proof")
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to record identity_event")
 		return
 	}
 

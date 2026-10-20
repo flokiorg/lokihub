@@ -290,6 +290,38 @@ func TestGetFollowSet_StaleEntry_ServedWithoutRefetch(t *testing.T) {
 	assert.Equal(t, before.FetchedAt, after.FetchedAt, "a stale-but-present entry must be served as-is, never refetched on the request path")
 }
 
+// Past the eviction cutoff an entry is too old to decide membership on: the
+// request path refetches it, so a member the provider since removed is not
+// admitted from the old copy when the refresher isn't running.
+func TestGetFollowSet_EntryPastEvictionCutoff_IsRefetched(t *testing.T) {
+	cache, svc := newSocialCacheForTest(t)
+	defer svc.Remove()
+
+	providerSK, provider := newKeypair(t)
+	current := signedFollowSetEvent(t, providerSK, testD, []string{unrelatedPubkey})
+	useRelayServing(t, svc, current)
+	seedCache(cache, provider, testD, []string{requesterPubkey}, 2*socialCacheTTL+time.Minute)
+
+	set, err := cache.getFollowSet(context.TODO(), provider, testD)
+	require.NoError(t, err)
+	assert.False(t, set.IsMember(requesterPubkey), "the removed member is not admitted from the expired copy")
+	assert.True(t, set.IsMember(unrelatedPubkey))
+}
+
+// With no relay able to serve the set, an expired entry is unresolved rather
+// than served: NOT_READY, never the old member list.
+func TestGetFollowSet_EntryPastEvictionCutoff_NoRelay_IsUnresolved(t *testing.T) {
+	cache, svc := newSocialCacheForTest(t)
+	defer svc.Remove()
+
+	_, provider := newKeypair(t)
+	useRelayServing(t, svc)
+	seedCache(cache, provider, testD, []string{requesterPubkey}, 2*socialCacheTTL+time.Minute)
+
+	_, err := cache.getFollowSet(context.TODO(), provider, testD)
+	require.ErrorIs(t, err, constants.ErrCircleMembershipUnresolved)
+}
+
 func TestGetFollowSet_ColdMiss_TriggersFetch(t *testing.T) {
 	cache, svc := newSocialCacheForTest(t)
 	defer svc.Remove()
