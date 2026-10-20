@@ -164,6 +164,8 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   client and NIP-46 signer work lokihub does not use.
 - Builds with Go 1.26.9, which `nmilat` v0.5.0-rc.17 requires for that
   release's standard-library security fixes. (4d45ff82)
+- Moves the frontend to react-router v7, which fixes an open redirect through a
+  backslash in a link (GHSA-wrjc-x8rr-h8h6).
 - Analytics sit inside the Cash Hub and Circle Hub overview cards they
   explain, instead of as a separate section further down the page, and
   those cards show a skeleton while loading instead of nothing.

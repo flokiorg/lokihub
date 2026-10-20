@@ -1,7 +1,7 @@
 import { InfoIcon, Zap } from "lucide-react";
 import React, { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { ChannelPublicPrivateAlert } from "src/components/channels/ChannelPublicPrivateAlert";

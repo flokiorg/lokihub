@@ -1,5 +1,5 @@
 import React from "react";
-import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
+import { Outlet, ScrollRestoration, useLocation } from "react-router";
 import { CompactLanguageSwitcher } from "src/components/CompactLanguageSwitcher";
 import { useInfo } from "src/hooks/useInfo";
 import { useLocale } from "src/hooks/useLocale";
