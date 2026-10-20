@@ -409,6 +409,8 @@ private-transport request ended.
 - Marks a private-transport request `executed` or `error` once its handler
   ends; it stayed `executing` forever, unlike the same request sent over the
   standard transport. (#140)
+- Ignores a follow-set event whose id doesn't match its content; a relay could
+  forge one to choose which of two same-second versions decides membership.
 
 ## [0.4.0]
 

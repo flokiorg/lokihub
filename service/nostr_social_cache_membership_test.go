@@ -99,6 +99,34 @@ func TestSelectFollowSetEvent_NewestWins_TieGoesToLowestID(t *testing.T) {
 	assert.Equal(t, lowest.ID, selectFollowSetEvent([]nostr.Event{b, a}, provider, testD).ID)
 }
 
+// The signature covers the content, not the id field, so a relay can resend a
+// genuine version under a forged low id. That copy must not win the same-second
+// tie: the version that really has the lowest id does.
+func TestSelectFollowSetEvent_ForgedIDCannotWinTheTie(t *testing.T) {
+	providerSK, provider := newKeypair(t)
+
+	a := signedFollowSetEvent(t, providerSK, testD, []string{requesterPubkey}, nostr.Tag{"title", "a"})
+	b := signedFollowSetEvent(t, providerSK, testD, []string{unrelatedPubkey}, nostr.Tag{"title", "b"})
+	b.CreatedAt = a.CreatedAt
+	require.NoError(t, b.Sign(providerSK))
+	winner, loser := a, b
+	if b.ID < a.ID {
+		winner, loser = b, a
+	}
+
+	forged := loser
+	forged.ID = "0000000000000000000000000000000000000000000000000000000000000000"
+	ok, err := forged.CheckSignature()
+	require.NoError(t, err)
+	require.True(t, ok, "the signature still verifies, which is why the id must be checked too")
+
+	selected := selectFollowSetEvent([]nostr.Event{forged, winner}, provider, testD)
+	require.NotNil(t, selected)
+	assert.Equal(t, winner.ID, selected.ID)
+
+	assert.Nil(t, selectFollowSetEvent([]nostr.Event{forged}, provider, testD), "an event whose id doesn't match its content is not a version at all")
+}
+
 // --- Which members ---
 
 func TestParseFollowSet_PublicAndHiddenMembers(t *testing.T) {
