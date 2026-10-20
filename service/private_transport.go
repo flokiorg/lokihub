@@ -113,11 +113,23 @@ func (svc *service) GetPrivateTransportStatus() PrivateTransportStatus {
 	return svc.loadPrivateTransportStatus()
 }
 
+// privateJoinIdentity is what get_info reports as circle_wallet.identity: the node
+// identity once this run's private transport has started, otherwise "".
+func (svc *service) privateJoinIdentity() string {
+	return svc.loadPrivateTransportStatus().NodeIdentity
+}
+
 func (svc *service) loadPrivateTransportStatus() PrivateTransportStatus {
 	if p := svc.privateTransportStatus.Load(); p != nil {
 		return *p
 	}
 	return PrivateTransportStatus{}
+}
+
+func (svc *service) resetPrivateTransportStatus() {
+	svc.privateTransportStatusMu.Lock()
+	defer svc.privateTransportStatusMu.Unlock()
+	svc.privateTransportStatus.Store(&PrivateTransportStatus{})
 }
 
 // setPrivateTransportIdentity records the node/inbox identity as soon as
@@ -244,16 +256,28 @@ func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, 
 	return envelope, conversationKey, nil
 }
 
+// resolvePrivateTransport derives this run's private transport and records its identity.
+// It forgets the previous run first, so a restart that cannot start the transport stops
+// reporting circle_wallet.identity in get_info.
+func (svc *service) resolvePrivateTransport() (*privateTransport, error) {
+	svc.resetPrivateTransportStatus()
+	pt, err := svc.newPrivateTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inboxXOnly)
+	return pt, nil
+}
+
 // startPrivateTransport resolves the inbox key, announces it, and opens the
 // subscription — in that order on purpose. Announcing before subscribing would
 // leave a window where a client has been told where to write and nothing is
 // reading; the reverse order costs nothing.
 func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.SimplePool, group *errgroup.Group) error {
-	pt, err := svc.newPrivateTransport()
+	pt, err := svc.resolvePrivateTransport()
 	if err != nil {
 		return err
 	}
-	svc.setPrivateTransportIdentity(pt.nodeXOnly, pt.inboxXOnly)
 
 	// Reclaim expired nonces so the set tracks the live window rather than
 	// growing toward its cap, where it would start refusing real envelopes.
