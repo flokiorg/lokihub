@@ -381,6 +381,9 @@ days by default, and moves to `nmilat` v0.5.0-rc.24.
   forever. Amounts and outcomes stay. (#126)
 - Returns to the page you opened before unlocking only when it is a page of
   this app; a link naming another site now lands on the home page. (#128)
+- Follows an app or peer link's `return_to` only when it opens another app or
+  site; a `javascript:` or `data:` link would have run in the hub's page with
+  your session. (#131)
 
 ## [0.4.0]
 

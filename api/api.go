@@ -113,6 +113,11 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 		}
 	}
 
+	returnToUrl, err := parseReturnTo(createAppRequest.ReturnTo)
+	if err != nil {
+		return nil, err
+	}
+
 	kind := createAppRequest.Kind
 	if kind == "" {
 		kind = db.AppKindStandard
@@ -212,20 +217,17 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 	responseBody.RelayUrls = relayUrls
 	responseBody.Lud16 = lightningAddress
 
-	if createAppRequest.ReturnTo != "" {
-		returnToUrl, err := url.Parse(createAppRequest.ReturnTo)
-		if err == nil {
-			query := returnToUrl.Query()
-			for _, relayUrl := range relayUrls {
-				query.Add("relay", relayUrl)
-			}
-			query.Add("pubkey", *app.WalletPubkey)
-			if lightningAddress != "" && !app.IsIsolated() {
-				query.Add("lud16", lightningAddress)
-			}
-			returnToUrl.RawQuery = query.Encode()
-			responseBody.ReturnTo = returnToUrl.String()
+	if returnToUrl != nil {
+		query := returnToUrl.Query()
+		for _, relayUrl := range relayUrls {
+			query.Add("relay", relayUrl)
 		}
+		query.Add("pubkey", *app.WalletPubkey)
+		if lightningAddress != "" && !app.IsIsolated() {
+			query.Add("lud16", lightningAddress)
+		}
+		returnToUrl.RawQuery = query.Encode()
+		responseBody.ReturnTo = returnToUrl.String()
 	}
 
 	var extra url.Values

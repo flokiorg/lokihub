@@ -53,6 +53,7 @@ import { useInfo } from "src/hooks/useInfo";
 import { ConnectAppCard } from "src/screens/apps/ConnectAppCard";
 import { formatFlokicoinAmount } from "src/utils/flokicoinFormatting";
 import { handleRequestError } from "src/utils/handleRequestError";
+import { safeReturnUrl } from "src/utils/safeReturnUrl";
 import Permissions from "../../components/Permissions";
 import { AppStoreApp } from "../../components/connections/SuggestedAppData";
 
@@ -101,7 +102,7 @@ const NewAppInternal = ({
     appStoreApp?.firefoxLink;
 
   const pubkey = queryParams.get("pubkey") ?? "";
-  const returnTo = queryParams.get("return_to") ?? "";
+  const returnTo = safeReturnUrl(queryParams.get("return_to")) ?? "";
 
   const nameParam = (queryParams.get("name") || queryParams.get("c")) ?? "";
   const [appName, setAppName] = useState(
@@ -361,10 +362,11 @@ const NewAppInternal = ({
         );
       }
 
-      if (createAppResponse.returnTo) {
+      const responseReturnTo = safeReturnUrl(createAppResponse.returnTo);
+      if (responseReturnTo) {
         // open connection URI directly in an app
         // eslint-disable-next-line react-hooks/immutability
-        window.location.href = createAppResponse.returnTo;
+        window.location.href = responseReturnTo;
         return;
       }
       toast(t("newApp.appCreated", "App created"));
