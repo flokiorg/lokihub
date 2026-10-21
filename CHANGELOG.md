@@ -179,6 +179,8 @@ private-transport request ended.
   client and NIP-46 signer work lokihub does not use.
 - Builds with Go 1.26.9, which `nmilat` v0.5.0-rc.17 requires for that
   release's standard-library security fixes. (4d45ff82)
+- Builds with Go 1.26.10, which fixes a certificate-verification flaw in the
+  standard library (GO-2026-6809) reachable from backup restore. (#152)
 - Moves the frontend to react-router v7, which fixes an open redirect through a
   backslash in a link (GHSA-wrjc-x8rr-h8h6). (#134)
 - Analytics sit inside the Cash Hub and Circle Hub overview cards they
