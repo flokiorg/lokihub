@@ -375,6 +375,7 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 			MaxExpSecs:        7200,
 			FeesPpm:           500,
 			PerWalletMaxMloki: 100_000,
+			MinBudgetRenewal:  constants.BUDGET_RENEWAL_WEEKLY,
 		},
 	)
 	require.NoError(t, err)
@@ -423,6 +424,16 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 	assert.Equal(t, 7200, nodeInfo.CircleWallet.MaxExpSecs)
 	assert.Equal(t, 500, nodeInfo.CircleWallet.FeesPpm)
 	assert.Equal(t, db.CirclePolicyAllowlist, nodeInfo.CircleWallet.CirclePolicy)
+	assert.Equal(t, int64(100_000), nodeInfo.CircleWallet.PerWalletMaxMillis)
+	assert.Equal(t, constants.BUDGET_RENEWAL_WEEKLY, nodeInfo.CircleWallet.MinBudgetRenewal)
+
+	// NIP-CW names the two limits on the wire.
+	raw, err := json.Marshal(nodeInfo.CircleWallet)
+	require.NoError(t, err)
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(raw, &wire))
+	assert.EqualValues(t, 100_000, wire["per_wallet_max_millis"])
+	assert.Equal(t, constants.BUDGET_RENEWAL_WEEKLY, wire["min_budget_renewal"])
 }
 
 func TestHandleGetInfoEvent_CircleAdmin_ZeroAvailableMillis(t *testing.T) {

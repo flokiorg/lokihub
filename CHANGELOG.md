@@ -103,6 +103,9 @@ private-transport request ended.
   label. (#139)
 - Marks a Circle member's wallet as frozen in the hub's wallet list once they
   leave the circle, so you can see which wallets can no longer pay. (#148)
+- Reports a Circle Hub's per-wallet ceiling and budget-renewal floor in
+  `get_info` (`per_wallet_max_millis`, `min_budget_renewal`), so a client can
+  check a join before sending it. (#150)
 
 ### Changed
 

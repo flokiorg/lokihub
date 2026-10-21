@@ -320,6 +320,9 @@ type CircleWalletInfo struct {
 	MaxExpSecs      int    `json:"max_exp_secs"`
 	FeesPpm         int    `json:"fees_ppm"`
 	CirclePolicy    string `json:"circle_policy"`
+
+	PerWalletMaxMillis int64  `json:"per_wallet_max_millis,omitempty"`
+	MinBudgetRenewal   string `json:"min_budget_renewal,omitempty"`
 }
 
 type MakeInvoiceParams struct {
