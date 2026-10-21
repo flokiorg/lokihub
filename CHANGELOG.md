@@ -2,334 +2,208 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.19` on 2026-10-21._ This section stays open: 0.5.0 itself has
-not been released, so everything under it is still pre-release and
-accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
-multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
-on top of 0.4.0's Circles and JIT Wallets. rc.2 through rc.8 are three
-rounds of security/financial/disclosure audit against that surface, moving
-bill methods onto NIP-CASH's private transport, closing a real order-forgery
-gap in LSPS5 notifications and several money-safety and disclosure bugs
-around redemption, fees and the cash-to-identity split. rc.9 just picks up
-the published `nmilat` SDK the audited wire changes already depend on.
-rc.10 gives the hub's own Nostr identity a profile page, surfaces whether
-the private-transport announcement actually published, and tidies Debug
-Tools and the dashboard overview cards. rc.11 and rc.12 only pick up
-`nmilat` v0.5.0-rc.12 and v0.5.0-rc.13. rc.13 moves to `nmilat`
-v0.5.0-rc.17 and Go 1.26.9, and fixes four reachable HTTP/2 server
-advisories in `golang.org/x/net`. rc.14 lets the node profile page post
-text notes, and fixes publishing that profile from the desktop app. rc.15
-takes `flokicoinjs-lib` from flokiorg's fork, which moves `valibot` to 1.5.0.
-rc.16 issues each Circle Wallet to a connection key the member generates,
-answers joins with NIP-CW's error codes, keeps a payment the node sent as sent
-when recording it failed, publishes private-transport replies on the relay
-the request arrived on, makes app pubkeys unique, republishes the transport
-announcement when its limits change, forgets archived split links after 90
-days by default, and moves to `nmilat` v0.5.0-rc.24.
-rc.17 reports the node key in a circle hub's `get_info` so clients can join
-privately, follows a `return_to` link only to another app or site, returns
-after unlock only to a page of this app, names the missing signer permission
-when the node cannot sign, moves the frontend to react-router v7, and moves to
-`nmilat` v0.5.0-rc.31.
-rc.18 admits circle members from a NIP-51 follow set instead of the host's
-kind:3 list, publishes those sets from the hub with hidden members only it can
-read, deletes circles on the old `following` policy, and records how a
-private-transport request ended.
-rc.19 closes an audit of Circle Wallets: a wallet can no longer receive past
-its cap through hold invoices, zero-amount invoices or keysend, a member who
-leaves a circle has their wallet frozen, a follow set can't be rolled back by
-a restart, wallets need a cap above the 10-loki fee reserve, and deleting a
-hub moves every balance back to the main balance. `get_info` reports a hub's
-per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
-`nmilat` v0.5.0-rc.32.
+Adds the Cash Hub, multi-recipient cash bills served over NIP-CASH's private
+transport, and moves Circles onto member-generated connection keys and NIP-51
+follow sets. Also fixes the money-safety and privacy findings from several
+audits of both.
 
 ### Added
 
-- Cash Hub: bearer (identity-less) multi-recipient cash tokens, paired with a
-  bech32 `lokicash1...` token. (#90)
-- `cash_transfer` for splitting a slice off a cash wallet, `cash_consolidate`
-  for combining several slices this node custodies into one new token,
-  `list_recipients` for enumerating a wallet's slices. (#90)
-- Per-slice redeem fees (`redeem_fee_ppm`) and a configurable expiry
-  ceiling, including no-expiry (`MaxExpSecs == 0`). (#90)
-- Optional mint provenance: a recoverable-ECDSA node signature attesting a
-  token's minter and amount, across `mint_cash`, `cash_transfer`,
-  `cash_consolidate`, and the admin HTTP mint path. (#90)
-- New integration suite driving Cash Hub / Circle Hub through the real
-  `nmilat` client SDK, proving wire-compatibility with the published
-  caller-side library. (#90)
-- `cash_consolidate` accepts `pubkey`, `connection_key`, or `bearer`
-  targets, and `pubkey` or `connection_key` sources (each independently
-  proven; connection_key sources require a live-trusted attestation,
-  checked once per call to close a TOCTOU window across a multi-source
-  batch). Bearer sources remain deferred.
-- Recipients can be addressed by `nconnection1...`, `npub`, or NIP-05 in the
-  Cash UI, not just raw hex pubkeys.
-- Saved Identity Authorities show their npub, profile picture, display
-  name, and NIP-05 instead of a raw hex pubkey.
-- Windows desktop app: runs frameless, with its own minimal
-  minimize/maximize/close bar instead of the native title bar.
-- macOS desktop app: the native title bar is hidden and content extends
-  full-size, keeping only the traffic-light buttons — the same look used by
-  apps like VS Code and Slack.
-- New Cash Hub monitoring view at `/cash-hub/:id`: outstanding liability,
-  flow, fees earned and median time to redeem, over charts of liability and
-  daily movement, then the bills themselves — one row per bill, expanding
-  to its recipients, archived alongside live. (#103)
-- New per-hub stats endpoint: outstanding liability, flow, fees earned,
-  median time to redeem and a daily series. (#103)
-- Settings › Services › NWC relays now exposes whether this hub runs its
-  own relays, previously reachable only by editing the database. (#103)
-- `get_info` reports the bill methods under a new `private_methods` field,
-  since `methods` means "callable here" and these are not — so a client
-  could previously only learn they exist by hardcoding the list. Presence
-  here is informational and never permission.
-- `mint_cash` accepts an optional `idempotency_key`, so a caller that
-  retried after a timeout no longer mints and funds a second wallet. A
-  repeat is refused rather than replayed, because a cash-mode secret exists
-  only in the reply the caller missed; a failed mint releases its key.
-- A node profile page for the hub's own Nostr identity: its published
-  kind-0 profile (banner, avatar, bio, NIP-05, lightning address) with QR
-  codes for its npub and nprofile, its recent notes, and an edit form that
-  publishes a new profile. Signing stays on the backend; the node's key
-  never reaches the browser.
-- The node profile page can post a plain-text note as the hub's node
-  identity, signed the same way as its profile, and shows it in the notes
-  feed straight away instead of waiting for relays to echo it back.
-  (05b50513)
-- Settings › Services shows whether the hub's private-transport
-  announcement published — how many relays accepted it, and the last
-  error if not. A client could previously see only that it was missing. The
-  node's hex, npub and nprofile also appear under Channels.
-- `get_info` reports `circle_wallet.identity` so clients can join a circle
-  privately. It is the node key that signs the private-transport
-  announcement, and is omitted while that transport is not running. (#129)
+- Adds the Cash Hub, which issues multi-recipient cash bills held by a secret
+  or bound to an identity, shared as a `lokicash1...` token. (#90)
+- Adds `cash_transfer` to split a slice off a bill, `cash_consolidate` to merge
+  slices this node holds into one new bill, and `cash_status` to read a bill's
+  slices. (#90)
+- Adds per-slice redeem fees (`redeem_fee_ppm`) and a configurable expiry
+  ceiling, including no expiry. (#90)
+- Adds optional mint provenance: a node signature attesting a bill's minter and
+  amount on every mint, transfer and consolidate. (#90)
+- Lets `cash_consolidate` target a pubkey, a connection key or cash mode, and
+  take pubkey or connection-key sources, each proven separately. Cash-mode
+  sources are not supported yet. (8432fb6f)
+- Accepts `nconnection1...`, npub or NIP-05 for recipients in the Cash UI, not
+  just hex pubkeys. (a3ae647d)
+- Shows saved Identity Authorities by npub, picture, display name and NIP-05
+  instead of a hex pubkey. (1f30f8cb, c7456b60)
+- Runs the Windows desktop app frameless, with its own minimize, maximize and
+  close buttons. (8a3e6e7b)
+- Hides the macOS title bar and extends content to the window edge, keeping
+  only the traffic-light buttons. (8a3e6e7b, #97)
+- Adds a Cash Hub monitoring page at `/cash-hub/:id`: outstanding liability,
+  flow, fees earned, median time to redeem, and every bill with its
+  recipients, archived ones included. The same stats come from a new per-hub
+  stats endpoint. (#103)
+- Adds a setting under Settings › Services › NWC relays for whether this hub
+  runs its own relays. It was only reachable by editing the database. (#103)
+- Lists the bill methods in `get_info` under a new `private_methods` field.
+  Being listed there is informational, never permission. (#111)
+- Adds an optional `idempotency_key` to `mint_cash`, so a caller retrying after
+  a timeout no longer mints and funds a second bill. A repeat is refused, not
+  replayed, since a cash secret exists only in the first reply. (#111)
+- Adds a profile page for the hub's own Nostr identity, with its kind-0
+  profile, npub and nprofile QR codes, recent notes and an edit form. Signing
+  stays on the backend, so the node key never reaches the browser. (593775ea)
+- Lets the node profile page post plain-text notes as the hub's identity,
+  shown in the feed right away. (05b50513)
+- Shows in Settings › Services whether the private-transport announcement
+  published, how many relays accepted it and the last error. The node's hex,
+  npub and nprofile also appear under Channels. (1d0e1fcd)
+- Reports `circle_wallet.identity` in `get_info` so clients can join a circle
+  privately. It is omitted while the private transport is not running. (#129)
 - Adds follow-set circles the hub publishes as its node identity, with public
   and hidden members, a title and a description. Hidden members are encrypted
-  so only the hub can read them, and the invite takes the set's title as its
-  label. (#139)
-- Marks a Circle member's wallet as frozen in the hub's wallet list once they
-  leave the circle, so you can see which wallets can no longer pay. (#148)
-- Reports a Circle Hub's per-wallet ceiling and budget-renewal floor in
-  `get_info` (`per_wallet_max_millis`, `min_budget_renewal`), so a client can
-  check a join before sending it. (#150)
+  so only the hub can read them. (#139)
+- Marks a member's wallet as frozen in the hub's wallet list once they leave
+  the circle. (#148)
+- Reports a Circle Hub's per-wallet ceiling and renewal floor in `get_info`
+  (`per_wallet_max_millis`, `min_budget_renewal`), so clients can check a join
+  before sending it. (#150)
 
 ### Changed
 
-- Migrated onto `nmilat`'s own published `nipcash`/`nipcw` request/response
-  types and method-name constants instead of maintaining parallel copies.
-  Bumped `github.com/ohstr/nmilat` from v0.3.0 to v0.4.0 (cash-mode rename)
-  to v0.5.0-rc.2 (private transport becomes client-usable) to v0.5.0-rc.3
-  and on, dropping the temporary local `replace` directive used while
-  wire changes were still unpublished at each step. (#102)
-- `cash_transfer`'s partial split mints two fresh wallets (carved and
-  remainder) instead of shrinking the source in place — a wallet's
-  committed amount is immutable everywhere. (#90)
-- NIP-CASH's and NIP-CW's per-call proofs moved off the shared, colliding
-  kind 35521 onto their own kinds (23198 / 23199). (#90)
-- Swap claim/refund transactions broadcast through the node's own FLND
-  connection instead of a third-party `lightz` API, and compute the txid
-  locally from the signed transaction rather than trusting the
-  broadcaster's response. (#93)
-- `release.yaml` pulls all platform artifacts from the single aggregated
-  `build-all.yaml` run instead of picking up stale artifacts left over from
-  earlier ad-hoc `workflow_dispatch` runs. (#82)
-- Hyphenated `VERSION` values (`-rc`, `-alpha`, `-beta`, ...) now publish as
-  GitHub prereleases instead of stable releases.
-- A bearer note's token and secret are merged into a single gift string
-  instead of two separate values to copy/track.
-- **NIP-CASH's bearer mode is now cash mode:** `identity_type: "bearer"`
-  becomes `"cash"` and `bearer_secret` becomes `cash_secret` across every
-  cash method and the admin API, so a cash-mode target's
-  `new_identity_hash` binds over `"cash:" + commitment + ":"`. A migration
-  rewrites stored rows and leaves the secret commitment untouched, so every
-  slice minted before the rename stays redeemable with the secret its
-  holder already has. Requires `nmilat` v0.4.0. (#102)
-- Spent bills are archived instead of erased. The hard delete cascaded
-  through the claims and the transaction ledger, so value that passed
-  through a hub left no trace an operator could account for. (#103)
-- `cash_redeem` and `cash_consolidate` delete a drained bill the way a split
-  already did. Deleting on only some paths made the resulting `NOT_FOUND` a
-  reliable signal that this hub issued a given bill and it was spent.
-  (#103)
-- Slice status splits into unclaimed, redeemed, split, expired, reclaimed
-  and written-off; `claimed` still works as the legacy umbrella. (#103)
-- Payout facts — payment hash, preimage and both fees — are recorded on a
-  slice at redeem time, where previously nothing linked a payout back to
-  its slice. (#103)
-- The hub opens one NIP-47 subscription for every app wallet instead of one
-  per wallet, which grew with bills in circulation rather than with users.
-  (#103)
-- **The four bill methods — `cash_status`, `cash_redeem`, `cash_transfer`,
-  `cash_consolidate` — are served over the private transport only, and
-  refused on the standard NIP-47 connection.** A standard-transport request
-  p-tags the bill's own wallet pubkey, so a holder's bills were a public,
-  linkable set however well the payload was encrypted; consolidating fifty
-  bills published fifty requests resolving to one.
-- `list_recipients` is gone; `cash_status` is the one name, in the
-  dispatcher, the permission scopes and `get_info`.
-- A redemption that would pay out nothing is refused instead of performed.
-  The redeem fee saturates at the amount it is charged on, so a slice at or
-  below the flat fee base quoted a payout of zero.
-- A redeem fee now has a flat base as well as a proportional part, with the
-  route reserve capped so payout plus reserve equals the slice. The hub
-  could previously pay up to 10,000 mloki in routing to earn 1, on a route
-  the holder chose.
-- Converting a bill to cash mode after it has changed hands splits instead
-  of reassigning in place, so a previous holder can no longer recover a
-  bill they already sold.
-- Bumped `nmilat` dependency to v0.5.0-rc.3. lokihub doesn't import the
-  packages that version touches (the embeddable relay SDK and its
-  `POST /query` HTTP bridge), so there is no behavior change here — this
-  just keeps the SDK current.
-- Bumped `nmilat` dependency to v0.5.0-rc.11, then v0.5.0-rc.12,
-  v0.5.0-rc.13 and v0.5.0-rc.17. As above, nothing lokihub builds in
-  changed behavior between rc.5 and rc.17; those releases carry relay-side
-  NIP-29/NIP-42/NIP-43, write-path and live-subscription fixes, relay
-  client and NIP-46 signer work lokihub does not use.
-- Builds with Go 1.26.9, which `nmilat` v0.5.0-rc.17 requires for that
-  release's standard-library security fixes. (4d45ff82)
-- Builds with Go 1.26.10, which fixes a certificate-verification flaw in the
-  standard library (GO-2026-6809) reachable from backup restore. (#152)
+- Breaking: renames NIP-CASH's bearer mode to cash mode (`identity_type:
+  "cash"`, `cash_secret`) across every cash method and the admin API. A
+  migration rewrites stored rows, so existing slices stay redeemable with the
+  secret their holder has. (#102)
+- Breaking: renames `list_recipients` to `cash_status` in the dispatcher, the
+  permission scopes and `get_info`. (#111)
+- Breaking: serves the four bill methods (`cash_status`, `cash_redeem`,
+  `cash_transfer`, `cash_consolidate`) only over the private transport. On the
+  standard NIP-47 connection each request p-tags the bill's wallet, which made
+  a holder's bills a public, linkable set. (#111)
+- Breaking: issues each Circle Wallet to a connection key the member
+  generates, so `create_circle_wallet` requires `connection_pubkey` and a
+  matching `connection` tag on its proof. The hub never holds the member's
+  secret, and `encrypted_details` carries `wallet_pubkey` and `relays` instead
+  of a `pairing_uri`. (#124)
+- Breaking: admits circle members from a NIP-51 follow set (`circle_policy:
+  "follow_set"`) instead of the host's kind:3 list, so one account can run
+  several circles. Circles on the old `following` policy are deleted on
+  upgrade. (#139)
+- Makes a `cash_transfer` split mint two new bills, carved-off and remainder,
+  instead of shrinking the source, so a bill's amount never changes. (#90)
+- Moves the NIP-CASH and NIP-CW per-call proofs off the shared kind 35521 onto
+  their own kinds, 23198 and 23199. (#90)
+- Broadcasts swap claim and refund transactions through the node's own FLND
+  connection instead of the third-party `lightz` API, and computes the txid
+  locally. (#93)
+- Merges a cash bill's token and secret into one gift string, so there is one
+  value to copy. (9affcdfe)
+- Archives spent bills instead of deleting them, so value that passed through
+  a hub stays accountable. (#103)
+- Deletes a drained bill on `cash_redeem` and `cash_consolidate` too, as a
+  split already did. Deleting on only some paths revealed which bills this hub
+  issued. (#103)
+- Splits slice status into unclaimed, redeemed, split, expired, reclaimed and
+  written-off; `claimed` still works as the umbrella. (#103)
+- Records the payment hash, preimage and both fees on a slice when it is
+  redeemed. (#103)
+- Opens one NIP-47 subscription for all app wallets instead of one per wallet,
+  which grew with the number of bills in circulation. (#103)
+- Refuses a redemption that would pay out nothing. (#111)
+- Adds a flat base to the redeem fee and caps the route reserve, so payout plus
+  reserve equals the slice. Before, the hub could pay up to 10,000 mloki in
+  routing to earn 1. (#111)
+- Splits a bill converted to cash mode after it has changed hands, instead of
+  reassigning it, so a previous holder can't recover a bill they sold. (#111)
+- Keeps a Circle Wallet on the fee rate in force when its member joined; a hub
+  fee change applies only to later joins (NIP-CW §Fees). (#122)
+- Makes removing a recipient from a Cash bill all-or-nothing: if returning
+  their amount to the hub fails, their slice stays as it was. (#122)
+- Answers `create_circle_wallet` with NIP-CW error codes (`WALLET_EXISTS`,
+  `NOT_READY`) and reports the resolved `max_amount` in `encrypted_details`.
+  (#124)
+- Moves analytics into the Cash Hub and Circle Hub overview cards they
+  explain, and shows a skeleton while those cards load. (17fd8a62)
+- Removes "Execute Node Command" from Debug Tools. Get App/Node Logs now fetch
+  right away, with the maximum log length set from a settings icon and
+  remembered. (1d0e1fcd)
+- Removes the "Update Configuration" form from the critical-error page.
+  (c01e74ea)
 - Moves the frontend to react-router v7, which fixes an open redirect through a
   backslash in a link (GHSA-wrjc-x8rr-h8h6). (#134)
-- Analytics sit inside the Cash Hub and Circle Hub overview cards they
-  explain, instead of as a separate section further down the page, and
-  those cards show a skeleton while loading instead of nothing.
-- Debug Tools: "Execute Node Command" is removed; Get App/Node Logs fetch
-  straight away, with the maximum log length set from a settings icon on
-  the response and remembered across reloads.
-- The critical-error page no longer offers an "Update Configuration" form.
-- A Circle Wallet keeps the fee rate in force when its member joined: changing
-  a Circle Hub's fee now applies only to members who join afterwards (NIP-CW
-  §Fees). (#122)
-- Removing a recipient from a Cash bill is now all-or-nothing: if returning
-  their amount to the Cash Hub fails, their slice stays exactly as it was
-  instead of being removed with the funds left behind. (#122)
-- Answers `create_circle_wallet` with the NIP-CW error codes, `WALLET_EXISTS`
-  for a second join and `NOT_READY` while membership can't be checked, and
-  reports the resolved `max_amount` inside `encrypted_details`. (#124)
-- Breaking: issues each Circle Wallet to a connection key the member
-  generates, so `create_circle_wallet` now requires `connection_pubkey` and a
-  matching `connection` tag on its identity proof. The Hub never holds the
-  member's secret, and `encrypted_details` carries `wallet_pubkey` and
-  `relays` instead of a `pairing_uri`. (#124)
-- Breaking: a circle admits the members of a NIP-51 follow set
-  (`circle_policy: "follow_set"`) instead of the host's kind:3 contact list,
-  so one account can run several circles. Circles using the old `following`
-  policy are deleted on upgrade. (#139)
+- Builds with Go 1.26.10, which fixes a certificate-verification flaw in the
+  standard library (GO-2026-6809) reachable from backup restore. (#152)
+- Moves to `nmilat` v0.5.0-rc.32, the published client SDK with the NIP-CASH
+  and NIP-CW wire changes in this release. (#153)
 
 ### Fixed
 
-- Fixed a duplicate Linux server tarball filename collision across the
-  legacy/modern build matrix legs that broke asset upload. (#84)
-- 2026-08-31 security/financial/UX audit round (5 independent reviewers):
-  fixed a High-severity Circle Wallet spend-cap bypass (a member could
-  silently disable their own cap via a sub-loki `max_amount`) plus 7
-  additional findings — fee-skim visibility, cash-specific expiry
-  messaging, a silently-skipped rate-limit test, `cash_consolidate`
-  dedup-guard granularity, 128-bit-safe fee-skim overflow handling, and
-  more. (#90)
-- Closed a real, currently-exploitable order-forgery gap in the LSPS5
-  Nostr notification path: any trusted LSP's signed Nostr event could
-  change the state of *any* order, not just ones it created. The ownership
-  check that already existed on the HTTP webhook path now lives inside the
-  shared function both transports call.
-- `mint_cash` wallet creation is atomic — app creation, pubkey
-  registration, and claim-row insertion happen in one DB transaction,
-  closing a gap where a mid-creation failure could strand a partial,
-  unfunded wallet row.
-- Bumped `google.golang.org/grpc` to v1.83.2, fixing GO-2026-6348 (heap
-  exhaustion via HTTP/2 DATA frame fragmentation), reachable through
-  flnd's LND client and the HTTP service's shutdown path.
-- Bumped `golang.org/x/net` to v0.60.0, fixing four HTTP/2 server
-  advisories govulncheck reports as reachable: GO-2026-6617 (crash from an
-  HPACK encoder race), GO-2026-6612 (double flow-control refund),
-  GO-2026-6611 (CPU exhaustion from repeated initial window changes) and
-  GO-2026-6603 (memory exhaustion from trailer headers). (f02d0c22)
-- Uses flokiorg's fork of `flokicoinjs-lib` (v7.1.1), which moves `valibot`
-  to 1.5.0 and clears GHSA-vqpr-j7v3-hqw9 and GHSA-5qjj-4xww-7phc. (#117)
-- Publishing the node profile from the desktop app failed with "Unhandled
-  route"; it now works there as it does in the browser. (05b50513)
-- Fixed the sidebar's logo/header rendering underneath the window controls
-  instead of below them.
-- macOS: fixed the native window's own corner background showing a
-  mismatched default color instead of the app's actual theme.
-- The desktop app no longer exits silently if the backend fails to start —
-  it shows a dedicated error screen with the failure message instead of the
-  window just vanishing.
-- Fixed upgrading straight from a 0.3.0-alpha install to a 0.5.0 release
-  candidate failing at startup with "SQL logic error: no such column:
-  parent_kind (1)".
-- Requests made by the UI's data views now time out instead of hanging
-  forever if the backend stops responding.
-- Fixed `wails dev` intermittently showing a blank window on cold start,
-  caused by a race between Vite's dev server coming up and Wails' asset
-  proxy reaching it.
-- Fixed `cash_consolidate` delivering the merged wallet's token encrypted
-  to the wrong key (`new_identity` instead of the calling connection), so a
-  pubkey-mode consolidation's token couldn't be decrypted by its intended
-  recipient.
-- A cash bill never publishes a kind-13194 info event, which previously
-  outlived the bill as a permanent, unauthenticated answer to "did this hub
-  serve this pubkey", defeating the deletion that makes a spent bill
-  unfindable. Also fixes info-event deletion being silently skipped for
-  every app kind. (#103)
-- Fixed a concurrent unclaim restoring a slice between the drain check and
-  the delete, which could destroy a bill that still backed live value.
-  (#103)
-- Fixed a failed delete stranding a wallet forever, invisible to both the
-  sweep and manual retries. (#103)
-- Deleting an app no longer turns a racing request into a 30-second hang.
-  (#103)
-- Outstanding no longer counts bills whose redeem window has passed but
-  which the sweep has not yet collected. (#107)
-- The outstanding chart now meets the figure printed above it; it
-  previously accumulated from zero over a 30-day window and ignored splits
-  and write-offs entirely. (#107)
-- Creating a Cash Hub no longer claims its connection can be viewed again
-  later — a hub's pairing secret is random and never stored, unlike a
-  bill's. (#107)
-- `cash_status` no longer answers a caller holding no slice. On a bill
-  carrying any `connection_key` recipient, possession of the token alone
-  read the whole roster.
-- A `connection_key` recipient can read their own row again, via the
-  Identity Authority attestation `cash_redeem` already requires.
-- `cash_status` honours its scope, and co-recipients are no longer
-  disclosed by default.
-- Circle join details are nested so co-members cannot read them,
-  `sign_message` refuses mint-provenance payloads, and a read-only token
-  can no longer read the swap seed.
-- An unknown bill, an unverifiable proof and an unserved method are all
-  answered by the same silence, and a bill proof is checked before the
-  bill is looked up so a miss costs what a hit costs.
-- A proof can no longer be lifted out of its envelope and replayed in
-  another: a nonce stays burnt as long as a proof bound to it can still
-  verify.
-- An oversize reply is detected wherever it falls in the batch, not only
-  when it happens to come first.
-- One envelope can no longer burn a shared bill's whole hourly claim
-  budget, nor spend it on items that failed validation.
-- A lapsed invoice no longer pins its wallet, hub and identity forever,
-  and invoices on hold are counted.
-- Both compensating rollbacks check the wallet is actually empty before
-  deleting it, rather than trusting that the reversal call returned
-  without error.
-- A bill reassigned from cash to an identity no longer keeps a stale
-  "identity required" hint that made it unreceivable by its rightful
-  holder.
-- An Identity Authority attestation is verified once per request instead
-  of once per claim, so a bill with many recipients no longer costs a
-  verification each.
-- `db_migrate` copies all 27 tables. It copied six and reported success:
-  the schema check only asserts a table exists, and the rest were created
-  empty at the destination — so transactions migrated while the claims
-  that record who owns what did not.
-- Two throughput-measurement tests now skip under `-race`, where the race
-  detector's 5-20x slowdown made them compare a measured rate against a
-  threshold that assumed full speed, independent of any real regression.
-- A backend outage after the app had loaded showed the "Critical Error"
-  card twice, stacked on the same page.
+- Fixes a Circle Wallet spend-cap bypass where a member could disable their
+  own cap with a sub-loki `max_amount`, plus seven smaller audit findings.
+  (#90)
+- Fixes LSPS5 Nostr notifications letting any trusted LSP change the state of
+  any order, not just its own. (205d91ec)
+- Creates a `mint_cash` wallet in one database transaction, so a failure
+  midway no longer leaves a partial, unfunded wallet. (6f12eac7)
+- Moves `google.golang.org/grpc` to v1.83.2, fixing GO-2026-6348 (heap
+  exhaustion via HTTP/2 DATA frames), reachable through flnd's client and the
+  HTTP service. (f32928a6)
+- Moves `golang.org/x/net` to v0.60.0, fixing four reachable HTTP/2 server
+  advisories: GO-2026-6617, GO-2026-6612, GO-2026-6611 and GO-2026-6603.
+  (f02d0c22)
+- Uses flokiorg's fork of `flokicoinjs-lib` (v7.1.1), which moves `valibot` to
+  1.5.0 and clears GHSA-vqpr-j7v3-hqw9 and GHSA-5qjj-4xww-7phc. (#117)
+- Fixes publishing the node profile from the desktop app, which failed with
+  "Unhandled route". (05b50513)
+- Fixes the sidebar logo and header rendering under the window controls.
+  (164a5f8f)
+- Fixes the macOS window corner showing a default background color instead of
+  the app theme. (a991bc9b)
+- Shows an error screen with the failure message when the desktop app's
+  backend fails to start, instead of exiting silently. (#98)
+- Fixes upgrading from 0.3.0-alpha to a 0.5.0 release candidate failing at
+  startup with "no such column: parent_kind". (#98)
+- Times out the UI's data requests instead of hanging forever when the backend
+  stops responding. (#98)
+- Fixes `cash_consolidate` encrypting the merged bill's token to
+  `new_identity` instead of the calling connection, so its recipient couldn't
+  decrypt it. (#100)
+- Stops publishing a kind-13194 info event for cash bills, which outlived the
+  bill and revealed which pubkeys this hub served. Also fixes info-event
+  deletion being skipped for every app kind. (#103)
+- Fixes a concurrent unclaim restoring a slice between the drain check and the
+  delete, which could destroy a bill still backing live value. (#103)
+- Fixes a failed delete leaving a wallet stranded, invisible to the sweep and
+  to manual retries. (#103)
+- Stops a request racing an app deletion from hanging for 30 seconds. (#103)
+- Stops counting bills past their redeem window as outstanding before the
+  sweep collects them. (#107)
+- Fixes the outstanding chart to match the figure above it; it accumulated
+  from zero over 30 days and ignored splits and write-offs. (#107)
+- Stops claiming a new Cash Hub's connection can be viewed again later; a
+  hub's pairing secret is random and never stored. (#107)
+- Stops `cash_status` answering a caller holding no slice. With a
+  `connection_key` recipient on the bill, the token alone read the whole
+  roster. (#111)
+- Lets a `connection_key` recipient read their own row again, using the
+  Identity Authority attestation `cash_redeem` already requires. (#111)
+- Makes `cash_status` honor its scope and stop disclosing co-recipients by
+  default. (#111)
+- Nests circle join details so co-members can't read them. (#111)
+- Refuses mint-provenance payloads in `sign_message`. (#111)
+- Stops a read-only token from reading the swap seed. (#111)
+- Answers an unknown bill, an unverifiable proof and an unserved method with
+  the same silence, and checks a bill proof before looking up the bill so a
+  miss costs what a hit costs. (#111)
+- Stops a proof being lifted out of its envelope and replayed in another: a
+  nonce stays burnt while any proof bound to it can still verify. (#111)
+- Detects an oversize reply wherever it falls in a batch, not only when it
+  comes first. (#111)
+- Stops one envelope from burning a shared bill's whole hourly claim budget or
+  spending it on items that failed validation. (#111)
+- Stops a lapsed invoice pinning its wallet, hub and identity forever, and
+  counts invoices on hold. (#111)
+- Checks a wallet is actually empty before either compensating rollback
+  deletes it. (#111)
+- Clears the stale "identity required" hint on a bill reassigned from cash to
+  an identity, which made it unreceivable by its holder. (#111)
+- Verifies an Identity Authority attestation once per request instead of once
+  per claim. (#111)
+- Fixes `db_migrate` copying 6 of its 27 tables and reporting success, which
+  left the ownership claims behind. (#111)
+- Fixes the "Critical Error" card showing twice after a backend outage.
+  (c01e74ea)
 - Fixes `cash_redeem` when the node can't report a payment's outcome: the
   slice now stays claimed until the payment settles or fails, instead of
   being released at once. (#119)
@@ -349,16 +223,11 @@ per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
   unanswered: that item is now dropped and the rest are served, using
   `nmilat` v0.5.0-rc.22. (#120)
 - Fixes `mint_cash`, `cash_transfer` and `cash_consolidate` returning an
-  empty token after funding a bill: a bill whose token can't be produced is
-  now refused before any funds move, and split-off and consolidated bills
-  store their token like minted ones. (#120)
+  empty token after funding a bill. A bill whose token can't be produced is
+  now refused before any funds move. (#120)
 - Refuses a Cash Hub or Circle Hub name longer than its `cashhub1` /
   `circlehub1` connection can carry (255 bytes), instead of saving a hub whose
-  connection was never shown; hubs created from the generic new-app screen
-  now show that connection first too. (#120)
-- Fixes a following-policy Circle Hub refusing real members as "not
-  authorized" when its relays had not yet returned the provider's follow
-  list: it now answers `NOT_READY` until the list is fetched. (#120)
+  connection was never shown. (#120)
 - Fixes Circle Hubs created from lokihub's own UI leaving the
   `circle_wallet` block out of `get_info`: every Circle Hub now includes it. (#120)
 - Fixes a Circle Wallet's receive cap: invoices it has issued and that can
@@ -366,35 +235,29 @@ per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
   requests can no longer each pass the check. (#120)
 - Refuses a `cash_secret` supplied by the caller when minting, over NWC and the
   admin API, instead of silently replacing it with a Hub-generated one. (#120)
-- `cash_transfer` now verifies the caller before checking the amount against
-  the slice, so a refused request no longer reveals the slice's balance. (#120)
+- Verifies the caller before checking the amount in `cash_transfer`, so a
+  refused request no longer reveals the slice's balance. (#120)
 - Refuses bill methods on the standard NWC transport with `NOT_IMPLEMENTED`
   whatever the connection's scopes or expiry, as NIP-CASH requires. (#120)
 - Refuses a private-envelope padding bucket below 2048 bytes in settings: one
   that small broke the Hub's private-transport announcement, so it stopped
   being published. (#120)
-- A Cash wallet's `get_info` no longer lists `get_budget`, which it refuses. (#120)
-- The Cash Hub bills list warns that a destroyed bill's token still answers
-  `cash_status` until its retention window ends, so it should be treated as
-  live until then. (#120)
-- Resolves `cash_redeem` payouts whose outcome arrived while lokihub was
-  down: at startup and periodically the node is asked, a failed payout
-  releases its slice, and the node info reports how many are still pending. (#120)
-- A drained Cash bill is now deleted on every drain, as NIP-CASH requires,
-  including a `cash_transfer` whose new connection could not be delivered, a
-  `cash_redeem` whose node returned no preimage, and a payout that settled
-  only after `cash_redeem` answered. Before, these stayed live until the
-  expiry sweep. A late-settling payout's preimage and fees are also recorded
-  on its slice. (#120)
-- Operator note: a Cash Hub created before the destroyed-bill retention
-  setting existed keeps a retention of 0, so its destroyed bills answer
-  nothing. This is not migrated, since 0 is also a valid deliberate choice.
-  Set a retention in the hub's settings to answer `cash_status` for them. (#120)
-- `cash_redeem` refuses an `amount` that differs from a fixed-amount
-  invoice's own, and pays such an invoice for exactly its amount, as NIP-CASH
-  requires. Before, the caller's amount was handed to the node. (#121)
-- Refuses a following Circle Identity with no provider pubkey over the API,
-  as the UI already did: such a circle admits nobody. (#121)
+- Stops listing `get_budget` in a Cash wallet's `get_info`, which it refuses.
+  (#120)
+- Warns in the Cash Hub bills list that a destroyed bill's token still answers
+  `cash_status` until its retention window ends. (#120)
+- Resolves `cash_redeem` payouts whose outcome arrived while lokihub was down,
+  by asking the node at startup and periodically. A failed payout releases its
+  slice, and the node info reports how many are still pending. (#120)
+- Deletes a drained Cash bill on every drain, as NIP-CASH requires, including
+  an undelivered `cash_transfer`, a `cash_redeem` with no preimage and a payout
+  that settled late. Before, these stayed live until the expiry sweep. (#120)
+- Keeps a retention of 0 on Cash Hubs created before the destroyed-bill
+  retention setting existed, so their destroyed bills answer nothing. Set a
+  retention in the hub's settings to answer `cash_status` for them. (#120)
+- Refuses a `cash_redeem` `amount` that differs from a fixed-amount invoice's
+  own, and pays such an invoice for exactly its amount, as NIP-CASH requires.
+  (#121)
 - Makes refusing a private `cash_status` for a live bill cost the same as
   refusing one for a bill the hub never issued. (#121)
 - Keeps a payment the node reports as sent, but which could not be recorded,
@@ -456,12 +319,11 @@ per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
   payments and new invoices are refused until they are added back, while the
   balance and history stay readable. (#145)
 - Requires a Circle Wallet cap of at least 11 loki, on joins and in a hub's
-  per-wallet limit; at 10 loki or less, the Lightning fee reserve left a
-  wallet unable to pay out at all. (#148)
+  per-wallet limit. At 10 loki or less, the Lightning fee reserve left a wallet
+  unable to pay out. (#148)
 - Moves every member wallet's balance and the hub's own balance to your main
-  balance when you delete a Circle Hub with "Delete All", as recorded
-  transfers; before, those funds vanished from every wallet with no record.
-  A wallet with a payment in flight keeps the hub until it ends. (#148)
+  balance as recorded transfers when you delete a Circle Hub with "Delete
+  All". Before, those funds vanished with no record. (#148)
 - Saves nothing when a Circle or Cash Hub settings change is rejected; before,
   a bad fee rate still saved the new name and budget from the same form.
   (#148)
@@ -473,97 +335,62 @@ per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
 
 ## [0.4.0]
 
-This release introduces Circles and JIT Wallets, two new ways to share your
-node's Lightning liquidity with other people, along with backup security
-improvements, continued localization polish, and several reliability fixes.
+Adds Circles and JIT Wallets, two ways to share your node's Lightning liquidity
+with other people.
 
 ### Added
 
-- Circles — give people real wallets, without giving them a node. A Circle
-  lets you extend your own node to friends, family, or a team: each person
-  gets a real, personal wallet with their own balance, backed by your
-  channels and liquidity, with none of the operational burden. Fee-free
-  transfers in-circle; self-service membership via allowlist or nostr
-  follows; new screens for managing the nostr identities and authorities
-  behind your circles.
-- JIT (Just-In-Time) Wallets — pay people who aren't ready to collect yet.
-  Fund now, claim later: recipients generate their own invoice and claim
-  their exact share only when ready. A single JIT Wallet can serve multiple
-  recipients, each capped at their own pre-set amount.
-- Continued RTL and translation polish across the app, building on the
-  multi-language support introduced in 0.3.0-alpha.
+- Adds Circles: each member gets a personal wallet with its own balance,
+  backed by your node's channels. Transfers inside a circle are fee-free, and
+  membership is self-service through an allowlist or nostr follows.
+- Adds JIT Wallets: fund once, and each recipient claims their capped share
+  with their own invoice when they are ready.
+- Continues RTL and translation polish across the app.
 
 ### Changed
 
-- Backups now use a stronger, versioned encryption format. Existing backups
-  from earlier versions remain fully restorable.
-- Redesigned the connection details view with clearer copy-to-clipboard
-  actions.
+- Moves backups to a stronger, versioned encryption format. Backups from
+  earlier versions still restore.
+- Redesigns the connection details view with clearer copy buttons.
 
 ### Fixed
 
-- Fixed the "Deactivate" button on the AutoSwap screen, which was not
-  correctly turning off auto-swap-out.
-- General stability and correctness improvements across payment and wallet
-  handling.
+- Fixes the AutoSwap "Deactivate" button not turning off auto swap-out.
 
 ## [0.3.0-alpha]
 
-This release brings background running support, a system tray icon,
-improved reliability, and a more polished user experience.
+Lets Lokihub keep running in the background, with a system tray icon.
 
 ### Added
 
-- Lokihub stays active after you close the main window, and can be fully
-  quit at any time from the tray icon menu.
-- A system tray icon is available on macOS, Linux, and Windows.
-- macOS: the dock icon appears and disappears automatically based on
-  whether the window is open.
-- A dedicated Help and FAQ section, with content available in additional
-  languages.
+- Keeps Lokihub running after you close the main window. Quit it from the
+  tray icon menu.
+- Adds a system tray icon on macOS, Linux and Windows.
+- Shows the macOS dock icon only while the window is open.
+- Adds a Help and FAQ section, translated into additional languages.
 
 ### Changed
 
-- Navigation, headers, and transaction lists refined for better consistency
-  and responsiveness across all screen sizes.
+- Refines navigation, headers and transaction lists for consistency across
+  screen sizes.
 
 ### Fixed
 
-- The app handles unexpected errors in isolated areas without taking down
-  the entire interface.
-- Payments can be more accurately linked to the app or service that
-  generated them.
-- Significant testing work across payment processing and exchange services
-  to ensure more reliable behavior.
+- Keeps an unexpected error in one area from taking down the whole interface.
+- Links payments more accurately to the app or service that made them.
 
 ## [0.2.0-alpha]
 
-This release brings full global language support to Lokihub, alongside a
-suite of UI and UX improvements designed to deliver a more seamless and
-intuitive experience.
+Adds seven languages, with full right-to-left layouts for Arabic and Farsi.
 
 ### Added
 
-- Multi-language support for 7 languages: English, Spanish, Japanese,
-  Korean, Chinese, Arabic and Farsi/Persian.
-- Full RTL layout support for Arabic and Farsi, including mirrored
-  sidebars, navigation, and directional icons. Bundled `Noto Sans Arabic`
-  and `Vazirmatn` fonts for high-quality rendering without external
-  dependencies.
-- A language switcher to toggle between supported languages.
-- A JIT payment explanation dialog, and unique FLC/Loki presets tailored
-  for individual apps.
-
-### Changed
-
-- Refactored the global Loading component for better accessibility and
-  theme consistency.
-- Standardized the use of `AppHeader` across more screens, including
-  inbound channel management.
-- Integrated `react-i18next` for translation management, with a
-  direction-aware CSS engine for RTL/LTR switching.
+- Adds English, Spanish, Japanese, Korean, Chinese, Arabic and Farsi, with a
+  language switcher.
+- Adds full RTL layouts for Arabic and Farsi, with bundled Noto Sans Arabic and
+  Vazirmatn fonts.
+- Adds a JIT payment explanation dialog and per-app FLC/Loki amount presets.
 
 ## [0.1.2-alpha]
 
-Pre-release for testing and feedback. Developers and early adopters are
-encouraged to report issues.
+Pre-release for testing and feedback.
