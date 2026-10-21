@@ -2,7 +2,7 @@
 
 ## [0.5.0]
 
-_Cut as `0.5.0-rc.18` on 2026-10-20._ This section stays open: 0.5.0 itself has
+_Cut as `0.5.0-rc.19` on 2026-10-21._ This section stays open: 0.5.0 itself has
 not been released, so everything under it is still pre-release and
 accumulating. rc.1 introduced the Cash Hub — bearer and identity-bound
 multi-recipient cash tokens, transfer/consolidate/redeem, mint provenance —
@@ -35,6 +35,13 @@ rc.18 admits circle members from a NIP-51 follow set instead of the host's
 kind:3 list, publishes those sets from the hub with hidden members only it can
 read, deletes circles on the old `following` policy, and records how a
 private-transport request ended.
+rc.19 closes an audit of Circle Wallets: a wallet can no longer receive past
+its cap through hold invoices, zero-amount invoices or keysend, a member who
+leaves a circle has their wallet frozen, a follow set can't be rolled back by
+a restart, wallets need a cap above the 10-loki fee reserve, and deleting a
+hub moves every balance back to the main balance. `get_info` reports a hub's
+per-wallet ceiling and renewal floor. It builds with Go 1.26.10 and moves to
+`nmilat` v0.5.0-rc.32.
 
 ### Added
 
