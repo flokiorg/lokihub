@@ -26,6 +26,10 @@ import (
 // rules out any bug that only manifests for one specific pubkey value).
 const numGeneratedUnauthorizedIdentities = 5
 
+// hubPerWalletMaxMloki is the per-wallet ceiling TestCircleHubs' hub is
+// created with, and reports in get_info.
+const hubPerWalletMaxMloki = 1_000_000
+
 // circleHappyPathAmountMloki is the max_amount a test member joins with: twice
 // the smallest cap a join accepts (fee reserve + 1 loki), so it clears the
 // floor with room for a payment.
@@ -53,7 +57,7 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	// circlePolicyAllowlist too rather than branching this test's own setup.
 	hub, _, _ := createEphemeralCircleHub(t, cfg, "circle-hub-"+policy, policy,
 		[]string{member0Priv, member1Priv},
-		ephemeralCircleHubOpts{MinBudgetRenewal: constants.BUDGET_RENEWAL_MONTHLY})
+		ephemeralCircleHubOpts{MinBudgetRenewal: constants.BUDGET_RENEWAL_MONTHLY, PerWalletMaxMloki: hubPerWalletMaxMloki})
 	hubClient := mustConnect(t, hub.Connection)
 
 	// Every identity/validation scenario below is rejected before the
@@ -443,6 +447,9 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		var info GetInfoResult
 		require.NoError(t, hubClient.Call(ctxT(t), "get_info", struct{}{}, &info))
 		require.Contains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		require.NotNil(t, info.CircleWallet)
+		assert.Equal(t, int64(hubPerWalletMaxMloki), info.CircleWallet.PerWalletMaxMillis)
+		assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, info.CircleWallet.MinBudgetRenewal)
 	})
 
 	t.Run("CreateWallet_UnauthorizedMember_Rejected", func(t *testing.T) {
