@@ -17,6 +17,10 @@ type circleWalletInfo struct {
 	MaxExpSecs      int    `json:"max_exp_secs"`
 	FeesPpm         int    `json:"fees_ppm"`
 	CirclePolicy    string `json:"circle_policy"`
+	// PerWalletMaxMillis and MinBudgetRenewal are the other limits a join is
+	// checked against (NIP-CW get_info), so a client can validate before asking.
+	PerWalletMaxMillis int64  `json:"per_wallet_max_millis,omitempty"`
+	MinBudgetRenewal   string `json:"min_budget_renewal,omitempty"`
 	// Identity is the node key that signs the kind-11190 announcement. Present only
 	// while the private transport runs, so clients know Private Join is offered.
 	Identity string `json:"identity,omitempty"`
@@ -135,10 +139,12 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 		providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
 		if err == nil {
 			responsePayload.CircleWallet = &circleWalletInfo{
-				AvailableMillis: available,
-				MaxExpSecs:      providerConfig.MaxExpSecs,
-				FeesPpm:         providerConfig.FeesPpm,
-				CirclePolicy:    providerConfig.CircleIdentity.Policy,
+				AvailableMillis:    available,
+				MaxExpSecs:         providerConfig.MaxExpSecs,
+				FeesPpm:            providerConfig.FeesPpm,
+				CirclePolicy:       providerConfig.CircleIdentity.Policy,
+				PerWalletMaxMillis: int64(providerConfig.PerWalletMaxMloki),
+				MinBudgetRenewal:   providerConfig.MinBudgetRenewal,
 			}
 			if controller.privateIdentity != nil {
 				responsePayload.CircleWallet.Identity = controller.privateIdentity()
