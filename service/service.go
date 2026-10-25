@@ -88,6 +88,11 @@ func NewService(ctx context.Context) (*service, error) {
 	logger.Init(appConfig.LogLevel)
 	logger.Logger.Info().Msg("Lokihub " + appversion.Tag)
 
+	if err := config.ValidateNetwork(appConfig.Network); err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start")
+		return nil, err
+	}
+
 	if appConfig.Workdir == "" {
 		appConfig.Workdir = filepath.Join(xdg.DataHome, "/lokihub")
 		logger.Logger.Info().Interface("workdir", appConfig.Workdir).Msg("No workdir specified, using default")

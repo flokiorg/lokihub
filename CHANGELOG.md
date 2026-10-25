@@ -61,6 +61,8 @@ audits of both.
 
 ### Changed
 
+- Refuses to start with a `NETWORK` value it does not support. Use
+  `flokicoin` (the default) or `regtest`.
 - Breaking: renames NIP-CASH's bearer mode to cash mode (`identity_type:
   "cash"`, `cash_secret`) across every cash method and the admin API. A
   migration rewrites stored rows, so existing slices stay redeemable with the
