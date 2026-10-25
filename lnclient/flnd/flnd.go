@@ -354,13 +354,8 @@ func (svc *FLNDService) subscribeChannelEvents(ctx context.Context) {
 						Msg("Channel closed")
 
 					svc.eventPublisher.Publish(&events.Event{
-						Event: "nwc_channel_closed",
-						Properties: map[string]interface{}{
-							"counterparty_node_id":  counterpartyNodeId,
-							"counterparty_node_url": "https://flokichain.info/lightning/node/" + counterpartyNodeId,
-							"reason":                closureReason,
-							"node_type":             config.FLNDBackendType,
-						},
+						Event:      "nwc_channel_closed",
+						Properties: channelClosedProperties(svc.nodeInfo, counterpartyNodeId, closureReason),
 					})
 				}
 			}
@@ -2224,4 +2219,19 @@ func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan ln
 	}
 
 	return reqChan, respond, nil
+}
+
+// channelClosedProperties are the nwc_channel_closed event's properties. The explorer
+// link is given only on mainnet (flnd's "mainnet", reported as "bitcoin"): no public
+// explorer shows a test network's nodes.
+func channelClosedProperties(nodeInfo *lnclient.NodeInfo, counterpartyNodeId, reason string) map[string]interface{} {
+	props := map[string]interface{}{
+		"counterparty_node_id": counterpartyNodeId,
+		"reason":               reason,
+		"node_type":            config.FLNDBackendType,
+	}
+	if nodeInfo != nil && nodeInfo.Network == "bitcoin" {
+		props["counterparty_node_url"] = "https://flokichain.info/lightning/node/" + counterpartyNodeId
+	}
+	return props
 }
