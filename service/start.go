@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
@@ -543,6 +545,11 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		return err
 	}
 
+	if err := enforceDevStackNetwork(ctx, lnClient, config.IsDevStack()); err != nil {
+		_ = lnClient.Shutdown()
+		return err
+	}
+
 	// TODO: call a method on the LNClient here to check the LNClient is actually connectable,
 	// (e.g. lnClient.CheckConnection()) Rather than it being a side-effect
 	// in the LNClient init function
@@ -572,5 +579,32 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		},
 	})
 
+	return nil
+}
+
+type nodeInfoGetter interface {
+	GetInfo(ctx context.Context) (*lnclient.NodeInfo, error)
+}
+
+// exitProcess is os.Exit, behind a variable so a test can observe the dev-stack refusal.
+var exitProcess = os.Exit
+
+// enforceDevStackNetwork stops the backend (exit 1) when it runs in the regtest dev
+// stack and its node is on any other network, so the dev stack and its test hooks
+// can never drive a mainnet node.
+func enforceDevStackNetwork(ctx context.Context, lnClient nodeInfoGetter, devStack bool) error {
+	if !devStack {
+		return nil
+	}
+	info, err := lnClient.GetInfo(ctx)
+	network := ""
+	if err == nil && info != nil {
+		network = info.Network
+	}
+	if err := config.CheckDevStackNode(true, network); err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start")
+		exitProcess(1)
+		return err
+	}
 	return nil
 }
