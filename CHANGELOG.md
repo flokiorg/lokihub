@@ -9,6 +9,9 @@ audits of both.
 
 ### Added
 
+- Runs against a regtest node with `NETWORK=regtest`: regtest swap keys and
+  macaroon path, no explorer lookups or links, and `lnfcrt` invoices decode as
+  regtest.
 - Adds the Cash Hub, which issues multi-recipient cash bills held by a secret
   or bound to an identity, shared as a `lokicash1...` token. (#90)
 - Adds `cash_transfer` to split a slice off a bill, `cash_consolidate` to merge
