@@ -84,7 +84,27 @@ func Decode(bolt11 string) (*Bolt11, error) {
 		CreatedAt:       int64(inv.CreatedAt),
 		Expiry:          int64(inv.Expiry),
 		AmountMloki:     int64(inv.MLoki),
-		Network:         "flokicoin",
+		Network:         networkFromInvoice(bolt11),
 		Route:           routes,
 	}, nil
+}
+
+// networkFromInvoice names the network of a lowercase BOLT11 invoice from its HRP
+// (ln + the chain's bech32 prefix, then the amount): lnfc is flokicoin, lnfcrt
+// regtest, lntf testnet (signet shares tf), lnsf simnet.
+func networkFromInvoice(bolt11 string) string {
+	hrp := strings.TrimPrefix(bolt11, "ln")
+	if i := strings.IndexAny(hrp, "0123456789"); i >= 0 {
+		hrp = hrp[:i]
+	}
+	switch hrp {
+	case "fcrt":
+		return "regtest"
+	case "tf":
+		return "testnet"
+	case "sf":
+		return "simnet"
+	default:
+		return "flokicoin"
+	}
 }
