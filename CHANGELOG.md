@@ -226,6 +226,8 @@ audits of both.
 
 ### Fixed
 
+- Refuses a private-transport item whose `cash_secret` does not verify with
+  `UNAUTHORIZED` instead of `NOT_FOUND`, as NIP-CASH requires.
 - Fixes a Circle Wallet spend-cap bypass where a member could disable their
   own cap with a sub-loki `max_amount`, plus seven smaller audit findings.
   (#90)
