@@ -215,8 +215,10 @@ func (svc *nip47Service) ServePrivateItem(
 			if billIsCashMode {
 				message = "this item carries neither a slice proof nor a cash secret"
 			}
-		} else if !item.HasProof() && billIsCashMode {
-			message = "no slice of this bill matches this cash secret"
+		} else if !item.HasProof() {
+			// A cash secret that does not verify is UNAUTHORIZED (NIP-CASH §Errors, §Bearer
+			// Items, I9), whether the bill is cash-mode or identity-bound.
+			code, message = constants.ERROR_UNAUTHORIZED, "this cash secret does not verify for this bill"
 		} else if item.Method == constants.NIP47MethodCreateCircleWallet {
 			message = "a join's item proof must be signed by the pubkey that is joining"
 		}

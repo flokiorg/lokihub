@@ -362,11 +362,11 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
 	})
 
-	t.Run("CashSecret_WrongSecret_NotFound", func(t *testing.T) {
+	t.Run("CashSecret_WrongSecret_Unauthorized", func(t *testing.T) {
 		shared, _, _, _ := newPubkeySlice(t)
 		// Bearer: the request authorizes with a cash secret, so the item must carry no
 		// slice proof. One carrying both is refused as malformed before the secret is even
-		// looked at — which would mask the NOT_FOUND this case is asserting.
+		// looked at — which would mask the UNAUTHORIZED this case is asserting.
 		shared.(*billConn).Bearer()
 		wrongHex, targetHash := cashSecretAndHash(t) // random, unrelated secret
 		var res CashTransferResult
@@ -374,7 +374,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			CashSecret:  wrongHex,
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: targetHash},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 }
 
