@@ -18,34 +18,33 @@ time.
 
 ## What you need before running this
 
-1. **A real, running lokihub instance** with a real (or regtest) Lightning
-   backend, and its own real balance (any amount - every ephemeral fixture
-   self-funds via an internal transfer straight from that balance, see
-   `adminClient.transfer`'s doc comment).
+**The regtest dev stack** (`just dev up`): a regtest chain node, the Hub's flnd,
+a second flnd (the payer) with a channel each way, the dev relay and lokihub
+itself. `just dev up` runs `just dev bootstrap`, which sets lokihub up, mints an
+admin JWT through `POST /api/unlock`, points the Hub's `GeneralRelay` at the dev
+relay, seeds the relay (`testdata/social_graph.json`, see `cmd/seedrelay`) and
+writes `config.local.yaml` (git-ignored) here. Hand editing is optional; see
+`config.example.yaml` for its fields. Point `INTEGRATION_CONFIG` at another path
+to use a different file.
 
-2. **An admin API token.** Mint one with `POST {base_url}/api/unlock`
-   (`unlock_password`, `permission: "full"`, an explicit
-   `token_expiry_days`) - see `http/http_service.go`'s `unlockHandler`. It's
-   a bearer JWT, not a permanent key, so refresh it in `config.local.yaml`
-   once it expires.
+**Never point this suite at a mainnet Hub.** `TestAAA_PreflightCleanup` checks
+the Hub's `get_info` `network` first and ends the whole run unless it is
+`regtest`. Never configure an LSP on the test Hub: it would buy JIT channels and
+shrink invoice amounts.
 
-3. Copy `config.example.yaml` to `config.local.yaml` (gitignored) and fill in
-   `admin_api.base_url`/`admin_api.token`/`relay_url`. `config.local.yaml` is
-   resolved relative to this directory, or point `INTEGRATION_CONFIG` at an
-   absolute path.
+What each node holds after a bootstrap: both on-chain wallets hold mature
+coinbases, and each node has opened one 5 000 000 loki channel to the other with
+half pushed across, so each side has outbound and inbound room. Fixtures are
+funded by admin transfers from the Hub's balance (see `adminClient.transfer`), and
+every invoice they pay is the Hub's own, so the existing tests settle as
+self-payments; the payer and the chain serve the order, withdraw and external
+payment cases. `just dev mine`, `just dev fund` and `just dev status` drive and
+inspect the chain (`just dev help`).
 
-4. **`relay_url` must be this instance's own relay** (e.g.
-   `docker-compose.dev.yml`'s `relay` service in dev), and that relay must
-   actually be one of this instance's `GeneralRelay` settings (`PATCH
-   /api/settings`, `generalRelay` field) - that's what the backend's
-   "follow_set" circle-policy check (`service/nostr_social_cache.go`)
-   queries follow sets from. This suite deliberately never talks to
-   a public/third-party relay for anything - a real relay this suite
-   doesn't control being slow, rate-limited, or unreachable should never be
-   why it fails. Run `just dev seed-relay` (or `just dev reset`, which
-   already calls it) once to publish `testdata/social_graph.json`'s fixed
-   identities' follow list to it - see that file and
-   `cmd/seedrelay/main.go`.
+`relay_url` is the Hub's own relay (the `RELAY` value in `.env`), and it must be
+one of the Hub's `GeneralRelay` settings, which the backend's `follow_set`
+circle-policy check (`service/nostr_social_cache.go`) queries. This suite never
+talks to a public relay.
 
 ## Running
 
@@ -146,7 +145,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   thousands of leaked identities against the general relays - see
   `createEphemeralCircleHub`'s own identity-cleanup comment in
   `ephemeral_test.go`).
-- `jit_hub_test.go` — `create_jit_wallet` happy path, invalid identity_type
+- `cash_hub_test.go` — `create_jit_wallet` happy path, invalid identity_type
   rejection, a shared multi-recipient wallet funded with the SUM of every
   recipient (one connection, `list_recipients` shows both), the total-across-
   recipients per-wallet amount cap, max-expiry cap, spend-only enforcement (no
@@ -158,7 +157,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   distinct wallets — only duplicate identities *within one request* are
   rejected, and that's unit-test-only, see below), omitted-expiry defaulting
   to the hub's max, and (opt-in) rate limiting.
-- `claim_funds_test.go` — the shared-wallet, proof-gated `claim_funds` model:
+- `cash_redeem_test.go` — the shared-wallet, proof-gated `claim_funds` model:
   several independent recipients each claiming their own slice from the same
   connection without affecting each other, a wrong/outsider identity finding
   no matching slice, a claim proof bound to one invoice being rejected when
@@ -176,7 +175,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   attestation signed by a real keypair that isn't this slice's recorded
   trusted IA, an attestation with a forged/garbage signature, and (opt-in)
   rate limiting.
-- `jit_hub_payment_test.go` — real money movement sourced entirely from one
+- `cash_hub_payment_test.go` — real money movement sourced entirely from one
   jit_hub (no `circle_hub` needed): the hub mints an invoice for its own
   freshly-minted JIT child to pay and fully drain (including that a second
   claim attempt on the same now-fully-claimed slice is rejected), and paying
