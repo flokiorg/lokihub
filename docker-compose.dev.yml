@@ -1,56 +1,119 @@
+# The dev and test stack: regtest only. It has no mainnet option, port or fee
+# estimator; `just dev up` refuses to start if a config names another network, and
+# the backend exits if its node is not on regtest (LOKIHUB_DEV_STACK=1).
+#
+# Tracked configs live in dev/regtest/, data in data/regtest/ (git-ignored).
+# `just dev wipe` deletes data/regtest/ for a fresh chain. The project name keeps
+# containers per checkout, so a worktree can run its own stack: set
+# COMPOSE_PROJECT_NAME and the *_PORT values in its .env.
+name: lokihub-dev
+
 services:
+  chain:
+    build:
+      context: ${DEV_FLOKICOIN_DIR:-../go-flokicoin}
+      dockerfile: docker/Dockerfile
+    hostname: chain
+    restart: unless-stopped
+    # No --notls: flnd's btcd backend always uses TLS. The RPC cert is written by
+    # `just dev setup` (valid for `chain` and DEV_HOST) and shared with both flnd.
+    command:
+      - /bin/lokid
+      - --regtest
+      - --txindex
+      - --rejectnonstd
+      - --rpcuser=dev
+      - --rpcpass=dev
+      - --rpclisten=0.0.0.0:25213
+      - --listen=0.0.0.0:25212
+      - --rpcmaxwebsockets=50
+    volumes:
+      - ./data/regtest/chain:/root/.lokid
+    ports:
+      - "${CHAIN_RPC_PORT:-25213}:25213"
+    networks:
+      - lokihub-dev
+
+  # A fixed fee estimate (25 loki/vB, in loki/kvB) for both flnd, served on the
+  # compose network only. flnd's btcd backend would ask lokid instead, but lokid's
+  # estimatefee handler panics (go-flokicoin rpcserver.go handleEstimateFee). Drop
+  # this service and both fee.url lines once the chain image is built from a
+  # go-flokicoin with that fix.
+  fees:
+    image: busybox:1.36
+    restart: unless-stopped
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./dev/regtest/fees.json:/www/fees.json:ro
+    networks:
+      - lokihub-dev
+
   relay:
     image: ghcr.io/ohstr/ncli:rc
-    container_name: lokihub-dev-relay
     hostname: relay
     restart: unless-stopped
     command: ["relay", "--config", "/config/relay.yaml"]
     volumes:
-      - ${DEV_DATA_DIR:-./data}/relay/relay.yaml:/config/relay.yaml:ro
-      - ${DEV_DATA_DIR:-./data}/relay:/data
+      - ./data/regtest/relay/relay.yaml:/config/relay.yaml:ro
+      - ./data/regtest/relay:/data
     ports:
-      # Published to the host too so `go test -tags integration` (which runs
-      # outside the compose network) can reach the same relay the backend
-      # container talks to over Docker DNS as `relay:5500`. Requires a host
-      # /etc/hosts entry "127.0.0.1 relay" so both sides resolve the same
-      # hostname to this one relay.
+      # Published so the host-run integration suite reaches the same relay the
+      # backend uses (see RELAY in .env.example).
       - "${RELAY_PORT:-5500}:5500"
     networks:
       - lokihub-dev
 
+  # The Hub's node.
   flnd:
-    build:
-      # ../flnd etc. only resolve from the main checkout — a worktree lives
-      # several directories deeper (.claude/worktrees/<name>/), so the same
-      # relative path no longer reaches the real sibling repos. Override
-      # DEV_FLND_DIR/DEV_WALLETD_DIR/DEV_FLOKICOIN_NEUTRINO_DIR (absolute
-      # paths) in a worktree's .env — same pattern as DEV_DATA_DIR below.
+    build: &flnd-build
+      # A worktree sits deeper than the main checkout, so set DEV_FLND_DIR,
+      # DEV_WALLETD_DIR and DEV_FLOKICOIN_NEUTRINO_DIR (absolute) in its .env.
       context: ${DEV_FLND_DIR:-../flnd}
       dockerfile: dev.Dockerfile
       additional_contexts:
-        # flnd, walletd, and flokicoin-neutrino evolve in lockstep on this
-        # fork; this builds flnd against whatever's on disk in these sibling
-        # checkouts instead of their go.mod/go.sum-pinned versions (see
-        # flnd/dev.Dockerfile).
         walletd: ${DEV_WALLETD_DIR:-../walletd}
         flokicoin-neutrino: ${DEV_FLOKICOIN_NEUTRINO_DIR:-../flokicoin-neutrino}
-    container_name: lokihub-dev-flnd
+    hostname: flnd
     restart: unless-stopped
+    command:
+      - --configfile=/config/flnd.conf
+      - --tlsextradomain=${DEV_HOST:-localhost}
     volumes:
-      # DEV_DATA_DIR (set in .env) points this at another checkout's
-      # already-synced data/ instead of this one's own — see Justfile's
-      # `just dev help`.
-      - ${DEV_DATA_DIR:-./data}/flnd:/root/.flnd
-    # dev.Dockerfile's ENTRYPOINT is already ["flnd"] -- only pass flags here.
-    command: --configfile=/root/.flnd/flnd.conf
-    healthcheck:
-      test: ["CMD", "ls", "/root/.flnd/tls.cert"]
-      interval: 10s
+      - ./dev/regtest/flnd-hub.conf:/config/flnd.conf:ro
+      - ./data/regtest/flnd:/root/.flnd
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+    healthcheck: &flnd-health
+      test: ["CMD", "sh", "-c", "ls /root/.flnd/data/chain/flokicoin/regtest/admin.macaroon"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 30
+      start_period: 10s
     ports:
       - "${FLND_RPC_PORT:-10005}:10005"
+    depends_on:
+      - chain
+      - fees
+    networks:
+      - lokihub-dev
+
+  # The external node and on-chain wallet the tests pay from and to.
+  payer:
+    build: *flnd-build
+    hostname: payer
+    restart: unless-stopped
+    command:
+      - --configfile=/config/flnd.conf
+      - --tlsextradomain=${DEV_HOST:-localhost}
+    volumes:
+      - ./dev/regtest/flnd-payer.conf:/config/flnd.conf:ro
+      - ./data/regtest/payer:/root/.flnd
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+    healthcheck: *flnd-health
+    ports:
+      - "${PAYER_RPC_PORT:-10006}:10006"
+    depends_on:
+      - chain
+      - fees
     networks:
       - lokihub-dev
 
@@ -58,57 +121,38 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: lokihub-dev-backend
     restart: unless-stopped
-    # ports:
-    #   - "${PORT:-1610}:1610"
+    # air polls the tree instead of using inotify: the host's inotify instance
+    # limit (fs.inotify.max_user_instances, often 128) is shared by every
+    # container and runs out on a busy host ("too many open files").
+    command: ["--build.poll", "true", "--build.poll_interval", "1000"]
     environment:
       - WORK_DIR=/data
       - PORT=1610
-      - NETWORK=flokicoin
-      # No BASE_URL/FRONTEND_URL: both only feed the /logout redirect
-      # (config.GetBaseFrontendUrl), and neither localhost:1610 nor
-      # localhost:5173 is reachable from the browser - this stack is only
-      # ever reached through Caddy's reverse proxy (see Caddyfile.dev),
-      # on whatever host/port/tunnel fronts it. Leaving both unset makes
-      # the handler fall back to a same-origin relative "/" redirect,
-      # which works through the proxy regardless of how it's accessed.
+      - NETWORK=regtest
+      - LOKIHUB_DEV_STACK=1
+      # No BASE_URL/FRONTEND_URL: the stack is reached only through Caddy, and an
+      # unset value makes /logout redirect to a same-origin "/".
       - LN_BACKEND_TYPE=FLND
       - FLND_ADDRESS=flnd:10005
-      # No FLND_CERT_FILE: flnd's flnd/wrapper falls back to
-      # InsecureSkipVerify when it's unset, so we don't need to distribute
-      # tls.cert into this container at all.
-      - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/main/admin.macaroon
+      # No FLND_CERT_FILE: the flnd wrapper then skips verification, so tls.cert
+      # need not be shared into this container.
+      - FLND_MACAROON_FILE=/flnd-data/data/chain/flokicoin/regtest/admin.macaroon
       - RELAY=${RELAY:-ws://relay:5500}
+      - AUTO_UNLOCK_PASSWORD=${DEV_UNLOCK_PASSWORD:?set DEV_UNLOCK_PASSWORD in .env (see .env.example)}
+      - ENABLE_SWAP=false
+      # The *_RATE_LIMIT_PER_HOUR values are not set here: the backend reads them
+      # from .env at each start, so `just test integration-ratelimits` can change them.
       - LOG_LEVEL=${LOG_LEVEL:-4}
-    # Docker's default nofile limit in this environment is only 1024 (vs.
-    # the host's own 524288) - air's own watcher easily exceeds that, which
-    # caused a "too many open files" crash-loop. Root-caused: raise the
-    # limit rather than working around it elsewhere.
+    # Docker's default nofile limit here is 1024, which air's watcher exceeds.
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
     volumes:
       - .:/app
-      # nmilat, at the SAME absolute path inside the container as outside.
-      #
-      # go.mod carries a TEMPORARY `replace` for nmilat pointing at an absolute
-      # host path (see go.mod), and a replace is resolved by the compiler inside
-      # this container — so without this mount `air` cannot build at all. That
-      # fails in the worst available way: a crash-loop whose last SUCCESSFUL
-      # binary keeps serving, so the stack looks healthy while running stale code.
-      # It did exactly that for three days.
-      #
-      # Source and target are the same variable on purpose: the replace names one
-      # absolute path, so any other mount point would not satisfy it. Read-only,
-      # because a replace only ever reads the module.
-      #
-      # This mount and the `replace` are one unit — drop both together at release
-      # time, along with DEV_NMILAT_DIR in .env.
-      - ${DEV_NMILAT_DIR:?set DEV_NMILAT_DIR in .env to your nmilat checkout — go.mod replaces nmilat with an absolute path the backend container must also see}:${DEV_NMILAT_DIR}:ro
-      - ${DEV_DATA_DIR:-./data}/hub:/data
-      - ${DEV_DATA_DIR:-./data}/flnd:/flnd-data:ro
+      - ./data/regtest/hub:/data
+      - ./data/regtest/flnd:/flnd-data:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
     depends_on:
@@ -123,15 +167,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: lokihub-dev-frontend
     restart: unless-stopped
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=http://backend:1610
-      # Bind mounts frequently don't propagate inotify events into the
-      # container, silently breaking HMR — see vite.config.ts.
+      # Bind mounts often drop inotify events, which breaks HMR (vite.config.ts).
       - VITE_USE_POLLING=true
     depends_on:
       - backend
@@ -140,7 +182,6 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: lokihub-dev-caddy
     restart: unless-stopped
     ports:
       - "${CADDY_PORT:-5610}:80"
