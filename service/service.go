@@ -126,6 +126,7 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 	err = migrations.Migrate(gormDB)
 	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Refusing to start: the database cannot be used")
 		return nil, err
 	}
 
