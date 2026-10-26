@@ -1,84 +1,32 @@
+// Package migrations creates lokihub's schema. There are no data conversions: a
+// database is created fresh, and one made before the current schema epoch is
+// refused rather than converted.
 package migrations
 
 import (
-	"github.com/flokiorg/lokihub/db"
+	"errors"
+	"fmt"
+
 	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/db"
 )
 
-func Migrate(gormDB *gorm.DB) error {
-	// Run manual migrations first (for schema changes AutoMigrate can't handle)
-	if err := MigrateTransactionsFK(gormDB); err != nil {
-		return err
-	}
+// SchemaEpochKey is the user_configs key recording the schema a database was
+// created with.
+const SchemaEpochKey = "SchemaEpoch"
 
-	if err := MigrateTransactionsRequestEventFK(gormDB); err != nil {
-		return err
-	}
+// SchemaEpoch is the current schema. A database without it that already holds
+// apps predates it and is refused.
+const SchemaEpoch = "cash-final-1"
 
-	// Backfill kind column from isolated bool, then drop isolated.
-	if err := MigrateAppKind(gormDB); err != nil {
-		return err
-	}
+// ErrDatabasePredatesSchema refuses a database made before SchemaEpoch.
+var ErrDatabasePredatesSchema = errors.New("database predates " + SchemaEpoch + "; reset it (no migration is provided)")
 
-	// Create jit_hub_configs + circle_hub_configs, rename kinds, backfill configs.
-	if err := MigrateJITCircleConfigTables(gormDB); err != nil {
-		return err
-	}
-
-	// Rename stored kind value "circle_child" → "circle_wallet".
-	if err := MigrateRenameCircleChildToCircleWallet(gormDB); err != nil {
-		return err
-	}
-
-	// Extract Circle policy/pubkey/allowlist into a standalone, reusable
-	// CircleIdentity that survives deletion of any single circle_hub.
-	if err := MigrateCircleIdentityTables(gormDB); err != nil {
-		return err
-	}
-
-	// Rename stored config key "CircleRelay" → "GeneralRelay".
-	if err := MigrateRenameCircleRelayToGeneralRelay(gormDB); err != nil {
-		return err
-	}
-
-	// Add + backfill circle_identity_allowed_pubkeys.created_at, so allowlist
-	// policies can report "last policy update" alongside following policies.
-	if err := MigrateCircleIdentityAllowlistTimestamps(gormDB); err != nil {
-		return err
-	}
-
-	// Swap relay.nostr.band for nos.lol in an existing GeneralRelay config.
-	if err := MigrateReplaceNostrBandGeneralRelay(gormDB); err != nil {
-		return err
-	}
-
-	// Rename the JIT Wallet feature to Cash Hub / cash_wallet: renames
-	// jit_hub_configs/jit_wallet_claims, adds min_transfer_mloki + the new
-	// split lineage column, rewrites stored kind/scope string values.
-	if err := MigrateRenameJITToCash(gormDB); err != nil {
-		return err
-	}
-
-	// Drop the max_transfers cap feature — removed from NIP-CASH entirely.
-	if err := MigrateDropCashMaxTransfers(gormDB); err != nil {
-		return err
-	}
-
-	// Rewrite stored cash_wallet_claims.identity_type "bearer" → "cash",
-	// following NIP-CASH's rename of bearer mode to cash mode.
-	if err := MigrateRenameBearerIdentityToCash(gormDB); err != nil {
-		return err
-	}
-
-	// Delete circles using the retired kind:3 "following" policy, which NIP-CW
-	// replaced with follow_set.
-	if err := MigrateDropFollowingCircles(gormDB); err != nil {
-		return err
-	}
-
-	// AutoMigrate all core models (adds new columns declared in structs)
-	// Note: LSP model is migrated separately in LSPManager (via manager_db.go)
-	if err := gormDB.AutoMigrate(
+// Models are every table Migrate creates. The LSP and Identity Authority tables
+// are created by their own services.
+func Models() []any {
+	return []any{
 		&db.UserConfig{},
 		&db.App{},
 		&db.AppPermission{},
@@ -99,23 +47,61 @@ func Migrate(gormDB *gorm.DB) error {
 		&db.CashMintIdempotency{},
 		&db.CashBillArchive{},
 		&db.CashBillSliceArchive{},
-	); err != nil {
+	}
+}
+
+// Migrate refuses a database older than SchemaEpoch, then creates every table, the
+// partial indexes and, on a new database, the epoch mark.
+func Migrate(gormDB *gorm.DB) error {
+	epoch, err := storedEpoch(gormDB)
+	if err != nil {
 		return err
 	}
-
-	// Partial index on apps(expires_at) for sub-wallets awaiting cleanup.
-	// Runs after AutoMigrate since it indexes parent_app_id/cleanup_in_progress, which AutoMigrate adds.
-	if err := MigrateCleanupIndex(gormDB); err != nil {
-		return err
+	if epoch == "" {
+		hasApps, err := holdsApps(gormDB)
+		if err != nil {
+			return err
+		}
+		if hasApps {
+			return ErrDatabasePredatesSchema
+		}
+	} else if epoch != SchemaEpoch {
+		return fmt.Errorf("database schema %q is not %s; reset it (no migration is provided)", epoch, SchemaEpoch)
 	}
 
-	// Unique apps.app_pubkey, so a duplicate insert is refused by the database and
-	// not only by prepareApp's read-then-insert check.
-	if err := MigrateAppsAppPubkeyUnique(gormDB); err != nil {
+	if err := gormDB.AutoMigrate(Models()...); err != nil {
 		return err
 	}
+	if err := EnsurePartialIndexes(gormDB); err != nil {
+		return err
+	}
+	if epoch == "" {
+		return gormDB.Create(&db.UserConfig{Key: SchemaEpochKey, Value: SchemaEpoch}).Error
+	}
+	return nil
+}
 
-	// Backfills cash_bill_archives.retained_until, which AutoMigrate has just
-	// added as an empty column.
-	return MigrateCashArchiveRetainedUntil(gormDB)
+func storedEpoch(gormDB *gorm.DB) (string, error) {
+	if !gormDB.Migrator().HasTable(&db.UserConfig{}) {
+		return "", nil
+	}
+	var rows []db.UserConfig
+	if err := gormDB.Where(&db.UserConfig{Key: SchemaEpochKey}).Limit(1).Find(&rows).Error; err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	return rows[0].Value, nil
+}
+
+func holdsApps(gormDB *gorm.DB) (bool, error) {
+	if !gormDB.Migrator().HasTable("apps") {
+		return false, nil
+	}
+	var n int64
+	if err := gormDB.Table("apps").Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
