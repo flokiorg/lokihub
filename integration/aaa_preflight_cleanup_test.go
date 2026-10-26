@@ -21,13 +21,29 @@
 // started - never anything the current run itself created.
 package integration
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/integration/nwcclient"
+)
 
 func TestAAA_PreflightCleanup(t *testing.T) {
 	cfg := requireConfig(t)
 	admin, ok := newAdminClient(cfg)
 	if !ok {
 		t.Skip("skipping: admin_api not configured - see integration/README.md")
+	}
+
+	// This suite runs against the regtest dev stack only. Any other network ends
+	// the whole run here, before a single fixture is created.
+	if network, err := hubNetwork(t, admin); err != nil || network != "regtest" {
+		fmt.Fprintf(os.Stderr, "FAIL: the Hub under test must be on regtest (get_info network %q, err %v); see integration/README.md\n", network, err)
+		os.Exit(1)
 	}
 
 	apps, err := admin.listAppsByNamePrefix(ephemeralFixtureNamePrefix)
@@ -80,4 +96,35 @@ func TestAAA_PreflightCleanup(t *testing.T) {
 			t.Logf("preflight: swept stale circle identity id=%d", identity.ID)
 		}
 	}
+}
+
+// hubNetwork is get_info's network on a throwaway NWC connection of the Hub.
+func hubNetwork(t *testing.T, admin *adminClient) (string, error) {
+	resp, err := admin.createApp(adminCreateAppRequest{
+		Name:   ephemeralFixtureNamePrefix + " preflight network",
+		Scopes: []string{constants.GET_INFO_SCOPE},
+		Kind:   "isolated",
+	})
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := admin.deleteApp(resp.ID); err != nil {
+			t.Logf("preflight: failed to delete the network-check app_id=%d: %v", resp.ID, err)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	client, err := nwcclient.Connect(ctx, resp.PairingUri)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	var info struct {
+		Network string `json:"network"`
+	}
+	if err := client.Call(ctx, "get_info", struct{}{}, &info); err != nil {
+		return "", err
+	}
+	return info.Network, nil
 }

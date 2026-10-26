@@ -85,6 +85,21 @@ type Config struct {
 	// suite should never depend on real third-party relay infrastructure
 	// being reachable/responsive to pass.
 	RelayURL string `yaml:"relay_url"`
+	// Regtest is how a test reaches the regtest stack's chain node and payer
+	// node, written by `just dev bootstrap`.
+	Regtest RegtestConfig `yaml:"regtest"`
+}
+
+// RegtestConfig is config.local.yaml's regtest block (integration/regtest's
+// IntegrationConfig writes the same fields).
+type RegtestConfig struct {
+	ChainRPC      string `yaml:"chain_rpc"`
+	ChainRPCUser  string `yaml:"chain_rpc_user"`
+	ChainRPCPass  string `yaml:"chain_rpc_pass"`
+	ChainRPCCert  string `yaml:"chain_rpc_cert"`
+	PayerGRPC     string `yaml:"payer_grpc"`
+	PayerMacaroon string `yaml:"payer_macaroon"`
+	PayerTLSCert  string `yaml:"payer_tls_cert"`
 }
 
 // defaultConfigPath is used when the INTEGRATION_CONFIG env var is unset.
