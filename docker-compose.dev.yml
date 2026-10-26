@@ -17,6 +17,9 @@ services:
     restart: unless-stopped
     # No --notls: flnd's btcd backend always uses TLS. The RPC cert is written by
     # `just dev setup` (valid for `chain` and DEV_HOST) and shared with both flnd.
+    # TODO: add --keepregtestdb once go-flokicoin 0.26.4 is released; until then
+    # lokid deletes its regtest chain on every start, so a restarted chain needs
+    # `just dev wipe` (bootstrap detects it).
     command:
       - /bin/lokid
       - --regtest
@@ -36,9 +39,9 @@ services:
 
   # A fixed fee estimate (25 loki/vB, in loki/kvB) for both flnd, served on the
   # compose network only. flnd's btcd backend would ask lokid instead, but lokid's
-  # estimatefee handler panics (go-flokicoin rpcserver.go handleEstimateFee). Drop
-  # this service and both fee.url lines once the chain image is built from a
-  # go-flokicoin with that fix.
+  # estimatefee handler panics (go-flokicoin rpcserver.go handleEstimateFee).
+  # TODO: drop this service and both fee.url lines once go-flokicoin 0.26.4 (which
+  # fixes it) is released, so flnd estimates from lokid.
   fees:
     image: busybox:1.36
     restart: unless-stopped
