@@ -61,6 +61,8 @@ audits of both.
 
 ### Changed
 
+- Refuses to start on a database created before 0.5.0's final schema, and no
+  longer converts older databases. Reset the database before upgrading.
 - Breaking: renames NIP-CASH's bearer mode to cash mode (`identity_type:
   "cash"`, `cash_secret`) across every cash method and the admin API. A
   migration rewrites stored rows, so existing slices stay redeemable with the

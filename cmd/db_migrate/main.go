@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -144,6 +145,16 @@ func main() {
 }
 
 func migrateDB(from, to *gorm.DB) error {
+	// A source made before the current schema is refused here exactly as lokihub
+	// refuses it at startup; copying it would carry its rows past that guard.
+	var mark []db.UserConfig
+	if err := from.Where(&db.UserConfig{Key: migrations.SchemaEpochKey}).Limit(1).Find(&mark).Error; err != nil {
+		return fmt.Errorf("failed to read the source schema epoch: %w", err)
+	}
+	if len(mark) == 0 || mark[0].Value != migrations.SchemaEpoch {
+		return migrations.ErrDatabasePredatesSchema
+	}
+
 	tx := to.Begin()
 	defer tx.Rollback()
 
@@ -180,6 +191,11 @@ func migrateDB(from, to *gorm.DB) error {
 	}
 
 	logger.Logger.Info().Msg("migrating user_configs...")
+	// The destination was created with its own epoch mark; the source's rows,
+	// its mark included, replace it.
+	if err := tx.Where(&db.UserConfig{Key: migrations.SchemaEpochKey}).Delete(&db.UserConfig{}).Error; err != nil {
+		return fmt.Errorf("failed to clear the destination schema epoch: %w", err)
+	}
 	if err := migrateTable[db.UserConfig](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate user_configs: %w", err)
 	}
