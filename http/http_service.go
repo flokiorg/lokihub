@@ -228,6 +228,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.Use(httpSvc.requireFullAccess)
 
 	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
+	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
 	fullAccessApiGroup.PATCH("/unlock-password", httpSvc.changeUnlockPasswordHandler)
 	fullAccessApiGroup.PATCH("/auto-unlock", httpSvc.autoUnlockHandler)
 	fullAccessApiGroup.PATCH("/settings", httpSvc.updateSettingsHandler)
