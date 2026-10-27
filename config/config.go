@@ -11,9 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/adrg/xdg"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -814,6 +816,12 @@ func (cfg *config) PrivateEnvelopeLimits() transport.Limits {
 		MaxConsolidateSources: cfg.privateEnvelopeInt(privateEnvelopeMaxConsolidateKey, env.PrivateEnvelopeMaxConsolidateSources, defaultSources),
 		MaxRequestAgeSeconds:  int64(cfg.privateEnvelopeInt(cashMaxRequestAgeKey, env.CashMaxRequestAgeSecs, int(defaults.MaxRequestAgeSeconds))),
 	}
+	// H never decreases (NIP-CASH §Deadlines): the largest H ever used is stored.
+	if stored, err := cashrequest.HorizonTx(cfg.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read the stored horizon")
+	} else if stored > limits.MaxRequestAgeSeconds {
+		limits.MaxRequestAgeSeconds = stored
+	}
 	// H SHOULD NOT exceed one day (NIP-CASH §Deadlines); ValidateAnnounced holds the floor of 60.
 	if limits.MaxRequestAgeSeconds > MaxCashRequestAgeSecs {
 		logger.Logger.Error().Int64("max_request_age", limits.MaxRequestAgeSeconds).
@@ -892,6 +900,9 @@ func (cfg *config) SetPrivateEnvelopeLimits(limits transport.Limits) error {
 			logger.Logger.Error().Err(err).Str("key", key).Msg("Failed to update private envelope limit")
 			return err
 		}
+	}
+	if _, err := cashrequest.RaiseHorizon(cfg.db, limits.MaxRequestAgeSeconds, time.Now()); err != nil {
+		return fmt.Errorf("failed to store the horizon: %w", err)
 	}
 	return nil
 }
