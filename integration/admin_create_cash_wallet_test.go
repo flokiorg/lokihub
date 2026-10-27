@@ -130,5 +130,5 @@ func TestAdminCreateCashWallet_AlwaysCarriesProvenance(t *testing.T) {
 		Pubkey string `json:"pubkey"`
 	}
 	require.NoError(t, mustConnect(t, hub.Connection).Call(ctxT(t), "get_info", struct{}{}, &info))
-	require.True(t, nipcash.HubIdentityEqual(minter, info.Pubkey), "minter %s, get_info pubkey %s", minter, info.Pubkey)
+	require.True(t, nipcash.HubIdentityEqual(info.Pubkey, minter), "minter %s, get_info pubkey %s", minter, info.Pubkey)
 }
