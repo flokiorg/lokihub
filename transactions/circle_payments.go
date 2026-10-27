@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -330,7 +331,11 @@ func (svc *transactionsService) SetLNClientProvider(provider func() lnclient.LNC
 // invoice at once: the Hub accepts it, re-checks it and settles or cancels it,
 // with no node involved.
 func (svc *transactionsService) interceptSelfCircleHold(row *db.Transaction, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
-	svc.markHoldInvoiceAccepted(row.PaymentHash, 0, true)
+	// Only the payment that accepted the invoice may take its outcome: another
+	// payer's settlement must not read as this one's.
+	if !svc.markHoldInvoiceAccepted(row.PaymentHash, 0, true) {
+		return nil, errors.New("this invoice is already being paid by another payment")
+	}
 	if err := svc.ResolveCircleHold(context.Background(), row.PaymentHash, int64(row.AmountMloki), lnClient); err != nil { //nolint:gosec // invoice amount
 		return nil, err
 	}

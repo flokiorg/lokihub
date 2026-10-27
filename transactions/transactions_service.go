@@ -1548,7 +1548,11 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 	}
 }
 
-func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, settleDeadline uint32, selfPayment bool) {
+// markHoldInvoiceAccepted moves a hold invoice's PENDING incoming row to
+// ACCEPTED, and reports whether this call moved it. A row another payment
+// already accepted is left alone and reported false: a same-node payer must not
+// take that payment's outcome for its own.
+func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, settleDeadline uint32, selfPayment bool) bool {
 	svc.logger.Info().
 		Str("payment_hash", paymentHash).
 		Bool("self_payment", selfPayment).
@@ -1569,18 +1573,25 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 			return result.Error
 		}
 
-		err := tx.Model(&dbTransaction).UpdateColumns(map[string]interface{}{
-			"state":           constants.TRANSACTION_STATE_ACCEPTED,
-			"self_payment":    selfPayment,
-			"settle_deadline": settleDeadline,
-		}).Error
-		if err != nil {
-			svc.logger.Error().Err(err).
+		res := tx.Model(&db.Transaction{}).Where("id = ? AND state = ?", dbTransaction.ID, constants.TRANSACTION_STATE_PENDING).
+			UpdateColumns(map[string]interface{}{
+				"state":           constants.TRANSACTION_STATE_ACCEPTED,
+				"self_payment":    selfPayment,
+				"settle_deadline": settleDeadline,
+			})
+		if res.Error != nil {
+			svc.logger.Error().Err(res.Error).
 				Str("payment_hash", paymentHash).
 				Uint("dbTxID", dbTransaction.ID).
 				Msg("Failed to update hold invoice state to accepted in DB")
-			return err
+			return res.Error
 		}
+		if res.RowsAffected != 1 {
+			return errHoldAlreadyAccepted
+		}
+		dbTransaction.State = constants.TRANSACTION_STATE_ACCEPTED
+		dbTransaction.SelfPayment = selfPayment
+		dbTransaction.SettleDeadline = &settleDeadline
 
 		svc.logger.Info().
 			Str("payment_hash", paymentHash).
@@ -1593,13 +1604,19 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 		svc.logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Failed DB transaction for hold invoice accepted event")
-	} else if publishHoldAccepted(svc.db, &dbTransaction) {
+		return false
+	}
+	if publishHoldAccepted(svc.db, &dbTransaction) {
 		svc.eventPublisher.Publish(&events.Event{
 			Event:      "nwc_hold_invoice_accepted",
 			Properties: &dbTransaction,
 		})
 	}
+	return true
 }
+
+// errHoldAlreadyAccepted: another payment accepted the hold invoice first.
+var errHoldAlreadyAccepted = errors.New("the hold invoice was already accepted by another payment")
 
 // IsSelfPayment reports whether paymentRequest resolves to a payment that
 // never actually needs to leave this node's own Lightning liquidity — the
@@ -1738,7 +1755,9 @@ func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnC
 
 	fakeSettleDeadline := clientInfo.BlockHeight + 24
 
-	svc.markHoldInvoiceAccepted(paymentHash, fakeSettleDeadline, true)
+	if !svc.markHoldInvoiceAccepted(paymentHash, fakeSettleDeadline, true) {
+		return nil, errors.New("this invoice is already being paid by another payment")
+	}
 
 	select {
 	case settledTransaction := <-settledChannel:
