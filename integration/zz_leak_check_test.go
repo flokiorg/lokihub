@@ -50,7 +50,13 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 				circles++
 				continue
 			case "cash_hub":
-				if blockers, err := admin.cashHubDeleteBlockers(app.ID); err == nil && onlyRecords(blockers) {
+				blockers, err := admin.cashHubDeleteBlockers(app.ID)
+				if err == nil && onlyRecords(blockers) {
+					continue
+				}
+				// Kept only while its records were retained, its test's cleanup
+				// could not delete it then; nothing keeps it now.
+				if err == nil && len(blockers) == 0 && admin.deleteApp(app.ID) == nil {
 					continue
 				}
 			}
