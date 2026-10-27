@@ -63,6 +63,10 @@ audits of both.
 
 ### Changed
 
+- Requires an `expiration` tag on `mint_cash` (its deadline, at most the
+  announced `max_request_age` ahead) and refuses a used `request_id` with
+  `REQUEST_REUSED`; a mint running concurrently on the same Hub is
+  `RATE_LIMITED`.
 - Takes a `request_id` on `mint_cash` and, for a cash recipient, the
   caller's commitment; the Hub no longer generates or returns a cash secret.
   `idempotency_key`, `min_transfer_millis` and a recipient `cash_secret` are

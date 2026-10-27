@@ -18,9 +18,13 @@ import (
 	"github.com/flokiorg/lokihub/nip47/permissions"
 	nostrmodels "github.com/flokiorg/lokihub/nostr/models"
 	"github.com/nbd-wtf/go-nostr"
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 )
 
 func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
+	// Arrival is taken before any decryption (NIP-CASH §Deadlines).
+	meta := standardCallMeta(event, time.Now())
 	var nip47Response *models.Response
 	logger.Logger.Debug().
 		Str("requestEventNostrId", event.ID).
@@ -538,7 +542,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			HandleCreateConnectionEvent(ctx, nip47Request, requestEvent.ID, publishResponse)
 	case constants.NIP47MethodMintCash:
 		controller.
-			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, meta)
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.
 			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
@@ -668,4 +672,17 @@ func (svc *nip47Service) publishResponseEvent(ctx context.Context, pool nostrmod
 	}
 
 	return nil
+}
+
+// standardCallMeta is a kind-23194 request's arrival and deadline: its expiration
+// tag, read as nmilat reads it (exactly one, unsigned decimal).
+func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
+	meta := models.CallMeta{Transport: models.TransportStandard, ArrivedAt: arrived.Unix()}
+	tags := make([][]string, len(event.Tags))
+	for i, t := range event.Tags {
+		tags[i] = t
+	}
+	deadline, present, err := nmilatnip47.RequestExpiration(&nmilatnip01.Event{Tags: tags})
+	meta.Deadline, meta.DeadlinePresent, meta.DeadlineMalformed = deadline, present, err != nil
+	return meta
 }
