@@ -93,14 +93,16 @@ export function DisconnectCashHub({
                 )}
                 {recordBlockers.map((b) => (
                   <p key={b.kind}>
-                    {b.until
-                      ? t("disconnectCashHub.recordsUntil", {
-                          count: b.count,
-                          until: new Date(b.until * 1000).toLocaleString(),
-                        })
-                      : t("disconnectCashHub.recordsUntilBillsGone", {
-                          count: b.count,
-                        })}
+                    {b.kind === "payout_open"
+                      ? t("disconnectCashHub.payoutsOpen", { count: b.count })
+                      : b.until
+                        ? t("disconnectCashHub.recordsUntil", {
+                            count: b.count,
+                            until: new Date(b.until * 1000).toLocaleString(),
+                          })
+                        : t("disconnectCashHub.recordsUntilBillsGone", {
+                            count: b.count,
+                          })}
                   </p>
                 ))}
                 {deleteCheck && recordBlockers.length > 0 && (

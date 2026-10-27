@@ -373,6 +373,8 @@
     "recordsUntil_other": "{{count}} request records are kept until {{until}}, so a lost reply can still be looked up.",
     "recordsUntilBillsGone_one": "{{count}} request record is kept until its bills are gone.",
     "recordsUntilBillsGone_other": "{{count}} request records are kept until their bills are gone.",
+    "payoutsOpen_one": "{{count}} on-chain payout is not final or cancelled yet.",
+    "payoutsOpen_other": "{{count}} on-chain payouts are not final or cancelled yet.",
     "earliestDelete": "The earliest this hub can be deleted is {{at}}.",
     "earliestAfterBills": "This hub can be deleted only after its bills are gone."
   },
