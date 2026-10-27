@@ -36,10 +36,14 @@ type RedeemClaim struct {
 
 // inFlightRedeems counts claimed slices whose payout has started and recorded no
 // preimage: the redeems in flight, counted from the claim itself so a payout
-// whose ledger row is not written yet counts too.
+// whose ledger row is not written yet counts too. A payout the ledger shows
+// settled is not in flight, even when its preimage never reached the slice.
 func inFlightRedeems(tx *gorm.DB) *gorm.DB {
 	return tx.Model(&db.CashWalletClaim{}).
-		Where("cash_wallet_claims.claimed_at IS NOT NULL AND cash_wallet_claims.payment_hash <> '' AND cash_wallet_claims.preimage = ''")
+		Where("cash_wallet_claims.claimed_at IS NOT NULL AND cash_wallet_claims.payment_hash <> '' AND cash_wallet_claims.preimage = ''").
+		Where("NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.state = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED)
 }
 
 // ClaimSliceForRedeem claims a slice for a cash_redeem in one transaction: the
