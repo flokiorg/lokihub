@@ -2,6 +2,7 @@ package flnd
 
 import (
 	"errors"
+	"github.com/flokiorg/go-flokicoin/txscript"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,5 +33,17 @@ func TestTxUnknown(t *testing.T) {
 	}
 	if txUnknown(errors.New("connection refused")) {
 		t.Error("a transport error is an error")
+	}
+}
+
+// A segwit v0 payout input is signed SIGHASH_ALL, a taproot one SIGHASH_DEFAULT.
+func TestSighashFor(t *testing.T) {
+	p2wkh := append([]byte{0x00, 0x14}, make([]byte, 20)...)
+	p2tr := append([]byte{0x51, 0x20}, make([]byte, 32)...)
+	if got := sighashFor(p2wkh); got != txscript.SigHashAll {
+		t.Errorf("p2wkh: %v", got)
+	}
+	if got := sighashFor(p2tr); got != txscript.SigHashDefault {
+		t.Errorf("p2tr: %v", got)
 	}
 }

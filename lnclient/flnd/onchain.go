@@ -195,6 +195,7 @@ func (svc *FLNDService) FundPsbtFixed(ctx context.Context, raw []byte, id [32]by
 			return nil, fmt.Errorf("lease input %s: %w", o, err)
 		}
 		p.Inputs[i].WitnessUtxo = wire.NewTxOut(u.ValueSat, u.Script)
+		p.Inputs[i].SighashType = sighashFor(u.Script)
 	}
 	var buf bytes.Buffer
 	if err := p.Serialize(&buf); err != nil {
@@ -395,4 +396,16 @@ func txUnknown(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "can not find") ||
 		strings.Contains(msg, "cannot find")
+}
+
+// sighashFor is the sighash type an input of a payout version is signed with:
+// SIGHASH_ALL, written out for a segwit v0 coin (flnd signs a PSBT input with
+// no type as type 0, which a v0 signature may not carry: lokid refused every
+// such version "invalid hash type 0x0", live run23); SIGHASH_DEFAULT (0) for
+// a taproot coin.
+func sighashFor(script []byte) txscript.SigHashType {
+	if txscript.IsPayToTaproot(script) {
+		return txscript.SigHashDefault
+	}
+	return txscript.SigHashAll
 }
