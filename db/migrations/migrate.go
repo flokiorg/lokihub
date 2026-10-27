@@ -26,7 +26,7 @@ var ErrDatabasePredatesSchema = errors.New("database predates " + SchemaEpoch + 
 // Models are every table Migrate creates. The LSP and Identity Authority tables
 // are created by their own services.
 func Models() []any {
-	return []any{
+	base := []any{
 		&db.UserConfig{},
 		&db.App{},
 		&db.AppPermission{},
@@ -58,6 +58,7 @@ func Models() []any {
 		&db.CashOrderAddress{},
 		&db.CashOrderPayment{},
 	}
+	return append(base, withdrawModels()...)
 }
 
 // Migrate refuses a database older than SchemaEpoch, then creates every table, the
