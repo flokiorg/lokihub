@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ohstr/nmilat/nipcash"
+	cashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -146,9 +147,12 @@ func TestSpecWithdraw_I58_Reorg(t *testing.T) {
 	token, priv, rid, _ := commitWithdraw(t, h)
 	waitPayout(t, chain, token, priv, rid, false, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutBroadcast })
 	conf := waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutConfirmed })
+	// Held out of the new branch, the transaction is back in the mempool only.
+	require.NoError(t, chain.Withhold(conf.Txid, true))
 	require.NoError(t, chain.InvalidateTip(ctxT(t)))
 	back := waitPayout(t, chain, token, priv, rid, false, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutBroadcast })
 	assert.Equal(t, conf.Txid, back.Txid)
+	require.NoError(t, chain.Withhold(conf.Txid, false))
 	final := waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutFinal })
 	assert.Equal(t, conf.Txid, final.Txid, "never replaced")
 }
@@ -168,6 +172,7 @@ func TestSpecWithdraw_I59_HubCancel(t *testing.T) {
 	assert.NotEmpty(t, p.NewWalletPubkey)
 	assert.NotEmpty(t, p.NewWalletToken.Token)
 	assert.Empty(t, p.Txid)
+	redeemReminted(t, cfg, h, p.NewWalletPubkey, priv)
 }
 
 // I-60: the holder's cancel request: RESTRICTED before 7 days; at 7 days on a
@@ -188,9 +193,37 @@ func TestSpecWithdraw_I60_CancelRequest(t *testing.T) {
 	require.NoError(t, privateCall(t, token, constants.NIP47MethodCashWithdraw, map[string]any{"cancel": true, "request_id": rid}, priv, &answer))
 	assert.Equal(t, nipcash.PayoutBroadcast, answer.State)
 	done := waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutCancelled })
-	appID, err := h.admin.findAppIDByWalletPubkey(done.NewWalletPubkey)
+	redeemReminted(t, cfg, h, done.NewWalletPubkey, priv)
+}
+
+// redeemReminted checks the Hub's owner cannot delete the bill a cancelled
+// payout re-minted, then redeems it as its holder (priv): the new bill pays out
+// and, drained, goes with its Cash Hub's other fixtures.
+func redeemReminted(t *testing.T, cfg *Config, h withdrawHub, walletPubkey, priv string) {
+	t.Helper()
+	claims, err := h.admin.listCashWalletClaims(h.id)
 	require.NoError(t, err)
-	assert.Error(t, h.admin.deleteApp(appID), "a re-minted bill cannot be deleted by its owner")
+	var reminted *adminCashWalletClaim
+	live := liveCashClaims(claims)
+	for i := range live {
+		if live[i].WalletPubkey == walletPubkey {
+			reminted = &live[i]
+		}
+	}
+	require.NotNil(t, reminted, "the re-minted bill is one of the Cash Hub's bills")
+	err = h.admin.deleteCashWallet(h.id, reminted.WalletAppID)
+	require.Error(t, err, "a re-minted bill cannot be deleted by its owner")
+	assert.Contains(t, err.Error(), "re-minted")
+
+	wallet, err := cashclient.Connect(ctxT(t), reminted.CashToken)
+	require.NoError(t, err)
+	t.Cleanup(wallet.Close)
+	payee := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+	var invoice MakeInvoiceResult
+	require.NoError(t, payee.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: uint64(reminted.AmountMloki), //nolint:gosec // positive
+		Description: "integration re-minted bill redeem"}, &invoice))
+	_, err = wallet.CashRedeem(ctxT(t), nipcash.CashRedeemParams{Invoice: invoice.Invoice, Credential: nipcash.BySigning(priv)})
+	require.NoError(t, err, "the re-minted bill redeems")
 }
 
 // I-62: three withdrawals within the window share one version with a change
