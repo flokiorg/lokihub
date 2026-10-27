@@ -419,7 +419,8 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	// private transport for its own reasons.
 	switch nip47Request.Method {
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
-		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus:
+		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashLookup:
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{

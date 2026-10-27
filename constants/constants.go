@@ -160,6 +160,9 @@ const (
 	// NIP47MethodCashConsolidate combines several same-hub slices this node
 	// custodies into one new cash token (NIP-CASH §Consolidating Tokens).
 	NIP47MethodCashConsolidate = nipcash.MethodCashConsolidate
+	// NIP47MethodCashLookup looks up a call by its request_id (NIP-CASH §Looking
+	// Up a Call). Private transport only; it moves nothing.
+	NIP47MethodCashLookup = nipcash.MethodCashLookup
 	// NIP47MethodCashStatus asks a bill for its state. It answers with the
 	// full roster of that bill's recipients (identity, entitled amount,
 	// claimed status) — no invoice or preimage detail, since a cash_wallet has

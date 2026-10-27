@@ -9,6 +9,15 @@ audits of both.
 
 ### Added
 
+- Serves `cash_lookup` on the private transport (NIP-CASH §Looking Up a Call):
+  a held record answers `done` with the call's reply rebuilt (the same fields,
+  each token re-encoded from the record and encrypted to the same key, a
+  destroyed bill's token as its tombstone) to the recorded authorizer only, any
+  other signer, target or secret `UNAUTHORIZED`; with no record the answer is
+  `pending`, `unknown` or `expired` by the call's deadline. A lookup writes
+  nothing, is served for a destroyed bill a record names, is limited to 600 an
+  hour per signer, and is listed in `private_methods`; on kind 23194 it is
+  `NOT_IMPLEMENTED`. Join lookups by `connection_pubkey` are not served yet.
 - Adds `PRIVATE_INBOX_EVENTS_PER_MIN` (600): the envelopes decrypted per relay
   connection a minute; the rest are dropped undecrypted.
 - Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`

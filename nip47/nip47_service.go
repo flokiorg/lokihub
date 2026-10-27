@@ -39,6 +39,7 @@ type nip47Service struct {
 	cashClaimLimiter       controllers.RateLimiter
 	circleRateLimiter      controllers.RateLimiter
 	cashLineageLimiter     controllers.RateLimiter
+	lookupLimiter          controllers.RateLimiter
 	identityAuthorityMgr   *apps.IdentityAuthorityManager
 	privateIdentity        func() string
 }
@@ -79,6 +80,7 @@ func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublis
 		cashClaimLimiter:       controllers.NewRateLimiter(),
 		circleRateLimiter:      controllers.NewRateLimiter(),
 		cashLineageLimiter:     controllers.NewRateLimiter(),
+		lookupLimiter:          controllers.NewRateLimiter(),
 		identityAuthorityMgr:   apps.NewIdentityAuthorityManager(db),
 	}
 }

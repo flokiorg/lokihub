@@ -36,6 +36,7 @@ var privateServableMethods = map[string]struct{}{
 	constants.NIP47MethodCashRedeem:         {},
 	constants.NIP47MethodCashTransfer:       {},
 	constants.NIP47MethodCashConsolidate:    {},
+	constants.NIP47MethodCashLookup:         {},
 	constants.NIP47MethodCreateCircleWallet: {},
 }
 
