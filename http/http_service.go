@@ -314,8 +314,8 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 
 	fullAccessApiGroup.GET("/lsps", httpSvc.listLSPsHandler)
 	fullAccessApiGroup.POST("/lsps", httpSvc.addLSPHandler)
-	fullAccessApiGroup.PUT("/lsps/:pubkey", httpSvc.updateLSPHandler)
-	fullAccessApiGroup.DELETE("/lsps/:pubkey", httpSvc.deleteLSPHandler)
+	fullAccessApiGroup.PUT("/lsps/:pubkey/trust", httpSvc.trustLSPHandler)
+	fullAccessApiGroup.POST("/lsps/:pubkey/check", httpSvc.checkLSPHandler)
 
 	// LSPS0/1/5
 	fullAccessApiGroup.GET("/lsps0/protocols", httpSvc.lsps0ListProtocolsHandler)

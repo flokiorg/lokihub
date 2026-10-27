@@ -47,7 +47,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	err = m.AddLSP("TestLSPManual", lspPubkey+"@host:5521")
+	err = m.addTestLSP("TestLSPManual", lspPubkey+"@host:5521")
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

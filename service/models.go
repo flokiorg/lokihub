@@ -12,6 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
@@ -77,4 +78,6 @@ type Service interface {
 	GetLiquidityManager() *manager.LiquidityManager
 	// GetListingService is the offer-listing service (WP-25), nil until started.
 	GetListingService() *listing.Service
+	// GetLSPCatalogue is the NIP-LSP catalogue (WP-26), nil until started.
+	GetLSPCatalogue() *discovery.Service
 }

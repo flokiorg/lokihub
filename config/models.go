@@ -42,9 +42,8 @@ type AppConfig struct {
 	LokihubStoreURL     string `envconfig:"LOKIHUB_STORE_URL" default:"https://raw.githubusercontent.com/flokiorg/lokihub-store/refs/heads/main"`
 	MessageboardNwcUrl  string `envconfig:"MESSAGEBOARD_NWC_URL"`
 
-	EnableSwap            bool   `envconfig:"ENABLE_SWAP" default:"false"`
-	EnableMessageboardNwc bool   `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
-	LSP                   string `envconfig:"LSP"`
+	EnableSwap            bool `envconfig:"ENABLE_SWAP" default:"false"`
+	EnableMessageboardNwc bool `envconfig:"ENABLE_MESSAGEBOARD_NWC" default:"false"`
 
 	// CashWalletRateLimitPerHour caps mint_cash calls per calling app
 	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
@@ -198,8 +197,6 @@ type Config interface {
 	EnableMessageboardNwc() bool
 	SetEnableMessageboardNwc(value bool) error
 	GetDefaultWorkDir() string
-	GetLSP() string
-	SetLSP(value string) error
 	GetCachedServicesJSON() string
 	SetCachedServicesJSON(json string) error
 }

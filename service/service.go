@@ -27,6 +27,7 @@ import (
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
+	"github.com/flokiorg/lokihub/lsps/discovery"
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -91,6 +92,8 @@ type service struct {
 	listingSvc *listing.Service
 	// listingClockOffset moves the listing clock (test hook only), seconds.
 	listingClockOffset atomic.Int64
+	// lspCatalogue is the NIP-LSP catalogue (WP-26); set by startLSPCatalogue.
+	lspCatalogue *discovery.Service
 }
 
 func NewService(ctx context.Context) (*service, error) {

@@ -6,7 +6,6 @@ import (
 	"math"
 	"net"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -121,27 +120,6 @@ func ParseCommandLine(s string) ([]string, error) {
 	}
 
 	return args, nil
-}
-
-var pubkeyRegex = regexp.MustCompile(`^[0-9a-fA-F]{66}$`)
-
-// ParseLSPURI parses an LSP URI in the format pubkey@host:port
-func ParseLSPURI(uri string) (pubkey, host string, err error) {
-	parts := strings.Split(uri, "@")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid URI format: expected pubkey@host:port")
-	}
-	pubkey = strings.ToLower(parts[0])
-	host = parts[1]
-
-	if !pubkeyRegex.MatchString(pubkey) {
-		return "", "", fmt.Errorf("invalid pubkey format: expected 33-byte hex")
-	}
-	if host == "" {
-		return "", "", fmt.Errorf("host cannot be empty")
-	}
-
-	return pubkey, host, nil
 }
 
 // ParseHostPort parses a host string which may or may not contain a port.

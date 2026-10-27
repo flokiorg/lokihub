@@ -680,32 +680,26 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: encoded, Error: ""}
 	}
 
-	lspsResourceRegex := regexp.MustCompile(
-		`/api/lsps/([^/]+)`,
-	)
-	lspsResourceMatch := lspsResourceRegex.FindStringSubmatch(route)
-
-	switch {
-	case len(lspsResourceMatch) > 1:
-		pubkey := lspsResourceMatch[1]
-		switch method {
-		case "PUT":
-			req := &api.UpdateLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
+	// The LSP catalogue's trust and live-check routes (WP-26), as over HTTP.
+	lspsResourceRegex := regexp.MustCompile(`^/api/lsps/([0-9a-fA-F]{64,66})/(trust|check)$`)
+	if m := lspsResourceRegex.FindStringSubmatch(route); m != nil {
+		switch {
+		case m[2] == "trust" && method == "PUT":
+			req := &api.TrustLSPRequest{}
+			if err := json.Unmarshal([]byte(body), req); err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			lsp, err := app.api.HandleTrustLSP(ctx, m[1], req.Trusted)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			err = app.api.HandleUpdateLSP(ctx, pubkey, req)
+			return WailsRequestRouterResponse{Body: lsp, Error: ""}
+		case m[2] == "check" && method == "POST":
+			lsp, err := app.api.HandleLSPLiveCheck(ctx, m[1])
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-		case "DELETE":
-			err := app.api.HandleDeleteLSP(ctx, pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
+			return WailsRequestRouterResponse{Body: lsp, Error: ""}
 		}
 	}
 
@@ -1221,115 +1215,6 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: l, Error: ""}
 		}
 
-	// LSPS Settings Routes (Legacy - kept for backward compatibility if any)
-	case "/api/lsps/all":
-		switch method {
-		case "GET":
-			lsps, err := app.api.ListLSPs()
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: lsps, Error: ""}
-
-		case "POST":
-			// Struct for adding LSP
-			type AddLSPRequest struct {
-				Name string `json:"name"`
-				URI  string `json:"uri"`
-			}
-			req := &AddLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddLSP(req.Name, req.URI)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "DELETE":
-			// Struct for removing LSP, or use query param?
-			// Using query param for now as per other DELETE routes
-			pubkey := ""
-			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
-			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
-			for _, match := range paramMatches {
-				if match[1] == "pubkey" {
-					pubkey = match[2]
-				}
-			}
-			if pubkey == "" {
-				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
-			}
-			err := app.api.RemoveLSP(pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "PATCH":
-			// Set Active LSP
-			type SetActiveRequest struct {
-				Pubkey string `json:"pubkey"`
-			}
-			req := &SetActiveRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddSelectedLSP(req.Pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		}
-
-	case "/api/lsps/selected":
-		switch method {
-		case "GET":
-			// Return list of selected LSP pubkeys
-			selected, err := app.api.GetSelectedLSPs()
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: selected, Error: ""}
-
-		case "POST":
-			// Add LSP to selected list
-			type SelectLSPRequest struct {
-				Pubkey string `json:"pubkey"`
-			}
-			req := &SelectLSPRequest{}
-			err := json.Unmarshal([]byte(body), req)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			err = app.api.AddSelectedLSP(req.Pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-
-		case "DELETE":
-			pubkey := ""
-			paramRegex := regexp.MustCompile(`[?&](pubkey)=([^&]+)`)
-			paramMatches := paramRegex.FindAllStringSubmatch(route, -1)
-			for _, match := range paramMatches {
-				if match[1] == "pubkey" {
-					pubkey = match[2]
-				}
-			}
-			if pubkey == "" {
-				return WailsRequestRouterResponse{Body: nil, Error: "pubkey is required"}
-			}
-			err := app.api.RemoveSelectedLSP(pubkey)
-			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
-			}
-			return WailsRequestRouterResponse{Body: nil, Error: ""}
-		}
 	case "/api/lsps0/protocols":
 		lspPubkey := ""
 		paramRegex := regexp.MustCompile(`[?&](lspPubkey|lsp)=([^&]+)`)

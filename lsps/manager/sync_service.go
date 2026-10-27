@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"io"
@@ -11,13 +10,13 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/logger"
-	"github.com/flokiorg/lokihub/utils"
 )
 
-// StartSyncService starts the background sync service for community LSPs
+// StartSyncService caches services.json (rates, currencies, info, faq) now and
+// every 6 hours.
 func (m *LiquidityManager) StartSyncService(ctx context.Context, servicesURL string) {
 	if servicesURL == "" {
-		logger.Logger.Warn().Msg("No services URL provided for LSP sync service")
+		logger.Logger.Warn().Msg("No services URL provided for the services sync")
 		return
 	}
 
@@ -41,11 +40,11 @@ func (m *LiquidityManager) StartSyncService(ctx context.Context, servicesURL str
 }
 
 func (m *LiquidityManager) runSync(ctx context.Context, servicesURL string) {
-	logger.Logger.Info().Msg("Starting community LSP sync...")
+	logger.Logger.Info().Msg("Syncing services.json...")
 	if err := m.syncRPC(ctx, servicesURL); err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to sync community LSPs")
+		logger.Logger.Error().Err(err).Msg("Failed to sync services.json")
 	} else {
-		logger.Logger.Info().Msg("Community LSP sync completed")
+		logger.Logger.Info().Msg("services.json synced")
 	}
 }
 
@@ -86,58 +85,7 @@ func (m *LiquidityManager) syncRPC(ctx context.Context, url string) error {
 		logger.Logger.Info().Msg("Cached services.json for local API access")
 	}
 
-	type ExternalLSP struct {
-		Name        string `json:"name"`
-		URI         string `json:"uri"`
-		Connection  string `json:"connection"` // Support new schema
-		Pubkey      string `json:"pubkey"`
-		Host        string `json:"host"`
-		URL         string `json:"url"` // Website URL
-		Description string `json:"description"`
-	}
-	type ServiceConfig struct {
-		LSPs []ExternalLSP `json:"lsps"`
-	}
-
-	var result ServiceConfig
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return err
-	}
-
-	if len(result.LSPs) == 0 {
-		return nil
-	}
-
-	var inputs []CommunityLSPInput
-	for _, l := range result.LSPs {
-		pubkey := l.Pubkey
-		host := l.Host
-
-		// Try parsing from Connection string first (new schema priority)
-		// "pubkey@host:port"
-		if l.Connection != "" {
-			parts := strings.Split(l.Connection, "@")
-			if len(parts) == 2 {
-				pubkey = parts[0]
-				host = parts[1]
-			}
-		} else if l.URI != "" {
-			// Fallback to legacy URI parsing if present
-			pk, h, err := utils.ParseLSPURI(l.URI)
-			if err == nil {
-				pubkey = pk
-				host = h
-			}
-		}
-
-		inputs = append(inputs, CommunityLSPInput{
-			Name:        l.Name,
-			Description: l.Description,
-			Website:     l.URL,
-			Pubkey:      pubkey,
-			Host:        host,
-		})
-	}
-
-	return m.cfg.LSPManager.SyncSystemLSPs(inputs)
+	// services.json no longer lists LSPs (WP-26, LP-2): the catalogue comes
+	// from NIP-LSP announcements. Rates, currencies, info and faq stay.
+	return nil
 }

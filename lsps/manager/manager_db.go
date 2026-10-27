@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/flokiorg/lokihub/lsps/persist"
 	"gorm.io/gorm"
@@ -17,66 +16,51 @@ type LSPManager struct {
 
 func NewLSPManager(db *gorm.DB) *LSPManager {
 	m := &LSPManager{db: db}
+	// The catalogue table is recreated, never migrated (LP-14): a table from
+	// before NIP-LSP (services.json LSPs, pubkey@host entries) is dropped and the
+	// user picks trusted LSPs again from the announcements.
+	if db.Migrator().HasTable(&persist.LSP{}) && !db.Migrator().HasColumn(&persist.LSP{}, "node_key") {
+		_ = db.Migrator().DropTable(&persist.LSP{})
+	}
 	_ = db.AutoMigrate(&persist.LSP{})
 	_ = db.AutoMigrate(&persist.LSPS1Order{})
-	_ = m.CleanupInvalidLSPs()
 	return m
 }
 
-// CleanupInvalidLSPs removes LSPs with empty pubkeys or hosts
-func (m *LSPManager) CleanupInvalidLSPs() error {
-	// Delete where pubkey is empty string
-	if err := m.db.Where("pubkey = ?", "").Delete(&persist.LSP{}).Error; err != nil {
-		return err
-	}
-	// Delete where host is empty string (if allowed by schema, but strictly should be valid)
-	if err := m.db.Where("host = ?", "").Delete(&persist.LSP{}).Error; err != nil {
-		return err
-	}
-	return nil
-}
+// DB is the catalogue's database.
+func (m *LSPManager) DB() *gorm.DB { return m.db }
 
-// ListLSPs returns all LSPs from the database
+// ListLSPs returns the whole catalogue.
 func (m *LSPManager) ListLSPs() ([]persist.LSP, error) {
 	var lsps []persist.LSP
-	if err := m.db.Find(&lsps).Error; err != nil {
+	if err := m.db.Order("name, node_key").Find(&lsps).Error; err != nil {
 		return nil, err
 	}
 	return lsps, nil
 }
 
-// AddLSP adds a new LSP (Custom or Community)
-func (m *LSPManager) AddLSP(name, pubkey, host string, active bool, isCommunity bool) (*persist.LSP, error) {
-	pubkey = strings.ToLower(pubkey)
-
-	var count int64
-	if err := m.db.Model(&persist.LSP{}).Where("pubkey = ?", pubkey).Count(&count).Error; err != nil {
+// ListTrustedLSPs returns the LSPs the user trusts.
+func (m *LSPManager) ListTrustedLSPs() ([]persist.LSP, error) {
+	var lsps []persist.LSP
+	if err := m.db.Where("trusted = ?", true).Order("name, node_key").Find(&lsps).Error; err != nil {
 		return nil, err
 	}
-	if count > 0 {
-		return nil, errors.New("LSP with this pubkey already exists")
-	}
+	return lsps, nil
+}
 
-	lsp := persist.LSP{
-		Pubkey:      pubkey,
-		Host:        host,
-		Name:        name,
-		IsActive:    active,
-		IsCommunity: isCommunity,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-
-	if err := m.db.Create(&lsp).Error; err != nil {
+// GetLSP returns one LSP by node key (x-only) or node id (66 hex).
+func (m *LSPManager) GetLSP(key string) (*persist.LSP, error) {
+	key = NodeKeyOf(key)
+	var lsp persist.LSP
+	if err := m.db.First(&lsp, "node_key = ?", key).Error; err != nil {
 		return nil, err
 	}
 	return &lsp, nil
 }
 
-// ToggleLSP updates the active status of an LSP
-func (m *LSPManager) ToggleLSP(pubkey string, active bool) error {
-	pubkey = strings.ToLower(pubkey)
-	result := m.db.Model(&persist.LSP{}).Where("pubkey = ?", pubkey).Update("is_active", active)
+// SetTrusted records the user's choice for an LSP.
+func (m *LSPManager) SetTrusted(key string, trusted bool) error {
+	result := m.db.Model(&persist.LSP{}).Where("node_key = ?", NodeKeyOf(key)).Update("trusted", trusted)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -86,92 +70,18 @@ func (m *LSPManager) ToggleLSP(pubkey string, active bool) error {
 	return nil
 }
 
-// UpdateLSPNostrPubkey updates the nostr pubkey for an LSP
-func (m *LSPManager) UpdateLSPNostrPubkey(pubkey, nostrPubkey string) error {
-	pubkey = strings.ToLower(pubkey)
-	return m.db.Model(&persist.LSP{}).Where("pubkey = ?", pubkey).Update("nostr_pubkey", nostrPubkey).Error
+// UpdateLSPNostrPubkey stores the LSPS0 notification pubkey read live (LP-18).
+func (m *LSPManager) UpdateLSPNostrPubkey(key, nostrPubkey string) error {
+	return m.db.Model(&persist.LSP{}).Where("node_key = ?", NodeKeyOf(key)).Update("nostr_pubkey", nostrPubkey).Error
 }
 
-// DeleteCustomLSP removes a custom LSP. System LSPs cannot be deleted.
-func (m *LSPManager) DeleteCustomLSP(pubkey string) error {
-	pubkey = strings.ToLower(pubkey)
-	var lsp persist.LSP
-	if err := m.db.First(&lsp, "pubkey = ?", pubkey).Error; err != nil {
-		return err
+// NodeKeyOf is the x-only node key of a node key or a 66-hex node id.
+func NodeKeyOf(key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if len(key) == 66 && (strings.HasPrefix(key, "02") || strings.HasPrefix(key, "03")) {
+		return key[2:]
 	}
-
-	if lsp.IsCommunity {
-		return errors.New("cannot delete system/community LSP")
-	}
-
-	return m.db.Delete(&lsp).Error
-}
-
-// SyncSystemLSPs synchronizes the hardcoded community LSPs with the database.
-// It effectively "Upserts" them, adding new ones but PRESERVING user's active/inactive choice on existing ones.
-type CommunityLSPInput struct {
-	Name        string
-	Description string
-	Website     string
-	Pubkey      string
-	Host        string
-}
-
-func (m *LSPManager) SyncSystemLSPs(inputs []CommunityLSPInput) error {
-	for _, input := range inputs {
-		// Filter out invalid inputs (empty pubkey or host)
-		if input.Pubkey == "" || input.Host == "" {
-			continue
-		}
-
-		input.Pubkey = strings.ToLower(input.Pubkey)
-
-		// Try to find existing
-		var existing persist.LSP
-		err := m.db.First(&existing, "pubkey = ?", input.Pubkey).Error
-
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Create new
-			newLSP := persist.LSP{
-				Pubkey:      input.Pubkey,
-				Host:        input.Host,
-				Name:        input.Name,
-				Website:     input.Website,
-				Description: input.Description,
-				IsActive:    false, // Default to inactive for new ones
-				IsCommunity: true,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-			}
-			if err := m.db.Create(&newLSP).Error; err != nil {
-				return err
-			}
-		} else if err == nil {
-			// Update properties (Host/Name/Description/Website) but NOT IsActive
-			// Also ensure IsCommunity is true
-			existing.Host = input.Host
-			existing.Name = input.Name
-			existing.Website = input.Website
-			existing.Description = input.Description
-			existing.IsCommunity = true
-			existing.UpdatedAt = time.Now()
-
-			// We can use Updates for partial update
-			if err := m.db.Model(&existing).Where("pubkey = ?", existing.Pubkey).Updates(map[string]interface{}{
-				"host":         input.Host,
-				"name":         input.Name,
-				"website":      input.Website,
-				"description":  input.Description,
-				"is_community": true,
-				"updated_at":   time.Now(),
-			}).Error; err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	}
-	return nil
+	return key
 }
 
 // LSPS1 Order Persistence

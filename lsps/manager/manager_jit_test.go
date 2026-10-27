@@ -184,11 +184,11 @@ func TestEnsureInboundLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	// Add Active LSP
 	lspPubkey := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	err = m.AddLSP("TestLSP", lspPubkey+"@host:5521")
+	err = m.addTestLSP("TestLSP", lspPubkey+"@host:5521")
 	if err != nil {
 		t.Fatalf("AddLSP failed: %v", err)
 	}
-	err = m.AddSelectedLSP(lspPubkey)
+	err = m.SetTrusted(lspPubkey, true)
 	if err != nil {
 		t.Fatalf("AddSelectedLSP failed: %v", err)
 	}
