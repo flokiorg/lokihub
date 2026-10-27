@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nip01"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -39,7 +38,7 @@ func (svc *service) setupWithdraw() {
 	// The payout engine is the withdrawal service's Funds; it runs for the
 	// app's life and idles while the node lacks the on-chain capability.
 	svc.withdrawEngine = cashwithdraw.NewEngine(svc.withdraw)
-	svc.withdrawEngine.Notices = relayNoticeSender{relays: svc.cfg.GetRelayUrls}
+	svc.withdrawEngine.Notices = poolNoticeSender{svc: svc}
 	if w, ok := svc.nip47Service.(interface{ SetWithdraw(*cashwithdraw.Service) }); ok {
 		w.SetWithdraw(svc.withdraw)
 	}
@@ -66,37 +65,19 @@ func (svc *service) setupWithdraw() {
 // GetWithdrawService is the on-chain withdrawal service.
 func (svc *service) GetWithdrawService() *cashwithdraw.Service { return svc.withdraw }
 
-// relayNoticeSender publishes a payout's state notice on the call's arrival
-// relay, and on the other configured relays only if it refuses.
-type relayNoticeSender struct{ relays func() []string }
+// poolNoticeSender publishes a payout's state notice the way an order notice is
+// published (publishNotice): it is NIP-CO's order notice, sent on the call's
+// arrival relay and on the Hub's other relays only if that one refuses. The
+// pool is the one Start opens; until then no notice is due yet in practice,
+// and one that is gets a refusal (clients poll).
+type poolNoticeSender struct{ svc *service }
 
-func (s relayNoticeSender) SendNotice(ctx context.Context, arrival string, ev *nip01.Event) error {
-	published, err := toGoNostrEvent(ev)
-	if err != nil {
-		return err
+func (s poolNoticeSender) SendNotice(ctx context.Context, arrival string, ev *nip01.Event) error {
+	pool := s.svc.noticePool.Load()
+	if pool == nil {
+		return errors.New("the relay pool is not open yet")
 	}
-	try := func(url string) bool {
-		if url == "" {
-			return false
-		}
-		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		relay, err := nostr.RelayConnect(cctx, url)
-		if err != nil {
-			return false
-		}
-		defer relay.Close()
-		return relay.Publish(cctx, *published) == nil
-	}
-	if try(arrival) {
-		return nil
-	}
-	for _, url := range s.relays() {
-		if url != arrival && try(url) {
-			return nil
-		}
-	}
-	return errors.New("no relay took the state notice")
+	return s.svc.publishNotice(ctx, pool, arrival, ev)
 }
 
 // GetWithdrawEngine is the payout engine.

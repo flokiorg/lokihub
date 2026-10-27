@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/nbd-wtf/go-nostr"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
@@ -62,7 +63,10 @@ type service struct {
 	// withdraw serves on-chain withdrawals (service/withdraw.go).
 	withdraw *cashwithdraw.Service
 	// withdrawEngine pays the payouts (service/withdraw.go).
-	withdrawEngine   *cashwithdraw.Engine
+	withdrawEngine *cashwithdraw.Engine
+	// noticePool is the relay pool Start opens; order and payout notices go
+	// through it.
+	noticePool       atomic.Pointer[nostr.SimplePool]
 	socialCache      *nostrSocialCache
 	lsps5Listener    *lspsnostr.Listener
 	liquidityManager *manager.LiquidityManager

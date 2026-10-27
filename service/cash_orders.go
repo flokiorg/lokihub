@@ -43,12 +43,14 @@ func (svc *service) newOrderEngine(gormDB *gorm.DB, k keys.Keys, cfg config.Conf
 // startOrderJobs publishes order notices through pool and runs the order jobs;
 // a startup sweep first re-reads every open Lightning order's invoice.
 func (svc *service) startOrderJobs(ctx context.Context, pool *nostr.SimplePool) {
+	// A payout's state notice is an order notice too, sent through this pool.
+	svc.noticePool.Store(pool)
 	e := svc.orders
 	if e == nil {
 		return
 	}
 	e.SetNoticePublisher(func(ctx context.Context, relay string, ev *nip01.Event) error {
-		return svc.publishOrderNotice(ctx, pool, relay, ev)
+		return svc.publishNotice(ctx, pool, relay, ev)
 	})
 	go func() {
 		e.SweepLightning(ctx)
@@ -71,10 +73,10 @@ func (svc *service) startOrderJobs(ctx context.Context, pool *nostr.SimplePool) 
 	}()
 }
 
-// publishOrderNotice publishes an order notice on the relay its order arrived
-// on, and on the Hub's other relays only if that one refuses (NIP-CO §Order
-// Notice).
-func (svc *service) publishOrderNotice(ctx context.Context, pool *nostr.SimplePool, arrivedOn string, ev *nip01.Event) error {
+// publishNotice publishes an order notice (an order's, or a payout's state
+// notice) on the relay its call arrived on, and on the Hub's other relays only
+// if that one refuses (NIP-CO §Order Notice).
+func (svc *service) publishNotice(ctx context.Context, pool *nostr.SimplePool, arrivedOn string, ev *nip01.Event) error {
 	tags := make(nostr.Tags, 0, len(ev.Tags))
 	for _, t := range ev.Tags {
 		tags = append(tags, nostr.Tag(t))
@@ -96,6 +98,6 @@ func (svc *service) publishOrderNotice(ctx context.Context, pool *nostr.SimplePo
 			return nil
 		}
 	}
-	logger.Logger.Debug().Msg("No relay accepted an order notice")
-	return fmt.Errorf("no relay accepted the order notice")
+	logger.Logger.Debug().Msg("No relay accepted a notice")
+	return fmt.Errorf("no relay accepted the notice")
 }
