@@ -126,6 +126,32 @@ func (c *Chain) Mine(n int, address string, skip map[chainhash.Hash]bool) ([]*ch
 	return hashes, nil
 }
 
+// Reorg reorganises the last depth blocks away: the block depth − 1 below the
+// tip is invalidated (its transactions and its descendants' go back to the
+// node's mempool) and depth + 1 new blocks are mined on its parent to address,
+// leaving out skip, so the new branch is the longer one.
+func (c *Chain) Reorg(depth int, address string, skip map[chainhash.Hash]bool) ([]*chainhash.Hash, error) {
+	if depth < 1 || depth > 100 {
+		return nil, errors.New("depth must be between 1 and 100")
+	}
+	_, height, err := c.rpc.GetBestBlock()
+	if err != nil {
+		return nil, err
+	}
+	target := int64(height) - int64(depth) + 1
+	if target < 1 {
+		return nil, fmt.Errorf("the chain is only %d blocks high", height)
+	}
+	hash, err := c.rpc.GetBlockHash(target)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.rpc.InvalidateBlock(hash); err != nil {
+		return nil, fmt.Errorf("invalidateblock %s: %w", hash, err)
+	}
+	return c.Mine(depth+1, address, skip)
+}
+
 // blockVersion is the version the node itself would give the next block: its
 // template's version bits (so soft forks such as segwit activate) and, from the
 // auxpow height on, the chain ID.

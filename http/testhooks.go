@@ -114,6 +114,22 @@ func (httpSvc *HttpService) registerTestHooks(full *echo.Group) {
 		}
 		return c.JSON(http.StatusOK, map[string]any{"blocks": hashes})
 	}))
+	g.POST("/chain/reorg", t.with(func(c echo.Context, h *regtest.Hooks) error {
+		var req struct {
+			Depth int `json:"depth"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return hookError(c, err)
+		}
+		if req.Depth == 0 {
+			req.Depth = 1
+		}
+		hashes, err := h.Reorg(c.Request().Context(), req.Depth)
+		if err != nil {
+			return hookError(c, err)
+		}
+		return c.JSON(http.StatusOK, map[string]any{"blocks": hashes})
+	}))
 	g.GET("/chain/tip", t.with(func(c echo.Context, h *regtest.Hooks) error {
 		tip, err := h.Tip()
 		if err != nil {

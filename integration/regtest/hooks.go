@@ -76,6 +76,21 @@ func (h *Hooks) Mine(ctx context.Context, n int, address string) ([]string, erro
 	return out, err
 }
 
+// Reorg reorganises the last depth blocks away and mines depth + 1 new ones to
+// the payer, leaving out every withheld transaction (Chain.Reorg).
+func (h *Hooks) Reorg(ctx context.Context, depth int) ([]string, error) {
+	address, err := h.Payer.NewAddress(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hashes, err := h.Chain.Reorg(depth, address, h.Withheld())
+	out := make([]string, len(hashes))
+	for i, b := range hashes {
+		out[i] = b.String()
+	}
+	return out, err
+}
+
 // Tip is the chain's best block.
 type Tip struct {
 	Height int32  `json:"height"`
