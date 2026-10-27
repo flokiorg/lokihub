@@ -28,45 +28,60 @@ const lookupsPerHour = 600
 // with. Answered INTERNAL, never with a different token.
 var errRebuildMismatch = errors.New("rebuilt token differs from the issued token")
 
-// lookupTargetKey resolves a cash_lookup's target to the connection key its bill
-// proof must recover to (NIP-CASH §Looking Up a Call, I2): a live app (bill, Cash
-// Hub or Circle Wallet Hub connection) by its wallet pubkey; a record naming it as
-// target; a bill a record created, whose pairing key is re-derived; a destroyed
-// bill whose archive is still in its retention window. "" when the Hub holds no
-// such target.
-func (svc *nip47Service) lookupTargetKey(target string) (string, error) {
-	var app db.App
-	err := svc.db.Where("wallet_pubkey = ?", target).First(&app).Error
+// lookupTargetKeys resolves a cash_lookup's target to the connection keys its
+// bill proof may recover to (NIP-CASH §Looking Up a Call, I2): a live app (bill,
+// Cash Hub or Circle Wallet Hub connection) by its wallet pubkey, a circle Hub
+// by every live connection of it; a circle Hub already gone by the connections
+// its retained join records name; a record naming it as target; a bill a record
+// created, whose pairing key is re-derived; a destroyed bill whose archive is
+// still in its retention window. nil when the Hub holds no such target.
+func (svc *nip47Service) lookupTargetKeys(target string) ([]string, error) {
+	app, err := svc.resolveItemTarget(target)
 	if err == nil {
-		return app.AppPubkey, nil
+		if app.Kind == db.AppKindCircleHub {
+			return liveHubConnKeys(&app), nil
+		}
+		return []string{app.AppPubkey}, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", err
+		return nil, err
+	}
+	var hubConns []string
+	if err := svc.db.Model(&db.CircleJoinRecord{}).Where("hub_wallet_pubkey = ?", target).
+		Distinct().Pluck("hub_conn_pubkey", &hubConns).Error; err != nil {
+		return nil, err
+	}
+	if len(hubConns) > 0 {
+		return hubConns, nil
 	}
 	var rec db.CashRequestRecord
 	err = svc.db.Where("target_wallet_pubkey = ?", target).Order("id DESC").First(&rec).Error
 	if err == nil {
-		return rec.TargetConnPubkey, nil
+		return []string{rec.TargetConnPubkey}, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", err
+		return nil, err
 	}
 	var bill db.CashRequestRecordBill
 	err = svc.db.Where("wallet_pubkey = ?", target).First(&bill).Error
 	if err == nil {
 		priv, keyErr := svc.keys.GetCashPairingKey(bill.WalletAppID)
 		if keyErr != nil {
-			return "", keyErr
+			return nil, keyErr
 		}
-		return nostr.GetPublicKey(priv)
+		pub, keyErr := nostr.GetPublicKey(priv)
+		if keyErr != nil {
+			return nil, keyErr
+		}
+		return []string{pub}, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", err
+		return nil, err
 	}
 	if tomb, ok := db.SpentBillTombstoneFor(svc.db, target); ok && db.RetentionWindowOpen(tomb.RetainedUntil, time.Now()) {
-		return tomb.ConnectionPubkey, nil
+		return []string{tomb.ConnectionPubkey}, nil
 	}
-	return "", nil
+	return nil, nil
 }
 
 // servePrivateLookup serves a cash_lookup item (NIP-CASH §Looking Up a Call). It
@@ -77,19 +92,20 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 			Error: &transport.ResultError{Code: code, Message: message}}, true
 	}
 
-	// I2 and I3.
-	key, err := svc.lookupTargetKey(item.Target)
+	// I2 and I3: the bill proof verifies against any live connection of the
+	// target (VerifyBillProofAny's rule, billProofLive); a bill has exactly one.
+	keys, err := svc.lookupTargetKeys(item.Target)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to resolve a lookup's target")
 		omitted(item, "could not resolve the lookup target")
 		return transport.Result{}, false
 	}
-	if key == "" {
+	if len(keys) == 0 {
 		omitted(item, "the hub holds no lookup target with this wallet_pubkey")
 		return transport.Result{}, false
 	}
-	if !billSigned || !billProofHolder(billSigner, key) {
-		omitted(item, "lookup bill proof missing or not signed by the target's connection key")
+	if !billSigned || !billProofLive(billSigner, keys) {
+		omitted(item, "lookup bill proof missing or not signed by a live connection of the target")
 		return transport.Result{}, false
 	}
 

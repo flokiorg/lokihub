@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -113,8 +114,8 @@ func (svc *nip47Service) servePrivateItem(
 	tombstone, tombstoned := db.SpentBillTombstoneFor(svc.db, item.Target)
 
 	// I2: the target, by wallet_pubkey alone (the envelope's outer key is ephemeral).
-	var app db.App
-	if err := svc.db.Where("wallet_pubkey = ?", item.Target).First(&app).Error; err != nil {
+	app, err := svc.resolveItemTarget(item.Target)
+	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Logger.Error().Err(err).Msg("Failed to resolve a private item's target")
 		}
@@ -144,7 +145,14 @@ func (svc *nip47Service) servePrivateItem(
 		omitted(item, "bill proof missing, malformed, or not verifiable")
 		return transport.Result{}, false
 	}
-	if !billProofHolder(signer, app.AppPubkey) {
+	if app.Kind == db.AppKindCircleHub {
+		// A circle's bill proof verifies against any live connection of the
+		// Hub (NIP-CW §The Circle Wallet Hub Connection, H-CW-072).
+		if !billProofLive(signer, liveHubConnKeys(&app)) {
+			omitted(item, "bill proof not signed by a live connection of this circle")
+			return transport.Result{}, false
+		}
+	} else if !billProofHolder(signer, app.AppPubkey) {
 		omitted(item, "bill proof not signed by this bill's connection key")
 		return transport.Result{}, false
 	}
@@ -421,6 +429,42 @@ func (svc *nip47Service) billProofSigner(item transport.Item, binding PrivateIte
 		return "", false
 	}
 	return signer, true
+}
+
+// resolveItemTarget is I2: the app whose wallet_pubkey is target. Several
+// connections of one circle share the Hub's wallet pubkey, and the circle_hub
+// row is the one an item targets (H-CW-072).
+func (svc *nip47Service) resolveItemTarget(target string) (db.App, error) {
+	var apps []db.App
+	if err := svc.db.Where("wallet_pubkey = ?", target).Order("id").Limit(8).Find(&apps).Error; err != nil {
+		return db.App{}, err
+	}
+	if len(apps) == 0 {
+		return db.App{}, gorm.ErrRecordNotFound
+	}
+	for _, app := range apps {
+		if app.Kind == db.AppKindCircleHub {
+			return app, nil
+		}
+	}
+	return apps[0], nil
+}
+
+// liveHubConnKeys are the client keys of a circle Hub's live connections: its own
+// connection. Listing connections (WP-25) join this list once they exist; a
+// revoked one is deleted, so its key is never passed.
+func liveHubConnKeys(hub *db.App) []string {
+	return []string{hub.AppPubkey}
+}
+
+// billProofLive is transport.VerifyBillProofAny's rule for a signer
+// billProofSigner already verified: the bill proof must be signed by one of
+// live, the client keys of the target's live connections. VerifyBillProofAny is
+// VerifyBillProof followed by exactly this membership check; the signature half
+// runs before the target is looked up (see billProofSigner), so a found target
+// and a missing one cost the same, and only this half runs here.
+func billProofLive(signer string, live []string) bool {
+	return signer != "" && slices.Contains(live, signer)
 }
 
 // billProofHolder reports whether an already-verified signer is the key this bill's
