@@ -67,7 +67,7 @@ func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey str
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           expirationSecs,
+		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
@@ -431,7 +431,7 @@ func TestHandleCreateCircleWalletEvent_HappyPath(t *testing.T) {
 	assert.NotEmpty(t, details.Relays)
 	assert.NotEmpty(t, details.WalletPubkey)
 	assert.Greater(t, details.ExpiresAt, time.Now().Unix())
-	assert.Equal(t, 0, details.FeesPpm)
+	assert.Zero(t, details.FeesPpm)
 
 	// Verify the child was created with the correct kind/parent.
 	var childApps []db.App
@@ -660,7 +660,7 @@ func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubWalle
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           expirationSecs,
+		Expiry:           uint64(expirationSecs),
 		BudgetRenewal:    budgetRenewal,
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}

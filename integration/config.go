@@ -42,7 +42,10 @@ type CashHubConfig struct {
 type CircleHubConfig struct {
 	Name       string
 	Connection string
-	Members    CircleMembers
+	// CircleHubToken is the hub's signed circlehub1 string, what a member's
+	// client dials to join (NIP-CW §The Circle Wallet Hub Connection).
+	CircleHubToken string
+	Members        CircleMembers
 }
 
 // SimpleWalletConfig is a ready-to-use plain NWC connection (not a cash_hub or

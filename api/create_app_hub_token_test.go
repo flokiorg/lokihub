@@ -95,9 +95,9 @@ func TestCreateApp_CircleHub_EmitsCircleHubToken(t *testing.T) {
 
 	got, err := nipcw.DecodeCircleHubConnection(*resp.CircleHubToken)
 	require.NoError(t, err)
-	assert.Equal(t, wantPairing.WalletPubkey, got.WalletPubkey)
+	assert.Equal(t, wantPairing.WalletPubkey, got.Pubkey)
 	assert.Equal(t, wantPairing.Secret, got.Secret)
-	assert.Equal(t, wantPairing.RelayURLs, got.RelayURLs)
+	assert.Equal(t, wantPairing.RelayURLs, got.Relays)
 	assert.Equal(t, "My Family Circle", got.Label)
 }
 

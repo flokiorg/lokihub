@@ -46,7 +46,7 @@ func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           expirationSecs,
+		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    identityEventJSON,
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}

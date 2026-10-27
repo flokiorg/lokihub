@@ -65,14 +65,14 @@ func joinParams(t *testing.T, memberPriv, hubWalletPubkey string, maxAmount uint
 	t.Helper()
 	connection, err := nipcw.NewConnectionKey()
 	require.NoError(t, err)
-	req, err := nipcw.CreateCircleWalletParams{
+	prepared, err := nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
 		Connection:      connection,
 		MaxAmountMillis: maxAmount,
 		Expiry:          time.Hour,
-	}.Request(hubWalletPubkey)
+	}.Prepare(hubWalletPubkey, time.Now())
 	require.NoError(t, err)
-	b, err := json.Marshal(req)
+	b, err := json.Marshal(prepared.Request)
 	require.NoError(t, err)
 	return string(b)
 }

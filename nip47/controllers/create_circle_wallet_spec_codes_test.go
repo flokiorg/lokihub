@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcw"
@@ -103,9 +104,10 @@ func TestCreateCircleWallet_ResolvedMaxAmountInEncryptedDetails(t *testing.T) {
 	memberPub, _ := nostr.GetPublicKey(member)
 	connection, err := nipcw.ConnectionKeyFromSecret(testConnectionSecret(memberPub))
 	require.NoError(t, err)
-	parsed, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection, MaxAmountMillis: 100_500}.
-		ParseResult(*provider.WalletPubkey, raw)
+	prepared, err := nipcw.CreateCircleWalletParams{Credential: nipcw.BySigning(member), Connection: connection, MaxAmountMillis: 100_500}.
+		Prepare(*provider.WalletPubkey, time.Now())
 	require.NoError(t, err)
-	require.NotNil(t, parsed.MaxAmountMillis)
-	assert.Equal(t, uint64(100_000), *parsed.MaxAmountMillis)
+	parsed, err := prepared.ParseResult(raw)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(100_000), parsed.MaxAmountMillis)
 }

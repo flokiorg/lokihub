@@ -185,10 +185,10 @@ func TestCircleMoneyAudit_HiddenMemberOverStandardTransport_Admitted(t *testing.
 		HiddenMembers: []string{mustPubkey(t, hiddenPriv)},
 	}, ephemeralCircleHubOpts{})
 
-	client, err := cwclient.Connect(ctxT(t), resp.PairingUri)
+	client, err := cwclient.Connect(ctxT(t), resp.CircleHubToken, cwclient.Options{})
 	require.NoError(t, err)
 	t.Cleanup(client.Close)
-	joined, err := client.CreateCircleWallet(ctxT(t), joinParams(hiddenPriv))
+	joined, err := client.Join(ctxT(t), joinParams(hiddenPriv), joinOpts, &memJoinJournal{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, joined.WalletPubkey)
 }

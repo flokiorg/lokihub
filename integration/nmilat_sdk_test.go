@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipIC"
 	"github.com/ohstr/nmilat/nipcash"
 	cashclient "github.com/ohstr/nmilat/nipcash/client"
@@ -342,7 +343,7 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 
 	circleHub, _, _ := createEphemeralCircleHub(t, cfg, "nmilat-circle-hub", circlePolicyAllowlist, []string{memberPriv}, ephemeralCircleHubOpts{})
 
-	circleHubClient, err := cwclient.Connect(ctxT(t), circleHub.Connection)
+	circleHubClient, err := cwclient.Connect(ctxT(t), circleHub.CircleHubToken, cwclient.Options{})
 	require.NoError(t, err)
 	t.Cleanup(circleHubClient.Close)
 
@@ -350,20 +351,20 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	// its public half (NIP-CW §Request).
 	connection, err := nipcw.NewConnectionKey()
 	require.NoError(t, err)
-	resp, err := circleHubClient.CreateCircleWallet(ctxT(t), nipcw.CreateCircleWalletParams{
+	resp, err := circleHubClient.Join(ctxT(t), nipcw.CreateCircleWalletParams{
 		Credential:      nipcw.BySigning(memberPriv),
 		Connection:      connection,
 		MaxAmountMillis: circleHappyPathAmountMloki,
 		Expiry:          nmilatHappyPathExpiry,
-	})
+	}, joinOpts, &memJoinJournal{})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.PairingURI, "resp.PairingURI is already decrypted - connect straight from it")
+	wallet := resp.Wallet()
 
 	// The Circle Wallet itself is an ordinary NWC connection once created -
 	// generic calls against it (make_invoice/get_balance) go through this
 	// suite's existing nwcclient, same as the rest of the suite; only the
 	// NIP-CASH/NIP-CW protocol calls above go through nmilat's typed SDK.
-	member := mustConnect(t, resp.PairingURI)
+	member := mustConnect(t, nmilatnip47.BuildPairingURI(wallet.WalletPubkey, wallet.Relays, wallet.Secret, nil))
 
 	cashHub, _, _ := createEphemeralCashHub(t, cfg, "nmilat-cash-hub-for-circle", nil)
 	cashHubClient, err := cashclient.ConnectCashHub(ctxT(t), cashHub.CashHubToken)

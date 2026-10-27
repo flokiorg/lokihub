@@ -185,9 +185,10 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 	}
 
 	return CircleHubConfig{
-		Name:       name,
-		Connection: resp.PairingUri,
-		Members:    CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
+		Name:           name,
+		Connection:     resp.PairingUri,
+		CircleHubToken: resp.CircleHubToken,
+		Members:        CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
 	}, resp.ID, admin
 }
 

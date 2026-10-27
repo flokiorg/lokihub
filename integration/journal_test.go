@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ohstr/nmilat/nipcash"
+	cwclient "github.com/ohstr/nmilat/nipcw/client"
 )
 
 // memJournal is an in-memory client.Journal: the suite writes every
@@ -55,3 +56,19 @@ func newRequestID(t *testing.T) string {
 
 // testDevice names this suite as the writing device in a journal.
 const testDevice = "lokihub-integration"
+
+// memJoinJournal is an in-memory cwclient.JoinJournal.
+type memJoinJournal struct {
+	mu    sync.Mutex
+	joins []cwclient.PendingJoin
+}
+
+func (j *memJoinJournal) WriteAhead(_ context.Context, p cwclient.PendingJoin) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.joins = append(j.joins, p)
+	return nil
+}
+
+// joinOpts accepts a Hub that cannot rotate a lost connection.
+var joinOpts = cwclient.JoinOptions{WarnNoRotation: func(context.Context) bool { return true }}

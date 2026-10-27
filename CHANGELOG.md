@@ -63,6 +63,8 @@ audits of both.
 
 ### Changed
 
+- Signs every `circlehub1` string with the node identity and chain, and names
+  the member's `connection_pubkey` in a join's encrypted details.
 - Requires an `expiration` tag on `mint_cash` (its deadline, at most the
   announced `max_request_age` ahead) and refuses a used `request_id` with
   `REQUEST_REUSED`; a mint running concurrently on the same Hub is

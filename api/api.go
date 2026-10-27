@@ -25,7 +25,6 @@ import (
 	"github.com/flokiorg/go-flokicoin/chainutil"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcash/transport"
-	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
@@ -270,14 +269,9 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			responseBody.CashHubToken = &hubToken
 		}
 	case db.AppKindCircleHub:
-		hubToken, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
-			WalletPubkey: *app.WalletPubkey,
-			Secret:       pairingSecretKey,
-			RelayURLs:    relayUrls,
-			Label:        hubLabel(circleLabel),
-		})
+		hubToken, err := connstr.CircleHub(context.Background(), api.lnClient(), *app.WalletPubkey, relayUrls, pairingSecretKey, hubLabel(circleLabel))
 		if err != nil {
-			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not encode the circle hub connection token; returning the pairing URI only")
+			logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Msg("Could not sign the circle hub connection string; returning the pairing URI only")
 		} else {
 			responseBody.CircleHubToken = &hubToken
 		}
