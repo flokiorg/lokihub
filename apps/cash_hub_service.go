@@ -152,15 +152,6 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 			return fmt.Errorf("failed to apply new spent retention to archived bills: %w", err)
 		}
 
-		// Tells the service layer to re-sync its relay gate: raising retention
-		// brings wallets back into range that the sweep has already dropped, and
-		// nothing else would notice until a restart.
-		svc.eventPublisher.Publish(&events.Event{
-			Event: "nwc_cash_retention_changed",
-			Properties: map[string]interface{}{
-				"id": appID,
-			},
-		})
 	}
 
 	return nil

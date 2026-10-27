@@ -92,6 +92,10 @@ audits of both.
 
 ### Changed
 
+- Answers a destroyed bill on kind 23194 with silence: its tombstone is served
+  on the private transport only. The relay gate no longer keeps destroyed bills'
+  wallets registered for their retention window, so the start-up reload, the
+  retention-change resync and the expiry prune of those wallets are gone.
 - Serves private-transport envelopes through nmilat's E1 to E6 classifier: an
   envelope refused at E4 to E6 gets an envelope-level `BAD_REQUEST` or
   `QUOTA_EXCEEDED` reply and its nonce stays unserved; served nonces are kept in

@@ -50,10 +50,7 @@ func resetCleanupInProgress(gormDB *gorm.DB, appID uint) {
 // funds from expired Cash and circle_child sub-wallets back to their parent app.
 // getLNClient is called each tick so the service works even when the client
 // starts after the goroutine is launched.
-// pruneRetainedWallets is called on every sweep to drop spent-bill wallets
-// whose retention window has passed. Optional so tests and non-trusted-relay
-// setups can pass nil.
-func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, pruneRetainedWallets func(), splitLinkRetention time.Duration) {
+func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher, splitLinkRetention time.Duration) {
 	// Once at startup, as soon as the node is up: a cash_redeem payout whose
 	// outcome arrived while lokihub was down is otherwise never resolved, and its
 	// slice stays claimed.
@@ -91,9 +88,6 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneCashRequests(gormDB)
 				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
-				if pruneRetainedWallets != nil {
-					pruneRetainedWallets()
-				}
 			}
 		}
 	}()
