@@ -25,6 +25,10 @@ type RemintBill struct {
 	MinTransferMillis   int64
 	RedeemFeePpm        int
 	RedeemFeeBaseMillis int64
+	// Ordered and UnfinalPaymentIDs are the source slice's marks, kept on the
+	// re-minted slice (NIP-CASH §Cancelling a Payout).
+	Ordered           bool
+	UnfinalPaymentIDs *string
 }
 
 // RemintedBill is a re-minted bill as created: its app, its issued token and
@@ -68,6 +72,9 @@ func CreateRemintedBillTx(ctx context.Context, tx *gorm.DB, deps Deps, b RemintB
 		MinTransferMloki:   b.MinTransferMillis,
 		RedeemFeePpm:       b.RedeemFeePpm,
 		RedeemFeeBaseMloki: b.RedeemFeeBaseMillis,
+		Ordered:            b.Ordered,
+		UnfinalPaymentIDs:  b.UnfinalPaymentIDs,
+		Reminted:           true,
 	}
 	if err := deps.AppsService.CreateCashWalletClaimsTx(tx, app.ID, []db.CashWalletClaim{claim}); err != nil {
 		return nil, fmt.Errorf("store the re-minted bill's slice: %w", err)

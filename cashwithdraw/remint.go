@@ -102,6 +102,7 @@ func (s *Service) Remint(ctx context.Context, withdrawalID uint, reason string) 
 			Hub: &hub, NameSeed: "remint-" + cur.RequestID[:8], AmountMillis: uint64(cur.AmountMillis), //nolint:gosec // positive
 			ExpiresAt: expiresAt, IdentityType: identityType, IdentityValue: identityValue, IAPubkey: cur.IAPubkey,
 			MinTransferMillis: cur.MinTransferMillis, RedeemFeePpm: cur.RedeemFeePpm, RedeemFeeBaseMillis: cur.RedeemFeeBaseMillis,
+			Ordered: cur.Ordered, UnfinalPaymentIDs: cur.UnfinalPaymentIDs,
 		})
 		if err != nil {
 			return err

@@ -489,7 +489,7 @@ func TestCashModeWithdraw(t *testing.T) {
 }
 
 // unfinalOrders reads every slice as ordered and unfinal.
-type unfinalOrders struct{ noOrders }
+type unfinalOrders struct{ DBOrders }
 
 func (unfinalOrders) OrderedUnfinal(*gorm.DB, *db.CashWalletClaim, int) (bool, error) {
 	return true, nil
@@ -497,7 +497,7 @@ func (unfinalOrders) OrderedUnfinal(*gorm.DB, *db.CashWalletClaim, int) (bool, e
 
 // orderAddress reads one script as an order address.
 type orderAddress struct {
-	noOrders
+	DBOrders
 	script []byte
 }
 

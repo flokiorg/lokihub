@@ -123,10 +123,12 @@ func (s *Service) BlocksHubDelete(hubAppID uint) (bool, error) {
 	return false, nil
 }
 
-// IsRemintedBill reports a bill a cancelled payout re-minted: its owner can
-// neither delete it nor remove its slice, as for an ordered slice.
+// IsRemintedBill reports a bill a cancelled payout re-minted whose slice is
+// still live: its owner can neither delete it nor remove its slice, as for an
+// ordered slice.
 func IsRemintedBill(tx *gorm.DB, appID uint) (bool, error) {
 	var n int64
-	err := tx.Model(&db.CashWithdrawal{}).Where("remint_app_id = ?", appID).Count(&n).Error
+	err := tx.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND reminted = ? AND claimed_at IS NULL", appID, true).
+		Count(&n).Error
 	return n > 0, err
 }
