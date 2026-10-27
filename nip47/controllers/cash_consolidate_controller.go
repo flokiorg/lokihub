@@ -241,7 +241,9 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			earliest = e
 		}
 	}
-	if code, message := controller.spinOffLimitRefusal(sources[0].bill, 1); code == constants.ERROR_QUOTA_EXCEEDED || code == constants.ERROR_INTERNAL {
+	// A merge is bounded by the live-bill cap only: it ends more bills than it
+	// makes, so it spends no lineage's spin-off allowance.
+	if code, message := controller.spinOffLimitRefusal(sources[0].bill, 1, false); code != "" {
 		refuse(code, message)
 		return
 	}
