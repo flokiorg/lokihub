@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Keeps a record of every circle join and serves the NIP-CW join lookup:
+  `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
+  joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's
+  own `encrypted_details`, and anyone else by deadline with the 6-minute
+  window. A record is dropped once its wallet is gone and that window has
+  passed.
 - Serves `cash_lookup` on the private transport (NIP-CASH §Looking Up a Call):
   a held record answers `done` with the call's reply rebuilt (the same fields,
   each token re-encoded from the record and encrypted to the same key, a
@@ -17,7 +23,7 @@ audits of both.
   `pending`, `unknown` or `expired` by the call's deadline. A lookup writes
   nothing, is served for a destroyed bill a record names, is limited to 600 an
   hour per signer, and is listed in `private_methods`; on kind 23194 it is
-  `NOT_IMPLEMENTED`. Join lookups by `connection_pubkey` are not served yet.
+  `NOT_IMPLEMENTED`.
 - Adds `PRIVATE_INBOX_EVENTS_PER_MIN` (600): the envelopes decrypted per relay
   connection a minute; the rest are dropped undecrypted.
 - Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`

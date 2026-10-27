@@ -39,6 +39,7 @@ var expectedTables = []string{
 	"circle_wallet_memberships",
 	"cash_consumed_proofs",
 	"private_served_nonces",
+	"circle_join_records",
 	"cash_used_request_ids",
 	"cash_request_records",
 	"cash_request_record_bills",
@@ -260,6 +261,7 @@ func migrateDB(from, to *gorm.DB) error {
 	}{
 		{"cash_consumed_proofs", migrateTable[db.CashConsumedProof]},
 		{"private_served_nonces", migrateTable[db.PrivateServedNonce]},
+		{"circle_join_records", migrateTable[db.CircleJoinRecord]},
 		{"cash_used_request_ids", migrateTable[db.CashUsedRequestID]},
 		{"cash_request_records", migrateTable[db.CashRequestRecord]},
 		{"cash_request_record_bills", migrateTable[db.CashRequestRecordBill]},

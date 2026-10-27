@@ -105,10 +105,6 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 	if err := params.Validate(); err != nil {
 		return refuse(constants.ERROR_BAD_REQUEST, err.Error())
 	}
-	if params.ConnectionPubkey != "" {
-		// NIP-CW join lookups need the join records of WP-14.
-		return refuse(constants.ERROR_NOT_IMPLEMENTED, "join lookups by connection_pubkey are not served yet")
-	}
 
 	// I9: a present item proof must verify with its usual bindings.
 	signer := ""
@@ -139,6 +135,10 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 			return refuse(constants.ERROR_INTERNAL, "could not encode the lookup")
 		}
 		return transport.Result{ID: item.ID, ResultType: item.Method, Result: body}, true
+	}
+
+	if params.ConnectionPubkey != "" {
+		return svc.serveJoinLookup(item, params, signer, answer, refuse)
 	}
 
 	store := cashrequest.New(svc.db)
@@ -409,4 +409,31 @@ func (svc *nip47Service) archivedTombstone(walletPubkey string, now time.Time) *
 		t.RetainedUntil = &at
 	}
 	return t
+}
+
+// serveJoinLookup answers a NIP-CW join lookup (§Lost Join Reply): authorized by
+// the joiner's item proof, matched on (signer, connection_pubkey) at this Hub,
+// answered with the join's own encrypted_details, or by its deadline with the
+// 6-minute window. It writes nothing.
+func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.CashLookupRequest, signer string,
+	answer func(nipcash.CashLookupResult) (transport.Result, bool), refuse func(code, message string) (transport.Result, bool)) (transport.Result, bool) {
+	if signer == "" {
+		return refuse(constants.ERROR_UNAUTHORIZED, "a join lookup needs the joiner's item proof")
+	}
+	var rec db.CircleJoinRecord
+	err := svc.db.Where("hub_wallet_pubkey = ? AND authorizer_pubkey = ? AND connection_pubkey = ?",
+		item.Target, signer, params.ConnectionPubkey).First(&rec).Error
+	if err == nil {
+		body, err := json.Marshal(map[string]string{"encrypted_details": rec.EncryptedDetails})
+		if err != nil {
+			return refuse(constants.ERROR_INTERNAL, "could not encode the join")
+		}
+		return answer(nipcash.CashLookupResult{Status: nipcash.LookupDone, Result: body})
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Logger.Error().Err(err).Msg("Failed to read a join record")
+		return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
+	}
+	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: time.Now().Unix(), Deadline: params.Deadline, Join: true})
+	return answer(nipcash.CashLookupResult{Status: decision.Status, RetryAfter: decision.RetryAfter})
 }

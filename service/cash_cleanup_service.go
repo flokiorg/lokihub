@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ohstr/nmilat/nipcash"
 	"time"
 
 	"github.com/flokiorg/lokihub/cashrequest"
@@ -87,6 +88,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneCashRequests(gormDB)
+				pruneCircleJoinRecords(gormDB, time.Now())
 				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
 			}
 		}
@@ -335,4 +337,14 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		logger.Logger.Info().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).Msg("sub-wallet balance reclaimed and app deleted")
 	}
 	return nil
+}
+
+// pruneCircleJoinRecords drops a join's record once its wallet is gone and its
+// lookup window (deadline plus 6 minutes) has passed (NIP-CW §Lost Join Reply).
+func pruneCircleJoinRecords(gormDB *gorm.DB, now time.Time) {
+	err := gormDB.Where("deadline < ? AND NOT EXISTS (SELECT 1 FROM apps WHERE apps.id = circle_join_records.wallet_app_id)",
+		now.Unix()-nipcash.JoinLookupWindow).Delete(&db.CircleJoinRecord{}).Error
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune circle join records")
+	}
 }
