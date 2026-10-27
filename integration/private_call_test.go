@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,12 +44,23 @@ func privateCall(t *testing.T, billToken, method string, params any, signerPriv 
 	return privateCallCtx(t, ctx, billToken, method, params, signerPriv, result)
 }
 
+// forgedBillKeys holds marked tokens whose bill proofs a test signs with a key of
+// its own: a stranger who knows the wallet pubkey but not the connection secret.
+var forgedBillKeys sync.Map
+
+// strangerMark separates a token from the marker naming its forged bill key.
+const strangerMark = "#stranger-"
+
 // privateCallCtx is privateCall with the caller's own deadline. Separate because a
 // SILENCE assertion needs to bound its own wait — a probe that hangs for the default
 // 30s turns "the hub went quiet" into a test that takes half a minute per poll.
 func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string, params any, signerPriv string, result any) error {
 	t.Helper()
 
+	forgedKey, forged := forgedBillKeys.Load(billToken)
+	if i := strings.Index(billToken, strangerMark); i >= 0 {
+		billToken = billToken[:i]
+	}
 	tok, err := nipcash.Decode(billToken)
 	require.NoError(t, err, "decode bill token")
 
@@ -81,6 +94,13 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 	if method == nipcash.MethodCashConsolidate {
 		rawParams = rebindConsolidateProofs(t, rawParams)
 	}
+	// An item carrying a claim proof is signed by that proof's signer (NIP-CASH
+	// §Claim Proofs); a bearer item stays bearer.
+	if signerPriv != "" {
+		if claimSigner := claimSignerOf(rawParams); claimSigner != "" {
+			signerPriv = claimSigner
+		}
+	}
 	paramsHash, err := transport.CanonicalParamsHash(rawParams)
 	require.NoError(t, err)
 
@@ -92,7 +112,11 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 		ID: "1", Target: tok.WalletPubkey, Method: method, Params: rawParams,
 	}
 	// Always a bill proof: required on every item whatever the identity mode.
-	billProof, err := transport.BuildBillProof(tok.Secret, binding)
+	billKey := tok.Secret
+	if forged {
+		billKey = forgedKey.(string)
+	}
+	billProof, err := transport.BuildBillProof(billKey, binding)
 	require.NoError(t, err)
 	item.BillProof = billProof
 	// A slice proof only when a signer was given. Omitting it is how a test reaches the
@@ -176,6 +200,13 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 					// existing code assertion in this suite still applies.
 					return &nwcclient.NWCError{Code: r.Error.Code, Message: r.Error.Message}
 				}
+				// A value method naming a destroyed bill is answered with its tombstone
+				// (NIP-CASH §Serving an Envelope, I4): nothing moved, so never a success.
+				if method != nipcash.MethodCashStatus {
+					if tomb, ok := nipcash.ParseTombstone(r.Result); ok {
+						return &billGoneError{Tombstone: *tomb}
+					}
+				}
 				if result != nil && len(r.Result) > 0 {
 					if err := json.Unmarshal(r.Result, result); err != nil {
 						return fmt.Errorf("private transport: unmarshal result: %w", err)
@@ -197,6 +228,29 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 // an omission is not an error code and not a success: it is the hub declining to say
 // anything, which a test asserting on a REASON must never accept.
 var errPrivateOmitted = errors.New("private transport: the hub omitted this item (information-free by design)")
+
+// mustConnectStranger is a bill connection held by someone who knows the bill's
+// wallet pubkey and relays (public on the relay) but not its connection secret:
+// its bill proofs are signed with a key of its own.
+func mustConnectStranger(t *testing.T, token string) *billConn {
+	t.Helper()
+	marked := token + strangerMark + nostr.GeneratePrivateKey()[:8]
+	forgedBillKeys.Store(marked, nostr.GeneratePrivateKey())
+	return &billConn{t: t, token: marked}
+}
+
+// billGoneError is a value method answered with the destroyed bill's tombstone.
+type billGoneError struct{ Tombstone nipcash.Tombstone }
+
+func (e *billGoneError) Error() string {
+	return fmt.Sprintf("private transport: the bill is destroyed (spent, reason %q)", e.Tombstone.Reason)
+}
+
+// isBillGone reports a value method answered with a tombstone.
+func isBillGone(err error) bool {
+	var gone *billGoneError
+	return errors.As(err, &gone)
+}
 
 // requirePrivateOmitted asserts the hub said nothing about an item, which is the correct
 // answer for an unknown bill, a proof that did not verify, or possession it could not

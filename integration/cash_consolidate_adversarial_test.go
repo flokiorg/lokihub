@@ -50,7 +50,7 @@ func mintPubkeySource(t *testing.T, hubClient *nwcclient.Client, ownerPub string
 		Recipients: onePubkeyRecipient(ownerPub, amount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	return created.WalletPubkey, "", created.CashToken
+	return created.WalletPubkey, created.CashToken, created.CashToken
 }
 
 // consolidateSourceFor builds a source param for a wallet the caller owns, bound
@@ -110,7 +110,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 		require.ErrorContains(t, err, "same Cash Hub")
 	})
 
@@ -128,7 +128,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("UnauthorizedProof_Rejected", func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 			},
 			NewIdentity: CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("SourcesDrainedAndNotDoubleSpendable", func(t *testing.T) {

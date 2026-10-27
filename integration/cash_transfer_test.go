@@ -150,6 +150,6 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerPub},
 		}, &transferResult)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 }

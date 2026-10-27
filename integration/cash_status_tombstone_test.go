@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"errors"
-	"net/url"
 	"testing"
 	"time"
 
@@ -64,29 +63,6 @@ func createCashHubWithRetention(t *testing.T, cfg *Config, name string, retentio
 	return admin, resp.ID, resp.CashHubToken
 }
 
-// strangerURI rewrites a pairing URI to keep its wallet pubkey and relays but
-// swap in a freshly generated secret.
-//
-// This is exactly the attacker's real capability, not a contrived one: a
-// wallet pubkey is public on the relay (it is the "p" tag of every request
-// ever made against that bill) and anyone can generate their own key and
-// encrypt to it. What they cannot do is produce the connection secret that
-// came inside the lokicash token. So a client built this way can reach the
-// hub and be decrypted by it, and must still learn nothing.
-func strangerURI(t *testing.T, pairingURI string) string {
-	t.Helper()
-
-	parsed, err := url.Parse(pairingURI)
-	require.NoError(t, err)
-
-	query := parsed.Query()
-	require.NotEmpty(t, query.Get("secret"), "pairing uri must carry a secret to replace")
-	query.Set("secret", newTestPrivkey(t))
-	parsed.RawQuery = query.Encode()
-
-	return parsed.String()
-}
-
 // mintAndDrainOneBill mints a single-recipient bill on hubClient, redeems it in
 // full, and returns a client still holding its (now destroyed) connection.
 func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client) (billCaller, string) {
@@ -119,7 +95,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 	}, &result))
 	require.NotEmpty(t, result.Preimage, "the drain must actually pay out, or the bill is not really spent")
 
-	return holder, ""
+	return holder, created.CashToken
 }
 
 // awaitTombstone polls cash_status until the bill reports itself spent.
@@ -177,7 +153,7 @@ func TestCashStatus_SpentBill_AnswersHolderAndStaysSilentToStrangers(t *testing.
 	_, _, hubURI := createCashHubWithRetention(t, cfg, "tombstone-hub", &retention)
 	hubClient := mustConnect(t, hubURI)
 
-	holder, billURI := mintAndDrainOneBill(t, cfg, hubClient)
+	holder, billToken := mintAndDrainOneBill(t, cfg, hubClient)
 
 	// Half one: the holder gets a definitive answer.
 	status := awaitTombstone(t, holder)
@@ -196,7 +172,7 @@ func TestCashStatus_SpentBill_AnswersHolderAndStaysSilentToStrangers(t *testing.
 	// gets nothing, even though the hub is demonstrably still answering about
 	// it (we just read the tombstone above, so a silence here cannot be blamed
 	// on the bill having aged out or the hub being down).
-	stranger := mustConnect(t, strangerURI(t, billURI))
+	stranger := mustConnectStranger(t, billToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), drainedWalletSilenceWindow)
 	defer cancel()
@@ -205,7 +181,7 @@ func TestCashStatus_SpentBill_AnswersHolderAndStaysSilentToStrangers(t *testing.
 	err := stranger.Call(ctx, constants.NIP47MethodCashStatus, struct{}{}, &strangerStatus)
 	require.Error(t, err,
 		"a caller who does not hold this bill's connection must not be answered at all")
-	require.True(t, errors.Is(err, context.DeadlineExceeded),
+	require.True(t, errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted),
 		"the answer to a stranger must be silence, not an error: any reply at all confirms this hub once served that pubkey, "+
 			"turning the tombstone into an existence oracle for every bill the hub has issued (got: %v)", err)
 

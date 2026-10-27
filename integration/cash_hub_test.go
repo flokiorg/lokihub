@@ -195,7 +195,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     clearlyTooLargeExpirySecs,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("CreateWallet_ConnectionKeyMode_MissingIAPubkey_Rejected", func(t *testing.T) {
@@ -235,7 +235,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("CreateWallet_ConnectionKeyMode_HappyPath", func(t *testing.T) {

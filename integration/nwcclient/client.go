@@ -146,14 +146,16 @@ func ConnectBill(ctx context.Context, token string) (*Client, error) {
 	return connect(ctx, tok.WalletPubkey, tok.Secret, tok.RelayURLs)
 }
 
-// ConnectAny connects through a signed cashhub1 or circlehub1 string, or a
-// pairing URI.
+// ConnectAny connects through a signed cashhub1 or circlehub1 string, a bill's
+// token, or a pairing URI.
 func ConnectAny(ctx context.Context, connection string) (*Client, error) {
 	switch {
 	case strings.HasPrefix(connection, nipcash.CashHubConnectionHRP+"1"):
 		return ConnectCashHub(ctx, connection)
 	case strings.HasPrefix(connection, nipcw.CircleHubConnectionHRP+"1"):
 		return ConnectCircleHub(ctx, connection)
+	case strings.HasPrefix(connection, constants.CashTokenHRP+"1"):
+		return ConnectBill(ctx, connection)
 	}
 	return Connect(ctx, connection)
 }
