@@ -150,6 +150,17 @@ audits of both.
 
 ### Changed
 
+- Breaking: a Circle Wallet's membership is decided by resolutions, no longer
+  re-checked on every call (NIP-CW §Membership): each successful resolution of
+  the circle's follow set (nmilat's `ResolveFollowSet`: the newest signed
+  version, one dated more than 15 minutes ahead ignored, one older than the
+  last resolution a failed refresh) and each committed allowlist edit suspends
+  the Active wallets of members no longer named and returns Suspended ones
+  named again within their grace to Active; an unresolved or failed refresh
+  changes nothing. A resolution suspending 20 % or more of a circle's Active
+  wallets raises a host alert (`nwc_circle_mass_suspension`, log WARN, no
+  member pubkeys). Hidden members are read with the current inbox key and every
+  retired one an Active or Suspended wallet was issued under.
 - Breaking: a host delete of a Circle Wallet (the wallet list, the generic app
   delete) moves it to Closing instead of sweeping its balance to the Hub, and
   deleting a circle hub tears it down: every wallet Closing, the circle closed

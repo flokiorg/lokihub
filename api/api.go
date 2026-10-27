@@ -2904,7 +2904,8 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 		return fmt.Errorf("circle_hub has no config: %w", err)
 	}
 	identityID := cfg.CircleIdentityID
-	return api.db.Transaction(func(tx *gorm.DB) error {
+	var changes []circlelife.HubMembershipChange
+	err = api.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("circle_identity_id = ?", identityID).Delete(&db.CircleIdentityAllowedPubkey{}).Error; err != nil {
 			return err
 		}
@@ -2924,8 +2925,41 @@ func (api *api) ReplaceCircleAllowlist(app *db.App, pubkeys []string) error {
 				return err
 			}
 		}
-		return nil
+		return api.applyAllowlistTx(tx, identityID, &changes)
 	})
+	if err == nil {
+		api.publishMassSuspension(changes)
+	}
+	return err
+}
+
+// applyAllowlistTx applies an allowlist identity's committed list to its Hubs'
+// wallets in the editing transaction: each committed edit is a successful
+// resolution, applied at once (NIP-CW §Membership).
+func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circlelife.HubMembershipChange) error {
+	var pubkeys []string
+	if err := tx.Model(&db.CircleIdentityAllowedPubkey{}).Where("circle_identity_id = ?", identityID).Pluck("pubkey", &pubkeys).Error; err != nil {
+		return err
+	}
+	members := make(map[string]bool, len(pubkeys))
+	for _, pk := range pubkeys {
+		members[pk] = true
+	}
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, time.Now())
+	*changes = applied
+	return err
+}
+
+// publishMassSuspension raises the host alert for a Hub one edit suspended a
+// large share of (no member pubkey in it).
+func (api *api) publishMassSuspension(changes []circlelife.HubMembershipChange) {
+	for _, c := range changes {
+		if c.Alert() && api.eventPublisher != nil {
+			api.eventPublisher.Publish(&events.Event{Event: "nwc_circle_mass_suspension", Properties: map[string]interface{}{
+				"hub_app_id": c.HubID, "suspended": c.Suspended, "active_before": c.ActiveBefore,
+			}})
+		}
+	}
 }
 
 // RemoveCircleAllowedPubkey removes a single pubkey from the CircleIdentity
@@ -2947,8 +2981,18 @@ func (api *api) RemoveCircleAllowedPubkey(app *db.App, pubkey string) error {
 	if err != nil {
 		return fmt.Errorf("circle_hub has no config: %w", err)
 	}
-	return api.db.Where("circle_identity_id = ? AND pubkey = ?", cfg.CircleIdentityID, pubkey).
-		Delete(&db.CircleIdentityAllowedPubkey{}).Error
+	var changes []circlelife.HubMembershipChange
+	err = api.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("circle_identity_id = ? AND pubkey = ?", cfg.CircleIdentityID, pubkey).
+			Delete(&db.CircleIdentityAllowedPubkey{}).Error; err != nil {
+			return err
+		}
+		return api.applyAllowlistTx(tx, cfg.CircleIdentityID, &changes)
+	})
+	if err == nil {
+		api.publishMassSuspension(changes)
+	}
+	return err
 }
 
 // ListCircleAllowlist returns the current allowlisted pubkeys for the

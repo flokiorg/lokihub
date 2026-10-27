@@ -303,6 +303,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			"circle_state":                circlelife.StateActive,
 			"circle_state_at":             createdApp.CreatedAt.Unix(),
 			"circle_dust_threshold_mloki": providerConfig.DustThresholdMloki,
+			"circle_inbox_key_index":      constants.PRIVATE_TRANSPORT_KEY_INDEX,
 		}).Error; err != nil {
 			return fmt.Errorf("failed to record the member's terms: %w", err)
 		}

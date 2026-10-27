@@ -3,6 +3,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"github.com/flokiorg/lokihub/circlelife"
 	"strings"
 	"sync"
 	"testing"
@@ -21,9 +22,9 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// Freezing a removed member's circle wallet (#143). Membership is decided again
-// on every payment or new invoice, so these drive real requests through the
-// standard transport, the only one that serves wallet methods.
+// Membership resolution (NIP-CW §Membership): a removed member's wallet is
+// Suspended by the next successful resolution, driven here through real
+// requests on the standard transport, the only one that serves wallet methods.
 
 // freezeMembership answers like the social cache: an allowlist from the
 // database, a follow set from members. err, when set, stands for a set that
@@ -167,28 +168,7 @@ func (w *memberWallet) call(method string, params map[string]interface{}) models
 	return sendOverStandardTransport(w.c.t, w.c.svc, w.c.nip47svc, w.walletPubkey, w.secret, payload)
 }
 
-// gatedCalls are the methods that move money or open a way for it to arrive.
-func gatedCalls() map[string]map[string]interface{} {
-	return map[string]map[string]interface{}{
-		models.PAY_INVOICE_METHOD:       {"invoice": tests.MockInvoice},
-		models.PAY_KEYSEND_METHOD:       {"amount": 1000, "pubkey": strings.Repeat("02", 1) + strings.Repeat("ab", 32)},
-		models.MULTI_PAY_INVOICE_METHOD: {"invoices": []map[string]interface{}{{"invoice": tests.MockInvoice}}},
-		models.MULTI_PAY_KEYSEND_METHOD: {"keysends": []map[string]interface{}{{"amount": 1000, "pubkey": strings.Repeat("02", 1) + strings.Repeat("ab", 32)}}},
-		models.MAKE_INVOICE_METHOD:      {"amount": 1000},
-		models.MAKE_HOLD_INVOICE_METHOD: {"amount": 1000, "payment_hash": tests.RandomHex32()},
-	}
-}
-
-// readCalls show a member their wallet's state, so they keep working while
-// it is frozen.
-func readCalls() map[string]map[string]interface{} {
-	return map[string]map[string]interface{}{
-		models.GET_BALANCE_METHOD:       nil,
-		models.GET_INFO_METHOD:          nil,
-		models.LIST_TRANSACTIONS_METHOD: {},
-		models.LOOKUP_INVOICE_METHOD:    {"payment_hash": tests.MockPaymentHash},
-	}
-}
+var freezePolicies = []string{db.CirclePolicyAllowlist, db.CirclePolicyFollowSet}
 
 func errorCode(resp models.Response) string {
 	if resp.Error == nil {
@@ -197,10 +177,31 @@ func errorCode(resp models.Response) string {
 	return resp.Error.Code
 }
 
-var freezePolicies = []string{db.CirclePolicyAllowlist, db.CirclePolicyFollowSet}
+// resolve applies the circle's current membership, as a successful resolution
+// does (an allowlist edit, or a follow-set refresh).
+func (c *freezeCircle) resolve(now time.Time) {
+	c.t.Helper()
+	members := map[string]bool{}
+	var pubkeys []string
+	require.NoError(c.t, c.svc.DB.Model(&db.CircleIdentityAllowedPubkey{}).Where("circle_identity_id = ?", c.identity.ID).Pluck("pubkey", &pubkeys).Error)
+	for _, pk := range pubkeys {
+		members[pk] = true
+	}
+	c.membership.mu.Lock()
+	for pk := range c.membership.followSet {
+		members[pk] = true
+	}
+	c.membership.mu.Unlock()
+	require.NoError(c.t, c.svc.DB.Transaction(func(tx *gorm.DB) error {
+		_, err := circlelife.ApplyResolution(tx, c.identity.ID, func(pk string) bool { return members[pk] }, now)
+		return err
+	}))
+}
 
-// TP: a member still listed keeps full use of their wallet.
-func TestCircleWalletFreeze_ListedMember_PaysAndInvoices(t *testing.T) {
+// NIP-CW §Membership: a member a resolution no longer names is Suspended at
+// once and can only pay out; named again within the grace, the same wallet is
+// Active again. Nothing changes between resolutions (U-17.1, U-17.5).
+func TestMembership_RemovedMemberSuspended_ReaddedResumed(t *testing.T) {
 	for _, policy := range freezePolicies {
 		t.Run(policy, func(t *testing.T) {
 			c := newFreezeCircle(t, policy)
@@ -209,163 +210,40 @@ func TestCircleWalletFreeze_ListedMember_PaysAndInvoices(t *testing.T) {
 			c.add(memberPub)
 			w := c.join(member)
 
+			c.remove(memberPub)
+			require.Nil(t, w.call(models.MAKE_INVOICE_METHOD, map[string]interface{}{"amount": 1000}).Error,
+				"no resolution yet: nothing changes")
+
+			c.resolve(time.Now())
+			assert.Equal(t, constants.ERROR_RESTRICTED, errorCode(w.call(models.MAKE_INVOICE_METHOD, map[string]interface{}{"amount": 1000})))
+			assert.Equal(t, constants.ERROR_RESTRICTED, errorCode(w.call(models.GET_BUDGET_METHOD, nil)))
+			assert.Nil(t, w.call(models.GET_BALANCE_METHOD, nil).Error)
 			pay := w.call(models.PAY_INVOICE_METHOD, map[string]interface{}{"invoice": tests.MockInvoice})
-			assert.Nil(t, pay.Error, "%+v", pay.Error)
-			invoice := w.call(models.MAKE_INVOICE_METHOD, map[string]interface{}{"amount": 1000})
-			assert.Nil(t, invoice.Error, "%+v", invoice.Error)
-		})
-	}
-}
-
-// FP closed: once removed, every method that moves money is refused, and the
-// check asked about this hub's own identity.
-func TestCircleWalletFreeze_RemovedMember_GatedMethodsRestricted(t *testing.T) {
-	for _, policy := range freezePolicies {
-		t.Run(policy, func(t *testing.T) {
-			c := newFreezeCircle(t, policy)
-			member := nostr.GeneratePrivateKey()
-			memberPub, _ := nostr.GetPublicKey(member)
-			c.add(memberPub)
-			w := c.join(member)
-			c.remove(memberPub)
-
-			for method, params := range gatedCalls() {
-				resp := w.call(method, params)
-				assert.Equal(t, constants.ERROR_RESTRICTED, errorCode(resp), "%s must be refused for a removed member: %+v", method, resp.Error)
-			}
-			c.membership.mu.Lock()
-			for _, id := range c.membership.identities {
-				assert.Equal(t, c.identity.ID, id, "membership is checked against this hub's identity")
-			}
-			c.membership.mu.Unlock()
-		})
-	}
-}
-
-// FN guard: a frozen wallet still shows its balance and history.
-func TestCircleWalletFreeze_RemovedMember_ReadMethodsStillWork(t *testing.T) {
-	for _, policy := range freezePolicies {
-		t.Run(policy, func(t *testing.T) {
-			c := newFreezeCircle(t, policy)
-			member := nostr.GeneratePrivateKey()
-			memberPub, _ := nostr.GetPublicKey(member)
-			c.add(memberPub)
-			w := c.join(member)
-			c.remove(memberPub)
-
-			for method, params := range readCalls() {
-				resp := w.call(method, params)
-				assert.NotEqual(t, constants.ERROR_RESTRICTED, errorCode(resp), "%s must keep working: %+v", method, resp.Error)
-				assert.NotEqual(t, constants.ERROR_NOT_READY, errorCode(resp), "%s must not depend on membership: %+v", method, resp.Error)
-			}
-			balance := w.call(models.GET_BALANCE_METHOD, nil)
-			require.Nil(t, balance.Error)
-		})
-	}
-}
-
-// FN guard: re-adding the member unfreezes the same wallet; nothing was stored.
-func TestCircleWalletFreeze_ReaddedMember_Unfrozen(t *testing.T) {
-	for _, policy := range freezePolicies {
-		t.Run(policy, func(t *testing.T) {
-			c := newFreezeCircle(t, policy)
-			member := nostr.GeneratePrivateKey()
-			memberPub, _ := nostr.GetPublicKey(member)
-			c.add(memberPub)
-			w := c.join(member)
-			c.remove(memberPub)
-			require.Equal(t, constants.ERROR_RESTRICTED, errorCode(w.call(models.MAKE_INVOICE_METHOD, map[string]interface{}{"amount": 1000})))
+			assert.Nil(t, pay.Error, "a Suspended wallet still pays out: %+v", pay.Error)
 
 			c.add(memberPub)
+			c.resolve(time.Now())
 			resp := w.call(models.MAKE_INVOICE_METHOD, map[string]interface{}{"amount": 1000})
-			assert.Nil(t, resp.Error, "%+v", resp.Error)
-			pay := w.call(models.PAY_INVOICE_METHOD, map[string]interface{}{"invoice": tests.MockInvoice})
-			assert.Nil(t, pay.Error, "%+v", pay.Error)
+			assert.Nil(t, resp.Error, "Active again, the same wallet: %+v", resp.Error)
 		})
 	}
 }
 
-// FP guard: membership that can't be decided is NOT_READY, never a payment.
-func TestCircleWalletFreeze_MembershipUnresolved_NotReady(t *testing.T) {
-	for _, policy := range freezePolicies {
-		t.Run(policy, func(t *testing.T) {
-			c := newFreezeCircle(t, policy)
-			member := nostr.GeneratePrivateKey()
-			memberPub, _ := nostr.GetPublicKey(member)
-			c.add(memberPub)
-			w := c.join(member)
-
-			for _, err := range []error{constants.ErrCircleMembershipUnresolved, constants.ErrSocialCacheWarmingUp} {
-				c.membership.mu.Lock()
-				c.membership.err = err
-				c.membership.mu.Unlock()
-				resp := w.call(models.PAY_INVOICE_METHOD, map[string]interface{}{"invoice": tests.MockInvoice})
-				assert.Equal(t, constants.ERROR_NOT_READY, errorCode(resp), "%v: %+v", err, resp.Error)
-			}
-			balance := w.call(models.GET_BALANCE_METHOD, nil)
-			assert.Nil(t, balance.Error, "reading the balance doesn't need membership")
-		})
-	}
-}
-
-// The race: the member is removed after the join checked them but before it
-// committed. The wallet is issued, and refused on its first payment.
-func TestCircleWalletFreeze_RemovedDuringJoin_FrozenOnFirstUse(t *testing.T) {
-	for _, policy := range freezePolicies {
-		t.Run(policy, func(t *testing.T) {
-			c := newFreezeCircle(t, policy)
-			member := nostr.GeneratePrivateKey()
-			memberPub, _ := nostr.GetPublicKey(member)
-			c.add(memberPub)
-			c.membership.mu.Lock()
-			c.membership.revokeAfterNextCall = memberPub
-			c.membership.mu.Unlock()
-			w := c.join(member)
-
-			resp := w.call(models.PAY_INVOICE_METHOD, map[string]interface{}{"invoice": tests.MockInvoice})
-			assert.Equal(t, constants.ERROR_RESTRICTED, errorCode(resp), "%+v", resp.Error)
-		})
-	}
-}
-
-// A circle wallet with no membership row has no member to check, so it is
-// refused rather than trusted. The join always writes that row in the same
-// transaction as the wallet, so this only guards against a broken database.
-func TestCircleWalletFreeze_NoMembershipRow_Restricted(t *testing.T) {
-	c := newFreezeCircle(t, db.CirclePolicyAllowlist)
-	member := nostr.GeneratePrivateKey()
-	memberPub, _ := nostr.GetPublicKey(member)
-	c.add(memberPub)
-	w := c.join(member)
-	require.NoError(t, c.svc.DB.Where("wallet_app_id = ?", w.app.ID).Delete(&db.CircleWalletMembership{}).Error)
-
-	resp := w.call(models.PAY_INVOICE_METHOD, map[string]interface{}{"invoice": tests.MockInvoice})
-	assert.Equal(t, constants.ERROR_RESTRICTED, errorCode(resp), "%+v", resp.Error)
-}
-
-// The private transport never serves wallet methods, so it is no way around
-// the freeze: a payment item naming a circle wallet is omitted.
-func TestCircleWalletFreeze_PrivateTransportDoesNotServeWalletMethods(t *testing.T) {
+// Past its grace a Suspended member named again stays Suspended (the job closes
+// it).
+func TestMembership_ReaddedAfterGraceStaysSuspended(t *testing.T) {
 	c := newFreezeCircle(t, db.CirclePolicyAllowlist)
 	member := nostr.GeneratePrivateKey()
 	memberPub, _ := nostr.GetPublicKey(member)
 	c.add(memberPub)
 	w := c.join(member)
 	c.remove(memberPub)
-
-	hubXOnly := strings.Repeat("ab", 32)
-	nonce := strings.Repeat("09", 32)
-	notAfter := time.Now().Add(time.Minute).Unix()
-	for _, method := range []string{models.PAY_INVOICE_METHOD, models.MAKE_INVOICE_METHOD, models.PAY_KEYSEND_METHOD} {
-		item := buildItem(t, "p1", w.walletPubkey, method, `{"invoice":"`+tests.MockInvoice+`"}`,
-			member, w.secret, hubXOnly, nonce, notAfter)
-		res, served := c.nip47svc.ServePrivateItem(context.TODO(), c.svc.LNClient, item,
-			PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
-		// I5: the holder of the connection learns the method is not served here.
-		require.True(t, served, method)
-		require.NotNil(t, res.Error, method)
-		assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, res.Error.Code, "%s is not served over the private transport", method)
-	}
+	c.resolve(time.Now())
+	c.add(memberPub)
+	c.resolve(time.Now().Add(8 * 24 * time.Hour))
+	var stored db.App
+	require.NoError(t, c.svc.DB.First(&stored, w.app.ID).Error)
+	assert.Equal(t, circlelife.StateSuspended, stored.CircleState)
 }
 
 // privateJoin sends a join as one private-transport item: the bill proof signed

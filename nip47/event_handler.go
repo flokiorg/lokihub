@@ -501,16 +501,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		}
 	}
 
-	// A circle wallet works only while its member is still in the circle. Only
-	// this transport serves wallet methods, so this is the one place to check.
-	if ok, code, message := svc.circleMemberStillAuthorized(ctx, &app, nip47Request.Method); !ok {
-		publishResponse(&models.Response{
-			ResultType: nip47Request.Method,
-			Error:      &models.Error{Code: code, Message: message},
-		}, nostr.Tags{})
-		return
-	}
-
 	controller := controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
 		WithPrivateIdentity(svc.privateIdentity)
 
