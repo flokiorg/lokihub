@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -70,6 +71,20 @@ func (notifier *Nip47Notifier) ConsumeEvent(ctx context.Context, event *events.E
 			Notification:     notification,
 			NotificationType: PAYMENT_SENT_NOTIFICATION,
 		}, nostr.Tags{}, transaction.AppId)
+
+	case circlelife.CircleNotificationEvent:
+		// NIP-CW §Recovering a Lost Connection: rotation and freeze notices,
+		// to the Circle Wallet's current connection key.
+		props, ok := event.Properties.(*circlelife.CircleNotificationProperties)
+		if !ok {
+			logger.Logger.Error().Interface("event", event).Msg("Failed to cast circle notification")
+			return errors.New("failed to cast event")
+		}
+		appID := props.WalletAppID
+		return notifier.notifySubscribers(ctx, &Notification{
+			Notification:     props.Notification,
+			NotificationType: props.Type,
+		}, nostr.Tags{}, &appID)
 
 	case "nwc_hold_invoice_accepted":
 		dbTransaction, ok := event.Properties.(*db.Transaction)

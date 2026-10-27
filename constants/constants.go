@@ -229,6 +229,9 @@ const (
 	// grace period and dust threshold a Hub gets unless its host sets others.
 	CIRCLE_DEFAULT_GRACE_SECS = 604_800
 	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
+	// CIRCLE_DEFAULT_ROTATION_DELAY_SECS is the rotation delay NIP-CW
+	// recommends: 5 days.
+	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000
 )
 
 // PRIVATE_TRANSPORT_KEY_INDEX is the rotation index of the private-transport

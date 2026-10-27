@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
@@ -34,6 +36,10 @@ type API interface {
 	// every child unpaginated (used by the pre-delete confirmation UI).
 	ListCircleChildrenBalances(app *db.App, limit uint64, offset uint64) ([]CircleChildBalance, uint64, error)
 	DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error)
+	// SubmitCircleMemberRequest submits a member request the member signed
+	// (NIP-CW §Recovering a Lost Connection) to a circle hub; the result names
+	// the NIP-CW code it was refused with, if any.
+	SubmitCircleMemberRequest(app *db.App, event json.RawMessage) (*circlelife.MemberRequestResult, error)
 	// DeleteCircleWalletChild removes a single circle_wallet child in any state
 	// (empty or with a remaining balance), unlike DeleteCircleHub which only
 	// operates on the whole hub at once.
@@ -283,6 +289,10 @@ type App struct {
 	// CircleTeardownRequestedAt is set once the host tore it down.
 	CircleAccepting           *bool  `json:"circleAccepting,omitempty"`
 	CircleTeardownRequestedAt *int64 `json:"circleTeardownRequestedAt,omitempty"`
+	// CircleRotationEnabled and CircleRotationDelaySecs: member requests
+	// (NIP-CW §Recovering a Lost Connection) and the delay new wallets get.
+	CircleRotationEnabled   *bool  `json:"circleRotationEnabled,omitempty"`
+	CircleRotationDelaySecs *int64 `json:"circleRotationDelaySecs,omitempty"`
 }
 
 // CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
@@ -415,6 +425,8 @@ type UpdateAppRequest struct {
 	CircleOutboundPeriod           *string `json:"circleOutboundPeriod"`
 	CircleGraceSecs                *int64  `json:"circleGraceSecs"`
 	CircleDustThresholdMloki       *int64  `json:"circleDustThresholdMloki"`
+	CircleRotationEnabled          *bool   `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs        *int64  `json:"circleRotationDelaySecs"`
 }
 
 type TransferRequest struct {
@@ -467,6 +479,9 @@ type CreateAppRequest struct {
 	// CircleGraceSecs (0 = 7 days) and CircleDustThresholdMloki (0 = 1000).
 	CircleGraceSecs          int64 `json:"circleGraceSecs"`
 	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki"`
+	// CircleRotationEnabled and CircleRotationDelaySecs (0 = 5 days).
+	CircleRotationEnabled   bool  `json:"circleRotationEnabled"`
+	CircleRotationDelaySecs int64 `json:"circleRotationDelaySecs"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`

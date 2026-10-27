@@ -129,7 +129,8 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	// terms, then its single-use record, recorded here before any later step.
 	var recordErr error
 	consumed := func(id string) bool {
-		err := controller.db.Create(&db.CircleWalletIdentityProof{AppID: app.ID, EventID: id}).Error
+		err := controller.db.Create(&db.CircleWalletIdentityProof{AppID: app.ID, EventID: id, Kind: db.CircleProofJoin,
+			RetainUntil: nipcw.JoinProofRetainUntil(eventCreatedAt(params.IdentityEvent))}).Error
 		if err == nil {
 			return false
 		}
@@ -247,6 +248,8 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		constants.LOOKUP_INVOICE_SCOPE,
 		constants.LIST_TRANSACTIONS_SCOPE,
 		constants.GET_INFO_SCOPE,
+		// The notifications of NIP-CW §Recovering a Lost Connection.
+		constants.NOTIFICATIONS_SCOPE,
 	}
 
 	// 9. The holdings check and the wallet's creation as one atomic unit. On
@@ -258,6 +261,16 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	err = controller.db.Transaction(func(tx *gorm.DB) error {
 		if err := db.LockApp(tx, app.ID); err != nil {
 			return fmt.Errorf("acquire circle lock: %w", err)
+		}
+		// The connection key is checked and claimed as one atomic step with
+		// every rotation's acceptance (NIP-CW §Recovering a Lost Connection).
+		if err := db.LockNamespace(tx, db.LockNsConnKey, 0); err != nil {
+			return fmt.Errorf("acquire connection key lock: %w", err)
+		}
+		if taken, err := circlelife.ConnectionKeyTaken(tx, params.ConnectionPubkey); err != nil {
+			return err
+		} else if taken {
+			return apps.ErrDuplicateAppPubkey
 		}
 
 		// The circle's holdings must be below its holdings ceiling (NIP-CW
@@ -304,6 +317,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			"circle_state_at":             createdApp.CreatedAt.Unix(),
 			"circle_dust_threshold_mloki": providerConfig.DustThresholdMloki,
 			"circle_inbox_key_index":      constants.PRIVATE_TRANSPORT_KEY_INDEX,
+			"circle_rotation_delay_secs":  rotationDelay(providerConfig),
 		}).Error; err != nil {
 			return fmt.Errorf("failed to record the member's terms: %w", err)
 		}
@@ -429,6 +443,7 @@ func (controller *nip47Controller) joinDetails(hub, wallet *db.App, params nipcw
 		ExpiresAt:           expiresAtUnix,
 		FeesPpm:             uint64(config.FeesPpm),            //nolint:gosec // fees_ppm is validated non-negative
 		DustThresholdMillis: uint64(config.DustThresholdMloki), //nolint:gosec // validated non-negative
+		RotationDelaySecs:   rotationDelayDetail(config),
 		BudgetRenewal:       budgetRenewal,
 	})
 	if err != nil {
@@ -458,4 +473,22 @@ func (controller *nip47Controller) expireDueMembership(hubID uint, member string
 		}
 		return circlelife.Transition(tx, &wallet, circlelife.EventExpire, now, graceSecs)
 	})
+}
+
+// rotationDelay is a new wallet's rotation delay: the Hub's, when it serves
+// rotation, fixed for the wallet's life; nil otherwise.
+func rotationDelay(cfg *db.CircleHubConfig) *int64 {
+	if !cfg.RotationEnabled {
+		return nil
+	}
+	d := cfg.RotationDelaySecs
+	return &d
+}
+
+func rotationDelayDetail(cfg *db.CircleHubConfig) *uint64 {
+	if d := rotationDelay(cfg); d != nil {
+		v := uint64(*d) //nolint:gosec // validated positive
+		return &v
+	}
+	return nil
 }

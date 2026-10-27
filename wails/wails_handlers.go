@@ -221,6 +221,27 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
+	circleMemberRequestRegex := regexp.MustCompile(
+		`^/api/circle-hubs/([0-9]+)/member-requests$`,
+	)
+	if m := circleMemberRequestRegex.FindStringSubmatch(route); len(m) == 2 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		var reqBody struct {
+			Event json.RawMessage `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		result, err := app.api.SubmitCircleMemberRequest(dbApp, reqBody.Event)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: result, Error: ""}
+	}
+
 	cashHubDeleteCheckRegex := regexp.MustCompile(
 		`^/api/cash-hubs/([0-9]+)/delete-check$`,
 	)

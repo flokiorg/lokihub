@@ -71,6 +71,9 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	if config.DustThresholdMloki == 0 {
 		config.DustThresholdMloki = constants.CIRCLE_DEFAULT_DUST_MLOKI
 	}
+	if config.RotationDelaySecs == 0 {
+		config.RotationDelaySecs = constants.CIRCLE_DEFAULT_ROTATION_DELAY_SECS
+	}
 	if err := validateCircleHubConfig(&config); err != nil {
 		return nil, "", err
 	}
@@ -134,6 +137,8 @@ type CircleHubConfigPatch struct {
 	OutboundPeriod           *string
 	GraceSecs                *int64
 	DustThresholdMloki       *int64
+	RotationEnabled          *bool
+	RotationDelaySecs        *int64
 }
 
 // IsEmpty reports whether the patch changes nothing.
@@ -182,6 +187,12 @@ func (p CircleHubConfigPatch) apply(cfg *db.CircleHubConfig) {
 	if p.DustThresholdMloki != nil {
 		cfg.DustThresholdMloki = *p.DustThresholdMloki
 	}
+	if p.RotationEnabled != nil {
+		cfg.RotationEnabled = *p.RotationEnabled
+	}
+	if p.RotationDelaySecs != nil {
+		cfg.RotationDelaySecs = *p.RotationDelaySecs
+	}
 }
 
 // patchedCircleHubConfig is appID's stored config with the patch applied and
@@ -226,6 +237,8 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, patch CircleHubConfigP
 		"outbound_period":              cfg.OutboundPeriod,
 		"grace_secs":                   cfg.GraceSecs,
 		"dust_threshold_mloki":         cfg.DustThresholdMloki,
+		"rotation_enabled":             cfg.RotationEnabled,
+		"rotation_delay_secs":          cfg.RotationDelaySecs,
 	})
 	if result.Error != nil {
 		return result.Error
@@ -289,6 +302,9 @@ func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
 	}
 	if cfg.DustThresholdMloki < 0 {
 		return fmt.Errorf("%w: dust_threshold_mloki must not be negative", constants.ErrInvalidParams)
+	}
+	if cfg.RotationDelaySecs <= 0 || cfg.RotationDelaySecs > constants.MAX_EXPIRY_SECS {
+		return fmt.Errorf("%w: rotation_delay_secs must be between 1 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
 	return validateBudgetRenewal(cfg.MinBudgetRenewal)
 }

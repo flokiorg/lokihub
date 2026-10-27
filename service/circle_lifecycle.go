@@ -18,13 +18,44 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// circleLifecycleInterval is how often the Circle Wallet lifecycle job runs.
-const circleLifecycleInterval = 60 * time.Second
+// circleLifecycleInterval is how often the Circle Wallet lifecycle job runs;
+// circleRotationInterval how often due rotations are completed.
+const (
+	circleLifecycleInterval = 60 * time.Second
+	circleRotationInterval  = 10 * time.Second
+)
+
+// RunCircleRotations completes every rotation that has come due (NIP-CW
+// §Recovering a Lost Connection), or cancels it when its new key got used, and
+// sends the notifications.
+func RunCircleRotations(gormDB *gorm.DB, eventPublisher events.EventPublisher, now time.Time) {
+	notices, swapped, err := circlelife.CompleteDueRotations(gormDB, now, nil)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Circle rotations: failed to complete due rotations")
+		return
+	}
+	if len(swapped) > 0 {
+		logger.Logger.Info().Int("rotated", len(swapped)).Msg("Circle rotations: completed")
+	}
+	circlelife.Publish(eventPublisher, notices)
+}
 
 // StartCircleLifecycleService runs the Circle Wallet lifecycle job (NIP-CW
 // §Lifecycle and Deletion) every minute.
 func StartCircleLifecycleService(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService,
 	getLNClient func() lnclient.LNClient, eventPublisher events.EventPublisher) {
+	go func() {
+		ticker := time.NewTicker(circleRotationInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				RunCircleRotations(gormDB, eventPublisher, time.Now())
+			}
+		}
+	}()
 	go func() {
 		ticker := time.NewTicker(circleLifecycleInterval)
 		defer ticker.Stop()

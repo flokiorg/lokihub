@@ -156,6 +156,12 @@ type App struct {
 	// the circle_wallet was issued: hidden members encrypted to it stay
 	// readable while the wallet is Active or Suspended (NIP-CW §Hidden Members).
 	CircleInboxKeyIndex *uint32
+	// CircleFrozen: a member request froze the wallet, so every request by its
+	// current key is refused FROZEN until an unfreeze or a completed rotation.
+	CircleFrozen bool
+	// CircleRotationDelaySecs is the wallet's rotation delay, fixed when it was
+	// issued; nil on a wallet of a Hub that did not serve rotation then.
+	CircleRotationDelaySecs *int64
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
@@ -421,6 +427,10 @@ type CircleHubConfig struct {
 	// TeardownRequestedAt is when the host tore the Hub down: every wallet is
 	// Closing, and the Hub goes once its last wallet is deleted.
 	TeardownRequestedAt *int64
+	// RotationEnabled: the Hub serves NIP-CW §Recovering a Lost Connection,
+	// with RotationDelaySecs (default 432000) for the wallets it issues.
+	RotationEnabled   bool
+	RotationDelaySecs int64
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
 	// members resetting their spend cap too often. A request is rejected when
@@ -446,6 +456,38 @@ type CircleWalletIdentityProof struct {
 	AppID     uint   `gorm:"not null;index"` // the circle_hub, for observability only
 	EventID   string `gorm:"not null;uniqueIndex"`
 	CreatedAt time.Time
+	// Kind is "join" or "member" (a member request, NIP-CW §Recovering a Lost
+	// Connection); RetainUntil is the unix time the id may be forgotten after:
+	// a join's created_at + 360, a member request's + 86460. 0 on older rows.
+	Kind        string `gorm:"size:8"`
+	RetainUntil int64  `gorm:"index"`
+}
+
+// Kinds of single-use proof ids.
+const (
+	CircleProofJoin   = "join"
+	CircleProofMember = "member"
+)
+
+// Circle rotation states (NIP-CW §Recovering a Lost Connection).
+const (
+	CircleRotationPending   = "pending"
+	CircleRotationCompleted = "completed"
+	CircleRotationCancelled = "cancelled"
+)
+
+// CircleRotation is a member's move of a Circle Wallet to a new connection key:
+// pending from RequestedAt until CompletesAt, then completed or cancelled. Kept
+// while the wallet exists, so a join lookup by the new key can be answered.
+type CircleRotation struct {
+	ID                  uint   `gorm:"primaryKey"`
+	WalletAppID         uint   `gorm:"not null;index"`
+	MemberPubkey        string `gorm:"size:64;not null;index"`
+	NewConnectionPubkey string `gorm:"size:64;not null;index"`
+	RequestedAt         int64  `gorm:"not null"`
+	CompletesAt         int64  `gorm:"not null;index"`
+	State               string `gorm:"size:12;not null;index"`
+	EndedAt             *int64
 }
 
 // CircleJoinRecord is a join's record (NIP-CW §Lost Join Reply): what a lookup by

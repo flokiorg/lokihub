@@ -9,6 +9,25 @@ audits of both.
 
 ### Added
 
+- Serves NIP-CW §Recovering a Lost Connection on a Circle Wallet Hub that
+  enables it (new settings: rotation on/off, delay default 5 days; `get_info`
+  reports `rotation_delay_secs` and each wallet's details carry its own, fixed
+  at join). The host submits a member request the member signed with
+  `POST /api/circle-hubs/:id/member-requests` (and its Wails route); it is
+  checked in the spec's order (`NOT_IMPLEMENTED`, `UNAUTHORIZED`,
+  `REQUEST_REUSED` with the id kept 24 h 1 min, `NOT_FOUND`, `UNAUTHORIZED`,
+  `NOT_IMPLEMENTED`, then the action). A `rotate` is accepted under the
+  node-wide connection-key lock shared with joins (`ROTATION_PENDING`,
+  `RESTRICTED`), completes at its `completes_at` (lazily on a request by either
+  key, and by a 10-second job), is cancelled by any request of the old key or
+  when the new key got used, and swaps the wallet's key, ending a freeze. A
+  `freeze` refuses every request of the current key `FROZEN` until an
+  `unfreeze` or a completed rotation. `rotation_pending`, `rotation_cancelled`,
+  `rotation_completed` and `wallet_frozen` notifications go to the wallet's
+  key; Circle Wallets are granted `notifications`. A join lookup by the member
+  naming a rotated key answers `pending` until `completes_at`, then `done` with
+  the details re-encrypted for the new key, writing nothing. A join to a key a
+  pending rotation names is `RESTRICTED`.
 - Adds NIP-CW's Circle Wallet lifecycle (new `circlelife` package): Active,
   Suspended, Expired and Closing, with only the spec's edges; a wallet past its
   `expires_at` is Expired at once, whether or not the job has run; the grace
