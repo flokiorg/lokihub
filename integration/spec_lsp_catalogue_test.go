@@ -3,10 +3,9 @@
 // spec_lsp_catalogue_test.go is CT-LSP-01 (plan WP-26, I-80..I-84): the LSP
 // catalogue built from flspd's NIP-LSP announcement on the dev relay.
 //
-// NOT YET RUN LIVE: written with WP-26 on spec-sync/wp-26-lsp-catalogue and
-// only compiled (go vet -tags integration). It needs the flspd overlay
-// (docker-compose.flspd.yml) on the regtest stack, flnd-lsp funded with a
-// channel to payer, and the dev relay among the Hub's General relays. Every
+// It needs flspd on the regtest stack (the compose profile "lsp", on when the
+// flspd:regtest image exists; bootstrap funds flnd-lsp and opens its channel to
+// the payer) and the dev relay among the Hub's General relays. Every
 // test skips when no LSP announcement is in the catalogue. I-83 and I-84 drive
 // flspd's dashboard (fee hot-swap, unlist) and skip unless FLSPD_ADMIN_URL
 // names a hook that does it.
@@ -58,7 +57,7 @@ func flspdLSP(t *testing.T, cfg *Config, admin *adminClient) adminLSP {
 	evs, err := relay.QuerySync(ctx, nostr.Filter{Kinds: []int{niplsp.Kind}, Limit: 10})
 	require.NoError(t, err)
 	if len(evs) == 0 {
-		t.Skip("no kind-10735 announcement on the dev relay: start the flspd overlay (docker-compose.flspd.yml)")
+		t.Skip("no kind-10735 announcement on the dev relay: the stack runs without flspd (build flspd:regtest)")
 	}
 	key := evs[0].PubKey
 	var l adminLSP
