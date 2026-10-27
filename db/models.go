@@ -398,6 +398,23 @@ type CircleWalletIdentityProof struct {
 	CreatedAt time.Time
 }
 
+// CircleJoinRecord is a join's record (NIP-CW §Lost Join Reply): what a lookup by
+// (signer, connection_pubkey) answers with. Kept while the wallet exists and at
+// least until the join's deadline plus 6 minutes; no foreign key, since it
+// outlives the wallet.
+type CircleJoinRecord struct {
+	ID               uint   `gorm:"primaryKey"`
+	CircleHubAppID   uint   `gorm:"not null;index"`
+	HubWalletPubkey  string `gorm:"size:64;not null"`
+	HubConnPubkey    string `gorm:"size:64;not null"`
+	AuthorizerPubkey string `gorm:"size:64;not null;uniqueIndex:idx_circle_join_record_key,priority:1"`
+	ConnectionPubkey string `gorm:"size:64;not null;uniqueIndex:idx_circle_join_record_key,priority:2"`
+	ProofCreatedAt   int64  `gorm:"not null"`
+	Deadline         int64  `gorm:"not null;index"`
+	EncryptedDetails string `gorm:"type:text;not null"`
+	WalletAppID      uint   `gorm:"not null;index"`
+}
+
 // PrivateServedNonce is the nonce of an envelope this hub served on the private
 // transport (NIP-CASH §Serving an Envelope, E3), kept until its not_after passes
 // so a replay is dropped even across a restart.

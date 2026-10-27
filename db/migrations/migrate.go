@@ -44,6 +44,7 @@ func Models() []any {
 		&db.CircleWalletMembership{},
 		&db.CashConsumedProof{},
 		&db.PrivateServedNonce{},
+		&db.CircleJoinRecord{},
 		&db.CashUsedRequestID{},
 		&db.CashRequestRecord{},
 		&db.CashRequestRecordBill{},
