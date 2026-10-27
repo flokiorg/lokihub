@@ -66,6 +66,17 @@ type cashTransferParams struct {
 	// slice's own MinTransferMloki (0 = no floor) — enforced by
 	// handleCashTransferSplit.
 	AmountMillis *uint64 `json:"amount_millis,omitempty"`
+
+	// RequestID is REQUIRED (NIP-CASH §request_id).
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// PrivateCall is what the private transport knows about an item beyond its
+// params: its call metadata (the deadline is the envelope's not_after) and the
+// pubkey that signed its item proof, "" for a proofless item.
+type PrivateCall struct {
+	Meta       models.CallMeta
+	ItemSigner string
 }
 
 // cashTransferResponse never carries a secret of any kind — IdentityValue is
@@ -162,11 +173,22 @@ func newIdentityHash(identityType, identityValue, iaPubkey string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
+func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags, call *PrivateCall) {
 	params := &nipcash.CashTransferRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)
+		return
+	}
+	// The private loop refused a missing, malformed or used request_id at I6 and
+	// I7; this is the same refusal for a caller that reached here another way.
+	if call == nil || !call.Meta.DeadlinePresent {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "cash_transfer needs a deadline")
+		return
+	}
+	if !nipcash.ValidRequestID(params.RequestID) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			"request_id is required: 32 to 64 lowercase hex characters")
 		return
 	}
 
@@ -379,6 +401,31 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// isCashCurrent: nothing further to verify — step 5's hash-matched
 	// lookup was the entire proof, identical in spirit to a cash-mode redeem.
 
+	// The call is authorized: its request_id is used from now on, whatever
+	// happens to it (NIP-CASH §request_id). A concurrent call that marked it
+	// first wins.
+	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, nip47Request.Method); err != nil {
+		if errors.Is(err, cashrequest.ErrRequestReused) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
+			return
+		}
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
+	// The record commits with the transfer (NIP-CASH §The Record): its authorizer
+	// is the claim signer, or the source's commitment for a cash slice, whose
+	// tokens travel in the clear.
+	record := func(resultMeta any) (*db.CashRequestRecord, error) {
+		kind, authorizer := "pubkey", callerProofPubkey
+		var delivery *string
+		if isCashCurrent {
+			kind, authorizer = "commitment", currentIdentityValue
+		} else {
+			delivery = &callerProofPubkey
+		}
+		return transferRecord(params.RequestID, app, call.Meta.Deadline, kind, authorizer, delivery, resultMeta)
+	}
+
 	// 7b. The caller is authenticated, so the amount can now be bounded by the
 	// slice's balance, and the error may name it.
 	if requestedAmount > uint64(claim.AmountMloki) { //nolint:gosec // AmountMloki is always non-negative
@@ -565,6 +612,12 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		// In-place reassignment only ever applies to a full transfer, so the amount
 		// is the slice's own, unchanged. It commits with its consumed proof, or not
 		// at all.
+		rec, err := record(cashTransferResponse{AmountMillis: uint64(claim.AmountMloki), //nolint:gosec // non-negative
+			IdentityType: newIdentityType, IdentityValue: newIdentityValueToStore})
+		if err != nil {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this call")
+			return
+		}
 		if err := cashwallet.Reassign(ctx, controller.cashDeps(), cashwallet.ReassignParams{
 			WalletApp:        app,
 			Source:           source,
@@ -572,6 +625,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			NewIdentityValue: newIdentityValueToStore,
 			NewIAPubkey:      newIAPubkeyToStore,
 			Proofs:           proofs,
+			Record:           rec,
 		}); err != nil {
 			controller.respondCommitError(publishResponse, nip47Request.Method, app, err, "failed to reassign this slice's identity")
 			return
@@ -599,7 +653,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	controller.handleCashTransferSplit(ctx, nip47Request, app, currentIdentityType, currentIdentityValue, requestedAmount,
-		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, source, proofs, claim, publishResponse, tags)
+		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, source, proofs, record, claim, publishResponse, tags)
 }
 
 // handleCashTransferSplit moves a full or partial amount out of a slice and
@@ -621,6 +675,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
 	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey string,
 	source apps.SliceRef, proofs []cashwallet.ClaimProof,
+	record func(resultMeta any) (*db.CashRequestRecord, error),
 	claim *db.CashWalletClaim, publishResponse publishFunc, tags nostr.Tags) {
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
@@ -659,6 +714,15 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// lengthens one (NIP-CASH's inheritance rule). The carved piece goes to
 	// new_identity; the remainder (when > 0) goes back to the caller's OWN
 	// current identity in its own fresh wallet.
+	meta := cashTransferResponse{AmountMillis: requestedAmount, IdentityType: newIdentityType, IdentityValue: newIdentityValueToStore}
+	if remainderAmount > 0 {
+		meta.RemainingAmountMillis = &remainderAmount
+	}
+	rec, err := record(meta)
+	if err != nil {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this call")
+		return
+	}
 	result, err := cashwallet.SplitInTwo(ctx, controller.cashDeps(), cashwallet.SplitInTwoParams{
 		HubApp:                 hubApp,
 		SourceWalletApp:        app,
@@ -676,6 +740,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		RedeemFeeBaseMloki:     claim.RedeemFeeBaseMloki,
 		ExpiresAt:              app.ExpiresAt,
 		Proofs:                 proofs,
+		Record:                 rec,
 	})
 	if err != nil {
 		controller.respondCommitError(publishResponse, nip47Request.Method, app, err, "failed to split off slice")
@@ -752,6 +817,39 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		Msg("Cash wallet slice split off into fresh dedicated wallet(s)")
 
 	publishResponse(&models.Response{ResultType: nip47Request.Method, Result: resp}, tags)
+}
+
+// transferRecord is a transfer's record: its target is this bill, its result_meta
+// the reply's non-secret fields other than the new bills, which the record's bill
+// rows carry.
+func transferRecord(requestID string, bill *db.App, deadline int64, authorizerKind, authorizer string, delivery *string, resultMeta any) (*db.CashRequestRecord, error) {
+	raw, err := json.Marshal(resultMeta)
+	if err != nil {
+		return nil, err
+	}
+	target := ""
+	if bill.WalletPubkey != nil {
+		target = *bill.WalletPubkey
+	}
+	return &db.CashRequestRecord{
+		RequestID:          requestID,
+		Method:             constants.NIP47MethodCashTransfer,
+		HubAppID:           derefUint(bill.ParentAppID),
+		TargetWalletPubkey: target,
+		TargetConnPubkey:   bill.AppPubkey,
+		AuthorizerKind:     authorizerKind,
+		Authorizer:         authorizer,
+		Deadline:           deadline,
+		DeliveryPubkey:     delivery,
+		ResultMeta:         string(raw),
+	}, nil
+}
+
+func derefUint(p *uint) uint {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // cashDeps are the services a cash commit needs.

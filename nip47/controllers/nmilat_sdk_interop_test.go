@@ -51,7 +51,11 @@ func serveSDK(t *testing.T, svc *tests.TestService, app *db.App, req *models.Req
 	case constants.NIP47MethodCashRedeem:
 		controller.HandleCashRedeemEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{})
 	case constants.NIP47MethodCashTransfer:
-		controller.HandleCashTransferEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{})
+		var params struct {
+			IdentityEvent string `json:"identity_event"`
+		}
+		_ = json.Unmarshal(req.Params, &params)
+		controller.HandleCashTransferEvent(context.TODO(), req, ev.ID, app, publish, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	default:
 		t.Fatalf("no handler wired for %s", req.Method)
 	}
