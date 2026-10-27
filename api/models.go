@@ -17,6 +17,7 @@ import (
 )
 
 type API interface {
+	ListingsAPI
 	CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error)
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error

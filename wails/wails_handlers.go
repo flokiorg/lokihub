@@ -70,6 +70,10 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	appMatch := appRegex.FindStringSubmatch(route)
 
+	if resp, ok := app.routeListings(ctx, route, method, body); ok {
+		return resp
+	}
+
 	switch {
 	case len(appMatch) > 1:
 		appIdStr := appMatch[1]
