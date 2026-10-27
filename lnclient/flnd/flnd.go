@@ -719,6 +719,11 @@ func (svc *FLNDService) LookupPayment(ctx context.Context, paymentHash string) (
 	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
 }
 
+// getPaymentResult reads a payment's update stream until the payment is final:
+// SUCCEEDED or FAILED. Every other status (INITIATED, which a node run with
+// routerrpc.usestatusinitiated sends first, IN_FLIGHT, UNKNOWN) means the HTLCs
+// may still be out, so it is never taken as an outcome. A stream that ends
+// before a final status returns its error, and the caller then asks the node.
 func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {
 	for {
 		payment, err := stream.Recv()
@@ -726,7 +731,8 @@ func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Cl
 			return nil, err
 		}
 
-		if payment.Status != lnrpc.Payment_IN_FLIGHT {
+		switch payment.Status {
+		case lnrpc.Payment_SUCCEEDED, lnrpc.Payment_FAILED:
 			return payment, nil
 		}
 	}
