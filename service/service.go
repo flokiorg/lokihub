@@ -89,6 +89,8 @@ type service struct {
 	orders *cashorder.Engine
 	// listingSvc lists offers (WP-25); set by startListings.
 	listingSvc *listing.Service
+	// listingClockOffset moves the listing clock (test hook only), seconds.
+	listingClockOffset atomic.Int64
 }
 
 func NewService(ctx context.Context) (*service, error) {

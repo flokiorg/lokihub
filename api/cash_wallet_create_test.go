@@ -36,6 +36,7 @@ func newTestAPIWithService(t *testing.T, svc *tests.TestService) *api {
 	txSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
 	mockSvc.On("GetTransactionsService").Return(txSvc).Maybe()
 	mockSvc.On("GetLNClient").Return(svc.LNClient).Maybe()
+	mockSvc.On("GetListingService").Return(nil).Maybe()
 
 	return &api{
 		db:             svc.DB,

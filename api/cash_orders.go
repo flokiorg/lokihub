@@ -8,6 +8,7 @@ import (
 	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/listing"
 )
 
 func (api *api) orderDeps() cashorder.Deps {
@@ -46,7 +47,13 @@ func (api *api) RetireOrderConnection(hub *db.App, connAppID uint) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	return cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, time.Now())
+	if err := cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, time.Now()); err != nil {
+		return err
+	}
+	// The retirement is committed, so get_info answers "cash_order": {} from
+	// now on; then its listing is closed and deleted in order (WP-25 item 8).
+	api.closeListings(func(l *listing.Service) error { return l.RetireOrder(context.Background(), connAppID) })
+	return nil
 }
 
 // GetOrderTerms is a Cash Hub's selling terms and open-order limits; nil when

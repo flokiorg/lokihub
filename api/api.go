@@ -38,6 +38,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
@@ -640,7 +641,22 @@ func (api *api) DeleteApp(userApp *db.App) error {
 			})
 	}
 
-	return api.appsSvc.DeleteApp(userApp)
+	// A Cash Hub's Order connections go with it: their listings are retired in
+	// order once the delete is committed (WP-16 item 9, OQ-RC5; I-RC2).
+	var orderConns []uint
+	if userApp.Kind == db.AppKindCashHub {
+		if err := api.db.Model(&db.CashOrderConnection{}).Where("hub_app_id = ?", userApp.ID).
+			Pluck("app_id", &orderConns).Error; err != nil {
+			return err
+		}
+	}
+	if err := api.appsSvc.DeleteApp(userApp); err != nil {
+		return err
+	}
+	for _, id := range orderConns {
+		api.closeListings(func(l *listing.Service) error { return l.RetireOrder(context.Background(), id) })
+	}
+	return nil
 }
 
 func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
@@ -3155,7 +3171,16 @@ func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
 	if accepting && cfg.TeardownRequestedAt != nil {
 		return fmt.Errorf("%w: this circle is being torn down and takes no new members", constants.ErrInvalidParams)
 	}
-	return api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error
+	if err := api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error; err != nil {
+		return err
+	}
+	if accepting {
+		return nil
+	}
+	// accepting false is committed, so get_info says so; then the circle's
+	// listing is closed and deleted in order (WP-25 item 8, H-CASH-417).
+	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
+	return nil
 }
 
 // paginateSlice returns the [offset, offset+limit) window of s, clamped to
@@ -3318,7 +3343,23 @@ func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
 	if result.HubDeleted {
 		api.publishCircleHubDeleted(app)
 	}
+	// Closing set accepting false: the circle's listing is closed in order
+	// (WP-16 item 9, WP-25 item 8).
+	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
 	return result, nil
+}
+
+// closeListings runs a listing retirement after the commit that ended an offer;
+// a failure is retried by the listing scheduler.
+func (api *api) closeListings(f func(*listing.Service) error) {
+	if api.svc == nil {
+		return
+	}
+	if l := api.svc.GetListingService(); l != nil {
+		if err := f(l); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Could not close an ended offer's listing yet; the scheduler retries")
+		}
+	}
 }
 
 func (api *api) publishCircleHubDeleted(app *db.App) {
