@@ -174,6 +174,35 @@ func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 	assert.EqualValues(t, 600, svc.Cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 }
 
+// Raising H after a record's drop time was set keeps the record until
+// deadline + the new H: a lookup in between decides with the new H, and must not
+// answer unknown for a call that committed.
+func TestRaisingTheHorizonDelaysRecordDrops(t *testing.T) {
+	svc, s, now := newStore(t)
+	_, err := cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Transaction(func(tx *gorm.DB) error {
+		return s.CommitTx(tx, record(rid(1), now.Unix()+30), nil)
+	}))
+	got, err := s.Get(rid(1))
+	require.NoError(t, err)
+	require.Equal(t, now.Unix()+30+300+1, *got.DropAfter)
+
+	_, err = cashrequest.RaiseHorizon(svc.DB, 900, *now)
+	require.NoError(t, err)
+	got, err = s.Get(rid(1))
+	require.NoError(t, err)
+	assert.Equal(t, now.Unix()+30+900+1, *got.DropAfter)
+
+	// Past the old drop time, before the new one: still there.
+	*now = now.Add(30*time.Second + 301*time.Second)
+	_, err = s.PruneRecords(100)
+	require.NoError(t, err)
+	got, err = s.Get(rid(1))
+	require.NoError(t, err)
+	assert.NotNil(t, got)
+}
+
 // U-3.8: consumed claim proofs are single-use, releasable for a call that did not
 // happen, and pruned an hour after their created_at.
 func TestU_3_8_ConsumedProofs(t *testing.T) {
