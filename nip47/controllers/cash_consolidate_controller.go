@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -381,11 +382,13 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 	insertedProofs := make([]string, 0, len(proofEventIDs))
 	releaseProofGuards := func() {
 		for _, evID := range insertedProofs {
-			_ = controller.db.Where("event_id = ?", evID).Delete(&db.CashTransferProof{}).Error
+			_ = cashrequest.New(controller.db).ReleaseProof(evID)
 		}
 	}
 	for _, evID := range proofEventIDs {
-		if err := controller.db.Create(&db.CashTransferProof{AppID: app.ID, EventID: evID}).Error; err != nil {
+		// The proof's created_at is not kept here; the consumption time is a later,
+		// so safely longer, retention anchor.
+		if err := cashrequest.New(controller.db).ConsumeProofTx(controller.db, evID, time.Now().Unix(), nip47Request.Method); err != nil {
 			releaseProofGuards()
 			unclaimAll(nil)
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "a source proof was already used")

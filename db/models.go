@@ -370,24 +370,90 @@ type CircleWalletIdentityProof struct {
 	CreatedAt time.Time
 }
 
-// CashTransferProof records the nostr event ID of every consumed
-// cash_transfer identity proof, so a captured proof (a multi-recipient
-// cash_wallet connection is shared — every co-recipient can decrypt every
-// request sent over it, including this one) can't be resubmitted to
-// authorize a repeat transfer/split, or one for a different amount_mloki
-// than it was signed for, within its own freshness window. A partial split
-// doesn't change the source slice's registered identity the way an in-place
-// reassignment does, so — unlike a full transfer — state alone doesn't
-// naturally invalidate a replayed proof for the split case; this table is
-// what does. EventID is globally unique (content-addressed hash), so no
-// additional scoping key is needed for correctness. See
-// verifyTransferIdentityEvent's doc comment (cash_transfer_controller.go).
-type CashTransferProof struct {
-	ID        uint   `gorm:"primaryKey"`
-	AppID     uint   `gorm:"not null;index"` // the cash_wallet, for observability only
-	EventID   string `gorm:"not null;uniqueIndex"`
-	CreatedAt time.Time
+// CashConsumedProof marks a claim proof (kind 23198) as used, so a captured proof
+// cannot authorize a second redeem, transfer or consolidate (NIP-CASH §Claim
+// Proofs). Kept until well after the proof could pass the freshness check
+// (nipcash.ClaimRetainUntil); pruned an hour after its created_at.
+type CashConsumedProof struct {
+	EventID        string `gorm:"primaryKey;size:64"`
+	ProofCreatedAt int64  `gorm:"not null;index"`
+	ConsumedAt     int64  `gorm:"not null"`
+	Method         string `gorm:"size:24;not null"`
 }
+
+// CashUsedRequestID is the permanent used mark of a request_id (NIP-CASH
+// §request_id): set once a call is authorized and never removed, so a reused id
+// is refused REQUEST_REUSED forever.
+type CashUsedRequestID struct {
+	RequestID string `gorm:"primaryKey;size:64"`
+	Method    string `gorm:"size:24;not null"`
+	UsedAt    int64  `gorm:"not null"`
+}
+
+// CashRequestRecord is the record of a committed bill-creating call (NIP-CASH
+// §The Record), written in the call's commit transaction. It holds what a lookup
+// needs to rebuild the call's answer and never a secret, a token or a zap target.
+type CashRequestRecord struct {
+	ID                 uint    `gorm:"primaryKey"`
+	RequestID          string  `gorm:"size:64;not null;uniqueIndex"`
+	Method             string  `gorm:"size:24;not null"`
+	OrderID            *uint   // cash_order: its order row
+	WithdrawalID       *uint   // cash_withdraw: its withdrawal row
+	HubAppID           uint    `gorm:"not null"` // no FK: the Hub cannot be deleted while a record names it
+	TargetWalletPubkey string  `gorm:"size:64;not null;index"`
+	TargetConnPubkey   string  `gorm:"size:64;not null"`
+	AuthorizerKind     string  `gorm:"size:12;not null"` // pubkey | commitment | client
+	Authorizer         string  `gorm:"size:64;not null"`
+	Deadline           int64   `gorm:"not null"`
+	DeliveryPubkey     *string `gorm:"size:64"` // inner-layer key; nil means the token is in the clear
+	ResultMeta         string  `gorm:"type:text;not null"`
+	CommittedAt        int64   `gorm:"not null"`
+	DropAfter          *int64  `gorm:"index"` // set once every created bill is destroyed
+}
+
+// Roles of a record's bills.
+const (
+	CashRecordBillMinted    = "minted"
+	CashRecordBillCarved    = "carved"
+	CashRecordBillRemainder = "remainder"
+	CashRecordBillSingle    = "single"
+	CashRecordBillMerged    = "merged"
+)
+
+// CashRequestRecordBill is one bill a recorded call created, with what a lookup
+// needs to rebuild its token (the connection secret is re-derived from
+// WalletAppID; nothing secret is stored).
+type CashRequestRecordBill struct {
+	ID               uint              `gorm:"primaryKey"`
+	RecordID         uint              `gorm:"not null;index"`
+	Record           CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
+	Ordinal          int16             `gorm:"not null"`
+	Role             string            `gorm:"size:12;not null"`
+	WalletAppID      uint              `gorm:"not null;index"` // no FK: the record outlives the bill
+	WalletPubkey     string            `gorm:"size:64;not null"`
+	RelayHints       string            `gorm:"type:text;not null"` // JSON array, exactly as encoded
+	IdentityRequired *int16
+	HubGroup         *string `gorm:"size:8"`
+	AmountMillis     int64   `gorm:"not null"`
+	Scheme           int16   `gorm:"not null"`
+	Signature        string  `gorm:"size:130;not null"`
+	ZapIssuedAt      *int64
+	ZapExpiresAt     *int64
+	ZapTargetHash    *string `gorm:"size:64"`
+	ZapRecipient     *string `gorm:"size:80"`
+	ZapSender        *string `gorm:"size:80"`
+}
+
+// CashHorizon holds the single horizon H (NIP-CASH §Deadlines) in its only row
+// (ID 1). H never decreases, so the stored value is the largest ever used.
+type CashHorizon struct {
+	ID        int16 `gorm:"primaryKey"`
+	HSecs     int64 `gorm:"not null"`
+	UpdatedAt int64
+}
+
+// TableName is cash_horizon: one row, not a collection.
+func (CashHorizon) TableName() string { return "cash_horizon" }
 
 // CashStrandedFund is a durable record of one compensating-saga reversal that
 // itself failed during cashwallet.Consolidate/SplitInTwo, so an operator can

@@ -527,7 +527,7 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 	proof2 := buildTransferProofEvent(t, ownerPriv, *s2.WalletPubkey, db.CashIdentityPubkey, newPub, "", 2000, nil, time.Now())
 
 	// Simulate proof2 already consumed by an earlier, legitimate request.
-	require.NoError(t, svc.DB.Create(&db.CashTransferProof{AppID: caller.ID, EventID: proof2.ID}).Error)
+	require.NoError(t, svc.DB.Create(&db.CashConsumedProof{EventID: proof2.ID, ProofCreatedAt: int64(proof2.CreatedAt), ConsumedAt: time.Now().Unix(), Method: "cash_consolidate"}).Error)
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), caller, cashConsolidateParams{
 		Sources: []consolidateSourceParam{
@@ -541,9 +541,9 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 	assert.Contains(t, resp.Error.Message, "already used")
 
 	var count1, count2 int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Where("event_id = ?", proof1.ID).Count(&count1).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", proof1.ID).Count(&count1).Error)
 	assert.EqualValues(t, 0, count1, "a rejected consolidate must release the proof it consumed, so the caller can retry")
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Where("event_id = ?", proof2.ID).Count(&count2).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", proof2.ID).Count(&count2).Error)
 	assert.EqualValues(t, 1, count2, "must NOT un-burn a proof another request legitimately consumed (no replay reopened)")
 
 	// Both sources must be left unclaimed and unchanged.

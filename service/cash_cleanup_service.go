@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/archive"
@@ -88,7 +89,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.ReconcilePendingCashRedeems(ctx, lnClient)
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
-				pruneStaleCashTransferProofs(gormDB)
+				pruneCashRequests(gormDB)
 				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
 				if pruneRetainedWallets != nil {
 					pruneRetainedWallets()
@@ -171,21 +172,21 @@ func pruneStaleCircleWalletIdentityProofs(gormDB *gorm.DB) {
 	}
 }
 
-// cashTransferProofRetention mirrors circleWalletIdentityProofRetention —
-// well beyond cash_transfer's own 5-minute proof freshness window
-// (cashRedeemIdentityFreshnessWindow, nip47/controllers/cash_redeem_controller.go),
-// so a proof can never become replayable again before its row is pruned.
-const cashTransferProofRetention = time.Hour
-
-// pruneStaleCashTransferProofs deletes cash_transfer replay-guard rows old
-// enough that their proofs could no longer pass the freshness check anyway.
-// See db.CashTransferProof's doc comment for what this table protects.
-func pruneStaleCashTransferProofs(gormDB *gorm.DB) {
-	if err := gormDB.Where("created_at < ?", time.Now().Add(-cashTransferProofRetention)).
-		Delete(&db.CashTransferProof{}).Error; err != nil {
-		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale cash transfer proofs")
+// pruneCashRequests drops request records past their drop_after and consumed
+// claim proofs that could no longer pass the freshness check (NIP-CASH §The
+// Record, §Claim Proofs). Used request_id marks are never pruned.
+func pruneCashRequests(gormDB *gorm.DB) {
+	store := cashrequest.New(gormDB)
+	if _, err := store.PruneRecords(cashRecordPruneBatch); err != nil {
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune request records")
+	}
+	if _, err := store.PruneProofs(); err != nil {
+		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune consumed claim proofs")
 	}
 }
+
+// cashRecordPruneBatch bounds one pass of record pruning.
+const cashRecordPruneBatch = 500
 
 // pruneArchivedSplitLinks clears archived slices' links to the bill their value
 // moved into once they are older than retention (CASH_SPLIT_LINK_RETENTION_DAYS;

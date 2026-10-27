@@ -79,6 +79,6 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 		hub.ID, db.AppKindCashWallet, []uint{caller.ID, s1.ID, s2.ID}).Count(&merged).Error)
 	assert.Zero(t, merged, "no merged bill is created")
 	var burned int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Count(&burned).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&burned).Error)
 	assert.Zero(t, burned, "no proof is used up by a request that failed")
 }

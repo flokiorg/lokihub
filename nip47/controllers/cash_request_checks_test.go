@@ -79,7 +79,7 @@ func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T
 		assert.Nil(t, cashWalletClaimByIdentity(t, svc, source.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt)
 	}
 	var used int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Count(&used).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&used).Error)
 	assert.Zero(t, used)
 }
 
