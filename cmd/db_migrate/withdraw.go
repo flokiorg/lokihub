@@ -19,6 +19,11 @@ var withdrawSteps = []struct {
 	{"cash_withdraw_terms", migrateTable[db.CashWithdrawTerms]},
 	{"cash_withdrawals", migrateTable[db.CashWithdrawal]},
 	{"cash_withdraw_events", migrateTable[db.CashWithdrawEvent]},
+	{"cash_withdraw_batches", migrateTable[db.CashWithdrawBatch]},
+	{"cash_withdraw_versions", migrateTable[db.CashWithdrawVersion]},
+	{"cash_withdraw_version_outputs", migrateTable[db.CashWithdrawVersionOutput]},
+	{"cash_withdraw_coins", migrateTable[db.CashWithdrawCoin]},
+	{"cash_withdraw_set_asides", migrateTable[db.CashWithdrawSetAside]},
 }
 
 func init() {

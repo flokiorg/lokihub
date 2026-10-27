@@ -11,5 +11,10 @@ func withdrawModels() []any {
 		&db.CashWithdrawTerms{},
 		&db.CashWithdrawal{},
 		&db.CashWithdrawEvent{},
+		&db.CashWithdrawBatch{},
+		&db.CashWithdrawVersion{},
+		&db.CashWithdrawVersionOutput{},
+		&db.CashWithdrawCoin{},
+		&db.CashWithdrawSetAside{},
 	}
 }
