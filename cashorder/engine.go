@@ -581,6 +581,18 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 	if err != nil || inv == nil || inv.Preimage == "" {
 		return "", true, fmt.Errorf("could not read the order invoice: %w", err)
 	}
+	if order.State != db.CashOrderOpen || e.now().Unix() > order.PayBy {
+		return "", true, ErrOrderNotPayable
+	}
+	// The node invoice is cancelled before the payment is recorded: an external
+	// payment can then no longer settle it as well, which would be neither
+	// minted nor credited. One that already did makes the cancel fail, and this
+	// payer is refused.
+	if err := ln.CancelHoldInvoice(ctx, paymentHash); err != nil {
+		logger.Logger.Warn().Err(err).Uint("order_id", order.ID).
+			Msg("Could not cancel an order invoice before taking a payment of it on this node; refusing that payment")
+		return "", true, ErrOrderNotPayable
+	}
 	var changed *db.CashOrder
 	err = e.DB.Transaction(func(tx *gorm.DB) error {
 		if err := db.LockNamespace(tx, db.LockNsOrder, int32(order.HubAppID)); err != nil { //nolint:gosec // app ids are small
@@ -609,10 +621,6 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 		return "", true, err
 	}
 	e.notify(changed)
-	if err := ln.CancelHoldInvoice(ctx, paymentHash); err != nil {
-		logger.Logger.Error().Err(err).Uint("order_id", order.ID).
-			Msg("Failed to cancel an order invoice paid on this node; a second payment of it would be kept by the Hub")
-	}
 	e.mintPending(ctx, order.ID)
 	return inv.Preimage, true, nil
 }
