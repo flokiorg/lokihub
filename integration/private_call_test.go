@@ -215,7 +215,7 @@ func privateTargetCall(t *testing.T, ctx context.Context, target privateTarget, 
 				if r.Error != nil {
 					// The same shape the standard transport produced, so every
 					// existing code assertion in this suite still applies.
-					return &nwcclient.NWCError{Code: r.Error.Code, Message: r.Error.Message}
+					return &nwcclient.NWCError{Code: r.Error.Code, Message: r.Error.Message, Detail: r.Error.Detail}
 				}
 				// A value method naming a destroyed bill is answered with its tombstone
 				// (NIP-CASH §Serving an Envelope, I4): nothing moved, so never a success.

@@ -65,6 +65,8 @@ func WithRequestID(params json.RawMessage) (json.RawMessage, error) {
 type NWCError struct {
 	Code    string
 	Message string
+	// Detail refines a withdrawal refusal on the private transport (NIP-CASH §Errors).
+	Detail string
 }
 
 func (e *NWCError) Error() string {
