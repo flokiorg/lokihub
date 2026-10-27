@@ -32,7 +32,7 @@ func OrderRetentionTx(tx *gorm.DB, o *db.CashOrder, horizon int64, now time.Time
 			r.Seen = true
 			u.Unconfirmed++
 			u.LastSeenAt = max(u.LastSeenAt, p.SeenAt)
-		case db.CashOrderPaymentMinted, db.CashOrderPaymentReorged, db.CashOrderPaymentKept:
+		case db.CashOrderPaymentMinted, db.CashOrderPaymentReorged, db.CashOrderPaymentKept, db.CashOrderPaymentDropped:
 			r.Seen = true
 		}
 	}
