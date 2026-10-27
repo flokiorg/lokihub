@@ -119,6 +119,11 @@ func TestCashLookup_DoneRebuildsASplit(t *testing.T) {
 			decryptToken(t, w, f.ownerPriv, rebuilt[pair[1]].(string)), "the same token, byte for byte")
 	}
 
+	// The source bill was destroyed by the transfer: its tombstone reason says so.
+	reason, ok := db.SpentBillReason(f.svc.DB, f.walletPubkey)
+	require.True(t, ok)
+	assert.Equal(t, nipcash.ReasonTransferred, reason)
+
 	var events2, marks2 int64
 	require.NoError(t, f.svc.DB.Model(&db.RequestEvent{}).Count(&events2).Error)
 	require.NoError(t, f.svc.DB.Model(&db.CashUsedRequestID{}).Count(&marks2).Error)

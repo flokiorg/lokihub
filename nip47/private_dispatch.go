@@ -354,6 +354,7 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string,
 	deadline := retainedUntil.Unix()
 	body, err := json.Marshal(nipcash.Tombstone{
 		Status:        nipcash.StatusSpent,
+		Reason:        tombstone.Reason,
 		RetainedUntil: &deadline,
 	})
 	if err != nil {

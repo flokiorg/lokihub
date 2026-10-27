@@ -365,3 +365,36 @@ func TestDeriveSliceOutcome(t *testing.T) {
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
+
+// U-11.1: a destroyed bill's tombstone reason is the terminal state of the last
+// of its slices to end; written-off has none.
+func TestBillReason(t *testing.T) {
+	t1 := time.Now().Add(-2 * time.Minute)
+	t2 := time.Now().Add(-time.Minute)
+	target := uint(9)
+	str := func(s string) *string { return &s }
+	cases := []struct {
+		name    string
+		claims  []db.CashWalletClaim
+		outcome string
+		want    *string
+	}{
+		{"last claim redeemed", []db.CashWalletClaim{
+			{ClaimedAt: &t1, EndedAs: db.CashSliceStatusTransferred, SpunOffToWalletAppID: &target},
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusRedeemed}}, db.CashBillOutcomeDrained, str("redeemed")},
+		{"last claim consolidated", []db.CashWalletClaim{
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusConsolidated, SpunOffToWalletAppID: &target},
+			{ClaimedAt: &t1, EndedAs: db.CashSliceStatusRedeemed}}, db.CashBillOutcomeDrained, str("consolidated")},
+		{"a spin-off with no recorded state is a transfer", []db.CashWalletClaim{
+			{ClaimedAt: &t2, SpunOffToWalletAppID: &target}}, db.CashBillOutcomeDrained, str("transferred")},
+		{"an unclaimed slice ends with the expiry sweep", []db.CashWalletClaim{
+			{ClaimedAt: &t2, EndedAs: db.CashSliceStatusRedeemed}, {}}, db.CashBillOutcomeExpired, str("expired")},
+		{"an operator delete reclaims", []db.CashWalletClaim{{}}, db.CashBillOutcomeDeleted, str("reclaimed")},
+		{"written-off has no reason", []db.CashWalletClaim{{}}, db.CashBillOutcomeWrittenOff, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, billReason(c.claims, c.outcome))
+		})
+	}
+}

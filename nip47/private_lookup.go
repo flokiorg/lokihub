@@ -397,9 +397,13 @@ func (svc *nip47Service) rebuildToken(b *db.CashRequestRecordBill, delivery *str
 }
 
 // archivedTombstone is a destroyed bill's tombstone in a rebuilt result: with
-// retained_until while its window is open, status alone after it.
+// its reason, and retained_until while its window is open (status and reason
+// alone after it).
 func (svc *nip47Service) archivedTombstone(walletPubkey string, now time.Time) *nipcash.Tombstone {
 	t := &nipcash.Tombstone{Status: nipcash.StatusSpent}
+	if reason, ok := db.SpentBillReason(svc.db, walletPubkey); ok {
+		t.Reason = reason
+	}
 	if tomb, ok := db.SpentBillTombstoneFor(svc.db, walletPubkey); ok && db.RetentionWindowOpen(tomb.RetainedUntil, now) {
 		at := tomb.RetainedUntil.Unix()
 		t.RetainedUntil = &at

@@ -307,7 +307,11 @@ type CashWalletClaim struct {
 	// RedeemCooldownUntil is set when a payout failed only after cash_redeem had
 	// answered: until then another redeem of the slice is RATE_LIMITED.
 	RedeemCooldownUntil *time.Time
-	CreatedAt           time.Time
+	// EndedAs is the terminal state the claim that ended this slice gave it:
+	// redeemed, transferred or consolidated ("" while live, or for a slice a
+	// sweep ends). It decides the tombstone reason of the bill it destroys.
+	EndedAs   string `gorm:"size:12"`
+	CreatedAt time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +
@@ -521,6 +525,11 @@ const (
 	// CashSliceStatusWrittenOff: unclaimed, and the value could not be
 	// returned anywhere because the parent hub was gone.
 	CashSliceStatusWrittenOff = "written-off"
+	// CashSliceStatusTransferred and CashSliceStatusConsolidated are the two
+	// ways a slice's value moves into another bill, as a tombstone reason
+	// tells them apart; the operator's listing groups both under split.
+	CashSliceStatusTransferred  = "transferred"
+	CashSliceStatusConsolidated = "consolidated"
 )
 
 // CashBillArchive is the durable record of one cash bill — a cash_wallet app —
@@ -600,6 +609,11 @@ type CashBillArchive struct {
 	ExpiresAt     *time.Time
 	// Outcome is one of the CashBillOutcome* values.
 	Outcome string `gorm:"not null;index"`
+	// Reason is the tombstone reason (NIP-CASH §Answering About a Destroyed
+	// Bill): the terminal state of the slice whose ending destroyed the bill, one
+	// of redeemed, transferred, consolidated, expired and reclaimed. NULL for a
+	// written-off bill, whose tombstone carries no reason.
+	Reason *string `gorm:"size:12"`
 	// TotalMloki is the sum of this bill's archived slices, including any
 	// archived earlier by an operator removing a single recipient — so it is
 	// computed after those rows land, not from the claims alive at death.
