@@ -40,6 +40,7 @@ var expectedTables = []string{
 	"cash_consumed_proofs",
 	"private_served_nonces",
 	"circle_join_records",
+	"circle_rotations",
 	"cash_used_request_ids",
 	"cash_request_records",
 	"cash_request_record_bills",
