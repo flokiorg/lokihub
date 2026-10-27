@@ -411,8 +411,8 @@ func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, 
 // instead of reaching here.
 func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error {
 	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash IN ?",
-			walletAppID, identityType, identityValue, []string{"", payment.PaymentHash}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
+			walletAppID, identityType, identityValue, payment.PaymentHash).
 		Updates(map[string]interface{}{
 			"payment_hash":      payment.PaymentHash,
 			"preimage":          payment.Preimage,

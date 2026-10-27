@@ -422,8 +422,10 @@ func (controller *nip47Controller) authorizeConsolidateSources(params *nipcash.C
 		claim := &db.CashWalletClaim{}
 		if bill != nil {
 			// The slice this identity holds, claimed or not: its state is step 3's.
+			// Its live slice comes first; a claimed one is history it may also have.
 			if err := controller.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
-				bill.ID, src.IdentityType, src.IdentityValue).Order("id DESC").Limit(1).Find(claim).Error; err != nil {
+				bill.ID, src.IdentityType, src.IdentityValue).
+				Order("CASE WHEN claimed_at IS NULL THEN 0 ELSE 1 END").Order("id DESC").Limit(1).Find(claim).Error; err != nil {
 				claim = &db.CashWalletClaim{}
 			}
 		}
