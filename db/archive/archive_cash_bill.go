@@ -145,16 +145,6 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 		return fmt.Errorf("failed to archive cash bill %d: %w", live.ID, err)
 	}
 
-	// Resolving this inside the transaction rather than after the delete (as
-	// the cleanup service used to, in a separate autocommit statement) means a
-	// crash can no longer leave a resolved-in-spirit stranded-fund record open
-	// against a wallet that no longer exists.
-	if err := tx.Model(&db.CashStrandedFund{}).
-		Where("retained_wallet_app_id = ? AND resolved_at IS NULL", live.ID).
-		Update("resolved_at", now).Error; err != nil {
-		return fmt.Errorf("failed to resolve stranded funds for cash bill %d: %w", live.ID, err)
-	}
-
 	if err := tx.Delete(&db.App{}, live.ID).Error; err != nil {
 		return fmt.Errorf("failed to delete cash bill %d: %w", live.ID, err)
 	}
@@ -239,8 +229,6 @@ func DeriveSliceOutcome(claim db.CashWalletClaim, billOutcome string) string {
 		return db.CashSliceStatusExpired
 	case db.CashBillOutcomeWrittenOff:
 		return db.CashSliceStatusWrittenOff
-	case db.CashBillOutcomeVoid:
-		return db.CashSliceStatusVoid
 	default:
 		// "deleted" and "drained": the value went back to the hub, but the
 		// slice's own window had not passed, so this is not "expired".

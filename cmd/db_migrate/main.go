@@ -42,7 +42,6 @@ var expectedTables = []string{
 	"cash_request_records",
 	"cash_request_record_bills",
 	"cash_horizon",
-	"cash_stranded_funds",
 	// The cash bill archive. Retained forever and carried across a migration
 	// like any other table: it is the only record that a spent bill ever
 	// existed, since the bill's own app row is hard-deleted the moment it is
@@ -268,11 +267,6 @@ func migrateDB(from, to *gorm.DB) error {
 		if err := step.run(from, tx); err != nil {
 			return fmt.Errorf("failed to migrate %s: %w", step.name, err)
 		}
-	}
-
-	logger.Logger.Info().Msg("migrating cash_stranded_funds...")
-	if err := migrateTable[db.CashStrandedFund](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_stranded_funds: %w", err)
 	}
 
 	logger.Logger.Info().Msg("migrating cash_bill_archives...")

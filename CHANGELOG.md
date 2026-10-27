@@ -63,6 +63,8 @@ audits of both.
 
 ### Changed
 
+- Drops the stranded-fund records and the `void` bill outcome: a failed cash
+  call now leaves nothing behind to reconcile.
 - Commits each `mint_cash`, `cash_transfer` and `cash_consolidate` as one
   database transaction: the new bills, their slices and signed tokens, the
   funding, the consumed claim proofs and the mint's record commit together or
