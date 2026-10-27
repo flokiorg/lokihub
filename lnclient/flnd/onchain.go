@@ -327,7 +327,7 @@ func (svc *FLNDService) WalletTx(ctx context.Context, txid string) (lnclient.Wal
 	defer cancel()
 	tx, err := svc.client.WalletKit().GetTransaction(ctx, &walletrpc.GetTransactionRequest{Txid: txid})
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if txUnknown(err) {
 			return lnclient.WalletTx{}, nil
 		}
 		return lnclient.WalletTx{}, err
@@ -386,4 +386,13 @@ func (svc *FLNDService) SubscribeBlocks(ctx context.Context) (<-chan lnclient.Bl
 		}
 	}()
 	return out, nil
+}
+
+// txUnknown reports the wallet's answer for a transaction it does not hold
+// (flnd says "can not find transaction"; other versions "not found"): a
+// version signed but never published, which is no error.
+func txUnknown(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "can not find") ||
+		strings.Contains(msg, "cannot find")
 }
