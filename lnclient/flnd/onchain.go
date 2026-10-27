@@ -66,13 +66,64 @@ func (svc *FLNDService) ListUnspent(ctx context.Context, minConfs int32, account
 		return nil, err
 	}
 	out := make([]lnclient.Utxo, 0, len(resp.Utxos))
+	listed := map[string]bool{}
 	for _, u := range resp.Utxos {
 		script, err := hex.DecodeString(u.PkScript)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, lnclient.Utxo{Outpoint: outpointString(u.Outpoint), ValueSat: u.AmountSat, Script: script,
+		op := outpointString(u.Outpoint)
+		listed[op] = true
+		out = append(out, lnclient.Utxo{Outpoint: op, ValueSat: u.AmountSat, Script: script,
 			Confs: u.Confirmations, Account: account})
+	}
+	if account != "" && account != "default" {
+		return out, nil
+	}
+	// The wallet leaves leased coins out of ListUnspent, but they are still the
+	// wallet's: the payout engine leases the coins it sets aside and must keep
+	// seeing them (and their callers decide what a foreign lease means).
+	leased, err := svc.leasedUnspent(ctx, minConfs, listed)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, leased...), nil
+}
+
+// leasedUnspent lists the wallet's leased, unspent coins with at least
+// minConfs confirmations that are not in listed.
+func (svc *FLNDService) leasedUnspent(ctx context.Context, minConfs int32, listed map[string]bool) ([]lnclient.Utxo, error) {
+	leases, err := svc.client.WalletKit().ListLeases(ctx, &walletrpc.ListLeasesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var pending []*walletrpc.UtxoLease
+	for _, l := range leases.LockedUtxos {
+		if !listed[outpointString(l.Outpoint)] {
+			pending = append(pending, l)
+		}
+	}
+	if len(pending) == 0 {
+		return nil, nil
+	}
+	confs := map[string]int64{}
+	txs, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{StartHeight: 0, EndHeight: -1})
+	if err != nil {
+		return nil, err
+	}
+	for _, tx := range txs.Transactions {
+		confs[tx.TxHash] = int64(tx.NumConfirmations)
+	}
+	var out []lnclient.Utxo
+	for _, l := range pending {
+		op := outpointString(l.Outpoint)
+		txid := op[:strings.LastIndexByte(op, ':')]
+		c, known := confs[txid]
+		if !known || c < int64(minConfs) {
+			continue
+		}
+		out = append(out, lnclient.Utxo{Outpoint: op, ValueSat: int64(l.Value), Script: l.PkScript, //nolint:gosec // an output value
+			Confs: c, Account: "default"})
 	}
 	return out, nil
 }
@@ -291,7 +342,9 @@ func (svc *FLNDService) ConfirmedBalance(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return resp.ConfirmedBalance, nil
+	// Leased coins (those the payout engine set aside) are confirmed coins of
+	// the wallet too; WalletBalance counts them apart.
+	return resp.ConfirmedBalance + resp.LockedBalance, nil
 }
 
 func (svc *FLNDService) BestBlock(ctx context.Context) (lnclient.BlockEpoch, error) {
