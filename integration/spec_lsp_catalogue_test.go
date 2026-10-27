@@ -123,17 +123,17 @@ func TestSpecLSP_I82_JITThroughTrustedLSP(t *testing.T) {
 	t.Cleanup(func() {
 		_ = admin.doBody(http.MethodPut, fmt.Sprintf("/api/lsps/%s/trust", l.NodeKey), map[string]any{"trusted": false}, nil)
 	})
-	var info struct {
-		OpeningFeeParamsMenu []map[string]any `json:"opening_fee_params_menu"`
-	}
-	require.NoError(t, admin.do(http.MethodGet, "/api/lsps2/info?lsp="+l.Pubkey, &info))
-	require.NotEmpty(t, info.OpeningFeeParamsMenu)
+	// GET /api/lsps2/info answers the LSP's first opening fee parameter set,
+	// which the buy takes back as is.
+	var params map[string]any
+	require.NoError(t, admin.do(http.MethodGet, "/api/lsps2/info?lsp="+l.Pubkey, &params))
+	require.NotEmpty(t, params)
 	size := uint64(50_000_000)
 	var buy struct {
 		InterceptSCID string `json:"interceptScid"`
 	}
 	require.NoError(t, admin.doBody(http.MethodPost, "/api/lsps2/buy", map[string]any{
-		"lspPubkey": l.Pubkey, "paymentSizeMloki": size, "openingFeeParams": info.OpeningFeeParamsMenu[0],
+		"lspPubkey": l.Pubkey, "paymentSizeMloki": size, "openingFeeParams": params,
 	}, &buy))
 	assert.NotEmpty(t, buy.InterceptSCID)
 }
