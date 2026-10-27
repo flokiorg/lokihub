@@ -323,7 +323,14 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 		if err := json.Unmarshal([]byte(order.TermsJSON), &terms); err != nil {
 			return err
 		}
-		value := uint64(max(p.ValueMillis, 0))                                           //nolint:gosec // non-negative
+		value := uint64(max(p.ValueMillis, 0)) //nolint:gosec // non-negative
+		// An on-chain payment is minted only at its tier's confirmations, read
+		// again here: a reorganisation since it was confirmed leaves it unminted
+		// (NIP-CO §On-chain).
+		if strings.HasPrefix(p.PaymentKey, "oc:") && p.Confirmations < requiredConfirmations(&order, value) {
+			return tx.Model(&db.CashOrderPayment{}).Where("id = ? AND state = ?", p.ID, db.CashOrderPaymentConfirmed).
+				Update("state", db.CashOrderPaymentSeen).Error
+		}
 		amounts := nipCO.MintSplit(value, uint64(order.FeeMillis), terms.Kind.MaxMillis) //nolint:gosec // non-negative
 		if value > 0 {
 			credit := ledger.ExternalCredit{AppID: hub.ID, Amount: value, Purpose: "cash order", Key: p.PaymentKey,
