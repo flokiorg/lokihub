@@ -33,6 +33,7 @@ import (
 type fakeNode struct {
 	mu      sync.Mutex
 	tip     int64
+	tipFn   func() int64
 	privHex string
 	signErr error
 	payer   lnclient.OnchainPayer
@@ -348,3 +349,23 @@ func (w *world) snapshot(t *testing.T) snapshot {
 func balance(w *world, appID uint) int64 { return queries.GetIsolatedBalance(w.svc.DB, appID) }
 
 func newRID() string { return tests.RandomHex32() }
+
+var addrSeq struct {
+	sync.Mutex
+	n int
+}
+
+// freshAddress is a distinct regtest key-hash address each call.
+func freshAddress(t *testing.T) string {
+	t.Helper()
+	addrSeq.Lock()
+	addrSeq.n++
+	n := addrSeq.n
+	addrSeq.Unlock()
+	prog := make([]byte, 20)
+	prog[0], prog[1], prog[2] = byte(n>>16), byte(n>>8), byte(n)
+	prog[19] = 0x5a
+	a, err := chainutil.NewAddressWitnessPubKeyHash(prog, &chaincfg.RegressionNetParams)
+	require.NoError(t, err)
+	return a.EncodeAddress()
+}
