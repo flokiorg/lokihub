@@ -4,6 +4,8 @@ package transport
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/flokiorg/lokihub/lnclient"
 )
@@ -48,7 +50,36 @@ func (t *FLNDTransport) SendCustomMessage(ctx context.Context, peerPubkey string
 	if len(data) > 65535 {
 		return fmt.Errorf("message too large: %d bytes (max 65535)", len(data))
 	}
-	return t.lnClient.SendCustomMessage(ctx, peerPubkey, msgType, data)
+	// A peer whose connection is being replaced (a reconnect racing an old
+	// connection, or a disconnect just before) refuses the message for a moment;
+	// the node reconnects a persistent peer, so the send is retried briefly.
+	var err error
+	for attempt := 0; attempt < sendAttempts; attempt++ {
+		if err = t.lnClient.SendCustomMessage(ctx, peerPubkey, msgType, data); err == nil || !peerChurning(err) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(sendRetryDelay):
+		}
+	}
+	return err
+}
+
+// sendAttempts and sendRetryDelay bound SendCustomMessage's retries while a
+// peer's connection is being replaced.
+const (
+	sendAttempts   = 4
+	sendRetryDelay = 750 * time.Millisecond
+)
+
+// peerChurning reports the node's errors for a peer whose connection is going
+// or being replaced.
+func peerChurning(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "peer exiting") || strings.Contains(msg, "disconnected") ||
+		strings.Contains(msg, "not online") || strings.Contains(msg, "not connected")
 }
 
 // SubscribeCustomMessages subscribes to incoming custom messages
