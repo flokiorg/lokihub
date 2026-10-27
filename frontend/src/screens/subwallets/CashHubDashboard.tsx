@@ -1,3 +1,4 @@
+import { RegenerateCashHubConnection } from "src/components/listings/RegenerateCashHubConnection";
 import {
   CheckCircleIcon,
   ChevronDownIcon,
@@ -516,6 +517,7 @@ function CashHubDashboardInternal({
           )
         }
       />
+      <RegenerateCashHubConnection hubId={hub.id} />
 
       {/* Page order is what an operator reaches for, in order: what the hub
           holds and owes, then the bills themselves plus the mint action,

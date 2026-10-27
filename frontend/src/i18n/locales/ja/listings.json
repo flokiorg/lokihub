@@ -1,0 +1,111 @@
+{
+  "nav": "掲載",
+  "page": {
+    "title": "掲載",
+    "description": "リンクを持たない人も見つけられるよう、この Hub がリレーに掲載するオファー",
+    "empty": "まだ掲載はありません",
+    "emptyHint": "下でサークルを掲載できます。Cash Hub の接続は掲載されません。",
+    "listCircle": "サークルを掲載"
+  },
+  "card": {
+    "untitled": "無題のオファー",
+    "typeOrder": "キャッシュ注文",
+    "typeCircle": "サークル"
+  },
+  "status": {
+    "open": "受付中",
+    "paused": "一時停止",
+    "closed": "終了"
+  },
+  "health": {
+    "listed": "掲載中",
+    "paused": "掲載中・一時停止",
+    "closing": "終了、最後のバージョンの期限まで保持",
+    "deleted": "掲載取り下げ",
+    "refreshed": "{{count}} 日前に更新",
+    "relays": "{{total}} 中 {{ok}} のリレーに掲載",
+    "operatorVerified": "運営者確認済み",
+    "operatorNotNamed": "運営者がまだ記載していません",
+    "failing": "最新バージョンを受け付けたリレーがありません。再試行中"
+  },
+  "dialog": {
+    "title": "このオファーを掲載",
+    "editTitle": "掲載を編集",
+    "description": "掲載は宣伝のみです。条件は常に、誰かがタップしたときにオファー自体から取得されます。",
+    "list": "掲載",
+    "save": "保存"
+  },
+  "warnings": {
+    "public": "掲載するとこのオファーは公開され、誰でもこのノードを見つけられます。",
+    "pow": "プルーフ・オブ・ワークのリレーが未設定の間、受信箱のプルーフ・オブ・ワークは無効で、誰でもリクエストを送れます。",
+    "circleTerms": "サークルの場合、参加ポリシーと受け入れ可能な残額が誰でも読めるようになります。",
+    "followSet": "このサークルのフォローセットは公開されています。名前を出すべきでないメンバーには非公開エントリを検討してください。掲載のタイトルはセットから取りません。",
+    "operator": "運営者を記載すると、そのアカウントとこのノードが公に結び付きます。"
+  },
+  "form": {
+    "title": "タイトル",
+    "content": "説明",
+    "image": "画像（https）",
+    "location": "場所（例: Lisbon, Baixa）",
+    "regions": "地域",
+    "regionsHint": "3〜4 文字の geohash プレフィックス",
+    "languages": "言語（ISO-639-1）",
+    "operator": "運営者（npub または hex、任意）",
+    "operatorRelay": "運営者のリレー",
+    "followSetA": "フォローセットのアドレスを追加",
+    "followSetConfirm": "フォローセットが公開であることを理解しました",
+    "preview": "プレビュー"
+  },
+  "problems": {
+    "title": "タイトルは 1 行、40 文字以内です。",
+    "content": "説明は 280 文字以内です。",
+    "image": "画像は https の URL にしてください。",
+    "location": "場所は 1 行、40 文字以内で、リンクは含められません。",
+    "languages": "言語は 2 文字の ISO-639-1 コードです。",
+    "regions": "地域は 3〜4 文字の geohash プレフィックスです。",
+    "operator": "運営者は npub か 64 文字の hex 公開鍵です。",
+    "operatorRelay": "運営者のリレーは websocket の URL にしてください。"
+  },
+  "toast": {
+    "listed": "掲載しました",
+    "updated": "掲載を更新しました"
+  },
+  "errors": {
+    "save": "掲載を保存できませんでした",
+    "action": "掲載を更新できませんでした",
+    "relays": "掲載リレーを保存できませんでした",
+    "regenerate": "接続を再発行できませんでした"
+  },
+  "address": {
+    "label": "掲載アドレス",
+    "copied": "コピーしました",
+    "copyTag": "a タグをコピー",
+    "copyCommand": "運営者用コマンドをコピー",
+    "hint": "運営者は自分の Nostr クライアントか cashctl でこのオファーを記載します。このアプリが運営者の鍵を求めることはありません。"
+  },
+  "connection": {
+    "label": "掲載用接続（公開）"
+  },
+  "actions": {
+    "pause": "一時停止",
+    "resume": "再開",
+    "edit": "編集",
+    "unlist": "掲載取り下げ",
+    "checkOperator": "運営者を確認",
+    "revokeConnection": "掲載用接続を取り消す"
+  },
+  "relays": {
+    "title": "掲載リレー",
+    "description": "掲載とこのノードのリレーリストの送信先: {{relays}}。空欄なら一般リレーを使います。",
+    "save": "保存",
+    "saved": "掲載リレーを保存しました"
+  },
+  "regenerate": {
+    "button": "Cash Hub 接続を取り消して再発行",
+    "title": "この Cash Hub 接続を取り消しますか？",
+    "description": "接続文字列が公開されたことがある場合に実行してください。古い文字列はすぐに使えなくなり、新しい文字列は一度だけ表示されます。紙幣と記録は変わりません。新しい文字列で発行クライアントを再接続してください。",
+    "cancel": "キャンセル",
+    "confirm": "取り消して再発行",
+    "shownOnce": "新しい接続（一度だけ表示）:"
+  }
+}

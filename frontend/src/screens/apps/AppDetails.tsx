@@ -1,3 +1,4 @@
+import { CircleListingPanel } from "src/components/listings/CircleListingPanel";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 
@@ -670,6 +671,10 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                 <>
                   <CircleAcceptingCard app={app} onChanged={refetchApp} />
                   <CircleMemberRequestCard app={app} />
+                  <CircleListingPanel
+                    appId={app.id}
+                    policy={app.circleIdentity?.policy}
+                  />
                 </>
               )}
               {(app.kind === "cash_wallet" || app.kind === "circle_wallet") && (
