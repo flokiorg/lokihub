@@ -275,6 +275,14 @@ type App struct {
 	CircleFeeReserveMinMloki   *int64  `json:"circleFeeReserveMinMloki,omitempty"`
 	CircleOutboundCeilingMloki *int64  `json:"circleOutboundCeilingMloki,omitempty"`
 	CircleOutboundPeriod       *string `json:"circleOutboundPeriod,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings
+	// (NIP-CW §Lifecycle and Deletion).
+	CircleGraceSecs          *int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki *int64 `json:"circleDustThresholdMloki,omitempty"`
+	// CircleAccepting is false once the host closed the circle to new members;
+	// CircleTeardownRequestedAt is set once the host tore it down.
+	CircleAccepting           *bool  `json:"circleAccepting,omitempty"`
+	CircleTeardownRequestedAt *int64 `json:"circleTeardownRequestedAt,omitempty"`
 }
 
 // CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
@@ -405,6 +413,8 @@ type UpdateAppRequest struct {
 	CircleFeeReserveMinMloki       *int64  `json:"circleFeeReserveMinMloki"`
 	CircleOutboundCeilingMloki     *int64  `json:"circleOutboundCeilingMloki"`
 	CircleOutboundPeriod           *string `json:"circleOutboundPeriod"`
+	CircleGraceSecs                *int64  `json:"circleGraceSecs"`
+	CircleDustThresholdMloki       *int64  `json:"circleDustThresholdMloki"`
 }
 
 type TransferRequest struct {
@@ -454,6 +464,9 @@ type CreateAppRequest struct {
 	CircleFeeReserveMinMloki   int64  `json:"circleFeeReserveMinMloki"`
 	CircleOutboundCeilingMloki int64  `json:"circleOutboundCeilingMloki"`
 	CircleOutboundPeriod       string `json:"circleOutboundPeriod"`
+	// CircleGraceSecs (0 = 7 days) and CircleDustThresholdMloki (0 = 1000).
+	CircleGraceSecs          int64 `json:"circleGraceSecs"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`
@@ -1014,6 +1027,10 @@ type DeleteCircleHubResult struct {
 	HubDeleted      bool   `json:"hubDeleted"`
 	DeletedChildIDs []uint `json:"deletedChildIds"`
 	SkippedChildIDs []uint `json:"skippedChildIds"`
+	// ClosingChildIDs are the wallets the teardown moved to Closing, or found
+	// Expired or Closing already: each goes once its grace is over and it holds
+	// at most dust (NIP-CW §Lifecycle and Deletion).
+	ClosingChildIDs []uint `json:"closingChildIds"`
 }
 
 type InfoResponseRelay struct {

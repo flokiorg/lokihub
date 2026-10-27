@@ -6,14 +6,15 @@ package api
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -116,83 +117,6 @@ func TestDeleteCircleHub_NoChildren(t *testing.T) {
 	assert.Nil(t, svc.AppsService.GetAppById(provider.ID))
 }
 
-func TestDeleteCircleHub_AllEmpty_ModeAll_DeletesEverything(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	provider, _, err := svc.AppsService.CreateCircleHub("circle", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
-	)
-	require.NoError(t, err)
-	child1 := createCircleChild(t, svc, provider, "child1")
-	child2 := createCircleChild(t, svc, provider, "child2")
-
-	theAPI := newTestAPIWithService(t, svc)
-	result, err := theAPI.DeleteCircleHub(provider, db.CircleDeleteModeAll)
-	require.NoError(t, err)
-	assert.True(t, result.HubDeleted)
-	assert.ElementsMatch(t, []uint{child1.ID, child2.ID}, result.DeletedChildIDs)
-	assert.Empty(t, result.SkippedChildIDs)
-
-	assert.Nil(t, svc.AppsService.GetAppById(provider.ID))
-	assert.Nil(t, svc.AppsService.GetAppById(child1.ID))
-	assert.Nil(t, svc.AppsService.GetAppById(child2.ID))
-}
-
-func TestDeleteCircleHub_AllEmpty_ModeEmptyOnly_DeletesEverything(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	provider, _, err := svc.AppsService.CreateCircleHub("circle", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
-	)
-	require.NoError(t, err)
-	child := createCircleChild(t, svc, provider, "child")
-
-	theAPI := newTestAPIForCircleDelete(svc)
-	result, err := theAPI.DeleteCircleHub(provider, db.CircleDeleteModeEmptyOnly)
-	require.NoError(t, err)
-	assert.True(t, result.HubDeleted, "with nothing to preserve, empty_only should fully delete like all")
-	assert.Equal(t, []uint{child.ID}, result.DeletedChildIDs)
-	assert.Empty(t, result.SkippedChildIDs)
-
-	assert.Nil(t, svc.AppsService.GetAppById(provider.ID))
-}
-
-func TestDeleteCircleHub_FundedChild_ModeEmptyOnly_AbortsHubDeletion(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	provider, _, err := svc.AppsService.CreateCircleHub("circle", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
-	)
-	require.NoError(t, err)
-	empty := createCircleChild(t, svc, provider, "empty-child")
-	funded := createCircleChild(t, svc, provider, "funded-child")
-	tests.FundApp(svc, funded.ID, 75_000, "delete-test-hash-2")
-
-	theAPI := newTestAPIForCircleDelete(svc)
-	result, err := theAPI.DeleteCircleHub(provider, db.CircleDeleteModeEmptyOnly)
-	require.NoError(t, err)
-	assert.False(t, result.HubDeleted, "a nonzero-balance child must abort the provider deletion")
-	assert.Equal(t, []uint{empty.ID}, result.DeletedChildIDs)
-	assert.Equal(t, []uint{funded.ID}, result.SkippedChildIDs)
-
-	// Provider and the funded child are both left fully intact.
-	assert.NotNil(t, svc.AppsService.GetAppById(provider.ID))
-	assert.NotNil(t, svc.AppsService.GetAppById(funded.ID))
-	assert.Nil(t, svc.AppsService.GetAppById(empty.ID))
-}
-
 func TestDeleteCircleHub_InvalidMode_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -228,19 +152,12 @@ func TestDeleteCircleHub_NonCircleHub_Rejected(t *testing.T) {
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 
-// "Empty" means nothing can still arrive or leave, not just a zero balance: a
-// child with a live invoice or a payment going out is skipped, so the hub stays.
-func TestDeleteCircleHub_PaymentInFlight_ModeEmptyOnly_ChildSkipped(t *testing.T) {
-	future := time.Now().Add(time.Hour)
-	for name, pending := range map[string]db.Transaction{
-		"live invoice": {Type: constants.TRANSACTION_TYPE_INCOMING, State: constants.TRANSACTION_STATE_PENDING,
-			AmountMloki: 50_000, PaymentHash: "empty-only-in", ExpiresAt: &future},
-		"held payment": {Type: constants.TRANSACTION_TYPE_INCOMING, State: constants.TRANSACTION_STATE_ACCEPTED,
-			AmountMloki: 50_000, PaymentHash: "empty-only-held"},
-		"payment going out": {Type: constants.TRANSACTION_TYPE_OUTGOING, State: constants.TRANSACTION_STATE_PENDING,
-			AmountMloki: 0, PaymentHash: "empty-only-out"},
-	} {
-		t.Run(name, func(t *testing.T) {
+// Hub teardown (NIP-CW §Lifecycle and Deletion): whatever the mode, every
+// wallet moves to Closing, the circle stops accepting joins, and the hub stays
+// until its last wallet is deleted (U-16.3).
+func TestDeleteCircleHub_TeardownClosesEveryWalletAndKeepsTheHub(t *testing.T) {
+	for _, mode := range []string{db.CircleDeleteModeAll, db.CircleDeleteModeEmptyOnly} {
+		t.Run(mode, func(t *testing.T) {
 			svc, err := tests.CreateTestService(t)
 			require.NoError(t, err)
 			defer svc.Remove()
@@ -251,15 +168,27 @@ func TestDeleteCircleHub_PaymentInFlight_ModeEmptyOnly_ChildSkipped(t *testing.T
 				db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
 			)
 			require.NoError(t, err)
-			busy := createCircleChild(t, svc, provider, "busy-child")
-			pending.AppId = &busy.ID
-			require.NoError(t, svc.DB.Create(&pending).Error)
+			empty := createCircleChild(t, svc, provider, "empty")
+			funded := createCircleChild(t, svc, provider, "funded")
+			tests.FundApp(svc, funded.ID, 75_000, tests.RandomHex32())
 
-			result, err := newTestAPIForCircleDelete(svc).DeleteCircleHub(provider, db.CircleDeleteModeEmptyOnly)
+			result, err := newTestAPIForCircleDelete(svc).DeleteCircleHub(provider, mode)
 			require.NoError(t, err)
 			assert.False(t, result.HubDeleted)
-			assert.Equal(t, []uint{busy.ID}, result.SkippedChildIDs)
-			assert.NotNil(t, svc.AppsService.GetAppById(busy.ID))
+			assert.ElementsMatch(t, []uint{empty.ID, funded.ID}, result.ClosingChildIDs)
+			assert.NotNil(t, svc.AppsService.GetAppById(provider.ID), "the hub stays while it has wallets")
+			for _, id := range []uint{empty.ID, funded.ID} {
+				var w db.App
+				require.NoError(t, svc.DB.First(&w, id).Error)
+				assert.Equal(t, circlelife.StateClosing, w.CircleState)
+			}
+			assert.Equal(t, int64(75_000), queries.GetIsolatedBalance(svc.DB, funded.ID), "nothing is swept")
+
+			cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
+			require.NoError(t, err)
+			require.NotNil(t, cfg.TeardownRequestedAt)
+			require.NotNil(t, cfg.AcceptingJoins)
+			assert.False(t, *cfg.AcceptingJoins, "a torn-down circle takes no joins")
 		})
 	}
 }

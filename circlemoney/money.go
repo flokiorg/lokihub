@@ -16,6 +16,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -242,19 +243,28 @@ func ReceiveRoom(tx *gorm.DB, wallet *db.App, now time.Time) (int64, error) {
 	return max(caps.MaxReceive-used, 0), nil
 }
 
-// HoldingWalletIDs are the wallets of a Hub that count toward its holdings.
-func HoldingWalletIDs(tx *gorm.DB, hubID uint) ([]uint, error) {
-	var ids []uint
-	err := tx.Model(&db.App{}).
+// HoldingWalletIDs are the wallets of a Hub that count toward its holdings:
+// the Active ones at now (NIP-CW §Lifecycle and Deletion).
+func HoldingWalletIDs(tx *gorm.DB, hubID uint, now time.Time) ([]uint, error) {
+	var wallets []db.App
+	if err := tx.Model(&db.App{}).Select("id", "circle_state", "expires_at").
 		Where("parent_app_id = ? AND kind = ?", hubID, db.AppKindCircleWallet).
-		Pluck("id", &ids).Error
-	return ids, err
+		Find(&wallets).Error; err != nil {
+		return nil, err
+	}
+	ids := make([]uint, 0, len(wallets))
+	for i := range wallets {
+		if circlelife.IsActive(&wallets[i], now) {
+			ids = append(ids, wallets[i].ID)
+		}
+	}
+	return ids, nil
 }
 
 // Holdings are the balances of a Hub's Active wallets plus every open invoice
 // they issued.
 func Holdings(tx *gorm.DB, hubID uint, now time.Time) (int64, error) {
-	ids, err := HoldingWalletIDs(tx, hubID)
+	ids, err := HoldingWalletIDs(tx, hubID, now)
 	if err != nil {
 		return 0, err
 	}

@@ -21,8 +21,8 @@ type circleWalletInfo struct {
 	MaxExpSecs      int        `json:"max_exp_secs"`
 	FeesPpm         int        `json:"fees_ppm"`
 	FeeReserve      feeReserve `json:"fee_reserve"`
-	// DustThresholdMillis: a balance at or below it is dust. lokihub treats only
-	// an empty balance as dust.
+	// DustThresholdMillis: a balance at or below it is dust; what a new wallet
+	// gets (NIP-CW §Lifecycle and Deletion).
 	DustThresholdMillis int64  `json:"dust_threshold_millis"`
 	CirclePolicy        string `json:"circle_policy"`
 	// Identity is the node key that signs the kind-11190 announcement, x-only,

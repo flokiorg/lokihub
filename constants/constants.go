@@ -150,6 +150,12 @@ const (
 const (
 	NIP47MethodMintCash           = nipcash.MethodMintCash
 	NIP47MethodCreateCircleWallet = nipcw.MethodCreateCircleWallet
+	// NIP47MethodDeleteCircleWallet is a member's own deletion of its Circle
+	// Wallet (NIP-CW §Deleting a Circle Wallet), on every Circle Wallet
+	// connection.
+	NIP47MethodDeleteCircleWallet = nipcw.MethodDeleteCircleWallet
+	// NIP47MethodCashOrder places an order on an Order connection (NIP-CO).
+	NIP47MethodCashOrder = nipcash.MethodCashOrder
 	// NIP47MethodCashRedeem pays out a proven recipient's slice of a shared
 	// cash_wallet in one shot (NIP-CASH §Redeeming Funds).
 	NIP47MethodCashRedeem = nipcash.MethodCashRedeem
@@ -219,6 +225,10 @@ const (
 	CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI    = 10_000
 	CIRCLE_DEFAULT_OUTBOUND_PERIOD          = BUDGET_RENEWAL_MONTHLY
 	CIRCLE_DEFAULT_HOLDINGS_CEILING_WALLETS = 100
+	// CIRCLE_DEFAULT_GRACE_SECS (7 days) and CIRCLE_DEFAULT_DUST_MLOKI are the
+	// grace period and dust threshold a Hub gets unless its host sets others.
+	CIRCLE_DEFAULT_GRACE_SECS = 604_800
+	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
 )
 
 // MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:

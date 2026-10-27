@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -165,7 +166,14 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	}
 
 	// Step 5: one wallet per member; the membership row's unique index inside the
-	// transaction is the authoritative guard.
+	// transaction is the authoritative guard. A wallet past its expiry is
+	// Expired whether or not the lifecycle job has recorded it, and no longer
+	// counts: record that first (NIP-CW §Lifecycle and Deletion).
+	if err := controller.expireDueMembership(app.ID, params.Pubkey, providerConfig.GraceSecs); err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to record an expired circle wallet")
+		refuse(constants.ERROR_INTERNAL, "membership check failed")
+		return
+	}
 	var existingMembershipCount int64
 	if err := controller.db.Model(&db.CircleWalletMembership{}).
 		Where("circle_hub_app_id = ? AND requester_pubkey = ?", app.ID, params.Pubkey).
@@ -286,13 +294,22 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// NIP-CW §Fees: the member's rate is the one in force now, and stays;
 		// its receive cap is the one it asked for.
 		// Its budget periods count from its creation (NIP-CW §Budget Renewal Floor).
+		// It starts Active, with the Hub's dust threshold fixed for its life.
 		maxReceive := int64(params.MaxReceive) //nolint:gosec // bounded by the Hub's ceiling above
 		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
-			"circle_fees_ppm":          providerConfig.FeesPpm,
-			"circle_max_receive_mloki": maxReceive,
-			"circle_budget_anchor_at":  createdApp.CreatedAt.Unix(),
+			"circle_fees_ppm":             providerConfig.FeesPpm,
+			"circle_max_receive_mloki":    maxReceive,
+			"circle_budget_anchor_at":     createdApp.CreatedAt.Unix(),
+			"circle_state":                circlelife.StateActive,
+			"circle_state_at":             createdApp.CreatedAt.Unix(),
+			"circle_dust_threshold_mloki": providerConfig.DustThresholdMloki,
 		}).Error; err != nil {
 			return fmt.Errorf("failed to record the member's terms: %w", err)
+		}
+		// The wallet's expiry is its own (apps.expires_at): an Expired wallet
+		// still pays out, so no permission of it expires.
+		if err := tx.Model(&db.AppPermission{}).Where("app_id = ?", createdApp.ID).Update("expires_at", nil).Error; err != nil {
+			return fmt.Errorf("failed to record the wallet's expiry: %w", err)
 		}
 
 		// One active wallet per identity per hub, atomic guard: a unique-
@@ -407,13 +424,37 @@ func (controller *nip47Controller) joinDetails(hub, wallet *db.App, params nipcw
 		Relays:           relays,
 		MaxAmount:        params.MaxAmount / 1000 * 1000,
 		// max_receive is applied as requested, within the Hub's ceiling.
-		MaxReceive:    params.MaxReceive,
-		ExpiresAt:     expiresAtUnix,
-		FeesPpm:       uint64(config.FeesPpm), //nolint:gosec // fees_ppm is validated non-negative
-		BudgetRenewal: budgetRenewal,
+		MaxReceive:          params.MaxReceive,
+		ExpiresAt:           expiresAtUnix,
+		FeesPpm:             uint64(config.FeesPpm),            //nolint:gosec // fees_ppm is validated non-negative
+		DustThresholdMillis: uint64(config.DustThresholdMloki), //nolint:gosec // validated non-negative
+		BudgetRenewal:       budgetRenewal,
 	})
 	if err != nil {
 		return "", err
 	}
 	return encryptForRecipient(params.Pubkey, hubWalletPrivKey, string(detailsJSON))
+}
+
+// expireDueMembership records as Expired a member's wallet under hub whose
+// expiry has passed, which frees the member to join again.
+func (controller *nip47Controller) expireDueMembership(hubID uint, member string, graceSecs int64) error {
+	return controller.db.Transaction(func(tx *gorm.DB) error {
+		var membership db.CircleWalletMembership
+		if err := tx.Where("circle_hub_app_id = ? AND requester_pubkey = ?", hubID, member).Limit(1).Find(&membership).Error; err != nil || membership.ID == 0 {
+			return err
+		}
+		var wallet db.App
+		if err := tx.Where("id = ?", membership.WalletAppID).Limit(1).Find(&wallet).Error; err != nil || wallet.ID == 0 {
+			return err
+		}
+		now := time.Now()
+		if circlelife.EffectiveState(&wallet, now) != circlelife.StateExpired || circlelife.State(&wallet) == circlelife.StateExpired {
+			return nil
+		}
+		if err := db.LockApp(tx, hubID); err != nil {
+			return err
+		}
+		return circlelife.Transition(tx, &wallet, circlelife.EventExpire, now, graceSecs)
+	})
 }

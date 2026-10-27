@@ -428,6 +428,21 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		return
 	}
 
+	// A Circle Wallet serves only the methods its state allows, before any scope
+	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
+	if ok, code, message := circleWalletGate(&app, nip47Request.Method, time.Now()); !ok {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error:      &models.Error{Code: code, Message: message},
+		}, nostr.Tags{})
+		return
+	}
+	if nip47Request.Method == constants.NIP47MethodDeleteCircleWallet {
+		controllers.NewNip47Controller(lnClient, svc.db, svc.eventPublisher, svc.permissionsService, svc.transactionsService, svc.appsService, svc.keys, svc.socialCache, svc.cashRateLimiter, svc.cashClaimLimiter, svc.circleRateLimiter, svc.cfg, svc.identityAuthorityMgr).
+			HandleDeleteCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
+		return
+	}
+
 	if !slices.Contains(permissions.GetAlwaysGrantedMethods(), nip47Request.Method) {
 		scope, err := permissions.RequestMethodToScope(nip47Request.Method)
 		if err != nil {

@@ -66,6 +66,10 @@ func (s *stubTransactionsService) ResolveAcceptedCircleHolds(_ context.Context, 
 
 func (s *stubTransactionsService) SetLNClientProvider(_ func() lnclient.LNClient) {}
 
+func (s *stubTransactionsService) CancelOpenCircleInvoices(_ context.Context, _ uint, _ lnclient.LNClient) error {
+	panic("CancelOpenCircleInvoices: unexpected call in test")
+}
+
 func (s *stubTransactionsService) MakeHoldInvoice(_ context.Context, _ uint64, _, _ string, _ uint64, _ string, _ map[string]interface{}, _ lnclient.LNClient, _ *uint, _ *uint) (*transactions.Transaction, error) {
 	panic("MakeHoldInvoice: unexpected call in test")
 }

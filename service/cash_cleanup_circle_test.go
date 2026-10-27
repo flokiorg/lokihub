@@ -1,8 +1,7 @@
 package service
 
-// The expiry sweep on circle wallets: a funded wallet's balance goes back to its
-// hub, and a wallet with a payment still in flight, either way, is left for the
-// next tick.
+// The cash expiry sweep never touches a Circle Wallet (U-16.10): a member's
+// balance is never swept, and an expired wallet is the lifecycle job's.
 
 import (
 	"context"
@@ -26,23 +25,29 @@ func expiredCircleChild(t *testing.T, svc *tests.TestService) (hub, child *db.Ap
 	return hub, createSubWallet(t, svc, db.AppKindCircleWallet, hub.ID, db.ParentKindCircle, makeExpiredTime())
 }
 
-func TestRunCashCleanup_CircleChild_Funded_ReclaimedToHub(t *testing.T) {
+func TestRunCashCleanup_CircleChild_NeverSwept(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 	svc.LNClient.(*tests.MockLn).Pubkey = selfPaymentPubkey
 
-	hub, child := expiredCircleChild(t, svc)
-	tests.FundApp(svc, child.ID, 200_000, "circle-cleanup-fund")
+	hub, funded := expiredCircleChild(t, svc)
+	tests.FundApp(svc, funded.ID, 200_000, "circle-cleanup-fund")
+	empty := createSubWallet(t, svc, db.AppKindCircleWallet, hub.ID, db.ParentKindCircle, makeExpiredTime())
 
 	runCashCleanup(ctx, svc.DB, transactions.NewTransactionsService(svc.DB, svc.EventPublisher), svc.LNClient, svc.EventPublisher)
 
-	var found db.App
-	assert.Error(t, svc.DB.First(&found, child.ID).Error, "the expired circle wallet is deleted")
-	// The mock LN client pays a fixed invoice whatever amount is asked, so only
-	// the direction of the transfer is checked (as for cash wallets).
-	assert.Greater(t, queries.GetIsolatedBalance(svc.DB, hub.ID), int64(0), "its balance goes back to the hub")
+	for _, id := range []uint{funded.ID, empty.ID} {
+		var found db.App
+		require.NoError(t, svc.DB.First(&found, id).Error, "an expired circle wallet stays for its lifecycle")
+		assert.False(t, found.CleanupInProgress)
+	}
+	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, funded.ID))
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, hub.ID), "nothing reached the hub")
+
+	err = ReclaimAndDeleteSubWallet(ctx, svc.DB, transactions.NewTransactionsService(svc.DB, svc.EventPublisher), svc.LNClient, *funded, SubWalletDeletion{})
+	assert.ErrorIs(t, err, constants.ErrInvalidParams, "the reclaim path refuses a circle wallet")
 }
 
 // Deleting the wallet would cascade-delete the outgoing row, so the payment's

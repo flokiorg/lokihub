@@ -3,6 +3,7 @@ package apps_test
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -883,4 +884,41 @@ func TestSetCashSliceSplitTarget_NoOpWhenNotClaimed(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, claim, "an untouched slice must still be a normal unclaimed slice")
 	assert.Nil(t, claim.SpunOffToWalletAppID)
+}
+
+// Q23: a Cash Hub stays while a request record naming it is retained, and the
+// delete check reports each blocker with the earliest time.
+func TestDeleteCashHub_RefusedWhileRecordsRetained(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub, _, err := svc.AppsService.CreateCashHub("hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_HUB_SCOPE}, nil, db.CashHubConfig{PerWalletMaxMloki: 1_000_000, MaxExpSecs: 3600})
+	require.NoError(t, err)
+
+	drop := time.Now().Add(time.Hour).Unix()
+	rec := db.CashRequestRecord{RequestID: strings.Repeat("ab", 16), Method: constants.NIP47MethodMintCash, HubAppID: hub.ID,
+		TargetWalletPubkey: strings.Repeat("cd", 32), TargetConnPubkey: strings.Repeat("ef", 32), AuthorizerKind: "client",
+		Authorizer: strings.Repeat("01", 32), Deadline: 1, ResultMeta: "{}", CommittedAt: 1, DropAfter: &drop}
+	require.NoError(t, svc.DB.Create(&rec).Error)
+
+	check, err := svc.AppsService.CashHubDeleteCheck(hub.ID)
+	require.NoError(t, err)
+	require.Len(t, check.Blockers, 1)
+	assert.Equal(t, apps.CashHubBlockerRecords, check.Blockers[0].Kind)
+	require.NotNil(t, check.EarliestDeleteAt)
+	assert.Equal(t, drop, *check.EarliestDeleteAt)
+
+	err = svc.AppsService.DeleteApp(hub)
+	require.ErrorIs(t, err, constants.ErrInvalidParams)
+	assert.Contains(t, err.Error(), "request record(s) kept until")
+
+	// A record still waiting for its bills has no time.
+	require.NoError(t, svc.DB.Model(&db.CashRequestRecord{}).Where("id = ?", rec.ID).Update("drop_after", nil).Error)
+	check, err = svc.AppsService.CashHubDeleteCheck(hub.ID)
+	require.NoError(t, err)
+	assert.Nil(t, check.EarliestDeleteAt)
+
+	require.NoError(t, svc.DB.Delete(&rec).Error)
+	require.NoError(t, svc.AppsService.DeleteApp(hub), "once the record dropped")
 }

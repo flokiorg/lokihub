@@ -139,6 +139,19 @@ type App struct {
 	// CircleBudgetAnchorAt is when a circle_wallet's budget periods start
 	// counting from (NIP-CW §Budget Renewal Floor): its creation, unix seconds.
 	CircleBudgetAnchorAt *int64
+	// CircleState is a circle_wallet's state (NIP-CW §Lifecycle and Deletion):
+	// active, suspended, expired or closing ("" reads as active); CircleStateAt
+	// when it was entered. Deleted has no row.
+	CircleState   string `gorm:"index"`
+	CircleStateAt *int64
+	// CircleGraceStartedAt and CircleGraceEndsAt are a circle_wallet's grace
+	// period, set when it first leaves Active for any state but Deleted and
+	// never restarted; nil while it has none.
+	CircleGraceStartedAt *int64
+	CircleGraceEndsAt    *int64
+	// CircleDustThresholdMloki is the largest balance the Hub may keep from a
+	// wallet it deletes, fixed when the member joined.
+	CircleDustThresholdMloki *int64
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
@@ -396,6 +409,14 @@ type CircleHubConfig struct {
 	// yearly, from the Hub's creation); 0 is no ceiling.
 	OutboundCeilingMloki int64
 	OutboundPeriod       string
+	// GraceSecs is the grace period a member gets before a wallet they did not
+	// delete may be (NIP-CW §Lifecycle and Deletion); DustThresholdMloki the
+	// dust threshold a new wallet gets.
+	GraceSecs          int64
+	DustThresholdMloki int64
+	// TeardownRequestedAt is when the host tore the Hub down: every wallet is
+	// Closing, and the Hub goes once its last wallet is deleted.
+	TeardownRequestedAt *int64
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
 	// members resetting their spend cap too often. A request is rejected when
@@ -438,6 +459,9 @@ type CircleJoinRecord struct {
 	Deadline         int64  `gorm:"not null;index"`
 	EncryptedDetails string `gorm:"type:text;not null"`
 	WalletAppID      uint   `gorm:"not null;index"`
+	// WalletDeletedAt is when the wallet was deleted; the record is then kept
+	// until the join's deadline plus 6 minutes.
+	WalletDeletedAt *int64
 }
 
 // PrivateServedNonce is the nonce of an envelope this hub served on the private

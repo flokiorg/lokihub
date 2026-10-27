@@ -1,0 +1,124 @@
+package apps
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+)
+
+// The kinds of thing that keep a Cash Hub from being deleted (NIP-CASH §Hub
+// Rules; Q23, XQ-22(1)).
+const (
+	CashHubBlockerLiveBills = "live_bills"
+	CashHubBlockerRecords   = "records"
+)
+
+// CashHubDeleteBlocker is one reason a Cash Hub cannot be deleted yet: how many,
+// and until when (nil when no time applies: the bills must go first).
+type CashHubDeleteBlocker struct {
+	Kind  string `json:"kind"`
+	Count int64  `json:"count"`
+	Until *int64 `json:"until"`
+}
+
+// CashHubDeleteCheck is what deleting a Cash Hub waits for, and the earliest
+// time it could go (nil when a blocker has no time).
+type CashHubDeleteCheck struct {
+	Blockers             []CashHubDeleteBlocker `json:"blockers"`
+	EarliestDeleteAt     *int64                 `json:"earliest_delete_at"`
+	WatchedAddresses     int64                  `json:"watched_addresses"`
+	ConfirmationRequired bool                   `json:"confirmation_required"`
+}
+
+// Blocked reports whether anything keeps the Hub.
+func (c CashHubDeleteCheck) Blocked() bool { return len(c.Blockers) > 0 }
+
+// Message is the refusal a delete gives: each reason and the earliest time.
+func (c CashHubDeleteCheck) Message() string {
+	reasons := make([]string, 0, len(c.Blockers))
+	for _, b := range c.Blockers {
+		switch b.Kind {
+		case CashHubBlockerLiveBills:
+			reasons = append(reasons, fmt.Sprintf("%d live bill(s)", b.Count))
+		case CashHubBlockerRecords:
+			if b.Until != nil {
+				reasons = append(reasons, fmt.Sprintf("%d request record(s) kept until %s", b.Count, time.Unix(*b.Until, 0).UTC().Format(time.RFC3339)))
+			} else {
+				reasons = append(reasons, fmt.Sprintf("%d request record(s) kept until their bills are gone", b.Count))
+			}
+		default:
+			reasons = append(reasons, fmt.Sprintf("%d %s", b.Count, b.Kind))
+		}
+	}
+	when := "after the bills are gone"
+	if c.EarliestDeleteAt != nil {
+		when = "at " + time.Unix(*c.EarliestDeleteAt, 0).UTC().Format(time.RFC3339)
+	}
+	return fmt.Sprintf("this Cash Hub cannot be deleted yet: %s; the earliest it can go is %s", strings.Join(reasons, ", "), when)
+}
+
+// CashHubDeleteCheckTx reads what keeps a Cash Hub at now, inside tx: its live
+// bills, and every request record that names it and is still retained (a held
+// record is within retention: records drop only at drop_after). The insert of
+// every record naming the Hub runs under the Hub's lock, as the delete does, so
+// nothing appears between this check and the delete.
+func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDeleteCheck, error) {
+	check := CashHubDeleteCheck{Blockers: []CashHubDeleteBlocker{}}
+	var bills int64
+	if err := tx.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", hubID, db.AppKindCashWallet).Count(&bills).Error; err != nil {
+		return check, err
+	}
+	if bills > 0 {
+		check.Blockers = append(check.Blockers, CashHubDeleteBlocker{Kind: CashHubBlockerLiveBills, Count: bills})
+	}
+	var records []db.CashRequestRecord
+	if err := tx.Select("id", "drop_after").Where("hub_app_id = ? AND method <> ?", hubID, constants.NIP47MethodCashOrder).
+		Find(&records).Error; err != nil {
+		return check, err
+	}
+	if len(records) > 0 {
+		blocker := CashHubDeleteBlocker{Kind: CashHubBlockerRecords, Count: int64(len(records))}
+		var latest int64
+		timed := true
+		for _, r := range records {
+			if r.DropAfter == nil {
+				timed = false
+				break
+			}
+			latest = max(latest, *r.DropAfter)
+		}
+		if timed {
+			blocker.Until = &latest
+		}
+		check.Blockers = append(check.Blockers, blocker)
+	}
+	check.EarliestDeleteAt = earliestDelete(check.Blockers, now)
+	return check, nil
+}
+
+// earliestDelete is the latest of the blockers' times, or nil when one has none.
+func earliestDelete(blockers []CashHubDeleteBlocker, now time.Time) *int64 {
+	if len(blockers) == 0 {
+		at := now.Unix()
+		return &at
+	}
+	var latest int64
+	for _, b := range blockers {
+		if b.Until == nil {
+			return nil
+		}
+		latest = max(latest, *b.Until)
+	}
+	return &latest
+}
+
+// CashHubDeleteCheck is CashHubDeleteCheckTx outside a transaction, for the
+// delete-check endpoint.
+func (svc *appsService) CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error) {
+	return CashHubDeleteCheckTx(svc.db, hubID, time.Now())
+}
