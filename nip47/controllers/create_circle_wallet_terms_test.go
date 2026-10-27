@@ -102,3 +102,27 @@ func TestGetInfo_CircleHubReportsReceiveCeiling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(333_000), terms.PerWalletMaxReceiveMillis)
 }
+
+// get_info reports the Hub's own routing-fee reserve rule, dust threshold and,
+// when it serves rotation, its rotation delay.
+func TestGetInfo_CircleHubReportsItsLifecycleTerms(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	provider := createCircleHub(t, svc, 7200, 1_000_000)
+	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", provider.ID).Updates(map[string]interface{}{
+		"fee_reserve_ppm": 20_000, "fee_reserve_min_mloki": 5_000, "dust_threshold_mloki": 2_500,
+		"rotation_enabled": true, "rotation_delay_secs": 3600}).Error)
+
+	terms, err := NewTestNip47Controller(svc).circleWalletTerms(provider, "")
+	require.NoError(t, err)
+	assert.Equal(t, feeReserve{Ppm: 20_000, MinMillis: 5_000}, terms.FeeReserve)
+	assert.Equal(t, int64(2_500), terms.DustThresholdMillis)
+	require.NotNil(t, terms.RotationDelaySecs)
+	assert.Equal(t, int64(3600), *terms.RotationDelaySecs)
+
+	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", provider.ID).Update("rotation_enabled", false).Error)
+	terms, err = NewTestNip47Controller(svc).circleWalletTerms(provider, "")
+	require.NoError(t, err)
+	assert.Nil(t, terms.RotationDelaySecs, "absent when the Hub does not serve rotation")
+}
