@@ -285,12 +285,16 @@ export interface AppPermissions {
   cashMaxExpSecs?: number;
 }
 
+// LSP is a trusted LSP as /api/info lists it (WP-26): pubkey is the node id
+// LSPS uses (empty until resolved), status and usable its announcement's.
 export interface LSP {
+  nodeKey: string;
   name: string;
   pubkey: string;
   host: string;
   active: boolean;
-  isCommunity?: boolean;
+  status: "open" | "paused" | "closed" | "";
+  usable: boolean;
   description?: string;
   website?: string;
 }
@@ -745,7 +749,6 @@ export type SetupNodeInfo = Partial<{
   mempoolApi?: string;
   enableSwap?: boolean;
   enableMessageboardNwc?: boolean;
-  lsps?: LSP[];
 }>;
 
 export type LSPType = "LSPS1";

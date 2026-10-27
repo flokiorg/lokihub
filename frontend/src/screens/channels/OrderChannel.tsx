@@ -1,3 +1,12 @@
+import {
+  defaultLSP,
+  readLastUsedLSP,
+  rememberLSP,
+} from "src/components/lsps/catalogue";
+import {
+  NoTrustedLSP,
+  TrustedLSPItems,
+} from "src/components/lsps/TrustedLSPItems";
 import { History, InfoIcon, Zap } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,12 +19,10 @@ import QRCode from "src/components/QRCode";
 import { Alert, AlertDescription } from "src/components/ui/alert";
 import { Card, CardContent } from "src/components/ui/card";
 import { CurrencyInput } from "src/components/CurrencyInput";
-import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "src/components/ui/select";
@@ -84,10 +91,13 @@ export default function OrderChannel() {
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [lsps1Info, setLsps1Info] = useState<LSPS1GetInfoResponse | null>(null);
 
-  // Initialize selectedLSP with the first available LSP
+  // The last used trusted LSP selling now, else the first (WP-26).
   useEffect(() => {
-    if (info?.lsps?.length && !selectedLSP) {
-      setSelectedLSP(info.lsps[0].pubkey);
+    if (!selectedLSP) {
+      const d = defaultLSP(info?.lsps ?? [], readLastUsedLSP());
+      if (d) {
+        setSelectedLSP(d);
+      }
     }
   }, [info, selectedLSP]);
 
@@ -427,20 +437,22 @@ export default function OrderChannel() {
             <div className="grid gap-1.5">
               <Label htmlFor="lsp-select">{t("orderChannel.lspLabel")}</Label>
               {info.lsps && info.lsps.length > 0 ? (
-                <Select value={selectedLSP} onValueChange={setSelectedLSP}>
+                <Select
+                  value={selectedLSP}
+                  onValueChange={(v) => {
+                    setSelectedLSP(v);
+                    rememberLSP(v);
+                  }}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={t("orderChannel.selectLSP")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {info.lsps.map((lsp) => (
-                      <SelectItem key={lsp.pubkey} value={lsp.pubkey}>
-                        {lsp.name || lsp.pubkey.substring(0, 16) + "..."}
-                      </SelectItem>
-                    ))}
+                    <TrustedLSPItems lsps={info.lsps} />
                   </SelectContent>
                 </Select>
               ) : (
-                <Input value={t("orderChannel.noLSPs")} disabled />
+                <NoTrustedLSP />
               )}
               <div className="text-muted-foreground text-xs">
                 <span className="me-1">{t("orderChannel.manageLSP")}</span>

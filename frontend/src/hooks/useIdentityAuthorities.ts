@@ -44,7 +44,7 @@ export function useIdentityAuthorities() {
 
   // Diffs `original` (last-saved backend state) against `current` (local
   // working state) and issues only the add/remove calls needed, mirroring
-  // useLSPSManagement's saveLSPChanges so Identity Authorities save via the
+  // a diff-based save, so Identity Authorities save via the
   // same "Save Services" button instead of their own per-row API calls.
   const saveIdentityAuthorityChanges = useCallback(
     async (original: IdentityAuthority[], current: IdentityAuthority[]) => {
