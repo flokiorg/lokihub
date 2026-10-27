@@ -466,6 +466,10 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			if err := lockCircleParties(tx, payer); err != nil {
 				return err
 			}
+			// Read again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
 		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
@@ -745,6 +749,15 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		if circlePayer || circlemoney.IsCircleWallet(recipient) {
 			if err := lockCircleParties(tx, payer, recipient); err != nil {
 				return err
+			}
+			// Read both again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
+			if recipient != nil {
+				if recipient, err = loadApp(tx, &recipient.ID); err != nil {
+					return err
+				}
 			}
 		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
