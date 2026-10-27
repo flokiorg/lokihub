@@ -3,6 +3,7 @@ package nip47
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -105,6 +106,7 @@ func TestOrderIntake_LightningMintsOnce(t *testing.T) {
 	require.NoError(t, f.svc.DB.Find(&claims).Error)
 	require.Len(t, claims, 1)
 	assert.True(t, claims[0].Ordered)
+	assert.Nil(t, claims[0].UnfinalPaymentIDs, "a Lightning payment is final once settled")
 	assert.Equal(t, int64(21_000), claims[0].AmountMloki)
 	assert.Equal(t, 5000, claims[0].RedeemFeePpm, "the bill terms frozen at placement")
 	var bill db.App
@@ -220,6 +222,13 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	require.Len(t, got.Bills, 1)
 	assert.EqualValues(t, 21_000, got.Bills[0].AmountMillis)
 	assert.Equal(t, out.TxID+":1", got.Bills[0].Outpoint)
+	// The bill names its on-chain payment, for cash_withdraw's unfinal check.
+	var pay db.CashOrderPayment
+	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+out.TxID+":1").First(&pay).Error)
+	var minted db.CashWalletClaim
+	require.NoError(t, f.svc.DB.Where("ordered = ?", true).Order("id").First(&minted).Error)
+	require.NotNil(t, minted.UnfinalPaymentIDs)
+	assert.Equal(t, fmt.Sprintf("[%d]", pay.ID), *minted.UnfinalPaymentIDs)
 
 	f.clock = f.clock.Add(86401 * time.Second)
 	f.engine.RunPayBy(context.TODO())

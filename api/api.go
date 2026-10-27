@@ -587,17 +587,23 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 }
 
 // refuseOwnerDeleteOfHeldBill refuses the Hub owner's delete of a bill holding
-// a live ordered slice (NIP-CASH §Data Model): only its holder ends it. Every
-// owner delete path (the Cash Hub's wallet list and the generic app delete
-// behind Disconnect) goes through it.
+// a live ordered slice (NIP-CASH §Data Model) or the live slice of a bill a
+// cancelled withdrawal re-minted (§Cancelling a Payout): only its holder ends
+// it. Every owner delete path (the Cash Hub's wallet list and the generic app
+// delete behind Disconnect) goes through it.
 func (api *api) refuseOwnerDeleteOfHeldBill(walletAppID uint) error {
-	var ordered int64
-	if err := api.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND ordered = ? AND claimed_at IS NULL", walletAppID, true).
-		Count(&ordered).Error; err != nil {
+	var held []db.CashWalletClaim
+	if err := api.db.Select("ordered", "reminted").Where("wallet_app_id = ? AND (ordered = ? OR reminted = ?) AND claimed_at IS NULL",
+		walletAppID, true, true).Find(&held).Error; err != nil {
 		return err
 	}
-	if ordered > 0 {
-		return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
+	for _, c := range held {
+		if c.Ordered {
+			return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
+		}
+	}
+	if len(held) > 0 {
+		return fmt.Errorf("%w: this bill was re-minted by a cancelled withdrawal and cannot be deleted", constants.ErrInvalidParams)
 	}
 	return nil
 }
@@ -3496,14 +3502,15 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		}
 		return err
 	}
-	// An ordered slice is never removed by the Hub's owner (NIP-CASH §Data Model).
-	var ordered int64
-	if err := api.db.Model(&db.CashWalletClaim{}).Where("id = ? AND wallet_app_id = ? AND ordered = ?", claimID, walletAppID, true).
-		Count(&ordered).Error; err != nil {
+	// An ordered slice, or a re-minted one, is never removed by the Hub's owner
+	// (NIP-CASH §Data Model, §Cancelling a Payout).
+	var held int64
+	if err := api.db.Model(&db.CashWalletClaim{}).Where("id = ? AND wallet_app_id = ? AND (ordered = ? OR reminted = ?)",
+		claimID, walletAppID, true, true).Count(&held).Error; err != nil {
 		return err
 	}
-	if ordered > 0 {
-		return fmt.Errorf("%w: an ordered slice cannot be removed", constants.ErrInvalidParams)
+	if held > 0 {
+		return fmt.Errorf("%w: an ordered or re-minted slice cannot be removed", constants.ErrInvalidParams)
 	}
 
 	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):

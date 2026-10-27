@@ -301,6 +301,16 @@ type CashWalletClaim struct {
 	// owner can neither delete its wallet nor remove it. Carried onto every
 	// wallet made from it.
 	Ordered bool `gorm:"not null;default:false"`
+	// UnfinalPaymentIDs are the on-chain cash_order_payments ids (a JSON array)
+	// an ordered slice was made from: until each has final_depth confirmations
+	// the slice is refused for cash_withdraw (unfinal, NIP-CASH §Redeeming
+	// On-chain). Set at the mint, carried onto every slice made from it (a
+	// merge carries the union), copied onto a re-minted bill.
+	UnfinalPaymentIDs *string `gorm:"type:text"`
+	// Reminted marks the slice of a bill a cancelled cash_withdraw re-minted
+	// (NIP-CASH §Cancelling a Payout): as for an ordered slice, the Hub's owner
+	// can neither delete its wallet nor remove it.
+	Reminted bool `gorm:"not null;default:false"`
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see

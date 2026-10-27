@@ -41,8 +41,11 @@ type SplitInTwoParams struct {
 	RedeemFeeBaseMloki int64
 	// Ordered: a wallet made from an ordered slice is ordered (NIP-CASH §Data
 	// Model).
-	Ordered   bool
-	ExpiresAt *time.Time
+	Ordered bool
+	// UnfinalPaymentIDs travel with Ordered: the order payments the slice was
+	// made from (NIP-CASH §Redeeming On-chain, unfinal).
+	UnfinalPaymentIDs *string
+	ExpiresAt         *time.Time
 
 	// Proofs are consumed by the commit, and only if it commits.
 	Proofs []ClaimProof
@@ -92,6 +95,7 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*Split
 				RedeemFeePpm:       params.RedeemFeePpm,
 				RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 				Ordered:            params.Ordered,
+				UnfinalPaymentIDs:  params.UnfinalPaymentIDs,
 			}},
 			identityRequired: identityType != db.CashIdentityCash,
 			splitFrom:        &source,

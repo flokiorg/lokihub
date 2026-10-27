@@ -102,7 +102,7 @@ func (s *Service) orders() OrderFacts {
 	if s.Orders != nil {
 		return s.Orders
 	}
-	return noOrders{}
+	return DBOrders{}
 }
 
 func (s *Service) env() config.WithdrawEnv {

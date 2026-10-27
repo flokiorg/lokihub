@@ -46,3 +46,30 @@ func TestDeleteApp_OrderedBill_Refused(t *testing.T) {
 		Update("claimed_at", time.Now()).Error)
 	require.NoError(t, theAPI.DeleteApp(bill))
 }
+
+// A bill a cancelled withdrawal re-minted is the holder's too (NIP-CASH
+// §Cancelling a Payout): neither delete path nor the slice removal takes it.
+func TestDeleteApp_RemintedBill_Refused(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 10_000, 3600)
+	bill, _, err := svc.AppsService.CreateApp(
+		"reminted-bill", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_REDEEM_SCOPE, constants.GET_BALANCE_SCOPE}, db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, svc.AppsService.CreateCashWalletClaims(bill.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 5_000, Reminted: true},
+	}))
+	var claim db.CashWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", bill.ID).First(&claim).Error)
+
+	theAPI := newTestAPIWithService(t, svc)
+	err = theAPI.DeleteApp(bill)
+	require.ErrorIs(t, err, constants.ErrInvalidParams)
+	assert.Contains(t, err.Error(), "re-minted")
+	require.ErrorIs(t, theAPI.DeleteCashWallet(hub.ID, bill.ID), constants.ErrInvalidParams)
+	require.ErrorIs(t, theAPI.DeleteCashClaim(hub.ID, bill.ID, claim.ID), constants.ErrInvalidParams)
+}

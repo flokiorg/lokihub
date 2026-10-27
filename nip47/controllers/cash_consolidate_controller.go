@@ -288,6 +288,15 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		}
 		proofs[i] = cashwallet.ClaimProof{EventID: s.proofID, CreatedAt: s.proofCreatedAt, Method: method}
 	}
+	unfinal := make([]*string, len(sources))
+	for i, s := range sources {
+		unfinal[i] = s.claim.UnfinalPaymentIDs
+	}
+	unfinalIDs, err := db.MergePaymentIDs(unfinal...)
+	if err != nil {
+		refuse(constants.ERROR_INTERNAL, "could not read the sources' order payments")
+		return
+	}
 	result, err := cashwallet.Consolidate(ctx, controller.cashDeps(), cashwallet.ConsolidateParams{
 		HubApp:             hubApp,
 		Sources:            inputs,
@@ -298,6 +307,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		RedeemFeePpm:       first.RedeemFeePpm,
 		RedeemFeeBaseMloki: first.RedeemFeeBaseMloki,
 		Ordered:            first.Ordered,
+		UnfinalPaymentIDs:  unfinalIDs,
 		ExpiresAt:          earliest,
 		Proofs:             proofs,
 		Record:             record,

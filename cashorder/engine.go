@@ -350,6 +350,12 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 			if order.RecipientIA != nil {
 				claim.IAPubkey = *order.RecipientIA
 			}
+			// An on-chain payment's bills are refused for cash_withdraw until it
+			// has final_depth confirmations (NIP-CASH §Redeeming On-chain).
+			if strings.HasPrefix(p.PaymentKey, "oc:") {
+				ids := fmt.Sprintf("[%d]", p.ID)
+				claim.UnfinalPaymentIDs = &ids
+			}
 			bills := make([]cashwallet.OrderedBill, len(amounts))
 			for i, a := range amounts {
 				bills[i] = cashwallet.OrderedBill{Amount: a, Claim: claim}
