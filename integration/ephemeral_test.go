@@ -320,9 +320,9 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 	// apps.DeleteApp refuses a cash_hub with any cash_wallet children still
 	// attached.
 	t.Cleanup(func() {
-		// A mint's request record is retained (NIP-CASH Q23) and keeps the hub
-		// until it drops; TestZZZ_NoLeakedEphemeralFixtures accepts that.
-		if err := admin.deleteApp(resp.ID); err != nil && !strings.Contains(err.Error(), "request record") {
+		// A mint's request record (NIP-CASH Q23) or an order (NIP-CO) keeps the
+		// hub until it drops; TestZZZ_NoLeakedEphemeralFixtures accepts that.
+		if err := admin.deleteApp(resp.ID); err != nil && !strings.Contains(err.Error(), "cannot be deleted yet") {
 			t.Logf("cleanup: failed to delete ephemeral cash_hub app_id=%d (%v)", resp.ID, err)
 		}
 	})
