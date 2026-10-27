@@ -256,6 +256,8 @@ func (svc *nip47Service) rebuildResult(rec *db.CashRequestRecord, now time.Time)
 		// The order as it stands, never a copy of the first reply (NIP-CO
 		// §Reading an Order).
 		return svc.orderView(rec)
+	case constants.NIP47MethodCashWithdraw:
+		return svc.withdrawLookupResult(rec, now)
 	case constants.NIP47MethodMintCash:
 		var meta struct {
 			ExpiresAt  *int64                    `json:"expires_at,omitempty"`

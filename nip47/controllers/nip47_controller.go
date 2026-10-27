@@ -5,6 +5,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
@@ -42,6 +43,8 @@ type nip47Controller struct {
 	lineageLimiter RateLimiter
 	// cashHooks is the cash commit's fault-injection seam; tests only.
 	cashHooks *cashwallet.TestHooks
+	// withdraw serves on-chain withdrawals; nil offers none.
+	withdraw *cashwithdraw.Service
 
 	cfg config.Config
 }

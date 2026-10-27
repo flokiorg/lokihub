@@ -130,9 +130,11 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		recipients[i] = status
 	}
 
+	result := nipcash.CashStatusResult{Recipients: recipients}
+	controller.addWithdrawStatus(app, claims, &result, caller)
 	publishResponse(&models.Response{
 		ResultType: nip47Request.Method,
-		Result:     nipcash.CashStatusResult{Recipients: recipients},
+		Result:     result,
 	}, nostr.Tags{})
 }
 

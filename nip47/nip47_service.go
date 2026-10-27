@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
@@ -42,6 +43,8 @@ type nip47Service struct {
 	lookupLimiter          controllers.RateLimiter
 	identityAuthorityMgr   *apps.IdentityAuthorityManager
 	privateIdentity        func() string
+	// withdraw serves on-chain withdrawals (private_withdraw.go); nil offers none.
+	withdraw *cashwithdraw.Service
 }
 
 type Nip47Service interface {

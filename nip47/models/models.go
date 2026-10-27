@@ -69,6 +69,9 @@ type Response struct {
 type Error struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Detail refines a withdrawal refusal (NIP-CASH §Errors): one of nmilat's
+	// eight values, on the private transport only.
+	Detail string `json:"detail,omitempty"`
 }
 
 // CallMeta is what the transport knows about a call before its controller runs

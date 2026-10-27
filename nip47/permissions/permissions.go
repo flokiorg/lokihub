@@ -163,6 +163,7 @@ func (svc *permissionsService) GetPrivateMethods(app *db.App) []string {
 	}
 	// cash_lookup recovers a lost reply of a bill method or of mint_cash, so every
 	// connection serving either lists it (NIP-CASH §Support).
+	out = append(out, withdrawPrivateMethods(app, scopes)...)
 	if len(out) > 0 || slices.Contains(scopes, constants.CASH_HUB_SCOPE) {
 		out = append(out, constants.NIP47MethodCashLookup)
 	}
@@ -279,7 +280,8 @@ func RequestMethodToScope(requestMethod string) (string, error) {
 		return constants.CASH_HUB_SCOPE, nil
 	case constants.NIP47MethodCreateCircleWallet:
 		return constants.CIRCLE_WALLET_SCOPE, nil
-	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus:
+	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashStatus,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
 		return constants.CASH_REDEEM_SCOPE, nil
 	case constants.NIP47MethodCashTransfer:
 		return constants.CASH_TRANSFER_SCOPE, nil
