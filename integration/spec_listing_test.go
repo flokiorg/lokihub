@@ -7,13 +7,10 @@
 // against an 11191 a test key publishes (lokihub builds and signs none); the
 // signing oracle closed on the admin API.
 //
-// NOT YET RUN LIVE: written with WP-25 on spec-sync/wp-25-listings and only
-// compiled (go vet -tags integration). Run it on the regtest stack in the next
-// live round. The time-travel steps (republish after 7 days, the deletion after
-// the last open version's expiry) need the backend clock hook
-// (POST /api/test/clock, WP-20 item 2) driving the listing scheduler's clock,
-// and skip until it exists. Order connections (I-70's Order half, I-71's
-// retire, I-RC2) wait for WP-21.
+// The time-travel steps (republish after 7 days, the deletion after the last
+// open version's expiry) move the listing scheduler's clock through the
+// testhooks clock hook (POST /api/test/clock {scope: "listing"}) and skip on a
+// stack without it.
 package integration
 
 import (
@@ -116,11 +113,11 @@ func eventTag(ev *nostr.Event, name string) string {
 	return ""
 }
 
-// moveClock moves the backend clock by offset; the step skips when the hook is
-// absent (WP-20 item 2).
+// moveClock moves the listing scheduler's clock by offset (the testhooks clock
+// hook, scope "listing"); the step skips when the hook is absent.
 func moveClock(t *testing.T, admin *adminClient, offset int64) bool {
 	t.Helper()
-	if err := admin.doBody(http.MethodPost, "/api/test/clock", map[string]any{"offset_secs": offset}, nil); err != nil {
+	if err := admin.doBody(http.MethodPost, "/api/test/clock", map[string]any{"offset_secs": offset, "scope": "listing"}, nil); err != nil {
 		t.Logf("clock hook unavailable (%v): time-travel step skipped", err)
 		return false
 	}
@@ -178,7 +175,7 @@ func TestSpecListing_I70_Publish(t *testing.T) {
 
 // I-71: unlist publishes the closed version, get_info unchanged; past the last
 // open version's expiry the NIP-09 deletion (a, k) follows. Closing a circle
-// (accepting false) first, then closed, once WP-19's toggle exists.
+// (WP-19's accepting toggle): accepting false first, then closed.
 func TestSpecListing_I71_Retirement(t *testing.T) {
 	cfg := requireConfig(t)
 	hub, hubID, admin := createEphemeralCircleHub(t, cfg, "retired circle", circlePolicyAllowlist, nil, ephemeralCircleHubOpts{})
