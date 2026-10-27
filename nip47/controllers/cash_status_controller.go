@@ -95,6 +95,13 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 	}
 	if scope == nipcash.ScopeMine {
 		claims = claimsForCaller(claims, caller)
+		// "mine" comes from the item-proof signer alone (NIP-CASH §Scoping the Roster,
+		// XQ-5): a caller it names no row for gets NOT_FOUND, never a wider roster. A
+		// connection_key holder reads scope "all" and picks its row.
+		if len(claims) == 0 {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
+			return
+		}
 	}
 
 	var expiresAt nipcash.Expiry
@@ -108,6 +115,7 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		status := nipcash.RecipientStatus{
 			IdentityType:        c.IdentityType,
 			IdentityValue:       c.IdentityValue,
+			IAPubkey:            iaPubkeyOf(c),
 			AmountMillis:        uint64(c.AmountMloki), //nolint:gosec // AmountMloki is always non-negative
 			Claimed:             c.ClaimedAt != nil,
 			RedeemFeeMillis:     redeemFeeMloki,
@@ -180,4 +188,14 @@ func claimsForCaller(claims []db.CashWalletClaim, caller *CashStatusCaller) []db
 		}
 	}
 	return out
+}
+
+// iaPubkeyOf is a row's ia_pubkey: a connection_key slice's IA, so its holder can
+// pick its own row from scope "all" (NIP-CASH §Cash Status, CT-STAT-15); none for a
+// pubkey or cash row.
+func iaPubkeyOf(c db.CashWalletClaim) string {
+	if c.IdentityType == db.CashIdentityConnectionKey {
+		return c.IAPubkey
+	}
+	return ""
 }

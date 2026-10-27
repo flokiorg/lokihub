@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
 
@@ -28,9 +29,8 @@ func TestCashStatus_RemovedRecipientHiddenFromBothScopes(t *testing.T) {
 	assert.Equal(t, mine, allRows[0].IdentityValue)
 
 	own := callStatus(t, svc, wallet, statusRequest(t, nipcash.ScopeMine), &CashStatusCaller{IdentityValue: theirs})
-	require.Nil(t, own.Error)
-	assert.Empty(t, own.Result.(nipcash.CashStatusResult).Recipients,
-		"the removed recipient's own scope=mine read returns nothing")
+	require.NotNil(t, own.Error, "the removed recipient's own scope=mine read names no row")
+	assert.Equal(t, constants.ERROR_NOT_FOUND, own.Error.Code)
 
 	var archived db.CashBillSliceArchive
 	require.NoError(t, svc.DB.Where("wallet_app_id = ? AND identity_value = ?", wallet.ID, theirs).First(&archived).Error)
