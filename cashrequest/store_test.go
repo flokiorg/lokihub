@@ -203,8 +203,9 @@ func TestRaisingTheHorizonDelaysRecordDrops(t *testing.T) {
 	assert.NotNil(t, got)
 }
 
-// U-3.8: consumed claim proofs are single-use, releasable for a call that did not
-// happen, and pruned an hour after their created_at.
+// U-3.8: consumed claim proofs are single-use, and pruned an hour after their
+// created_at. A redeem that did not happen releases its proof with its claim, in
+// one transaction (apps.ReleaseRedeemClaim); nothing releases one on its own.
 func TestU_3_8_ConsumedProofs(t *testing.T) {
 	svc, s, now := newStore(t)
 	ev := strings.Repeat("ab", 32)
@@ -216,8 +217,6 @@ func TestU_3_8_ConsumedProofs(t *testing.T) {
 	used, err = s.IsProofConsumed(ev)
 	require.NoError(t, err)
 	assert.True(t, used)
-	require.NoError(t, s.ReleaseProof(ev))
-	require.NoError(t, s.ConsumeProofTx(svc.DB, ev, now.Unix(), "cash_transfer"))
 
 	later := cashrequest.Store{DB: svc.DB, Now: func() time.Time { return now.Add(cashrequest.ProofRetentionSecs * time.Second) }}
 	n, err := later.PruneProofs()
