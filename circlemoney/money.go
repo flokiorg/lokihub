@@ -175,12 +175,14 @@ func HubPeriodStart(hub *db.App, cfg *db.CircleHubConfig, now time.Time) (int64,
 // it may cost and settled at what it cost.
 func SendUsage(tx *gorm.DB, walletID uint, periodStart int64) int64 {
 	var sum int64
-	tx.Model(&db.Transaction{}).
+	if err := tx.Model(&db.Transaction{}).
 		Select("COALESCE(SUM(amount_mloki + fee_mloki + fee_reserve_mloki + fee_skim_mloki), 0)").
 		Where("app_id = ? AND type = ? AND state IN ? AND counts_send = ? AND period_start = ?",
 			walletID, constants.TRANSACTION_TYPE_OUTGOING,
 			[]string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_SETTLED}, true, periodStart).
-		Scan(&sum)
+		Scan(&sum).Error; err != nil {
+		return usageUnknown(err, "send usage", walletID)
+	}
 	return sum
 }
 
@@ -188,12 +190,14 @@ func SendUsage(tx *gorm.DB, walletID uint, periodStart int64) int64 {
 // period starting at periodStart.
 func Receipts(tx *gorm.DB, walletID uint, periodStart int64) int64 {
 	var sum int64
-	tx.Model(&db.Transaction{}).
+	if err := tx.Model(&db.Transaction{}).
 		Select("COALESCE(SUM(amount_mloki), 0)").
 		Where("app_id = ? AND type = ? AND state = ? AND payment_kind IN ? AND period_start = ?",
 			walletID, constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_SETTLED,
 			[]int{KindNode, KindLightning}, periodStart).
-		Scan(&sum)
+		Scan(&sum).Error; err != nil {
+		return usageUnknown(err, "receipts", walletID)
+	}
 	return sum
 }
 
@@ -206,10 +210,12 @@ func OpenInvoices(tx *gorm.DB, walletIDs []uint, now time.Time) (sum int64, coun
 		return 0, 0
 	}
 	var rows []db.Transaction
-	tx.Model(&db.Transaction{}).Select("amount_mloki", "expires_at", "state").
+	if err := tx.Model(&db.Transaction{}).Select("amount_mloki", "expires_at", "state").
 		Where("app_id IN ? AND type = ? AND state IN ?", walletIDs, constants.TRANSACTION_TYPE_INCOMING,
 			[]string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_ACCEPTED}).
-		Find(&rows)
+		Find(&rows).Error; err != nil {
+		return usageUnknown(err, "open invoices", walletIDs[0]), math.MaxInt32
+	}
 	for _, row := range rows {
 		if row.State == constants.TRANSACTION_STATE_ACCEPTED || row.ExpiresAt == nil || row.ExpiresAt.After(now) {
 			sum = satAdd(sum, clampInt64(row.AmountMloki))
@@ -320,15 +326,26 @@ func warnNearCeiling(ceiling string, hubID uint, used, limit int64) {
 // the Hub period starting at hubPeriodStart.
 func OutboundUsage(tx *gorm.DB, hubID uint, hubPeriodStart int64) int64 {
 	var sum int64
-	tx.Table("transactions").
+	if err := tx.Table("transactions").
 		Select("COALESCE(SUM(transactions.amount_mloki + transactions.fee_mloki + transactions.fee_reserve_mloki + transactions.fee_skim_mloki), 0)").
 		Joins("JOIN apps ON apps.id = transactions.app_id").
 		Where("apps.parent_app_id = ? AND apps.kind = ?", hubID, db.AppKindCircleWallet).
 		Where("transactions.type = ? AND transactions.state IN ? AND transactions.outbound_period_start = ?",
 			constants.TRANSACTION_TYPE_OUTGOING,
 			[]string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_SETTLED}, hubPeriodStart).
-		Scan(&sum)
+		Scan(&sum).Error; err != nil {
+		return usageUnknown(err, "outbound usage", hubID)
+	}
 	return sum
+}
+
+// usageUnknown is the usage a sum reads when the database could not answer: the
+// most there can be, so every cap and ceiling it feeds refuses rather than
+// passes.
+func usageUnknown(err error, what string, appID uint) int64 {
+	logger.Logger.Error().Err(err).Uint("app_id", appID).Str("sum", what).
+		Msg("Could not read circle usage; treating it as full")
+	return math.MaxInt64
 }
 
 func satAdd(a, b int64) int64 {
