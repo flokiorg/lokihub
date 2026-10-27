@@ -355,11 +355,6 @@ func (svc *nip47Service) servePrivateItem(
 // cash_status and the value methods are answered (I4), each under its own
 // result_type: the tombstone is a result, never an error.
 func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
-	// I4: cash_status and the value methods are answered with the tombstone.
-	if item.Method != nipcash.MethodCashStatus && !valueMethods[item.Method] {
-		return transport.Result{}, false
-	}
-
 	// Gate 2, using db.RetentionWindowOpen rather than a local comparison so this
 	// path and the relay gate agree exactly at the boundary — they did not when each
 	// wrote the comparison itself.
@@ -372,6 +367,17 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string,
 	// Gate 3, against the pubkey stored at archive time: deriving it here cost
 	// enough to tell a recently destroyed bill from one never served.
 	if tombstone.ConnectionPubkey == "" || !billProofHolder(signer, tombstone.ConnectionPubkey) {
+		return transport.Result{}, false
+	}
+
+	// I4: cash_status and the value methods are answered with the tombstone.
+	// I5: a method this transport does not serve is NOT_IMPLEMENTED; any other
+	// method has nothing to act on and is omitted.
+	if item.Method != nipcash.MethodCashStatus && !valueMethods[item.Method] {
+		if !IsPrivateServableMethod(item.Method) {
+			return transport.Result{ID: item.ID, ResultType: item.Method, Error: &transport.ResultError{
+				Code: constants.ERROR_NOT_IMPLEMENTED, Message: item.Method + " is not served on this transport"}}, true
+		}
 		return transport.Result{}, false
 	}
 

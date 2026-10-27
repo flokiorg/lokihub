@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
 )
 
@@ -434,9 +435,18 @@ func TestPrivateTombstone_ValueMethodsAreAnswered(t *testing.T) {
 		})
 	}
 
+	// I5: a method this transport does not serve is NOT_IMPLEMENTED, for a
+	// destroyed bill as for a live one.
+	unserved := buildItem(t, "t6", walletPubkey, models.PAY_INVOICE_METHOD, `{}`,
+		nostr.GeneratePrivateKey(), connPriv, hubXOnly, nonce, notAfter)
+	res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, unserved, binding)
+	require.True(t, served)
+	require.NotNil(t, res.Error)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, res.Error.Code)
+
 	// A foreign bill proof still gets silence.
 	item := buildItem(t, "t5", walletPubkey, constants.NIP47MethodCashRedeem, `{}`,
 		nostr.GeneratePrivateKey(), nostr.GeneratePrivateKey(), hubXOnly, nonce, notAfter)
-	_, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	_, served = nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	assert.False(t, served)
 }
