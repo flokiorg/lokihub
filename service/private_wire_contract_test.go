@@ -96,7 +96,7 @@ func TestWireContract_ReplayIsRefusedAcrossTheBoundary(t *testing.T) {
 
 	_, _, err = pt.unwrap(event, transport.DefaultLimits(), time.Now())
 	require.Error(t, err, "a replayed envelope must be refused")
-	assert.Contains(t, err.Error(), "already seen")
+	assert.Contains(t, err.Error(), "already served")
 }
 
 // TestWireContract_HubRejectsAWrapAddressedElsewhere: an SDK request addressed to a

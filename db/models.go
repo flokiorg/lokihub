@@ -390,6 +390,14 @@ type CircleWalletIdentityProof struct {
 	CreatedAt time.Time
 }
 
+// PrivateServedNonce is the nonce of an envelope this hub served on the private
+// transport (NIP-CASH §Serving an Envelope, E3), kept until its not_after passes
+// so a replay is dropped even across a restart.
+type PrivateServedNonce struct {
+	Nonce    string `gorm:"primaryKey;size:64"`
+	NotAfter int64  `gorm:"not null;index"`
+}
+
 // CashConsumedProof marks a claim proof (kind 23198) as used, so a captured proof
 // cannot authorize a second redeem, transfer or consolidate (NIP-CASH §Claim
 // Proofs). Kept until well after the proof could pass the freshness check

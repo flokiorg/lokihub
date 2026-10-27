@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip44"
@@ -34,6 +37,8 @@ func (svc *service) dispatchEnvelope(
 		HubXOnly: pt.nodeXOnly,
 		Nonce:    envelope.Nonce,
 		NotAfter: envelope.NotAfter,
+		// Items run one at a time, in array order, so one counter serves them all.
+		AuthFailures: new(int),
 	}
 
 	// Items Decode dropped as malformed are omitted too: each item stands on its own,
@@ -98,61 +103,99 @@ func (svc *service) publishPrivateReply(
 		if err != nil {
 			return fmt.Errorf("encode reply %d/%d: %w", chunk.Seq, chunk.Total, err)
 		}
-		ciphertext, err := nip44.Encrypt(string(plaintext), replyKey)
-		if err != nil {
-			return fmt.Errorf("encrypt reply %d/%d: %w", chunk.Seq, chunk.Total, err)
-		}
-
-		// Authored by a FRESH ephemeral key, never the hub's identity. Signing with the
-		// identity would leave a countable, permanent public record of how much
-		// private-transport traffic this hub serves and when — undoing part of what the
-		// transport is for. The signature does no authentication work anyway: only this hub
-		// can derive the reply key, so decrypting is what proves authorship.
-		ephemeral := nostr.GeneratePrivateKey()
-		reply := nostr.Event{
-			Kind:      transport.KindPrivateResponse,
-			CreatedAt: nostr.Now(),
-			// Addressed by the request's own reply_to (NIP-CASH §Addressing the Response).
-			// That value appears nowhere else, so nothing on the relay links this reply to
-			// the request it answers.
-			Tags:    nostr.Tags{nostr.Tag{"p", envelope.ReplyTo}},
-			Content: ciphertext,
-		}
-		if err := reply.Sign(ephemeral); err != nil {
-			return fmt.Errorf("sign reply %d/%d: %w", chunk.Seq, chunk.Total, err)
-		}
-
-		published := false
-		if arrivedOn != "" {
-			if relay, err := pool.EnsureRelay(arrivedOn); err != nil {
-				logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("Could not reach the relay a private request arrived on to reply")
-			} else if err := relay.Publish(ctx, reply); err != nil {
-				logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("The relay a private request arrived on refused its reply")
-			} else {
-				published = true
-			}
-		}
-		for _, relayURL := range svc.cfg.GetRelayUrls() {
-			if published {
-				break
-			}
-			if relayURL == arrivedOn {
-				continue
-			}
-			relay, err := pool.EnsureRelay(relayURL)
-			if err != nil {
-				continue
-			}
-			if err := relay.Publish(ctx, reply); err != nil {
-				continue
-			}
-			published = true
-		}
-		if !published {
-			return fmt.Errorf("no relay accepted reply %d/%d", chunk.Seq, chunk.Total)
+		if err := svc.publishReplyEvent(ctx, pool, plaintext, replyKey, envelope.ReplyTo, arrivedOn); err != nil {
+			return fmt.Errorf("reply %d/%d: %w", chunk.Seq, chunk.Total, err)
 		}
 	}
 	return nil
+}
+
+// publishPrivateRefusal answers an envelope refused at E4 to E6 with an
+// envelope-level error and no results.
+func (svc *service) publishPrivateRefusal(ctx context.Context, pool *nostr.SimplePool, refusal *envelopeRefusal, conversationKey [32]byte, arrivedOn string) error {
+	if refusal.header == nil {
+		return fmt.Errorf("refusal without a readable header")
+	}
+	replyKey, err := transport.DeriveReplyKey(conversationKey, refusal.header.ReplyTo)
+	if err != nil {
+		return fmt.Errorf("derive reply key: %w", err)
+	}
+	reply := transport.ResponseEnvelope{
+		Version: transport.EnvelopeVersion, ReqNonce: refusal.header.Nonce, Seq: 1, Total: 1,
+		Error: &transport.ResultError{Code: refusal.code, Message: "envelope refused"},
+	}
+	plaintext, err := reply.EncodeResponse(svc.cfg.PrivateEnvelopeLimits())
+	if err != nil {
+		return fmt.Errorf("encode refusal: %w", err)
+	}
+	return svc.publishReplyEvent(ctx, pool, plaintext, replyKey, refusal.header.ReplyTo, arrivedOn)
+}
+
+// replyBackdateMax is how far a reply's created_at may lie in the past (NIP-CASH
+// §Addressing the Response: now minus up to two days, uniformly).
+const replyBackdateMax = 172800
+
+// replyCreatedAt is now minus a uniform random [0, 172800] seconds, from
+// crypto/rand, so a reply's timestamp says nothing about when it was served.
+func replyCreatedAt(now time.Time) nostr.Timestamp {
+	n, err := rand.Int(rand.Reader, big.NewInt(replyBackdateMax+1))
+	back := int64(0)
+	if err == nil {
+		back = n.Int64()
+	}
+	return nostr.Timestamp(now.Unix() - back)
+}
+
+// publishReplyEvent encrypts one reply chunk to replyKey and publishes it, signed
+// by a fresh key, on arrivedOn, falling back to the other relays only if that
+// one refuses or is unknown.
+func (svc *service) publishReplyEvent(ctx context.Context, pool *nostr.SimplePool, plaintext []byte, replyKey [32]byte, replyTo, arrivedOn string) error {
+	ciphertext, err := nip44.Encrypt(string(plaintext), replyKey)
+	if err != nil {
+		return fmt.Errorf("encrypt: %w", err)
+	}
+
+	// Authored by a FRESH ephemeral key, never the hub's identity. Signing with the
+	// identity would leave a countable, permanent public record of how much
+	// private-transport traffic this hub serves and when. The signature does no
+	// authentication work anyway: only this hub can derive the reply key.
+	ephemeral := nostr.GeneratePrivateKey()
+	reply := nostr.Event{
+		Kind:      transport.KindPrivateResponse,
+		CreatedAt: replyCreatedAt(time.Now()),
+		// Addressed by the request's own reply_to (NIP-CASH §Addressing the Response).
+		// That value appears nowhere else, so nothing on the relay links this reply to
+		// the request it answers.
+		Tags:    nostr.Tags{nostr.Tag{"p", replyTo}},
+		Content: ciphertext,
+	}
+	if err := reply.Sign(ephemeral); err != nil {
+		return fmt.Errorf("sign: %w", err)
+	}
+
+	if arrivedOn != "" {
+		if relay, err := pool.EnsureRelay(arrivedOn); err != nil {
+			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("Could not reach the relay a private request arrived on to reply")
+		} else if err := relay.Publish(ctx, reply); err != nil {
+			logger.Logger.Warn().Err(err).Str("relay", arrivedOn).Msg("The relay a private request arrived on refused its reply")
+		} else {
+			return nil
+		}
+	}
+	for _, relayURL := range svc.cfg.GetRelayUrls() {
+		if relayURL == arrivedOn {
+			continue
+		}
+		relay, err := pool.EnsureRelay(relayURL)
+		if err != nil {
+			continue
+		}
+		if err := relay.Publish(ctx, reply); err != nil {
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("no relay accepted the reply")
 }
 
 // chunkResults splits results into as few replies as the limits allow.

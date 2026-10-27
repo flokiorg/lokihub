@@ -40,7 +40,7 @@ func auditDSecAWindowTransport(t *testing.T) (*privateTransport, func(t *testing
 		inboxPrivKey: inboxPriv,
 		inboxXOnly:   inboxPub,
 		nodeXOnly:    strings.Repeat("bb", 32),
-		nonces:       newPrivateNonceSet(),
+		nonces:       newMemServedNonces(),
 	}
 
 	sealRaw := func(t *testing.T, plaintext []byte) *nostr.Event {

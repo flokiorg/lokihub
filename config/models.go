@@ -125,6 +125,10 @@ type AppConfig struct {
 	// (~952 bytes), so 100 sources is a ~96 KB item, past NIP-44's 65535-byte
 	// ceiling and therefore impossible to encrypt at any envelope size.
 	PrivateEnvelopeMaxConsolidateSources int `envconfig:"PRIVATE_ENVELOPE_MAX_CONSOLIDATE_SOURCES" default:"0"`
+	// PrivateInboxEventsPerMin is how many envelopes a minute the hub decrypts
+	// from one relay connection; the rest are dropped undecrypted. 0 disables
+	// the limit.
+	PrivateInboxEventsPerMin int `envconfig:"PRIVATE_INBOX_EVENTS_PER_MIN" default:"600"`
 	// CashMaxRequestAgeSecs is the horizon H (NIP-CASH §Deadlines): how far past
 	// arrival a request's deadline may lie, and the record-retention unit. 0 means
 	// the default (300); accepted 60 to 86400.
