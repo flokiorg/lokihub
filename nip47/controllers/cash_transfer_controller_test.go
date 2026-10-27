@@ -55,6 +55,9 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 // returns the decoded response.
 func handleCashTransferFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params cashTransferParams) *models.Response {
 	t.Helper()
+	if params.RequestID == "" {
+		params.RequestID = testRequestID()
+	}
 	content := map[string]interface{}{
 		"method": constants.NIP47MethodCashTransfer,
 		"params": params,
@@ -69,8 +72,24 @@ func handleCashTransferFor(t *testing.T, svc *tests.TestService, controller *nip
 	var response *models.Response
 	controller.HandleCashTransferEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nostr.Tags{})
+	}, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	return response
+}
+
+// testPrivateCall is a private item that arrived now with a deadline a minute
+// ahead, its item proof signed by identityEvent's signer (the claim proof's), or
+// proofless when there is none.
+func testPrivateCall(identityEvent string) *PrivateCall {
+	var ev nostr.Event
+	signer := ""
+	if identityEvent != "" && json.Unmarshal([]byte(identityEvent), &ev) == nil {
+		signer = ev.PubKey
+	}
+	now := time.Now().Unix()
+	return &PrivateCall{
+		Meta:       models.CallMeta{Transport: models.TransportPrivate, ArrivedAt: now, Deadline: now + 60, DeadlinePresent: true},
+		ItemSigner: signer,
+	}
 }
 
 func TestHandleCashTransferEvent_HappyPath_PubkeyToPubkey(t *testing.T) {

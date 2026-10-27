@@ -12,6 +12,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -124,6 +125,14 @@ func (svc *nip47Service) ServePrivateItem(
 	if !billProofHolder(signer, app.AppPubkey) {
 		omitted(item, "bill proof not signed by this bill's connection key")
 		return transport.Result{}, false
+	}
+
+	// 2.55. I6 and I7 (NIP-CASH §Serving an Envelope): a call's request_id must be
+	// present and well formed (BAD_REQUEST), then unused (REQUEST_REUSED), before
+	// its proofs are looked at. Only checked here; the method marks it used once
+	// the call is authorized.
+	if refusal, refused := svc.refuseRequestID(item); refused {
+		return refusal, true
 	}
 
 	// 2.6. An item MUST NOT carry BOTH a slice proof and a cash secret
@@ -281,7 +290,8 @@ func (svc *nip47Service) ServePrivateItem(
 	case constants.NIP47MethodCashRedeem:
 		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
 	case constants.NIP47MethodCashTransfer:
-		controller.HandleCashTransferEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
+		controller.HandleCashTransferEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
+			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCashConsolidate:
 		controller.HandleCashConsolidateEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
 	case constants.NIP47MethodCreateCircleWallet:
@@ -595,6 +605,46 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		}
 	}
 	return "", billIsCashMode, false, nil
+}
+
+// requestIDMethods are the private methods that are calls carrying a request_id
+// checked at I6 and I7.
+var requestIDMethods = map[string]bool{
+	constants.NIP47MethodCashTransfer: true,
+}
+
+// refuseRequestID is I6 and I7 for a call: a missing or malformed request_id is
+// BAD_REQUEST, a used one REQUEST_REUSED.
+func (svc *nip47Service) refuseRequestID(item transport.Item) (transport.Result, bool) {
+	if !requestIDMethods[item.Method] {
+		return transport.Result{}, false
+	}
+	refuse := func(code, message string) (transport.Result, bool) {
+		return transport.Result{ID: item.ID, ResultType: item.Method,
+			Error: &transport.ResultError{Code: code, Message: message}}, true
+	}
+	var params struct {
+		RequestID *string `json:"request_id"`
+	}
+	if json.Unmarshal(item.Params, &params) != nil || params.RequestID == nil || !nipcash.ValidRequestID(*params.RequestID) {
+		return refuse(constants.ERROR_BAD_REQUEST, "request_id is required: 32 to 64 lowercase hex characters")
+	}
+	used, err := cashrequest.New(svc.db).IsUsed(*params.RequestID)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("item", item.ID).Msg("Failed to read a request_id mark")
+		return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
+	}
+	if used {
+		return refuse(constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
+	}
+	return transport.Result{}, false
+}
+
+// privateCallMeta is an item's call metadata: its deadline is the envelope's
+// not_after, which E4 already bounded by H.
+func privateCallMeta(binding PrivateItemBinding) models.CallMeta {
+	return models.CallMeta{Transport: models.TransportPrivate, ArrivedAt: time.Now().Unix(),
+		Deadline: binding.NotAfter, DeadlinePresent: true}
 }
 
 // omitted records WHY an item was dropped, at Debug only.

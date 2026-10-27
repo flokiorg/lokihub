@@ -63,6 +63,10 @@ audits of both.
 
 ### Changed
 
+- Requires a `request_id` on `cash_transfer`: a missing or malformed one is
+  refused before the item's proofs (`BAD_REQUEST`), a used one with
+  `REQUEST_REUSED`; it is marked used once the call is authorized, and the
+  call's record commits with the transfer, under the envelope's `not_after`.
 - Returns only the `cash_token` from the admin mint and the bill connection
   endpoint, the bill's one credential; neither carries a `pairing_uri` any more,
   and the Cash screens show the token alone.
