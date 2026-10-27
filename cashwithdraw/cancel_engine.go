@@ -31,7 +31,7 @@ func (e *Engine) cancelStep(ctx context.Context, p lnclient.OnchainPayer, tip in
 		Order("id").Find(&ws).Error; err != nil {
 		return err
 	}
-	now := e.S.now().Unix()
+	now := e.S.cancelNow().Unix()
 	id, err := e.lease()
 	if err != nil {
 		return err

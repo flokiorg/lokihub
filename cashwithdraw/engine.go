@@ -48,6 +48,17 @@ type EngineHooks struct {
 	HoldSign      atomic.Bool
 	HoldBroadcast atomic.Bool
 	HoldBump      atomic.Bool
+	// CrashAfterSign ends every pass right after a version is signed, before
+	// it is stored as signed or published, as a crash there would.
+	CrashAfterSign atomic.Bool
+	// CrashAt, when set to one of EngineStages, ends every pass at that stage
+	// as a crash there would.
+	CrashAt atomic.Value // string
+	// UnconfirmedBoundMillis, when positive, replaces the unconfirmed bound
+	// (CASH_WITHDRAW_UNCONFIRMED_PPM of the confirmed balance).
+	UnconfirmedBoundMillis atomic.Int64
+	// StarveCoins reads every set-aside as not covered.
+	StarveCoins atomic.Bool
 }
 
 // NoticeSender publishes a state notice on a relay.
@@ -89,7 +100,16 @@ func NewEngine(s *Service) *Engine {
 func (e *Engine) env() config.WithdrawEnv { return e.S.env() }
 
 func (e *Engine) before(stage string) error {
-	if e.Hooks == nil || e.Hooks.Before == nil {
+	if e.Hooks == nil {
+		return nil
+	}
+	if stage == EngineAfterFinalize && e.Hooks.CrashAfterSign.Load() {
+		return ErrEngineStopped
+	}
+	if at, _ := e.Hooks.CrashAt.Load().(string); at != "" && at == stage {
+		return ErrEngineStopped
+	}
+	if e.Hooks.Before == nil {
 		return nil
 	}
 	return e.Hooks.Before(stage)
@@ -147,6 +167,11 @@ func (e *Engine) AtUnconfirmedBoundTx(tx *gorm.DB, snap FundsSnapshot, payoutMil
 		return false, err
 	}
 	bound := uint64(max(snap.ConfirmedSat, 0)) * 1000 / 1_000_000 * uint64(e.env().UnconfirmedPpm()) //nolint:gosec // non-negative
+	if e.Hooks != nil {
+		if b := e.Hooks.UnconfirmedBoundMillis.Load(); b > 0 {
+			bound = uint64(b)
+		}
+	}
 	return v+payoutMillis > bound, nil
 }
 
@@ -159,6 +184,9 @@ func needSat(payoutMillis, networkFeeMillis uint64) int64 {
 // CanSetAsideTx: the coins neither in a version nor below the floor, less what
 // is already set aside, cover need.
 func (e *Engine) CanSetAsideTx(tx *gorm.DB, payoutMillis, networkFeeMillis uint64) (bool, error) {
+	if e.held(func(h *EngineHooks) bool { return h.StarveCoins.Load() }) {
+		return false, nil
+	}
 	var coins, aside int64
 	if err := tx.Model(&db.CashWithdrawCoin{}).Where("state IN ?", []string{db.CashCoinAvailable, db.CashCoinSetAside}).
 		Select("COALESCE(SUM(value_sat), 0)").Scan(&coins).Error; err != nil {
