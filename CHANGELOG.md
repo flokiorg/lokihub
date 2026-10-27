@@ -70,7 +70,8 @@ audits of both.
 - Signs every bill under `cash-mint:v1` and every `cashhub1` string with the
   node identity and chain, as the final NIP-CASH requires.
 - Refuses to sign text starting with `cash-mint:`, `cash-zap:`, `cash-hub:`,
-  `cash-order:` or `circle-hub:` over NWC (`RESTRICTED`).
+  `cash-order:` or `circle-hub:`, over NWC (`RESTRICTED`) and from the
+  operator's sign-message screen.
 - Answers `cash_status` on a cash-mode bill from the bill proof alone and
   refuses one that carries a `cash_secret`; a destroyed bill's answer is
   `{"status":"spent"}`.

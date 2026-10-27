@@ -43,6 +43,7 @@ import (
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
@@ -1500,7 +1501,14 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 	return newAddress, nil
 }
 
+// ErrReservedSignText refuses a text the node key signs as Hub data: a bill, a
+// zap bill or a connection string (NIP-CASH §Security Considerations).
+var ErrReservedSignText = errors.New("text with a reserved cash prefix cannot be signed")
+
 func (api *api) SignMessage(ctx context.Context, message string) (*SignMessageResponse, error) {
+	if nipcash.IsReservedSignText(message) {
+		return nil, ErrReservedSignText
+	}
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}

@@ -1061,6 +1061,9 @@ func (httpSvc *HttpService) signMessageHandler(c echo.Context) error {
 
 	signMessageResponse, err := httpSvc.api.SignMessage(ctx, signMessageRequest.Message)
 
+	if errors.Is(err, api.ErrReservedSignText) {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Message: fmt.Sprintf("Failed to sign message: %s", err.Error()),
