@@ -40,6 +40,9 @@ type intakeFixture struct {
 
 func newIntakeFixture(t *testing.T) *intakeFixture {
 	f := &intakeFixture{orderFixture: newOrderFixture(t), clock: time.Now()}
+	// The node stamps order invoices with the engine's clock, so pay_by moves
+	// with it.
+	f.invoiceNow = func() time.Time { return f.clock }
 	f.chain = &chainLN{MockLn: f.ln}
 	f.engine = &cashorder.Engine{DB: f.svc.DB, Keys: f.svc.Keys, Apps: f.svc.AppsService,
 		Transactions: transactions.NewTransactionsService(f.svc.DB, f.svc.EventPublisher),
