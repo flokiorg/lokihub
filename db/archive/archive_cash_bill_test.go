@@ -284,6 +284,66 @@ func TestArchiveAndDeleteDrainedCashBillTx_Guards(t *testing.T) {
 			"a bill still holding funds must never be force-deleted")
 	})
 
+	t.Run("refuses while a sibling slice's payout is in flight", func(t *testing.T) {
+		// Slice A settled; slice B (zero fee, so the balance is already 0) is
+		// still paying out. B's claim and payment row must survive so a failure
+		// can release it.
+		hashA, hashB := randomHex32(t), randomHex32(t)
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed, PaymentHash: hashA, Preimage: "preimage-a"},
+			{AmountMloki: 2000, ClaimedAt: &claimed, PaymentHash: hashB},
+		})
+		guards := DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}
+		err := gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, guards, time.Now())
+		})
+		require.ErrorIs(t, err, ErrBillNotDrained)
+		assert.EqualValues(t, 1, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+		assert.EqualValues(t, 2, countRows(t, gormDB, &db.CashWalletClaim{}, "wallet_app_id = ?", bill.ID))
+
+		// Once B's payout resolves, the drain goes through.
+		require.NoError(t, gormDB.Model(&db.CashWalletClaim{}).
+			Where("wallet_app_id = ? AND payment_hash = ?", bill.ID, hashB).
+			Update("preimage", "preimage-b").Error)
+		require.NoError(t, gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, guards, time.Now())
+		}))
+		assert.Zero(t, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
+	t.Run("a payout the ledger shows settled is done without its preimage", func(t *testing.T) {
+		hash := randomHex32(t)
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed, PaymentHash: hash},
+		})
+		require.NoError(t, gormDB.Create(&db.Transaction{
+			AppId: &bill.ID, Type: constants.TRANSACTION_TYPE_OUTGOING, State: constants.TRANSACTION_STATE_SETTLED,
+			PaymentHash: hash,
+		}).Error)
+		require.NoError(t, gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}, time.Now())
+		}))
+		assert.Zero(t, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
+	t.Run("refuses while a payment out of the bill is pending", func(t *testing.T) {
+		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
+			{AmountMloki: 1000, ClaimedAt: &claimed},
+		})
+		require.NoError(t, gormDB.Create(&db.Transaction{
+			AppId:       &bill.ID,
+			Type:        constants.TRANSACTION_TYPE_OUTGOING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: 0,
+			PaymentHash: randomHex32(t),
+		}).Error)
+		err := gormDB.Transaction(func(tx *gorm.DB) error {
+			return ArchiveAndDeleteDrainedCashBillTx(tx, bill, DrainGuards{IsolatedBalance: queries.GetIsolatedBalance, HasPendingIncoming: queries.HasPendingIncoming, HasPendingOutgoing: queries.HasPendingOutgoing}, time.Now())
+		})
+		require.ErrorIs(t, err, ErrBillNotDrained)
+		assert.EqualValues(t, 1, countRows(t, gormDB, &db.App{}, "id = ?", bill.ID))
+	})
+
 	t.Run("archives when genuinely drained", func(t *testing.T) {
 		bill := newCashBill(t, gormDB, hub, 0, []db.CashWalletClaim{
 			{AmountMloki: 1000, ClaimedAt: &claimed},

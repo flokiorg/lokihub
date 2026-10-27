@@ -15,8 +15,9 @@ import (
 // AutoDeleteDrained is the one auto-delete policy for a drained bill (NIP-CASH
 // §Lifecycle and Deletion: the same for every drain mechanism). It archives and
 // deletes walletAppID if it is a cash_wallet with no unclaimed slice, a zero
-// balance and no pending incoming payment, and reports whether it did. Any
-// other app, or a bill still holding value, is left alone.
+// balance, no pending incoming payment and no payout still in flight, and
+// reports whether it did. Any other app, or a bill still holding value, is left
+// alone.
 //
 // The drain guard runs in the same transaction as the archive and the delete,
 // so a concurrent rollback cannot restore an unclaimed slice between check and
@@ -37,6 +38,7 @@ func AutoDeleteDrained(gormDB *gorm.DB, eventPublisher events.EventPublisher, wa
 		return archive.ArchiveAndDeleteDrainedCashBillTx(tx, &app, archive.DrainGuards{
 			IsolatedBalance:    queries.GetIsolatedBalance,
 			HasPendingIncoming: queries.HasPendingIncoming,
+			HasPendingOutgoing: queries.HasPendingOutgoing,
 		}, time.Now())
 	})
 	if errors.Is(err, archive.ErrBillNotDrained) {
