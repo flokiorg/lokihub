@@ -108,6 +108,11 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 		Nonce: nonce, ReplyTo: replyTo, Items: []transport.Item{item},
 	}
 	plaintext, err := env.Encode(limits)
+	if err != nil {
+		// The SDK refuses to build what the Hub must refuse (a proof and a cash
+		// secret together, say); an adversarial test sends it anyway, unpadded.
+		plaintext, err = json.Marshal(env)
+	}
 	require.NoError(t, err, "encode envelope")
 
 	request, convKey, err := transport.WrapRequest(plaintext, session.Inbox())
