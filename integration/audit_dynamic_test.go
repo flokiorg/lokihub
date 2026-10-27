@@ -37,7 +37,7 @@ func oneCashRecipient(commitment string, amountMloki uint64) []CashWalletRecipie
 // The token is returned because bill methods now travel over the private transport, whose
 // hub identity comes from the token's own mint signature — a pairing URI does not carry
 // one, so a caller holding only that can mint but cannot act on the bill.
-func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (pairingURI, token, walletPubkey, cashSecret string) {
+func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (unused, token, walletPubkey, cashSecret string) {
 	t.Helper()
 	secret, commitment := cashSecretAndHash(t)
 	var created MintCashResult

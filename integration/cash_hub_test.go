@@ -154,9 +154,8 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		}, &result))
 		require.Len(t, result.Recipients, 2)
 
-		// cash_token is wallet-level, not per-recipient — must still
-		// decode correctly (and to the same connection as pairing_uri) when
-		// the wallet backs more than one slice.
+		// cash_token is wallet-level, not per-recipient — it must still
+		// decode correctly when the wallet backs more than one slice.
 		requireBillToken(t, result.CashToken)
 
 		child := mustConnectBill(t, result.CashToken, priv1)

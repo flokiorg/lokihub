@@ -1,7 +1,7 @@
 # Real-NWC integration suite
 
-This is a **black-box** test suite that drives real JIT Hub and Circle Hub
-parent connections purely as an external NWC client would — over a real
+This is a **black-box** test suite that drives real Cash Hub and Circle Wallet
+Hub connections purely as an external NWC client would — over a real
 Nostr relay, with real NIP-44 encryption, creating real child wallets and
 moving real money between them. It is a separate thing from the unit tests
 elsewhere in this repo (`apps/`, `nip47/controllers/`, etc.), which call Go
@@ -10,11 +10,19 @@ functions directly in-process against a mocked Lightning client.
 It is gated behind the `integration` Go build tag, so it's completely
 invisible to normal `go build`/`go test ./...` runs.
 
-Every jit_hub/circle_hub/simple-wallet fixture a test needs — including a
+Every cash_hub/circle_hub/simple-wallet fixture a test needs — including a
 synthetic Nostr identity for a circle "follow_set" policy — is provisioned on
 demand through the instance's own admin API and torn down again in its own
 `t.Cleanup` (see `ephemeral_test.go`). Nothing is hand-provisioned ahead of
 time.
+
+A Hub is reached through its signed connection string (`cashhub1…`,
+`circlehub1…`), whose signature the client checks before connecting; a bill
+through its `cash_token`, whose mint provenance is checked first; a member's
+circle wallet from its join's details and the member's own secret. Only the
+simple-wallet fixture still uses a `nostr+walletconnect://` URI. Every call
+that NIP-CASH makes recoverable carries a `request_id`, and `mint_cash`
+carries an `expiration` tag as its deadline.
 
 ## What you need before running this
 
@@ -70,7 +78,7 @@ suite limitation — it's because the dev stack's `.env` ships with
 `CASH_WALLET_RATE_LIMIT_PER_HOUR`/`CASH_CLAIM_CALLS_PER_HOUR`/
 `CIRCLE_WALLET_RATE_LIMIT_PER_HOUR` all set to `0` ("disabled", not "zero
 allowed" — see `rate_limiter.go`'s `Allow()`), so an operator can hammer
-`create_jit_wallet`/`claim_funds`/`create_circle_wallet` from the frontend
+`mint_cash`/`cash_redeem`/`create_circle_wallet` from the frontend
 during manual testing without tripping anything. These tests need the
 opposite: real, nonzero limits, so the 11th/21st call in their loop actually
 gets rejected. Setting `INTEGRATION_RUN_RATE_LIMIT_TESTS=1` alone is **not**
@@ -110,7 +118,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
 ## What's covered
 
 - `ephemeral_test.go` — the shared fixture layer every other file builds
-  on: `createEphemeralJITHub`/`createEphemeralCircleHub` (either policy, via
+  on: `createEphemeralCashHub`/`createEphemeralCircleHub` (either policy, via
   the admin API, root-funded through `adminClient.transfer`),
   `createEphemeralSimpleWallet`, `createEphemeralTrustedIA`, and
   `publishFollowSet` (a real signed kind-30000 follow set listing
@@ -146,41 +154,24 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   thousands of leaked identities against the general relays - see
   `createEphemeralCircleHub`'s own identity-cleanup comment in
   `ephemeral_test.go`).
-- `jit_hub_test.go` — `create_jit_wallet` happy path, invalid identity_type
-  rejection, a shared multi-recipient wallet funded with the SUM of every
-  recipient (one connection, `list_recipients` shows both), the total-across-
-  recipients per-wallet amount cap, max-expiry cap, spend-only enforcement (no
-  `make_invoice`/`pay_invoice`/`list_transactions`/`lookup_invoice` on a
-  jit_wallet child), `connection_key` mode (missing `ia_pubkey`, invalid hex,
-  untrusted-IA rejection, happy path via `createEphemeralTrustedIA`),
-  empty-recipients rejection, pubkey mode having no cross-request dedupe (two
-  independent `create_jit_wallet` calls for the same beneficiary yield two
-  distinct wallets — only duplicate identities *within one request* are
-  rejected, and that's unit-test-only, see below), omitted-expiry defaulting
-  to the hub's max, and (opt-in) rate limiting.
-- `claim_funds_test.go` — the shared-wallet, proof-gated `claim_funds` model:
-  several independent recipients each claiming their own slice from the same
-  connection without affecting each other, a wrong/outsider identity finding
-  no matching slice, a claim proof bound to one invoice being rejected when
-  submitted against another (the core "shared connection is public" audit
-  scenario), a proof for one wallet being replayed against a different wallet
-  the same identity also has a slice on, `get_budget` staying restricted while
-  `get_info` stays reachable, `list_transactions`/`lookup_invoice` staying
-  ungranted, `connection_key`-mode claiming (live IA attestation verification
-  via `createEphemeralTrustedIA`), a stale claim proof being rejected and the
-  same invoice remaining claimable with a fresh one, a wallet's own expiry
-  (not the claim proof's freshness window) being enforced end to end via a
-  short-lived (2s) real wallet, an attestation reused for a different
-  claimant than it was issued to, an attestation whose own expiration has
-  passed, an attestation missing its (now-mandatory) expiration tag, an
-  attestation signed by a real keypair that isn't this slice's recorded
-  trusted IA, an attestation with a forged/garbage signature, and (opt-in)
-  rate limiting.
-- `jit_hub_payment_test.go` — real money movement sourced entirely from one
-  jit_hub (no `circle_hub` needed): the hub mints an invoice for its own
-  freshly-minted JIT child to pay and fully drain (including that a second
-  claim attempt on the same now-fully-claimed slice is rejected), and paying
-  an invoice that exceeds the child's declared slice is rejected.
+- `cash_hub_test.go` — `mint_cash` happy paths for every identity mode
+  (pubkey, connection_key through `createEphemeralTrustedIA`, and cash, where
+  the caller sends only the commitment and the Hub never returns a secret), a
+  shared multi-recipient bill funded with the sum of every recipient, the
+  per-wallet ceiling, the expiry ceiling, invalid identity types, spend-only
+  enforcement on a bill, and (opt-in) rate limiting. Every bill's token is
+  checked to decode and to carry a verifying `cash-mint:v1` provenance.
+- `cash_redeem_test.go` — `cash_redeem` over the private transport: several
+  recipients redeeming their own slices of one bill independently, an outsider
+  finding no slice, claim proofs bound to another invoice or another wallet,
+  stale proofs, connection_key redemption with live attestation checks
+  (wrong claimant, expired, missing tags, wrong IA, forged signature), a
+  bill's own expiry, and (opt-in) rate limiting. Proof failures are
+  `UNAUTHORIZED` and an untrusted IA `RESTRICTED`, as NIP-CASH §Errors says.
+- `cash_hub_payment_test.go` — real money movement from one Cash Hub: the Hub
+  mints an invoice for its own freshly minted bill to redeem in full (the
+  drained bill is then destroyed), and an invoice for another amount than the
+  slice is refused.
 - `circle_hub_test.go` — run against both circle policies:
   `create_circle_wallet` happy path against every authorized member (the
   allowlist policy's last member also exercises omitted-expiry/
@@ -209,7 +200,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   transport and the public one over the standard transport, a non-member is
   refused on both, and a republished set revokes the member it drops.
 - `cross_test.go` — real money movement across hub types: a circle_wallet
-  child mints an invoice, a jit_wallet child pays it as a real internal
+  child mints an invoice, a bill redeems into it as a real internal
   self-payment, and both sides' balances/transaction history are checked;
   paying an invoice that exceeds a wallet's own balance; the hub's own
   isolated balance decreasing when a child is funded; `get_info` advertising
@@ -225,7 +216,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   holdings past its own `max_amount` ceiling (computed from `get_budget`'s
   `total_budget`, not hardcoded); and `get_budget`'s `used_budget` reflecting
   a real payment's cost — `get_budget` is reachable on a circle wallet child
-  at all, unlike a jit wallet child.
+  at all, unlike a bill.
 - `circle_fee_skim_test.go` — a circle hub created with a deliberately
   nonzero `FeesPpm`: a self-paid invoice (paid and received by the same
   wallet) must never be skimmed, regardless of the configured rate, proving
@@ -242,7 +233,7 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   `get_budget` keep answering (they're on
   `permissions.GetAlwaysGrantedMethods()` and bypass the expiry check
   entirely) — an expired wallet's balance/budget stays visible, it just
-  can't move money. Separately, for both jit_hub and circle_hub: once the
+  can't move money. Separately, for both cash_hub and circle_hub: once the
   *hub's own* permission expires, its own create-wallet call starts failing,
   but a child it minted beforehand keeps working — parent and child expiry
   are tracked completely independently (every `AppPermission` row is keyed
@@ -264,12 +255,6 @@ of that budget per ephemeral circle hub it creates, regardless of policy.
   every non-`"never"` renewal period.
 
 ## What's explicitly out of scope (for now)
-
-The JIT Hub allocation ("voucher") override path (`CreateJITHubAllocations`
-pre-defining a fixed amount/expiry for an identity, picked up automatically by
-`create_jit_wallet`) isn't covered — it's a small, deliberate gap rather than
-an admin-API limitation (this suite already reaches for the admin API for
-fixture setup elsewhere).
 
 Real insufficient-hub-balance and transfer-failure/rollback paths, the
 per-wallet recipient-count cap (`maxRecipientsPerWallet`), and in-request

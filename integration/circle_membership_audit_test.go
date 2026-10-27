@@ -117,7 +117,7 @@ func joinCircle(t *testing.T, hubConnection, memberPriv string) (*nwcclient.Clie
 	}
 	details, err := DecryptCircleWalletDetails(memberPriv, hubClient.WalletPubkey(), result)
 	require.NoError(t, err)
-	return mustConnect(t, CircleWalletURI(details, memberPub)), nil
+	return mustConnectCircleWallet(t, CircleWalletConnection(details, memberPub)), nil
 }
 
 func mustJoinCircle(t *testing.T, hubConnection, memberPriv string) *nwcclient.Client {

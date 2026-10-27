@@ -146,6 +146,12 @@ func ConnectBill(ctx context.Context, token string) (*Client, error) {
 	return connect(ctx, tok.WalletPubkey, tok.Secret, tok.RelayURLs)
 }
 
+// ConnectCircleWallet connects a member to its circle wallet from the wallet
+// pubkey and relays its join returned and the member's own secret.
+func ConnectCircleWallet(ctx context.Context, walletPubkey string, relays []string, secret string) (*Client, error) {
+	return connect(ctx, walletPubkey, secret, relays)
+}
+
 // ConnectAny connects through a signed cashhub1 or circlehub1 string, a bill's
 // token, or a pairing URI.
 func ConnectAny(ctx context.Context, connection string) (*Client, error) {

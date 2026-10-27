@@ -249,9 +249,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 
 		// The secret actually redeems the merged total, over the cash-mode
 		// wallet's own connection (built from the decoded token, same as any
-		// other spun-off wallet — nwcclient.Connect needs a
-		// nostr+walletconnect:// URI, not the raw lokicash1... token itself;
-		// the secret travels as its own request field, never embedded in the
+		// other spun-off wallet; the secret travels as its own request field, never embedded in the
 		// connection string — same pattern createCashModeWallet's callers use).
 		// Bearer: a cash-mode bill's secret in params IS its authorization, so the item
 		// carries no slice proof (§Bearer Items). Its delivery is in the clear precisely

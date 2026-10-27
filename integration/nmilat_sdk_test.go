@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipIC"
 	"github.com/ohstr/nmilat/nipcash"
 	cashclient "github.com/ohstr/nmilat/nipcash/client"
@@ -364,7 +363,7 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	// generic calls against it (make_invoice/get_balance) go through this
 	// suite's existing nwcclient, same as the rest of the suite; only the
 	// NIP-CASH/NIP-CW protocol calls above go through nmilat's typed SDK.
-	member := mustConnect(t, nmilatnip47.BuildPairingURI(wallet.WalletPubkey, wallet.Relays, wallet.Secret, nil))
+	member := mustConnectCircleWallet(t, circleWalletConnection{WalletPubkey: wallet.WalletPubkey, Relays: wallet.Relays, Secret: wallet.Secret})
 
 	cashHub, _, _ := createEphemeralCashHub(t, cfg, "nmilat-cash-hub-for-circle", nil)
 	cashHubClient, err := cashclient.ConnectCashHub(ctxT(t), cashHub.CashHubToken)

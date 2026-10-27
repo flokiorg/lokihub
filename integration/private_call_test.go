@@ -313,8 +313,6 @@ func (b *billConn) Bearer() *billConn {
 // mustConnectBill dials a bill by its TOKEN — required rather than preferred, since the
 // private transport recovers the hub identity from the token's own mint signature, which a
 // pairing URI does not carry.
-//
-// pairingURI is still needed for the non-bill methods the embedded client serves.
 func mustConnectBill(t *testing.T, token, signerPriv string) *billConn {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

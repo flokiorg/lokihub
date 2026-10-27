@@ -91,7 +91,7 @@ func TestSpec_StandardTransport_StillServesMintCash(t *testing.T) {
 //
 // The spec spells out why this is stated at all: token encoding can fail where URI
 // construction cannot — a long relay URL can exceed the TLV length limits — and the
-// tempting response is to emit `""` and lean on `pairing_uri` still being valid. A
+// tempting response is to emit `""` and lean on some other connection form. A
 // caller receiving `""` has no bill to hand on.
 func TestSpec_MintCash_NeverReturnsAnEmptyCashToken(t *testing.T) {
 	cfg := requireConfig(t)
