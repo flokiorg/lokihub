@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ohstr/nmilat/nip01"
@@ -441,7 +442,7 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 		if !nipcash.SliceLive(now.Unix(), billExpiry(in.bill)) {
 			return refuse(nipcash.ErrCodeRestricted, "this cash wallet is past its redemption deadline")
 		}
-		if in.claim.IdentityType == db.CashIdentityConnectionKey && !s.iaTrusted(in.claim.IAPubkey) {
+		if in.claim.IdentityType == db.CashIdentityConnectionKey && !iaTrustedTx(tx, in.claim.IAPubkey) {
 			return refuse(nipcash.ErrCodeRestricted, "the Identity Authority for this claim is no longer trusted")
 		}
 		atBound, canSetAside, err := s.fundsChecks(tx, in.pf.funds, in.quote)
@@ -615,4 +616,12 @@ func noticeDue(at time.Time) (int64, error) {
 		return 0, err
 	}
 	return at.Add(d).Unix(), nil
+}
+
+// iaTrustedTx is the IA allowlist read inside the commit's own transaction (a
+// second connection would wait on sqlite's one writer).
+func iaTrustedTx(tx *gorm.DB, ia string) bool {
+	var n int64
+	err := tx.Table("identity_authorities").Where("pubkey = ?", strings.ToLower(strings.TrimSpace(ia))).Count(&n).Error
+	return err == nil && n > 0
 }
