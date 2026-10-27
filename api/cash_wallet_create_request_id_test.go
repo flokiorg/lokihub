@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -127,4 +128,37 @@ func TestCreateCashWallet_DeadlineRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+// U-5.11, admin side: the reply carries the bill's app_id for the operator's
+// screen, its cash_token, expires_at and the recipients, and no URI form; the
+// connection endpoint returns the token alone.
+func TestCreateCashWallet_ReplyHasNoURIForm(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+	theAPI := newTestAPIWithService(t, svc)
+
+	res, err := theAPI.CreateCashWallet(hub.ID, adminMint("", 0))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"app_id", "cash_token", "expires_at", "recipients"}, jsonKeys(t, res))
+
+	conn, err := theAPI.GetCashWalletConnection(res.AppID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"cash_token"}, jsonKeys(t, conn))
+}
+
+func jsonKeys(t *testing.T, v any) []string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	require.NoError(t, err)
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &m))
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

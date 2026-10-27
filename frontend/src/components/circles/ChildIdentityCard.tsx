@@ -318,7 +318,6 @@ function CashWalletRecipientsCard({ app }: { app: App }) {
       {showReveal && connection && (
         <RevealConnectionDialog
           app={app}
-          pairingUri={connection.pairing_uri}
           lokicashToken={connection.cash_token}
           walletSummary={{
             amountLoki: recipients.reduce(

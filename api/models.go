@@ -479,10 +479,11 @@ type CreateCashWalletRequest struct {
 	Expiration int64  `json:"expiration,omitempty"`
 }
 
+// CreateCashWalletResponse carries the bill's cash_token, its only credential
+// (NIP-CASH §Minting Cash, Response); there is no URI form.
 type CreateCashWalletResponse struct {
-	AppID      uint   `json:"app_id"`
-	PairingURI string `json:"pairing_uri"`
-	CashToken  string `json:"cash_token"`
+	AppID     uint   `json:"app_id"`
+	CashToken string `json:"cash_token"`
 	// ExpiresAt is omitted when this wallet never expires — the Cash Hub's
 	// own CashMaxExpSecs is 0 ("never") and the request didn't carry its
 	// own ExpirySecs.
@@ -760,9 +761,10 @@ type CashHubDailyPointResponse struct {
 	WrittenOffMloki int64 `json:"written_off_mloki"`
 }
 
+// CashWalletConnectionResponse is a bill's cash_token as issued, its only
+// credential.
 type CashWalletConnectionResponse struct {
-	PairingURI string `json:"pairing_uri"`
-	CashToken  string `json:"cash_token"`
+	CashToken string `json:"cash_token"`
 }
 
 // Identity Authority registry types.

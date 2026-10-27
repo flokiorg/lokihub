@@ -320,3 +320,42 @@ func TestMintCash_RecipientSumOverflowIsBadRequest(t *testing.T) {
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
 	assert.Contains(t, resp.Error.Message, "overflow")
 }
+
+// U-5.11: the mint_cash reply carries exactly wallet_pubkey, cash_token,
+// expires_at (when the bill expires) and recipients; cash_token is the bill's
+// only credential, so there is no URI form.
+func TestMintCash_ReplyKeys(t *testing.T) {
+	for _, maxExp := range []int{3600, 0} {
+		t.Run(fmt.Sprintf("max_exp_secs=%d", maxExp), func(t *testing.T) {
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+			hub := tests.CreateCashHub(t, svc, 1_000_000, maxExp)
+			tests.FundApp(svc, hub.ID, 10_000_000, "fund")
+			pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+			raw, err := json.Marshal(map[string]any{"request_id": testRequestID(),
+				"recipients": []any{recipient(db.CashIdentityPubkey, pk, "", 1_000)}})
+			require.NoError(t, err)
+			var resp *models.Response
+			NewTestNip47Controller(svc).HandleMintCashEvent(context.TODO(),
+				&models.Request{Method: constants.NIP47MethodMintCash, Params: raw}, 0, hub,
+				func(r *models.Response, _ nostr.Tags) { resp = r }, testMintMeta())
+			require.NotNil(t, resp)
+			require.Nil(t, resp.Error)
+
+			encoded, err := json.Marshal(resp.Result)
+			require.NoError(t, err)
+			var keys map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(encoded, &keys))
+			want := []string{"cash_token", "recipients", "wallet_pubkey"}
+			if maxExp != 0 {
+				want = append(want, "expires_at")
+			}
+			got := make([]string, 0, len(keys))
+			for k := range keys {
+				got = append(got, k)
+			}
+			assert.ElementsMatch(t, want, got)
+		})
+	}
+}

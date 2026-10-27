@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -67,7 +66,6 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 		ExpirySecs: 1800,
 	})
 	require.NoError(t, err)
-	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
 	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
 	assert.NotZero(t, result.AppID)
 	require.Len(t, result.Recipients, 1)
@@ -81,24 +79,17 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ?", result.AppID).Count(&claimCount).Error)
 	assert.EqualValues(t, 1, claimCount)
 
-	// GET cash-connection for the new wallet must return the identical URI and
-	// lokicash token (determinism) — a recipient re-fetching later must land
-	// on the exact same wallet, never a different one.
+	// GET cash-connection returns the identical token, the bill's only credential,
+	// and it names this bill with the secret derived from its id.
 	conn, err := theAPI.GetCashWalletConnection(result.AppID)
 	require.NoError(t, err)
-	assert.Equal(t, result.PairingURI, conn.PairingURI)
 	assert.Equal(t, result.CashToken, conn.CashToken)
-
-	// The lokicash token and the pairing URI must describe the exact same
-	// wallet — the fund-safety property that matters most here, since either
-	// string alone is a sufficient connection credential.
-	pairingURI, err := url.Parse(result.PairingURI)
-	require.NoError(t, err)
 	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
-	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
-	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
-	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
+	assert.Equal(t, *childApp.WalletPubkey, decoded.WalletPubkey)
+	secret, err := svc.Keys.GetCashPairingKey(result.AppID)
+	require.NoError(t, err)
+	assert.Equal(t, secret, decoded.Secret)
 }
 
 // TestCreateCashWallet_ProducesSignedToken pins that a wallet minted through the admin
