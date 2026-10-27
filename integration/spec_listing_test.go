@@ -201,10 +201,24 @@ func TestSpecListing_I71_Retirement(t *testing.T) {
 	if moveClock(t, admin, 31*24*3600) {
 		t.Cleanup(func() { moveClock(t, admin, 0) })
 		_, author, _, _ := nmlisting.ParseAddress(l.Address)
+		_, _, d, _ := nmlisting.ParseAddress(l.Address)
 		require.Eventually(t, func() bool {
 			for _, del := range fetchEvents(t, cfg, nostr.Filter{Kinds: []int{5}, Authors: []string{author}}) {
 				if eventTag(del, "a") == l.Address && eventTag(del, "k") == "31190" {
 					return true
+				}
+			}
+			// A relay that applies a NIP-09 deletion may keep no kind 5 to
+			// read back: the deleted listing is gone and the Hub records it.
+			gone := len(fetchEvents(t, cfg, nostr.Filter{Kinds: []int{31190}, Authors: []string{author},
+				Tags: nostr.TagMap{"d": []string{d}}})) == 0
+			var rows []adminListing
+			if !gone || admin.do(http.MethodGet, "/api/listings", &rows) != nil {
+				return false
+			}
+			for _, r := range rows {
+				if r.ID == l.ID {
+					return r.Phase == "deleted"
 				}
 			}
 			return false
