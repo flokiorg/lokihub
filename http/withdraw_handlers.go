@@ -18,6 +18,7 @@ type withdrawAPI interface {
 	SetCashHubWithdrawTerms(hubAppID uint, in cashwithdraw.TermsInput) (*cashwithdraw.TermsView, error)
 	SetCashWithdrawNodeEnabled(on bool) error
 	ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, error)
+	CashWithdrawStatus() (*cashwithdraw.EngineStatus, error)
 }
 
 // registerWithdrawRoutes adds the on-chain withdrawal admin API (WP-23).
@@ -62,6 +63,13 @@ func (httpSvc *HttpService) registerWithdrawRoutes(g *echo.Group) {
 			return withdrawError(c, err)
 		}
 		return c.JSON(http.StatusOK, rows)
+	})
+	g.GET("/cash-withdraw/status", func(c echo.Context) error {
+		st, err := w.CashWithdrawStatus()
+		if err != nil {
+			return withdrawError(c, err)
+		}
+		return c.JSON(http.StatusOK, st)
 	})
 	g.PUT("/cash-withdraw/node", func(c echo.Context) error {
 		var in struct {

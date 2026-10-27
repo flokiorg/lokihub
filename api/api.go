@@ -1605,6 +1605,12 @@ func (api *api) RedeemOnchainFunds(ctx context.Context, toAddress string, amount
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
+	// Coins set aside for withdrawals are not the operator's to spend.
+	if w, err := api.withdrawService(); err == nil {
+		if err := w.OnchainSpendCheck(ctx, amount, sendAll); err != nil {
+			return nil, err
+		}
+	}
 	txId, err := api.svc.GetLNClient().RedeemOnchainFunds(ctx, toAddress, amount, feeRate, sendAll)
 	if err != nil {
 		return nil, err
