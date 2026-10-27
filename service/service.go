@@ -28,6 +28,7 @@ import (
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
@@ -74,6 +75,8 @@ type service struct {
 	// that the inbox's liveness watcher updates the snapshot concurrently with
 	// startup.
 	privateTransportStatusMu sync.Mutex
+	// orders takes order payments in and mints them (NIP-CO).
+	orders *cashorder.Engine
 }
 
 func NewService(ctx context.Context) (*service, error) {
@@ -193,6 +196,7 @@ func NewService(ctx context.Context) (*service, error) {
 	// A Circle Wallet payment the node reports accepted is settled by the Hub
 	// once re-checked, which needs the node.
 	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
+	svc.orders = svc.newOrderEngine(gormDB, keys, cfg, eventPublisher)
 
 	eventPublisher.RegisterSubscriber(svc.transactionsService)
 	eventPublisher.RegisterSubscriber(svc.nip47Service)

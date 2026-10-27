@@ -66,6 +66,10 @@ func (s *stubTransactionsService) ResolveAcceptedCircleHolds(_ context.Context, 
 
 func (s *stubTransactionsService) SetLNClientProvider(_ func() lnclient.LNClient) {}
 
+func (s *stubTransactionsService) SetOrderIntake(_ func(context.Context, *lnclient.Transaction) bool,
+	_ func(context.Context, string, uint64) (string, bool, error)) {
+}
+
 func (s *stubTransactionsService) CancelOpenCircleInvoices(_ context.Context, _ uint, _ lnclient.LNClient) error {
 	panic("CancelOpenCircleInvoices: unexpected call in test")
 }

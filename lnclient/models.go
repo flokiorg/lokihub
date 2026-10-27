@@ -136,6 +136,29 @@ type TransportSigner interface {
 	SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error)
 }
 
+// InvoiceStateKey is the Transaction.Metadata key carrying an invoice's state
+// as the node reports it (OPEN, SETTLED, CANCELED, ACCEPTED), when it does.
+const InvoiceStateKey = "invoice_state"
+
+// OnchainOutput is one output of a transaction the node's wallet sees, paying
+// one of its addresses. Confirmations is 0 for a transaction still in the
+// mempool.
+type OnchainOutput struct {
+	TxID          string
+	Vout          uint32
+	Address       string
+	AmountLoki    int64
+	Confirmations uint32
+	BlockHeight   int32
+}
+
+// OnchainOutputLister lists the outputs to the node's own addresses of every
+// wallet transaction, confirmed or not (NIP-CO §On-chain intake). Optional,
+// like TransportSigner: a node without it sells no on-chain orders.
+type OnchainOutputLister interface {
+	ListOnchainOutputs(ctx context.Context) ([]OnchainOutput, error)
+}
+
 type ChannelAcceptRequest struct {
 	ID         string
 	NodePubkey string

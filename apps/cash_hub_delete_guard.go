@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
@@ -16,6 +17,9 @@ import (
 const (
 	CashHubBlockerLiveBills = "live_bills"
 	CashHubBlockerRecords   = "records"
+	// CashHubBlockerOrders: orders still retained, or with a payment not yet
+	// minted (nipCO.OrderBlocksHubDelete).
+	CashHubBlockerOrders = "orders"
 )
 
 // CashHubDeleteBlocker is one reason a Cash Hub cannot be deleted yet: how many,
@@ -45,6 +49,8 @@ func (c CashHubDeleteCheck) Message() string {
 		switch b.Kind {
 		case CashHubBlockerLiveBills:
 			reasons = append(reasons, fmt.Sprintf("%d live bill(s)", b.Count))
+		case CashHubBlockerOrders:
+			reasons = append(reasons, fmt.Sprintf("%d order(s) still open or awaiting their bills", b.Count))
 		case CashHubBlockerRecords:
 			if b.Until != nil {
 				reasons = append(reasons, fmt.Sprintf("%d request record(s) kept until %s", b.Count, time.Unix(*b.Until, 0).UTC().Format(time.RFC3339)))
@@ -97,6 +103,28 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 		}
 		check.Blockers = append(check.Blockers, blocker)
 	}
+	h, err := cashrequest.HorizonTx(tx)
+	if err != nil {
+		return check, err
+	}
+	orders, at, timed, err := HubOrderBlockersTx(tx, hubID, h, now)
+	if err != nil {
+		return check, err
+	}
+	if orders > 0 {
+		blocker := CashHubDeleteBlocker{Kind: CashHubBlockerOrders, Count: orders}
+		if timed {
+			blocker.Until = &at
+		}
+		check.Blockers = append(check.Blockers, blocker)
+	}
+	// Addresses of on-chain orders that saw a payment are watched for as long
+	// as the Hub runs; deleting it ends the watch (NIP-CO §On-chain).
+	if err := tx.Model(&db.CashOrder{}).Where("hub_app_id = ? AND payment = ? AND state IN ?", hubID, "onchain",
+		[]string{db.CashOrderPaid, db.CashOrderMinted, db.CashOrderClosed}).Count(&check.WatchedAddresses).Error; err != nil {
+		return check, err
+	}
+	check.ConfirmationRequired = check.WatchedAddresses > 0
 	check.EarliestDeleteAt = earliestDelete(check.Blockers, now)
 	return check, nil
 }

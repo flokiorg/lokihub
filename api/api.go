@@ -3477,6 +3477,15 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		}
 		return err
 	}
+	// An ordered slice is never removed by the Hub's owner (NIP-CASH §Data Model).
+	var ordered int64
+	if err := api.db.Model(&db.CashWalletClaim{}).Where("id = ? AND wallet_app_id = ? AND ordered = ?", claimID, walletAppID, true).
+		Count(&ordered).Error; err != nil {
+		return err
+	}
+	if ordered > 0 {
+		return fmt.Errorf("%w: an ordered slice cannot be removed", constants.ErrInvalidParams)
+	}
 
 	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):
 	// if it fails, the slice stays exactly as it was.
@@ -3546,6 +3555,16 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 			return fmt.Errorf("%w: Cash wallet not found for this hub", constants.ErrInvalidParams)
 		}
 		return err
+	}
+	// A wallet holding a live ordered slice is never deleted by the Hub's owner
+	// (NIP-CASH §Data Model): only its holder ends it.
+	var ordered int64
+	if err := api.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND ordered = ? AND claimed_at IS NULL", walletAppID, true).
+		Count(&ordered).Error; err != nil {
+		return err
+	}
+	if ordered > 0 {
+		return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
 	}
 
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,

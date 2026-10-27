@@ -80,3 +80,37 @@ type CashOrderAddress struct {
 	IssuedAt int64  `gorm:"not null"`
 	Burnt    bool   `gorm:"not null;default:false"`
 }
+
+// Order payment states (NIP-CO §Paying and Minting).
+const (
+	CashOrderPaymentSeen      = "seen"      // on-chain, below its tier
+	CashOrderPaymentConfirmed = "confirmed" // at its tier (Lightning: settled), not minted
+	CashOrderPaymentMinted    = "minted"
+	CashOrderPaymentKept      = "kept"    // kept by the Hub: no order, or at most the fee
+	CashOrderPaymentReorged   = "reorged" // minted, then lost from the chain: the bill stands
+	CashOrderPaymentDropped   = "dropped" // unminted, gone from the mempool and the chain
+)
+
+// CashOrderPayment is one payment to an order: an invoice's settlement
+// (PaymentKey "ln:<payment_hash>") or an output to an order address
+// ("oc:<txid>:<vout>"). PaymentKey's uniqueness is what mints a payment once.
+// OrderID is nil for a payment the Hub keeps with no order.
+type CashOrderPayment struct {
+	ID            uint    `gorm:"primaryKey"`
+	OrderID       *uint   `gorm:"index"`
+	HubAppID      *uint   `gorm:"index"`
+	PaymentKey    string  `gorm:"size:80;not null;uniqueIndex"`
+	Address       *string `gorm:"size:100;index"`
+	ValueMillis   int64   `gorm:"not null"`
+	SeenAt        int64   `gorm:"not null"`
+	BlockHeight   *int
+	Confirmations int    `gorm:"not null;default:0"`
+	State         string `gorm:"size:10;not null;index"`
+	MintedAt      *int64
+	MintAttempts  int     `gorm:"not null;default:0"`
+	NextAttemptAt int64   `gorm:"not null;default:0"`
+	LastError     *string `gorm:"size:200"`
+	// MissedScans counts consecutive chain scans that did not find an
+	// unconfirmed output; two make it dropped.
+	MissedScans int `gorm:"not null;default:0"`
+}

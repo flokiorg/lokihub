@@ -231,6 +231,12 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 				"sources disagree on min_transfer_millis/redeem_fee_ppm/redeem_fee_base; only same-terms slices may be consolidated")
 			return
 		}
+		// Ordered and not-ordered sources are never merged (NIP-CASH §Consolidating
+		// Tokens); a merge of ordered sources is ordered.
+		if s.claim.Ordered != first.Ordered {
+			refuse(constants.ERROR_RESTRICTED, "ordered and not-ordered slices cannot be consolidated together")
+			return
+		}
 		if e := s.bill.ExpiresAt; e != nil && (earliest == nil || e.Before(*earliest)) {
 			earliest = e
 		}
@@ -291,6 +297,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		MinTransferMloki:   first.MinTransferMloki,
 		RedeemFeePpm:       first.RedeemFeePpm,
 		RedeemFeeBaseMloki: first.RedeemFeeBaseMloki,
+		Ordered:            first.Ordered,
 		ExpiresAt:          earliest,
 		Proofs:             proofs,
 		Record:             record,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"github.com/ohstr/nmilat/nipcash/transport"
@@ -81,7 +82,34 @@ func (svc *nip47Service) orderView(rec *db.CashRequestRecord) (json.RawMessage, 
 	return json.Marshal(cashorder.View(&order, bills))
 }
 
-// orderBills are the bills an order minted so far; none until it is paid.
-func (svc *nip47Service) orderBills(*db.CashRequestRecord) ([]nipCO.OrderBill, error) {
-	return nil, nil
+// orderBills are the bills an order minted so far, in minting order, each with
+// its token rebuilt byte for byte (in the clear, as the order's reply carries
+// it) or its tombstone, the payment it was minted from and, on chain, its
+// outpoint.
+func (svc *nip47Service) orderBills(rec *db.CashRequestRecord) ([]nipCO.OrderBill, error) {
+	rows, err := cashrequest.New(svc.db).Bills(rec.ID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := make([]nipCO.OrderBill, 0, len(rows))
+	for i := range rows {
+		b := &rows[i]
+		if b.Role != db.CashRecordBillOrdered {
+			continue
+		}
+		tok, err := svc.rebuildToken(b, nil, now)
+		if err != nil {
+			return nil, err
+		}
+		bill := nipCO.OrderBill{WalletPubkey: b.WalletPubkey, Token: tok, AmountMillis: uint64(max(b.AmountMillis, 0))} //nolint:gosec // non-negative
+		if b.PaidMillis != nil {
+			bill.PaidMillis = uint64(max(*b.PaidMillis, 0)) //nolint:gosec // non-negative
+		}
+		if b.Outpoint != nil {
+			bill.Outpoint = *b.Outpoint
+		}
+		out = append(out, bill)
+	}
+	return out, nil
 }

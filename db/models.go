@@ -296,6 +296,11 @@ type CashWalletClaim struct {
 	// must travel together, or a slice could be split into pieces that each pay a
 	// different share of the same route.
 	RedeemFeeBaseMloki int64
+	// Ordered marks an ordered slice (NIP-CASH §Data Model): minted for a NIP-CO
+	// order, or made from ordered slices only. It never expires, and the Hub's
+	// owner can neither delete its wallet nor remove it. Carried onto every
+	// wallet made from it.
+	Ordered bool `gorm:"not null;default:false"`
 	// SpunOffToWalletAppID is set (alongside ClaimedAt) when this slice's
 	// entire value was moved into a brand-new dedicated cash_wallet rather
 	// than redeemed via a real Lightning payment — see
@@ -590,7 +595,14 @@ type CashRequestRecordBill struct {
 	ZapTargetHash    *string `gorm:"size:64"`
 	ZapRecipient     *string `gorm:"size:80"`
 	ZapSender        *string `gorm:"size:80"`
+	// PaidMillis and Outpoint are an ordered bill's payment: what it brought in,
+	// and its on-chain output (txid:vout), nil for Lightning (NIP-CO §Response).
+	PaidMillis *int64
+	Outpoint   *string `gorm:"size:80"`
 }
+
+// CashRecordBillOrdered is the role of a bill minted for an order.
+const CashRecordBillOrdered = "ordered"
 
 // CashHorizon holds the single horizon H (NIP-CASH §Deadlines) in its only row
 // (ID 1). H never decreases, so the stored value is the largest ever used.
