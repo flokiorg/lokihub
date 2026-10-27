@@ -63,6 +63,8 @@ audits of both.
 
 ### Changed
 
+- Marks an admin mint's `request_id` used and commits its record with the bill,
+  as over NWC, when the request carries one with its `expiration`.
 - Checks `mint_cash` in NIP-CASH's order: recipients first (over 100, or one
   amount or the total over the per-wallet ceiling, is `QUOTA_EXCEEDED`), then
   the Identity Authorities (`RESTRICTED`), commitments and refused fields, then

@@ -44,6 +44,8 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/ohstr/nmilat/nipcash"
 
+	"github.com/flokiorg/lokihub/cashrequest"
+
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/keys"
 	permissions "github.com/flokiorg/lokihub/nip47/permissions"
@@ -3652,6 +3654,31 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 	}
 	defer release()
 
+	// NIP-CASH §Minting Cash, step 2, as over NWC: the id is checked and marked
+	// used before anything else, whatever else is wrong with the request, then
+	// the deadline. The record commits with the bill (cashwallet.MintRecord).
+	if req.RequestID == "" && req.Expiration != 0 {
+		return nil, fmt.Errorf("%w: expiration needs a request_id", constants.ErrInvalidParams)
+	}
+	if req.RequestID != "" {
+		if !nipcash.ValidRequestID(req.RequestID) {
+			return nil, fmt.Errorf("%w: request_id must be 32 to 64 lowercase hex characters", constants.ErrInvalidParams)
+		}
+		if err := cashrequest.New(api.db).MarkUsed(req.RequestID, constants.NIP47MethodMintCash); err != nil {
+			return nil, err
+		}
+		now := time.Now().Unix()
+		switch {
+		case req.Expiration == 0:
+			return nil, fmt.Errorf("%w: a request_id needs an expiration (its deadline)", constants.ErrInvalidParams)
+		case nipcash.CheckDeadline(req.Expiration, now, api.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds) != nil:
+			return nil, fmt.Errorf("%w: the expiration must lie within %d seconds", constants.ErrInvalidParams,
+				api.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
+		case !nipcash.CommitAllowed(req.Expiration, now):
+			return nil, fmt.Errorf("%w: the expiration has passed", constants.ErrInvalidParams)
+		}
+	}
+
 	// The operator is the minter here. A cash recipient sent without a commitment
 	// gets a secret generated for the operator, and only its commitment reaches the
 	// mint, as over NWC (NIP-CASH §Minting Cash). Until the browser generates it
@@ -3681,7 +3708,7 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		}
 	}
 
-	result, err := cashwallet.Create(context.Background(), cashwallet.Deps{
+	deps := cashwallet.Deps{
 		AppsService:         api.appsSvc,
 		TransactionsService: api.svc.GetTransactionsService(),
 		LNClient:            api.svc.GetLNClient(),
@@ -3689,11 +3716,22 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		DB:                  api.db,
 		RelayURLs:           api.cfg.GetRelayUrls(),
 		IAChecker:           api.iaManager,
-	}, cashwallet.Params{
+	}
+	resolved, err := cashwallet.Resolve(context.Background(), deps, cashwallet.Params{
 		HubApp:     &hub,
 		Recipients: recipients,
 		ExpirySecs: req.ExpirySecs,
 	})
+	if err != nil {
+		return nil, err
+	}
+	var record *db.CashRequestRecord
+	if req.RequestID != "" {
+		if record, err = cashwallet.MintRecord(req.RequestID, &hub, req.Expiration, resolved); err != nil {
+			return nil, err
+		}
+	}
+	result, err := cashwallet.Commit(context.Background(), deps, resolved, record)
 	if err != nil {
 		return nil, err
 	}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
 	lokidb "github.com/flokiorg/lokihub/db"
@@ -2206,6 +2207,10 @@ func mapCashAllocError(err error) (int, string) {
 		return http.StatusBadRequest, err.Error()
 	case errors.Is(err, transactions.NewQuotaExceededError()):
 		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, cashrequest.ErrRequestReused):
+		return http.StatusConflict, "REQUEST_REUSED: this request_id was already used on this node"
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return http.StatusBadRequest, "reached commit after its deadline; nothing was committed"
 	case errors.Is(err, constants.ErrInvalidParams):
 		// Our own validation messages are human-readable and safe to surface.
 		return http.StatusBadRequest, err.Error()

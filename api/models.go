@@ -471,6 +471,12 @@ type CashWalletRecipient struct {
 type CreateCashWalletRequest struct {
 	Recipients []CashWalletRecipient `json:"recipients"`
 	ExpirySecs int                   `json:"expiry_secs,omitempty"` // shared by every recipient; 0 => hub's max
+	// RequestID and Expiration make an operator's mint recoverable like one over
+	// NWC (NIP-CASH §request_id, §Deadlines): the id is marked used, Expiration
+	// (unix seconds) is the deadline, and the record commits with the bill.
+	// Optional until the browser sends them (WP-19); Expiration needs RequestID.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
 }
 
 type CreateCashWalletResponse struct {
