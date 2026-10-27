@@ -56,6 +56,9 @@ var expectedTables = []string{
 	"cash_orders",
 	"cash_order_addresses",
 	"cash_order_payments",
+	// Offer listings (WP-25).
+	"offer_listings",
+	"listing_node_states",
 }
 
 func main() {
@@ -278,6 +281,8 @@ func migrateDB(from, to *gorm.DB) error {
 		{"cash_orders", migrateTable[db.CashOrder]},
 		{"cash_order_addresses", migrateTable[db.CashOrderAddress]},
 		{"cash_order_payments", migrateTable[db.CashOrderPayment]},
+		{"offer_listings", migrateTable[db.OfferListing]},
+		{"listing_node_states", migrateTable[db.ListingNodeState]},
 	} {
 		logger.Logger.Info().Msg("migrating " + step.name + "...")
 		if err := step.run(from, tx); err != nil {

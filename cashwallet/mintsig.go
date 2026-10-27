@@ -14,8 +14,12 @@ import (
 )
 
 // hubGroupInput is the key a Cash Hub's fingerprint is derived from (NIP-CASH §The
-// Hub Group Fingerprint). It is the Hub's own connection pubkey, fixed once it mints.
+// Hub Group Fingerprint). It is the Hub's own connection pubkey, fixed once it mints:
+// after the connection is regenerated, the key it had before.
 func hubGroupInput(hub *db.App) string {
+	if hub.HubGroupPubkey != nil && *hub.HubGroupPubkey != "" {
+		return *hub.HubGroupPubkey
+	}
 	return hub.AppPubkey
 }
 
