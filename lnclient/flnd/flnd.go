@@ -274,6 +274,13 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 					}
 				}
 
+				// A keysend the node holds (flnd's keysend-hold-time) is
+				// followed until it is accepted, so lokihub can settle or fail
+				// it at the final hop (NIP-CW §Own Funds and Caps).
+				if invoice.State == lnrpc.Invoice_OPEN && invoice.IsKeysend {
+					go svc.subscribeSingleInvoice(invoice.RHash)
+					continue
+				}
 				if invoice.State != lnrpc.Invoice_SETTLED {
 					continue
 				}
@@ -381,7 +388,8 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 	}
 
 	for _, invoice := range listInvoicesResponse.Invoices {
-		if invoice.State == lnrpc.Invoice_OPEN {
+		// A keysend held while lokihub was down is decided now.
+		if invoice.State == lnrpc.Invoice_OPEN || (invoice.State == lnrpc.Invoice_ACCEPTED && invoice.IsKeysend) {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
 			logger.Logger.Debug().
 				Str("payment_hash", paymentHashHex).
