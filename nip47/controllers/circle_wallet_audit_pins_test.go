@@ -99,8 +99,9 @@ func TestCircleHub_LoweringMaxExpiry_AppliesToNewMembersOnly(t *testing.T) {
 	before := joinedWallet(t, svc, hub, early).ExpiresAt
 	require.NotNil(t, before)
 
+	// The default lifetime may not stay above the ceiling, so it is lowered too.
 	lowered := 3600
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered}))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered, DefaultExpSecs: &lowered}))
 
 	after := joinedWallet(t, svc, hub, early).ExpiresAt
 	require.NotNil(t, after)
