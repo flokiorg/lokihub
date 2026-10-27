@@ -37,7 +37,11 @@ var expectedTables = []string{
 	"cash_wallet_claims",
 	"circle_wallet_identity_proofs",
 	"circle_wallet_memberships",
-	"cash_transfer_proofs",
+	"cash_consumed_proofs",
+	"cash_used_request_ids",
+	"cash_request_records",
+	"cash_request_record_bills",
+	"cash_horizon",
 	"cash_stranded_funds",
 	// The cash bill archive. Retained forever and carried across a migration
 	// like any other table: it is the only record that a spent bill ever
@@ -250,9 +254,20 @@ func migrateDB(from, to *gorm.DB) error {
 		return fmt.Errorf("failed to migrate circle_wallet_identity_proofs: %w", err)
 	}
 
-	logger.Logger.Info().Msg("migrating cash_transfer_proofs...")
-	if err := migrateTable[db.CashTransferProof](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_transfer_proofs: %w", err)
+	for _, step := range []struct {
+		name string
+		run  func(from, to *gorm.DB) error
+	}{
+		{"cash_consumed_proofs", migrateTable[db.CashConsumedProof]},
+		{"cash_used_request_ids", migrateTable[db.CashUsedRequestID]},
+		{"cash_request_records", migrateTable[db.CashRequestRecord]},
+		{"cash_request_record_bills", migrateTable[db.CashRequestRecordBill]},
+		{"cash_horizon", migrateTable[db.CashHorizon]},
+	} {
+		logger.Logger.Info().Msg("migrating " + step.name + "...")
+		if err := step.run(from, tx); err != nil {
+			return fmt.Errorf("failed to migrate %s: %w", step.name, err)
+		}
 	}
 
 	logger.Logger.Info().Msg("migrating cash_stranded_funds...")

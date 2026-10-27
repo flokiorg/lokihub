@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -316,6 +317,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// exact same proof rather than needing a brand-new one. Stays empty for
 	// isCashCurrent, same as callerProofPubkey.
 	var proofEventID string
+	var proofCreatedAt int64
 	if !isCashCurrent {
 		var identityEvent nostr.Event
 		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
@@ -339,7 +341,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
 			return
 		}
-		// NOTE: the single-use replay guard (db.CashTransferProof) is
+		// NOTE: the single-use replay guard (db.CashConsumedProof) is
 		// deliberately NOT inserted here — only once every remaining check
 		// that can reject this request for a reason unrelated to the atomic
 		// operation itself (the live IA-trust re-check below, and step 8's
@@ -351,6 +353,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		// before step 9's split/reassign decision.
 		callerProofPubkey = identityEvent.PubKey
 		proofEventID = identityEvent.ID
+		proofCreatedAt = int64(identityEvent.CreatedAt)
 
 		// Same live IA re-check cash_redeem does — a compromised/retired
 		// Identity Authority must be cut off immediately, including for
@@ -430,13 +433,13 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	// Single-use replay guard: a captured proof (any co-recipient sharing
 	// this cash_wallet connection can decrypt every request sent over it,
 	// including this one) must not be resubmittable within its own freshness
-	// window — see db.CashTransferProof's doc comment. Inserted here, after
+	// window — see db.CashConsumedProof's doc comment. Inserted here, after
 	// every step-7/8 check that doesn't touch the slice has already passed,
 	// so a request that fails one of THOSE checks never burns the proof (see
 	// the comment above callerProofPubkey/proofEventID's capture in step 7).
 	// Empty for isCashCurrent, which has no signed proof to consume.
 	if proofEventID != "" {
-		if err := controller.db.Create(&db.CashTransferProof{AppID: app.ID, EventID: proofEventID}).Error; err != nil {
+		if err := cashrequest.New(controller.db).ConsumeProofTx(controller.db, proofEventID, proofCreatedAt, nip47Request.Method); err != nil {
 			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
 			return
 		}
@@ -591,7 +594,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 			// consumed and a legitimate retry needs a fresh one — safe (just
 			// an availability inconvenience), never a security gap.
 			if proofEventID != "" {
-				if delErr := controller.db.Where("event_id = ?", proofEventID).Delete(&db.CashTransferProof{}).Error; delErr != nil {
+				if delErr := cashrequest.New(controller.db).ReleaseProof(proofEventID); delErr != nil {
 					logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
 						Msg("Failed to release cash_transfer proof replay guard after a lost in-place reassignment race")
 				}
@@ -642,7 +645,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // and funded; any failure after that rolls the claim back (UnclaimCashSlice),
 // so a caller who hits an error here can safely retry — including with the
 // exact same identity_event, since rollback also releases proofEventID's
-// single-use guard (db.CashTransferProof) rather than leaving a proof that
+// single-use guard (db.CashConsumedProof) rather than leaving a proof that
 // never actually authorized anything permanently burned.
 func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, nip47Request *models.Request, app *db.App,
 	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
@@ -698,7 +701,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// source claim itself gets restored.
 	releaseProof := func() {
 		if proofEventID != "" {
-			if delErr := controller.db.Where("event_id = ?", proofEventID).Delete(&db.CashTransferProof{}).Error; delErr != nil {
+			if delErr := cashrequest.New(controller.db).ReleaseProof(proofEventID); delErr != nil {
 				logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
 					Msg("Failed to release cash_transfer proof replay guard after a rolled-back split")
 			}
@@ -914,7 +917,7 @@ func (controller *nip47Controller) maybeAutoDeleteDrainedCashWallet(app *db.App)
 // matches), but a partial split leaves the SAME identity registered on the
 // source slice — so, unlike before splitting existed, a captured proof
 // would otherwise remain "valid" for repeat reuse within its freshness
-// window. Callers MUST additionally insert a db.CashTransferProof row (see
+// window. Callers MUST additionally insert a db.CashConsumedProof row (see
 // its own doc comment) immediately after this function returns nil, to
 // make every proof single-use regardless of amount.
 //

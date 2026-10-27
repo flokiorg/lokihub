@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 )
@@ -156,6 +157,10 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 
 	if err := tx.Delete(&db.App{}, live.ID).Error; err != nil {
 		return fmt.Errorf("failed to delete cash bill %d: %w", live.ID, err)
+	}
+	// The records that created this bill may now be droppable (NIP-CASH §The Record).
+	if err := cashrequest.OnBillArchivedTx(tx, live.ID); err != nil {
+		return fmt.Errorf("failed to update the request records of cash bill %d: %w", live.ID, err)
 	}
 	return nil
 }

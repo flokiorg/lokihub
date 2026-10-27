@@ -90,7 +90,7 @@ func TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear(t 
 // is a second regression test: a full in-place reassignment that loses its optimistic-lock race
 // (ReassignCashSliceIdentity returns ErrNotFound because a concurrent
 // operation already claimed/transferred the slice) left the just-inserted
-// db.CashTransferProof row consumed — even though the losing request itself
+// db.CashConsumedProof row consumed — even though the losing request itself
 // authorized nothing. Unlike the split path, ReassignCashSliceIdentity is a
 // single atomic UPDATE with no fund movement of its own, so a failure here
 // means nothing happened at all: the proof must stay usable for a retry,

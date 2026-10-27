@@ -24,6 +24,7 @@ package main
 // and a count catches that while staying trivial to extend when a new table is added.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,8 +59,10 @@ func seedOneRowPerTable(t *testing.T, conn *gorm.DB) []string {
 		{"cash_wallet_claims", &db.CashWalletClaim{
 			WalletAppID: wallet.ID, IdentityType: db.CashIdentityPubkey,
 			IdentityValue: "migclaimant", AmountMloki: 4242}},
-		{"cash_transfer_proofs", &db.CashTransferProof{
-			AppID: wallet.ID, EventID: "migproofevent"}},
+		{"cash_consumed_proofs", &db.CashConsumedProof{
+			EventID: "migproofevent", ProofCreatedAt: 1, ConsumedAt: 2, Method: "cash_transfer"}},
+		{"cash_used_request_ids", &db.CashUsedRequestID{RequestID: strings.Repeat("ab", 32), Method: "mint_cash", UsedAt: 3}},
+		{"cash_horizon", &db.CashHorizon{ID: 1, HSecs: 300, UpdatedAt: 4}},
 		{"cash_stranded_funds", &db.CashStrandedFund{
 			Operation: "consolidate", SourceWalletAppID: wallet.ID,
 			RetainedWalletAppID: hub.ID, AmountMloki: 7}},
@@ -117,7 +120,7 @@ func TestMigrate_EveryExpectedTableIsCopied(t *testing.T) {
 	// that were seeded.
 	for _, table := range []string{
 		"apps", "circle_identities", "circle_identity_allowed_pubkeys",
-		"cash_hub_configs", "cash_wallet_claims", "cash_transfer_proofs",
+		"cash_hub_configs", "cash_wallet_claims", "cash_consumed_proofs", "cash_used_request_ids", "cash_horizon",
 		"cash_stranded_funds", "swaps",
 	} {
 		var n int64

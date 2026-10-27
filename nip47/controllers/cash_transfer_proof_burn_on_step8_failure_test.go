@@ -14,7 +14,7 @@ import (
 )
 
 // TestHandleCashTransferEvent_NewIdentityValidationFailure_ReleasesProofGuard
-// is a regression test: the db.CashTransferProof single-use replay guard used to be
+// is a regression test: the db.CashConsumedProof single-use replay guard used to be
 // inserted right after verifyTransferIdentityEvent succeeded (step 7), but
 // BEFORE new_identity was validated (step 8). Every failure path inside step
 // 9's atomic operation (ReassignCashSliceIdentity/SplitCashSliceAmount)
@@ -23,7 +23,7 @@ import (
 // its ia_pubkey isn't a trusted Identity Authority) did NOT release it, even
 // though nothing was ever mutated on the slice.
 //
-// Fixed by moving the db.CashTransferProof insert to occur only after every
+// Fixed by moving the db.CashConsumedProof insert to occur only after every
 // step-7/8 check that doesn't touch the slice has already passed (right
 // before step 9's split/reassign decision), so a request that fails one of
 // those earlier checks never burns the proof at all.
@@ -67,7 +67,7 @@ func TestHandleCashTransferEvent_NewIdentityValidationFailure_ReleasesProofGuard
 	// after correcting ia_pubkey, or once the operator adds the IA to the
 	// trust list) must not be told the proof was "already used".
 	var proofCount int64
-	require.NoError(t, svc.DB.Model(&db.CashTransferProof{}).Where("event_id = ?", proof.ID).Count(&proofCount).Error)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", proof.ID).Count(&proofCount).Error)
 	assert.Equal(t, int64(0), proofCount,
 		"a step-8 (new_identity validation) failure must not consume the single-use proof guard, "+
 			"since nothing was ever mutated on the slice")
