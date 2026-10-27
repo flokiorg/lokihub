@@ -9,6 +9,7 @@ import (
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
+	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
@@ -74,4 +75,6 @@ type Service interface {
 	NodeNostrIdentity() (string, error)
 	GetAppStoreSvc() appstore.Service
 	GetLiquidityManager() *manager.LiquidityManager
+	// GetListingService is the offer-listing service (WP-25), nil until started.
+	GetListingService() *listing.Service
 }

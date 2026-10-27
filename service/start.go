@@ -500,6 +500,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 	}
 
 	svc.publishAllAppInfoEvents()
+	svc.startListings(ctx)
 
 	svc.startupState = "Connecting To Relay"
 	err = svc.startNostr(ctx)
