@@ -214,15 +214,25 @@ func (svc *nip47Service) lookupSecretMatches(target, secret string) bool {
 	if err != nil {
 		return false
 	}
-	var claims []db.CashWalletClaim
-	if err := svc.db.Joins("JOIN apps ON apps.id = cash_wallet_claims.wallet_app_id").
+	var commitments []string
+	if err := svc.db.Model(&db.CashWalletClaim{}).Joins("JOIN apps ON apps.id = cash_wallet_claims.wallet_app_id").
 		Where("apps.wallet_pubkey = ? AND cash_wallet_claims.identity_type = ?", target, db.CashIdentityCash).
-		Find(&claims).Error; err != nil {
+		Pluck("cash_wallet_claims.identity_value", &commitments).Error; err != nil {
+		return false
+	}
+	// A destroyed bill's cash-mode slices, and ones removed from a live bill,
+	// keep their commitment in the archive.
+	var archived []string
+	if err := svc.db.Model(&db.CashBillSliceArchive{}).
+		Where("identity_type = ? AND (wallet_app_id IN (?) OR wallet_app_id IN (?))", db.CashIdentityCash,
+			svc.db.Model(&db.App{}).Select("id").Where("wallet_pubkey = ?", target),
+			svc.db.Model(&db.CashBillArchive{}).Select("wallet_app_id").Where("wallet_pubkey = ?", target)).
+		Pluck("identity_value", &archived).Error; err != nil {
 		return false
 	}
 	match := false
-	for _, c := range claims {
-		if subtle.ConstantTimeCompare([]byte(commitment), []byte(c.IdentityValue)) == 1 {
+	for _, c := range append(commitments, archived...) {
+		if subtle.ConstantTimeCompare([]byte(commitment), []byte(c)) == 1 {
 			match = true
 		}
 	}
