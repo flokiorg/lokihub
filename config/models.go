@@ -96,6 +96,8 @@ type AppConfig struct {
 	// Hub SHOULD NOT keep that longer than its audit policy needs. Amounts and
 	// outcomes stay. 0 keeps the links forever.
 	CashSplitLinkRetentionDays int `envconfig:"CASH_SPLIT_LINK_RETENTION_DAYS" default:"90"`
+	// WithdrawEnv are the on-chain withdrawal tunables (config/withdraw.go).
+	WithdrawEnv
 
 	// The four knobs below bound one private-transport batch envelope. They are
 	// node-level rather than per-Cash-Hub on purpose: the transport gate runs

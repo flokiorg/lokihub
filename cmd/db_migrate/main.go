@@ -295,6 +295,10 @@ func migrateDB(from, to *gorm.DB) error {
 		return fmt.Errorf("failed to migrate cash_bill_slice_archives: %w", err)
 	}
 
+	if err := migrateWithdrawTables(from, tx); err != nil {
+		return err
+	}
+
 	logger.Logger.Info().Msg("migrating swaps...")
 	if err := migrateTable[db.Swap](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate swaps: %w", err)
