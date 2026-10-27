@@ -9,6 +9,25 @@ audits of both.
 
 ### Added
 
+- Takes order payments in and mints them (NIP-CO §Paying and Minting). A
+  settled order invoice, or a payment of one by a wallet on this node, is
+  recorded once by its payment hash and minted in one commit: the Hub is
+  credited with what it brought in and each bill of the split (none above
+  `max_millis`; nothing for a payment of at most the fee, which the Hub keeps)
+  is created, signed, funded and recorded on the order. Outputs to order
+  addresses are read from the node's wallet every 30 s, seen, confirmed at
+  their tier and minted; an unconfirmed output gone for two scans is dropped,
+  a minted one that leaves the chain is reorged (the bill stands, alerted); a
+  payment to an address with no live order is kept by the Hub. A failed mint
+  is retried with backoff for good. pay_by expires an unpaid Lightning order
+  once its invoice is cancelled, and closes or expires an on-chain one;
+  retention drops what NIP-CO allows, with the used mark of an unpaid order.
+  Every state change and new bill publishes an order notice on the relay the
+  order arrived on. `cash_lookup` of an order returns its bills, tokens
+  rebuilt. Ordered slices never expire, cannot be removed or have their wallet
+  deleted by the owner, carry their mark through transfers and merges, and are
+  never consolidated with other slices. Open orders and unminted payments keep
+  their Cash Hub (`orders` in the delete check).
 - Sells a Cash Hub's cash through NIP-CO Order connections. The operator
   creates any number per Cash Hub (`POST /api/cash-hubs/:id/order-connections`
   returns the signed `cashorder1` string, shown again by the list), retires one

@@ -1948,6 +1948,9 @@ func flndInvoiceToTransaction(invoice *lnrpc.Invoice) *lnclient.Transaction {
 	var settledAt *int64
 	preimage := hex.EncodeToString(invoice.RPreimage)
 	metadata := map[string]interface{}{}
+	// OPEN, SETTLED, CANCELED or ACCEPTED: an order's pay_by job tells a
+	// cancelled invoice from one holding an accepted HTLC by it.
+	metadata[lnclient.InvoiceStateKey] = invoice.State.String()
 
 	if invoice.State == lnrpc.Invoice_SETTLED {
 		settledAt = &invoice.SettleDate
@@ -2231,4 +2234,33 @@ func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan ln
 	}
 
 	return reqChan, respond, nil
+}
+
+// ListOnchainOutputs lists every output to one of the wallet's own addresses,
+// over every wallet transaction, confirmed or in the mempool.
+func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.OnchainOutput, error) {
+	var out []lnclient.OnchainOutput
+	offset := uint32(0)
+	const limit = uint32(1000)
+	for {
+		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{IndexOffset: offset, MaxTransactions: limit})
+		if err != nil {
+			return nil, err
+		}
+		for _, tx := range resp.Transactions {
+			for _, o := range tx.OutputDetails {
+				if !o.IsOurAddress || o.Address == "" || o.OutputIndex < 0 {
+					continue
+				}
+				out = append(out, lnclient.OnchainOutput{
+					TxID: tx.TxHash, Vout: uint32(o.OutputIndex), Address: o.Address, AmountLoki: o.Amount, //nolint:gosec // an output index
+					Confirmations: uint32(max(tx.NumConfirmations, 0)), BlockHeight: tx.BlockHeight, //nolint:gosec // non-negative
+				})
+			}
+		}
+		if len(resp.Transactions) < int(limit) {
+			return out, nil
+		}
+		offset += uint32(len(resp.Transactions)) //nolint:gosec // at most limit
+	}
 }

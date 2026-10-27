@@ -130,6 +130,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher,
 		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
 	StartCircleLifecycleService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher)
+	svc.startOrderJobs(ctx, pool)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
 
 	// Start LSPS5 listener

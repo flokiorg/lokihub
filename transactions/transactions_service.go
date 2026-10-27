@@ -42,6 +42,12 @@ type transactionsService struct {
 	// lnClientProvider returns the node, for resolving a Circle Wallet payment
 	// the node reports accepted; nil until the service sets it.
 	lnClientProvider func() lnclient.LNClient
+	// orderIntake takes in a settled invoice that pays a NIP-CO order; it
+	// reports false for any other invoice. nil until the service sets it.
+	orderIntake func(ctx context.Context, inv *lnclient.Transaction) bool
+	// orderSelfPay takes in a same-node payment of an order's invoice: handled
+	// false when the hash names no order.
+	orderSelfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (preimage string, handled bool, err error)
 }
 
 // InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
@@ -79,6 +85,10 @@ type TransactionsService interface {
 	ResolveAcceptedCircleHolds(ctx context.Context, lnClient lnclient.LNClient)
 	// SetLNClientProvider gives the service the node for Circle Wallet payments.
 	SetLNClientProvider(provider func() lnclient.LNClient)
+	// SetOrderIntake routes a settled invoice that pays an order to the order
+	// intake (NIP-CO §Lightning) instead of app crediting.
+	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
+		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
 	// CancelOpenCircleInvoices cancels a Circle Wallet's open invoices.
 	CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error
 }
@@ -1325,6 +1335,12 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			return
 		}
 
+		// An order's invoice was created at the node directly, with no app row:
+		// its payment goes to the order intake, which mints it.
+		if svc.orderIntake != nil && svc.orderIntake(ctx, lnClientTransaction) {
+			return
+		}
+
 		var dbTransaction db.Transaction
 		var settledIncoming *db.Transaction
 		err := svc.db.Transaction(func(tx *gorm.DB) error {
@@ -1605,7 +1621,16 @@ func IsSelfPayment(gormDB *gorm.DB, paymentRequest *decodepay.Bolt11, lnClient l
 		Type:        constants.TRANSACTION_TYPE_INCOMING,
 		PaymentHash: paymentRequest.PaymentHash,
 	})
-	return result.Error == nil && result.RowsAffected > 0
+	if result.Error == nil && result.RowsAffected > 0 {
+		return true
+	}
+	// An order's invoice has no app row until it is minted: it is this node's
+	// when its payment hash names an open Lightning order (NIP-CO, a same-node
+	// payment of an order invoice).
+	var orders int64
+	err := gormDB.Model(&db.CashOrder{}).Where("payment_hash = ? AND payment = ? AND state = ?",
+		paymentRequest.PaymentHash, "lightning", db.CashOrderOpen).Count(&orders).Error
+	return err == nil && orders > 0
 }
 
 // interceptSelfPayment settles a payment whose payee is a wallet on this same node,
@@ -1636,6 +1661,15 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 	}
 
 	if result.RowsAffected == 0 {
+		// The invoice of an order: the order intake takes the payment in.
+		if svc.orderSelfPay != nil {
+			if preimage, handled, err := svc.orderSelfPay(context.Background(), paymentHash, payerAmountMloki); handled {
+				if err != nil {
+					return nil, err
+				}
+				return &lnclient.PayInvoiceResponse{Preimage: preimage, Fee: 0}, nil
+			}
+		}
 		return nil, NewNotFoundError()
 	}
 

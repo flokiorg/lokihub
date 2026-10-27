@@ -56,6 +56,7 @@ func Models() []any {
 		&db.CashOrderTerms{},
 		&db.CashOrder{},
 		&db.CashOrderAddress{},
+		&db.CashOrderPayment{},
 	}
 }
 

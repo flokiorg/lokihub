@@ -381,3 +381,10 @@ func (svc *transactionsService) CancelOpenCircleInvoices(ctx context.Context, wa
 	}
 	return nil
 }
+
+// SetOrderIntake sets the order intake (see the interface).
+func (svc *transactionsService) SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
+	selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error)) {
+	svc.orderIntake = intake
+	svc.orderSelfPay = selfPay
+}

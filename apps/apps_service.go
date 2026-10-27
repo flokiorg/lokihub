@@ -631,6 +631,9 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 		// An Order connection lives as long as its Hub and goes with it (NIP-CO
 		// §The Order Connection).
 		if app.Kind == db.AppKindCashHub {
+			if err := DeleteHubOrdersTx(tx, app.ID); err != nil {
+				return err
+			}
 			if err := tx.Where("parent_app_id = ? AND kind = ?", app.ID, db.AppKindCashOrder).Delete(&db.App{}).Error; err != nil {
 				return err
 			}

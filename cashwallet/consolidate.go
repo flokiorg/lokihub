@@ -39,7 +39,9 @@ type ConsolidateParams struct {
 	RedeemFeePpm     int
 	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
 	RedeemFeeBaseMloki int64
-	ExpiresAt          *time.Time
+	// Ordered: a merge of ordered sources is ordered.
+	Ordered   bool
+	ExpiresAt *time.Time
 
 	// Proofs are consumed by the commit, and only if it commits.
 	Proofs []ClaimProof
@@ -93,6 +95,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (*Con
 				MinTransferMloki:   params.MinTransferMloki,
 				RedeemFeePpm:       params.RedeemFeePpm,
 				RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
+				Ordered:            params.Ordered,
 			}},
 			identityRequired: params.NewIdentityType != db.CashIdentityCash,
 			lineageRoot:      &root,
