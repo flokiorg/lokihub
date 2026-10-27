@@ -145,6 +145,14 @@ func signer(ctx context.Context, n Node) func(*nip01.Event) error {
 type lnNode struct{ ln lnclient.LNClient }
 
 func (n lnNode) Tip(ctx context.Context) (int64, error) {
+	// The chain's own best block when the node has the on-chain kit: the
+	// node info lokihub keeps is refreshed only now and then, and a quote's
+	// holds_until and its expiry must follow the chain (live run21).
+	if p := n.Payer(); p != nil {
+		if best, err := p.BestBlock(ctx); err == nil && best.Height > 0 {
+			return best.Height, nil
+		}
+	}
 	info, err := n.ln.GetInfo(ctx)
 	if err != nil {
 		return 0, err
