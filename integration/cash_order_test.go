@@ -89,9 +89,10 @@ func TestCashOrder_LightningOrderMintedAndRedeemed(t *testing.T) {
 	assert.EqualValues(t, 21_000, got.Bills[0].AmountMillis)
 	assert.EqualValues(t, 22_021, got.Bills[0].PaidMillis)
 
-	billAppID, err := admin.findAppIDByWalletPubkey(got.Bills[0].WalletPubkey)
+	claims, err := admin.listCashWalletClaims(hubID)
 	require.NoError(t, err)
-	err = admin.deleteCashWallet(hubID, billAppID)
+	require.Len(t, claims, 1)
+	err = admin.deleteCashWallet(hubID, claims[0].WalletAppID)
 	require.Error(t, err, "an ordered bill is not the owner's to delete")
 	assert.Contains(t, err.Error(), "ordered")
 
