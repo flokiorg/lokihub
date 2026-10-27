@@ -28,10 +28,11 @@ type circleWalletInfo struct {
 	// equal to the circlehub1 string's TLV 4 (NIP-CW §The Circle Wallet Hub
 	// Connection). Always present.
 	Identity string `json:"identity"`
-	// PerWalletMaxMillis and MinBudgetRenewal are the other limits a join is
+	// PerWalletMaxMillis, PerWalletMaxReceiveMillis and MinBudgetRenewal are the other limits a join is
 	// checked against (NIP-CW get_info), so a client can validate before asking.
-	PerWalletMaxMillis int64  `json:"per_wallet_max_millis,omitempty"`
-	MinBudgetRenewal   string `json:"min_budget_renewal,omitempty"`
+	PerWalletMaxMillis        int64  `json:"per_wallet_max_millis,omitempty"`
+	PerWalletMaxReceiveMillis int64  `json:"per_wallet_max_receive_millis,omitempty"`
+	MinBudgetRenewal          string `json:"min_budget_renewal,omitempty"`
 	// Accepting is false once the host closes the circle to new members.
 	Accepting bool `json:"accepting"`
 }
@@ -225,14 +226,15 @@ func (controller *nip47Controller) circleWalletTerms(app *db.App, identity strin
 		available = min(available, perWallet)
 	}
 	return &circleWalletInfo{
-		AvailableMillis:    available,
-		MaxExpSecs:         providerConfig.MaxExpSecs,
-		FeesPpm:            providerConfig.FeesPpm,
-		FeeReserve:         feeReserve{Ppm: 10_000, MinMillis: constants.MIN_FEE_RESERVE_MLOKI},
-		CirclePolicy:       providerConfig.CircleIdentity.Policy,
-		Identity:           identity,
-		PerWalletMaxMillis: int64(providerConfig.PerWalletMaxMloki),
-		MinBudgetRenewal:   providerConfig.MinBudgetRenewal,
-		Accepting:          providerConfig.AcceptingJoins == nil || *providerConfig.AcceptingJoins,
+		AvailableMillis:           available,
+		MaxExpSecs:                providerConfig.MaxExpSecs,
+		FeesPpm:                   providerConfig.FeesPpm,
+		FeeReserve:                feeReserve{Ppm: 10_000, MinMillis: constants.MIN_FEE_RESERVE_MLOKI},
+		CirclePolicy:              providerConfig.CircleIdentity.Policy,
+		Identity:                  identity,
+		PerWalletMaxMillis:        int64(providerConfig.PerWalletMaxMloki),
+		PerWalletMaxReceiveMillis: providerConfig.PerWalletMaxReceiveMloki,
+		MinBudgetRenewal:          providerConfig.MinBudgetRenewal,
+		Accepting:                 providerConfig.AcceptingJoins == nil || *providerConfig.AcceptingJoins,
 	}, nil
 }

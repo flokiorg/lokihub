@@ -9,6 +9,13 @@ audits of both.
 
 ### Added
 
+- Adds a Circle Wallet Hub's per-wallet receive ceiling and default wallet
+  lifetime (NIP-CW §Data Model): a join whose `max_receive` is over the
+  ceiling is refused `LIMIT_EXCEEDED` naming `max_receive`, the wallet keeps
+  the `max_receive` it asked for, and a join naming no expiry gets the default
+  lifetime instead of the ceiling. A lifetime ceiling of 0 (none) is accepted;
+  a default above a non-zero ceiling, or 0 under one, is refused. `get_info`
+  reports `per_wallet_max_receive_millis`.
 - Keeps a record of every circle join and serves the NIP-CW join lookup:
   `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
   joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's

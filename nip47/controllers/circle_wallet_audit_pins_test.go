@@ -7,6 +7,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"github.com/flokiorg/lokihub/apps"
 	"testing"
 	"time"
 
@@ -75,7 +76,7 @@ func TestCircleHub_LoweringPerWalletCap_AppliesToNewMembersOnly(t *testing.T) {
 	require.Nil(t, joinWithExpiry(t, svc, hub, early, 400_000, 3600).Error)
 
 	lowered := 100_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, nil, nil, &lowered, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &lowered}))
 
 	var perm db.AppPermission
 	require.NoError(t, svc.DB.Where("app_id = ? AND scope = ?", joinedWallet(t, svc, hub, early).ID, constants.MAKE_INVOICE_SCOPE).First(&perm).Error)
@@ -99,7 +100,7 @@ func TestCircleHub_LoweringMaxExpiry_AppliesToNewMembersOnly(t *testing.T) {
 	require.NotNil(t, before)
 
 	lowered := 3600
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, &lowered, nil, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered}))
 
 	after := joinedWallet(t, svc, hub, early).ExpiresAt
 	require.NotNil(t, after)
@@ -127,7 +128,7 @@ func TestCircleWallet_JoinedFeeFree_StaysFeeFreeWhenHubStartsCharging(t *testing
 	assert.Equal(t, 0, *wallet.CircleFeesPpm)
 
 	raised := 50_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, nil, &raised, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(hub.ID, apps.CircleHubConfigPatch{FeesPpm: &raised}))
 	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
 
 	r := &models.Request{}

@@ -264,6 +264,10 @@ type App struct {
 	CircleFeesPpm           *int    `json:"circleFeesPpm,omitempty"`
 	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki,omitempty"`
 	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleDefaultExpSecs is the lifetime a join naming none gets (0 = never);
+	// CirclePerWalletMaxReceiveMloki the ceiling on a member's max_receive.
+	CircleDefaultExpSecs           *int   `json:"circleDefaultExpSecs,omitempty"`
+	CirclePerWalletMaxReceiveMloki *int64 `json:"circlePerWalletMaxReceiveMloki,omitempty"`
 }
 
 // CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
@@ -383,10 +387,12 @@ type UpdateAppRequest struct {
 	// CircleMaxExpSecs/CircleFeesPpm/CirclePerWalletMaxMloki/CircleMinBudgetRenewal
 	// update a circle_hub's CircleHubConfig; nil leaves the
 	// corresponding field unchanged. Ignored for other app kinds.
-	CircleMaxExpSecs        *int    `json:"circleMaxExpSecs"`
-	CircleFeesPpm           *int    `json:"circleFeesPpm"`
-	CirclePerWalletMaxMloki *int    `json:"circlePerWalletMaxMloki"`
-	CircleMinBudgetRenewal  *string `json:"circleMinBudgetRenewal"`
+	CircleMaxExpSecs               *int    `json:"circleMaxExpSecs"`
+	CircleDefaultExpSecs           *int    `json:"circleDefaultExpSecs"`
+	CircleFeesPpm                  *int    `json:"circleFeesPpm"`
+	CirclePerWalletMaxMloki        *int    `json:"circlePerWalletMaxMloki"`
+	CirclePerWalletMaxReceiveMloki *int64  `json:"circlePerWalletMaxReceiveMloki"`
+	CircleMinBudgetRenewal         *string `json:"circleMinBudgetRenewal"`
 }
 
 type TransferRequest struct {
@@ -426,6 +432,10 @@ type CreateAppRequest struct {
 	CircleFeesPpm           int    `json:"circleFeesPpm"`
 	CirclePerWalletMaxMloki int    `json:"circlePerWalletMaxMloki"`
 	CircleMinBudgetRenewal  string `json:"circleMinBudgetRenewal"`
+	// CircleDefaultExpSecs (0 = the ceiling) and CirclePerWalletMaxReceiveMloki
+	// (0 = the send ceiling).
+	CircleDefaultExpSecs           int   `json:"circleDefaultExpSecs"`
+	CirclePerWalletMaxReceiveMloki int64 `json:"circlePerWalletMaxReceiveMloki"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`

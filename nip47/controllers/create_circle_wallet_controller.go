@@ -191,6 +191,10 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		limit("max_amount")
 		return
 	}
+	if params.MaxReceive > uint64(providerConfig.PerWalletMaxReceiveMloki) { //nolint:gosec // validated positive
+		limit("max_receive")
+		return
+	}
 	// Paying out over Lightning holds back at least the fee reserve on top of the
 	// amount, so a lower cap makes a wallet that can never pay outside this node.
 	if params.MaxAmount < constants.MIN_CIRCLE_WALLET_MAX_MLOKI {
@@ -209,11 +213,11 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		limit("expiry")
 		return
 	}
-	// An omitted expiry takes the Hub's default lifetime, which is its ceiling
-	// until a separate default exists; 0 never expires.
+	// An omitted or zero expiry takes the Hub's default lifetime, never its
+	// ceiling (NIP-CW §Request); a default of 0 never expires.
 	expirySecs := int(params.Expiry) //nolint:gosec // bounded above
 	if expirySecs == 0 {
-		expirySecs = providerConfig.MaxExpSecs
+		expirySecs = providerConfig.DefaultExpSecs
 	}
 	var expiresAt *time.Time
 	if expirySecs > 0 {
@@ -300,10 +304,14 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 			return err
 		}
 
-		// NIP-CW §Fees: the member's rate is the one in force now, and stays.
-		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).
-			Update("circle_fees_ppm", providerConfig.FeesPpm).Error; err != nil {
-			return fmt.Errorf("failed to record the member's fee rate: %w", err)
+		// NIP-CW §Fees: the member's rate is the one in force now, and stays;
+		// its receive cap is the one it asked for.
+		maxReceive := int64(params.MaxReceive) //nolint:gosec // bounded by the Hub's ceiling above
+		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
+			"circle_fees_ppm":          providerConfig.FeesPpm,
+			"circle_max_receive_mloki": maxReceive,
+		}).Error; err != nil {
+			return fmt.Errorf("failed to record the member's terms: %w", err)
 		}
 
 		// One active wallet per identity per hub, atomic guard: a unique-
@@ -417,8 +425,7 @@ func (controller *nip47Controller) joinDetails(hub, wallet *db.App, params nipcw
 		ConnectionPubkey: params.ConnectionPubkey,
 		Relays:           relays,
 		MaxAmount:        params.MaxAmount / 1000 * 1000,
-		// max_receive is reported as requested: the receive cap is enforced by the
-		// circle money model.
+		// max_receive is applied as requested, within the Hub's ceiling.
 		MaxReceive:    params.MaxReceive,
 		ExpiresAt:     expiresAtUnix,
 		FeesPpm:       uint64(config.FeesPpm), //nolint:gosec // fees_ppm is validated non-negative
