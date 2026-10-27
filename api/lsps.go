@@ -348,8 +348,37 @@ func (api *api) disconnectLSP(ctx context.Context, pubkey string) error {
 		logger.Logger.Warn().Err(err).Str("pubkey", pubkey).Msg("Failed to disconnect peer")
 		return err
 	}
+	// The node tears the connection down in the background: wait until the
+	// peer is gone, so a trust right after reconnects instead of finding a peer
+	// still exiting ("peer exiting" on the next LSPS message).
+	ln := api.svc.GetLNClient()
+	if ln == nil {
+		return nil
+	}
+	deadline := time.Now().Add(peerGoneWait)
+	for time.Now().Before(deadline) {
+		peers, err := ln.ListPeers(ctx)
+		if err != nil {
+			return nil
+		}
+		connected := false
+		for _, p := range peers {
+			connected = connected || (p.NodeId == pubkey && p.IsConnected)
+		}
+		if !connected {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 	return nil
 }
+
+// peerGoneWait bounds disconnectLSP's wait for the peer to be gone.
+const peerGoneWait = 5 * time.Second
 
 // checkHasChannels checks if there are any open channels with the given pubkey
 func (api *api) checkHasChannels(ctx context.Context, pubkey string) error {
