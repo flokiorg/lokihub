@@ -169,7 +169,7 @@ func TestAudit_CashTransferExactReplaySequential_Rejected(t *testing.T) {
 //     bypassable in a way that lets one wallet borrow another's allowance.
 //
 // Opt-in like the other rate-limit tests: dev's .env sets
-// CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR=0, which the limiter treats as "disabled"
+// CASH_CLAIM_CALLS_PER_HOUR=0, which the limiter treats as "disabled"
 // (nip47/controllers/rate_limiter.go). `just test integration-ratelimits` sets it to
 // 20 and runs this with INTEGRATION_RUN_RATE_LIMIT_TESTS=1.
 func TestAudit_CashTransferRateLimit_PerWallet(t *testing.T) {

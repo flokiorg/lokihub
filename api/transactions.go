@@ -93,6 +93,7 @@ func (api *api) SendPayment(ctx context.Context, invoice string, amountMloki *ui
 		delete(metadata, "internal_transfer")
 		delete(metadata, "cash_claim_slice")
 		delete(metadata, "cash_redeem_fee_mloki")
+		delete(metadata, transactions.CashRedeemRouteCapKey)
 	}
 	transaction, err := api.svc.GetTransactionsService().SendPaymentSync(invoice, amountMloki, metadata, api.svc.GetLNClient(), appID, nil)
 	if err != nil {

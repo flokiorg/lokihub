@@ -317,35 +317,21 @@ func (svc *appsService) SetCashSliceRedeemPaymentHash(walletAppID uint, identity
 // ReleaseCashSliceForFailedPayment is how a slice comes back after cash_redeem
 // had to keep it claimed because its payment's outcome was unknown. The ledger
 // must show that payment FAILED and nothing pending or settled under its hash,
-// so a payout that went through is never reopened.
+// so a payout that went through is never reopened. The claim and its consumed
+// claim proof go in one transaction, and the slice gets the late-failure
+// cool-down. A payment whose cash_redeem is still deciding its answer is left to
+// that redeem.
 func (svc *appsService) ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (bool, error) {
-	if paymentHash == "" {
+	if paymentHash == "" || redeemAnswering(paymentHash) {
 		return false, nil
 	}
-	var released int64
+	var released bool
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
-		var failed, live int64
-		ledger := func() *gorm.DB {
-			return tx.Model(&db.Transaction{}).Where("app_id = ? AND type = ? AND payment_hash = ?",
-				walletAppID, constants.TRANSACTION_TYPE_OUTGOING, paymentHash)
-		}
-		if err := ledger().Where("state = ?", constants.TRANSACTION_STATE_FAILED).Count(&failed).Error; err != nil {
-			return err
-		}
-		if err := ledger().Where("state IN ?", []string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_SETTLED}).Count(&live).Error; err != nil {
-			return err
-		}
-		if failed == 0 || live > 0 {
-			return nil
-		}
-		result := tx.Model(&db.CashWalletClaim{}).
-			Where("wallet_app_id = ? AND payment_hash = ? AND preimage = ? AND claimed_at IS NOT NULL",
-				walletAppID, paymentHash, "").
-			Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""})
-		released = result.RowsAffected
-		return result.Error
+		var err error
+		released, err = releaseRedeemClaimTx(tx, walletAppID, paymentHash, svc.lateFailureCooldown(time.Now()), true)
+		return err
 	})
-	return released > 0, err
+	return released, err
 }
 
 // ReassignCashSliceIdentity atomically reassigns one unclaimed slice's

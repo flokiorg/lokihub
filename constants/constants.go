@@ -271,7 +271,10 @@ const (
 	ERROR_INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
 	ERROR_UNAUTHORIZED         = "UNAUTHORIZED"
 	// ERROR_REQUEST_REUSED: the request_id was already used on this node (NIP-CASH §request_id).
-	ERROR_REQUEST_REUSED         = nipcash.ErrCodeRequestReused
+	ERROR_REQUEST_REUSED = nipcash.ErrCodeRequestReused
+	// ERROR_PAYMENT_FAILED: cash_redeem's payment failed before it could have
+	// settled, and the slice stays claimable (NIP-CASH §Errors).
+	ERROR_PAYMENT_FAILED         = nipcash.ErrCodePaymentFailed
 	ERROR_EXPIRED                = "EXPIRED"
 	ERROR_RESTRICTED             = "RESTRICTED"
 	ERROR_BAD_REQUEST            = "BAD_REQUEST"

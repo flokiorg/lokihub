@@ -32,8 +32,7 @@ import (
 // — the same "cap every multi-item Cash batch" convention, applied here since
 // this feature shipped without it. Without a ceiling, one rate-limited
 // cash_consolidate request could bundle an arbitrary number of independent
-// custody lookups and proof verifications, diluting the per-request
-// cashClaimLimiter tick by however many sources are packed in.
+// custody lookups and proof verifications in one call.
 const maxConsolidateSourcesCap = 100
 
 // consolidateSourceParam is no longer used to parse the real request
@@ -146,18 +145,16 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		return
 	}
 
-	// Rate limit, charged once the request is a real attempt; shared with
-	// cash_redeem and cash_transfer, so a caller cannot split attempts across
-	// methods to multiply its allowance.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		refuse(constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_consolidate")
-		return
-	}
-
 	// Step 2: every source's proof, before any other check on any source.
 	sources, ok := controller.authorizeConsolidateSources(params, call.ItemSigner)
 	if !ok {
 		refuse(constants.ERROR_UNAUTHORIZED, consolidateUnauthorized)
+		return
+	}
+	// The call limit, keyed by the verified signer (sources[0]'s, which signed the
+	// item proof) and shared with cash_redeem and cash_transfer.
+	if !controller.claimCallAllowed(call.ItemSigner) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
 		return
 	}
 	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, method); err != nil {

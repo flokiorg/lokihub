@@ -300,7 +300,14 @@ type CashWalletClaim struct {
 	RedeemFeeMloki  int64
 	RoutingFeeMloki int64
 	SettledAt       *time.Time
-	CreatedAt       time.Time
+	// RedeemProofID is the claim proof consumed by the cash_redeem whose payout
+	// is in flight, "" for a cash-mode slice. A payout that definitely fails
+	// releases the claim and forgets this proof in one transaction.
+	RedeemProofID string `gorm:"size:64"`
+	// RedeemCooldownUntil is set when a payout failed only after cash_redeem had
+	// answered: until then another redeem of the slice is RATE_LIMITED.
+	RedeemCooldownUntil *time.Time
+	CreatedAt           time.Time
 }
 
 // CircleIdentity is a reusable Nostr identity (policy + provider pubkey +

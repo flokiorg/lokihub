@@ -115,6 +115,14 @@ func TestHandleCashRedeemEvent_UnknownOutcomeThenLateFailure_SliceReleased(t *te
 	require.NoError(t, err)
 	require.True(t, released)
 
+	// The consumed claim proof goes with the claim, and the late failure sets the
+	// slice's cool-down (Q22).
+	var consumed int64
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&consumed).Error)
+	require.Zero(t, consumed)
+	slice := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, claimantPubkey)
+	require.NotNil(t, slice.RedeemCooldownUntil)
+
 	amount, err := svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
 	require.NoError(t, err, "a definitely failed payout leaves the slice redeemable")
 	require.Equal(t, int64(1000), amount)

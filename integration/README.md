@@ -67,7 +67,7 @@ A plain run above always skips the 3 rate-limit tests:
 `TestClaimFunds/RateLimiting_TwentyFirstClaimIsRateLimited` and
 `TestAudit_CashTransferRateLimit_PerWallet`. That's not a
 suite limitation — it's because the dev stack's `.env` ships with
-`CASH_WALLET_RATE_LIMIT_PER_HOUR`/`CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR`/
+`CASH_WALLET_RATE_LIMIT_PER_HOUR`/`CASH_CLAIM_CALLS_PER_HOUR`/
 `CIRCLE_WALLET_RATE_LIMIT_PER_HOUR` all set to `0` ("disabled", not "zero
 allowed" — see `rate_limiter.go`'s `Allow()`), so an operator can hammer
 `create_jit_wallet`/`claim_funds`/`create_circle_wallet` from the frontend

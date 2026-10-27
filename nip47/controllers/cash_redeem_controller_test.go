@@ -61,7 +61,7 @@ func newFundedCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, tota
 // tags (connection_key + e-tag referencing the attestation event).
 func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash string, extraTags nostr.Tags, createdAt time.Time) *nostr.Event {
 	t.Helper()
-	tags := nostr.Tags{{"d", walletPubkey}, {"bolt11_hash", bolt11Hash}}
+	tags := nostr.Tags{{"d", walletPubkey}, {"m", "cash_redeem"}, {"bolt11_hash", bolt11Hash}}
 	tags = append(tags, extraTags...)
 	ev := &nostr.Event{
 		Kind:      nostrKindClaimProof,
@@ -126,7 +126,7 @@ func handleClaimFundsFor(t *testing.T, svc *tests.TestService, controller *nip47
 	var response *models.Response
 	controller.HandleCashRedeemEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nostr.Tags{})
+	}, nostr.Tags{}, testPrivateCall(params.IdentityEvent))
 	return response
 }
 
@@ -386,7 +386,7 @@ func TestHandleCashRedeemEvent_ProofBoundToDifferentInvoice_Rejected(t *testing.
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The slice must remain unclaimed — the attacker gained nothing.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, claimantPubkey)
@@ -425,7 +425,7 @@ func TestHandleCashRedeemEvent_ReplaySameProofSameInvoice_AfterSuccess_Rejected(
 	// a no-op failure, not a second payout.
 	second := handleClaimFundsFor(t, svc, controller, wallet, params)
 	require.NotNil(t, second.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, second.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, second.Error.Code)
 }
 
 // TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable is the
@@ -524,7 +524,7 @@ func TestHandleCashRedeemEvent_SettleRacesFailure_NotDoubleClaimable(t *testing.
 
 	replay := handleClaimFundsFor(t, svc, controller, wallet, params)
 	require.NotNil(t, replay.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, replay.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, replay.Error.Code)
 }
 
 func TestHandleCashRedeemEvent_ForgedIdentity_NoMatchingSlice_Rejected(t *testing.T) {
@@ -593,7 +593,7 @@ func TestHandleCashRedeemEvent_IdentityEventReplayedAcrossWallets_Rejected(t *te
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// Wallet A's own slice must remain untouched/claimable — this wasn't a valid claim there either.
 	claimOnA, err := svc.AppsService.GetCashWalletClaim(walletA.ID, db.CashIdentityPubkey, claimantPubkey)
@@ -672,7 +672,7 @@ func TestHandleCashRedeemEvent_StaleIdentityEvent_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 }
 
 func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing.T) {
@@ -708,7 +708,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 }
 
 // TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant_Rejected
@@ -761,7 +761,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The slice must remain intact and claimable by the real claimant.
 	realProof := buildClaimProofEvent(t, realClaimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash,
@@ -791,9 +791,12 @@ func TestHandleCashRedeemEvent_RateLimited(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: claimantPubkey, AmountMloki: 1000},
 	}))
 
+	// Spend the claimant's own allowance: the limit is keyed by the verified
+	// signer, never by the bill.
 	controller := NewTestNip47Controller(svc)
-	for i := 0; i < cashRedeemRateLimitPerHour; i++ {
-		controller.cashClaimLimiter.Allow(wallet.AppPubkey, cashRedeemRateLimitPerHour)
+	limit := svc.Cfg.GetEnv().CashClaimCallsPerHour
+	for i := 0; i < limit; i++ {
+		controller.cashClaimLimiter.Allow("claim:"+claimantPubkey, limit)
 	}
 
 	proof := buildClaimProofEvent(t, claimantPrivkey, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
@@ -889,7 +892,7 @@ func TestHandleCashRedeemEvent_Cash_WrongSecret_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 
 	// The real slice must remain unclaimed — a wrong guess burned nothing.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityCash, secretHash)

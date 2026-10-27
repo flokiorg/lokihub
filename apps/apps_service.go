@@ -208,6 +208,15 @@ type AppsService interface {
 	// definitely failed. A no-op unless walletAppID has a claimed slice whose
 	// payment carries paymentHash and recorded no preimage.
 	ReleaseCashSliceForFailedPayment(walletAppID uint, paymentHash string) (released bool, err error)
+	// ClaimSliceForRedeem claims a slice for a cash_redeem: in-flight bound,
+	// first-wins claim, payment hash and consumed claim proof in one transaction.
+	ClaimSliceForRedeem(c RedeemClaim, now time.Time) error
+	// ReleaseRedeemClaim reopens a slice whose redeem payment did not happen or
+	// definitely failed, forgetting its consumed proof in the same transaction.
+	ReleaseRedeemClaim(walletAppID uint, paymentHash string, cooldownUntil *time.Time) (released bool, err error)
+	// LateFailureCooldown is when a slice whose payout failed after its redeem
+	// answered may be redeemed again; nil when the cool-down is off.
+	LateFailureCooldown(now time.Time) *time.Time
 	// DeleteCashBill archives a cash bill's history and hard-deletes it in one
 	// transaction, then publishes nwc_app_deleted. This is the ONLY way to
 	// delete a cash_wallet — DeleteApp refuses that kind — so no delete path

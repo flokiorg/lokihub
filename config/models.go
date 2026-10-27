@@ -50,10 +50,33 @@ type AppConfig struct {
 	// pubkey. 0 disables the limit entirely (useful for dev/integration testing
 	// against a shared long-lived hub).
 	CashWalletRateLimitPerHour int `envconfig:"CASH_WALLET_RATE_LIMIT_PER_HOUR" default:"10"`
-	// CashWalletClaimRateLimitPerHour caps cash_redeem calls per calling cash_wallet
-	// app pubkey (separate limiter from CashWalletRateLimitPerHour). 0 disables
-	// the limit entirely.
-	CashWalletClaimRateLimitPerHour int `envconfig:"CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
+	// CashClaimCallsPerHour caps the cash_redeem, cash_transfer and
+	// cash_consolidate calls one verified claim signer, or one cash-mode
+	// commitment, may make per hour; the three share it. Never keyed by a bill.
+	// 0 disables the limit.
+	CashClaimCallsPerHour int `envconfig:"CASH_CLAIM_CALLS_PER_HOUR" default:"120"`
+	// CashRedeemMaxInvoiceExpirySecs and CashRedeemMaxFinalCLTV are the redeem
+	// invoice policy: an invoice whose expiry or final CLTV delta exceeds them is
+	// refused RESTRICTED before the claim. 0 disables the check.
+	CashRedeemMaxInvoiceExpirySecs int `envconfig:"CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS" default:"86400"`
+	CashRedeemMaxFinalCLTV         int `envconfig:"CASH_REDEEM_MAX_FINAL_CLTV" default:"288"`
+	// CashRedeemInflightPerHub and CashRedeemInflightNode bound the cash_redeem
+	// payouts in flight per Cash Hub and node-wide; over either a redeem is
+	// RATE_LIMITED before it claims anything. 0 disables that bound.
+	CashRedeemInflightPerHub int `envconfig:"CASH_REDEEM_INFLIGHT_PER_HUB" default:"32"`
+	CashRedeemInflightNode   int `envconfig:"CASH_REDEEM_INFLIGHT_NODE" default:"256"`
+	// CashRedeemLateFailureCooldownSecs is how long a slice whose payout failed
+	// only after cash_redeem answered is refused RATE_LIMITED for another
+	// redeem. 0 disables the cool-down.
+	CashRedeemLateFailureCooldownSecs int `envconfig:"CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS" default:"600"`
+	// CashRedeemRouteMarginPpm and CashRedeemRouteMarginMinMillis are the margin
+	// over the quoted redeem fee that an external redeem may pay for its route:
+	// fee + max(ppm × amount / 1e6, min).
+	CashRedeemRouteMarginPpm       int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_PPM" default:"2000"`
+	CashRedeemRouteMarginMinMillis int `envconfig:"CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS" default:"1000"`
+	// CashRedeemReplyWaitSecs is how long cash_redeem waits for its payment
+	// before answering INTERNAL with the slice kept claimed. 0 means 20.
+	CashRedeemReplyWaitSecs int `envconfig:"CASH_REDEEM_REPLY_WAIT_SECS" default:"20"`
 	// CashLineageSpinOffsPerHour bounds how often one bill's lineage spins off
 	// new bills, per hour (NIP-CASH §Security Considerations for Cash-Mode
 	// Slices); over it a spin-off is RATE_LIMITED. 0 disables the limit.

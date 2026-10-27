@@ -253,18 +253,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		Bool("cash_source", isCashSource).
 		Msg("Handling cash_transfer request")
 
-	// Rate limit, charged once the request is a real attempt. Shared with
-	// cash_redeem: a cash secret is a presentation surface on both, and separate
-	// budgets would double a guesser's allowance. After the shape checks, so an
-	// envelope of malformed items cannot spend a shared bill's whole allowance.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		refuse(constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_transfer")
-		return
-	}
-
 	// Locate the slice: none is NOT_FOUND; only a claimed or terminal one, or a
 	// bill past its expiry, is RESTRICTED.
-	claim, code, message := controller.locateTransferSlice(app, isCashSource, params.IdentityType, params.IdentityValue)
+	claim, code, message := controller.locateSlice(app, isCashSource, params.IdentityType, params.IdentityValue)
 	if code != "" {
 		refuse(code, message)
 		return
@@ -305,6 +296,18 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		}
 		claimSigner = verdict.Signer
 		proofs = []cashwallet.ClaimProof{{EventID: verdict.RecomputedID, CreatedAt: eventCreatedAt(params.IdentityEvent), Method: method}}
+	}
+
+	// The call limit, keyed by the verified claim signer or the slice's
+	// commitment, never by the bill, and shared with cash_redeem and
+	// cash_consolidate.
+	limitKey := claimSigner
+	if isCashSource {
+		limitKey = claim.IdentityValue
+	}
+	if !controller.claimCallAllowed(limitKey) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
+		return
 	}
 
 	// The call is authorized: its request_id is used from now on, whatever
@@ -454,12 +457,12 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}, tags)
 }
 
-// locateTransferSlice finds the slice a transfer acts on (NIP-CASH
+// locateSlice finds the slice a transfer acts on (NIP-CASH
 // §Transferring and Splitting a Slice, step 1): the unclaimed slice registered
 // to the identity, or for a cash secret the wallet's cash-mode slice. None is
 // NOT_FOUND (a removed slice counts as none); a claimed or terminal one, or a
 // bill past its expiry, is RESTRICTED.
-func (controller *nip47Controller) locateTransferSlice(app *db.App, isCash bool, identityType, identityValue string) (*db.CashWalletClaim, string, string) {
+func (controller *nip47Controller) locateSlice(app *db.App, isCash bool, identityType, identityValue string) (*db.CashWalletClaim, string, string) {
 	q := controller.db.Where("wallet_app_id = ?", app.ID)
 	if isCash {
 		q = q.Where("identity_type = ?", db.CashIdentityCash)
