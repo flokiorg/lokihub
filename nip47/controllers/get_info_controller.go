@@ -13,7 +13,6 @@ import (
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nodesign"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/ohstr/nmilat/nip47"
 	"github.com/ohstr/nmilat/nipcash"
 )
 
@@ -217,13 +216,7 @@ func isCashConnection(kind string) bool {
 // "bitcoin" or "mainnet" (and an older build "flokicoin"); the test networks
 // keep their names.
 func cashNetwork(nodeNetwork string) string {
-	switch nodeNetwork {
-	case "bitcoin", "mainnet", "flokicoin", "main":
-		return nip47.NetworkMainnet
-	case "testnet", "testnet3":
-		return nip47.NetworkTestnet
-	}
-	return nodeNetwork
+	return nodesign.Network(nodeNetwork)
 }
 
 // circleWalletTerms is a Circle Wallet Hub's circle_wallet block (NIP-CW §The
