@@ -53,14 +53,14 @@ func TestCashOrder_OnchainPaidMintedAndUnfinal(t *testing.T) {
 	_, err = hooks.PayAddress(order.Address, order.PayMillis)
 	require.NoError(t, err)
 
+	// One block: the payment reaches its 1-confirmation tier and is minted
+	// (the intake scans every 30 s) while far from final_depth.
+	require.NoError(t, hooks.Mine(ctxT(t), 1))
 	var got *nipCO.Order
 	require.Eventually(t, func() bool {
 		_, o, err := oc.Lookup(ctxT(t), j.calls[len(j.calls)-1])
 		if err == nil && o != nil {
 			got = o
-			if o.State == nipCO.OrderPaid || o.State == nipCO.OrderOpen {
-				_ = hooks.Mine(ctxT(t), 1)
-			}
 			return o.State == nipCO.OrderMinted
 		}
 		return false

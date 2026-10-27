@@ -91,7 +91,7 @@ func waitPayout(t *testing.T, chain withdrawChain, token, priv, rid string, mine
 // commitWithdraw quotes and commits one withdrawal of a fresh bill.
 func commitWithdraw(t *testing.T, h withdrawHub) (token, priv, rid string, q *nipcash.WithdrawQuote) {
 	t.Helper()
-	token, privs, _ := h.mintFor(t, 21_000_000, 1_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
 	q, err := quoteAs(t, token, privs[0], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
 	rid = newTestPrivkey(t)
