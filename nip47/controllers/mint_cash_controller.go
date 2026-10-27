@@ -33,7 +33,7 @@ func mapCashWalletErrorCode(err error) string {
 	switch {
 	case errors.Is(err, cashrequest.ErrDeadlinePassed):
 		return constants.ERROR_BAD_REQUEST
-	case errors.Is(err, apps.ErrSliceClaimed):
+	case errors.Is(err, apps.ErrSliceClaimed), errors.Is(err, apps.ErrIdentityHoldsSlice):
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return constants.ERROR_UNAUTHORIZED
