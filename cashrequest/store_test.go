@@ -179,8 +179,14 @@ func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 func TestU_3_8_ConsumedProofs(t *testing.T) {
 	svc, s, now := newStore(t)
 	ev := strings.Repeat("ab", 32)
+	used, err := s.IsProofConsumed(ev)
+	require.NoError(t, err)
+	assert.False(t, used)
 	require.NoError(t, s.ConsumeProofTx(svc.DB, ev, now.Unix(), "cash_transfer"))
 	require.ErrorIs(t, s.ConsumeProofTx(svc.DB, ev, now.Unix(), "cash_redeem"), cashrequest.ErrProofConsumed)
+	used, err = s.IsProofConsumed(ev)
+	require.NoError(t, err)
+	assert.True(t, used)
 	require.NoError(t, s.ReleaseProof(ev))
 	require.NoError(t, s.ConsumeProofTx(svc.DB, ev, now.Unix(), "cash_transfer"))
 
