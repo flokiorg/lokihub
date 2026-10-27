@@ -38,6 +38,8 @@ type nip47Controller struct {
 	// privateIdentity returns the node identity get_info reports as
 	// circle_wallet.identity, or "" when the private transport is not running.
 	privateIdentity func() string
+	// lineageLimiter bounds spin-offs per bill lineage; nil applies no limit.
+	lineageLimiter RateLimiter
 	// cashHooks is the cash commit's fault-injection seam; tests only.
 	cashHooks *cashwallet.TestHooks
 
@@ -78,5 +80,12 @@ func NewNip47Controller(
 // WithPrivateIdentity sets where get_info reads the Hub's private-transport identity from.
 func (controller *nip47Controller) WithPrivateIdentity(privateIdentity func() string) *nip47Controller {
 	controller.privateIdentity = privateIdentity
+	return controller
+}
+
+// WithLineageLimiter sets the limiter that bounds spin-offs per bill lineage. It
+// lives on the service, so every per-item controller shares one.
+func (controller *nip47Controller) WithLineageLimiter(limiter RateLimiter) *nip47Controller {
+	controller.lineageLimiter = limiter
 	return controller
 }

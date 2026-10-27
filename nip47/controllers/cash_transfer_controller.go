@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -420,6 +421,14 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	source := apps.SliceRef{ClaimID: claim.ID, IdentityType: claim.IdentityType, IdentityValue: claim.IdentityValue, TransferCount: claim.TransferCount}
 
 	if spinOff {
+		newBills := 1
+		if remainder > 0 {
+			newBills = 2
+		}
+		if code, message := controller.spinOffLimitRefusal(app, newBills); code != "" {
+			refuse(code, message)
+			return
+		}
 		remainderType, remainderValue, remainderIA := claim.IdentityType, claim.IdentityValue, claim.IAPubkey
 		if partialCash {
 			remainderType, remainderValue, remainderIA = db.CashIdentityCash, params.RemainderCommitment, ""
@@ -597,6 +606,29 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 		return false, err
 	}
 	return removed, nil
+}
+
+// spinOffLimitRefusal bounds spin-offs (NIP-CASH §Security Considerations for
+// Cash-Mode Slices): per bill lineage per hour (RATE_LIMITED), then the live bills
+// under the Cash Hub (QUOTA_EXCEEDED). "" when the spin-off may proceed.
+func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int) (string, string) {
+	env := controller.cfg.GetEnv()
+	if controller.lineageLimiter != nil &&
+		!controller.lineageLimiter.Allow(strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10), env.CashLineageSpinOffsPerHour) {
+		return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
+	}
+	if limit := env.CashMaxLiveBillsPerHub; limit > 0 && app.ParentAppID != nil {
+		var live int64
+		if err := controller.db.Model(&db.App{}).
+			Where("parent_app_id = ? AND kind = ?", *app.ParentAppID, db.AppKindCashWallet).Count(&live).Error; err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to count a Cash Hub's live bills")
+			return constants.ERROR_INTERNAL, "failed to check this hub's live bills"
+		}
+		if live+int64(newBills) > int64(limit) {
+			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit)
+		}
+	}
+	return "", ""
 }
 
 // handleCashTransferSplit spins a slice off into one or two new dedicated bills

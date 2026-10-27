@@ -73,6 +73,7 @@ type SplitInTwoResult struct {
 // untouched and claimable, and the proofs stay unused.
 func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*SplitInTwoResult, error) {
 	source := params.SourceWalletApp.ID
+	root := LineageRoot(params.SourceWalletApp)
 	bill := func(role, identityType, identityValue, iaPubkey string, amount uint64) newBill {
 		return newBill{
 			role:      role,
@@ -90,6 +91,7 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*Split
 			}},
 			identityRequired: identityType != db.CashIdentityCash,
 			splitFrom:        &source,
+			lineageRoot:      &root,
 		}
 	}
 

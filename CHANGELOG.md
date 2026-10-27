@@ -9,6 +9,10 @@ audits of both.
 
 ### Added
 
+- Adds `CASH_LINEAGE_SPIN_OFFS_PER_HOUR` (default 20), which bounds the bills
+  one minted bill's lineage may spin off per hour (`RATE_LIMITED` over it), and
+  `CASH_MAX_LIVE_BILLS_PER_HUB` (default 10 000), which caps the live bills a
+  spin-off may leave under one Cash Hub (`QUOTA_EXCEEDED`).
 - Makes zap transfers (NIP-CZ): a `cash_transfer` with `zap_target` spins the
   slice off into a bill signed under the zap scheme, whose `issued_at` and
   `expires_at` the reply returns exactly as signed; the hub keeps the zap fields
