@@ -90,11 +90,15 @@ func (h *circleIdentityHub) circleWallet(t *testing.T) map[string]json.RawMessag
 	return response.Result.CircleWallet
 }
 
+// NIP-CW §The Circle Wallet Hub Connection: identity is always present, the node
+// identity that signs the kind-11190 announcement, whether or not the private
+// transport has started.
 func TestGetInfo_CircleIdentityIsTheAnnouncementSigner(t *testing.T) {
 	relay := newCapturingRelay(t)
 	h := newCircleIdentityHub(t, relay.url)
 
-	assert.NotContains(t, h.circleWallet(t), "identity", "no identity before the private transport starts")
+	before := h.circleWallet(t)
+	require.Contains(t, before, "identity", "identity is reported always")
 
 	pt, err := h.svc.resolvePrivateTransport()
 	require.NoError(t, err)
@@ -105,25 +109,11 @@ func TestGetInfo_CircleIdentityIsTheAnnouncementSigner(t *testing.T) {
 	require.Equal(t, transport.KindHubAnnouncement, announcement.Kind)
 
 	block := h.circleWallet(t)
-	require.Contains(t, block, "identity")
-	var identity string
+	var identity, earlier string
 	require.NoError(t, json.Unmarshal(block["identity"], &identity))
+	require.NoError(t, json.Unmarshal(before["identity"], &earlier))
 	assert.Equal(t, announcement.Pubkey, identity, "identity must be the announcement's signer")
+	assert.Equal(t, identity, earlier, "the same identity before and after the transport starts")
 	assert.Regexp(t, `^[0-9a-f]{64}$`, identity)
 	assert.NotEqual(t, pt.inboxXOnly, identity, "the inbox key is not the identity")
-}
-
-// A restart whose private transport cannot start must stop reporting the identity the
-// previous run reported.
-func TestGetInfo_NoCircleIdentityWhenPrivateTransportOff(t *testing.T) {
-	h := newCircleIdentityHub(t, "ws://127.0.0.1:1")
-
-	_, err := h.svc.resolvePrivateTransport()
-	require.NoError(t, err)
-	require.Contains(t, h.circleWallet(t), "identity")
-
-	h.ln.pub = "deadbeef"
-	_, err = h.svc.resolvePrivateTransport()
-	require.Error(t, err)
-	assert.NotContains(t, h.circleWallet(t), "identity")
 }

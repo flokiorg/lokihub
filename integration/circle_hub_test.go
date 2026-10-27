@@ -446,7 +446,9 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 	t.Run("GetInfo_HubAdvertisesCreateCircleWallet", func(t *testing.T) {
 		var info GetInfoResult
 		require.NoError(t, hubClient.Call(ctxT(t), "get_info", struct{}{}, &info))
-		require.Contains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		// Joins are private-only: listed in private_methods, never in methods.
+		require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		require.Contains(t, info.PrivateMethods, constants.NIP47MethodCreateCircleWallet)
 		require.NotNil(t, info.CircleWallet)
 		assert.Equal(t, int64(hubPerWalletMaxMloki), info.CircleWallet.PerWalletMaxMillis)
 		assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, info.CircleWallet.MinBudgetRenewal)

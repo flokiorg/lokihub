@@ -9,28 +9,48 @@ import (
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
+	"github.com/flokiorg/lokihub/nodesign"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 type circleWalletInfo struct {
-	AvailableMillis int64  `json:"available_millis"`
-	MaxExpSecs      int    `json:"max_exp_secs"`
-	FeesPpm         int    `json:"fees_ppm"`
-	CirclePolicy    string `json:"circle_policy"`
+	AvailableMillis int64      `json:"available_millis"`
+	MaxExpSecs      int        `json:"max_exp_secs"`
+	FeesPpm         int        `json:"fees_ppm"`
+	FeeReserve      feeReserve `json:"fee_reserve"`
+	// DustThresholdMillis: a balance at or below it is dust. lokihub treats only
+	// an empty balance as dust.
+	DustThresholdMillis int64  `json:"dust_threshold_millis"`
+	CirclePolicy        string `json:"circle_policy"`
+	// Identity is the node key that signs the kind-11190 announcement, x-only,
+	// equal to the circlehub1 string's TLV 4 (NIP-CW §The Circle Wallet Hub
+	// Connection). Always present.
+	Identity string `json:"identity"`
 	// PerWalletMaxMillis and MinBudgetRenewal are the other limits a join is
 	// checked against (NIP-CW get_info), so a client can validate before asking.
 	PerWalletMaxMillis int64  `json:"per_wallet_max_millis,omitempty"`
 	MinBudgetRenewal   string `json:"min_budget_renewal,omitempty"`
-	// Identity is the node key that signs the kind-11190 announcement. Present only
-	// while the private transport runs, so clients know Private Join is offered.
-	Identity string `json:"identity,omitempty"`
+	// Accepting is false once the host closes the circle to new members.
+	Accepting bool `json:"accepting"`
+}
+
+// feeReserve is the most routing fee a payment holds back: ppm of the amount,
+// at least min_millis (transactions.CalculateFeeReserveMloki).
+type feeReserve struct {
+	Ppm       int64 `json:"ppm"`
+	MinMillis int64 `json:"min_millis"`
 }
 
 type getInfoResponse struct {
-	Alias       *string  `json:"alias"`
-	Color       *string  `json:"color"`
-	Pubkey      *string  `json:"pubkey"`
-	Network     *string  `json:"network"`
+	Alias   *string `json:"alias"`
+	Color   *string `json:"color"`
+	Pubkey  *string `json:"pubkey"`
+	Network *string `json:"network"`
+	// Chain is the chain's name, on every connection a Cash Hub serves (NIP-CASH
+	// §Network and Chain).
+	Chain       *string  `json:"chain,omitempty"`
 	BlockHeight *uint32  `json:"block_height"`
 	BlockHash   *string  `json:"block_hash"`
 	Methods     []string `json:"methods"`
@@ -126,28 +146,36 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 		}
 	}
 
-	// A circle_hub always answers with its terms, whatever its scopes: NIP-CW makes
-	// the circle_wallet block what identifies a Hub at all, and hubs created from
-	// lokihub's own UI hold no get_info scope.
-	if app != nil && app.Kind == db.AppKindCircleHub {
-		balance := queries.GetIsolatedBalance(controller.db, app.ID)
-		commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
-		available := balance - commitment
-		if available < 0 {
-			available = 0
+	// Every connection a Cash Hub serves answers network and chain, whatever its
+	// scopes (NIP-CASH §Network and Chain), and a Cash Hub its node identity as
+	// pubkey, x-only, equal to its cashhub1 string's TLV 4.
+	if app != nil && isCashConnection(app.Kind) {
+		info, err := controller.lnClient.GetInfo(ctx)
+		if err != nil {
+			publishResponse(&models.Response{ResultType: nip47Request.Method, Error: mapNip47Error(err)}, nostr.Tags{})
+			return
 		}
-		providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
-		if err == nil {
-			responsePayload.CircleWallet = &circleWalletInfo{
-				AvailableMillis:    available,
-				MaxExpSecs:         providerConfig.MaxExpSecs,
-				FeesPpm:            providerConfig.FeesPpm,
-				CirclePolicy:       providerConfig.CircleIdentity.Policy,
-				PerWalletMaxMillis: int64(providerConfig.PerWalletMaxMloki),
-				MinBudgetRenewal:   providerConfig.MinBudgetRenewal,
+		network := cashNetwork(info.Network)
+		chain := nodesign.Chain
+		responsePayload.Network, responsePayload.Chain = &network, &chain
+		if app.Kind == db.AppKindCashHub || app.Kind == db.AppKindCircleHub {
+			// The node identity that signs the announcement and every string.
+			identity, err := nipcash.MinterXOnly(controller.lnClient.GetPubkey())
+			if err != nil {
+				publishResponse(&models.Response{ResultType: nip47Request.Method,
+					Error: &models.Error{Code: constants.ERROR_INTERNAL, Message: "could not read the node identity"}}, nostr.Tags{})
+				return
 			}
-			if controller.privateIdentity != nil {
-				responsePayload.CircleWallet.Identity = controller.privateIdentity()
+			if app.Kind == db.AppKindCashHub {
+				responsePayload.Pubkey = &identity
+			} else {
+				circle, err := controller.circleWalletTerms(app, identity)
+				if err != nil {
+					publishResponse(&models.Response{ResultType: nip47Request.Method,
+						Error: &models.Error{Code: constants.ERROR_INTERNAL, Message: "could not read this circle's terms"}}, nostr.Tags{})
+					return
+				}
+				responsePayload.CircleWallet = circle
 			}
 		}
 	}
@@ -156,4 +184,55 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 		ResultType: nip47Request.Method,
 		Result:     responsePayload,
 	}, nostr.Tags{})
+}
+
+// isCashConnection reports the app kinds a Cash Hub serves: its own connection,
+// its bills, Circle Wallet Hubs and their wallets.
+func isCashConnection(kind string) bool {
+	switch kind {
+	case db.AppKindCashHub, db.AppKindCashWallet, db.AppKindCircleHub, db.AppKindCircleWallet:
+		return true
+	}
+	return false
+}
+
+// cashNetwork is NIP-47's network for the node's: flnd reports mainnet as
+// "bitcoin" or "mainnet" (and an older build "flokicoin"); the test networks
+// keep their names.
+func cashNetwork(nodeNetwork string) string {
+	switch nodeNetwork {
+	case "bitcoin", "mainnet", "flokicoin", "main":
+		return nip47.NetworkMainnet
+	case "testnet", "testnet3":
+		return nip47.NetworkTestnet
+	}
+	return nodeNetwork
+}
+
+// circleWalletTerms is a Circle Wallet Hub's circle_wallet block (NIP-CW §The
+// Circle Wallet Hub Connection): every term always present. available_millis is
+// what the circle can still take in, at least 0, capped at the per-wallet
+// ceiling (the MAY cap).
+func (controller *nip47Controller) circleWalletTerms(app *db.App, identity string) (*circleWalletInfo, error) {
+	providerConfig, err := controller.appsService.GetCircleHubConfig(app.ID)
+	if err != nil {
+		return nil, err
+	}
+	balance := queries.GetIsolatedBalance(controller.db, app.ID)
+	commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
+	available := max(balance-commitment, 0)
+	if perWallet := int64(providerConfig.PerWalletMaxMloki); perWallet > 0 {
+		available = min(available, perWallet)
+	}
+	return &circleWalletInfo{
+		AvailableMillis:    available,
+		MaxExpSecs:         providerConfig.MaxExpSecs,
+		FeesPpm:            providerConfig.FeesPpm,
+		FeeReserve:         feeReserve{Ppm: 10_000, MinMillis: constants.MIN_FEE_RESERVE_MLOKI},
+		CirclePolicy:       providerConfig.CircleIdentity.Policy,
+		Identity:           identity,
+		PerWalletMaxMillis: int64(providerConfig.PerWalletMaxMloki),
+		MinBudgetRenewal:   providerConfig.MinBudgetRenewal,
+		Accepting:          providerConfig.AcceptingJoins == nil || *providerConfig.AcceptingJoins,
+	}, nil
 }

@@ -228,7 +228,9 @@ func TestCrossHub_GetInfo_AdvertisesExpectedMethods(t *testing.T) {
 		client := mustConnect(t, circleHub.Connection)
 		var info GetInfoResult
 		require.NoError(t, client.Call(ctxT(t), "get_info", struct{}{}, &info))
-		require.Contains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		// Joins are private-only: listed in private_methods, never in methods.
+		require.NotContains(t, info.Methods, constants.NIP47MethodCreateCircleWallet)
+		require.Contains(t, info.PrivateMethods, constants.NIP47MethodCreateCircleWallet)
 	})
 }
 

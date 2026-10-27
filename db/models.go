@@ -378,6 +378,10 @@ type CircleHubConfig struct {
 	// rank (e.g. floor "monthly" allows "monthly"/"yearly"/"never", rejects
 	// "daily"/"weekly").
 	MinBudgetRenewal string
+	// AcceptingJoins is false once the host closes the circle to new members:
+	// every join is then RESTRICTED (NIP-CW §The Circle Wallet Hub Connection).
+	// NULL is the default, open.
+	AcceptingJoins *bool
 }
 
 // CircleWalletIdentityProof records the nostr event ID of every consumed
