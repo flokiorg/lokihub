@@ -18,20 +18,20 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // decryptSplitWalletToken decrypts a nested-encrypted split/consolidate token
 // (delivered to the caller keyed to their own privkey) and returns the decoded
 // token — for inspecting provenance without connecting.
-func decryptSplitWalletToken(t *testing.T, walletPubkey, encToken, callerPriv string) lokicash.Token {
+func decryptSplitWalletToken(t *testing.T, walletPubkey, encToken, callerPriv string) nipcash.Token {
 	t.Helper()
 	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, walletPubkey, callerPriv)
 	require.NoError(t, err)
 	dec, err := c.Decrypt(encToken)
 	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
+	tok, err := nipcash.Decode(dec)
 	require.NoError(t, err)
 	require.Equal(t, walletPubkey, tok.WalletPubkey)
 	return tok
@@ -209,9 +209,9 @@ func TestConsolidate_Adversarial(t *testing.T) {
 
 		merged := decryptSplitWalletToken(t, res.NewWalletPubkey, res.NewWalletToken, callerPriv)
 		require.NotNil(t, merged.MintSignature, "an opted-in consolidated token must carry provenance")
-		require.NotNil(t, merged.AttestedAmount)
-		assert.EqualValues(t, happyPathAmountMloki*2, *merged.AttestedAmount, "provenance must attest the merged sum")
-		minter, ok := lokicash.VerifyMint(merged)
+		require.NotNil(t, merged.AttestedAmountMillis)
+		assert.EqualValues(t, happyPathAmountMloki*2, *merged.AttestedAmountMillis, "provenance must attest the merged sum")
+		minter, ok := nipcash.VerifyProvenance(merged)
 		require.True(t, ok, "the consolidated token's provenance must verify")
 		require.Len(t, minter, 66)
 	})
@@ -244,7 +244,7 @@ func TestConsolidate_Adversarial(t *testing.T) {
 		// The delivered token is a plain lokicash1... string (no ECDH target
 		// exists for a cash-mode commitment), so it must decode directly — no
 		// nested-encryption layer to strip first, unlike a pubkey target.
-		decoded, err := lokicash.Decode(res.NewWalletToken)
+		decoded, err := nipcash.Decode(res.NewWalletToken)
 		require.NoError(t, err, "cash-mode target delivery must be a plain, directly-decodable token")
 		assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
@@ -337,7 +337,7 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 	}, &res))
 	require.NotEmpty(t, res.NewWalletToken)
 
-	decoded, err := lokicash.Decode(res.NewWalletToken)
+	decoded, err := nipcash.Decode(res.NewWalletToken)
 	require.NoError(t, err, "connection_key target delivery must be a plain, directly-decodable token")
 	assert.Equal(t, res.NewWalletPubkey, decoded.WalletPubkey)
 
@@ -382,16 +382,16 @@ func TestProvenance_TamperedTokenFailsVerification(t *testing.T) {
 		MintSignature: true,
 	}, &created))
 
-	genuine, err := lokicash.Decode(created.CashToken)
+	genuine, err := nipcash.Decode(created.CashToken)
 	require.NoError(t, err)
-	honest, ok := lokicash.VerifyMint(genuine)
+	honest, ok := nipcash.VerifyProvenance(genuine)
 	require.True(t, ok)
 
 	// Tamper: inflate the attested amount, keep the real signature.
-	inflated := *genuine.AttestedAmount + 1
+	inflated := *genuine.AttestedAmountMillis + 1
 	tampered := genuine
-	tampered.AttestedAmount = &inflated
-	recovered, ok := lokicash.VerifyMint(tampered)
+	tampered.AttestedAmountMillis = &inflated
+	recovered, ok := nipcash.VerifyProvenance(tampered)
 	require.True(t, ok, "recovery still runs on a well-formed 65-byte signature")
 	assert.NotEqual(t, honest, recovered, "a restated denomination must not recover the true minter")
 }

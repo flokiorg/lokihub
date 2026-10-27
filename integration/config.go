@@ -31,6 +31,9 @@ type CircleMembers struct {
 type CashHubConfig struct {
 	Name       string
 	Connection string
+	// CashHubToken is the hub's signed cashhub1 string, what an SDK client dials
+	// to mint (NIP-CASH §The Cash Hub Connection).
+	CashHubToken string
 }
 
 // CircleHubConfig is a ready-to-use circle_hub connection, plus the member

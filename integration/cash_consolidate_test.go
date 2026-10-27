@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 func TestCashMintProvenance(t *testing.T) {
@@ -30,7 +30,7 @@ func TestCashMintProvenance(t *testing.T) {
 	recipientPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 	require.NoError(t, err)
 
-	mintSigned := func(t *testing.T, amount uint64) lokicash.Token {
+	mintSigned := func(t *testing.T, amount uint64) nipcash.Token {
 		t.Helper()
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
@@ -38,7 +38,7 @@ func TestCashMintProvenance(t *testing.T) {
 			Expiry:        happyPathExpirySecs,
 			MintSignature: true,
 		}, &created))
-		decoded, err := lokicash.Decode(created.CashToken)
+		decoded, err := nipcash.Decode(created.CashToken)
 		require.NoError(t, err)
 		return decoded
 	}
@@ -52,17 +52,17 @@ func TestCashMintProvenance(t *testing.T) {
 		// same node identity, stable.
 		a := mintSigned(t, happyPathAmountMloki)
 		require.NotNil(t, a.MintSignature, "token should carry a mint signature")
-		require.NotNil(t, a.AttestedAmount)
-		assert.EqualValues(t, happyPathAmountMloki, *a.AttestedAmount)
-		minterA, ok := lokicash.VerifyMint(a)
+		require.NotNil(t, a.AttestedAmountMillis)
+		assert.EqualValues(t, happyPathAmountMloki, *a.AttestedAmountMillis)
+		minterA, ok := nipcash.VerifyProvenance(a)
 		require.True(t, ok, "mint signature must verify")
 		assert.Len(t, minterA, 66, "recovered minter must be a compressed secp256k1 pubkey (hex)")
 
 		b := mintSigned(t, happyPathAmountMloki*2)
-		minterB, ok := lokicash.VerifyMint(b)
+		minterB, ok := nipcash.VerifyProvenance(b)
 		require.True(t, ok)
 		assert.Equal(t, minterA, minterB, "both tokens must recover to the same node identity")
-		assert.EqualValues(t, happyPathAmountMloki*2, *b.AttestedAmount)
+		assert.EqualValues(t, happyPathAmountMloki*2, *b.AttestedAmountMillis)
 	})
 
 	t.Run("UnsignedTokenCarriesNoProvenance", func(t *testing.T) {
@@ -79,10 +79,10 @@ func TestCashMintProvenance(t *testing.T) {
 		// unsigned bill could never reach the only transport serving bill methods.
 		//
 		// Inverted from asserting its ABSENCE, which was correct while signing was opt-in.
-		decoded, err := lokicash.Decode(created.CashToken)
+		decoded, err := nipcash.Decode(created.CashToken)
 		require.NoError(t, err)
 		require.NotNil(t, decoded.MintSignature, "every mint must be signed, or the bill is unspendable")
-		_, ok := lokicash.VerifyMint(decoded)
+		_, ok := nipcash.VerifyProvenance(decoded)
 		assert.True(t, ok, "the provenance must verify, not merely be present")
 	})
 }
@@ -154,7 +154,7 @@ func TestCashConsolidate(t *testing.T) {
 	require.NoError(t, err)
 	decryptedToken, err := c.Decrypt(result.NewWalletToken)
 	require.NoError(t, err)
-	mergedToken, err := lokicash.Decode(decryptedToken)
+	mergedToken, err := nipcash.Decode(decryptedToken)
 	require.NoError(t, err)
 	require.Equal(t, result.NewWalletPubkey, mergedToken.WalletPubkey)
 

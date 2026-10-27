@@ -19,8 +19,8 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // connKeyTransferProofTags builds the connection_key-mode-only extra tags a
@@ -113,7 +113,7 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	remDec, err := remCipher.Decrypt(res.RemainderWalletToken)
 	require.NoError(t, err)
-	remTok, err := lokicash.Decode(remDec)
+	remTok, err := nipcash.Decode(remDec)
 	require.NoError(t, err)
 	remClient := mustConnectBill(t, nwcURIFromLokicash(remTok), remDec, newPriv)
 	remInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount-splitAmount, "audit connkey remainder redeem")
@@ -136,7 +136,7 @@ func TestAudit_CashTransferConnectionKey_PartialSplit_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	dec, err := c.Decrypt(res.NewWalletToken)
 	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
+	tok, err := nipcash.Decode(dec)
 	require.NoError(t, err)
 	newClient := mustConnectBill(t, nwcURIFromLokicash(tok), dec, newPriv)
 	newInvoice := mintInvoiceFromSimpleWallet(t, cfg, splitAmount, "audit connkey carveoff redeem")

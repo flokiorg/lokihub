@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // clearlyTooLargeAmountMloki is chosen to reliably exceed any sane real
@@ -51,10 +51,10 @@ func onePubkeyRecipient(pubkey string, amountMloki uint64) []CashWalletRecipient
 // wallet-level pairing data, not per-recipient.
 func requireLokicashMatchesPairingURI(t *testing.T, pairingURI, lokicashToken string) {
 	t.Helper()
-	require.True(t, strings.HasPrefix(lokicashToken, lokicash.HRP+"1"))
+	require.True(t, strings.HasPrefix(lokicashToken, constants.CashTokenHRP+"1"))
 	parsedURI, err := url.Parse(pairingURI)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(lokicashToken)
+	decoded, err := nipcash.Decode(lokicashToken)
 	require.NoError(t, err)
 	require.Equal(t, parsedURI.Host, decoded.WalletPubkey)
 	require.Equal(t, parsedURI.Query().Get("secret"), decoded.Secret)

@@ -350,7 +350,7 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
 
-	return CashHubConfig{Name: name, Connection: resp.PairingUri}, resp.ID, admin
+	return CashHubConfig{Name: name, Connection: resp.PairingUri, CashHubToken: resp.CashHubToken}, resp.ID, admin
 }
 
 // ephemeralSimpleWalletFundLoki is root-funded into every ephemeral simple

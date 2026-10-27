@@ -209,11 +209,12 @@ type CashStatusParams struct {
 
 type CashStatusResult struct {
 	Recipients []RecipientStatus `json:"recipients"`
-	// Error/RetainedUntil carry the spent-bill tombstone instead of a roster:
-	// a bill this hub has destroyed, still inside its retention window,
-	// answers {"error":"spent","retained_until":<unix>} rather than falling
-	// silent (NIP-CASH §Cash Status). Both are absent on a roster response.
-	Error         string `json:"error,omitempty"`
+	// Status/Reason/RetainedUntil carry the spent-bill tombstone instead of a
+	// roster: a bill this hub has destroyed, still inside its retention window,
+	// answers {"status":"spent","reason":…,"retained_until":<unix>} (NIP-CASH
+	// §Answering About a Destroyed Bill). All are absent on a roster response.
+	Status        string `json:"status,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 	RetainedUntil *int64 `json:"retained_until,omitempty"`
 }
 

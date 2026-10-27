@@ -18,8 +18,8 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // createCashHubWithTransferPolicy provisions a throwaway cash_hub whose
@@ -86,7 +86,7 @@ func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv, signer
 	require.NoError(t, err)
 	dec, err := c.Decrypt(encToken)
 	require.NoError(t, err)
-	tok, err := lokicash.Decode(dec)
+	tok, err := nipcash.Decode(dec)
 	require.NoError(t, err)
 	require.Equal(t, walletPubkey, tok.WalletPubkey)
 	return mustConnectBill(t, nwcURIFromLokicash(tok), dec, signerPriv)

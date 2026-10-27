@@ -573,7 +573,7 @@ func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
 		err := conn.Call(ctx, constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &status)
 		cancel()
 
-		if err == nil && status.Error == nipcash.ErrorSpent {
+		if err == nil && status.Status == nipcash.StatusSpent {
 			require.Empty(t, status.Recipients,
 				"a tombstone must carry no roster — the bill and its slices are gone")
 			return
@@ -587,7 +587,7 @@ func requireSpentBillTombstoned(t *testing.T, conn billCaller) {
 			require.Fail(t,
 				"a spent bill must answer only a tombstone, or nothing at all",
 				"still returning %d roster row(s) %s after its last slice was spent (err: %v, error field: %q)",
-				len(status.Recipients), drainedWalletDeleteWindow, err, status.Error)
+				len(status.Recipients), drainedWalletDeleteWindow, err, status.Status)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
