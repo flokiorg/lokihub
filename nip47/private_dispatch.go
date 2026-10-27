@@ -157,8 +157,9 @@ func (svc *nip47Service) servePrivateItem(
 	}
 	if app.Kind == db.AppKindCircleHub {
 		// A circle's bill proof verifies against any live connection of the
-		// Hub (NIP-CW §The Circle Wallet Hub Connection, H-CW-072).
-		if !billProofLive(signer, liveHubConnKeys(&app)) {
+		// Hub: its own and its live listing connections (NIP-CW §The Circle
+		// Wallet Hub Connection, H-CW-072; VerifyBillProofAny's rule).
+		if !billProofLive(signer, svc.liveHubConnKeys(&app)) {
 			omitted(item, "bill proof not signed by a live connection of this circle")
 			return transport.Result{}, false
 		}
@@ -209,6 +210,9 @@ func (svc *nip47Service) servePrivateItem(
 	// The authorized identity comes back because cash_status needs it: "mine" MUST be
 	// decided from the proof's own signer, never from anything the item asserts
 	// (NIP-CASH §Scoping the Roster).
+	// The connection the bill proof came through: the hub's own, or a listed
+	// circle's listing connection, which the join record names (WP-14, WP-25).
+	connUsed := signer
 	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app)
 	if lookupErr != nil {
 		// The hub could not read its own records, which says nothing about the
@@ -316,7 +320,11 @@ func (svc *nip47Service) servePrivateItem(
 		controller.HandleCashConsolidateEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
 			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCreateCircleWallet:
-		controller.HandleCreateCircleWalletEvent(ctx, request, requestEvent.ID, &app, collector.publish)
+		// The join record names the connection the bill proof came through:
+		// the hub's own, or a listed circle's listing connection (WP-14, WP-25).
+		joinHub := app
+		joinHub.AppPubkey = connUsed
+		controller.HandleCreateCircleWalletEvent(ctx, request, requestEvent.ID, &joinHub, collector.publish)
 	case constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
 		call := &controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer}
 		withdrawCaller := cashwithdraw.Caller{ItemSigner: signer, CashMode: billIsCashMode, LimitKey: signer}
@@ -470,7 +478,9 @@ func (svc *nip47Service) billProofSigner(item transport.Item, binding PrivateIte
 // row is the one an item targets (H-CW-072).
 func (svc *nip47Service) resolveItemTarget(target string) (db.App, error) {
 	var apps []db.App
-	if err := svc.db.Where("wallet_pubkey = ?", target).Order("id").Limit(8).Find(&apps).Error; err != nil {
+	// A listed circle's own connection shares its hub's wallet pubkey and is
+	// served by the hub (WP-25 item 6), so it never resolves.
+	if err := svc.db.Where("wallet_pubkey = ? AND kind <> ?", target, db.AppKindCircleHubConn).Order("id").Limit(8).Find(&apps).Error; err != nil {
 		return db.App{}, err
 	}
 	if len(apps) == 0 {
@@ -485,10 +495,20 @@ func (svc *nip47Service) resolveItemTarget(target string) (db.App, error) {
 }
 
 // liveHubConnKeys are the client keys of a circle Hub's live connections: its own
-// connection. Listing connections (WP-25) join this list once they exist; a
-// revoked one is deleted, so its key is never passed.
-func liveHubConnKeys(hub *db.App) []string {
-	return []string{hub.AppPubkey}
+// connection and its listing connections (WP-25). A revoked listing connection's
+// row is deleted, so its key is never passed.
+func (svc *nip47Service) liveHubConnKeys(hub *db.App) []string {
+	keys := []string{hub.AppPubkey}
+	if hub.WalletPubkey == nil {
+		return keys
+	}
+	var listing []string
+	if err := svc.db.Model(&db.App{}).Where("wallet_pubkey = ? AND kind = ?", *hub.WalletPubkey, db.AppKindCircleHubConn).
+		Order("id").Pluck("app_pubkey", &listing).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read a circle's listing connections")
+		return keys
+	}
+	return append(keys, listing...)
 }
 
 // billProofLive is transport.VerifyBillProofAny's rule for a signer

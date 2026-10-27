@@ -41,7 +41,7 @@ func (svc *nip47Service) lookupTargetKeys(target string) ([]string, error) {
 	app, err := svc.resolveItemTarget(target)
 	if err == nil {
 		if app.Kind == db.AppKindCircleHub {
-			return liveHubConnKeys(&app), nil
+			return svc.liveHubConnKeys(&app), nil
 		}
 		return []string{app.AppPubkey}, nil
 	}

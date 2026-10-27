@@ -125,7 +125,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	if app.WalletPubkey != nil {
 		// This is a new child key derived from master using app ID as index
-		appWalletPrivKey, err = svc.keys.GetAppWalletKey(app.ID)
+		appWalletPrivKey, err = svc.keys.GetAppWalletKey(walletKeyAppID(&app))
 		if err != nil {
 			logger.Logger.Error().Err(err).
 				Uint("appId", app.ID).
@@ -401,6 +401,13 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 				Message: "get_budget is not available on a cash_wallet",
 			},
 		}, nostr.Tags{})
+		return
+	}
+
+	// A listed circle's own connection answers get_info as its hub, and nothing
+	// else on this transport (WP-25 item 6).
+	if app.Kind == db.AppKindCircleHubConn {
+		svc.serveListingConn(ctx, lnClient, nip47Request, requestEvent.ID, &app, publishResponse)
 		return
 	}
 
