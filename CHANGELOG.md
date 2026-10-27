@@ -9,6 +9,27 @@ audits of both.
 
 ### Added
 
+- Adds NIP-CW's money model for Circle Wallets (new `circlemoney` package).
+  Every payment is classified as same circle, another circle on the node, any
+  other connection on the node, or Lightning; only Lightning carries the
+  member's `fees_ppm` fee and the routing-fee reserve (the larger of
+  `min_millis` and amount × `ppm` / 1,000,000, rounded down, never exceeded:
+  it is the payment's fee limit). The send cap (`max_amount`) and the receive
+  cap (`max_receive`) count external traffic only, per budget period anchored
+  at the wallet's creation in UTC; the receive room counts open invoices and
+  accepted held payments. A circle's holdings (its wallets' balances and open
+  invoices) stay under its holdings ceiling (`INSUFFICIENT_CAPACITY`), and an
+  optional outbound ceiling bounds what its wallets send per Hub period
+  (`QUOTA_EXCEEDED`). Pending payments (32), external payments in flight (8),
+  same-circle transfers (60 a minute), open invoices (100) and invoices (60 a
+  minute) are bounded per wallet (`RATE_LIMITED`). New Circle Hub settings:
+  holdings ceiling (default: 100 wallets at the receive ceiling), fee reserve
+  ppm and minimum (default 10000 and 10000), outbound ceiling and period.
+- Issues every Circle Wallet invoice as a hold invoice the Hub settles itself
+  after re-checking the payment (amount equal to the invoice's, not expired),
+  cancelling it otherwise; a same-node payment of one is settled at once, and
+  accepted ones left from a restart are resolved at start. `get_budget` on a
+  Circle Wallet reports both caps for the current period, clamped.
 - Adds a Circle Wallet Hub's per-wallet receive ceiling and default wallet
   lifetime (NIP-CW §Data Model): a join whose `max_receive` is over the
   ceiling is refused `LIMIT_EXCEEDED` naming `max_receive`, the wallet keeps
@@ -105,6 +126,14 @@ audits of both.
 
 ### Changed
 
+- Breaking: a Circle Wallet's join checks the circle's holdings against its
+  holdings ceiling instead of committing each wallet's `max_amount` against the
+  Hub's balance; the Hub-wide budget ceiling is gone, and a circle hub's app
+  listing shows its holdings against that ceiling. A Circle Wallet's
+  zero-amount invoice is refused `RESTRICTED` (was `BAD_REQUEST`), and its
+  `make_hold_invoice` is refused `RESTRICTED`. A same-node keysend over the
+  receiving Circle Wallet's room or its circle's ceiling is refused before it
+  is sent.
 - Resolves a private item whose target several connections share to the
   Circle Wallet Hub's row, and checks a circle's bill proof against every live
   connection of the Hub (nmilat's `VerifyBillProofAny` rule) for joins and join

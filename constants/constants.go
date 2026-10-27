@@ -210,6 +210,17 @@ const MAX_FEES_PPM = PPM_DIVISOR
 // for routing fees (see transactions.CalculateFeeReserveMloki).
 const MIN_FEE_RESERVE_MLOKI = 10_000
 
+// Circle money model defaults (NIP-CW §Own Funds and Caps): the routing-fee
+// reserve a Hub gets unless its host sets another, the outbound ceiling's
+// period, and a holdings ceiling left unset sized as this many wallets at their
+// full receive ceiling.
+const (
+	CIRCLE_DEFAULT_FEE_RESERVE_PPM          = 10_000
+	CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI    = 10_000
+	CIRCLE_DEFAULT_OUTBOUND_PERIOD          = BUDGET_RENEWAL_MONTHLY
+	CIRCLE_DEFAULT_HOLDINGS_CEILING_WALLETS = 100
+)
+
 // MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:
 // the fee reserve plus 1 loki. Any less, and the reserve alone exceeds the cap,
 // so the wallet could never pay outside this node.

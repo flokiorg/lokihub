@@ -33,12 +33,14 @@ type Transaction struct {
 	Preimage        string
 	PaymentHash     string
 	Amount          int64
-	FeesPaid        int64
-	CreatedAt       int64
-	ExpiresAt       *int64
-	SettledAt       *int64
-	Metadata        Metadata
-	SettleDeadline  *uint32 // block number for accepted hold invoices
+	// AmountPaid is what the payer paid an invoice, 0 when not known.
+	AmountPaid     int64
+	FeesPaid       int64
+	CreatedAt      int64
+	ExpiresAt      *int64
+	SettledAt      *int64
+	Metadata       Metadata
+	SettleDeadline *uint32 // block number for accepted hold invoices
 }
 
 type OnchainTransaction struct {

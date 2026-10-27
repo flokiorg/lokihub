@@ -1,8 +1,9 @@
 package controllers
 
-// A circle wallet may not hold more than its MaxAmountLoki cap (lokihub policy;
-// NIP-CW's max_amount is a spend cap). Production builds one controller per request,
-// so the cap check must hold across controllers, and invoices still payable count.
+// A circle wallet's invoices may not pass its receive room (NIP-CW §Own Funds and
+// Caps: max_receive less this period's receipts and its open invoices).
+// Production builds one controller per request, so the check must hold across
+// controllers, and invoices still payable count.
 
 import (
 	"context"
@@ -26,11 +27,14 @@ func circleCapChild(t *testing.T, svc *tests.TestService, name string) *db.App {
 	parent, _, err := svc.AppsService.CreateApp(name+"-hub", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
 	require.NoError(t, err)
-	// cap = 100 loki = 100_000 mloki, balance 0
+	_, err = tests.AddCircleHubConfig(svc, parent.ID)
+	require.NoError(t, err)
+	// receive cap = 100_000 mloki, balance 0
 	child, _, err := svc.AppsService.CreateApp(name, "", 100, "never", nil,
 		[]string{constants.MAKE_INVOICE_SCOPE, constants.PAY_INVOICE_SCOPE},
 		db.AppKindCircleWallet, &parent.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	require.NoError(t, tests.SetCircleMaxReceive(svc, child.ID, 100_000))
 	return child
 }
 
@@ -137,8 +141,9 @@ func TestMakeInvoice_CircleCap_UnpaidInvoiceCountsTowardCap(t *testing.T) {
 	}
 }
 
-// A zero-amount invoice lets the payer choose the amount, so a capped circle
-// wallet could receive any sum through one. Both ways to receive refuse it.
+// A zero-amount invoice lets the payer choose the amount, so a Circle Wallet
+// refuses it RESTRICTED (NIP-CW §Own Funds and Caps), and it can issue no hold
+// invoice at all.
 func TestMakeInvoice_CircleCap_ZeroAmountRefused(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
@@ -154,11 +159,11 @@ func TestMakeInvoice_CircleCap_ZeroAmountRefused(t *testing.T) {
 	NewTestNip47Controller(svc).HandleMakeInvoiceEvent(ctx, r, ev.ID, child.ID, func(rr *models.Response, _ nostr.Tags) { resp = rr })
 	require.NotNil(t, resp)
 	require.NotNil(t, resp.Error, "a zero-amount invoice would let the payer pick any amount")
-	require.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	require.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
 
 	hold := handleHoldInvoice(t, svc, child.ID, 0)
 	require.NotNil(t, hold.Error)
-	require.Equal(t, constants.ERROR_BAD_REQUEST, hold.Error.Code)
+	require.Equal(t, constants.ERROR_RESTRICTED, hold.Error.Code)
 }
 
 // A wallet with no circle parent may still issue zero-amount invoices.

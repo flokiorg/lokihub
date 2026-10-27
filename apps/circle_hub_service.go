@@ -2,6 +2,7 @@ package apps
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -50,6 +51,19 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	}
 	if config.MinBudgetRenewal == "" {
 		config.MinBudgetRenewal = constants.BUDGET_RENEWAL_MONTHLY
+	}
+	// The money model's settings left out take lokihub's defaults: a holdings
+	// ceiling of a hundred wallets at their full receive ceiling, the default
+	// routing-fee reserve, no outbound ceiling and a monthly outbound period.
+	if config.HoldingsCeilingMloki == 0 {
+		config.HoldingsCeilingMloki = satMul(config.PerWalletMaxReceiveMloki, constants.CIRCLE_DEFAULT_HOLDINGS_CEILING_WALLETS)
+	}
+	if config.FeeReservePpm == 0 && config.FeeReserveMinMloki == 0 {
+		config.FeeReservePpm = constants.CIRCLE_DEFAULT_FEE_RESERVE_PPM
+		config.FeeReserveMinMloki = constants.CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI
+	}
+	if config.OutboundPeriod == "" {
+		config.OutboundPeriod = constants.CIRCLE_DEFAULT_OUTBOUND_PERIOD
 	}
 	if err := validateCircleHubConfig(&config); err != nil {
 		return nil, "", err
@@ -107,6 +121,11 @@ type CircleHubConfigPatch struct {
 	PerWalletMaxMloki        *int
 	PerWalletMaxReceiveMloki *int64
 	MinBudgetRenewal         *string
+	HoldingsCeilingMloki     *int64
+	FeeReservePpm            *int
+	FeeReserveMinMloki       *int64
+	OutboundCeilingMloki     *int64
+	OutboundPeriod           *string
 }
 
 // IsEmpty reports whether the patch changes nothing.
@@ -133,6 +152,21 @@ func (p CircleHubConfigPatch) apply(cfg *db.CircleHubConfig) {
 	}
 	if p.MinBudgetRenewal != nil {
 		cfg.MinBudgetRenewal = *p.MinBudgetRenewal
+	}
+	if p.HoldingsCeilingMloki != nil {
+		cfg.HoldingsCeilingMloki = *p.HoldingsCeilingMloki
+	}
+	if p.FeeReservePpm != nil {
+		cfg.FeeReservePpm = *p.FeeReservePpm
+	}
+	if p.FeeReserveMinMloki != nil {
+		cfg.FeeReserveMinMloki = *p.FeeReserveMinMloki
+	}
+	if p.OutboundCeilingMloki != nil {
+		cfg.OutboundCeilingMloki = *p.OutboundCeilingMloki
+	}
+	if p.OutboundPeriod != nil {
+		cfg.OutboundPeriod = *p.OutboundPeriod
 	}
 }
 
@@ -171,6 +205,11 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, patch CircleHubConfigP
 		"per_wallet_max_mloki":         cfg.PerWalletMaxMloki,
 		"per_wallet_max_receive_mloki": cfg.PerWalletMaxReceiveMloki,
 		"min_budget_renewal":           cfg.MinBudgetRenewal,
+		"holdings_ceiling_mloki":       cfg.HoldingsCeilingMloki,
+		"fee_reserve_ppm":              cfg.FeeReservePpm,
+		"fee_reserve_min_mloki":        cfg.FeeReserveMinMloki,
+		"outbound_ceiling_mloki":       cfg.OutboundCeilingMloki,
+		"outbound_period":              cfg.OutboundPeriod,
 	})
 	if result.Error != nil {
 		return result.Error
@@ -207,7 +246,35 @@ func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
 	if cfg.FeesPpm < 0 || cfg.FeesPpm > constants.MAX_FEES_PPM {
 		return fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
 	}
+	if cfg.HoldingsCeilingMloki <= 0 {
+		return fmt.Errorf("%w: holdings_ceiling_mloki must be positive", constants.ErrInvalidParams)
+	}
+	if cfg.FeeReservePpm < 0 || cfg.FeeReservePpm > constants.MAX_FEES_PPM {
+		return fmt.Errorf("%w: fee_reserve_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+	}
+	if cfg.FeeReserveMinMloki < 0 {
+		return fmt.Errorf("%w: fee_reserve_min_mloki must not be negative", constants.ErrInvalidParams)
+	}
+	if cfg.FeeReservePpm == 0 && cfg.FeeReserveMinMloki == 0 {
+		return fmt.Errorf("%w: a zero routing-fee reserve leaves no member payment routable", constants.ErrInvalidParams)
+	}
+	if cfg.OutboundCeilingMloki < 0 {
+		return fmt.Errorf("%w: outbound_ceiling_mloki must not be negative (0 = none)", constants.ErrInvalidParams)
+	}
+	switch cfg.OutboundPeriod {
+	case constants.BUDGET_RENEWAL_DAILY, constants.BUDGET_RENEWAL_WEEKLY, constants.BUDGET_RENEWAL_MONTHLY, constants.BUDGET_RENEWAL_YEARLY:
+	default:
+		return fmt.Errorf("%w: outbound_period must be daily, weekly, monthly or yearly", constants.ErrInvalidParams)
+	}
 	return validateBudgetRenewal(cfg.MinBudgetRenewal)
+}
+
+// satMul is a × b, saturating at the int64 maximum.
+func satMul(a int64, b int64) int64 {
+	if a > 0 && b > 0 && a > math.MaxInt64/b {
+		return math.MaxInt64
+	}
+	return a * b
 }
 
 // validatePerWalletMaxMloki refuses a per-wallet ceiling below the smallest cap a

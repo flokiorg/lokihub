@@ -548,6 +548,12 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 }
 
 func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	return svc.SendKeysendWithFeeLimit(amount, destination, custom_records, preimage, transactions.CalculateFeeReserveMloki(amount))
+}
+
+// SendKeysendWithFeeLimit is SendKeysend with the routing fee capped at
+// feeLimitMloki: a Circle Wallet's keysend never pays more than its reserve.
+func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string, feeLimitMloki uint64) (*lnclient.PayKeysendResponse, error) {
 	destBytes, err := hex.DecodeString(destination)
 	if err != nil {
 		logger.Logger.Error().Err(err).
@@ -594,7 +600,7 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 		DestCustomRecords: destCustomRecords,
 		MaxParts:          MAX_PARTIAL_PAYMENTS,
 		TimeoutSeconds:    SEND_PAYMENT_TIMEOUT,
-		FeeLimitMsat:      int64(transactions.CalculateFeeReserveMloki(amount)), //nolint:gosec // msat amounts are always far below int64 range
+		FeeLimitMsat:      int64(feeLimitMloki), //nolint:gosec // msat amounts are always far below int64 range
 	}
 
 	payStream, err := svc.client.SendPayment(svc.ctx, sendPaymentRequest)
@@ -1973,6 +1979,7 @@ func flndInvoiceToTransaction(invoice *lnrpc.Invoice) *lnclient.Transaction {
 		Preimage:        preimage,
 		PaymentHash:     hex.EncodeToString(invoice.RHash),
 		Amount:          invoice.ValueMsat,
+		AmountPaid:      invoice.AmtPaidMsat,
 		CreatedAt:       invoice.CreationDate,
 		SettledAt:       settledAt,
 		ExpiresAt:       expiresAt,

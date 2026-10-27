@@ -3,10 +3,11 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/nodesign"
@@ -38,7 +39,7 @@ type circleWalletInfo struct {
 }
 
 // feeReserve is the most routing fee a payment holds back: ppm of the amount,
-// at least min_millis (transactions.CalculateFeeReserveMloki).
+// rounded down, at least min_millis (circlemoney.FeeReserve).
 type feeReserve struct {
 	Ppm       int64 `json:"ppm"`
 	MinMillis int64 `json:"min_millis"`
@@ -219,9 +220,10 @@ func (controller *nip47Controller) circleWalletTerms(app *db.App, identity strin
 	if err != nil {
 		return nil, err
 	}
-	balance := queries.GetIsolatedBalance(controller.db, app.ID)
-	commitment, _ := queries.GetCircleCommitmentMloki(controller.db, app.ID)
-	available := max(balance-commitment, 0)
+	available, err := circlemoney.Available(controller.db, app.ID, providerConfig, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	if perWallet := int64(providerConfig.PerWalletMaxMloki); perWallet > 0 {
 		available = min(available, perWallet)
 	}

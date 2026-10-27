@@ -141,11 +141,14 @@ func TestHandleMakeInvoiceEvent_CircleChild_CapNotExceeded(t *testing.T) {
 		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
 	require.NoError(t, err)
 
-	// Circle child: cap = 100 loki = 100_000 mloki, currently 0 balance.
+	// Circle child: receive cap 100_000 mloki, currently 0 balance.
 	child, _, err := svc.AppsService.CreateApp("child2", "", 100, "never", nil,
 		[]string{constants.MAKE_INVOICE_SCOPE, constants.PAY_INVOICE_SCOPE},
 		db.AppKindCircleWallet, &parent.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	_, err = tests.AddCircleHubConfig(svc, parent.ID)
+	require.NoError(t, err)
+	require.NoError(t, tests.SetCircleMaxReceive(svc, child.ID, 100_000))
 
 	dbRequestEvent := &db.RequestEvent{AppId: &child.ID}
 	svc.DB.Create(&dbRequestEvent)
@@ -178,11 +181,14 @@ func TestHandleMakeInvoiceEvent_CircleChild_OverflowAmountRejected(t *testing.T)
 		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
 	require.NoError(t, err)
 
-	// Circle child: cap = 100 loki = 100_000 mloki, currently 0 balance.
+	// Circle child: receive cap 100_000 mloki, currently 0 balance.
 	child, _, err := svc.AppsService.CreateApp("child3", "", 100, "never", nil,
 		[]string{constants.MAKE_INVOICE_SCOPE, constants.PAY_INVOICE_SCOPE},
 		db.AppKindCircleWallet, &parent.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	_, err = tests.AddCircleHubConfig(svc, parent.ID)
+	require.NoError(t, err)
+	require.NoError(t, tests.SetCircleMaxReceive(svc, child.ID, 100_000))
 
 	dbRequestEvent := &db.RequestEvent{AppId: &child.ID}
 	svc.DB.Create(&dbRequestEvent)

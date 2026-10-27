@@ -83,7 +83,8 @@ func TestCreateCircleWallet_QuotaSpentByRequestsPastTheChecks(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	provider := createCircleHub(t, svc, 7200, 0) // nothing to commit, so every join fails after the limiter
+	provider := createCircleHub(t, svc, 7200, 0)
+	fillCircle(t, svc, provider, 1_000) // a full circle: every join fails after the limiter
 	limiter := NewRateLimiter()
 	key := nostr.GeneratePrivateKey()
 

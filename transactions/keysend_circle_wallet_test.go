@@ -20,17 +20,20 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// keysendCircleChild is a circle wallet with a 100 loki (100_000 mloki) cap and
-// no balance.
+// keysendCircleChild is a circle wallet with a 100 loki (100_000 mloki) receive
+// cap and no balance.
 func keysendCircleChild(t *testing.T, svc *tests.TestService) *db.App {
 	t.Helper()
 	hub, _, err := svc.AppsService.CreateApp("keysend-hub", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
 	require.NoError(t, err)
+	_, err = tests.AddCircleHubConfig(svc, hub.ID)
+	require.NoError(t, err)
 	child, _, err := svc.AppsService.CreateApp("keysend-child", "", 100, "never", nil,
 		[]string{constants.MAKE_INVOICE_SCOPE, constants.PAY_INVOICE_SCOPE},
 		db.AppKindCircleWallet, &hub.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	require.NoError(t, tests.SetCircleMaxReceive(svc, child.ID, 100_000))
 	return child
 }
 
