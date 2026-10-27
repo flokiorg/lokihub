@@ -30,7 +30,8 @@ import (
 var ErrBillNotDrained = errors.New("cash bill is not fully drained")
 
 // DrainGuards are the ledger reads the drain check needs. Callers pass
-// queries.GetIsolatedBalance and queries.HasPendingIncoming; taking them as
+// queries.GetIsolatedBalance, queries.HasPendingIncoming and
+// queries.HasPendingOutgoing; taking them as
 // functions rather than importing them keeps this package a leaf (see the
 // package comment) AND guarantees both reads happen on the caller's own
 // transaction handle, which is the whole point of re-checking inside the
@@ -38,6 +39,7 @@ var ErrBillNotDrained = errors.New("cash bill is not fully drained")
 type DrainGuards struct {
 	IsolatedBalance    func(tx *gorm.DB, appID uint) int64
 	HasPendingIncoming func(tx *gorm.DB, appID uint) bool
+	HasPendingOutgoing func(tx *gorm.DB, appID uint) bool
 }
 
 // archiveSliceBatchSize matches CreateCashWalletClaimsTx's own batching.
@@ -160,7 +162,8 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 
 // ArchiveAndDeleteDrainedCashBillTx is ArchiveAndDeleteCashBillTx with the
 // drain guard re-evaluated INSIDE tx: every slice claimed, and a real ledger
-// balance of exactly zero, and nothing still settling into it. Returns
+// balance of exactly zero, and nothing still settling into it or paying out of
+// it. Returns
 // ErrBillNotDrained when any of those does not hold.
 //
 // Evaluating the guard inside the transaction is the point. The check used to
@@ -190,6 +193,29 @@ func ArchiveAndDeleteDrainedCashBillTx(tx *gorm.DB, app *db.App, guards DrainGua
 	// reclaims (service.ReclaimAndDeleteSubWallet).
 	if guards.HasPendingIncoming(tx, app.ID) {
 		return fmt.Errorf("%w: a payment is still settling into it", ErrBillNotDrained)
+	}
+	// A sibling slice's payout still in flight is invisible to the balance too:
+	// a zero-fee or same-node redeem has already left the balance at zero while
+	// its payment is out. Deleting now would cascade that claim and its payment
+	// row away, so a failure could no longer release the slice (NIP-CASH
+	// §Redeeming a Slice, step 4) and its value would stay with the node. The
+	// claim is checked as well as the ledger, because the pending payment row
+	// is written only after the claim commits; a payout the ledger shows settled
+	// is done, even when its preimage was not recorded on the slice.
+	var inFlight int64
+	if err := tx.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND claimed_at IS NOT NULL AND payment_hash <> '' AND preimage = ''", app.ID).
+		Where("NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.state = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED).
+		Count(&inFlight).Error; err != nil {
+		return fmt.Errorf("failed to count in-flight redeems of cash bill %d: %w", app.ID, err)
+	}
+	if inFlight > 0 {
+		return fmt.Errorf("%w: a slice's payout is still in flight", ErrBillNotDrained)
+	}
+	if guards.HasPendingOutgoing != nil && guards.HasPendingOutgoing(tx, app.ID) {
+		return fmt.Errorf("%w: a payment out of it is still pending", ErrBillNotDrained)
 	}
 	return ArchiveAndDeleteCashBillTx(tx, app, db.CashBillOutcomeDrained, 0, now)
 }
