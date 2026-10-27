@@ -216,6 +216,10 @@ func (svc *nip47Service) servePrivateItem(
 		case !item.HasProof() && !billIsCashMode:
 			// A proofless item on a slice that is not cash-mode by the hub's records.
 			return refuse(constants.ERROR_UNAUTHORIZED, "this bill is identity-bound and the item carries no slice proof")
+		case !item.HasProof() && itemCashSecretMalformed(item):
+			// A cash secret in any form but 64 lowercase hex is BAD_REQUEST
+			// (NIP-CASH §Cash-Mode Slices).
+			return refuse(constants.ERROR_BAD_REQUEST, "cash_secret must be 64 lowercase hex characters")
 		case !item.HasProof():
 			// A cash secret that does not verify is UNAUTHORIZED (NIP-CASH §Errors,
 			// §Bearer Items), never NOT_FOUND.
@@ -487,11 +491,23 @@ func billProofHolder(signer, wantPubkey string) bool {
 
 // cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
 // behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
+// itemCashSecretMalformed reports whether item's params carry a cash_secret that
+// is not 64 lowercase hex characters.
+func itemCashSecretMalformed(item transport.Item) bool {
+	var params struct {
+		CashSecret *string `json:"cash_secret"`
+	}
+	if err := json.Unmarshal(item.Params, &params); err != nil || params.CashSecret == nil {
+		return false
+	}
+	return !nipcash.ValidCashSecret(*params.CashSecret)
+}
+
 func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) bool {
 	var params struct {
 		CashSecret string `json:"cash_secret"`
 	}
-	if err := json.Unmarshal(item.Params, &params); err != nil {
+	if err := json.Unmarshal(item.Params, &params); err != nil || !nipcash.ValidCashSecret(params.CashSecret) {
 		return false
 	}
 	secret, err := hex.DecodeString(params.CashSecret)
