@@ -32,7 +32,8 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 	// Two kinds of leftover are expected and waited for or accepted:
 	//   - a torn-down circle_hub and its Closing wallets, which the lifecycle
 	//     job deletes once their (short, ephemeral) grace ends;
-	//   - a cash_hub kept only by its retained request records (NIP-CASH Q23).
+	//   - a cash_hub kept only by its retained request records (NIP-CASH Q23)
+	//     or its orders (NIP-CO §Reading an Order).
 	var leaked []adminApp
 	deadline := time.Now().Add(ephemeralCircleGraceSecs*time.Second + 3*time.Minute)
 	for {
@@ -80,7 +81,7 @@ func onlyRecords(blockers []string) bool {
 		return false
 	}
 	for _, b := range blockers {
-		if b != "records" {
+		if b != "records" && b != "orders" {
 			return false
 		}
 	}
