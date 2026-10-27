@@ -61,6 +61,10 @@ type Nip47Service interface {
 	// SetPrivateIdentity sets the source of get_info's circle_wallet.identity. Call it
 	// before any event is handled; it returns "" while the private transport is down.
 	SetPrivateIdentity(privateIdentity func() string)
+	// SetOrderIntake routes this service's own payments of an order invoice
+	// (a same-node payment) to the order intake, as the node's settlements are.
+	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
+		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
 }
 
 func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
@@ -171,4 +175,11 @@ func (svc *nip47Service) runNip47InfoPublisherWorker(ctx context.Context, pool *
 			}
 		}
 	}
+}
+
+// SetOrderIntake implements Nip47Service: its payments go through its own
+// transactions service, which must know the order intake too.
+func (svc *nip47Service) SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
+	selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error)) {
+	svc.transactionsService.SetOrderIntake(intake, selfPay)
 }
