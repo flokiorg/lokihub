@@ -35,7 +35,59 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPub
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
+	joinProofSigners.Store(ev.ID, requesterPrivkey)
 	return ev
+}
+
+// joinProofSigners remembers who signed each join proof a test built, so testJoin
+// can bind it to the request's terms (NIP-CW §Identity Proof, check 7).
+var joinProofSigners sync.Map
+
+// testJoin serves a join the way the tests build it: a proof built by
+// buildCircleWalletIdentityEvent gets the request's terms tag and is re-signed
+// by its signer, and a request without max_receive asks for as much as
+// max_amount. A proof the tests did not sign is sent as it is.
+func (controller *nip47Controller) testJoin(t testing.TB, ctx context.Context, req *models.Request, requestEventId uint, app *db.App, publish publishFunc) {
+	t.Helper()
+	controller.HandleCreateCircleWalletEvent(ctx, bindJoinTerms(t, req), requestEventId, app, publish)
+}
+
+func bindJoinTerms(t testing.TB, req *models.Request) *models.Request {
+	t.Helper()
+	var params map[string]any
+	if json.Unmarshal(req.Params, &params) != nil || params == nil {
+		return req
+	}
+	if _, ok := params["max_receive"]; !ok {
+		params["max_receive"] = params["max_amount"]
+	}
+	raw, err := json.Marshal(params)
+	require.NoError(t, err)
+	parsed, err := nipcw.ParseCreateCircleWalletRequest(raw)
+	if err == nil {
+		var ev nostr.Event
+		if json.Unmarshal([]byte(parsed.IdentityEvent), &ev) == nil {
+			if priv, ok := joinProofSigners.Load(ev.ID); ok {
+				if terms, err := nipcw.TermsTag(parsed.Terms()); err == nil {
+					kept := nostr.Tags{}
+					for _, tag := range ev.Tags {
+						if len(tag) > 0 && tag[0] != "terms" {
+							kept = append(kept, tag)
+						}
+					}
+					ev.Tags = append(kept, nostr.Tag{"terms", terms})
+					require.NoError(t, ev.Sign(priv.(string)))
+					joinProofSigners.Store(ev.ID, priv)
+					evJSON, err := json.Marshal(ev)
+					require.NoError(t, err)
+					params["identity_event"] = string(evJSON)
+				}
+			}
+		}
+	}
+	raw, err = json.Marshal(params)
+	require.NoError(t, err)
+	return &models.Request{Method: req.Method, Params: raw}
 }
 
 // testConnectionSecret and testConnectionPubkey are the member-generated
@@ -176,12 +228,12 @@ func TestHandleCreateCircleWalletEvent_HubBudgetExceeded_Rejected(t *testing.T) 
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
 	require.NotNil(t, publishedResponse.Error, "commitment exceeding the hub's own budget ceiling must be rejected even though real balance is sufficient")
-	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
+	assert.Equal(t, nipcw.ErrInsufficientCapacity, publishedResponse.Error.Code)
 }
 
 // Boundary case: committing exactly up to the hub budget must succeed; one
@@ -198,7 +250,7 @@ func TestHandleCreateCircleWalletEvent_HubBudgetBoundary(t *testing.T) {
 		svc.DB.Create(&ev)
 		var resp *models.Response
 		NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-			HandleCreateCircleWalletEvent(ctx, nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) { resp = r })
+			testJoin(t, ctx, nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) { resp = r })
 		return resp
 	}
 
@@ -218,7 +270,7 @@ func TestHandleCreateCircleWalletEvent_HubBudgetBoundary(t *testing.T) {
 		provider := createCircleHubWithHubBudget(t, svc, 10_000_000, 100_000)
 		resp := callCreate(svc, provider, 100_001)
 		require.NotNil(t, resp.Error, "commitment > hub budget must fail")
-		assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code)
+		assert.Equal(t, nipcw.ErrInsufficientCapacity, resp.Error.Code)
 	})
 }
 
@@ -244,7 +296,7 @@ func TestHandleCreateCircleWalletEvent_HubBudgetUnset_OnlyBalanceApplies(t *test
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -271,12 +323,12 @@ func TestHandleCreateCircleWalletEvent_NotCircleHub(t *testing.T) {
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, standardApp, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, standardApp, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
 	assert.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_NOT_SUPPORTED, publishedResponse.Error.Code)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, publishedResponse.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_Unauthorized(t *testing.T) {
@@ -298,7 +350,7 @@ func TestHandleCreateCircleWalletEvent_Unauthorized(t *testing.T) {
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: false}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -325,12 +377,12 @@ func TestHandleCreateCircleWalletEvent_ExpiryExceedsMax(t *testing.T) {
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
 	assert.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+	assert.Equal(t, nipcw.ErrLimitExceeded, publishedResponse.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_CommitmentExceedsBalance(t *testing.T) {
@@ -359,12 +411,12 @@ func TestHandleCreateCircleWalletEvent_CommitmentExceedsBalance(t *testing.T) {
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
 	assert.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
+	assert.Equal(t, nipcw.ErrInsufficientCapacity, publishedResponse.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_RateLimited(t *testing.T) {
@@ -393,7 +445,7 @@ func TestHandleCreateCircleWalletEvent_RateLimited(t *testing.T) {
 	svc.DB.Create(&dbRequestEvent)
 
 	var publishedResponse *models.Response
-	controller.HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+	controller.testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
 	})
 
@@ -420,7 +472,7 @@ func TestHandleCreateCircleWalletEvent_HappyPath(t *testing.T) {
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -469,7 +521,7 @@ func TestHandleCreateCircleWalletEvent_ChildScopes(t *testing.T) {
 	svc.DB.Create(&dbRequestEvent)
 
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(_ *models.Response, _ nostr.Tags) {})
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(_ *models.Response, _ nostr.Tags) {})
 
 	var childApps []db.App
 	svc.DB.Where("parent_app_id = ? AND kind = ?", provider.ID, db.AppKindCircleWallet).Find(&childApps)
@@ -502,7 +554,7 @@ func TestHandleCreateCircleWalletEvent_CommitmentBoundary(t *testing.T) {
 		ev := &db.RequestEvent{}
 		svc.DB.Create(&ev)
 		var resp *models.Response
-		makeController(svc).HandleCreateCircleWalletEvent(ctx, nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) { resp = r })
+		makeController(svc).testJoin(t, ctx, nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) { resp = r })
 		return resp
 	}
 
@@ -522,7 +574,7 @@ func TestHandleCreateCircleWalletEvent_CommitmentBoundary(t *testing.T) {
 		provider := createCircleHub(t, svc, 7200, 100_000)
 		resp := callCreate(svc, provider, 100_001)
 		assert.NotNil(t, resp.Error, "commitment > balance must fail")
-		assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code)
+		assert.Equal(t, nipcw.ErrInsufficientCapacity, resp.Error.Code)
 	})
 }
 
@@ -569,7 +621,7 @@ func TestHandleCreateCircleWalletEvent_ConcurrentCreation_AtMostOneSucceeds(t *t
 		go func() {
 			defer wg.Done()
 			<-ready
-			controller.HandleCreateCircleWalletEvent(ctx, a.req, a.eventID, provider,
+			controller.testJoin(t, ctx, a.req, a.eventID, provider,
 				func(r *models.Response, _ nostr.Tags) { responses <- r })
 		}()
 	}
@@ -618,7 +670,7 @@ func TestHandleCreateCircleWalletEvent_NonRoundMloki_CapRoundsDownSafely(t *test
 
 	controller := NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true})
 	var createResp *models.Response
-	controller.HandleCreateCircleWalletEvent(ctx, createReq, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+	controller.testJoin(t, ctx, createReq, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 		createResp = r
 	})
 	require.Nil(t, createResp.Error)
@@ -689,7 +741,7 @@ func TestHandleCreateCircleWalletEvent_ExpiryOmitted_DefaultsToMaxExpSecs(t *tes
 	before := time.Now()
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -718,12 +770,12 @@ func TestHandleCreateCircleWalletEvent_MaxAmountExceedsPerWalletMax_Rejected(t *
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
 	require.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
+	assert.Equal(t, nipcw.ErrLimitExceeded, publishedResponse.Error.Code)
 }
 
 func TestHandleCreateCircleWalletEvent_BudgetRenewal_AtOrLooserThanFloor_Accepted(t *testing.T) {
@@ -746,7 +798,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_AtOrLooserThanFloor_Accepte
 
 		var publishedResponse *models.Response
 		NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-			HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+			testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 				publishedResponse = r
 			})
 
@@ -783,12 +835,12 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_TighterThanFloor_Rejected(t
 
 		var publishedResponse *models.Response
 		NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-			HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+			testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 				publishedResponse = r
 			})
 
 		require.NotNil(t, publishedResponse.Error, "renewal %q should be rejected under a monthly floor", renewal)
-		assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+		assert.Equal(t, nipcw.ErrLimitExceeded, publishedResponse.Error.Code)
 	}
 }
 
@@ -812,7 +864,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_Omitted_DefaultsToNever(t *
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -840,7 +892,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_InvalidValue_Rejected(t *te
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -868,7 +920,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_FloorChangeIsNotRetroactive
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 	require.Nil(t, publishedResponse.Error)

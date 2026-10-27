@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
@@ -30,7 +30,7 @@ func joinWithMaxAmount(t *testing.T, svc *tests.TestService, provider *db.App, m
 
 	var published *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, context.TODO(), nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			published = r
 		})
 	require.NotNil(t, published)
@@ -49,7 +49,7 @@ func TestHandleCreateCircleWalletEvent_MaxAmountBelowFeeReserveFloor_Rejected(t 
 
 			resp, _ := joinWithMaxAmount(t, svc, provider, maxAmount)
 			require.NotNil(t, resp.Error, "a cap the fee reserve swallows must be refused")
-			assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+			assert.Equal(t, nipcw.ErrLimitExceeded, resp.Error.Code)
 
 			var count int64
 			require.NoError(t, svc.DB.Model(&db.App{}).

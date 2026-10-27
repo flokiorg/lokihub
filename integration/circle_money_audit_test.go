@@ -93,9 +93,9 @@ func TestCircleMoneyAudit(t *testing.T) {
 			Expiry:        happyPathExpirySecs,
 			IdentityEvent: eventJSON(t, buildCircleWalletIdentityEvent(t, stranger, a.WalletPubkey())),
 		}, &result)
-		// A member's wallet has no circle_wallet scope, so the request never
-		// reaches the join handler.
-		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
+		// Joins are served on the private transport only: kind 23194 refuses
+		// one before reading anything.
+		requireNWCErrorCode(t, err, constants.ERROR_NOT_IMPLEMENTED)
 
 		after, err := admin.listCircleChildren(hubID)
 		require.NoError(t, err)
@@ -173,15 +173,14 @@ func TestCircleMoneyAudit_HubDeleteEmptyOnly_KeepsWalletWithLiveInvoice(t *testi
 	payInvoiceFromSimpleWallet(t, cfg, invoice.Invoice)
 }
 
-// Hidden follow-set members are expected to join privately, but the hub does
-// not refuse one that uses the standard transport: privacy is the client's
-// choice (nmilat's RequirePrivate). Pinned so a change is deliberate.
-func TestCircleMoneyAudit_HiddenMemberOverStandardTransport_Admitted(t *testing.T) {
+// A hidden follow-set member joins over the private transport, the only one that
+// serves joins (NIP-CW §Private Join).
+func TestCircleMoneyAudit_HiddenMemberJoinsPrivately(t *testing.T) {
 	cfg := requireConfig(t)
 	hiddenPriv := newTestPrivkey(t)
 	d := "e2e-hidden-std-" + newTestPrivkey(t)[:8]
 	resp, _ := createEphemeralManagedFollowSetHub(t, cfg, "money-audit-hidden-std", d, adminFollowSet{
-		Title:         "E2E hidden member, standard transport",
+		Title:         "E2E hidden member, private join",
 		HiddenMembers: []string{mustPubkey(t, hiddenPriv)},
 	}, ephemeralCircleHubOpts{})
 

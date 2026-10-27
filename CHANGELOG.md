@@ -92,6 +92,15 @@ audits of both.
 
 ### Changed
 
+- Breaking: serves `create_circle_wallet` on the private transport only (kind
+  23194 answers `NOT_IMPLEMENTED` before any proof is read) and in NIP-CW's
+  order and codes: params `BAD_REQUEST`; a Hub not accepting joins
+  `RESTRICTED`; the join proof, now checked by nmilat with its `terms` tag,
+  `UNAUTHORIZED`; a used proof `REQUEST_REUSED`; membership `NOT_READY` or
+  `RESTRICTED`; an existing wallet `WALLET_EXISTS`; a term over the Hub's limits
+  `LIMIT_EXCEEDED` naming the field; a full circle `INSUFFICIENT_CAPACITY`; a
+  connection key in use `RESTRICTED`; and a join reaching its commit past its
+  proof's freshness window `BAD_REQUEST`. The details carry `max_receive`.
 - Answers `get_info` on every connection a Cash Hub serves (its own, its
   bills, Circle Wallet Hubs and their wallets) with `network` and `chain`
   whatever the connection's scopes; a Cash Hub's `pubkey` is its node identity

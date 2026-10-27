@@ -67,7 +67,7 @@ func raceCircleJoinsAcross(t *testing.T, procs []*tests.TestService, provider *d
 		go func(p prepared) {
 			defer wg.Done()
 			<-ready
-			p.ctl.HandleCreateCircleWalletEvent(context.TODO(), p.req, p.eventID, provider, func(r *models.Response, _ nostr.Tags) {
+			p.ctl.testJoin(t, context.TODO(), p.req, p.eventID, provider, func(r *models.Response, _ nostr.Tags) {
 				mu.Lock()
 				defer mu.Unlock()
 				if r.Error != nil {

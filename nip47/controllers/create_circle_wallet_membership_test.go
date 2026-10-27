@@ -141,6 +141,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", testConnectionPubkey(t, requesterPubkey)}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, identityEvent.Sign(requesterPrivkey))
+	joinProofSigners.Store(identityEvent.ID, requesterPrivkey)
 
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
@@ -194,7 +195,7 @@ func TestHandleCreateCircleWalletEvent_Membership_ConcurrentRace_ExactlyOneWinne
 		go func() {
 			defer wg.Done()
 			<-ready
-			controller.HandleCreateCircleWalletEvent(context.TODO(), requests[i], eventIDs[i], provider,
+			controller.testJoin(t, context.TODO(), requests[i], eventIDs[i], provider,
 				func(r *models.Response, _ nostr.Tags) { responses <- r })
 		}()
 	}

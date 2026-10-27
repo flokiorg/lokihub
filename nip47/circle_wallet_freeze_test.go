@@ -148,12 +148,8 @@ func (c *freezeCircle) join(memberPriv string) *memberWallet {
 	}
 	prepared, err := join.Prepare(*c.hub.WalletPubkey, time.Now())
 	require.NoError(c.t, err)
-	params := prepared.Request
-	resp := sendOverStandardTransport(c.t, c.svc, c.nip47svc, *c.hub.WalletPubkey, c.hubSecret,
-		map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": params})
-	require.Nil(c.t, resp.Error, "%+v", resp.Error)
-	raw, err := json.Marshal(resp.Result)
-	require.NoError(c.t, err)
+	// Joins are private-only (NIP-CW §Private Join).
+	raw := privateJoin(c.t, c.svc, c.nip47svc, c.hub, c.hubSecret, memberPriv, prepared.Request)
 	issued, err := prepared.ParseResult(raw)
 	require.NoError(c.t, err)
 
@@ -404,4 +400,22 @@ func TestCircleWalletFreeze_RemovedMember_CanSettleHoldInvoiceIssuedBefore(t *te
 			assert.Contains(t, c.svc.LNClient.(*tests.MockLn).SettleHoldPreimages(), preimage)
 		})
 	}
+}
+
+// privateJoin sends a join as one private-transport item: the bill proof signed
+// with the Hub connection's secret, the item proof by the joining member.
+func privateJoin(t *testing.T, ts *tests.TestService, svc Nip47Service, hub *db.App, hubSecret, memberPriv string, req nipcw.CreateCircleWalletRequest) json.RawMessage {
+	t.Helper()
+	params, err := json.Marshal(req)
+	require.NoError(t, err)
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := tests.RandomHex32()
+	notAfter := time.Now().Add(time.Minute).Unix()
+	item := buildItem(t, "join", *hub.WalletPubkey, constants.NIP47MethodCreateCircleWallet, string(params),
+		memberPriv, hubSecret, hubXOnly, nonce, notAfter)
+	res, served := svc.ServePrivateItem(context.TODO(), ts.LNClient, item,
+		PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
+	require.True(t, served)
+	require.Nil(t, res.Error, "%+v", res.Error)
+	return res.Result
 }

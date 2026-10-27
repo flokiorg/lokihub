@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,7 +40,7 @@ func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requester
 	require.NoError(t, svc.DB.Create(ev).Error)
 	var resp *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(context.TODO(), r, ev.ID, hub, func(rr *models.Response, _ nostr.Tags) { resp = rr })
+		testJoin(t, context.TODO(), r, ev.ID, hub, func(rr *models.Response, _ nostr.Tags) { resp = rr })
 	require.NotNil(t, resp)
 	return resp
 }
@@ -58,7 +59,7 @@ func TestCircleWallet_CannotCreateCircleWallets(t *testing.T) {
 	// is not a hub.
 	resp := joinWithExpiry(t, svc, wallet, nostr.GeneratePrivateKey(), 1_000, 3600)
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_NOT_SUPPORTED, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, resp.Error.Code)
 	var grandchildren int64
 	svc.DB.Model(&db.App{}).Where("parent_app_id = ?", wallet.ID).Count(&grandchildren)
 	assert.Zero(t, grandchildren)
@@ -82,7 +83,7 @@ func TestCircleHub_LoweringPerWalletCap_AppliesToNewMembersOnly(t *testing.T) {
 
 	over := joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 200_000, 3600)
 	require.NotNil(t, over.Error)
-	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, over.Error.Code, "a new member is held to the lowered cap")
+	assert.Equal(t, nipcw.ErrLimitExceeded, over.Error.Code, "a new member is held to the lowered cap")
 	assert.Nil(t, joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 100_000, 3600).Error)
 }
 
@@ -107,7 +108,7 @@ func TestCircleHub_LoweringMaxExpiry_AppliesToNewMembersOnly(t *testing.T) {
 
 	tooLong := joinWithExpiry(t, svc, hub, nostr.GeneratePrivateKey(), 100_000, 7000)
 	require.NotNil(t, tooLong.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, tooLong.Error.Code, "a new member is held to the lowered max expiry")
+	assert.Equal(t, nipcw.ErrLimitExceeded, tooLong.Error.Code, "a new member is held to the lowered max expiry")
 }
 
 // NIP-CW §Fees for the zero case: a member who joined a fee-free hub stays

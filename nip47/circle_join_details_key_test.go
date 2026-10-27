@@ -13,15 +13,14 @@ import (
 	"github.com/flokiorg/lokihub/nip47/cipher"
 )
 
-// NIP-CW §Response: encrypted_details is encrypted from the Hub's connection key on either
-// transport. Pinned against the two keys a refactor of the private path could reach for
-// instead: the inbox key the envelope is encrypted to, and the node identity that signs
-// the announcement.
-func TestCircleJoin_EncryptedDetailsFromHubConnectionKeyOnBothTransports(t *testing.T) {
-	privateMember, standardMember := nostr.GeneratePrivateKey(), nostr.GeneratePrivateKey()
+// NIP-CW §Response: encrypted_details is encrypted from the Hub's connection key.
+// Pinned against the two keys a refactor of the private path could reach for
+// instead: the inbox key the envelope is encrypted to, and the node identity that
+// signs the announcement.
+func TestCircleJoin_EncryptedDetailsFromHubConnectionKey(t *testing.T) {
+	privateMember := nostr.GeneratePrivateKey()
 	privatePub, _ := nostr.GetPublicKey(privateMember)
-	standardPub, _ := nostr.GetPublicKey(standardMember)
-	h := newJoinHub(t, privatePub, standardPub)
+	h := newJoinHub(t, privatePub)
 
 	nodeXOnly, err := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	require.NoError(t, err)
@@ -39,38 +38,18 @@ func TestCircleJoin_EncryptedDetailsFromHubConnectionKeyOnBothTransports(t *test
 	res, served := h.serve(t, "p", joinParams(t, privateMember, hubWalletPub, 20_000), privateMember, strings.Repeat("0a", 32))
 	require.True(t, served)
 	require.Nil(t, res.Error, "%+v", res.Error)
-	var privateBody struct {
+	var body struct {
 		EncryptedDetails string `json:"encrypted_details"`
 	}
-	require.NoError(t, json.Unmarshal(res.Result, &privateBody))
-
-	response := sendOverStandardTransport(t, h.ts, h.svc, hubWalletPub, h.connPriv, map[string]interface{}{
-		"method": constants.NIP47MethodCreateCircleWallet,
-		"params": json.RawMessage(joinParams(t, standardMember, hubWalletPub, 20_000)),
-	})
-	require.Nil(t, response.Error, "%+v", response.Error)
-	raw, err := json.Marshal(response.Result)
-	require.NoError(t, err)
-	var standardBody struct {
-		EncryptedDetails string `json:"encrypted_details"`
+	require.NoError(t, json.Unmarshal(res.Result, &body))
+	require.NotEmpty(t, body.EncryptedDetails)
+	opensFrom := func(senderPub string) bool {
+		c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, senderPub, privateMember)
+		require.NoError(t, err)
+		_, err = c.Decrypt(body.EncryptedDetails)
+		return err == nil
 	}
-	require.NoError(t, json.Unmarshal(raw, &standardBody))
-
-	for _, tc := range []struct {
-		transport, memberPriv, ciphertext string
-	}{
-		{"private", privateMember, privateBody.EncryptedDetails},
-		{"standard", standardMember, standardBody.EncryptedDetails},
-	} {
-		require.NotEmpty(t, tc.ciphertext, tc.transport)
-		opensFrom := func(senderPub string) bool {
-			c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, senderPub, tc.memberPriv)
-			require.NoError(t, err)
-			_, err = c.Decrypt(tc.ciphertext)
-			return err == nil
-		}
-		assert.True(t, opensFrom(hubWalletPub), "%s: must be encrypted from the Hub connection key", tc.transport)
-		assert.False(t, opensFrom(inboxXOnly), "%s: must not be encrypted from the inbox key", tc.transport)
-		assert.False(t, opensFrom(nodeXOnly), "%s: must not be encrypted from the node key", tc.transport)
-	}
+	assert.True(t, opensFrom(hubWalletPub), "must be encrypted from the Hub connection key")
+	assert.False(t, opensFrom(inboxXOnly), "must not be encrypted from the inbox key")
+	assert.False(t, opensFrom(nodeXOnly), "must not be encrypted from the node key")
 }

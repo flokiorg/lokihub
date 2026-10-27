@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +37,7 @@ func joinThroughSharedLimiter(t *testing.T, svc *tests.TestService, limiter Rate
 		permissions.NewPermissionsService(svc.DB, svc.EventPublisher), transactions.NewTransactionsService(svc.DB, svc.EventPublisher),
 		svc.AppsService, svc.Keys, cache, NewRateLimiter(), NewRateLimiter(), limiter, svc.Cfg, apps.NewIdentityAuthorityManager(svc.DB))
 	var response *models.Response
-	controller.HandleCreateCircleWalletEvent(context.TODO(), req, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
+	controller.testJoin(t, context.TODO(), req, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
 		response = r
 	})
 	require.NotNil(t, response)
@@ -61,7 +62,7 @@ func TestCreateCircleWallet_RejectedRequestsDoNotSpendTheMembersQuota(t *testing
 		response := joinThroughSharedLimiter(t, svc, limiter, member, provider,
 			rawCircleWalletRequest(t, victim, 100_000, 3600, mustMarshal(t, forged)))
 		require.NotNil(t, response.Error)
-		require.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+		require.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 	}
 	for i := 0; i < 5; i++ {
 		// The victim's own proof, while not (yet) a member.
@@ -93,7 +94,7 @@ func TestCreateCircleWallet_QuotaSpentByRequestsPastTheChecks(t *testing.T) {
 		require.NotNil(t, response.Error)
 		codes = append(codes, response.Error.Code)
 	}
-	assert.Equal(t, []string{constants.ERROR_QUOTA_EXCEEDED, constants.ERROR_QUOTA_EXCEEDED, constants.ERROR_QUOTA_EXCEEDED, constants.ERROR_RATE_LIMITED}, codes)
+	assert.Equal(t, []string{nipcw.ErrInsufficientCapacity, nipcw.ErrInsufficientCapacity, nipcw.ErrInsufficientCapacity, constants.ERROR_RATE_LIMITED}, codes)
 }
 
 // CW-creating-a-circle-wallet-12: while membership can't be decided the Hub

@@ -43,7 +43,7 @@ func joinCircle(t *testing.T, ctx context.Context, svc *tests.TestService, provi
 
 	var published *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			published = r
 		})
 	require.NotNil(t, published)
