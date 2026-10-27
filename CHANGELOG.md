@@ -9,6 +9,16 @@ audits of both.
 
 ### Added
 
+- Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`
+  (86400) and `CASH_REDEEM_MAX_FINAL_CLTV` (288) refuse an invoice over them
+  `RESTRICTED`; `CASH_REDEEM_INFLIGHT_PER_HUB` (32) and
+  `CASH_REDEEM_INFLIGHT_NODE` (256) bound the payouts in flight
+  (`RATE_LIMITED` before the claim); `CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS`
+  (600) refuses another redeem of a slice whose payout failed after its answer;
+  `CASH_REDEEM_ROUTE_MARGIN_PPM` (2000) and
+  `CASH_REDEEM_ROUTE_MARGIN_MIN_MILLIS` (1000) set the routing margin; and
+  `CASH_REDEEM_REPLY_WAIT_SECS` (20) is how long a redeem waits for its payment.
+
 - Adds `CASH_LINEAGE_SPIN_OFFS_PER_HOUR` (default 20), which bounds the bills
   one minted bill's lineage may spin off per hour (`RATE_LIMITED` over it), and
   `CASH_MAX_LIVE_BILLS_PER_HUB` (default 10 000), which caps the live bills a
@@ -70,6 +80,26 @@ audits of both.
   before sending it. (#150)
 
 ### Changed
+
+- Runs `cash_redeem` in NIP-CASH's order and codes: locate (`NOT_FOUND`, a
+  claimed or expired slice `RESTRICTED`), authorize (a claim proof that does not
+  verify, now checked by nmilat with its `m` tag, or a wrong cash secret is
+  `UNAUTHORIZED`; an IA no longer trusted `RESTRICTED`), the invoice policy, the
+  amount rules (an `amount` beside an invoice's own amount, even an equal one, is
+  `BAD_REQUEST`; a zero payout `RESTRICTED`), then the claim, which consumes the
+  claim proof in the same transaction. Caller-set fee, rate or same-node fields
+  are `BAD_REQUEST`.
+- Answers `cash_redeem` while its payment may still settle: after the reply wait
+  it is `INTERNAL` with the slice kept claimed; a payment that fails before it can
+  have settled is `PAYMENT_FAILED` and releases the claim and the proof together;
+  a payout that fails later releases both and starts the slice's cool-down.
+- Caps every external redeem's route at the quoted fee plus the routing margin,
+  never the generic fee reserve, so a fee-free slice is bounded too.
+- Breaking: replaces `CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR` (20 per bill) with
+  `CASH_CLAIM_CALLS_PER_HOUR` (120), shared by `cash_redeem`, `cash_transfer`
+  and `cash_consolidate` and keyed by the verified claim signer or the slice's
+  commitment, never by a bill, so one co-recipient can no longer spend the
+  others' allowance.
 
 - Runs `cash_consolidate` in NIP-CASH's order and codes: the item names its
   first source; it requires a `request_id`, marked once every source's claim

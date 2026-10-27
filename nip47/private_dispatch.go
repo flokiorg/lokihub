@@ -288,7 +288,8 @@ func (svc *nip47Service) ServePrivateItem(
 		controller.HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
 			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode})
 	case constants.NIP47MethodCashRedeem:
-		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
+		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
+			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCashTransfer:
 		controller.HandleCashTransferEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
 			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})

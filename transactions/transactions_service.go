@@ -533,23 +533,11 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 	if selfPayment {
 		response, err = svc.interceptSelfPayment(paymentRequest.PaymentHash, paymentAmount, lnClient)
 	} else {
-		// Cap the route at the fee this redemption already WITHHELD from the slice.
-		//
-		// cashRedeemFeeMloki is non-nil only for a cash_redeem, and only the Hub sets
-		// it — so this is the one payment whose price was quoted in advance, to the
-		// recipient, and deducted from their payout before the route was chosen. Paying
-		// more for the route than was withheld for it means the Hub covers the
-		// difference out of its own balance, which is what a purely proportional fee
-		// made routine on small slices.
-		//
-		// Zero is not a cap: a Hub with no fee configured has withheld nothing and has
-		// made no promise, so it keeps the old reserve rather than having every external
-		// redeem fail. Configuring a fee is what opts a Hub into the guarantee, which is
-		// the right way round — the guarantee IS that the fee covers the route.
-		// Read from metadata rather than reusing the variable above, which lives inside
-		// the DB-transaction closure; this is the same key cash_redeem_controller.go set.
+		// A cash_redeem's route is capped by the Hub's own policy (NIP-CASH
+		// §Redeeming a Slice step 4): the quoted fee plus a margin, computed by
+		// cash_redeem_controller.go and set only there. Never the generic reserve.
 		var routeCap *uint64
-		if v, ok := metadata["cash_redeem_fee_mloki"].(uint64); ok && v > 0 {
+		if v, ok := metadata[CashRedeemRouteCapKey].(uint64); ok {
 			routeCap = &v
 		}
 		response, err = lnClient.SendPaymentSync(payReq, amountMloki, routeCap)
@@ -998,6 +986,10 @@ func (svc *transactionsService) checkUnsettledTransaction(ctx context.Context, t
 }
 
 const stalePendingTTL = 48 * time.Hour
+
+// CashRedeemRouteCapKey is the payment metadata key carrying a cash_redeem's
+// routing-fee cap. Only cash_redeem sets it; callers' metadata never may.
+const CashRedeemRouteCapKey = "cash_redeem_route_cap_mloki"
 
 // IsCashRedeemPayout reports whether t is a cash_redeem payout, which
 // cash_redeem_controller.go marks with cash_claim_slice.

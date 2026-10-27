@@ -86,35 +86,26 @@ func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T
 // NIP-CASH §Security Considerations for Cash-Mode Slices: a throttled call MUST
 // get a distinct rate-limit error (CASH-security-considerations-for-cash-12).
 // Redeem's is pinned by TestHandleCashRedeemEvent_RateLimited; these are
-// transfer and consolidate, which share its limiter.
+// transfer and consolidate, which share its limiter, keyed by the verified signer.
 func TestCashTransferAndConsolidate_ThrottledCallsAreRateLimited(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	wallet := guardCashWallet(t, svc, hub)
-	controller := NewTestNip47Controller(svc)
-	limit := svc.Cfg.GetEnv().CashWalletClaimRateLimitPerHour
+	f := newConsolidateFixture(t)
+	controller := NewTestNip47Controller(f.svc)
+	limit := f.svc.Cfg.GetEnv().CashClaimCallsPerHour
 	require.Positive(t, limit)
 	for i := 0; i < limit; i++ {
-		controller.cashClaimLimiter.Allow(wallet.AppPubkey, limit)
+		controller.cashClaimLimiter.Allow("claim:"+f.ownerPub, limit)
 	}
 
-	transfer := handleCashTransferFor(t, svc, controller, wallet, cashTransferParams{
-		IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}",
-		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32()},
+	proof := buildTransferProofEvent(t, f.ownerPriv, *f.s1.WalletPubkey, db.CashIdentityPubkey, f.newPub, "", 3000, nil, time.Now())
+	transfer := handleCashTransferFor(t, f.svc, controller, f.s1, cashTransferParams{
+		IdentityType: db.CashIdentityPubkey, IdentityValue: f.ownerPub, IdentityEvent: mustMarshal(t, proof),
+		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: f.newPub},
+		RequestID:   testRequestID(),
 	})
 	require.NotNil(t, transfer.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, transfer.Error.Code)
 
-	consolidate := handleCashConsolidateFor(t, svc, controller, wallet, cashConsolidateParams{
-		Sources: []consolidateSourceParam{
-			{WalletPubkey: *wallet.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
-			{WalletPubkey: tests.RandomHex32(), IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
-		},
-		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32()},
-	})
+	consolidate := handleCashConsolidateFor(t, f.svc, controller, f.s1, f.params(t))
 	require.NotNil(t, consolidate.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, consolidate.Error.Code)
 }

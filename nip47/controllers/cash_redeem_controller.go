@@ -2,8 +2,7 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	decodepay "github.com/flokiorg/lokihub/decodepay"
@@ -63,481 +63,375 @@ const (
 	// legitimate explanation, so it gets far less tolerance. Defense-in-depth
 	// on top of the invoice/wallet binding above — not the primary protection.
 	cashRedeemIdentityFreshnessWindow = 5 * time.Minute
-
-	// cashRedeemRateLimitPerHour is the fallback used by tests, which build a
-	// config.AppConfig literal directly rather than through envconfig.Process.
-	cashRedeemRateLimitPerHour = 20
 )
 
-// cash_redeem's request struct is github.com/ohstr/nmilat/nipcash's own
-// exported nipcash.CashRedeemRequest — same wire shape, field-for-field
-// identical to this controller's former local cashRedeemParams, adopted
-// directly instead of maintaining a parallel copy (nmilat migration, PR
-// #90). The response stays this package's own payResponse (models.go): it's
-// shared across pay_invoice/cash_redeem/other paying methods and carries a
-// fee_skim_mloki field nipcash.CashRedeemResult doesn't have, so it isn't a
-// clean swap candidate.
-func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags) {
+// cashRedeemForbiddenParams are fields a caller may never set on cash_redeem:
+// the fee, the rate and same-node-ness are the Hub's to decide (NIP-CASH §The
+// Redeem Fee). A key equal to one of these, or starting with "fee" or
+// "redeem_fee", is BAD_REQUEST.
+var cashRedeemForbiddenParams = map[string]bool{"same_node": true, "rate": true}
+
+func cashRedeemForbiddenParam(raw json.RawMessage) (string, bool) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return "", false
+	}
+	for k := range fields {
+		if cashRedeemForbiddenParams[k] || strings.HasPrefix(k, "fee") || strings.HasPrefix(k, "redeem_fee") {
+			return k, true
+		}
+	}
+	return "", false
+}
+
+// cashRedeemOutcome is what the payment of a redeem came back with.
+type cashRedeemOutcome struct {
+	tx  *transactions.Transaction
+	err error
+}
+
+// HandleCashRedeemEvent serves cash_redeem in NIP-CASH §Redeeming a Slice's
+// order: locate the slice (NOT_FOUND, RESTRICTED), authorize it (UNAUTHORIZED,
+// RESTRICTED), the invoice policy (RESTRICTED) and amount rules (BAD_REQUEST,
+// RESTRICTED for a zero payout), the late-failure cool-down and the in-flight
+// bound (RATE_LIMITED), then the first-wins claim, which consumes the claim
+// proof in the same transaction, and the payment.
+//
+// The answer is given while the payment may still settle: after
+// CASH_REDEEM_REPLY_WAIT_SECS (or sooner when the envelope's deadline is nearer)
+// the item is answered INTERNAL with the slice kept claimed, and the payment's
+// outcome is applied when it comes. A payment that fails before it can have
+// settled is PAYMENT_FAILED and releases the claim and the proof in one
+// transaction.
+func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, tags nostr.Tags, call *PrivateCall) {
 	params := &nipcash.CashRedeemRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
 		publishResponse(resp, tags)
 		return
 	}
+	method := nip47Request.Method
+	refuse := func(code, message string) { respondError(publishResponse, method, code, message) }
 
-	isCash := params.CashSecret != ""
-
-	logger.Logger.Info().
-		Uint("app_id", app.ID).
-		Str("identity_type", params.IdentityType).
-		Bool("cash", isCash).
-		Msg("Handling cash_redeem request")
-
-	// 1. cash_redeem only ever makes sense against a cash_wallet — reject
-	// outright rather than relying solely on scope absence elsewhere.
 	if app.Kind != db.AppKindCashWallet {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "cash_redeem requires a cash_wallet app")
+		refuse(constants.ERROR_RESTRICTED, "cash_redeem requires a cash_wallet app")
+		return
+	}
+	if field, forbidden := cashRedeemForbiddenParam(nip47Request.Params); forbidden {
+		refuse(constants.ERROR_BAD_REQUEST, fmt.Sprintf("%s is the Hub's to decide and may not be sent", field))
 		return
 	}
 
-	// 2. Basic param validation. A cash-mode redemption and an identity-bound
-	// one are mutually exclusive param shapes, not two optional variants of
-	// the same one — mixing them is rejected rather than picking one side to
-	// honor.
-	var identityType, identityValue string
+	// The credential's shape: a cash secret, or an identity with its claim proof,
+	// never both.
+	isCash := params.CashSecret != ""
 	if isCash {
 		if params.IdentityType != "" || params.IdentityValue != "" || params.IdentityEvent != "" || params.AttestationEvent != "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			refuse(constants.ERROR_BAD_REQUEST,
 				"cash_secret is mutually exclusive with identity_type, identity_value, identity_event, and attestation_event")
 			return
 		}
-		if params.Invoice == "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "invoice is required")
+		if !nipcash.ValidCashSecret(params.CashSecret) {
+			refuse(constants.ERROR_BAD_REQUEST, "cash_secret must be 64 lowercase hex characters")
 			return
 		}
-		secretBytes, hexErr := hex.DecodeString(params.CashSecret)
-		if hexErr != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "cash_secret must be hex")
-			return
-		}
-		hash := sha256.Sum256(secretBytes)
-		identityType = db.CashIdentityCash
-		identityValue = hex.EncodeToString(hash[:])
 	} else {
-		if params.Invoice == "" || params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"invoice, identity_type, identity_value, and identity_event are all required")
+		if params.IdentityType == "" || params.IdentityValue == "" || params.IdentityEvent == "" {
+			refuse(constants.ERROR_BAD_REQUEST, "invoice, identity_type, identity_value, and identity_event are all required")
 			return
 		}
 		if params.IdentityType != db.CashIdentityPubkey && params.IdentityType != db.CashIdentityConnectionKey {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
+			refuse(constants.ERROR_BAD_REQUEST,
 				fmt.Sprintf("identity_type must be %q or %q", db.CashIdentityPubkey, db.CashIdentityConnectionKey))
 			return
 		}
 		if params.IdentityType == db.CashIdentityConnectionKey && params.AttestationEvent == "" {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-				"attestation_event is required when identity_type is connection_key")
+			refuse(constants.ERROR_BAD_REQUEST, "attestation_event is required when identity_type is connection_key")
 			return
 		}
-		identityType = params.IdentityType
-		identityValue = params.IdentityValue
 	}
-
-	// 3. Decode the invoice up front — the identity proof must bind to it.
+	if params.Invoice == "" {
+		refuse(constants.ERROR_BAD_REQUEST, "invoice is required")
+		return
+	}
 	bolt11 := strings.ToLower(params.Invoice)
-	paymentRequest, err := decodepay.Decode(bolt11)
+	invoice, err := decodepay.Decode(bolt11)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			fmt.Sprintf("Failed to decode bolt11 invoice: %s", err.Error()))
+		refuse(constants.ERROR_BAD_REQUEST, "invoice is not a valid Lightning invoice")
 		return
 	}
 
-	// 4. Rate limit per connection, charged only now that the request is a real
-	// attempt at a redemption.
-	//
-	// The connection may be shared by several recipients, so this throttles the
-	// WALLET as a whole rather than any one caller — intentional, given the
-	// connection itself may be widely held. It is also the ONLY throttle standing
-	// between a cash-mode slice and an attacker guessing its secret, since a
-	// cash-mode redemption has no signature to forge, only a secret to guess.
-	//
-	// It used to be charged at step 2, before any of the validation above. That was
-	// per-request when a request was one message; the private transport made one
-	// envelope carry up to MaxItems (32) items, each dispatched into this controller
-	// separately, and nothing adjusted. So a co-recipient — who legitimately holds the
-	// token and passes the possession gate — could send one envelope of 32 malformed
-	// redeems (`{"invoice": ""}` is enough), spend the bill's whole hourly allowance,
-	// and leave every other recipient RATE_LIMITED for the hour, repeatable until the
-	// bill expired. The attacker needed no valid data at all, because validation came
-	// after the charge.
-	//
-	// Charging here instead costs nothing in brute-force resistance: a genuine
-	// secret-guess IS well-formed and still reaches this line. Only garbage became
-	// free to send, and garbage was never a threat to the secret.
-	if !controller.cashClaimLimiter.Allow(app.AppPubkey, controller.cfg.GetEnv().CashWalletClaimRateLimitPerHour) {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "rate limit exceeded for cash_redeem")
+	logger.Logger.Info().Uint("app_id", app.ID).Str("identity_type", params.IdentityType).Bool("cash", isCash).
+		Msg("Handling cash_redeem request")
+
+	// Step 1: locate.
+	claim, code, message := controller.locateSlice(app, isCash, params.IdentityType, params.IdentityValue)
+	if code != "" {
+		refuse(code, message)
 		return
 	}
 
-	// 5. Read-only lookup of the claimed slice BEFORE touching the atomic
-	// claim guard, so a proof that fails verification never briefly occupies
-	// (and can never grief) the slot a legitimate concurrent claimer needs.
-	claim, err := controller.appsService.GetCashWalletClaim(app.ID, identityType, identityValue)
-	if err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to look up Cash wallet claim")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to look up claim")
-		return
-	}
-	if claim == nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND,
-			controller.noSliceRegisteredMessage(app.ID, identityType, identityValue))
-		return
-	}
-
-	// 6. Parse and verify the kind-23198 claim proof — identity-bound slices
-	// only. A cash-mode slice's entire proof is the hash-matched lookup in step
-	// 5 above: presenting the correct secret is necessary and sufficient, so
-	// there is nothing further to verify here.
-	var identityEvent nostr.Event
-	var attestationEvent nostr.Event
-	if !isCash {
-		if err := json.Unmarshal([]byte(params.IdentityEvent), &identityEvent); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event is not valid JSON")
+	// Step 2: authorize.
+	var limitKey, proofID string
+	var proofCreatedAt int64
+	if isCash {
+		commitment, err := nipcash.CashCommitment(params.CashSecret)
+		if err != nil || subtle.ConstantTimeCompare([]byte(commitment), []byte(claim.IdentityValue)) != 1 {
+			refuse(constants.ERROR_UNAUTHORIZED, "this cash_secret does not open this slice")
 			return
 		}
-		walletPubkey := ""
-		if app.WalletPubkey != nil {
-			walletPubkey = *app.WalletPubkey
-		}
-		attestationEventID := ""
-		if identityType == db.CashIdentityConnectionKey {
-			if err := json.Unmarshal([]byte(params.AttestationEvent), &attestationEvent); err != nil {
-				respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "attestation_event is not valid JSON")
+		limitKey = claim.IdentityValue
+	} else {
+		verdict, err := controller.verifyRedeemClaimProof(app, claim, params, invoice.PaymentHash)
+		if err != nil {
+			var claimErr *nipcash.ClaimError
+			if errors.As(err, &claimErr) && claimErr.Code == constants.ERROR_RESTRICTED {
+				refuse(constants.ERROR_RESTRICTED, "the Identity Authority for this claim is no longer trusted")
 				return
 			}
-			attestationEventID = attestationEvent.ID
-		}
-		if err := verifyClaimIdentityEvent(&identityEvent, identityType, identityValue, walletPubkey, paymentRequest.PaymentHash, attestationEventID); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
+			refuse(constants.ERROR_UNAUTHORIZED, "identity_event does not authorize this redeem: "+claimReason(err))
 			return
 		}
+		// The item proof and the claim proof must be one signer's (NIP-CASH §Claim
+		// Proofs), or whoever assembled the item could re-point a captured proof.
+		if call == nil || !nipcash.ItemSignerMatchesClaim(call.ItemSigner, verdict) {
+			refuse(constants.ERROR_UNAUTHORIZED, "the item proof was not signed by the claim proof's signer")
+			return
+		}
+		limitKey = verdict.Signer
+		proofID = verdict.RecomputedID
+		proofCreatedAt = eventCreatedAt(params.IdentityEvent)
+	}
+	if !controller.claimCallAllowed(limitKey) {
+		refuse(constants.ERROR_RATE_LIMITED, "too many calls by this signer; retry later")
+		return
 	}
 
-	// 7. For connection_key mode, first re-check that the IA recorded on this
-	// claim at wallet-creation time is *still* a trusted Identity Authority —
-	// checked live, here, rather than only ever at creation time, so revoking
-	// a compromised IA immediately blocks future claims it attested instead
-	// of leaving them honorable until their own attestation expiry lapses.
-	if identityType == db.CashIdentityConnectionKey {
-		trusted, err := controller.iaChecker.IsTrusted(claim.IAPubkey)
+	// Step 3: the invoice policy, then the amount rules.
+	env := controller.cfg.GetEnv()
+	if limit := env.CashRedeemMaxInvoiceExpirySecs; limit > 0 && invoice.Expiry > int64(limit) {
+		refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("the invoice's expiry exceeds this Hub's limit of %d seconds", limit))
+		return
+	}
+	if limit := env.CashRedeemMaxFinalCLTV; limit > 0 && invoice.MinFinalCLTVExpiry > int64(limit) {
+		refuse(constants.ERROR_RESTRICTED, fmt.Sprintf("the invoice's final CLTV delta exceeds this Hub's limit of %d", limit))
+		return
+	}
+	committed := uint64(claim.AmountMloki) //nolint:gosec // non-negative
+	sameNode := transactions.IsSelfPayment(controller.db, invoice, controller.lnClient)
+	fee := uint64(0)
+	if !sameNode {
+		fee, _, err = nipcash.RedeemFee(committed, uint64(max(claim.RedeemFeeBaseMloki, 0)), uint64(max(claim.RedeemFeePpm, 0))) //nolint:gosec // non-negative
 		if err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check Identity Authority trust")
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to check Identity Authority trust")
-			return
-		}
-		if !trusted {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "the Identity Authority for this claim has been revoked")
-			return
-		}
-		// Also verify the IA attestation itself: signature, connection_key/
-		// claimant tag binding, and its own expiration.
-		if err := VerifyClaimAttestationEvent(&attestationEvent, claim.IAPubkey, identityEvent.PubKey, identityValue); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, err.Error())
+			refuse(constants.ERROR_INTERNAL, "this slice's redeem fee is invalid")
 			return
 		}
 	}
-
-	// NIP-CASH §Redeeming a Slice: amount is only for an amountless invoice and
-	// MUST NOT alter one that already carries an amount. A matching value is
-	// harmless; a different one is refused before anything is claimed.
-	if paymentRequest.AmountMloki != 0 && params.Amount != nil &&
-		*params.Amount != uint64(paymentRequest.AmountMloki) { //nolint:gosec // mloki amounts are always far below int64/uint64 range
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			"amount must not differ from the amount the invoice already carries")
+	var invoiceMillis *uint64
+	if invoice.AmountMloki != 0 {
+		v := uint64(invoice.AmountMloki) //nolint:gosec // positive
+		invoiceMillis = &v
+	}
+	required, check := nipcash.RequiredInvoiceAmount(committed, fee, sameNode, invoiceMillis, params.Amount)
+	switch {
+	case check.Code == constants.ERROR_RESTRICTED:
+		refuse(constants.ERROR_RESTRICTED, fmt.Sprintf(
+			"this slice cannot be redeemed to Lightning: its %d millis are fully consumed by the %d millis redeem fee, so the payout would be zero. Consolidate it with another slice first, or redeem to an invoice on this node, where the fee is waived",
+			committed, fee))
 		return
-	}
-
-	// 8. Atomically claim the slice — guards the actual payout against races
-	// and replays. RowsAffected==0 here means a concurrent redeem/transfer won
-	// since step 5's lookup. Reported with a distinct message from step 5's
-	// "never existed" case — cash_status already discloses claimed/
-	// claimed_at to any holder of this shared connection, so naming "already
-	// redeemed" here protects nothing that isn't already visible one method
-	// over, while sparing a legitimate recipient who was in fact paid from
-	// seeing a message that reads as "you were never owed anything."
-	claimedAmount, err := controller.appsService.ClaimCashSlice(app.ID, identityType, identityValue)
-	if err != nil {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "this slice has already been redeemed")
+	case check.Code != "" && invoiceMillis != nil && params.Amount != nil:
+		refuse(constants.ERROR_BAD_REQUEST, "amount must not be sent with an invoice that carries an amount")
 		return
-	}
-
-	// 9. The "not partially, in one shot" rule as an explicit, direct check:
-	// the invoice's resolved amount must equal the slice's own net
-	// redeemable amount exactly — the full slice for a redemption that will
-	// resolve to a same-node payment (no fee applies), or the slice minus
-	// this claim's own RedeemFeePpm cut for a genuine external one. Peeking
-	// at transactions.IsSelfPayment here — the SAME predicate
-	// SendPaymentSync itself evaluates moments later — lets the recipient's
-	// invoice be checked against the RIGHT expected amount before payment is
-	// even attempted, rather than discovering after the fact that they built
-	// it for the wrong one. See cash_status (redeem_fee_millis/
-	// net_redeemable_millis) for the quote a client should build this invoice
-	// from in the first place.
-	resolvedAmount := uint64(paymentRequest.AmountMloki) //nolint:gosec // mloki amounts are always far below int64/uint64 range
-	if resolvedAmount == 0 && params.Amount != nil {
-		resolvedAmount = *params.Amount
-	}
-	willBeSelfPayment := transactions.IsSelfPayment(controller.db, paymentRequest, controller.lnClient)
-	hubFeeMloki := uint64(0)
-	if !willBeSelfPayment {
-		hubFeeMloki = transactions.CalculateRedeemFeeMloki(uint64(claimedAmount), claim.RedeemFeeBaseMloki, claim.RedeemFeePpm) //nolint:gosec // claimedAmount is always non-negative
-	}
-	expectedAmount := uint64(claimedAmount) - hubFeeMloki //nolint:gosec // claimedAmount is always non-negative and >= hubFeeMloki (a <=100% cut of it)
-
-	// A redemption that pays out nothing is refused rather than performed.
-	//
-	// Reachable since the redeem fee grew a flat base: CalculateRedeemFeeMloki
-	// saturates at the amount it is charged on, so a slice at or below the base
-	// quotes a fee equal to the whole slice and a payout of zero. Nothing downstream
-	// stops that. resolvedAmount is zero for an amountless invoice, so it MATCHES
-	// expectedAmount, the exact-match check below passes, and the slice is consumed to
-	// pay an invoice for nothing — the recipient loses the slice and receives no
-	// payment, with a SUCCESS response.
-	//
-	// Refused here rather than at mint time, although CalculateRedeemFeeMloki's own
-	// comment used to promise a mint-time MinRedeemableMloki that was never
-	// implemented. Mint time is the wrong place: whether a slice can pay out at all
-	// depends on IsSelfPayment, which is only known now, and a slice below the base
-	// fee is still perfectly useful — it can be transferred, consolidated with
-	// others, or redeemed same-node where the fee is waived entirely. Refusing to
-	// mint it would break those to prevent this.
-	//
-	// The slice stays claimable: the claim is rolled back exactly as the amount
-	// mismatch below does, so the holder can consolidate it and redeem the total.
-	if expectedAmount == 0 {
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after a zero-payout redemption")
+	case check.Code != "":
+		message := fmt.Sprintf("the invoice must be for exactly %d millis (this slice's %d minus its %d millis redeem fee)", required, committed, fee)
+		if sameNode {
+			message = fmt.Sprintf("this redemption resolves to a same-node payment, which is fee-free: the invoice must be for the full %d millis", committed)
 		}
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, fmt.Sprintf(
-			"this slice cannot be redeemed to Lightning: its allocated share of %d millis is fully consumed by the %d millis redeem fee, so the payout would be zero. Consolidate it with another slice first, or redeem to an invoice on this node, where the fee is waived",
-			claimedAmount, hubFeeMloki))
+		refuse(constants.ERROR_BAD_REQUEST, message)
 		return
 	}
 
-	if resolvedAmount != expectedAmount {
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after amount mismatch")
-		}
-		// The generic message below is correct on its own, but a recipient
-		// who followed cash_status' own advice (build the invoice for
-		// net_redeemable_millis, the WORST-CASE quote) and presented exactly
-		// that fee-reduced amount, only to have this specific redemption
-		// resolve same-node (fee-free, full amount required), would read
-		// "net redeemable amount of X" as agreeing with the very value that
-		// just got rejected — same phrase, different number, no indication
-		// why. Name the mechanism explicitly for that specific case.
-		message := fmt.Sprintf("invoice amount %d does not exactly match your net redeemable amount of %d millis (allocated share %d minus redeem fee %d)",
-			resolvedAmount, expectedAmount, claimedAmount, hubFeeMloki)
-		if willBeSelfPayment && resolvedAmount < uint64(claimedAmount) { //nolint:gosec // claimedAmount is always non-negative
-			message = fmt.Sprintf("invoice amount %d does not match: this redemption resolves to a same-node payment, which is always fee-free — present an invoice for the full %d instead of a fee-reduced quote",
-				resolvedAmount, claimedAmount)
-		}
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, message)
+	// Step 4: the late-failure cool-down, then the in-flight bound and the claim,
+	// in one transaction with the consumed proof.
+	now := time.Now()
+	if claim.RedeemCooldownUntil != nil && now.Before(*claim.RedeemCooldownUntil) {
+		refuse(constants.ERROR_RATE_LIMITED, "this slice's last payout failed; try later")
+		return
+	}
+	hubID := uint(0)
+	if app.ParentAppID != nil {
+		hubID = *app.ParentAppID
+	}
+	err = controller.appsService.ClaimSliceForRedeem(apps.RedeemClaim{
+		Slice:          apps.SliceRef{ClaimID: claim.ID, IdentityType: claim.IdentityType, IdentityValue: claim.IdentityValue, TransferCount: claim.TransferCount},
+		HubAppID:       hubID,
+		PaymentHash:    invoice.PaymentHash,
+		ProofID:        proofID,
+		ProofCreatedAt: proofCreatedAt,
+		InflightPerHub: env.CashRedeemInflightPerHub,
+		InflightNode:   env.CashRedeemInflightNode,
+	}, now)
+	switch {
+	case errors.Is(err, apps.ErrRedeemInflight):
+		refuse(constants.ERROR_RATE_LIMITED, "too many redemptions are in flight; retry later")
+		return
+	case errors.Is(err, apps.ErrSliceClaimed):
+		refuse(constants.ERROR_RESTRICTED, "this slice was already claimed by another call")
+		return
+	case errors.Is(err, cashrequest.ErrProofConsumed):
+		refuse(constants.ERROR_UNAUTHORIZED, "this claim proof was already used")
+		return
+	case err != nil:
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to claim a slice for cash_redeem")
+		refuse(constants.ERROR_INTERNAL, "failed to start the redemption")
 		return
 	}
 
-	// 10. Pay. Build outgoing metadata from caller input, stripping any
-	// caller-supplied internal_transfer/cash_claim_slice/cash_redeem_fee_mloki
-	// keys (spoofing prevention — mirrors pay_invoice_controller.go's
-	// internal_transfer stripping) before setting cash_claim_slice ourselves,
-	// which bypasses enforceCashFullDrain's whole-wallet-balance check: that
-	// check is wrong for a shared wallet (it would reject a recipient's
-	// payout whenever other recipients' unclaimed slices are still sitting
-	// in the same balance), and step 9 above already enforces the correct,
-	// per-slice exact-amount rule in its place. cash_redeem_fee_mloki is the
-	// quoted hub fee, computed above from this claim's own RedeemFeePpm —
-	// threaded through so markTransactionSettled can reconcile it against
-	// the real routing fee at settlement (transactions.reconcileCashRedeemFee).
-	metadata := map[string]interface{}{}
-	// (cash_redeem has no metadata param of its own in the wire format above;
-	// reserved for parity with pay_invoice's shape/future extension.)
-	delete(metadata, "internal_transfer")
-	delete(metadata, "cash_claim_slice")
-	delete(metadata, "cash_redeem_fee_mloki")
-	metadata["cash_claim_slice"] = true
-	metadata["cash_redeem_fee_mloki"] = hubFeeMloki
-
-	// Recorded before paying so a failure learned only later can find this
-	// slice again (ReleaseCashSliceForFailedPayment).
-	if err := controller.appsService.SetCashSliceRedeemPaymentHash(app.ID, identityType, identityValue, paymentRequest.PaymentHash); err != nil {
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after recording its payment hash failed")
-		}
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to record cash_redeem payment hash")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to start the redemption")
-		return
+	// The route is capped by the quoted fee plus a margin, for every external
+	// redemption.
+	metadata := map[string]interface{}{"cash_claim_slice": true, "cash_redeem_fee_mloki": fee}
+	if !sameNode {
+		margin := committed / 1_000_000 * uint64(max(env.CashRedeemRouteMarginPpm, 0)) //nolint:gosec // non-negative
+		margin += committed % 1_000_000 * uint64(max(env.CashRedeemRouteMarginPpm, 0)) / 1_000_000
+		margin = max(margin, uint64(max(env.CashRedeemRouteMarginMinMillis, 0))) //nolint:gosec // non-negative
+		metadata[transactions.CashRedeemRouteCapKey] = fee + margin
 	}
-
-	// Only an amountless invoice takes the caller's amount; a fixed-amount one
-	// is paid for exactly what it says.
+	// Only an amountless invoice takes the caller's amount.
 	var payAmount *uint64
-	if paymentRequest.AmountMloki == 0 {
+	if invoiceMillis == nil {
 		payAmount = params.Amount
 	}
-	transaction, err := controller.transactionsService.SendPaymentSync(bolt11, payAmount, metadata, controller.lnClient, &app.ID, &requestEventId)
-	if err != nil && errors.Is(err, lnclient.ErrPaymentPending) {
-		// The payment may still settle, so the slice stays claimed. If it
-		// fails instead, the payment-failed event releases it.
-		logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentRequest.PaymentHash).
-			Msg("cash_redeem payment outcome unknown; slice held until it resolves")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
-			"the payment's outcome is not known yet; this slice stays claimed until the payment settles or fails")
-		return
-	}
-	if err != nil && errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
-		// The node reported the payout as sent but it could not be recorded
-		// (e.g. no preimage came back). The money has left, so the slice stays
-		// claimed: releasing it would let the same slice be redeemed twice. The
-		// payment subscription or startup reconciliation settles the row and
-		// records the payout facts once the preimage is known.
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentRequest.PaymentHash).
-			Msg("cash_redeem payout sent but not recorded; slice kept claimed, needs operator attention")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
-			"the payment was sent but could not be recorded; this slice stays claimed — do not retry")
-		return
-	}
-	if err != nil {
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, identityType, identityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).Msg("Failed to roll back Cash wallet slice claim after payment failure")
+
+	apps.BeginRedeemAnswer(invoice.PaymentHash)
+	done := make(chan cashRedeemOutcome, 1)
+	go func() {
+		tx, err := controller.transactionsService.SendPaymentSync(bolt11, payAmount, metadata, controller.lnClient, &app.ID, &requestEventId)
+		done <- cashRedeemOutcome{tx: tx, err: err}
+	}()
+
+	timer := time.NewTimer(controller.redeemReplyWait(call))
+	defer timer.Stop()
+	select {
+	case outcome := <-done:
+		code, message, result := controller.finishRedeem(app, claim, invoice.PaymentHash, fee, outcome, false)
+		if code != "" {
+			refuse(code, message)
+			return
 		}
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to pay cash_redeem invoice")
-		publishResponse(&models.Response{
-			ResultType: nip47Request.Method,
-			Error:      mapNip47Error(err),
-		}, tags)
-		return
+		publishResponse(&models.Response{ResultType: method, Result: result}, tags)
+	case <-timer.C:
+		// No second reply is ever sent: the outcome is read through cash_status.
+		refuse(constants.ERROR_INTERNAL, "the payment's outcome is not known yet; this slice stays claimed until it settles or fails")
+		go func() {
+			controller.finishRedeem(app, claim, invoice.PaymentHash, fee, <-done, true)
+		}()
 	}
-
-	if transaction == nil || transaction.Preimage == nil {
-		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_redeem payment succeeded but transaction or preimage is nil")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "payment completed but preimage unavailable")
-		// The payment went through, so the slice is spent: a drained bill is
-		// auto-deleted here exactly as on the success path below.
-		controller.maybeAutoDeleteDrainedCashWallet(app)
-		return
-	}
-
-	// Record the payout facts on the slice itself. Best-effort and never
-	// load-bearing: the money has already moved and the caller's response does
-	// not depend on this, so a failure is logged and the redeem still succeeds.
-	// It has to happen here, though — nothing links a Transaction back to the
-	// slice that caused it, and these rows cascade away with the wallet app.
-	if err := controller.appsService.SetCashSliceRedeemPayment(app.ID, identityType, identityValue, apps.CashSliceRedeemPayment{
-		PaymentHash:     transaction.PaymentHash,
-		Preimage:        *transaction.Preimage,
-		RedeemFeeMloki:  int64(hubFeeMloki),          //nolint:gosec // a quoted ppm cut of a positive amount
-		RoutingFeeMloki: int64(transaction.FeeMloki), //nolint:gosec // a routing fee the node reports, far below int64's range
-		SettledAt:       transaction.SettledAt,
-	}); err != nil {
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-			Msg("Failed to record cash_redeem payout facts on the slice")
-	}
-
-	logger.Logger.Info().
-		Uint("app_id", app.ID).
-		Str("identity_type", identityType).
-		Uint64("amount_mloki", resolvedAmount).
-		Msg("Cash wallet slice claimed")
-
-	publishResponse(&models.Response{
-		ResultType: nip47Request.Method,
-		Result: payResponse{
-			Preimage: *transaction.Preimage,
-			// FeesPaid is the hub's own redeem fee (what the recipient
-			// actually bore, already deducted from their invoice amount in
-			// step 9) — NOT transaction.FeeMloki, the real Lightning routing
-			// fee, which under this design is never charged to the
-			// recipient (see transactions.reconcileCashRedeemFee).
-			FeesPaid: hubFeeMloki,
-		},
-	}, tags)
-
-	// A redeem that took the bill's last slice leaves it holding nothing, so
-	// it is archived and deleted here exactly as a fully-splitting
-	// cash_transfer is (cash_transfer_controller.go).
-	//
-	// This is what makes a spent bill uniformly silent. Before, only the split
-	// path deleted: a redeemed-to-zero bill lingered until its expiry and kept
-	// answering "no slice registered for this identity", which told anyone who
-	// had ever seen its token that this hub issued that bill and it had been
-	// spent — the very oracle the deletion exists to close. The cost is that a
-	// legitimate holder replaying a redeem now gets silence instead of an
-	// error, which is the same trade already accepted for splits.
-	//
-	// Best-effort and after the response, so it can never delay or fail the
-	// caller's redeem; the expiry sweep remains the fallback.
-	controller.maybeAutoDeleteDrainedCashWallet(app)
 }
 
-// verifyClaimIdentityEvent checks a kind-23198 claim proof: valid signature;
-// bound to this exact wallet (d-tag) and this exact invoice (bolt11_hash
-// tag) — the binding that makes an intercepted proof unusable for any
-// invoice other than the one it was created for, which matters on a shared/
-// public connection where anyone holding it can decrypt every cash_redeem
-// request; a recency window as defense-in-depth; and, depending on mode,
-// either self-proof (pubkey) or a reference to the accompanying IA
-// attestation (connection_key).
-func verifyClaimIdentityEvent(ev *nostr.Event, identityType, identityValue, walletPubkey, invoicePaymentHash, attestationEventID string) error {
-	if ev.Kind != nostrKindClaimProof {
-		return fmt.Errorf("identity_event must be kind %d, got %d", nostrKindClaimProof, ev.Kind)
+// redeemReplyWait is how long cash_redeem waits for its payment before it
+// answers: CASH_REDEEM_REPLY_WAIT_SECS, at most until the call's deadline.
+func (controller *nip47Controller) redeemReplyWait(call *PrivateCall) time.Duration {
+	secs := controller.cfg.GetEnv().CashRedeemReplyWaitSecs
+	if secs <= 0 {
+		secs = 20
 	}
-	valid, err := ev.CheckSignature()
-	if err != nil || !valid {
-		return fmt.Errorf("identity_event has invalid signature")
+	wait := time.Duration(secs) * time.Second
+	if call != nil && call.Meta.DeadlinePresent {
+		left := time.Until(time.Unix(call.Meta.Deadline, 0))
+		wait = min(wait, max(left, time.Second))
 	}
-	// CheckSignature verifies the signature against a hash it recomputes from
-	// the event's own fields — it does not check that the client-supplied
-	// evt.ID matches that hash (only CheckID does). Nothing here currently
-	// trusts identityEvent.ID as a security-relevant key (this claim's
-	// single-use guarantee comes from ClaimCashSlice's atomic claim, and
-	// replay is bound to a specific invoice via bolt11_hash below, not the
-	// event ID) — this check is defense in depth / NIP-01 correctness, kept
-	// consistent with the sibling verifyCircleWalletIdentityEvent, which does
-	// rely on the ID for its own replay guard.
-	if !ev.CheckID() {
-		return fmt.Errorf("identity_event id does not match its content")
-	}
-	dTag := ev.Tags.Find("d")
-	if len(dTag) < 2 || dTag[1] != walletPubkey {
-		return fmt.Errorf("identity_event d-tag does not match this wallet")
-	}
-	hashTag := ev.Tags.Find("bolt11_hash")
-	if len(hashTag) < 2 || hashTag[1] != invoicePaymentHash {
-		return fmt.Errorf("identity_event is not bound to this invoice")
-	}
-	now := time.Now()
-	evTime := ev.CreatedAt.Time()
-	if evTime.Before(now.Add(-cashRedeemIdentityFreshnessWindow)) || evTime.After(now.Add(time.Minute)) {
-		return fmt.Errorf("identity_event is stale or has a future timestamp")
+	return wait
+}
+
+// finishRedeem applies a redeem payment's outcome and, when the redeem is still
+// answering (late false), says what to answer: a code and message, or the
+// result. late means the item was already answered INTERNAL.
+//
+//   - pending, or sent but not recorded: the slice stays claimed; the payment's
+//     own events settle or release it (INTERNAL).
+//   - any other failure: nothing is in flight, so the claim and its proof are
+//     released in one transaction (PAYMENT_FAILED); a late one sets the
+//     cool-down.
+//   - settled without a preimage: claimed for good (INTERNAL).
+//   - settled: the payout facts are recorded on the slice.
+func (controller *nip47Controller) finishRedeem(app *db.App, claim *db.CashWalletClaim, paymentHash string, fee uint64, outcome cashRedeemOutcome, late bool) (string, string, any) {
+	defer apps.EndRedeemAnswer(paymentHash)
+	err := outcome.err
+	switch {
+	case err != nil && (errors.Is(err, lnclient.ErrPaymentPending) || errors.Is(err, transactions.ErrPaymentSentNotRecorded)):
+		logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentHash).
+			Msg("cash_redeem payment outcome unknown; slice held until it resolves")
+		// A failure published while this redeem held the hash was left to it.
+		apps.EndRedeemAnswer(paymentHash)
+		if _, relErr := controller.appsService.ReleaseCashSliceForFailedPayment(app.ID, paymentHash); relErr != nil {
+			logger.Logger.Error().Err(relErr).Uint("app_id", app.ID).Msg("Failed to recheck a pending cash_redeem payout")
+		}
+		return constants.ERROR_INTERNAL, "the payment's outcome is not known yet; this slice stays claimed until it settles or fails", nil
+	case err != nil:
+		var cooldown *time.Time
+		if late {
+			cooldown = controller.appsService.LateFailureCooldown(time.Now())
+		}
+		if _, relErr := controller.appsService.ReleaseRedeemClaim(app.ID, paymentHash, cooldown); relErr != nil {
+			logger.Logger.Error().Err(relErr).Uint("app_id", app.ID).Msg("Failed to release a slice after its cash_redeem payment failed")
+		}
+		logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentHash).Bool("late", late).
+			Msg("cash_redeem payment failed; slice claimable again")
+		return constants.ERROR_PAYMENT_FAILED, "the payment failed; this slice can be redeemed again", nil
+	case outcome.tx == nil || outcome.tx.Preimage == nil:
+		logger.Logger.Error().Uint("app_id", app.ID).Str("payment_hash", paymentHash).
+			Msg("cash_redeem payment settled without a preimage; slice kept claimed")
+		controller.maybeAutoDeleteDrainedCashWallet(app)
+		return constants.ERROR_INTERNAL, "the payment was sent but could not be recorded; this slice stays claimed", nil
 	}
 
-	if identityType == db.CashIdentityConnectionKey {
-		connKeyTag := ev.Tags.Find("connection_key")
-		if len(connKeyTag) < 2 || connKeyTag[1] != identityValue {
-			return fmt.Errorf("identity_event connection_key tag does not match identity_value")
-		}
-		eTag := ev.Tags.FindWithValue("e", attestationEventID)
-		if len(eTag) == 0 {
-			return fmt.Errorf("identity_event must reference the attestation event via an e-tag")
-		}
-		return nil
+	tx := outcome.tx
+	if err := controller.appsService.SetCashSliceRedeemPayment(app.ID, claim.IdentityType, claim.IdentityValue, apps.CashSliceRedeemPayment{
+		PaymentHash:     tx.PaymentHash,
+		Preimage:        *tx.Preimage,
+		RedeemFeeMloki:  int64(fee),         //nolint:gosec // at most the slice's amount
+		RoutingFeeMloki: int64(tx.FeeMloki), //nolint:gosec // a routing fee the node reports
+		SettledAt:       tx.SettledAt,
+	}); err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to record cash_redeem payout facts on the slice")
 	}
+	logger.Logger.Info().Uint("app_id", app.ID).Str("identity_type", claim.IdentityType).Msg("Cash wallet slice redeemed")
+	// A redeem that took the bill's last slice archives and deletes it, after the
+	// answer (NIP-CASH §Lifecycle and Deletion).
+	defer controller.maybeAutoDeleteDrainedCashWallet(app)
+	// fees_paid is the recipient's own redeem fee, never the routing cost.
+	return "", "", payResponse{Preimage: *tx.Preimage, FeesPaid: fee}
+}
 
-	// pubkey mode: the event's own signer IS the proof of ownership.
-	if ev.PubKey != identityValue {
-		return fmt.Errorf("identity_event must be signed by identity_value")
+// verifyRedeemClaimProof verifies a redeem's kind-23198 claim proof with nmilat
+// (NIP-CASH §Claim Proofs): its exact tags, bound to this wallet, m cash_redeem
+// and the invoice's payment hash, fresh, unused, and signed by the slice's
+// identity (for a connection_key slice through a live attestation by the IA
+// recorded on it, checked last for trust).
+func (controller *nip47Controller) verifyRedeemClaimProof(app *db.App, claim *db.CashWalletClaim, params *nipcash.CashRedeemRequest, paymentHash string) (nipcash.ClaimVerdict, error) {
+	wallet := ""
+	if app.WalletPubkey != nil {
+		wallet = *app.WalletPubkey
 	}
-	return nil
+	store := cashrequest.New(controller.db)
+	return nipcash.VerifyClaimProof(params.IdentityEvent, nipcash.ClaimExpectation{
+		Binding:     nipcash.ClaimBinding{Method: nipcash.MethodCashRedeem, Wallet: wallet, Bolt11Hash: paymentHash},
+		SliceType:   claim.IdentityType,
+		SliceValue:  claim.IdentityValue,
+		SliceIA:     claim.IAPubkey,
+		Attestation: params.AttestationEvent,
+		IATrusted: func(ia string) bool {
+			trusted, err := controller.iaChecker.IsTrusted(ia)
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to check Identity Authority trust")
+			}
+			return err == nil && trusted
+		},
+		Consumed: func(id string) bool {
+			used, err := store.IsProofConsumed(id)
+			return err == nil && used
+		},
+	}, time.Now())
 }
 
 // VerifyClaimAttestationEvent checks a kind-35522 event is validly signed by

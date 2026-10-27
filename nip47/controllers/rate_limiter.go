@@ -74,3 +74,11 @@ func (rl *pubkeyRateLimiter) evictExpiredLocked(now time.Time) {
 		}
 	}
 }
+
+// claimCallAllowed charges one cash_redeem, cash_transfer or cash_consolidate
+// call against key: the verified claim signer, or the cash-mode slice's
+// commitment. Never a bill: a limiter keyed by a bill lets one co-recipient spend
+// every other recipient's allowance.
+func (controller *nip47Controller) claimCallAllowed(key string) bool {
+	return controller.cashClaimLimiter.Allow("claim:"+key, controller.cfg.GetEnv().CashClaimCallsPerHour)
+}

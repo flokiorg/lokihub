@@ -60,15 +60,16 @@ func TestHandleCashRedeemEvent_FixedInvoice_DifferentAmountRefused(t *testing.T)
 	assert.Nil(t, slice.ClaimedAt, "the slice stays redeemable")
 }
 
-func TestHandleCashRedeemEvent_FixedInvoice_MatchingAmountPaysTheInvoiceAsIs(t *testing.T) {
+func TestHandleCashRedeemEvent_FixedInvoice_MatchingAmountStillRefused(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
+	// NIP-CASH §Redeeming a Slice step 3: an amount on an invoice that carries one
+	// is BAD_REQUEST, even when it matches.
 	_, _, response := redeemFixedInvoice(t, svc, fixedInvoiceMloki)
 
-	require.Nil(t, response.Error, "%+v", response.Error)
-	calls := svc.LNClient.(*tests.MockLn).SendPaymentSyncCalls()
-	require.Len(t, calls, 1)
-	assert.Nil(t, calls[0].Amount, "a fixed-amount invoice is paid for its own amount, never an override")
+	require.NotNil(t, response.Error)
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Empty(t, svc.LNClient.(*tests.MockLn).SendPaymentSyncCalls(), "nothing is paid")
 }
