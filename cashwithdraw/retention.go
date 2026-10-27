@@ -1,9 +1,12 @@
 package cashwithdraw
 
 import (
+	"time"
+
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -100,27 +103,61 @@ func (s *Service) PruneRecords(limit int) (int, error) {
 
 // BlocksHubDelete reports whether hubAppID has a payout not final or cancelled,
 // or a withdraw record still kept (NIP-CASH §Lifecycle and Deletion, Hub
-// teardown). TODO(WP-16): the Cash Hub delete check calls it.
+// teardown).
 func (s *Service) BlocksHubDelete(hubAppID uint) (bool, error) {
+	open, kept, _, err := s.HubDeleteBlockersTx(s.DB, hubAppID, s.now())
+	return open+kept > 0, err
+}
+
+// HubDeleteBlockersTx counts hubAppID's payouts not yet final or cancelled
+// (open), the ended ones whose records are still kept (kept), and the time the
+// last kept record goes, nil while a re-minted bill keeps one.
+func (s *Service) HubDeleteBlockersTx(tx *gorm.DB, hubAppID uint, at time.Time) (open, kept int64, keptUntil *int64, err error) {
 	var ws []db.CashWithdrawal
-	if err := s.DB.Where("hub_app_id = ?", hubAppID).Find(&ws).Error; err != nil {
-		return false, err
+	if err := tx.Where("hub_app_id = ?", hubAppID).Find(&ws).Error; err != nil {
+		return 0, 0, nil, err
 	}
-	now := s.now().Unix()
+	now := at.Unix()
+	var latest int64
+	timed := true
 	for i := range ws {
 		var rec db.CashRequestRecord
-		if err := s.DB.Where("id = ?", ws[i].RecordID).Limit(1).Find(&rec).Error; err != nil {
-			return false, err
+		if err := tx.Where("id = ?", ws[i].RecordID).Limit(1).Find(&rec).Error; err != nil {
+			return 0, 0, nil, err
 		}
-		r, err := s.retention(s.DB, &ws[i], &rec)
+		r, err := s.retention(tx, &ws[i], &rec)
 		if err != nil {
-			return false, err
+			return 0, 0, nil, err
 		}
-		if nipcash.WithdrawBlocksHubDelete(r, now) {
-			return true, nil
+		switch {
+		case !nipcash.WithdrawBlocksHubDelete(r, now):
+		case r.EndedAt == 0:
+			open++
+		case r.RemintLive:
+			kept++
+			timed = false
+		default:
+			kept++
+			latest = max(latest, r.Deadline+r.Horizon, r.EndedAt+r.TombstoneWindow)
 		}
 	}
-	return false, nil
+	if kept > 0 && timed {
+		keptUntil = &latest
+	}
+	return open, kept, keptUntil, nil
+}
+
+// HubDeleteBlockers is HubDeleteBlockersTx as the Cash Hub delete check reads it
+// (apps.RegisterCashHubDeleteBlocker).
+func (s *Service) HubDeleteBlockers(tx *gorm.DB, hubID uint, now time.Time) ([]apps.CashHubDeleteBlocker, error) {
+	open, kept, until, err := s.HubDeleteBlockersTx(tx, hubID, now)
+	if err != nil {
+		return nil, err
+	}
+	return []apps.CashHubDeleteBlocker{
+		{Kind: apps.CashHubBlockerPayoutOpen, Count: open},
+		{Kind: apps.CashHubBlockerWithdrawRecords, Count: kept, Until: until},
+	}, nil
 }
 
 // IsRemintedBill reports a bill a cancelled payout re-minted whose slice is

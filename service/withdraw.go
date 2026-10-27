@@ -29,6 +29,8 @@ func (svc *service) setupWithdraw() {
 		LN:     func() lnclient.LNClient { return svc.lnClient },
 		IA:     apps.NewIdentityAuthorityManager(svc.db),
 	}
+	// A Cash Hub stays while a payout of it is owed or its record is kept.
+	apps.RegisterCashHubDeleteBlocker("cash_withdraw", svc.withdraw.HubDeleteBlockers)
 	if w, ok := svc.nip47Service.(interface{ SetWithdraw(*cashwithdraw.Service) }); ok {
 		w.SetWithdraw(svc.withdraw)
 	}

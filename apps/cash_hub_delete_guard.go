@@ -2,7 +2,9 @@ package apps
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -20,7 +22,30 @@ const (
 	// CashHubBlockerOrders: orders still retained, or with a payment not yet
 	// minted (nipCO.OrderBlocksHubDelete).
 	CashHubBlockerOrders = "orders"
+	// CashHubBlockerPayoutOpen: on-chain payouts not yet final or cancelled;
+	// CashHubBlockerWithdrawRecords: ended payouts whose records are still kept
+	// (NIP-CASH §Lifecycle and Deletion, Hub teardown).
+	CashHubBlockerPayoutOpen      = "payout_open"
+	CashHubBlockerWithdrawRecords = "withdraw_records"
 )
+
+// CashHubDeleteBlockerFunc reports more things keeping a Cash Hub, read inside
+// the delete's own transaction. Packages apps cannot import (the withdrawals)
+// register one.
+type CashHubDeleteBlockerFunc func(tx *gorm.DB, hubID uint, now time.Time) ([]CashHubDeleteBlocker, error)
+
+var (
+	extraBlockersMu sync.RWMutex
+	extraBlockers   = map[string]CashHubDeleteBlockerFunc{}
+)
+
+// RegisterCashHubDeleteBlocker adds (or, under the same name, replaces) a
+// blocker source every Cash Hub delete check reads.
+func RegisterCashHubDeleteBlocker(kind string, f CashHubDeleteBlockerFunc) {
+	extraBlockersMu.Lock()
+	defer extraBlockersMu.Unlock()
+	extraBlockers[kind] = f
+}
 
 // CashHubDeleteBlocker is one reason a Cash Hub cannot be deleted yet: how many,
 // and until when (nil when no time applies: the bills must go first).
@@ -51,6 +76,14 @@ func (c CashHubDeleteCheck) Message() string {
 			reasons = append(reasons, fmt.Sprintf("%d live bill(s)", b.Count))
 		case CashHubBlockerOrders:
 			reasons = append(reasons, fmt.Sprintf("%d order(s) still open or awaiting their bills", b.Count))
+		case CashHubBlockerPayoutOpen:
+			reasons = append(reasons, fmt.Sprintf("%d on-chain payout(s) not yet final or cancelled", b.Count))
+		case CashHubBlockerWithdrawRecords:
+			if b.Until != nil {
+				reasons = append(reasons, fmt.Sprintf("%d withdraw record(s) kept until %s", b.Count, time.Unix(*b.Until, 0).UTC().Format(time.RFC3339)))
+			} else {
+				reasons = append(reasons, fmt.Sprintf("%d withdraw record(s) kept while their re-minted bills live", b.Count))
+			}
 		case CashHubBlockerRecords:
 			if b.Until != nil {
 				reasons = append(reasons, fmt.Sprintf("%d request record(s) kept until %s", b.Count, time.Unix(*b.Until, 0).UTC().Format(time.RFC3339)))
@@ -117,6 +150,28 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 			blocker.Until = &at
 		}
 		check.Blockers = append(check.Blockers, blocker)
+	}
+	extraBlockersMu.RLock()
+	kinds := make([]string, 0, len(extraBlockers))
+	for k := range extraBlockers {
+		kinds = append(kinds, k)
+	}
+	sort.Strings(kinds)
+	fns := make([]CashHubDeleteBlockerFunc, len(kinds))
+	for i, k := range kinds {
+		fns[i] = extraBlockers[k]
+	}
+	extraBlockersMu.RUnlock()
+	for _, f := range fns {
+		bs, err := f(tx, hubID, now)
+		if err != nil {
+			return check, err
+		}
+		for _, b := range bs {
+			if b.Count > 0 {
+				check.Blockers = append(check.Blockers, b)
+			}
+		}
 	}
 	// Addresses of on-chain orders that saw a payment are watched for as long
 	// as the Hub runs; deleting it ends the watch (NIP-CO §On-chain).
