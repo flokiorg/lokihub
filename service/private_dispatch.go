@@ -37,6 +37,8 @@ func (svc *service) dispatchEnvelope(
 		HubXOnly: pt.nodeXOnly,
 		Nonce:    envelope.Nonce,
 		NotAfter: envelope.NotAfter,
+		// An order's notices go to the relay its envelope arrived on.
+		ArrivalRelay: arrivedOn,
 		// Items run one at a time, in array order, so one counter serves them all.
 		AuthFailures: new(int),
 	}

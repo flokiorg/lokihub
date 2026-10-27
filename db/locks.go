@@ -14,6 +14,9 @@ const (
 	// Lost Connection: "checked and accepted as one atomic step with any join's
 	// step 9").
 	LockNsConnKey int32 = 0x434b
+	// LockNsOrder serialises a Cash Hub's order placements and payments
+	// against its open-order ceiling (NIP-CO §Limits), keyed by the Hub's id.
+	LockNsOrder int32 = 0x4f52
 )
 
 // LockApp takes the transaction-scoped lock of one app (a Hub or a wallet) on

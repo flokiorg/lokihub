@@ -546,6 +546,10 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 	switch app.Kind {
 	case db.AppKindCircleHub, db.AppKindCashHub:
 		err = svc.deleteHubAppTx(app)
+	case db.AppKindCashOrder:
+		// Its orders are still served and minted after it is retired, so an
+		// Order connection goes only with its Hub (NIP-CO §What It Allows).
+		return fmt.Errorf("%w: an order connection cannot be deleted; retire it instead", constants.ErrInvalidParams)
 	case db.AppKindCashWallet:
 		// A cash bill is hard-deleted the instant it is spent, which is what
 		// makes it indistinguishable from a pubkey this hub never served. That
@@ -600,7 +604,7 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 
 		var childCount int64
 		if err := tx.Model(&db.App{}).
-			Where("parent_app_id = ? AND parent_kind = ?", app.ID, parentKind).
+			Where("parent_app_id = ? AND parent_kind = ? AND kind <> ?", app.ID, parentKind, db.AppKindCashOrder).
 			Count(&childCount).Error; err != nil {
 			return err
 		}
@@ -624,6 +628,13 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 			}
 		}
 
+		// An Order connection lives as long as its Hub and goes with it (NIP-CO
+		// §The Order Connection).
+		if app.Kind == db.AppKindCashHub {
+			if err := tx.Where("parent_app_id = ? AND kind = ?", app.ID, db.AppKindCashOrder).Delete(&db.App{}).Error; err != nil {
+				return err
+			}
+		}
 		return tx.Delete(app).Error
 	})
 }

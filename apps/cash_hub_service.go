@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/ohstr/nmilat/nipCO"
 	"gorm.io/gorm"
 )
 
@@ -129,12 +131,26 @@ func (svc *appsService) UpdateCashHubConfig(appID uint, perWalletMaxMloki *int, 
 		return nil
 	}
 
-	result := svc.db.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("cash hub config not found for app %d", appID)
+	err = svc.db.Transaction(func(tx *gorm.DB) error {
+		if err := db.LockApp(tx, appID); err != nil {
+			return err
+		}
+		if perWalletMaxMloki != nil {
+			if err := checkCeilingAgainstOrderTerms(tx, appID, int64(*perWalletMaxMloki)); err != nil {
+				return err
+			}
+		}
+		result := tx.Model(&db.CashHubConfig{}).Where("app_id = ?", appID).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("cash hub config not found for app %d", appID)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// A retention change must reach bills this Hub has ALREADY destroyed, not
@@ -610,4 +626,29 @@ func (svc *appsService) cashHubConfigUpdates(appID uint, perWalletMaxMloki *int,
 		}
 	}
 	return updates, nil
+}
+
+// checkCeilingAgainstOrderTerms refuses a per-wallet ceiling below any kind's
+// max_millis in the Hub's current order terms, naming the kind, so get_info
+// never reports a max_millis above the ceiling (NIP-CO §Terms).
+func checkCeilingAgainstOrderTerms(tx *gorm.DB, hubID uint, perWalletMaxMloki int64) error {
+	var row db.CashOrderTerms
+	err := tx.Where("hub_app_id = ?", hubID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var terms nipCO.Terms
+	if err := json.Unmarshal([]byte(row.TermsJSON), &terms); err != nil {
+		return err
+	}
+	for _, kind := range []string{nipCO.PaymentLightning, nipCO.PaymentOnchain} {
+		if k := terms.Kind(kind); k != nil && (perWalletMaxMloki < 0 || k.MaxMillis > uint64(perWalletMaxMloki)) {
+			return fmt.Errorf("%w: the per-wallet ceiling may not be below the %s order terms' max_millis (%d)",
+				constants.ErrInvalidParams, kind, k.MaxMillis)
+		}
+	}
+	return nil
 }

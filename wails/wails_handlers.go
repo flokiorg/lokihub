@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/flokiorg/lokihub/api"
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
@@ -278,6 +279,71 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: check, Error: ""}
+	}
+
+	orderConnectionsRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-connections$`)
+	if m := orderConnectionsRegex.FindStringSubmatch(route); len(m) == 2 && (method == "GET" || method == "POST") {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if method == "GET" {
+			conns, err := app.api.ListOrderConnections(dbApp)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: conns, Error: ""}
+		}
+		var reqBody struct {
+			Label string `json:"label"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		conn, err := app.api.CreateOrderConnection(dbApp, reqBody.Label)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: conn, Error: ""}
+	}
+
+	orderConnectionRetireRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-connections/([0-9]+)/retire$`)
+	if m := orderConnectionRetireRegex.FindStringSubmatch(route); len(m) == 3 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		connID, err := strconv.ParseUint(m[2], 10, 64)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "invalid order connection id"}
+		}
+		if err := app.api.RetireOrderConnection(dbApp, uint(connID)); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
+	orderTermsRegex := regexp.MustCompile(`^/api/cash-hubs/([0-9]+)/order-terms$`)
+	if m := orderTermsRegex.FindStringSubmatch(route); len(m) == 2 && (method == "GET" || method == "PUT") {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if method == "GET" {
+			terms, err := app.api.GetOrderTerms(dbApp)
+			if err != nil {
+				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			}
+			return WailsRequestRouterResponse{Body: terms, Error: ""}
+		}
+		var reqBody cashorder.Settings
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		if err := app.api.PutOrderTerms(dbApp, reqBody); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
 	circleHubDeleteRegex := regexp.MustCompile(

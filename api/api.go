@@ -945,7 +945,8 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 		// listings (Connections page, command palette, unused-apps nudges, etc.).
 		// Filtering for a specific hub's children (ParentAppId set) is exactly
 		// that narrow, intentional exception, so skip the exclusion in that case.
-		query = query.Where("kind != ?", db.AppKindCashWallet)
+		// Order connections are listed on their Cash Hub's own page.
+		query = query.Where("kind NOT IN ?", []string{db.AppKindCashWallet, db.AppKindCashOrder})
 	}
 
 	if orderBy == "" {
