@@ -143,6 +143,11 @@ func (e *Engine) observeOutput(ctx context.Context, addr db.CashOrderAddress, o 
 			updates["state"] = db.CashOrderPaymentConfirmed
 		}
 	}
+	// A confirmed payment not minted yet that a reorganisation left below its
+	// tier goes back to seen: it is never minted short of its confirmations.
+	if p.State == db.CashOrderPaymentConfirmed && order != nil && conf < requiredConfirmations(order, uint64(value)) { //nolint:gosec // positive
+		updates["state"] = db.CashOrderPaymentSeen
+	}
 	changed := false
 	err := e.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&db.CashOrderPayment{}).Where("id = ?", p.ID).Updates(updates).Error; err != nil {

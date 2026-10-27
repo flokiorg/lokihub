@@ -291,6 +291,49 @@ func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
 	assert.Equal(t, nipCO.OrderClosed, got.State)
 }
 
+// A confirmed on-chain payment whose first mint failed, and which a
+// reorganisation then takes back below its tier, is not minted by the retry: it
+// goes back to seen until it has its confirmations again (NIP-CO §On-chain).
+func TestOrderIntake_OnchainReorgedBeforeMintIsNotMinted(t *testing.T) {
+	f := newIntakeFixture(t)
+	res, _, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	placed := orderOf(t, res)
+	key := f.ln.SigningKey
+	f.ln.SigningKey = nil
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43, Confirmations: 1}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	payment := func() db.CashOrderPayment {
+		var pay db.CashOrderPayment
+		require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+out.TxID+":0").First(&pay).Error)
+		return pay
+	}
+	require.Equal(t, db.CashOrderPaymentConfirmed, payment().State, "confirmed, its mint failed")
+
+	// The retry finds the payment's confirmations gone, before any scan sees it.
+	require.NoError(t, f.svc.DB.Model(&db.CashOrderPayment{}).Where("id = ?", payment().ID).Update("confirmations", 0).Error)
+	f.ln.SigningKey = key
+	f.clock = f.clock.Add(time.Hour)
+	f.engine.RetryMints(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentSeen, payment().State, "not minted at 0 confirmations")
+	assert.Equal(t, db.CashOrderPaid, f.orderRow(t, p.RequestID).State)
+
+	// The scan also demotes a confirmed payment it sees below its tier.
+	require.NoError(t, f.svc.DB.Model(&db.CashOrderPayment{}).Where("id = ?", payment().ID).Update("state", db.CashOrderPaymentConfirmed).Error)
+	out.Confirmations = 0
+	f.ln.SigningKey = nil
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentSeen, payment().State)
+
+	// Back at its tier, it mints.
+	f.ln.SigningKey = key
+	out.Confirmations = 1
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentMinted, payment().State)
+}
+
 // U-22.6: an unpaid on-chain order expires at pay_by and is deleted at
 // UnpaidOnchainDeleteAt with its address burnt; a later payment to it is kept.
 func TestOrderIntake_OnchainUnpaidDeleted(t *testing.T) {
