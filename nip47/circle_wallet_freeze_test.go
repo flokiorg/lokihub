@@ -364,9 +364,12 @@ func TestCircleWalletFreeze_PrivateTransportDoesNotServeWalletMethods(t *testing
 	for _, method := range []string{models.PAY_INVOICE_METHOD, models.MAKE_INVOICE_METHOD, models.PAY_KEYSEND_METHOD} {
 		item := buildItem(t, "p1", w.walletPubkey, method, `{"invoice":"`+tests.MockInvoice+`"}`,
 			member, w.secret, hubXOnly, nonce, notAfter)
-		_, served := c.nip47svc.ServePrivateItem(context.TODO(), c.svc.LNClient, item,
+		res, served := c.nip47svc.ServePrivateItem(context.TODO(), c.svc.LNClient, item,
 			PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
-		assert.False(t, served, "%s is not served over the private transport", method)
+		// I5: the holder of the connection learns the method is not served here.
+		require.True(t, served, method)
+		require.NotNil(t, res.Error, method)
+		assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, res.Error.Code, "%s is not served over the private transport", method)
 	}
 }
 
