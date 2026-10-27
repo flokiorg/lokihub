@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 func TestCashTransferSpinOff(t *testing.T) {
@@ -41,7 +41,7 @@ func TestCashTransferSpinOff(t *testing.T) {
 // buildNWCPairingURI — a real recipient has only the decoded lokicash token,
 // not a ready-made pairing_uri, for a spun-off wallet (see NIP-CASH: only the
 // token travels, nested-encrypted, inside the cash_transfer response).
-func nwcURIFromLokicash(token lokicash.Token) string {
+func nwcURIFromLokicash(token nipcash.Token) string {
 	var b strings.Builder
 	b.WriteString("nostr+walletconnect://")
 	b.WriteString(token.WalletPubkey)
@@ -135,7 +135,7 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 		require.NoError(t, err)
 		decrypted, err := victimCipher.Decrypt(transferResult.NewWalletToken)
 		require.NoError(t, err, "the intended recipient must be able to decrypt the inner token")
-		newWalletToken, err := lokicash.Decode(decrypted)
+		newWalletToken, err := nipcash.Decode(decrypted)
 		require.NoError(t, err)
 		require.Equal(t, transferResult.NewWalletPubkey, newWalletToken.WalletPubkey)
 

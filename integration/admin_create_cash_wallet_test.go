@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted proves a wallet
@@ -57,7 +57,7 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 
 	requireLokicashMatchesPairingURI(t, resp.PairingURI, resp.CashToken)
 
-	decoded, err := lokicash.Decode(resp.CashToken)
+	decoded, err := nipcash.Decode(resp.CashToken)
 	require.NoError(t, err)
 
 	child := mustConnectBill(t, resp.PairingURI, resp.CashToken, beneficiaryPriv)
@@ -117,13 +117,13 @@ func TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode(t *testing.T
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = admin.deleteCashWallet(hubAppID, resp.AppID) })
 
-	decoded, err := lokicash.Decode(resp.CashToken)
+	decoded, err := nipcash.Decode(resp.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decoded.MintSignature, "admin-minted token with mint_signature:true must carry a mint signature")
-	require.NotNil(t, decoded.AttestedAmount)
-	assert.EqualValues(t, happyPathAmountMloki, *decoded.AttestedAmount)
+	require.NotNil(t, decoded.AttestedAmountMillis)
+	assert.EqualValues(t, happyPathAmountMloki, *decoded.AttestedAmountMillis)
 
-	minter, verified := lokicash.VerifyMint(decoded)
+	minter, verified := nipcash.VerifyProvenance(decoded)
 	require.True(t, verified, "admin-minted token's provenance signature must verify against the live node's real signing key")
 	assert.Len(t, minter, 66, "recovered minter must be a compressed secp256k1 pubkey (hex)")
 }
@@ -164,11 +164,11 @@ func TestAdminCreateCashWallet_AlwaysCarriesProvenance(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = admin.deleteCashWallet(hubAppID, resp.AppID) })
 
-	decoded, err := lokicash.Decode(resp.CashToken)
+	decoded, err := nipcash.Decode(resp.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decoded.MintSignature,
 		"an admin-minted bill must carry provenance; without it the bill cannot reach the private transport and is unspendable")
-	minter, verified := lokicash.VerifyMint(decoded)
+	minter, verified := nipcash.VerifyProvenance(decoded)
 	require.True(t, verified, "the provenance must verify, not merely be present")
 	require.NotEmpty(t, minter, "a verified signature must recover its minting node")
 }

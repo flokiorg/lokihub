@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // TestAuditA_SecB_CarveLocksOutThePreviousHolder is the adversarial counterpart to the
@@ -127,16 +127,16 @@ func TestAuditA_SecB_CarveLocksOutThePreviousHolder(t *testing.T) {
 		for _, r := range status.Recipients {
 			require.NotEqual(t, bobSecretHash, r.IdentityValue)
 		}
-		body := strings.ToLower(status.Error)
+		body := strings.ToLower(status.Status)
 		require.NotContains(t, body, strings.ToLower(rekey.NewWalletPubkey),
 			"the old bill disclosed the carved wallet's pubkey to a previous holder")
-		t.Logf("the old bill answers only: error=%q", status.Error)
+		t.Logf("the old bill answers only: error=%q", status.Status)
 	})
 
 	// ---- The positive leg: the value survived, and only Bob can move it. ----
 
 	t.Run("BobRedeemsTheFullAmount", func(t *testing.T) {
-		carved, err := lokicash.Decode(rekey.NewWalletToken)
+		carved, err := nipcash.Decode(rekey.NewWalletToken)
 		require.NoError(t, err, "the carved token must be usable by its recipient")
 		require.Equal(t, rekey.NewWalletPubkey, carved.WalletPubkey)
 

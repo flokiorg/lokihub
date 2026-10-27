@@ -20,8 +20,8 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // oneCashRecipient builds a single-cash-mode-recipient mint_cash
@@ -426,7 +426,7 @@ func TestAudit_CashTransferIntoCash_SpinsOffOnSharedWallet(t *testing.T) {
 	require.NoError(t, err)
 	decrypted, err := aCipher.Decrypt(res.NewWalletToken)
 	require.NoError(t, err)
-	newWalletToken, err := lokicash.Decode(decrypted)
+	newWalletToken, err := nipcash.Decode(decrypted)
 	require.NoError(t, err)
 
 	// Bearer: this spun-off bill is cash-mode, so its secret in params IS the authorization

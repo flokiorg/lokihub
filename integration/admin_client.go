@@ -339,6 +339,7 @@ type adminCreateAppResponse struct {
 	ID             uint   `json:"id"`
 	WalletPubkey   string `json:"walletPubkey"`
 	PairingUri     string `json:"pairingUri"`
+	CashHubToken   string `json:"cashHubToken"`
 	CircleHubToken string `json:"circleHubToken"`
 }
 

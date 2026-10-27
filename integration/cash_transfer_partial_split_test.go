@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 func TestCashTransferPartialSplit(t *testing.T) {
@@ -68,7 +68,7 @@ func TestCashTransferPartialSplit(t *testing.T) {
 		require.NoError(t, err)
 		remDecrypted, err := remCipher.Decrypt(transferResult.RemainderWalletToken)
 		require.NoError(t, err)
-		remWalletToken, err := lokicash.Decode(remDecrypted)
+		remWalletToken, err := nipcash.Decode(remDecrypted)
 		require.NoError(t, err)
 		// currentPriv, not newPriv: a partial split leaves the REMAINDER with the original
 		// caller and carves the split amount off to the new target. The remainder's slice is
@@ -110,7 +110,7 @@ func TestCashTransferPartialSplit(t *testing.T) {
 		require.NoError(t, err)
 		decrypted, err := newWalletCipher.Decrypt(transferResult.NewWalletToken)
 		require.NoError(t, err)
-		newWalletToken, err := lokicash.Decode(decrypted)
+		newWalletToken, err := nipcash.Decode(decrypted)
 		require.NoError(t, err)
 
 		newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, newPriv)

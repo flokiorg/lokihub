@@ -14,7 +14,7 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/integration/nwcclient"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // createCashHubWithRetention builds an ephemeral cash hub with an explicit
@@ -102,7 +102,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	decoded, err := lokicash.Decode(created.CashToken)
+	decoded, err := nipcash.Decode(created.CashToken)
 	require.NoError(t, err)
 
 	holder := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
@@ -137,7 +137,7 @@ func awaitTombstone(t *testing.T, holder billCaller) CashStatusResult {
 		err := holder.Call(ctx, constants.NIP47MethodCashStatus, struct{}{}, &status)
 		cancel()
 
-		if err == nil && status.Error != "" {
+		if err == nil && status.Status != "" {
 			return status
 		}
 		if time.Now().After(deadline) {
@@ -181,7 +181,7 @@ func TestCashStatus_SpentBill_AnswersHolderAndStaysSilentToStrangers(t *testing.
 
 	// Half one: the holder gets a definitive answer.
 	status := awaitTombstone(t, holder)
-	require.Equal(t, "spent", status.Error,
+	require.Equal(t, "spent", status.Status,
 		"a destroyed bill must name its state rather than leaving the caller to infer it from silence")
 	require.Empty(t, status.Recipients,
 		"a tombstone must not also carry the roster — the bill and its slices are gone")
@@ -228,7 +228,7 @@ func TestCashStatus_SpentBill_AnswersHolderAndStaysSilentToStrangers(t *testing.
 	var stillAnswering CashStatusResult
 	require.NoError(t, holder.Call(ctxT(t), constants.NIP47MethodCashStatus, struct{}{}, &stillAnswering),
 		"the hub must still be answering its holder after refusing the stranger, or the silence above proves nothing")
-	require.Equal(t, "spent", stillAnswering.Error,
+	require.Equal(t, "spent", stillAnswering.Status,
 		"the bill must still be within retention after the stranger's attempt, or the silence above is explained by the window closing rather than by the gate")
 }
 
