@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -431,74 +430,6 @@ func billProofHolder(signer, wantPubkey string) bool {
 	return wantPubkey != "" && signer == wantPubkey
 }
 
-// attestedConnectionKey resolves a connection_key recipient from an IA attestation in
-// cash_status's own params, returning the identity_value to scope the answer to.
-//
-// A connection_key claim's identity_value is hex(sha256(platform + ":" + externalID)),
-// never a pubkey, so the signer of an item can never equal it and the transport gate
-// has nothing to compare. cash_redeem solves this by requiring an attestation that
-// binds a claimant's keypair to that identity; this is the same evidence, checked the
-// same way, for a read instead of a spend.
-//
-// The attestation alone is sufficient to identify WHICH claim: rather than trusting a
-// caller-supplied identity_value, every connection_key claim on this bill is tried
-// against it, each with its OWN registered IAPubkey. A match means that IA has
-// attested this signer for that identity, which is exactly the fact needed. Trusting a
-// caller-named identity_value instead would let a caller point at someone else's row
-// and only then discover the attestation does not cover it — the same fail-open shape
-// this whole gate exists to avoid.
-//
-// Absent or unverifiable, it returns false and the caller falls through to the ordinary
-// decidable check, which refuses. That direction matters: a missing attestation must
-// never widen anything.
-func (svc *nip47Service) attestedConnectionKey(item transport.Item, claims []db.CashWalletClaim, signer string) (string, bool) {
-	var params struct {
-		AttestationEvent string `json:"attestation_event"`
-	}
-	if len(item.Params) == 0 || json.Unmarshal(item.Params, &params) != nil {
-		return "", false
-	}
-	if params.AttestationEvent == "" {
-		return "", false
-	}
-	var attestation nostr.Event
-	if err := json.Unmarshal([]byte(params.AttestationEvent), &attestation); err != nil {
-		return "", false
-	}
-	// Parsed and signature-verified ONCE, outside the loop. It used to happen per
-	// claim, and a signature does not depend on which claim it is compared against — so
-	// a bill with 100 connection_key claims cost ~100 secp256k1 verifications for ONE
-	// item, against a transport budget that believes an item costs 2. Same shape, same
-	// fix, as the proof split that closed the bill-existence timing leak.
-	parsed, err := parseClaimAttestation(&attestation)
-	if err != nil {
-		return "", false
-	}
-	for _, claim := range claims {
-		if claim.IdentityType != db.CashIdentityConnectionKey || claim.IAPubkey == "" {
-			continue
-		}
-		if err := controllers.MatchClaimAttestation(parsed, claim.IAPubkey, signer, claim.IdentityValue); err != nil {
-			continue
-		}
-		// Live trust, not trust-at-mint: an IA whose registration has since been
-		// revoked must not still vouch for a reader, exactly as it must not still
-		// vouch for a redeemer.
-		if svc.identityAuthorityMgr != nil {
-			trusted, err := svc.identityAuthorityMgr.IsTrusted(claim.IAPubkey)
-			if err != nil || !trusted {
-				continue
-			}
-		}
-		return claim.IdentityValue, true
-	}
-	return "", false
-}
-
-// parseClaimAttestation is controllers.ParseClaimAttestation, behind a variable so a
-// test can count how often an item pays for it: once, whatever the claim count.
-var parseClaimAttestation = controllers.ParseClaimAttestation
-
 // cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
 // behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
 func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) bool {
@@ -648,35 +579,13 @@ func (svc *nip47Service) privateItemIsAuthorized(
 			break
 		}
 	}
-	// Deferring is only safe for a method whose controller actually authorizes. That is the
-	// premise the comment above rests on, and it does not hold for cash_status:
-	// HandleCashStatusEvent performs no identity check at all — it filters the roster by
-	// scope and answers. So for cash_status there is nothing behind this gate, and deferring
-	// meant not checking at all.
-	//
-	// The cost of getting that wrong: on a bill carrying any connection_key recipient, mere
-	// POSSESSION of the token (a valid kind-23193 bill proof, signed with a pairing secret
-	// that is app-ID-derived and unrotatable) read the WHOLE roster — every recipient's
-	// identity_value and amount — with scope "all", while the same caller correctly got
-	// NOT_FOUND on an all-pubkey bill. §Scoping the Roster makes NOT_FOUND a MUST for a
-	// no-slice caller, unconditional on identity mode. The parties who hold a token but no
-	// slice are real: a recipient removed by DeleteCashClaim, a recipient who transferred her
-	// slice away in place, and anyone the widely-held connection was ever shown to.
-	//
-	// So the deferral is scoped to the methods it was reasoned about. cash_status instead
-	// resolves a connection_key caller HERE, from an IA attestation carried in its own
-	// params — the same evidence cash_redeem already requires, for the same reason.
-	//
-	// Without it a connection_key recipient could not read their own row at all: their
-	// identity_value is a hash, so the signer can never equal it, and there was nothing
-	// else to match on. Refusing was the safe half of the fix and cost that mode its only
-	// read. The attestation restores it without reopening anything, because it proves the
-	// binding the gate could not otherwise see.
-	if !decidableHere && item.Method == constants.NIP47MethodCashStatus {
-		if identity, ok := svc.attestedConnectionKey(item, claims, signer); ok {
-			return identity, billIsCashMode, true, nil
-		}
-	}
+	// On a bill with a connection_key slice the signer cannot be matched here, so a
+	// value method goes to its controller, which authorizes it itself. cash_status
+	// does not: its controller performs no identity check. NIP-CASH §Scoping the
+	// Roster decides "mine" from the item proof's own signer, never from anything the
+	// item asserts (so no attestation_event), and a caller whose proof verifies but
+	// who holds no slice MUST get NOT_FOUND, never a wider roster, whatever the scope.
+	// So cash_status falls through to the signer match below.
 	if !decidableHere && item.Method != constants.NIP47MethodCashStatus {
 		return signer, billIsCashMode, true, nil
 	}

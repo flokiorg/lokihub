@@ -63,6 +63,9 @@ audits of both.
 
 ### Changed
 
+- Answers `cash_status` `mine` only from the item-proof signer and refuses a
+  signer that holds no slice with `NOT_FOUND` for every scope; roster rows of
+  `connection_key` slices carry their `ia_pubkey`.
 - Signs every `circlehub1` string with the node identity and chain, and names
   the member's `connection_pubkey` in a join's encrypted details.
 - Requires an `expiration` tag on `mint_cash` (its deadline, at most the
