@@ -110,11 +110,9 @@ type OrderOffer struct {
 	Hints []nmlisting.Hint
 }
 
-// OrderSource resolves Order connections (WP-21). Nil until Order connections
-// exist: a cash_order listing is refused until then.
-//
-// TODO(WP-21): wire the Order connection service here, and call RetireOrder from
-// its retire endpoint after the retire commit.
+// OrderSource resolves Order connections (WP-21; cashorder.ListingSource). Nil
+// refuses every cash_order listing. The retire endpoint calls RetireOrder after
+// the retire commit.
 type OrderSource interface {
 	Order(ctx context.Context, connAppID uint) (*OrderOffer, error)
 }

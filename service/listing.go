@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"time"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -13,6 +15,12 @@ import (
 // started.
 func (svc *service) GetListingService() *listing.Service {
 	return svc.listingSvc
+}
+
+// SetListingClockOffset moves the listing scheduler's clock by secs (the
+// regtest clock hook, scope "listing"; I-70, I-71).
+func (svc *service) SetListingClockOffset(secs int64) {
+	svc.listingClockOffset.Store(secs)
 }
 
 // startListings creates the listing service and starts its scheduler (WP-25 item
@@ -28,8 +36,15 @@ func (svc *service) startListings(ctx context.Context) {
 			return connstr.CircleHub(ctx, ln(), pubkey, relays, secret, label)
 		},
 		Relays: listing.NostrRelays{},
-		// Orders stays nil until Order connections exist (WP-21).
+		Orders: cashorder.ListingSource{Deps: func() cashorder.Deps {
+			return cashorder.Deps{DB: svc.db, Keys: svc.keys, LN: svc.lnClient, Relays: svc.cfg.GetRelayUrls()}
+		}},
 		InvalidateGetInfo: controllers.InvalidateListedGetInfo,
+		// The listing clock: moved only by a testhooks build's clock hook
+		// (scope "listing"); 0 otherwise.
+		Now: func() time.Time {
+			return time.Now().Add(time.Duration(svc.listingClockOffset.Load()) * time.Second)
+		},
 	})
 	svc.shutdownGroup.Go(func() error {
 		svc.listingSvc.Run(ctx)
