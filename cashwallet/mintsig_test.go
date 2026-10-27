@@ -210,9 +210,11 @@ func TestSplitInTwo_WithMintProvenance_BothWalletsSigned(t *testing.T) {
 
 	carvedPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	remainderPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	result, _, err := SplitInTwo(context.TODO(), newTestDeps(svc), SplitInTwoParams{
+	deps := newTestDeps(svc)
+	result, err := SplitInTwo(context.TODO(), deps, SplitInTwoParams{
 		HubApp:                 hub,
 		SourceWalletApp:        sourceWallet,
+		Source:                 mustAddSlice(t, deps, sourceWallet, 5000),
 		CarvedIdentityType:     db.CashIdentityPubkey,
 		CarvedIdentityValue:    carvedPubkey,
 		CarvedAmountMloki:      2000,
@@ -321,7 +323,7 @@ func TestConsolidate_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
 	svc.LNClient.(*tests.MockLn).SigningKey = nil
 
 	newPk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	result, stranded, err := Consolidate(context.TODO(), newTestDeps(svc), ConsolidateParams{
+	result, err := Consolidate(context.TODO(), newTestDeps(svc), ConsolidateParams{
 		HubApp: hub,
 		Sources: []ConsolidateSource{
 			{WalletApp: &db.App{ID: 9001}, AmountMloki: 3000},
@@ -332,7 +334,6 @@ func TestConsolidate_SigningFailureAbortsWithNothingCommitted(t *testing.T) {
 	})
 	require.Error(t, err, "a consolidation that cannot be signed must fail, not degrade to an unspendable merged bill")
 	assert.Nil(t, result)
-	assert.Empty(t, stranded, "nothing was transferred, so nothing can be stranded")
 
 	// The CAUSE, not merely the failure. Asserting "an error, and no bill" is not
 	// enough and a mutation test proved it: with the signature made best-effort the

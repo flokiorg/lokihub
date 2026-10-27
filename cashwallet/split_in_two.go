@@ -2,34 +2,34 @@ package cashwallet
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
 )
 
-// SplitInTwoParams spins a just-claimed source slice off into one or two fresh
-// dedicated wallets. The carved piece (for a target identity) is always
-// created; the remainder (back to the caller's own identity) is created only
-// when RemainderAmountMloki > 0. Both are funded from SourceWalletApp's own
-// balance, and both inherit their terms from the source slice.
+// SplitInTwoParams spins a source slice off into one or two fresh dedicated
+// bills. The carved bill (for the target identity) is always created; the
+// remainder bill (back to the caller's own identity) only when
+// RemainderAmountMloki > 0. Both are funded from SourceWalletApp's balance and
+// inherit the source slice's terms and expiry.
 //
-// The caller MUST have already claimed the source slice terminal (ClaimCashSlice)
-// before calling, and MUST unclaim it if this returns an error — mirroring
-// Split's own "caller claims first" contract, extended to the two-wallet case.
+// Source is the slice exactly as the caller read and authorized it; the commit
+// claims it terminal, so a slice that changed since fails the call with
+// apps.ErrSliceClaimed and nothing is written.
 type SplitInTwoParams struct {
 	HubApp          *db.App
 	SourceWalletApp *db.App
+	Source          apps.SliceRef
 
 	CarvedIdentityType  string
 	CarvedIdentityValue string
 	CarvedIAPubkey      string
 	CarvedAmountMloki   uint64
 
-	// Remainder* describe the wallet the caller keeps their own change in.
-	// RemainderAmountMloki == 0 means a full spin-off (no remainder wallet) —
-	// e.g. a full transfer to cash mode on a multi-recipient-history wallet.
+	// Remainder* describe the bill the caller keeps their change in.
+	// RemainderAmountMloki == 0 means a full spin-off (no remainder bill).
 	RemainderIdentityType  string
 	RemainderIdentityValue string
 	RemainderIAPubkey      string
@@ -37,117 +37,113 @@ type SplitInTwoParams struct {
 
 	MinTransferMloki int64
 	RedeemFeePpm     int
-	// RedeemFeeBaseMloki travels with RedeemFeePpm — they are one quoted price.
+	// RedeemFeeBaseMloki travels with RedeemFeePpm: they are one quoted price.
 	RedeemFeeBaseMloki int64
 	ExpiresAt          *time.Time
+
+	// Proofs are consumed by the commit, and only if it commits.
+	Proofs []ClaimProof
+	// Record, when set, is the call's record, written last under its deadline.
+	Record *db.CashRequestRecord
 }
 
-// SplitInTwoResult carries the created wallet(s). Remainder is nil for a full
+// SplitInTwoResult carries the created bill(s). Remainder is nil for a full
 // spin-off.
 type SplitInTwoResult struct {
 	Carved    *SplitResult
 	Remainder *SplitResult
 }
 
-// SplitInTwo performs the one-to-two spin-off with all-or-nothing atomicity: if
-// the remainder spin-off fails after the carved one already funded, the carved
-// transfer is compensated (funds moved back to the source, wallet deleted) so
-// the caller ends with neither wallet and can safely retry after the source
-// slice is unclaimed. A compensation that itself fails is logged for manual
-// sweep (the same posture Consolidate takes) — the funds remain the node's own,
-// never lost, just briefly misfiled.
-//
-// The returned sourceFundsIntact reports whether it's safe for the caller to
-// restore (UnclaimCashSlice) the source slice to its full original amount: true
-// whenever nothing actually left the source (the carved spin-off itself failed)
-// or the carved transfer was successfully reversed; false only when the reverse
-// itself failed, leaving the carved wallet — deliberately NOT deleted in that
-// case — still holding funds the source's restored claim would otherwise
-// double-count. On success (nil error), sourceFundsIntact is meaningless: the
-// source was consumed terminal by design and MUST NOT be restored regardless.
-func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (result *SplitInTwoResult, sourceFundsIntact bool, err error) {
-	// Both bills are created, signed and encoded before either is funded: NIP-CASH
-	// requires a signing refusal to fail the operation before any funds move.
-	preparedCarved, err := prepareSplit(ctx, deps, SplitParams{
-		HubApp:             params.HubApp,
-		SourceWalletApp:    params.SourceWalletApp,
-		AmountMloki:        params.CarvedAmountMloki,
-		NewIdentityType:    params.CarvedIdentityType,
-		NewIdentityValue:   params.CarvedIdentityValue,
-		NewIAPubkey:        params.CarvedIAPubkey,
-		MinTransferMloki:   params.MinTransferMloki,
-		RedeemFeePpm:       params.RedeemFeePpm,
-		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-		ExpiresAt:          params.ExpiresAt,
+// SplitInTwo performs the one-to-two spin-off as one commit: the source claim,
+// both bills, their signed tokens, the funding rows, the consumed proofs and the
+// record commit together or not at all. On any error the source slice is
+// untouched and claimable, and the proofs stay unused.
+func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*SplitInTwoResult, error) {
+	source := params.SourceWalletApp.ID
+	bill := func(role, identityType, identityValue, iaPubkey string, amount uint64) newBill {
+		return newBill{
+			role:      role,
+			nameSeed:  identityValue,
+			amount:    amount,
+			expiresAt: params.ExpiresAt,
+			claims: []db.CashWalletClaim{{
+				IdentityType:       identityType,
+				IdentityValue:      identityValue,
+				IAPubkey:           iaPubkey,
+				AmountMloki:        int64(amount), //nolint:gosec // bounded by the source slice's own int64 amount
+				MinTransferMloki:   params.MinTransferMloki,
+				RedeemFeePpm:       params.RedeemFeePpm,
+				RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
+			}},
+			identityRequired: identityType != db.CashIdentityCash,
+			splitFrom:        &source,
+		}
+	}
+
+	carvedRole := db.CashRecordBillSingle
+	if params.RemainderAmountMloki > 0 {
+		carvedRole = db.CashRecordBillCarved
+	}
+	plan := commitPlan{
+		op:       "split",
+		hub:      params.HubApp,
+		lockApps: []uint{source},
+		bills: []newBill{bill(carvedRole, params.CarvedIdentityType, params.CarvedIdentityValue,
+			params.CarvedIAPubkey, params.CarvedAmountMloki)},
+		sources:   []apps.SliceRef{params.Source},
+		transfers: []internalTransfer{{fromAppID: source, toBill: 0, amount: params.CarvedAmountMloki}},
+		proofs:    params.Proofs,
+		record:    params.Record,
+	}
+	if params.RemainderAmountMloki > 0 {
+		plan.bills = append(plan.bills, bill(db.CashRecordBillRemainder, params.RemainderIdentityType,
+			params.RemainderIdentityValue, params.RemainderIAPubkey, params.RemainderAmountMloki))
+		plan.transfers = append(plan.transfers, internalTransfer{fromAppID: source, toBill: 1, amount: params.RemainderAmountMloki})
+	}
+
+	out, err := commit(ctx, deps, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &SplitInTwoResult{Carved: &SplitResult{WalletApp: out[0].App, CashToken: out[0].Token}}
+	if len(out) > 1 {
+		result.Remainder = &SplitResult{WalletApp: out[1].App, CashToken: out[1].Token}
+	}
+	logger.Logger.Info().
+		Uint("source_wallet_id", source).
+		Uint("carved_wallet_id", out[0].App.ID).
+		Uint64("carved_amount_mloki", params.CarvedAmountMloki).
+		Uint64("remainder_amount_mloki", params.RemainderAmountMloki).
+		Msg("Slice split off into fresh dedicated Cash wallet(s)")
+	return result, nil
+}
+
+// ReassignParams moves a whole slice to a new identity in place, on its own bill.
+type ReassignParams struct {
+	WalletApp        *db.App
+	Source           apps.SliceRef
+	NewIdentityType  string
+	NewIdentityValue string
+	NewIAPubkey      string
+	Proofs           []ClaimProof
+	Record           *db.CashRequestRecord
+}
+
+// Reassign is the in-place transfer as one commit: the identity change, the
+// consumed proofs and the record commit together or not at all.
+func Reassign(ctx context.Context, deps Deps, params ReassignParams) error {
+	_, err := commit(ctx, deps, commitPlan{
+		op:       "transfer",
+		lockApps: []uint{params.WalletApp.ID},
+		reassign: &reassignment{
+			ref:              params.Source,
+			newIdentityType:  params.NewIdentityType,
+			newIdentityValue: params.NewIdentityValue,
+			newIAKey:         params.NewIAPubkey,
+		},
+		proofs: params.Proofs,
+		record: params.Record,
 	})
-	if err != nil {
-		// Nothing has left the source yet — safe to restore.
-		return nil, true, fmt.Errorf("failed to spin off the carved piece: %w", err)
-	}
-
-	if params.RemainderAmountMloki == 0 {
-		carved, err := preparedCarved.fund(ctx, deps)
-		if err != nil {
-			return nil, true, fmt.Errorf("failed to spin off the carved piece: %w", err)
-		}
-		return &SplitInTwoResult{Carved: carved}, false, nil
-	}
-
-	preparedRemainder, err := prepareSplit(ctx, deps, SplitParams{
-		HubApp:             params.HubApp,
-		SourceWalletApp:    params.SourceWalletApp,
-		AmountMloki:        params.RemainderAmountMloki,
-		NewIdentityType:    params.RemainderIdentityType,
-		NewIdentityValue:   params.RemainderIdentityValue,
-		NewIAPubkey:        params.RemainderIAPubkey,
-		MinTransferMloki:   params.MinTransferMloki,
-		RedeemFeePpm:       params.RedeemFeePpm,
-		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-		ExpiresAt:          params.ExpiresAt,
-	})
-	if err != nil {
-		// Neither bill is funded yet, so nothing has left the source.
-		preparedCarved.abandon(deps)
-		return nil, true, fmt.Errorf("failed to spin off the remainder: %w", err)
-	}
-
-	carved, err := preparedCarved.fund(ctx, deps)
-	if err != nil {
-		preparedRemainder.abandon(deps)
-		return nil, true, fmt.Errorf("failed to spin off the carved piece: %w", err)
-	}
-
-	remainder, err := preparedRemainder.fund(ctx, deps)
-	if err != nil {
-		// Compensate the carved spin-off: move its funds back to the source,
-		// then delete the emptied wallet. Reversal must precede deletion so the
-		// wallet still exists to pay from. Delete (and report the source safe
-		// to restore) only if the reversal is CONFIRMED — never on its failure,
-		// which leaves the carved wallet — deliberately retained — the only
-		// record of where the funds actually are.
-		if rerr := fundInternal(ctx, deps, carved.WalletApp.ID, params.SourceWalletApp.ID, params.CarvedAmountMloki, "cash split rollback"); rerr != nil {
-			logger.Logger.Error().Err(rerr).
-				Uint("carved_wallet_id", carved.WalletApp.ID).
-				Uint("source_wallet_id", params.SourceWalletApp.ID).
-				Uint64("amount_mloki", params.CarvedAmountMloki).
-				Msg("Failed to reverse the carved spin-off after the remainder failed — funds are stranded in the carved wallet; manual sweep recommended, source claim NOT restored, wallet app left in place")
-			if recErr := deps.AppsService.RecordCashStrandedFund("split", params.SourceWalletApp.ID, carved.WalletApp.ID, params.CarvedAmountMloki); recErr != nil {
-				logger.Logger.Error().Err(recErr).
-					Uint("carved_wallet_id", carved.WalletApp.ID).
-					Uint("source_wallet_id", params.SourceWalletApp.ID).
-					Msg("Failed to durably record a stranded-fund reconciliation entry; the log line above is the only record")
-			}
-			return nil, false, fmt.Errorf("failed to spin off the remainder: %w", err)
-		}
-		// The reversal above returned nil, which is not the same as "the carved wallet
-		// is empty" — see deleteIfDrained. If it still holds funds the wallet stays,
-		// and the source claim must NOT be reported safe to restore, or the same value
-		// is handed back to its recipient while still sitting in the carved wallet.
-		if !deleteIfDrained(deps, "split", params.SourceWalletApp.ID, carved.WalletApp) {
-			return nil, false, fmt.Errorf("failed to spin off the remainder: %w", err)
-		}
-		return nil, true, fmt.Errorf("failed to spin off the remainder: %w", err)
-	}
-
-	return &SplitInTwoResult{Carved: carved, Remainder: remainder}, false, nil
+	return err
 }

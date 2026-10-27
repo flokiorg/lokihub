@@ -63,6 +63,12 @@ audits of both.
 
 ### Changed
 
+- Commits each `mint_cash`, `cash_transfer` and `cash_consolidate` as one
+  database transaction: the new bills, their slices and signed tokens, the
+  funding, the consumed claim proofs and the mint's record commit together or
+  not at all. Value moves between bills as ledger rows, with no Lightning
+  invoice. A slice claimed by a concurrent call is refused with `RESTRICTED`,
+  and a claim proof already used with `UNAUTHORIZED`.
 - Answers `cash_status` `mine` only from the item-proof signer and refuses a
   signer that holds no slice with `NOT_FOUND` for every scope; roster rows of
   `connection_key` slices carry their `ia_pubkey`.

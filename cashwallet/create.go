@@ -33,7 +33,6 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
-	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
 )
@@ -87,16 +86,10 @@ type Deps struct {
 	// db.CashIdentityConnectionKey, so callers that only ever create
 	// pubkey-mode wallets may leave it nil.
 	IAChecker IATrustChecker
-	// FundInternalOverride, when non-nil, replaces the real internal-transfer
-	// primitive (fundInternal) — test-only. Lets a test script an exact
-	// success/failure sequence across a saga's multiple internal transfers
-	// (Consolidate, SplitInTwo) without needing distinct real bolt11 invoices
-	// or working around the mock LN client's single-payee-per-test self-
-	// payment-interception limit (see consolidate_rollback_test.go's doc
-	// comment for why that's otherwise a real wall for some scenarios). nil
-	// in production — fundInternal runs its real MakeInvoice/SendPaymentSync
-	// logic as always.
-	FundInternalOverride func(ctx context.Context, fromAppID, toAppID uint, amountMloki uint64, memo string) error
+	// Hooks is the commit's fault-injection seam (tests only; nil in production).
+	Hooks *TestHooks
+	// Now is the clock the commit checks its deadline against; nil is time.Now.
+	Now func() time.Time
 }
 
 // RecipientInput describes one recipient's requested slice of a shared Cash
@@ -436,60 +429,12 @@ var cashWalletScopes = []string{
 	constants.CASH_CONSOLIDATE_SCOPE,
 }
 
-// compensatingDeleteMaxAttempts/compensatingDeleteRetryDelay bound
-// deleteAppWithRetry's best-effort cleanup after a failed internal funding
-// transfer. Small on both counts: this is retrying a single local DB delete,
-// not a network call, so a transient failure (e.g. a momentary lock
-// contention) is expected to clear within milliseconds, not seconds.
-const (
-	compensatingDeleteMaxAttempts = 3
-	compensatingDeleteRetryDelay  = 20 * time.Millisecond
-)
-
-// deleteAppWithRetry retries app's compensating delete a bounded number of
-// times instead of attempting it once and discarding the error. If every
-// attempt fails, this leaves an unfunded, claim-less cash_wallet app row
-// stranded — rare (this only runs after the internal funding transfer
-// itself already failed) but, unlike a silently-discarded single attempt,
-// it is now logged clearly enough for an operator to find and clean up
-// manually, rather than becoming invisible.
-func deleteAppWithRetry(deps Deps, app *db.App) {
-	var lastErr error
-	for attempt := 1; attempt <= compensatingDeleteMaxAttempts; attempt++ {
-		if err := deps.AppsService.DeleteCashBill(app, db.CashBillOutcomeVoid); err != nil {
-			lastErr = err
-			if attempt < compensatingDeleteMaxAttempts {
-				time.Sleep(compensatingDeleteRetryDelay)
-			}
-			continue
-		}
-		return
-	}
-	logger.Logger.Error().Err(lastErr).
-		Uint("cash_wallet_id", app.ID).
-		Int("attempts", compensatingDeleteMaxAttempts).
-		Msg("Cash wallet funding failed and the compensating cleanup delete also failed after retries — " +
-			"an unfunded cash_wallet and its claims are left behind and need manual operator cleanup")
-
-	// Recorded as well, so the cleanup is driven by a query rather than by finding
-	// this log line. Amount 0: nothing was funded, only the rows remain.
-	hubID := uint(0)
-	if app.ParentAppID != nil {
-		hubID = *app.ParentAppID
-	}
-	if err := deps.AppsService.RecordCashStrandedFund("mint", hubID, app.ID, 0); err != nil {
-		logger.Logger.Error().Err(err).Uint("cash_wallet_id", app.ID).
-			Msg("Failed to record the unfunded cash_wallet left behind; the log line above is the only record")
-	}
-}
-
-// Commit creates one spend-only cash_wallet child of resolved.HubApp serving
-// every resolved recipient, and funds it via a single internal transfer sized
-// to their combined total, using values already validated by Resolve. If
-// funding fails, the child app (and its recipient rows) are rolled back
-// (deleted); once funds have moved, nothing after that point deletes the
-// wallet, since doing so would produce a ledger imbalance.
-func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error) {
+// Commit creates one spend-only cash_wallet child of resolved.HubApp serving every
+// resolved recipient and funds it from the Hub, as one transaction (see commit):
+// the bill, its slices, its signed token, the funding rows and, when record is
+// set, the call's record either all commit or none do. record is written last,
+// under its deadline.
+func Commit(ctx context.Context, deps Deps, resolved *Resolved, record *db.CashRequestRecord) (*Result, error) {
 	var sum uint64
 	for _, r := range resolved.Recipients {
 		sum += r.AmountMloki
@@ -501,122 +446,34 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			IdentityType:       r.IdentityType,
 			IdentityValue:      r.IdentityValue,
 			IAPubkey:           r.IAPubkey,
-			AmountMloki:        int64(r.AmountMloki), //nolint:gosec // resolved.Recipients' amounts are already bounded to <= MaxInt64 by Resolve, which Commit's only callers always invoke first
+			AmountMloki:        int64(r.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by Resolve
 			MinTransferMloki:   resolved.MinTransferMloki,
 			RedeemFeePpm:       resolved.RedeemFeePpm,
 			RedeemFeeBaseMloki: resolved.RedeemFeeBaseMloki,
 		}
 	}
 
-	// App creation, pairing-key registration, and claim-row insertion all
-	// happen in one DB transaction: if any of them fails, the transaction
-	// rolls back and there is nothing left to compensate for — no partial,
-	// claim-less, or unfunded app row can ever become observable from this
-	// part of wallet creation. This mirrors create_circle_wallet_controller.go's
-	// own CreateAppTx-inside-a-transaction pattern. Every read/write below
-	// MUST go through tx, never deps.DB/svc.db independently — an independent
-	// read against the same underlying DB while this transaction is open can
-	// deadlock (see CreateAppTx's own doc comment; found via exactly this
-	// pattern in the circle-wallet case).
-	var newApp *db.App
-	var pairingSecretKey string
-	var deterministicPubKey string
-	err := deps.DB.Transaction(func(tx *gorm.DB) error {
-		var err error
-		newApp, _, err = deps.AppsService.CreateAppTx(tx,
-			apps.GenerateChildName(resolved.HubApp.Name, resolved.Recipients[0].IdentityValue),
-			"", // generate a temporary random keypair; overridden immediately below
-			sum/1000,
-			constants.BUDGET_RENEWAL_NEVER,
-			resolved.ExpiresAt,
-			cashWalletScopes,
-			db.AppKindCashWallet,
-			&resolved.HubApp.ID,
-			db.ParentKindCash,
-			nil,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create Cash wallet app: %w", err)
-		}
-
-		// Derive the deterministic pairing private key from the app ID (BIP32
-		// branch H+2). This key never needs to be stored — it can be
-		// re-derived any time via keys.GetCashPairingKey/api.GetCashWalletConnection.
-		pairingSecretKey, err = deps.Keys.GetCashPairingKey(newApp.ID)
-		if err != nil {
-			return fmt.Errorf("failed to derive Cash pairing key: %w", err)
-		}
-		deterministicPubKey, err = nostr.GetPublicKey(pairingSecretKey)
-		if err != nil {
-			return fmt.Errorf("failed to derive Cash pairing pubkey: %w", err)
-		}
-		if err := tx.Model(&db.App{}).Where("id = ?", newApp.ID).
-			Update("app_pubkey", deterministicPubKey).Error; err != nil {
-			return fmt.Errorf("failed to register pairing key: %w", err)
-		}
-
-		if err := deps.AppsService.CreateCashWalletClaimsTx(tx, newApp.ID, claimRows); err != nil {
-			return fmt.Errorf("failed to store recipient claims: %w", err)
-		}
-
-		return nil
+	// A cash-mode recipient is always the bill's only one (Resolve), so the first
+	// recipient's mode speaks for the bill. The provenance attests the bill's total.
+	out, err := commit(ctx, deps, commitPlan{
+		op:       "mint",
+		hub:      resolved.HubApp,
+		lockApps: []uint{resolved.HubApp.ID},
+		bills: []newBill{{
+			role:             db.CashRecordBillMinted,
+			nameSeed:         resolved.Recipients[0].IdentityValue,
+			amount:           sum,
+			expiresAt:        resolved.ExpiresAt,
+			claims:           claimRows,
+			identityRequired: resolved.Recipients[0].IdentityType != db.CashIdentityCash,
+		}},
+		transfers: []internalTransfer{{fromAppID: resolved.HubApp.ID, toBill: 0, amount: sum}},
+		record:    record,
 	})
 	if err != nil {
 		return nil, err
 	}
-	newApp.AppPubkey = deterministicPubKey
-	walletPubkey := *newApp.WalletPubkey
-
-	// The transaction above committed, so the app is now durable and
-	// discoverable — NotifyAppCreated (relay subscription setup etc.) must
-	// only fire after that, never from inside the transaction itself (see
-	// CreateAppTx's own doc comment for why: the event consumer looks the
-	// app up via a separate, non-transactional connection).
-	deps.AppsService.NotifyAppCreated(newApp)
-
-	// From here on, the app+claims already exist durably. The only remaining
-	// step is the internal funding transfer — genuinely irreversible (it's a
-	// real payment), so it deliberately cannot live inside the DB transaction
-	// above. If it fails, the app+claims it already committed need a
-	// compensating delete; unlike the bookkeeping above, that can't be made
-	// unconditionally atomic (the transfer already happened, or didn't, for
-	// real), so a failed delete here is retried a bounded number of times
-	// rather than attempted once and silently discarded.
-	fundsTransferred := false
-	defer func() {
-		if fundsTransferred {
-			return
-		}
-		deleteAppWithRetry(deps, newApp)
-	}()
-
-	// Mint provenance is obtained HERE, before the funds move, because it is
-	// mandatory and it can fail: it needs the node to sign. An unsigned bill carries
-	// nothing that identifies its minting hub, and that identity is the only thing a
-	// client can verify a transport announcement against — so an unsigned bill can
-	// never reach the private transport, which is the only transport serving bill
-	// methods. Refusing now costs nothing; refusing after the transfer below would
-	// mean reporting failure for a wallet that exists and holds money.
-	//
-	// Uniform across every recipient by construction (Resolve requires a cash-mode
-	// recipient to be this request's only one), so the first recipient's identity type
-	// speaks for the whole wallet. The provenance attests the wallet's total committed
-	// amount (sum), immutable for the wallet's life (§Mint Provenance).
-	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
-	lokicashToken, err := issueCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, sum, resolved.HubApp)
-	if err != nil {
-		return nil, fmt.Errorf("refusing to mint a bill without a signed token: %w", err)
-	}
-
-	// Transfer funds from Cash Hub to Cash wallet. This is the one genuinely
-	// irreversible step in this function, which is why it happens last: by
-	// this point every other side effect is already durably committed, so
-	// nothing remains that could fail and leave the wallet stranded or
-	// invisible.
-	if err := fundInternal(ctx, deps, resolved.HubApp.ID, newApp.ID, sum, "cash transfer"); err != nil {
-		return nil, fmt.Errorf("failed to fund Cash wallet via transfer: %w", err)
-	}
-	fundsTransferred = true
+	bill := out[0]
 
 	recipientResults := make([]RecipientResult, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
@@ -628,218 +485,27 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 		}
 	}
 
-	storeCashToken(deps, newApp.ID, lokicashToken)
-
 	logger.Logger.Info().
-		Uint("cash_wallet_id", newApp.ID).
+		Uint("cash_wallet_id", bill.App.ID).
 		Uint("parent_app_id", resolved.HubApp.ID).
 		Int("recipient_count", len(resolved.Recipients)).
 		Uint64("total_mloki", sum).
 		Msg("Shared Cash wallet created and funded")
 
 	return &Result{
-		WalletApp:  newApp,
-		CashToken:  lokicashToken,
+		WalletApp:  bill.App,
+		CashToken:  bill.Token,
 		ExpiresAt:  resolved.ExpiresAt,
 		Recipients: recipientResults,
 	}, nil
 }
 
-// SplitParams describes moving a full or partial amount out of an existing
-// cash_wallet's slice into a brand-new, dedicated wallet — see NIP-CASH's
-// "Splitting/Transferring a Slice" section. Unlike Commit (which funds its
-// new child from HubApp), the funding source here is a cash_wallet, not the
-// hub: HubApp only supplies naming/lineage (the new wallet is a child of the
-// SAME hub the source wallet already belongs to), while SourceWalletApp is
-// the actual isolated-balance app the transfer pays from.
-type SplitParams struct {
-	HubApp          *db.App
-	SourceWalletApp *db.App
-	// AmountMloki is the exact value moved into the new wallet — either the
-	// source slice's full amount or a piece of it, already validated
-	// (including the MinTransferMloki floor on both the piece and whatever is
-	// left) by the caller before this is called.
-	AmountMloki uint64
-	// NewIdentityType/NewIdentityValue/NewIAPubkey describe the new wallet's
-	// sole recipient — any identity mode (pubkey, connection_key, or
-	// cash), not cash-mode-only: the unified transfer/split model spins off a
-	// dedicated wallet for every target type once a wallet's recipient
-	// history rules out a cheap in-place reassignment (see
-	// cash_transfer_controller.go), not only when converting into cash mode.
-	// For cash mode, NewIdentityValue is the caller-supplied sha256(secret) hex
-	// commitment — never a secret this package mints, for the same reason
-	// cash_transfer's in-place cash-mode path requires a caller-supplied
-	// commitment (see cash_transfer_controller.go's cash-mode branch doc
-	// comment: a server-minted secret would be readable by every co-recipient
-	// of the connection this response travels over before the caller could
-	// ever deliver it — Split exists specifically to give those slices
-	// somewhere safe to go instead).
-	NewIdentityType  string
-	NewIdentityValue string
-	NewIAPubkey      string
-	// MinTransferMloki is inherited from the source slice, preserving
-	// whatever split floor the wallet's creator originally configured rather
-	// than resetting it on split — NIP-CASH's inheritance rule.
-	MinTransferMloki int64
-	// RedeemFeePpm is likewise inherited from the source slice, unchanged —
-	// same inheritance rule as MinTransferMloki: a later change to the hub's
-	// own config must never retroactively change the rate for an
-	// already-issued lokicash.
-	RedeemFeePpm int
-	// RedeemFeeBaseMloki is the flat part of the same quoted fee, carried under the
-	// same rules — the two are one price and must never travel separately.
-	RedeemFeeBaseMloki int64
-	// ExpiresAt is inherited from the source slice's own wallet, unchanged —
-	// including nil (never expires) if the source wallet itself never
-	// expires. A split relocates an existing entitlement; it does not
-	// shorten or lengthen it (NIP-CASH "Spinning a Slice Off Into a
-	// Dedicated Wallet" → Eligibility and limits).
-	ExpiresAt *time.Time
-}
-
-// SplitResult carries what cash_transfer_controller.go needs to deliver the
-// new wallet's connection to its caller — deliberately narrower than Result:
-// a split-off wallet's connection is never broadcast in the clear the way a
-// freshly mint_cash-issued one is (Result.PairingURI). The caller
-// NIP-44 encrypts CashToken to the recipient's own pubkey before it ever
-// reaches a response, keyed on WalletApp's own wallet keypair (mirroring
-// create_circle_wallet_controller.go's identical encryptedURI/WalletPubkey
-// pattern — see that controller's doc comment) — this package deliberately
-// stays ignorant of NIP-47 encryption, same as it does everywhere else (see
-// the package doc comment), so that step happens in the caller, not here.
+// SplitResult is one bill a split or consolidate created and the token it was
+// issued with. The caller delivers the token (nested-encrypted where the method
+// says so); this package knows nothing of NIP-47 encryption.
 type SplitResult struct {
 	WalletApp *db.App
 	CashToken string
-}
-
-// Split creates one spend-only, single-slice cash_wallet child of
-// params.HubApp and funds it via a single internal transfer from
-// params.SourceWalletApp's own isolated balance — structurally the same
-// create-then-fund-last, rollback-via-DeleteApp shape as Commit (see that
-// function's doc comment for the rationale), just with the parent and the
-// funding source split into two different apps instead of one.
-//
-// The caller is responsible for having already exclusively claimed the
-// source slice (AppsService.ClaimCashSlice) before calling this, and for
-// rolling that back (UnclaimCashSlice) if this returns an error — Split itself
-// never touches the source wallet's CashWalletClaim rows, only its balance.
-func Split(ctx context.Context, deps Deps, params SplitParams) (*SplitResult, error) {
-	prepared, err := prepareSplit(ctx, deps, params)
-	if err != nil {
-		return nil, err
-	}
-	return prepared.fund(ctx, deps)
-}
-
-// prepareSplit does everything Split does short of moving funds, so a caller
-// splitting into several bills can have every one signed before any is funded.
-// On error nothing is left behind.
-func prepareSplit(ctx context.Context, deps Deps, params SplitParams) (prepared *preparedSplit, err error) {
-	newApp, _, err := deps.AppsService.CreateApp(
-		apps.GenerateChildName(params.HubApp.Name, params.NewIdentityValue),
-		"", // generate a temporary random keypair; overridden immediately below
-		params.AmountMloki/1000,
-		constants.BUDGET_RENEWAL_NEVER,
-		params.ExpiresAt,
-		cashWalletScopes,
-		db.AppKindCashWallet,
-		&params.HubApp.ID,
-		db.ParentKindCash,
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create split-off Cash wallet app: %w", err)
-	}
-
-	// Same reversible-until-funded shape as Commit: on any error below, the bill
-	// is deleted; on success the caller funds or abandons it.
-	defer func() {
-		if err != nil {
-			_ = deps.AppsService.DeleteCashBill(newApp, db.CashBillOutcomeVoid)
-		}
-	}()
-
-	pairingSecretKey, err := deps.Keys.GetCashPairingKey(newApp.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
-	}
-	deterministicPubKey, err := nostr.GetPublicKey(pairingSecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing pubkey: %w", err)
-	}
-	if err := deps.DB.Model(&db.App{}).Where("id = ?", newApp.ID).
-		Update("app_pubkey", deterministicPubKey).Error; err != nil {
-		return nil, fmt.Errorf("failed to register pairing key: %w", err)
-	}
-	newApp.AppPubkey = deterministicPubKey
-	walletPubkey := *newApp.WalletPubkey
-
-	if err := deps.AppsService.CreateCashWalletClaims(newApp.ID, []db.CashWalletClaim{{
-		IdentityType:       params.NewIdentityType,
-		IdentityValue:      params.NewIdentityValue,
-		IAPubkey:           params.NewIAPubkey,
-		AmountMloki:        int64(params.AmountMloki), //nolint:gosec // bounded to <= MaxInt64 by the source slice's own AmountMloki, already validated when that slice was created/resolved
-		MinTransferMloki:   params.MinTransferMloki,
-		RedeemFeePpm:       params.RedeemFeePpm,
-		RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
-	}}); err != nil {
-		return nil, fmt.Errorf("failed to store split-off recipient claim: %w", err)
-	}
-
-	// Provenance before the money, for the reason Commit gives at its own call: it is
-	// mandatory, it can fail, and after the transfer below a failure could only be
-	// swallowed. A split-off wallet is always a single slice by construction (Split
-	// never creates anything else), so the identity type is known without inspecting
-	// the claim just stored.
-	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	lokicashToken, err := issueCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.AmountMloki, params.HubApp)
-	if err != nil {
-		return nil, fmt.Errorf("refusing to split off a bill without a signed token: %w", err)
-	}
-
-	return &preparedSplit{app: newApp, token: lokicashToken, params: params}, nil
-}
-
-// preparedSplit is a split-off bill that exists, is signed and has its token, but
-// holds no funds yet: fund it, or abandon it.
-type preparedSplit struct {
-	app    *db.App
-	token  string
-	params SplitParams
-}
-
-// abandon deletes a prepared bill that will not be funded.
-func (p *preparedSplit) abandon(deps Deps) {
-	_ = deps.AppsService.DeleteCashBill(p.app, db.CashBillOutcomeVoid)
-}
-
-// fund is the one irreversible step, done last for the same reason Commit does:
-// once funds move, nothing after this can fail and leave the new wallet stranded
-// or invisible. Pays from SourceWalletApp (an isolated-balance cash_wallet), not
-// HubApp — validateCanPay's isolated-balance check and enforceCashFullDrain both
-// key off the PAYING app, and internal_transfer metadata (stripped at every
-// external NWC entry point) exempts this privileged, Go-level-only transfer from
-// both the full-drain guard and the pay_invoice-scope requirement a cash_wallet's
-// real NWC connection deliberately never has.
-func (p *preparedSplit) fund(ctx context.Context, deps Deps) (*SplitResult, error) {
-	if err := fundInternal(ctx, deps, p.params.SourceWalletApp.ID, p.app.ID, p.params.AmountMloki, "cash split"); err != nil {
-		p.abandon(deps)
-		return nil, fmt.Errorf("failed to fund split-off Cash wallet via transfer: %w", err)
-	}
-
-	storeCashToken(deps, p.app.ID, p.token)
-
-	logger.Logger.Info().
-		Uint("cash_wallet_id", p.app.ID).
-		Uint("parent_app_id", p.params.HubApp.ID).
-		Uint("source_wallet_id", p.params.SourceWalletApp.ID).
-		Uint64("amount_mloki", p.params.AmountMloki).
-		Msg("Slice split off into a new dedicated Cash wallet")
-
-	return &SplitResult{
-		WalletApp: p.app,
-		CashToken: p.token,
-	}, nil
 }
 
 // Create resolves every recipient, creates a spend-only cash_wallet child of
@@ -852,5 +518,5 @@ func Create(ctx context.Context, deps Deps, params Params) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Commit(ctx, deps, resolved)
+	return Commit(ctx, deps, resolved, nil)
 }

@@ -20,9 +20,10 @@ func hubGroupInput(hub *db.App) string {
 }
 
 // issueCashToken signs a new bill under cash-mint:v1 with the node identity and
-// encodes it (NIP-CASH §Mint Provenance, §Wire Format). It runs before any funds
-// move: a Hub never issues an unsigned bill, and every failure here costs nothing.
-func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hub *db.App) (string, error) {
+// encodes it (NIP-CASH §Mint Provenance, §Wire Format), returning the signed token
+// and its encoding. It runs inside the call's commit transaction, before COMMIT: a
+// Hub never issues an unsigned bill, and a failure here rolls the whole call back.
+func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hub *db.App) (nipcash.Token, string, error) {
 	amt := amountMillis
 	tok := nipcash.Token{
 		HRP:                  constants.CashTokenHRP,
@@ -39,24 +40,16 @@ func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, sec
 	}
 	xonly, err := nodesign.XOnly(ctx, ln)
 	if err != nil {
-		return "", err
+		return nipcash.Token{}, "", err
 	}
 	signed, err := nipcash.SignToken(tok, nipcash.SchemeMintV1, nil, xonly, nodesign.Signer(ctx, ln))
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("wallet_pubkey", walletPubkey).Msg("Could not sign a bill's mint provenance")
-		return "", fmt.Errorf("provenance unavailable; nothing was committed: %w", err)
+		return nipcash.Token{}, "", fmt.Errorf("provenance unavailable; nothing was committed: %w", err)
 	}
-	return nipcash.Encode(signed)
-}
-
-// storeCashToken persists a freshly issued bill's token verbatim, so the archive
-// keeps the exact string the bill was issued with once it is destroyed
-// (db.App.CashToken). Best-effort: a bill that is otherwise fully minted and funded
-// must not fail over its own audit copy.
-func storeCashToken(deps Deps, walletAppID uint, token string) {
-	if err := deps.DB.Model(&db.App{}).Where("id = ?", walletAppID).
-		Update("cash_token", token).Error; err != nil {
-		logger.Logger.Warn().Err(err).Uint("cash_wallet_id", walletAppID).
-			Msg("Failed to store Cash bill token for the audit archive")
+	encoded, err := nipcash.Encode(signed)
+	if err != nil {
+		return nipcash.Token{}, "", err
 	}
+	return signed, encoded, nil
 }

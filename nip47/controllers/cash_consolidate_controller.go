@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
@@ -159,15 +161,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		return
 	}
 
-	deps := cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-		IAChecker:           controller.iaChecker,
-	}
+	deps := controller.cashDeps()
 	// Cash mode is validated separately from ValidateIdentityShape (which only
 	// knows pubkey/connection_key — same split cash_transfer's own
 	// new_identity validation already uses): the caller's own commitment MUST
@@ -332,73 +326,38 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		return
 	}
 
-	// 3. Claim every source terminal, tracking for rollback. If any claim fails,
-	// unclaim the ones already taken and reject — nothing half-consolidated.
-	// unclaimAll skips any source app ID listed in strandedAppIDs: those are
-	// sources whose compensating reverse-transfer inside Consolidate itself
-	// failed, so their real balance is short by whatever they contributed —
-	// restoring their claim to the full original amount would let the caller
-	// believe they have more than the wallet can actually pay out. Every other
-	// claimed source (never funded, or successfully reversed) is unclaimed as
-	// before.
-	claimed := make([]resolvedConsolidateSource, 0, len(resolved))
-	unclaimAll := func(strandedAppIDs []uint) {
-		stranded := make(map[uint]bool, len(strandedAppIDs))
-		for _, id := range strandedAppIDs {
-			stranded[id] = true
-		}
-		for _, rs := range claimed {
-			if stranded[rs.walletApp.ID] {
-				logger.Logger.Error().Uint("wallet_app_id", rs.walletApp.ID).
-					Msg("Source claim intentionally left in place after a cash_consolidate rollback — its contribution is stranded in the deliberately-retained merged wallet pending manual reconciliation")
-				continue
-			}
-			if err := controller.appsService.UnclaimCashSlice(rs.walletApp.ID, rs.identityType, rs.identityValue); err != nil {
-				logger.Logger.Error().Err(err).Uint("wallet_app_id", rs.walletApp.ID).
-					Msg("Failed to roll back a source claim during cash_consolidate; manual reconciliation may be needed")
-			}
-		}
-	}
-	sources := make([]cashwallet.ConsolidateSource, 0, len(resolved))
-	for _, rs := range resolved {
-		amt, err := controller.appsService.ClaimCashSlice(rs.walletApp.ID, rs.identityType, rs.identityValue)
+	// 3. A claim proof is single-use (NIP-CASH §Claim Proofs). This read refuses a
+	// proof already used; the commit consumes every proof, and only if it commits,
+	// so a refused or failed call leaves them all usable.
+	proofs := make([]cashwallet.ClaimProof, 0, len(proofEventIDs))
+	for _, evID := range proofEventIDs {
+		used, err := cashrequest.New(controller.db).IsProofConsumed(evID)
 		if err != nil {
-			unclaimAll(nil)
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_FOUND, "a source slice was already claimed or is no longer available")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to check the source proofs")
 			return
 		}
-		claimed = append(claimed, rs)
-		sources = append(sources, cashwallet.ConsolidateSource{WalletApp: rs.walletApp, AmountMloki: uint64(amt)}) //nolint:gosec // non-negative
-	}
-
-	// 4. Consume each proof's single-use replay guard now that authorization
-	// has fully succeeded and the sources are claimed (mirrors cash_transfer).
-	// releaseProofGuards drops ONLY the guards THIS request actually inserted —
-	// never the pre-existing guard that caused a mid-consume failure (that one
-	// belongs to whatever earlier request legitimately consumed the proof;
-	// deleting it would reopen a replay). This lets a rejected request avoid
-	// permanently burning a caller's (or a captured victim's) still-valid,
-	// unused proofs without un-burning anyone else's.
-	insertedProofs := make([]string, 0, len(proofEventIDs))
-	releaseProofGuards := func() {
-		for _, evID := range insertedProofs {
-			_ = cashrequest.New(controller.db).ReleaseProof(evID)
+		if used {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_UNAUTHORIZED, "a source proof was already used")
+			return
 		}
-	}
-	for _, evID := range proofEventIDs {
 		// The proof's created_at is not kept here; the consumption time is a later,
 		// so safely longer, retention anchor.
-		if err := cashrequest.New(controller.db).ConsumeProofTx(controller.db, evID, time.Now().Unix(), nip47Request.Method); err != nil {
-			releaseProofGuards()
-			unclaimAll(nil)
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "a source proof was already used")
-			return
-		}
-		insertedProofs = append(insertedProofs, evID)
+		proofs = append(proofs, cashwallet.ClaimProof{EventID: evID, CreatedAt: time.Now().Unix(), Method: nip47Request.Method})
 	}
 
-	// 5. Create + fund the merged wallet (compensating rollback on failure).
-	result, strandedSourceAppIDs, err := cashwallet.Consolidate(ctx, deps, cashwallet.ConsolidateParams{
+	// 4. One commit: every source claimed terminal (recording the merged bill it
+	// moved into), the merged bill, its signed token, its funding from each
+	// source and every consumed proof — or nothing at all.
+	sources := make([]cashwallet.ConsolidateSource, 0, len(resolved))
+	for _, rs := range resolved {
+		sources = append(sources, cashwallet.ConsolidateSource{
+			WalletApp: rs.walletApp,
+			Slice: apps.SliceRef{ClaimID: rs.claim.ID, IdentityType: rs.identityType,
+				IdentityValue: rs.identityValue, TransferCount: rs.claim.TransferCount},
+			AmountMloki: uint64(rs.claim.AmountMloki), //nolint:gosec // non-negative
+		})
+	}
+	result, err := cashwallet.Consolidate(ctx, deps, cashwallet.ConsolidateParams{
 		HubApp:             hubApp,
 		Sources:            sources,
 		NewIdentityType:    params.NewIdentity.IdentityType,
@@ -408,35 +367,18 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		RedeemFeePpm:       redeemFee,
 		RedeemFeeBaseMloki: redeemFeeBase,
 		ExpiresAt:          earliest,
+		Proofs:             proofs,
 	})
 	if err != nil {
-		// By here step 4 fully succeeded, so insertedProofs == proofEventIDs;
-		// releaseProofGuards drops exactly this request's guards. unclaimAll
-		// skips any source Consolidate reports as stranded (its compensating
-		// reversal failed — see unclaimAll's own doc comment above).
-		unclaimAll(strandedSourceAppIDs)
-		releaseProofGuards()
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to consolidate Cash wallet slices")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to consolidate slices")
-		return
-	}
-
-	// Informational bookkeeping links (db.CashWalletClaim.SpunOffToWalletAppID) —
-	// mirrors cash_transfer's identical split-target recording. Every source's
-	// claim records the merged wallet its value moved to; unlike a split (one
-	// source, one or two targets, so the reverse App.SplitFromWalletAppID
-	// pointer also fits), a consolidate is many-to-one, and
-	// SplitFromWalletAppID is a single pointer that can't name N sources — so
-	// only the forward direction is recorded here. An operator can still find
-	// every source that fed a given merged wallet by querying claims WHERE
-	// spun_off_to_wallet_app_id = that wallet's ID; SpunOffToWalletAppID isn't
-	// unique per target. Never fails the response: the funds have already
-	// moved and the merged wallet is live either way.
-	for _, rs := range resolved {
-		if setErr := controller.appsService.SetCashSliceSplitTarget(rs.walletApp.ID, rs.identityType, rs.identityValue, result.WalletApp.ID); setErr != nil {
-			logger.Logger.Error().Err(setErr).Uint("source_wallet_id", rs.walletApp.ID).Uint("new_wallet_id", result.WalletApp.ID).
-				Msg("Failed to record consolidate target on a source slice")
+		switch {
+		case errors.Is(err, apps.ErrSliceClaimed):
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "a source slice was already claimed or is no longer available")
+		case errors.Is(err, cashwallet.ErrProofUsed):
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_UNAUTHORIZED, "a source proof was already used")
+		default:
+			controller.respondCommitError(publishResponse, nip47Request.Method, app, err, "failed to consolidate slices")
 		}
+		return
 	}
 
 	// 6. Deliver the merged token. When new_identity is a pubkey, NIP-44

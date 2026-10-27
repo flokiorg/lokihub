@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -344,9 +344,9 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 	require.Len(t, claims, 2)
 }
 
-// TestHandleMintCashEvent_TransferFailure_Rollback verifies that when
-// SendPaymentSync fails after the child app is already created, the child app
-// (and its claim rows) are deleted (rolled back) and an error is returned.
+// TestHandleMintCashEvent_TransferFailure_Rollback verifies that a failure while
+// funding the new bill rolls the whole mint back: no bill, no slices, no record,
+// and an error reply.
 func TestHandleMintCashEvent_TransferFailure_Rollback(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
@@ -356,10 +356,13 @@ func TestHandleMintCashEvent_TransferFailure_Rollback(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
-	// Make the next SendPaymentSync call return an error.
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
-	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+	controller := NewTestNip47Controller(svc)
+	controller.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(0)" {
+			return errors.New("injected: funding failed")
+		}
+		return nil
+	}}
 
 	beneficiaryKey := nostr.GeneratePrivateKey()
 	beneficiaryPubkey, _ := nostr.GetPublicKey(beneficiaryKey)
@@ -372,12 +375,15 @@ func TestHandleMintCashEvent_TransferFailure_Rollback(t *testing.T) {
 	svc.DB.Create(&dbRequestEvent)
 
 	var publishedResponse *models.Response
-	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
+	controller.HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
 	}, testMintMeta())
 
 	// Handler must return an error.
-	assert.NotNil(t, publishedResponse.Error, "transfer failure must produce an error response")
+	require.NotNil(t, publishedResponse.Error, "transfer failure must produce an error response")
+	var records int64
+	require.NoError(t, svc.DB.Model(&db.CashRequestRecord{}).Count(&records).Error)
+	assert.Zero(t, records, "no record commits without its bill")
 
 	// The child Cash wallet app must have been deleted (rollback).
 	var childApps []db.App

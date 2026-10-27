@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
@@ -430,20 +431,25 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		newIAPubkeyToStore = params.NewIdentity.IAPubkey
 	}
 
-	// Single-use replay guard: a captured proof (any co-recipient sharing
-	// this cash_wallet connection can decrypt every request sent over it,
-	// including this one) must not be resubmittable within its own freshness
-	// window — see db.CashConsumedProof's doc comment. Inserted here, after
-	// every step-7/8 check that doesn't touch the slice has already passed,
-	// so a request that fails one of THOSE checks never burns the proof (see
-	// the comment above callerProofPubkey/proofEventID's capture in step 7).
-	// Empty for isCashCurrent, which has no signed proof to consume.
+	// A claim proof is single-use (NIP-CASH §Claim Proofs). This read refuses one
+	// already used; the commit consumes it, and only if the call commits, so a
+	// refused or failed call leaves it usable for a retry. Two calls racing on one
+	// proof are decided inside the commit (cashwallet.ErrProofUsed).
+	var proofs []cashwallet.ClaimProof
 	if proofEventID != "" {
-		if err := cashrequest.New(controller.db).ConsumeProofTx(controller.db, proofEventID, proofCreatedAt, nip47Request.Method); err != nil {
-			respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "identity_event has already been used")
+		used, err := cashrequest.New(controller.db).IsProofConsumed(proofEventID)
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to check the claim proof's replay guard")
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to check the claim proof")
 			return
 		}
+		if used {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_UNAUTHORIZED, "identity_event has already been used")
+			return
+		}
+		proofs = []cashwallet.ClaimProof{{EventID: proofEventID, CreatedAt: proofCreatedAt, Method: nip47Request.Method}}
 	}
+	source := apps.SliceRef{ClaimID: claim.ID, IdentityType: currentIdentityType, IdentityValue: currentIdentityValue, TransferCount: claim.TransferCount}
 
 	// 9. Decide in-place reassignment vs. split.
 	//
@@ -556,52 +562,21 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	if !split {
-		// In-place reassignment only ever applies to a full transfer —
-		// AmountMillis is unchanged by construction, so there's nothing to
-		// pass beyond the identities themselves.
-		amount, err := controller.appsService.ReassignCashSliceIdentity(app.ID,
-			currentIdentityType, currentIdentityValue,
-			newIdentityType, newIdentityValueToStore, newIAPubkeyToStore)
-		if err != nil {
-			// A race loss against a concurrent claim/transfer of this exact
-			// slice (constants.ErrNotFound) gets NOT_FOUND, matching
-			// cash_redeem's identical race-loss case — not the generic
-			// BAD_REQUEST every other validation failure here uses, since a
-			// race loss isn't caused by anything wrong with the request itself.
-			// ReassignCashSliceIdentity's ErrNotFound-wrapped errors are
-			// deliberately crafted, safe-to-show messages ("no slice
-			// registered...", "already been redeemed or transferred"); any
-			// OTHER error is a raw, unwrapped internal failure (e.g. a DB
-			// error) that must never be echoed to the caller verbatim —
-			// mirrors cash_redeem's and cash_consolidate's fixed-message
-			// pattern for the same class of failure.
-			code := constants.ERROR_BAD_REQUEST
-			message := "failed to reassign this slice's identity"
-			if errors.Is(err, constants.ErrNotFound) {
-				code = constants.ERROR_NOT_FOUND
-				message = err.Error()
-			} else {
-				logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-					Msg("Unexpected failure reassigning a cash_transfer slice's identity")
-			}
-			// Release the single-use replay guard: ReassignCashSliceIdentity
-			// is one atomic UPDATE with no fund movement of its own — unlike
-			// the split path, a failure here means nothing happened at all,
-			// so (mirroring handleCashTransferSplit's own rollback) this
-			// proof never actually authorized a completed operation and must
-			// stay usable for a retry within its own freshness window.
-			// Best-effort: if this delete itself fails, the proof stays
-			// consumed and a legitimate retry needs a fresh one — safe (just
-			// an availability inconvenience), never a security gap.
-			if proofEventID != "" {
-				if delErr := cashrequest.New(controller.db).ReleaseProof(proofEventID); delErr != nil {
-					logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
-						Msg("Failed to release cash_transfer proof replay guard after a lost in-place reassignment race")
-				}
-			}
-			respondError(publishResponse, nip47Request.Method, code, message)
+		// In-place reassignment only ever applies to a full transfer, so the amount
+		// is the slice's own, unchanged. It commits with its consumed proof, or not
+		// at all.
+		if err := cashwallet.Reassign(ctx, controller.cashDeps(), cashwallet.ReassignParams{
+			WalletApp:        app,
+			Source:           source,
+			NewIdentityType:  newIdentityType,
+			NewIdentityValue: newIdentityValueToStore,
+			NewIAPubkey:      newIAPubkeyToStore,
+			Proofs:           proofs,
+		}); err != nil {
+			controller.respondCommitError(publishResponse, nip47Request.Method, app, err, "failed to reassign this slice's identity")
 			return
 		}
+		amount := claim.AmountMloki
 
 		logger.Logger.Info().
 			Uint("app_id", app.ID).
@@ -624,7 +599,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	controller.handleCashTransferSplit(ctx, nip47Request, app, currentIdentityType, currentIdentityValue, requestedAmount,
-		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, proofEventID, claim, publishResponse, tags)
+		newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, callerProofPubkey, source, proofs, claim, publishResponse, tags)
 }
 
 // handleCashTransferSplit moves a full or partial amount out of a slice and
@@ -639,17 +614,13 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 // pubkey and no one else, so it never touches the shared connection this
 // response itself travels over.
 //
-// Ordering mirrors cash_redeem_controller.go's own claim-then-pay-then-
-// rollback-on-failure shape: the source slice is claimed FIRST (an exclusive,
-// atomic commit point — see ClaimCashSlice), then the new wallets are created
-// and funded; any failure after that rolls the claim back (UnclaimCashSlice),
-// so a caller who hits an error here can safely retry — including with the
-// exact same identity_event, since rollback also releases proofEventID's
-// single-use guard (db.CashConsumedProof) rather than leaving a proof that
-// never actually authorized anything permanently burned.
+// The source claim, the new bills, their funding and the consumed proof are one
+// commit (cashwallet.SplitInTwo): a failure leaves the slice claimable and the
+// proof unused, so the caller can retry with the same proof.
 func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, nip47Request *models.Request, app *db.App,
 	currentIdentityType, currentIdentityValue string, requestedAmount uint64,
-	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey, proofEventID string,
+	newIdentityType, newIdentityValueToStore, newIAPubkeyToStore, recipientPubkey string,
+	source apps.SliceRef, proofs []cashwallet.ClaimProof,
 	claim *db.CashWalletClaim, publishResponse publishFunc, tags nostr.Tags) {
 	// Enforce the slice's own min_transfer_millis floor (0 = none) on BOTH the
 	// carved piece and the remainder it would leave behind — a split that would
@@ -669,65 +640,15 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 			return
 		}
 	}
-
-	// Claim the source slice TERMINAL — the operation's commit point. Its whole
-	// amount re-emerges as one or two fresh dedicated wallets; nothing is ever
-	// decremented in place, so a wallet's committed amount stays immutable for
-	// its life (NIP-CASH §Transferring and Splitting a Slice). This replaces the old
-	// decrement-in-place partial split.
-	claimedFull, err := controller.appsService.ClaimCashSlice(app.ID, currentIdentityType, currentIdentityValue)
-	if err != nil {
-		// Same NOT_FOUND-vs-BAD_REQUEST distinction as the in-place transfer
-		// path above — a race loss is NOT_FOUND, everything else BAD_REQUEST.
-		// Same err.Error()-is-only-safe-for-the-ErrNotFound-case reasoning too:
-		// any other failure is a raw internal error that must not be echoed
-		// to the caller verbatim.
-		code := constants.ERROR_BAD_REQUEST
-		message := "failed to claim this slice"
-		if errors.Is(err, constants.ErrNotFound) {
-			code = constants.ERROR_NOT_FOUND
-			message = err.Error()
-		} else {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-				Msg("Unexpected failure claiming a cash_transfer slice for split")
-		}
-		respondError(publishResponse, nip47Request.Method, code, message)
-		return
-	}
-	remainderAmount := uint64(claimedFull) - requestedAmount //nolint:gosec // claimedFull >= requestedAmount, bounded by HandleCashTransferEvent step 6
-
-	// releaseProof drops the single-use proof replay guard so a caller who hits
-	// a failure can retry with the identical proof, regardless of whether the
-	// source claim itself gets restored.
-	releaseProof := func() {
-		if proofEventID != "" {
-			if delErr := cashrequest.New(controller.db).ReleaseProof(proofEventID); delErr != nil {
-				logger.Logger.Error().Err(delErr).Uint("app_id", app.ID).
-					Msg("Failed to release cash_transfer proof replay guard after a rolled-back split")
-			}
-		}
-	}
-	// rollback releases the proof AND restores the source slice to its full
-	// original amount. Only safe to call when the source's real balance
-	// genuinely still backs that full amount — see the SplitInTwo call site
-	// below for the case where it does not.
-	rollback := func() {
-		releaseProof()
-		if unclaimErr := controller.appsService.UnclaimCashSlice(app.ID, currentIdentityType, currentIdentityValue); unclaimErr != nil {
-			logger.Logger.Error().Err(unclaimErr).Uint("app_id", app.ID).
-				Msg("Failed to roll back a claimed slice after a failed cash_transfer split")
-		}
-	}
+	remainderAmount := uint64(claim.AmountMloki) - requestedAmount //nolint:gosec // claim.AmountMloki >= requestedAmount, bounded by HandleCashTransferEvent step 6
 
 	if app.ParentAppID == nil {
-		rollback()
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_wallet has no parent hub; cannot split off a slice")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
 		return
 	}
 	hubApp := controller.appsService.GetAppById(*app.ParentAppID)
 	if hubApp == nil {
-		rollback()
 		logger.Logger.Error().Uint("app_id", app.ID).Uint("hub_app_id", *app.ParentAppID).Msg("cash_wallet's parent hub no longer exists")
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
 		return
@@ -738,16 +659,10 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 	// lengthens one (NIP-CASH's inheritance rule). The carved piece goes to
 	// new_identity; the remainder (when > 0) goes back to the caller's OWN
 	// current identity in its own fresh wallet.
-	result, sourceFundsIntact, err := cashwallet.SplitInTwo(ctx, cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-	}, cashwallet.SplitInTwoParams{
+	result, err := cashwallet.SplitInTwo(ctx, controller.cashDeps(), cashwallet.SplitInTwoParams{
 		HubApp:                 hubApp,
 		SourceWalletApp:        app,
+		Source:                 source,
 		CarvedIdentityType:     newIdentityType,
 		CarvedIdentityValue:    newIdentityValueToStore,
 		CarvedIAPubkey:         newIAPubkeyToStore,
@@ -760,24 +675,10 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		RedeemFeePpm:           claim.RedeemFeePpm,
 		RedeemFeeBaseMloki:     claim.RedeemFeeBaseMloki,
 		ExpiresAt:              app.ExpiresAt,
+		Proofs:                 proofs,
 	})
 	if err != nil {
-		if sourceFundsIntact {
-			rollback()
-		} else {
-			// The carved wallet's compensating reverse-transfer itself failed:
-			// the source's real balance is short by the carved amount, which is
-			// still sitting in the (deliberately retained) carved wallet. The
-			// proof is released so the caller isn't permanently burned, but the
-			// source claim is intentionally NOT restored — doing so would let
-			// the caller believe they have the full original amount when the
-			// wallet can't actually pay it out.
-			releaseProof()
-			logger.Logger.Error().Uint("app_id", app.ID).
-				Msg("Split-off compensation failed; source slice intentionally left claimed pending manual reconciliation")
-		}
-		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to split off Cash wallet slice")
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to split off slice")
+		controller.respondCommitError(publishResponse, nip47Request.Method, app, err, "failed to split off slice")
 		return
 	}
 
@@ -817,19 +718,6 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		return pubkey, enc, true
 	}
 
-	// Informational bookkeeping links (db.CashWalletClaim.SpunOffToWalletAppID /
-	// db.App.SplitFromWalletAppID) — the source slice records the carved wallet
-	// it spun off to, and the carved wallet records its source. Never fail here:
-	// the funds have already moved and both wallets are live.
-	if setErr := controller.appsService.SetCashSliceSplitTarget(app.ID, currentIdentityType, currentIdentityValue, result.Carved.WalletApp.ID); setErr != nil {
-		logger.Logger.Error().Err(setErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Carved.WalletApp.ID).
-			Msg("Failed to record split target on the source slice")
-	}
-	if setSrcErr := controller.appsService.SetCashWalletSplitSource(result.Carved.WalletApp.ID, app.ID); setSrcErr != nil {
-		logger.Logger.Error().Err(setSrcErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Carved.WalletApp.ID).
-			Msg("Failed to record split source on the carved wallet")
-	}
-
 	carvedPubkey, carvedToken, ok := deliver(result.Carved)
 	if !ok {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL,
@@ -851,10 +739,6 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 				"slice was split off but the remainder connection could not be delivered; contact the wallet operator")
 			return
 		}
-		if setSrcErr := controller.appsService.SetCashWalletSplitSource(result.Remainder.WalletApp.ID, app.ID); setSrcErr != nil {
-			logger.Logger.Error().Err(setSrcErr).Uint("app_id", app.ID).Uint("new_wallet_id", result.Remainder.WalletApp.ID).
-				Msg("Failed to record split source on the remainder wallet")
-		}
 		resp.RemainingAmountMillis = &remainderAmount
 		resp.RemainderWalletPubkey = remPubkey
 		resp.RemainderWalletToken = remToken
@@ -868,6 +752,33 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		Msg("Cash wallet slice split off into fresh dedicated wallet(s)")
 
 	publishResponse(&models.Response{ResultType: nip47Request.Method, Result: resp}, tags)
+}
+
+// cashDeps are the services a cash commit needs.
+func (controller *nip47Controller) cashDeps() cashwallet.Deps {
+	return cashwallet.Deps{
+		AppsService:         controller.appsService,
+		TransactionsService: controller.transactionsService,
+		LNClient:            controller.lnClient,
+		Keys:                controller.keys,
+		DB:                  controller.db,
+		RelayURLs:           controller.cfg.GetRelayUrls(),
+		IAChecker:           controller.iaChecker,
+		Hooks:               controller.cashHooks,
+	}
+}
+
+// respondCommitError answers a failed cash commit. Nothing was committed: the
+// outcomes NIP-CASH names get their code and a fixed message; anything else is
+// logged and answered with fallback, never echoing an internal error.
+func (controller *nip47Controller) respondCommitError(publishResponse publishFunc, method string, app *db.App, err error, fallback string) {
+	code := mapCashWalletErrorCode(err)
+	if errors.Is(err, cashrequest.ErrDeadlinePassed) || errors.Is(err, apps.ErrSliceClaimed) || errors.Is(err, cashwallet.ErrProofUsed) {
+		respondError(publishResponse, method, code, commitErrorMessage(err))
+		return
+	}
+	logger.Logger.Error().Err(err).Uint("app_id", app.ID).Str("method", method).Msg("Cash commit failed; nothing was committed")
+	respondError(publishResponse, method, code, fallback)
 }
 
 // maybeAutoDeleteDrainedCashWallet deletes app if it has no unclaimed slices
