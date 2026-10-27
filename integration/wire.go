@@ -36,8 +36,6 @@ type CashWalletRecipientParam struct {
 type MintCashParams struct {
 	Recipients []CashWalletRecipientParam `json:"recipients"`
 	Expiry     int                        `json:"expiry,omitempty"`
-	// MintSignature opts the issued token into mint provenance (§Mint Provenance).
-	MintSignature bool `json:"mint_signature,omitempty"`
 }
 
 type CashWalletRecipientResult struct {
@@ -49,7 +47,6 @@ type CashWalletRecipientResult struct {
 
 type MintCashResult struct {
 	WalletPubkey string                      `json:"wallet_pubkey"`
-	PairingURI   string                      `json:"pairing_uri"`
 	CashToken    string                      `json:"cash_token"`
 	ExpiresAt    int64                       `json:"expires_at"`
 	Recipients   []CashWalletRecipientResult `json:"recipients"`

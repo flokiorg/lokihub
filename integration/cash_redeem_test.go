@@ -54,14 +54,14 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: params,
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		require.NotEmpty(t, created.PairingURI)
+		require.NotEmpty(t, "")
 
 		// All three recipients share the SAME connection. Bill methods now travel over
 		// the private transport, which authorizes PER ITEM — so the connection carries the
 		// bill's token, and each recipient names itself with ActAs before acting. The
 		// shared-connection property under test is unchanged; what changed is that the
 		// hub can now tell which sharer is calling.
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, recipients[0].privkey)
+		shared := mustConnectBill(t, created.CashToken, recipients[0].privkey)
 
 		var totalMloki uint64
 		for _, r := range recipients {
@@ -138,7 +138,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 		outsiderPub, err := nostr.GetPublicKey(outsiderPriv)
 		require.NoError(t, err)
 
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, outsiderPriv)
+		shared := mustConnectBill(t, created.CashToken, outsiderPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration wrong-identity test")
 		proof := buildClaimProofEvent(t, outsiderPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -166,7 +166,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		boundInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration proof-binding test (bound)")
 		attackerInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration proof-binding test (attacker)")
@@ -212,7 +212,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Expiry:     happyPathExpirySecs,
 		}, &walletB))
 
-		sharedB := mustConnectBill(t, walletB.PairingURI, walletB.CashToken, beneficiaryPriv)
+		sharedB := mustConnectBill(t, walletB.CashToken, beneficiaryPriv)
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cross-wallet replay test")
 
 		// Proof is bound (d-tag) to wallet A's pubkey...
@@ -238,7 +238,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnect(t, "")
 
 		var budget GetBudgetResult
 		err = shared.Call(ctxT(t), "get_budget", struct{}{}, &budget)
@@ -257,7 +257,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, created.PairingURI)
+		shared := mustConnect(t, "")
 
 		var txs ListTransactionsResult
 		err = shared.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs)
@@ -283,7 +283,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimedPriv)
+		shared := mustConnectBill(t, created.CashToken, claimedPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration cash_status status test")
 		proof := buildClaimProofEvent(t, claimedPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -323,7 +323,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration connection_key claim test")
 		attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
@@ -361,7 +361,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, realClaimantPriv)
+		shared := mustConnectBill(t, created.CashToken, realClaimantPriv)
 
 		attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, realClaimantPub, time.Hour)
 
@@ -412,7 +412,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		// Signed with an expiration timestamp already in the past.
 		expiredAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, -time.Hour)
@@ -466,7 +466,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		noExpiryAttestation := &nostr.Event{
 			Kind:      nostrKindIAAttestation,
@@ -512,7 +512,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, imposterIAPriv)
+		shared := mustConnectBill(t, created.CashToken, imposterIAPriv)
 
 		imposterAttestation := buildIAAttestationEvent(t, imposterIAPriv, connectionKey, claimantPub, time.Hour)
 
@@ -551,7 +551,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, claimantPriv)
+		shared := mustConnectBill(t, created.CashToken, claimantPriv)
 
 		forged := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
 		// Claims to be signed by the real IA pubkey, but the signature itself
@@ -582,7 +582,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration stale-proof test")
 
@@ -622,7 +622,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		// cash_redeem charges its per-bill limiter only once a request is
 		// well-formed (cash_redeem_controller.go step 4): a decodable invoice and
@@ -665,7 +665,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     2, // seconds - deliberately short so the wallet expires mid-test
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+		shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 		time.Sleep(3 * time.Second)
 

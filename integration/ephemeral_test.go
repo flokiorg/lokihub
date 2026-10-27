@@ -186,7 +186,7 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 
 	return CircleHubConfig{
 		Name:           name,
-		Connection:     resp.PairingUri,
+		Connection:     resp.CircleHubToken,
 		CircleHubToken: resp.CircleHubToken,
 		Members:        CircleMembers{AuthorizedPrivkeys: authorizedPrivkeys},
 	}, resp.ID, admin
@@ -351,7 +351,7 @@ func createEphemeralCashHub(t *testing.T, cfg *Config, name string, expiresAt *t
 
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
 
-	return CashHubConfig{Name: name, Connection: resp.PairingUri, CashHubToken: resp.CashHubToken}, resp.ID, admin
+	return CashHubConfig{Name: name, Connection: resp.CashHubToken, CashHubToken: resp.CashHubToken}, resp.ID, admin
 }
 
 // ephemeralSimpleWalletFundLoki is root-funded into every ephemeral simple

@@ -106,7 +106,7 @@ func TestFollowSetCircle_PublicAndHiddenMemberJoin(t *testing.T) {
 			Identity     string `json:"identity"`
 		} `json:"circle_wallet"`
 	}
-	require.NoError(t, mustConnect(t, resp.PairingUri).Call(ctxT(t), "get_info", struct{}{}, &info))
+	require.NoError(t, mustConnect(t, resp.CircleHubToken).Call(ctxT(t), "get_info", struct{}{}, &info))
 	require.NotNil(t, info.CircleWallet)
 	require.Equal(t, circlePolicyFollowSet, info.CircleWallet.CirclePolicy)
 	require.NotEmpty(t, info.CircleWallet.Identity, "the hub offers Private Join, which hidden members need")

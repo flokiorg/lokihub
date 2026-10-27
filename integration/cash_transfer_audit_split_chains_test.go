@@ -61,7 +61,7 @@ func createCashHubWithTransferPolicy(t *testing.T, cfg *Config, name string, min
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	return mustConnect(t, resp.PairingUri)
+	return mustConnect(t, resp.CashHubToken)
 }
 
 // splitToControlledTarget carves splitAmount off the pubkey slice currently
@@ -89,7 +89,7 @@ func decryptSplitWallet(t *testing.T, walletPubkey, encToken, callerPriv, signer
 	tok, err := nipcash.Decode(dec)
 	require.NoError(t, err)
 	require.Equal(t, walletPubkey, tok.WalletPubkey)
-	return mustConnectBill(t, nwcURIFromLokicash(tok), dec, signerPriv)
+	return mustConnectBill(t, dec, signerPriv)
 }
 
 // splitToControlledTarget performs a partial split and returns BOTH resulting
@@ -153,7 +153,7 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 
 	// billCaller, not *billConn: the loop below reassigns this from splitToControlledTarget,
 	// which hands back the next generation's connection through the same interface.
-	var curClient billCaller = mustConnectBill(t, created.PairingURI, created.CashToken, owner0Priv)
+	var curClient billCaller = mustConnectBill(t, created.CashToken, owner0Priv)
 	curPriv, curPub, curWalletPubkey := owner0Priv, owner0Pub, created.WalletPubkey
 	curAmount := originalAmount
 

@@ -192,7 +192,7 @@ func TestCircleMembershipAudit_ProviderFollowSetRemovalFreezesWallet(t *testing.
 
 	publishProviderSet(t, cfg, providerPriv, d, now-30, memberPub, otherPub)
 	resp, admin := createProviderFollowSetHub(t, cfg, "freeze-provider-set", providerPriv, d)
-	child := mustJoinCircle(t, resp.PairingUri, memberPriv)
+	child := mustJoinCircle(t, resp.CircleHubToken, memberPriv)
 	fundCircleChild(t, cfg, child, membershipAuditAmountMloki, "freeze-provider-set fund")
 	requireWorking(t, cfg, child)
 	balance := balanceOf(t, child)
@@ -223,8 +223,8 @@ func TestCircleMembershipAudit_ManagedFollowSetRemovalFreezesWallet(t *testing.T
 	identityID, err := admin.getCircleIdentityID(resp.ID)
 	require.NoError(t, err)
 
-	publicChild := mustJoinCircle(t, resp.PairingUri, publicPriv)
-	hiddenChild, err := joinCircle(t, resp.PairingUri, hiddenPriv)
+	publicChild := mustJoinCircle(t, resp.CircleHubToken, publicPriv)
+	hiddenChild, err := joinCircle(t, resp.CircleHubToken, hiddenPriv)
 	require.NoError(t, err, "a hidden member is admitted over the standard transport too")
 	fundCircleChild(t, cfg, publicChild, membershipAuditAmountMloki, "freeze-managed public fund")
 	fundCircleChild(t, cfg, hiddenChild, membershipAuditAmountMloki, "freeze-managed hidden fund")
@@ -270,9 +270,9 @@ func TestCircleMembershipAudit_ForgedFollowSetsAdmitNoOne(t *testing.T) {
 
 	refreshCircle(t, admin, resp.ID)
 
-	_, err := joinCircle(t, resp.PairingUri, outsiderPriv)
+	_, err := joinCircle(t, resp.CircleHubToken, outsiderPriv)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	mustJoinCircle(t, resp.PairingUri, memberPriv)
+	mustJoinCircle(t, resp.CircleHubToken, memberPriv)
 }
 
 // The provider removed a member, then the hub restarted while relays only
@@ -296,7 +296,7 @@ func TestCircleMembershipAudit_RestartKeepsRemovedMemberOut(t *testing.T) {
 	resp, admin := createProviderFollowSetHub(t, cfg, "restart-rollback", providerPriv, d)
 	publishProviderSet(t, cfg, providerPriv, d, now-30, keptPub)
 	refreshCircle(t, admin, resp.ID)
-	_, err := joinCircle(t, resp.PairingUri, removedPriv)
+	_, err := joinCircle(t, resp.CircleHubToken, removedPriv)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	restartCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -308,12 +308,12 @@ func TestCircleMembershipAudit_RestartKeepsRemovedMemberOut(t *testing.T) {
 	// The first answer after startup may be NOT_READY while the hub warms up.
 	deadline := time.Now().Add(90 * time.Second)
 	for {
-		_, err = joinCircle(t, resp.PairingUri, removedPriv)
+		_, err = joinCircle(t, resp.CircleHubToken, removedPriv)
 		if nwcErrorCode(err) != "NOT_READY" || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(2 * time.Second)
 	}
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	mustJoinCircle(t, resp.PairingUri, keptPriv)
+	mustJoinCircle(t, resp.CircleHubToken, keptPriv)
 }

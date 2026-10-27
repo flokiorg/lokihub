@@ -61,7 +61,7 @@ func createCashHubWithRetention(t *testing.T, cfg *Config, name string, retentio
 	})
 
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	return admin, resp.ID, resp.PairingUri
+	return admin, resp.ID, resp.CashHubToken
 }
 
 // strangerURI rewrites a pairing URI to keep its wallet pubkey and relays but
@@ -105,7 +105,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 	decoded, err := nipcash.Decode(created.CashToken)
 	require.NoError(t, err)
 
-	holder := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	holder := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration tombstone drain")
 	proof := buildClaimProofEvent(t, beneficiaryPriv, decoded.WalletPubkey, invoice.PaymentHash, nil, time.Now())
@@ -119,7 +119,7 @@ func mintAndDrainOneBill(t *testing.T, cfg *Config, hubClient *nwcclient.Client)
 	}, &result))
 	require.NotEmpty(t, result.Preimage, "the drain must actually pay out, or the bill is not really spent")
 
-	return holder, created.PairingURI
+	return holder, ""
 }
 
 // awaitTombstone polls cash_status until the bill reports itself spent.
