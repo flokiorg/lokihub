@@ -124,6 +124,20 @@ audits of both.
   lifetime instead of the ceiling. A lifetime ceiling of 0 (none) is accepted;
   a default above a non-zero ceiling, or 0 under one, is refused. `get_info`
   reports `per_wallet_max_receive_millis`.
+- Lists offers on relays (NIP-CASH §Listing Offers): a circle, from its hub
+  page or the new Listings page, is published as a kind-31190 listing signed
+  by the node identity, with its own public `circlehub1` connection (the
+  members' invite is untouched). Listings are republished every 7 days and on
+  each change, paused and resumed, and retired in the spec's order: the
+  `closed` version, kept until the last open version expires, then a NIP-09
+  deletion. The node publishes a kind 10002 naming the listing relays (a new
+  Listing relays setting). An optional operator is named in the `p` tag and
+  checked, read-only, against their own kind 11191; lokihub never asks for
+  their key. A Cash Hub connection is never listed. Order connections are
+  listed once they exist.
+- Adds "Revoke and reissue the Cash Hub connection": the old `cashhub1` stops
+  working at once and a new one is shown once; bills, records and the hub
+  group are untouched.
 - Keeps a record of every circle join and serves the NIP-CW join lookup:
   `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
   joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's
