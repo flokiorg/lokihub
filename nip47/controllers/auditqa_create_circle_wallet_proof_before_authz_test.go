@@ -80,7 +80,7 @@ func TestHandleCreateCircleWalletEvent_InvalidProof_NeverReachesAuthorizationChe
 
 	var resp *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, spy).
-		HandleCreateCircleWalletEvent(context.TODO(), nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, context.TODO(), nip47Request, ev.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			resp = r
 		})
 

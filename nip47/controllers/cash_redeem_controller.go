@@ -450,7 +450,7 @@ func (controller *nip47Controller) verifyRedeemClaimProof(app *db.App, claim *db
 // nip47/controllers/nmilat_attestation_equivalence_test.go, before this
 // swap. Two previously-inert gaps are deliberately closed by adopting it,
 // for the same reason the other two proof-verification functions
-// (verifyClaimIdentityEvent, verifyCircleWalletIdentityEvent) already apply
+// (the claim and join proof verifiers) already apply
 // them:
 //
 //  1. Event ID integrity is now checked (nip01.Event.Verify(), inside

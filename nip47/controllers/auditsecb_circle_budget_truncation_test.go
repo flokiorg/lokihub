@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -57,14 +58,14 @@ func TestHandleCreateCircleWalletEvent_SubLokiMaxAmount_Rejected(t *testing.T) {
 
 			var publishedResponse *models.Response
 			NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-				HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+				testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 					publishedResponse = r
 				})
 
 			require.NotNil(t, publishedResponse)
 			require.NotNil(t, publishedResponse.Error,
 				"a max_amount below 1000 mloki must be rejected outright, never silently truncated to an unlimited cap")
-			assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+			assert.Equal(t, nipcw.ErrLimitExceeded, publishedResponse.Error.Code)
 
 			// No wallet, and therefore no spend-cap-bypassing app, was created.
 			var count int64
@@ -100,7 +101,7 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_NoOverspendPossible(t 
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 
@@ -162,7 +163,7 @@ func TestHandleCreateCircleWalletEvent_WholeLokiMaxAmount_BudgetCapEnforced(t *t
 
 	var publishedResponse *models.Response
 	NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true}).
-		HandleCreateCircleWalletEvent(ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
+		testJoin(t, ctx, nip47Request, dbRequestEvent.ID, provider, func(r *models.Response, _ nostr.Tags) {
 			publishedResponse = r
 		})
 

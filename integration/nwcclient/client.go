@@ -81,6 +81,11 @@ type Client struct {
 	relaysMu sync.Mutex
 	relays   []*nostr.Relay
 
+	// PrivateCall, if set, may serve a call over the private transport instead:
+	// it reports whether it handled the method. Joins to a Circle Wallet Hub go
+	// this way (NIP-CW §Private Join).
+	PrivateCall func(ctx context.Context, method string, params, result any) (bool, error)
+
 	// Logger, if set, receives one line per Call: method, wallet, timing, and
 	// on failure the error/params needed to debug it. Relay-level detail is
 	// only logged when a relay actually fails. Callers typically wire this to
@@ -218,6 +223,11 @@ func (c *Client) ClientPubkey() string {
 // (pass a pointer, or nil to ignore it). On a NIP-47-level error response,
 // Call returns a *NWCError.
 func (c *Client) Call(ctx context.Context, method string, params any, result any) error {
+	if c.PrivateCall != nil {
+		if handled, err := c.PrivateCall(ctx, method, params, result); handled {
+			return err
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, DefaultCallTimeout)
 	defer cancel()
 

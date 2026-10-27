@@ -415,7 +415,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	switch nip47Request.Method {
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
-		constants.NIP47MethodCashLookup:
+		constants.NIP47MethodCashLookup, constants.NIP47MethodCreateCircleWallet:
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{
@@ -539,9 +539,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	case constants.NIP47MethodMintCash:
 		controller.
 			HandleMintCashEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse, meta)
-	case constants.NIP47MethodCreateCircleWallet:
-		controller.
-			HandleCreateCircleWalletEvent(ctx, nip47Request, requestEvent.ID, &app, publishResponse)
 	case models.MAKE_HOLD_INVOICE_METHOD:
 		controller.
 			HandleMakeHoldInvoiceEvent(ctx, nip47Request, requestEvent.ID, app.ID, publishResponse)

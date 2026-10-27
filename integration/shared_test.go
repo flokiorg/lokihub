@@ -219,6 +219,7 @@ func buildCircleWalletIdentityEvent(t *testing.T, requesterPrivkey, hubWalletPub
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, requesterPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(requesterPrivkey))
+	circleProofSigners.Store(ev.ID, requesterPrivkey)
 	return ev
 }
 
@@ -234,6 +235,7 @@ func buildCircleWalletIdentityEventCustom(t *testing.T, signerPrivkey, dTagValue
 		Tags:      nostr.Tags{{"d", dTagValue}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -255,6 +257,7 @@ func distinctCircleWalletIdentityEvent(t *testing.T, signerPrivkey, hubWalletPub
 		Tags:      nostr.Tags{{"d", hubWalletPubkey}, {"connection", circleConnectionPubkey(mustPubkey(t, signerPrivkey))}, {"disambiguator", disambiguator}},
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	circleProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -308,6 +311,14 @@ func mustConnect(t *testing.T, connection string) *nwcclient.Client {
 
 	client, err := nwcclient.ConnectAny(ctx, connection)
 	require.NoError(t, err, "connect to %s", connection)
+	if strings.HasPrefix(connection, nipcw.CircleHubConnectionHRP+"1") {
+		client.PrivateCall = func(ctx context.Context, method string, params, result any) (bool, error) {
+			if method != constants.NIP47MethodCreateCircleWallet {
+				return false, nil
+			}
+			return true, privateJoinCall(t, ctx, connection, params, result)
+		}
+	}
 	client.Logger = t.Logf
 	t.Cleanup(client.Close)
 	return client
@@ -712,4 +723,66 @@ func claimSignerOf(raw json.RawMessage) string {
 		return priv.(string)
 	}
 	return ""
+}
+
+// circleProofSigners remembers who signed each join proof the suite built, so a
+// private join can be bound to its request's terms and signed by its member.
+var circleProofSigners sync.Map
+
+// reboundJoinProofs keeps the first binding of each suite-built proof, so a proof
+// sent again is the same event, bound to the terms it was first sent with: a
+// replay stays a replay rather than a fresh proof.
+var reboundJoinProofs sync.Map
+
+// bindJoinProof completes a join the way the suite builds it: max_receive asks
+// for as much as max_amount when absent, and a proof the suite signed gets the
+// request's terms tag (NIP-CW §Identity Proof, check 7) and is re-signed. It
+// returns the params and the proof's signer ("" for a proof the suite did not
+// sign, which is sent as it is).
+func bindJoinProof(t *testing.T, raw json.RawMessage) (json.RawMessage, string) {
+	t.Helper()
+	var params map[string]any
+	if json.Unmarshal(raw, &params) != nil || params == nil {
+		return raw, ""
+	}
+	if _, ok := params["max_receive"]; !ok {
+		params["max_receive"] = params["max_amount"]
+	}
+	signer := ""
+	evJSON, _ := params["identity_event"].(string)
+	var ev nostr.Event
+	if json.Unmarshal([]byte(evJSON), &ev) == nil {
+		if priv, ok := circleProofSigners.Load(ev.ID); ok {
+			signer = priv.(string)
+			if rebound, ok := reboundJoinProofs.Load(ev.ID); ok {
+				params["identity_event"] = rebound.(string)
+				out, err := json.Marshal(params)
+				require.NoError(t, err)
+				return out, signer
+			}
+			originalID := ev.ID
+			req, err := json.Marshal(params)
+			require.NoError(t, err)
+			if parsed, err := nipcw.ParseCreateCircleWalletRequest(req); err == nil {
+				if terms, err := nipcw.TermsTag(parsed.Terms()); err == nil {
+					kept := nostr.Tags{}
+					for _, tag := range ev.Tags {
+						if len(tag) > 0 && tag[0] != "terms" {
+							kept = append(kept, tag)
+						}
+					}
+					ev.Tags = append(kept, nostr.Tag{"terms", terms})
+					require.NoError(t, ev.Sign(signer))
+					circleProofSigners.Store(ev.ID, signer)
+					rebound, err := json.Marshal(ev)
+					require.NoError(t, err)
+					params["identity_event"] = string(rebound)
+					reboundJoinProofs.Store(originalID, string(rebound))
+				}
+			}
+		}
+	}
+	out, err := json.Marshal(params)
+	require.NoError(t, err)
+	return out, signer
 }

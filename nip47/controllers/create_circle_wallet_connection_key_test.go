@@ -43,6 +43,7 @@ func joinWithConnection(t *testing.T, svc *tests.TestService, provider *db.App, 
 	}
 	proof := &nostr.Event{Kind: nostrKindCircleIdentityProof, CreatedAt: nostr.Now(), Tags: tags}
 	require.NoError(t, proof.Sign(member))
+	joinProofSigners.Store(proof.ID, member)
 
 	raw, err := json.Marshal(map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": nipcw.CreateCircleWalletRequest{
 		Pubkey: memberPub, ConnectionPubkey: connectionPubkey, MaxAmount: 100_000, Expiry: 3600, IdentityEvent: mustMarshal(t, proof),
@@ -54,7 +55,7 @@ func joinWithConnection(t *testing.T, svc *tests.TestService, provider *db.App, 
 	require.NoError(t, svc.DB.Create(ev).Error)
 
 	var response *models.Response
-	NewTestNip47ControllerWithSocialCache(svc, cache).HandleCreateCircleWalletEvent(context.TODO(), req, ev.ID, provider,
+	NewTestNip47ControllerWithSocialCache(svc, cache).testJoin(t, context.TODO(), req, ev.ID, provider,
 		func(r *models.Response, _ nostr.Tags) { response = r })
 	require.NotNil(t, response)
 	return response
@@ -120,7 +121,7 @@ func TestCreateCircleWallet_ProofConnectionTag_CheckedBeforeMembership(t *testin
 
 			response := joinWithConnection(t, svc, provider, cache, member, connection, tags...)
 			require.NotNil(t, response.Error)
-			assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+			assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code)
 			assert.Contains(t, response.Error.Message, "connection")
 			assert.Zero(t, cache.calls.Load(), "refused before membership is consulted")
 			requireNoCircleWallet(t, svc, provider)
@@ -143,7 +144,7 @@ func TestCreateCircleWallet_ConnectionPubkeyAlreadyAuthorized_RolledBack(t *test
 
 	response := joinWithConnection(t, svc, provider, &countingMembership{}, nostr.GeneratePrivateKey(), taken, taken)
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code)
 	assert.Contains(t, response.Error.Message, "connection_pubkey")
 	requireNoCircleWallet(t, svc, provider)
 

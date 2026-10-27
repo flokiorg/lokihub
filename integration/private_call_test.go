@@ -20,6 +20,7 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 	nipcashclient "github.com/ohstr/nmilat/nipcash/client"
 	"github.com/ohstr/nmilat/nipcash/transport"
+	"github.com/ohstr/nmilat/nipcw"
 )
 
 // privateCall places ONE bill-method request over the private transport and returns the
@@ -72,7 +73,27 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 	hubXOnly, err := transport.NormalizeNodeIdentity(minter)
 	require.NoError(t, err, "normalize hub identity")
 
-	session, err := (&nipcashclient.Client{}).NewBatchSession(ctx, hubXOnly, tok.RelayURLs)
+	billKey := tok.Secret
+	if forged {
+		billKey = forgedKey.(string)
+	}
+	return privateTargetCall(t, ctx, privateTarget{walletPubkey: tok.WalletPubkey, billKey: billKey, hubXOnly: hubXOnly, relays: tok.RelayURLs},
+		method, params, signerPriv, result)
+}
+
+// privateTarget is what a private item needs about its target: the wallet pubkey it
+// names, the key that signs its bill proof, and the Hub identity and relays that find
+// the Hub's announcement.
+type privateTarget struct {
+	walletPubkey, billKey, hubXOnly string
+	relays                          []string
+}
+
+// privateTargetCall places one item at target over the private transport.
+func privateTargetCall(t *testing.T, ctx context.Context, target privateTarget, method string, params any, signerPriv string, result any) error {
+	t.Helper()
+	hubXOnly := target.hubXOnly
+	session, err := (&nipcashclient.Client{}).NewBatchSession(ctx, hubXOnly, target.relays)
 	require.NoError(t, err, "fetch the hub's kind-11190 announcement")
 
 	limits := session.Limits()
@@ -105,18 +126,14 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 	require.NoError(t, err)
 
 	binding := transport.ProofBinding{
-		Target: tok.WalletPubkey, HubXOnly: hubXOnly, Method: method,
+		Target: target.walletPubkey, HubXOnly: hubXOnly, Method: method,
 		ParamsHash: paramsHash, Nonce: nonce, NotAfter: notAfter,
 	}
 	item := transport.Item{
-		ID: "1", Target: tok.WalletPubkey, Method: method, Params: rawParams,
+		ID: "1", Target: target.walletPubkey, Method: method, Params: rawParams,
 	}
 	// Always a bill proof: required on every item whatever the identity mode.
-	billKey := tok.Secret
-	if forged {
-		billKey = forgedKey.(string)
-	}
-	billProof, err := transport.BuildBillProof(billKey, binding)
+	billProof, err := transport.BuildBillProof(target.billKey, binding)
 	require.NoError(t, err)
 	item.BillProof = billProof
 	// A slice proof only when a signer was given. Omitting it is how a test reaches the
@@ -337,4 +354,22 @@ func mustConnectBill(t *testing.T, token, signerPriv string) *billConn {
 // bill connection around — and those helpers do not care which transport carries the call.
 type billCaller interface {
 	Call(ctx context.Context, method string, params, result any) error
+}
+
+// privateJoinCall sends a join to the Circle Wallet Hub of circlehub1 over the
+// private transport (NIP-CW §Private Join), the only transport that serves it. The
+// suite's proofs are bound to the request's terms here, and the item proof is
+// signed by the proof's signer, the joining pubkey.
+func privateJoinCall(t *testing.T, ctx context.Context, circlehub1 string, params, result any) error {
+	t.Helper()
+	conn, err := nipcw.DecodeCircleHubConnection(circlehub1)
+	require.NoError(t, err)
+	raw, err := json.Marshal(params)
+	require.NoError(t, err)
+	raw, signer := bindJoinProof(t, raw)
+	if signer == "" {
+		signer = nostr.GeneratePrivateKey()
+	}
+	return privateTargetCall(t, ctx, privateTarget{walletPubkey: conn.Pubkey, billKey: conn.Secret, hubXOnly: conn.HubIdentity, relays: conn.Relays},
+		nipcw.MethodCreateCircleWallet, json.RawMessage(raw), signer, result)
 }

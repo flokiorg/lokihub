@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -79,7 +80,7 @@ func TestCircleFollowups_JoinCapFloor(t *testing.T) {
 				ephemeralCircleHubOpts{FundLoki: 1_000})
 
 			_, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI-1)
-			requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+			requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
 
 			child, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI)
 			require.NoError(t, err)

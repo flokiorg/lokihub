@@ -67,7 +67,7 @@ func TestHandleCreateCircleWalletEvent_ConcurrentCreations_NeverStall(t *testing
 		w := work[i]
 		go func() {
 			<-ready
-			controller.HandleCreateCircleWalletEvent(context.TODO(), w.req, w.eventID, w.hub,
+			controller.testJoin(t, context.TODO(), w.req, w.eventID, w.hub,
 				func(r *models.Response, _ nostr.Tags) { responses <- r })
 		}()
 	}
