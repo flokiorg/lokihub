@@ -41,6 +41,23 @@ self-payments; the payer and the chain serve the order, withdraw and external
 payment cases. `just dev mine`, `just dev fund` and `just dev status` drive and
 inspect the chain (`just dev help`).
 
+**Test hooks.** The dev backend is built with the `testhooks` tag and runs with
+`LOKIHUB_TEST_HOOKS=1`, so it serves chain and payer hooks under `/api/test`
+behind the admin token. They refuse every call unless the Hub's own node is on
+regtest, and release builds never contain them:
+
+| Hook | Does |
+|---|---|
+| `POST /api/test/chain/mine {blocks, address?}` | mines blocks (to the payer unless `address`), leaving out withheld transactions |
+| `GET /api/test/chain/tip` | tip height and hash |
+| `GET /api/test/chain/tx/{txid}` | raw transaction and depth (0 in the mempool) |
+| `POST /api/test/chain/withhold {txid, on}` | keeps a transaction, and anything spending it, out of mined blocks |
+| `POST /api/test/payer/pay-invoice {invoice}` | the payer pays a BOLT11 invoice |
+| `POST /api/test/payer/pay-address {address, amount_millis}` | the payer pays on-chain (whole loki) |
+| `POST /api/test/payer/invoice {amount_millis}` | an invoice from the payer, for an external payment |
+| `GET /api/test/payer/invoice/{hash}` | that invoice's state |
+| `GET /api/test/payer/address` | a fresh payer address |
+
 `relay_url` is the Hub's own relay (the `RELAY` value in `.env`), and it must be
 one of the Hub's `GeneralRelay` settings, which the backend's `follow_set`
 circle-policy check (`service/nostr_social_cache.go`) queries. This suite never

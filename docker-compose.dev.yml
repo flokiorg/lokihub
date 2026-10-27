@@ -128,12 +128,20 @@ services:
     # air polls the tree instead of using inotify: the host's inotify instance
     # limit (fs.inotify.max_user_instances, often 128) is shared by every
     # container and runs out on a busy host ("too many open files").
-    command: ["--build.poll", "true", "--build.poll_interval", "1000"]
+    # Built with the testhooks tag: the chain and payer hooks under /api/test
+    # (http/testhooks.go), which release builds never contain.
+    command: ["--build.poll", "true", "--build.poll_interval", "1000",
+              "--build.cmd", "go build -tags testhooks -o ./tmp/main ./cmd/http"]
     environment:
       - WORK_DIR=/data
       - PORT=1610
       - NETWORK=regtest
       - LOKIHUB_DEV_STACK=1
+      - LOKIHUB_TEST_HOOKS=1
+      - LOKIHUB_TEST_CHAIN_RPC=chain:25213
+      - LOKIHUB_TEST_CHAIN_RPC_CERT=/chain/rpc.cert
+      - LOKIHUB_TEST_PAYER_GRPC=payer:10006
+      - LOKIHUB_TEST_PAYER_DIR=/payer-data
       # No BASE_URL/FRONTEND_URL: the stack is reached only through Caddy, and an
       # unset value makes /logout redirect to a same-origin "/".
       - LN_BACKEND_TYPE=FLND
@@ -156,10 +164,14 @@ services:
       - .:/app
       - ./data/regtest/hub:/data
       - ./data/regtest/flnd:/flnd-data:ro
+      - ./data/regtest/payer:/payer-data:ro
+      - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
     depends_on:
       flnd:
+        condition: service_healthy
+      payer:
         condition: service_healthy
       relay:
         condition: service_started
