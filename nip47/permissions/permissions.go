@@ -161,6 +161,11 @@ func (svc *permissionsService) GetPrivateMethods(app *db.App) []string {
 			out = append(out, method)
 		}
 	}
+	// cash_lookup recovers a lost reply of a bill method or of mint_cash, so every
+	// connection serving either lists it (NIP-CASH §Support).
+	if len(out) > 0 || slices.Contains(scopes, constants.CASH_HUB_SCOPE) {
+		out = append(out, constants.NIP47MethodCashLookup)
+	}
 	slices.Sort(out)
 	return out
 }

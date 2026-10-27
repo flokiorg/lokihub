@@ -102,6 +102,12 @@ func (svc *nip47Service) servePrivateItem(
 	// decided after the lookup (I3).
 	signer, signed := svc.billProofSigner(item, binding)
 
+	// cash_lookup resolves its own targets, which include bills the Hub has
+	// destroyed and calls it has recorded (NIP-CASH §Looking Up a Call).
+	if item.Method == constants.NIP47MethodCashLookup {
+		return svc.servePrivateLookup(item, binding, signer, signed)
+	}
+
 	// The destroyed-bill record is read for every item, live bill or not, so a
 	// target this hub never served costs no less than a live one.
 	tombstone, tombstoned := db.SpentBillTombstoneFor(svc.db, item.Target)
