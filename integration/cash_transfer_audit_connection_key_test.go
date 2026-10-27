@@ -266,7 +266,7 @@ func TestAudit_CashTransferConnectionKey_NewTargetUntrustedIA_Rejected(t *testin
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "connection_key", IdentityValue: targetConnKey, IAPubkey: untrustedIAPub},
 		AmountMillis:     &half,
 	}, &res)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 
 	// Nothing moved.
 	// Read from the HUB's own records, not over the wire.
@@ -318,7 +318,7 @@ func TestAudit_CashTransferConnectionKey_AttestationForWrongClaimant_Rejected(t 
 		NewIdentity:      CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: attackerTargetPub},
 		AmountMillis:     &half,
 	}, &res)
-	requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+	requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 	// The real owner can still split their own slice using the same attestation.
 	realTargetPriv := newTestPrivkey(t)

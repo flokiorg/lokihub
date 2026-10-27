@@ -181,7 +181,7 @@ func TestAudit_CashSplitChain_InheritanceAndConservation(t *testing.T) {
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: rejTargetPub},
 			AmountMillis:  &belowFloor,
 		}, &rejRes)
-		requireNWCErrorCode(t, rejErr, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, rejErr, constants.ERROR_RESTRICTED)
 		require.ErrorContains(t, rejErr, "min_transfer_millis",
 			"gen %d below-floor split must be rejected for the inherited floor, not another reason", gen)
 

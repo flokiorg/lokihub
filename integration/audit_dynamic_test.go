@@ -163,7 +163,7 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 				CashSecret: secret1,
 			}, &probeRes)
 			require.Error(t, probeErr, "CRITICAL DOUBLE-SPEND: the superseded pre-transfer secret redeemed a slice already transferred away")
-			requireNWCErrorCode(t, probeErr, constants.ERROR_NOT_FOUND)
+			requireNWCErrorCode(t, probeErr, constants.ERROR_UNAUTHORIZED)
 
 			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-probe-secret2")
 			var winRes ClaimFundsResult
@@ -231,7 +231,7 @@ func TestAudit_CashConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 				Invoice:    loseInvoice.Invoice,
 				CashSecret: loseHex,
 			}, &loseRes)
-			requireNWCErrorCode(t, err, constants.ERROR_NOT_FOUND)
+			requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 			// Winner's secret redeems exactly the full amount, once.
 			winInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit winner-secret")
@@ -323,7 +323,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			IdentityEvent: eventJSON(t, proof),
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "cash", IdentityValue: secretHash, IAPubkey: curPub},
 		}, &res)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("UnknownNewIdentityType_Rejected", func(t *testing.T) {

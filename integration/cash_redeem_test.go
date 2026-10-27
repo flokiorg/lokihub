@@ -181,7 +181,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The legitimate, correctly-bound claim must still succeed afterward.
 		correctResult := ClaimFundsResult{}
@@ -225,7 +225,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("GetBudget_Rejected_GetInfo_Allowed", func(t *testing.T) {
@@ -377,7 +377,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, attackerProof),
 			AttestationEvent: eventJSON(t, attestation),
 		}, &attackerResult)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The real claimant's own claim, using the same attestation, must still succeed.
 		realInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration attestation-theft test (real claimant)")
@@ -428,7 +428,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, expiredAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// A fresh attestation for the same slice must still succeed afterward.
 		freshAttestation := buildIAAttestationEvent(t, iaPriv, connectionKey, claimantPub, time.Hour)
@@ -486,7 +486,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, noExpiryAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("ConnectionKeyMode_AttestationSignedByImposterIA_Rejected", func(t *testing.T) {
@@ -527,7 +527,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, imposterAttestation),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("ConnectionKeyMode_AttestationForgedSignature_Rejected", func(t *testing.T) {
@@ -569,7 +569,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityEvent:    eventJSON(t, proof),
 			AttestationEvent: eventJSON(t, forged),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 	})
 
 	t.Run("StaleClaimProof_Rejected", func(t *testing.T) {
@@ -596,7 +596,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, staleProof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_UNAUTHORIZED)
 
 		// The slice must remain claimable with a fresh proof against the same
 		// invoice afterward.

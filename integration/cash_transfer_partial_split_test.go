@@ -222,7 +222,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 			AmountMillis:  &tooSmall,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("RemainderBelowFloor_Rejected", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 			NewIdentity:   CashTransferNewIdentityParam{IdentityType: "pubkey", IdentityValue: newPub},
 			AmountMillis:  &almostAll,
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("SplitAmountAtFloor_Accepted", func(t *testing.T) {

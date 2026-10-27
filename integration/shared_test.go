@@ -73,6 +73,7 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 		Tags:      tags,
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	transferProofSigners.Store(ev.ID, signerPrivkey)
 	return ev
 }
 
@@ -113,9 +114,10 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	return ev
 }
 
-// transferProofSigners remembers who signed each transfer proof the suite built,
-// so a consolidate call can re-bind its sources' proofs to the call
-// (rebindConsolidateProofs).
+// transferProofSigners remembers who signed each claim proof the suite built, so
+// a consolidate call can re-bind its sources' proofs to the call
+// (rebindConsolidateProofs) and an item proof is signed by its claim proof's
+// signer (claimSignerOf).
 var transferProofSigners sync.Map
 
 // rebindConsolidateProofs makes each source's claim proof a cash_consolidate
@@ -419,7 +421,7 @@ func requireCashWalletDrainedAway(t *testing.T, admin *adminClient, hubAppID uin
 	// a caller as an omission. Both are information-free by design — indistinguishable from
 	// a pubkey this hub never served — which is exactly the property being asserted.
 	require.True(t,
-		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted),
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err),
 		"a deleted cash wallet must be met with silence; any answer tells the caller this hub once served that pubkey (got %v)", err)
 }
 
@@ -454,7 +456,9 @@ func requireSpentBillSilent(t *testing.T, call func(ctx context.Context) error) 
 		// deliberately indistinguishable from a bill the hub never held — so both satisfy
 		// "stopped answering". Accepting only the timeout would fail this test for the very
 		// behaviour it is asserting.
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) {
+		// A value method on the private transport gets the bill's tombstone
+		// instead: the bill is gone just the same.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errPrivateOmitted) || isBillGone(err) {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -667,4 +671,31 @@ func balanceOf(t *testing.T, c *nwcclient.Client) int64 {
 	var b GetBalanceResult
 	require.NoError(t, c.Call(ctxT(t), "get_balance", struct{}{}, &b))
 	return b.Balance
+}
+
+// claimSignerOf is the key that signed the claim proof an item carries (for
+// cash_consolidate, sources[0]'s), when the suite built it; "" otherwise.
+// NIP-CASH §Claim Proofs: the item proof must be signed by the same key.
+func claimSignerOf(raw json.RawMessage) string {
+	var params struct {
+		IdentityEvent string `json:"identity_event"`
+		Sources       []struct {
+			IdentityEvent string `json:"identity_event"`
+		} `json:"sources"`
+	}
+	if json.Unmarshal(raw, &params) != nil {
+		return ""
+	}
+	evJSON := params.IdentityEvent
+	if evJSON == "" && len(params.Sources) > 0 {
+		evJSON = params.Sources[0].IdentityEvent
+	}
+	var ev nostr.Event
+	if evJSON == "" || json.Unmarshal([]byte(evJSON), &ev) != nil {
+		return ""
+	}
+	if priv, ok := transferProofSigners.Load(ev.ID); ok {
+		return priv.(string)
+	}
+	return ""
 }
