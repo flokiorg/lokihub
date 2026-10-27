@@ -28,13 +28,15 @@ func TestCashTransferSplit_AmountAndFloorBoundaries(t *testing.T) {
 		floor       int64
 		requested   uint64
 		wantMsgPart string
+		// An amount out of range is BAD_REQUEST (step 3); dust is RESTRICTED (step 4).
+		wantCode string
 	}{
-		{name: "zero amount", floor: 0, requested: 0, wantMsgPart: "positive"},
-		{name: "exceeds own slice", floor: 0, requested: sliceAmount + 1, wantMsgPart: "exceeds"},
-		{name: "carved below floor", floor: 1000, requested: 500, wantMsgPart: "min_transfer_millis floor"},
-		{name: "remainder below floor", floor: 1000, requested: 4500, wantMsgPart: "remainder"},
-		{name: "carved exactly one below floor", floor: 2000, requested: 1999, wantMsgPart: "min_transfer_millis floor"},
-		{name: "remainder exactly one below floor", floor: 2000, requested: 3001, wantMsgPart: "remainder"},
+		{name: "zero amount", floor: 0, requested: 0, wantMsgPart: "positive", wantCode: constants.ERROR_BAD_REQUEST},
+		{name: "exceeds own slice", floor: 0, requested: sliceAmount + 1, wantMsgPart: "exceeds", wantCode: constants.ERROR_BAD_REQUEST},
+		{name: "carved below floor", floor: 1000, requested: 500, wantMsgPart: "min_transfer_millis floor", wantCode: constants.ERROR_RESTRICTED},
+		{name: "remainder below floor", floor: 1000, requested: 4500, wantMsgPart: "remainder", wantCode: constants.ERROR_RESTRICTED},
+		{name: "carved exactly one below floor", floor: 2000, requested: 1999, wantMsgPart: "min_transfer_millis floor", wantCode: constants.ERROR_RESTRICTED},
+		{name: "remainder exactly one below floor", floor: 2000, requested: 3001, wantMsgPart: "remainder", wantCode: constants.ERROR_RESTRICTED},
 	}
 
 	for _, tc := range cases {
@@ -62,7 +64,7 @@ func TestCashTransferSplit_AmountAndFloorBoundaries(t *testing.T) {
 				AmountMillis:  &amt,
 			})
 			require.NotNil(t, resp.Error)
-			assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+			assert.Equal(t, tc.wantCode, resp.Error.Code)
 			assert.Contains(t, resp.Error.Message, tc.wantMsgPart)
 
 			// The source slice must be completely untouched by a rejected split.

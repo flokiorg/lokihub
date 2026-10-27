@@ -38,6 +38,7 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 	t.Helper()
 	tags := nostr.Tags{
 		{"d", walletPubkey},
+		{"m", constants.NIP47MethodCashTransfer},
 		{"new_identity_hash", newIdentityHash(newIdentityType, newIdentityValue, newIAPubkey)},
 		{"amount_millis", strconv.FormatUint(amountMloki, 10)},
 	}
@@ -329,7 +330,9 @@ func TestHandleCashTransferEvent_ToCash_IAPubkeySupplied_Rejected(t *testing.T) 
 
 	_, newSecretHash := cashSecretAndHash(t)
 	stray, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
+	// The proof binds exactly what is sent, stray ia_pubkey included, so it
+	// authorizes and the target itself is what is refused.
+	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, stray, 1000, nil, time.Now())
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
@@ -442,7 +445,7 @@ func TestHandleCashTransferEvent_NewIdentityConnectionKey_UntrustedIA_Rejected(t
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "an untrusted IA is RESTRICTED (NIP-CASH §Transferring and Splitting a Slice, step 2)")
 
 	// Untouched — the transfer must not have gone through.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, currentPubkey)
@@ -482,7 +485,7 @@ func TestHandleCashTransferEvent_ProofBoundToDifferentNewIdentity_Rejected(t *te
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code, "a claim proof that does not verify is UNAUTHORIZED (step 1)")
 
 	// Neither the intended nor the attacker's identity gained anything —
 	// the original registered identity is untouched.
@@ -520,7 +523,7 @@ func TestHandleCashTransferEvent_WrongSignature_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code, "a claim proof that does not verify is UNAUTHORIZED (step 1)")
 }
 
 // TestHandleCashTransferEvent_TransferIntoCash_MultiSliceWallet_SpinsOffToNewWallet
@@ -721,7 +724,7 @@ func TestHandleCashTransferEvent_PartialSplit_BelowMinTransferFloor_Rejected(t *
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "dust is RESTRICTED (step 4)")
 
 	// Untouched.
 	claim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, currentPubkey)
@@ -758,7 +761,7 @@ func TestHandleCashTransferEvent_PartialSplit_RemainderBelowFloor_Rejected(t *te
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "dust is RESTRICTED (step 4)")
 }
 
 // TestHandleCashTransferEvent_PartialSplit_ExceedsSliceBalance_Rejected
@@ -948,7 +951,7 @@ func TestHandleCashTransferEvent_AlreadyClaimedSlice_Rejected(t *testing.T) {
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "a slice already claimed is RESTRICTED (step 1)")
 }
 
 func TestHandleCashTransferEvent_CashCurrent_WrongSecret_Rejected(t *testing.T) {
@@ -972,7 +975,7 @@ func TestHandleCashTransferEvent_CashCurrent_WrongSecret_Rejected(t *testing.T) 
 	})
 
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, response.Error.Code, "a cash secret that does not open the slice is UNAUTHORIZED (step 1)")
 }
 
 func TestHandleCashTransferEvent_CashCurrent_MixedParams_Rejected(t *testing.T) {

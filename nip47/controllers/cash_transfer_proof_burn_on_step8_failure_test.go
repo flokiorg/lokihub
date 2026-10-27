@@ -54,7 +54,7 @@ func TestHandleCashTransferEvent_NewIdentityValidationFailure_ReleasesProofGuard
 		},
 	})
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "an untrusted IA is RESTRICTED (NIP-CASH §Transferring and Splitting a Slice, step 2)")
 
 	// The slice must be untouched (already covered by the sibling
 	// UntrustedIA_Rejected test) ...
@@ -87,5 +87,5 @@ func TestHandleCashTransferEvent_NewIdentityValidationFailure_ReleasesProofGuard
 	// reached the same validation step again rather than being blocked by a
 	// stale "already used" guard.
 	require.NotNil(t, retry.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, retry.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, retry.Error.Code)
 }
