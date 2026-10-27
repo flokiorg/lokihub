@@ -58,7 +58,8 @@ func Models() []any {
 		&db.CashOrderAddress{},
 		&db.CashOrderPayment{},
 	}
-	return append(base, withdrawModels()...)
+	base = append(base, withdrawModels()...)
+	return append(base, listingModels()...)
 }
 
 // Migrate refuses a database older than SchemaEpoch, then creates every table, the

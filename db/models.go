@@ -97,6 +97,11 @@ type App struct {
 	// Sub-wallet lineage (Cash and circle children)
 	ParentAppID *uint  `gorm:"index:idx_apps_parent,priority:1"`
 	ParentKind  string `gorm:"index:idx_apps_parent,priority:2"`
+	// HubGroupPubkey is a Cash Hub's hub group input once its connection was
+	// regenerated (WP-25 item 7): the client key it minted under before, kept so
+	// the fingerprint never changes (NIP-CASH §The Hub Group Fingerprint). Nil
+	// until then, when the input is AppPubkey.
+	HubGroupPubkey *string `gorm:"size:64"`
 
 	// Expiry of this sub-wallet app (mirrors the AppPermission.ExpiresAt value for
 	// efficient cleanup/commitment queries on the apps table itself).
@@ -916,7 +921,9 @@ func IsNameImmutableKind(kind string) bool {
 // is never discovered by relay query. A cash_hub, by contrast, is a public
 // service and advertising mint_cash is the point.
 func PublishesNip47InfoEvent(kind string) bool {
-	return kind != AppKindCashWallet
+	// A circle_hub_conn shares its hub's wallet key: publishing or deleting an
+	// info event for it would replace or delete the hub's (WP-25 item 6).
+	return kind != AppKindCashWallet && kind != AppKindCircleHubConn
 }
 
 type AppPermission struct {
