@@ -24,6 +24,7 @@ import (
 	"github.com/flokiorg/lokihub/db/migrations"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
+	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/swaps"
@@ -86,6 +87,8 @@ type service struct {
 	privateTransportStatusMu sync.Mutex
 	// orders takes order payments in and mints them (NIP-CO).
 	orders *cashorder.Engine
+	// listingSvc lists offers (WP-25); set by startListings.
+	listingSvc *listing.Service
 }
 
 func NewService(ctx context.Context) (*service, error) {
