@@ -56,3 +56,12 @@ func (api *api) ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, err
 	}
 	return w.ListPayouts(hubAppID, 500)
 }
+
+// CashWithdrawStatus is the payout engine's health.
+func (api *api) CashWithdrawStatus() (*cashwithdraw.EngineStatus, error) {
+	e, ok := api.svc.(interface{ GetWithdrawEngine() *cashwithdraw.Engine })
+	if !ok || e.GetWithdrawEngine() == nil {
+		return nil, ErrWithdrawUnavailable
+	}
+	return e.GetWithdrawEngine().Status()
+}

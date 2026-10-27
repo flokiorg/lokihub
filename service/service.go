@@ -60,7 +60,9 @@ type service struct {
 	droppedRequestEvents atomic.Int64
 	nip47Service         nip47.Nip47Service
 	// withdraw serves on-chain withdrawals (service/withdraw.go).
-	withdraw         *cashwithdraw.Service
+	withdraw *cashwithdraw.Service
+	// withdrawEngine pays the payouts (service/withdraw.go).
+	withdrawEngine   *cashwithdraw.Engine
 	socialCache      *nostrSocialCache
 	lsps5Listener    *lspsnostr.Listener
 	liquidityManager *manager.LiquidityManager
