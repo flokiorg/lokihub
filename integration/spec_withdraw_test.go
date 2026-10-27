@@ -199,6 +199,7 @@ func TestSpecWithdraw_I54_Quote(t *testing.T) {
 	require.NoError(t, err)
 	minter, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
+	minter = minter[2:] // compressed to x-only, the form QuoteExpectation takes
 	q, err := nipcash.VerifyQuoteAnswer(res, nipcash.QuoteExpectation{HubXOnly: minter, Wallet: tok.WalletPubkey,
 		IdentityValue: pubs[0], Address: addr, SendBefore: &sendBefore, AmountMillis: 8_000_000})
 	require.NoError(t, err)
@@ -212,7 +213,7 @@ func TestSpecWithdraw_I54_Quote(t *testing.T) {
 func TestSpecWithdraw_I63_LookupAndRefusals(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-call")
-	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
+	token, privs, _ := h.mintFor(t, 5_000_000, 5_000_000)
 
 	other, err := quoteAs(t, token, privs[1], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
@@ -247,7 +248,7 @@ func TestSpecWithdraw_I63_LookupAndRefusals(t *testing.T) {
 func TestSpecWithdraw_I66_SwitchOffKeepsPayouts(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-off")
-	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
+	token, privs, _ := h.mintFor(t, 5_000_000, 5_000_000)
 	q, err := quoteAs(t, token, privs[0], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
 	rid := newTestPrivkey(t)
