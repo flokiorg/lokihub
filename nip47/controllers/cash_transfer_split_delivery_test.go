@@ -53,10 +53,14 @@ func TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear(t 
 
 	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	amount := uint64(2000)
+	// A partial split of a cash slice gives its remainder a fresh commitment, so
+	// the source's secret opens nothing afterwards (NIP-CASH remainder_commitment).
+	_, remainderCommitment := cashSecretAndHash(t)
 	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		CashSecret:   secretHex,
-		NewIdentity:  cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMillis: &amount,
+		CashSecret:          secretHex,
+		NewIdentity:         cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
+		AmountMillis:        &amount,
+		RemainderCommitment: remainderCommitment,
 	})
 
 	require.Nil(t, response.Error, "a cash-mode partial split must succeed and deliver its token, not strand funds")
@@ -78,6 +82,10 @@ func TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear(t 
 	assert.Equal(t, result.RemainderWalletPubkey, remTok.WalletPubkey)
 	require.NotNil(t, result.RemainingAmountMillis)
 	assert.EqualValues(t, 3000, *result.RemainingAmountMillis)
+	var remainderSlice db.CashWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = (SELECT id FROM apps WHERE wallet_pubkey = ?)", result.RemainderWalletPubkey).First(&remainderSlice).Error)
+	assert.Equal(t, db.CashIdentityCash, remainderSlice.IdentityType)
+	assert.Equal(t, remainderCommitment, remainderSlice.IdentityValue, "the remainder takes the fresh commitment, never the source's")
 
 	// The source cash-mode slice is consumed whole (terminal) — its value re-emerged
 	// as the two new cash/pubkey wallets above, never decremented in place.
@@ -125,7 +133,7 @@ func TestHandleCashTransferEvent_InPlaceReassignment_LostRace_ReleasesProofGuard
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 	require.NotNil(t, response.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, response.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "a slice already claimed is RESTRICTED")
 
 	// The replay guard must have been released: a fresh attempt reusing the
 	// EXACT SAME proof (not a newly-signed one) must not be rejected as
@@ -139,5 +147,5 @@ func TestHandleCashTransferEvent_InPlaceReassignment_LostRace_ReleasesProofGuard
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 	require.NotNil(t, retry.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, retry.Error.Code, "must fail for the same underlying reason, not \"identity_event has already been used\"")
+	assert.Equal(t, constants.ERROR_RESTRICTED, retry.Error.Code, "must fail for the same underlying reason, not \"identity_event has already been used\"")
 }

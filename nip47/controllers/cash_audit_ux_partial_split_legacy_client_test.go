@@ -139,7 +139,7 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
 	})
 	require.NotNil(t, retry.Error, "the legacy client's natural next call, against the connection it still believes holds its change, must fail")
-	assert.Equal(t, constants.ERROR_NOT_FOUND, retry.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, retry.Error.Code, "a slice already claimed is RESTRICTED (NIP-CASH §Transferring and Splitting a Slice, step 1)")
 	assert.Contains(t, retry.Error.Message, "split off into a new dedicated wallet",
 		"the failure message must give a forwarding hint toward the new wallet the value actually moved to")
 	assert.Contains(t, retry.Error.Message, "cash_status")

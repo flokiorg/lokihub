@@ -63,6 +63,13 @@ audits of both.
 
 ### Changed
 
+- Runs `cash_transfer` in NIP-CASH's order and codes: a claimed or expired
+  slice is `RESTRICTED`; a claim proof that does not verify (now checked by
+  nmilat, `m` tag and exact tags included), a wrong cash secret, or an item proof
+  by another key is `UNAUTHORIZED`; an untrusted IA and dust are `RESTRICTED`. A
+  full transfer to an identity already holding a slice on the bill spins off, a
+  cash slice's partial split takes a fresh `remainder_commitment`, and a
+  `zap_target` is refused with `NOT_IMPLEMENTED` until zap transfers ship.
 - Requires a `request_id` on `cash_transfer`: a missing or malformed one is
   refused before the item's proofs (`BAD_REQUEST`), a used one with
   `REQUEST_REUSED`; it is marked used once the call is authorized, and the

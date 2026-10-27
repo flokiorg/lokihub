@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -586,4 +587,80 @@ func (controller *nip47Controller) resolveConsolidateSource(params *nipcash.Cash
 		claim:         claim,
 		proofPubkey:   identityEvent.PubKey,
 	}, evID, "", ""
+}
+
+// verifyTransferIdentityEvent checks a kind-23198 transfer proof — the same
+// event kind and most of the same checks as verifyClaimIdentityEvent
+// (cash_redeem_controller.go), except bound to the transfer's *target*
+// identity via a new_identity_hash tag instead of an invoice's bolt11_hash,
+// AND to the specific amount_millis this request resolves to (NIP-CASH
+// §Transferring and Splitting a Slice: "a proof MUST NOT be replayable to
+// authorize a DIFFERENT amount_millis than the one it was signed for" — an
+// omitted request amount_millis, i.e. a full transfer, is bound to the exact
+// live amount resolved for it, never left unbound). Caller passes the
+// already-resolved requestedAmount (§Processing Algorithm step 1's
+// "treating an omitted amount_millis as bound to the slice's full current
+// amount" rule already applied) — this function only compares it against
+// what the proof itself commits to.
+//
+// The identity/target binding alone isn't enough once splitting exists: an
+// in-place full reassignment naturally self-invalidates a replayed proof
+// (the slice's registered identity changes, so the proof's signer no longer
+// matches), but a partial split leaves the SAME identity registered on the
+// source slice — so, unlike before splitting existed, a captured proof
+// would otherwise remain "valid" for repeat reuse within its freshness
+// window. Callers MUST additionally insert a db.CashConsumedProof row (see
+// its own doc comment) immediately after this function returns nil, to
+// make every proof single-use regardless of amount.
+//
+// Deliberately a separate function rather than a refactor of
+// verifyClaimIdentityEvent to accept either binding: that function is
+// already security-critical and covered by its own focused tests: safer to
+// duplicate its structure once, here, than to risk it while generalizing it.
+func verifyTransferIdentityEvent(ev *nostr.Event, identityType, identityValue, walletPubkey, newIdentityHashTag string, requestedAmount uint64, attestationEventID string) error {
+	if ev.Kind != nostrKindClaimProof {
+		return fmt.Errorf("identity_event must be kind %d, got %d", nostrKindClaimProof, ev.Kind)
+	}
+	valid, err := ev.CheckSignature()
+	if err != nil || !valid {
+		return fmt.Errorf("identity_event has invalid signature")
+	}
+	if !ev.CheckID() {
+		return fmt.Errorf("identity_event id does not match its content")
+	}
+	dTag := ev.Tags.Find("d")
+	if len(dTag) < 2 || dTag[1] != walletPubkey {
+		return fmt.Errorf("identity_event d-tag does not match this wallet")
+	}
+	hashTag := ev.Tags.Find("new_identity_hash")
+	if len(hashTag) < 2 || hashTag[1] != newIdentityHashTag {
+		return fmt.Errorf("identity_event is not bound to this new_identity")
+	}
+	amountTag := ev.Tags.Find("amount_millis")
+	if len(amountTag) < 2 || amountTag[1] != strconv.FormatUint(requestedAmount, 10) {
+		return fmt.Errorf("identity_event is not bound to this amount_millis")
+	}
+	now := time.Now()
+	evTime := ev.CreatedAt.Time()
+	if evTime.Before(now.Add(-cashRedeemIdentityFreshnessWindow)) || evTime.After(now.Add(time.Minute)) {
+		return fmt.Errorf("identity_event is stale or has a future timestamp")
+	}
+
+	if identityType == db.CashIdentityConnectionKey {
+		connKeyTag := ev.Tags.Find("connection_key")
+		if len(connKeyTag) < 2 || connKeyTag[1] != identityValue {
+			return fmt.Errorf("identity_event connection_key tag does not match identity_value")
+		}
+		eTag := ev.Tags.FindWithValue("e", attestationEventID)
+		if len(eTag) == 0 {
+			return fmt.Errorf("identity_event must reference the attestation event via an e-tag")
+		}
+		return nil
+	}
+
+	// pubkey mode: the event's own signer IS the proof of ownership.
+	if ev.PubKey != identityValue {
+		return fmt.Errorf("identity_event must be signed by identity_value")
+	}
+	return nil
 }

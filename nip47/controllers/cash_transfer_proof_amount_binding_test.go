@@ -67,7 +67,7 @@ func TestCashTransfer_ProofBoundToAmount_ReplayWithDifferentAmountRejected(t *te
 		AmountMillis:  &mismatched,
 	})
 	require.NotNil(t, resp.Error, "a proof signed for amount_millis=2000 must not authorize a transfer of 3000")
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code, "a claim proof bound to another amount is UNAUTHORIZED")
 
 	// The victim's slice must be completely untouched: not claimed, still 5000.
 	victimClaim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, victimPubkey)
