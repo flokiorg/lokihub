@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -68,7 +70,8 @@ func removedMintField(raw json.RawMessage) string {
 	return ""
 }
 
-func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
+func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc, meta models.CallMeta) {
+	// 1. Decode. Nothing is marked: an unreadable request names no usable id.
 	params := &nipcash.MintCashRequest{}
 	resp := decodeRequest(nip47Request, params)
 	if resp != nil {
@@ -82,20 +85,45 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		Int64("expiry", params.Expiry).
 		Msg("Handling mint_cash request")
 
-	// 1. App must be cash_hub kind.
+	// The connection must be a Cash Hub's.
 	if app.Kind != db.AppKindCashHub {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_RESTRICTED, "mint_cash requires a cash_hub app")
 		return
 	}
 
-	// 1a. request_id is REQUIRED (NIP-CASH §request_id).
+	// 2. [step 1] Serialise mints on this Hub (this NWC path and the admin path,
+	// api.CreateCashWallet). A concurrent mint is refused, never queued.
+	release, ok := cashwallet.LockHub(app.ID)
+	if !ok {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_RATE_LIMITED, "another mint on this Hub is in progress")
+		return
+	}
+	defer release()
+
+	// 3. [step 2] request_id is REQUIRED; it is marked used now, whatever else is
+	// wrong with the call, so a reused id is REQUEST_REUSED and a later refusal leaves
+	// it used (NIP-CASH §request_id, S-CASH-02, S-CASH-06).
 	if !nipcash.ValidRequestID(params.RequestID) {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 			"request_id is required: 32 to 64 lowercase hex characters")
 		return
 	}
+	if err := cashrequest.New(controller.db).MarkUsed(params.RequestID, nip47Request.Method); err != nil {
+		if errors.Is(err, cashrequest.ErrRequestReused) {
+			respondError(publishResponse, nip47Request.Method, constants.ERROR_REQUEST_REUSED, "this request_id was already used on this node")
+			return
+		}
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this request_id, please retry")
+		return
+	}
+	// The deadline is the request's expiration: present, not passed, and at most H
+	// past its arrival (NIP-CASH §Deadlines).
+	if msg := mintDeadlineProblem(meta, time.Now().Unix(), controller.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds); msg != "" {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, msg)
+		return
+	}
 
-	// 1b. Fields mint_cash no longer takes are refused, whatever their value.
+	// 4. Fields mint_cash no longer takes are refused, whatever their value.
 	if field := removedMintField(nip47Request.Params); field != "" {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
 			field+" is not a mint_cash parameter")
@@ -105,18 +133,6 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "expiry is out of range")
 		return
 	}
-
-	// 1c. Serialize concurrent mint_cash attempts against this hub
-	// (across this NWC path and the admin HTTP path, api.CreateCashWallet) so
-	// two racing requests can't both pass Resolve's balance pre-check against
-	// the same stale balance before either one's Commit actually transfers
-	// funds out.
-	release, ok := cashwallet.LockHub(app.ID)
-	if !ok {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_NOT_READY, "wallet creation already in progress for this hub, please retry shortly")
-		return
-	}
-	defer release()
 
 	recipients := make([]cashwallet.RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
@@ -207,4 +223,21 @@ func mintCashReply(walletPubkey, cashToken string, expiresAt *time.Time, recipie
 		out.ExpiresAt = &at
 	}
 	return out
+}
+
+// mintDeadlineProblem is why a mint's deadline is refused, or "" when it holds: it
+// must be present and well formed, not passed at now, and no more than H past the
+// request's arrival.
+func mintDeadlineProblem(meta models.CallMeta, now, horizon int64) string {
+	switch {
+	case meta.DeadlineMalformed:
+		return "the request's expiration tag is malformed"
+	case !meta.DeadlinePresent:
+		return "mint_cash needs an expiration tag (its deadline)"
+	case nipcash.CheckDeadline(meta.Deadline, meta.ArrivedAt, horizon) != nil:
+		return fmt.Sprintf("the request's expiration must lie within %d seconds of its arrival", horizon)
+	case !nipcash.CommitAllowed(meta.Deadline, now):
+		return "the request's expiration has passed"
+	}
+	return ""
 }

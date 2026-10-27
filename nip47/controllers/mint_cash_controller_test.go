@@ -66,7 +66,7 @@ func TestHandleMintCashEvent_NotCashHub(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, standardApp, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code)
@@ -93,7 +93,7 @@ func TestHandleMintCashEvent_SumOfRecipients_ExceedsPerWalletMaxTotal(t *testing
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, publishedResponse.Error.Code)
@@ -120,7 +120,7 @@ func TestHandleMintCashEvent_ExpiryExceedsMax(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
@@ -156,7 +156,7 @@ func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(MintCashReply)
@@ -187,7 +187,7 @@ func TestHandleMintCashEvent_InsufficientBalance(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_INSUFFICIENT_BALANCE, publishedResponse.Error.Code)
@@ -222,7 +222,7 @@ func TestHandleMintCashEvent_RateLimited(t *testing.T) {
 	var publishedResponse *models.Response
 	controller.HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, publishedResponse.Error.Code)
@@ -250,7 +250,7 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(MintCashReply)
@@ -328,7 +328,7 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(MintCashReply)
@@ -374,7 +374,7 @@ func TestHandleMintCashEvent_TransferFailure_Rollback(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	// Handler must return an error.
 	assert.NotNil(t, publishedResponse.Error, "transfer failure must produce an error response")
@@ -418,7 +418,7 @@ func TestHandleMintCashEvent_ConnectionKeyMode_UntrustedIARejected(t *testing.T)
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
@@ -448,7 +448,7 @@ func TestHandleMintCashEvent_NonRoundMloki_FullDrainSucceeds(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.Nil(t, publishedResponse.Error)
 }
@@ -475,7 +475,7 @@ func TestHandleMintCashEvent_BudgetRenewalNever(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 	require.Nil(t, publishedResponse.Error)
 
 	var childApps []db.App
@@ -524,7 +524,7 @@ func TestHandleMintCashEvent_Cash_HappyPath(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.Nil(t, publishedResponse.Error)
 	result := publishedResponse.Result.(MintCashReply)
@@ -566,7 +566,7 @@ func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
 	var publishedResponse *models.Response
 	NewTestNip47Controller(svc).HandleMintCashEvent(ctx, nip47Request, dbRequestEvent.ID, hub, func(r *models.Response, _ nostr.Tags) {
 		publishedResponse = r
-	})
+	}, testMintMeta())
 
 	require.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
