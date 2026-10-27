@@ -259,16 +259,15 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 	})
 
 	t.Run("CreateWallet_Cash_HappyPath_RedeemWithSecret", func(t *testing.T) {
+		secret, commitment := cashSecretAndHash(t)
 		var result MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-			Recipients: []CashWalletRecipientParam{
-				{IdentityType: "cash", AmountMillis: happyPathAmountMloki},
-			},
-			Expiry: happyPathExpirySecs,
+			Recipients: oneCashRecipient(commitment, happyPathAmountMloki),
+			Expiry:     happyPathExpirySecs,
 		}, &result))
 		require.Len(t, result.Recipients, 1)
-		require.NotEmpty(t, result.Recipients[0].CashSecret, "the plaintext secret must come back exactly once, here")
-		require.Empty(t, result.Recipients[0].IdentityValue, "the internal secret hash must never be surfaced on the wire")
+		require.Empty(t, result.Recipients[0].CashSecret, "the hub never returns a cash secret")
+		require.Equal(t, commitment, result.Recipients[0].IdentityValue, "the recipients are echoed as sent")
 		requireBillToken(t, result.CashToken)
 
 		// Bearer: a cash-mode bill carries no slice proof — its secret in params IS the
@@ -279,7 +278,7 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		var claimResult ClaimFundsResult
 		require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{
 			Invoice:    invoice.Invoice,
-			CashSecret: result.Recipients[0].CashSecret,
+			CashSecret: secret,
 		}, &claimResult))
 		require.NotEmpty(t, claimResult.Preimage)
 
