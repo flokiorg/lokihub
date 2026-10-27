@@ -60,9 +60,14 @@ func setWithdrawNode(t *testing.T, admin *adminClient, on bool) {
 	require.NoError(t, admin.doBody(http.MethodPut, "/api/cash-withdraw/node", map[string]bool{"enabled": on}, nil))
 }
 
+// withdrawHubFundLoki is what newWithdrawHub adds to the hub's balance.
+const withdrawHubFundLoki = 40_000
+
 func newWithdrawHub(t *testing.T, cfg *Config, name string) withdrawHub {
 	t.Helper()
 	hub, id, admin := createEphemeralCashHub(t, cfg, name, nil)
+	// The withdraw tests mint bills of up to 10,000 loki each.
+	require.NoError(t, admin.transfer(nil, id, withdrawHubFundLoki))
 	var v withdrawTermsView
 	require.NoError(t, admin.do(http.MethodGet, fmt.Sprintf("/api/cash-hubs/%d/withdraw-terms", id), &v))
 	if !v.Capable {
@@ -140,7 +145,7 @@ func withdrawAs(t *testing.T, token, priv string, q *nipcash.WithdrawQuote, rid 
 func TestSpecWithdraw_I53_Switches(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-switches")
-	token, privs, _ := h.mintFor(t, 21_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000)
 	conn := mustConnectBill(t, token, privs[0])
 
 	var st struct {
@@ -166,7 +171,7 @@ func TestSpecWithdraw_I53_Switches(t *testing.T) {
 func TestSpecWithdraw_I54_Quote(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-quote")
-	token, privs, pubs := h.mintFor(t, 21_000_000, 500_000)
+	token, privs, pubs := h.mintFor(t, 8_000_000, 500_000)
 	addr := regtestP2WPKH(t)
 	testnet, err := chainutil.NewAddressWitnessPubKeyHash(make([]byte, 20), &chaincfg.TestNet3Params)
 	require.NoError(t, err)
@@ -195,7 +200,7 @@ func TestSpecWithdraw_I54_Quote(t *testing.T) {
 	minter, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
 	q, err := nipcash.VerifyQuoteAnswer(res, nipcash.QuoteExpectation{HubXOnly: minter, Wallet: tok.WalletPubkey,
-		IdentityValue: pubs[0], Address: addr, SendBefore: &sendBefore, AmountMillis: 21_000_000})
+		IdentityValue: pubs[0], Address: addr, SendBefore: &sendBefore, AmountMillis: 8_000_000})
 	require.NoError(t, err)
 	assert.LessOrEqual(t, q.SentBy, sendBefore)
 }
@@ -207,7 +212,7 @@ func TestSpecWithdraw_I54_Quote(t *testing.T) {
 func TestSpecWithdraw_I63_LookupAndRefusals(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-call")
-	token, privs, _ := h.mintFor(t, 21_000_000, 7_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
 
 	other, err := quoteAs(t, token, privs[1], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
@@ -242,7 +247,7 @@ func TestSpecWithdraw_I63_LookupAndRefusals(t *testing.T) {
 func TestSpecWithdraw_I66_SwitchOffKeepsPayouts(t *testing.T) {
 	cfg := requireConfig(t)
 	h := newWithdrawHub(t, cfg, "withdraw-off")
-	token, privs, _ := h.mintFor(t, 21_000_000, 7_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
 	q, err := quoteAs(t, token, privs[0], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
 	rid := newTestPrivkey(t)
