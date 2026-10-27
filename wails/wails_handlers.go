@@ -221,6 +221,26 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
+	circleAcceptingRegex := regexp.MustCompile(
+		`^/api/apps/([0-9]+)/circle/accepting$`,
+	)
+	if m := circleAcceptingRegex.FindStringSubmatch(route); len(m) == 2 && method == "POST" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		var reqBody struct {
+			Accepting *bool `json:"accepting"`
+		}
+		if err := json.Unmarshal([]byte(body), &reqBody); err != nil || reqBody.Accepting == nil {
+			return WailsRequestRouterResponse{Body: nil, Error: "accepting (true or false) is required"}
+		}
+		if err := app.api.SetCircleAccepting(dbApp, *reqBody.Accepting); err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	}
+
 	circleMemberRequestRegex := regexp.MustCompile(
 		`^/api/circle-hubs/([0-9]+)/member-requests$`,
 	)

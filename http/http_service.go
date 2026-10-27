@@ -242,6 +242,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.DELETE("/apps/:id/circle/children/:childId", httpSvc.circleChildDeleteHandler)
 	fullAccessApiGroup.POST("/apps/:id/circle/delete", httpSvc.circleHubDeleteHandler)
 	fullAccessApiGroup.POST("/circle-hubs/:id/member-requests", httpSvc.circleMemberRequestHandler)
+	fullAccessApiGroup.POST("/apps/:id/circle/accepting", httpSvc.circleAcceptingHandler)
 	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
@@ -2137,6 +2138,25 @@ func (httpSvc *HttpService) circleHubDeleteHandler(c echo.Context) error {
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+// circleAcceptingHandler opens or closes a circle to new members: {accepting}.
+func (httpSvc *HttpService) circleAcceptingHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Accepting *bool `json:"accepting"`
+	}
+	if err := c.Bind(&body); err != nil || body.Accepting == nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "accepting (true or false) is required"})
+	}
+	if err := httpSvc.api.SetCircleAccepting(dbApp, *body.Accepting); err != nil {
+		code, msg := mapCircleAllowlistError(err)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // circleMemberRequestHandler submits a member request the member signed (NIP-CW

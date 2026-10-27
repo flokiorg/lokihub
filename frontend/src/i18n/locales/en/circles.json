@@ -174,20 +174,39 @@
     "description": "Wallets already created for members of this circle.",
     "empty": "No circle wallets created yet.",
     "selectWallet": "Select circle wallet",
-    "frozenBadge": "Frozen",
-    "frozenHint": "This member left the circle. The wallet can't pay or take new invoices until they are added back.",
-    "removeTitle": "Remove this circle wallet?",
-    "removeDescription": "Its remaining balance will be transferred back to this hub, and its NWC connection will stop working immediately. This can't be undone.",
-    "removeSelectedTitle_one": "Remove {{count}} circle wallet?",
-    "removeSelectedTitle_other": "Remove {{count}} circle wallets?",
-    "removeSelectedDescription": "Their remaining balances will be transferred back to this hub, and their NWC connections will stop working immediately. This can't be undone.",
-    "removedToast": "Circle wallet removed",
-    "removedSelectedToast_one": "Circle wallet removed",
-    "removedSelectedToast_other": "{{count}} circle wallets removed",
     "errors": {
-      "remove": "Failed to remove circle wallet",
-      "removeSelected": "Failed to remove selected circle wallets"
-    }
+      "close": "Failed to close circle wallet",
+      "closeSelected": "Failed to close selected circle wallets"
+    },
+    "close": "Close",
+    "closeSelected": "Close selected",
+    "closeTitle": "Close this circle wallet?",
+    "closeDescription": "The wallet moves to Closing: it can only pay out, its open invoices are cancelled and its member may join again. Its balance stays the member's. It is deleted once its grace period is over and it holds at most dust, which the hub keeps.",
+    "closeSelectedTitle_one": "Close {{count}} circle wallet?",
+    "closeSelectedTitle_other": "Close {{count}} circle wallets?",
+    "closeSelectedDescription": "Each wallet moves to Closing: it can only pay out, and is deleted once its grace period is over and it holds at most dust. No balance is moved.",
+    "closedToast": "Circle wallet closing",
+    "closedSelectedToast_one": "Circle wallet closing",
+    "closedSelectedToast_other": "{{count}} circle wallets closing",
+    "state": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "expired": "Expired",
+      "closing": "Closing"
+    },
+    "stateHint": {
+      "active": "Sends and receives within its caps.",
+      "suspended": "Its member is no longer in the circle: it can only pay out, and returns to Active if they are added back within the grace period.",
+      "expired": "Past its expiry: it can only pay out.",
+      "closing": "Closed by the host: it can only pay out."
+    },
+    "graceLeft_one": "grace: {{days}} day left",
+    "graceLeft_other": "grace: {{days}} days left",
+    "graceOver": "grace over: deleted once at most {{dust}} loki",
+    "frozenBadge": "Frozen",
+    "frozenHint": "The member froze this wallet: its key is refused until an unfreeze or a completed rotation.",
+    "rotationBadge": "Rotating at {{at}}",
+    "rotationHint": "A move to the new connection key {{key}}… is pending; any request by the current key cancels it."
   },
   "cashHubAllocations": {
     "durationDays_one": "{{count}} day",
@@ -320,30 +339,24 @@
     }
   },
   "disconnectCircleHub": {
-    "title": "Are you sure you want to delete this circle?",
+    "title": "Close this circle?",
     "checking": "Checking member wallet balances…",
-    "allEmpty": "Every member wallet in this circle is empty. Deleting the circle will also delete all of its member wallets.",
-    "hasBalance_one": "{{count}} member wallet in this circle still holds a balance.",
-    "hasBalance_other": "{{count}} member wallets in this circle still hold a balance.",
     "colName": "Name",
     "colPubkey": "Pubkey",
     "colBalance": "Balance (loki)",
-    "totalSummary_one": "{{total}} loki total across {{count}} wallet.",
-    "totalSummary_other": "{{total}} loki total across {{count}} wallets.",
-    "sweepSummary": "Delete All moves {{total}} loki to your main balance: everything the member wallets hold, plus the hub's own {{hub}} loki. Members lose their wallets and their history.",
-    "sweepPartialToast": "Wallets emptied and deleted: {{count}}",
-    "sweepPartialDescription": "Kept until their payments finish: {{count}}. The circle was not deleted; try again shortly.",
-    "deleteEmptyOnly": "Delete Only Empty Ones",
-    "deleteAll": "Delete All",
     "deletedToast": "Circle deleted",
-    "partialDeleteToast_one": "Deleted {{count}} empty wallet",
-    "partialDeleteToast_other": "Deleted {{count}} empty wallets",
-    "partialDeleteDescription_one": "{{count}} wallet with a balance or a payment in progress was left untouched — the circle was not deleted.",
-    "partialDeleteDescription_other": "{{count}} wallets with a balance or a payment in progress were left untouched — the circle was not deleted.",
     "errors": {
       "load": "Failed to load circle wallets",
       "delete": "Failed to delete circle"
-    }
+    },
+    "closeExplanation_one": "Its {{count}} member wallet moves to Closing: it keeps its balance and can only pay out, the circle takes no new members, and the circle is deleted once its last wallet is gone after its grace period.",
+    "closeExplanation_other": "Its {{count}} member wallets move to Closing: each keeps its balance and can only pay out, the circle takes no new members, and the circle is deleted once its last wallet is gone after its grace period.",
+    "balancesStay_one": "{{total}} loki in {{count}} wallet stays the member's until paid out.",
+    "balancesStay_other": "{{total}} loki in {{count}} wallets stays the members' until paid out.",
+    "closeCircle": "Close circle",
+    "closingToast_one": "{{count}} wallet closing",
+    "closingToast_other": "{{count}} wallets closing",
+    "closingDescription": "The circle is deleted once its last wallet is gone."
   },
   "disconnectCashHub": {
     "title": "Are you sure you want to delete this Cash Hub?",
@@ -355,7 +368,13 @@
     "close": "Close",
     "errors": {
       "check": "Failed to check issued cash bills"
-    }
+    },
+    "recordsUntil_one": "{{count}} request record is kept until {{until}}, so a lost reply can still be looked up.",
+    "recordsUntil_other": "{{count}} request records are kept until {{until}}, so a lost reply can still be looked up.",
+    "recordsUntilBillsGone_one": "{{count}} request record is kept until its bills are gone.",
+    "recordsUntilBillsGone_other": "{{count}} request records are kept until their bills are gone.",
+    "earliestDelete": "The earliest this hub can be deleted is {{at}}.",
+    "earliestAfterBills": "This hub can be deleted only after its bills are gone."
   },
   "cashStatus": {
     "legendLabel": "What each status means",
@@ -491,5 +510,53 @@
     "flowHint": "Received above the line, spent below it.",
     "othersBar_one": "+{{count}} other",
     "othersBar_other": "+{{count}} others"
+  },
+  "circleControls": {
+    "acceptingTitle": "New members",
+    "acceptingDescription": "Close the circle to new members: every join is refused, and members keep their wallets and their join lookups.",
+    "tornDown": "This circle is being closed and takes no new members.",
+    "accepting": "Accepting new members",
+    "notAccepting": "Closed to new members",
+    "openedToast": "The circle accepts new members",
+    "closedToast": "The circle is closed to new members",
+    "memberRequestTitle": "Member request",
+    "memberRequestDescription": "Paste a member request (kind 23199) the member signed to rotate, freeze or unfreeze their wallet. The circle never acts on your word alone.",
+    "submit": "Submit",
+    "refused": "Refused: {{code}} ({{message}})",
+    "rotationPending": "Rotation pending; it completes at {{at}} unless the current key cancels it.",
+    "applied": "Applied: {{action}}",
+    "errors": {
+      "accepting": "Failed to change whether the circle accepts new members",
+      "memberRequest": "Failed to submit the member request",
+      "notJSON": "The member request is not valid JSON"
+    }
+  },
+  "circleSettings": {
+    "defaultExpiry": "Default wallet lifetime",
+    "defaultExpiryHelper": "What a member gets when they name no expiry. Never above the maximum lifetime; under a maximum, it cannot be never.",
+    "never": "Never",
+    "maxReceive": "Maximum receive cap per wallet (loki)",
+    "maxReceiveHelper": "The most a member may ask to receive from outside the circle in one budget period.",
+    "holdingsCeiling": "Holdings ceiling (loki)",
+    "holdingsCeilingHelper": "The most the circle's active wallets may hold together, open invoices included. New joins, invoices and credits past it are refused.",
+    "feeReservePpm": "Routing-fee reserve (ppm)",
+    "feeReserveMin": "Minimum routing-fee reserve (loki)",
+    "feeReserveMinHelper": "A member's Lightning payment holds back, and may spend, the larger of this and the amount times the ppm.",
+    "outboundCeiling": "Outbound ceiling (loki, 0 = none)",
+    "outboundCeilingHelper": "Optionally bounds what all wallets together send outside the circle in one period.",
+    "outboundPeriod": "Outbound period",
+    "period": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "grace": "Grace period",
+    "graceHelper": "How long a wallet the member did not delete can still pay out before it may be deleted.",
+    "dust": "Dust threshold (loki)",
+    "dustHelper": "The most the hub keeps when it deletes a wallet. Fixed for each wallet when it joins.",
+    "rotation": "Member requests (rotate, freeze, unfreeze)",
+    "rotationHelper": "Lets a member who lost their connection move the wallet to a new key, after a delay the current key can cancel.",
+    "rotationDelay": "Rotation delay"
   }
 }

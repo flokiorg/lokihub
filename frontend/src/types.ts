@@ -197,7 +197,28 @@ export interface App {
   circleFeesPpm?: number;
   circlePerWalletMaxMloki?: number;
   circleMinBudgetRenewal?: BudgetRenewalType;
+  // NIP-CW circle settings (all circle_hub only): the default wallet lifetime
+  // (0 = never), the receive ceiling, the money model (holdings ceiling,
+  // routing-fee reserve, optional outbound ceiling and its period), the
+  // lifecycle (grace, dust) and member requests (rotation and its delay).
+  circleDefaultExpSecs?: number;
+  circlePerWalletMaxReceiveMloki?: number;
+  circleHoldingsCeilingMloki?: number;
+  circleFeeReservePpm?: number;
+  circleFeeReserveMinMloki?: number;
+  circleOutboundCeilingMloki?: number;
+  circleOutboundPeriod?: OutboundPeriod;
+  circleGraceSecs?: number;
+  circleDustThresholdMloki?: number;
+  circleRotationEnabled?: boolean;
+  circleRotationDelaySecs?: number;
+  // circleAccepting is false once the host closed the circle to new members;
+  // circleTeardownRequestedAt is set once it was torn down (unix seconds).
+  circleAccepting?: boolean;
+  circleTeardownRequestedAt?: number;
 }
+
+export type OutboundPeriod = "daily" | "weekly" | "monthly" | "yearly";
 
 export type CirclePolicy = "follow_set" | "allowlist";
 
@@ -426,6 +447,21 @@ export interface CreateAppRequest {
   circleFeesPpm?: number;
   circlePerWalletMaxMloki?: number;
   circleMinBudgetRenewal?: BudgetRenewalType;
+  // NIP-CW circle settings (all circle_hub only): the default wallet lifetime
+  // (0 = never), the receive ceiling, the money model (holdings ceiling,
+  // routing-fee reserve, optional outbound ceiling and its period), the
+  // lifecycle (grace, dust) and member requests (rotation and its delay).
+  circleDefaultExpSecs?: number;
+  circlePerWalletMaxReceiveMloki?: number;
+  circleHoldingsCeilingMloki?: number;
+  circleFeeReservePpm?: number;
+  circleFeeReserveMinMloki?: number;
+  circleOutboundCeilingMloki?: number;
+  circleOutboundPeriod?: OutboundPeriod;
+  circleGraceSecs?: number;
+  circleDustThresholdMloki?: number;
+  circleRotationEnabled?: boolean;
+  circleRotationDelaySecs?: number;
   // circleIdentityId reuses an existing CircleIdentity — when set,
   // circleIdentityName/circlePolicy/providerPubkey below are ignored.
   circleIdentityId?: number;
@@ -470,8 +506,34 @@ export interface CircleChildBalance {
   requesterPubkey: string;
   appPubkey: string;
   balanceMloki: number;
-  // True once the member has left the circle; absent while unknown.
-  frozen?: boolean;
+  // The wallet's lifecycle state (NIP-CW §Lifecycle and Deletion).
+  state: CircleWalletState;
+  // When its grace period ends (unix seconds); absent while it has none.
+  graceEndsAt?: number;
+  expiresAt?: number;
+  dustThresholdMloki: number;
+  // True while a member request froze the wallet.
+  frozen: boolean;
+  pendingRotation?: { connectionPubkey: string; completesAt: number };
+}
+
+export type CircleWalletState = "active" | "suspended" | "expired" | "closing";
+
+// A member request's outcome: code is absent when it was applied.
+export interface CircleMemberRequestResult {
+  code?: string;
+  message: string;
+  action?: string;
+  wallet_app_id?: number;
+  completes_at?: number;
+}
+
+// What keeps a Cash Hub from being deleted (GET /api/cash-hubs/:id/delete-check).
+export interface CashHubDeleteCheck {
+  blockers: { kind: string; count: number; until: number | null }[];
+  earliest_delete_at: number | null;
+  watched_addresses: number;
+  confirmation_required: boolean;
 }
 
 export interface ListCircleChildrenBalancesResponse {
@@ -483,6 +545,8 @@ export interface DeleteCircleHubResult {
   hubDeleted: boolean;
   deletedChildIds: number[];
   skippedChildIds: number[];
+  // The wallets the teardown moved to Closing (or found Expired or Closing).
+  closingChildIds: number[];
 }
 
 export type UpdateAppRequest = {
@@ -505,6 +569,21 @@ export type UpdateAppRequest = {
   circleFeesPpm?: number;
   circlePerWalletMaxMloki?: number;
   circleMinBudgetRenewal?: BudgetRenewalType;
+  // NIP-CW circle settings (all circle_hub only): the default wallet lifetime
+  // (0 = never), the receive ceiling, the money model (holdings ceiling,
+  // routing-fee reserve, optional outbound ceiling and its period), the
+  // lifecycle (grace, dust) and member requests (rotation and its delay).
+  circleDefaultExpSecs?: number;
+  circlePerWalletMaxReceiveMloki?: number;
+  circleHoldingsCeilingMloki?: number;
+  circleFeeReservePpm?: number;
+  circleFeeReserveMinMloki?: number;
+  circleOutboundCeilingMloki?: number;
+  circleOutboundPeriod?: OutboundPeriod;
+  circleGraceSecs?: number;
+  circleDustThresholdMloki?: number;
+  circleRotationEnabled?: boolean;
+  circleRotationDelaySecs?: number;
 };
 
 export type Channel = {

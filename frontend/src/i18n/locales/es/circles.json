@@ -201,20 +201,7 @@
     "description": "Billeteras ya creadas para los miembros de este círculo.",
     "empty": "Aún no se han creado billeteras de círculo.",
     "selectWallet": "Seleccionar billetera de círculo",
-    "frozenBadge": "Congelada",
-    "frozenHint": "Este miembro salió del círculo. La billetera no puede pagar ni crear facturas nuevas hasta que se le vuelva a añadir.",
-    "removeTitle": "¿Eliminar esta billetera de círculo?",
-    "removeDescription": "Su saldo restante se transferirá de vuelta a este hub, y su conexión NWC dejará de funcionar de inmediato. Esto no se puede deshacer.",
-    "removeSelectedTitle_one": "¿Eliminar {{count}} billetera de círculo?",
-    "removeSelectedTitle_other": "¿Eliminar {{count}} billeteras de círculo?",
-    "removeSelectedDescription": "Sus saldos restantes se transferirán de vuelta a este hub, y sus conexiones NWC dejarán de funcionar de inmediato. Esto no se puede deshacer.",
-    "removedToast": "Billetera de círculo eliminada",
-    "removedSelectedToast_one": "Billetera de círculo eliminada",
-    "removedSelectedToast_other": "{{count}} billeteras de círculo eliminadas",
-    "errors": {
-      "remove": "Error al eliminar la billetera de círculo",
-      "removeSelected": "Error al eliminar las billeteras de círculo seleccionadas"
-    }
+    "errors": {}
   },
   "cashHubAllocations": {
     "durationDays_one": "{{count}} día",
@@ -341,26 +328,11 @@
     }
   },
   "disconnectCircleHub": {
-    "title": "¿Seguro que quieres eliminar este círculo?",
     "checking": "Comprobando los saldos de las billeteras de los miembros…",
-    "allEmpty": "Todas las billeteras de los miembros de este círculo están vacías. Eliminar el círculo también eliminará todas sus billeteras de miembros.",
-    "hasBalance_one": "{{count}} billetera de miembro en este círculo todavía tiene saldo.",
-    "hasBalance_other": "{{count}} billeteras de miembros en este círculo todavía tienen saldo.",
     "colName": "Nombre",
     "colPubkey": "Clave pública",
     "colBalance": "Saldo (loki)",
-    "totalSummary_one": "{{total}} loki en total en {{count}} billetera.",
-    "totalSummary_other": "{{total}} loki en total en {{count}} billeteras.",
-    "sweepSummary": "Eliminar todo mueve {{total}} loki a tu saldo principal: todo lo que tienen las billeteras de los miembros, más los {{hub}} loki del propio hub. Los miembros pierden sus billeteras y su historial.",
-    "sweepPartialToast": "Billeteras vaciadas y eliminadas: {{count}}",
-    "sweepPartialDescription": "Billeteras conservadas hasta que terminen sus pagos: {{count}}. El círculo no se eliminó; inténtalo de nuevo en un momento.",
-    "deleteEmptyOnly": "Eliminar solo las vacías",
-    "deleteAll": "Eliminar todas",
     "deletedToast": "Círculo eliminado",
-    "partialDeleteToast_one": "{{count}} billetera vacía eliminada",
-    "partialDeleteToast_other": "{{count}} billeteras vacías eliminadas",
-    "partialDeleteDescription_one": "{{count}} billetera con saldo o un pago en curso se dejó intacta — el círculo no se eliminó.",
-    "partialDeleteDescription_other": "{{count}} billeteras con saldo o un pago en curso se dejaron intactas — el círculo no se eliminó.",
     "errors": {
       "load": "Error al cargar las billeteras del círculo",
       "delete": "Error al eliminar el círculo"

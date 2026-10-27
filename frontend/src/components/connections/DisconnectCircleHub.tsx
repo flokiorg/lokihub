@@ -64,7 +64,11 @@ export function DisconnectCircleHub({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.id]);
 
-  const performDelete = async (mode: CircleDeleteMode) => {
+  // Closing a circle tears it down (NIP-CW §Lifecycle and Deletion): every
+  // wallet moves to Closing and keeps its balance, paying out only, the
+  // circle takes no more joins, and the hub goes once its last wallet is
+  // deleted. Nothing is swept.
+  const performClose = async () => {
     setDeleting(true);
     try {
       const result = await request<DeleteCircleHubResult>(
@@ -72,7 +76,7 @@ export function DisconnectCircleHub({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode }),
+          body: JSON.stringify({ mode: "all" satisfies CircleDeleteMode }),
         }
       );
 
@@ -87,33 +91,11 @@ export function DisconnectCircleHub({
         navigate("/sub-wallets");
         return;
       }
-
-      if (mode === "all") {
-        // Delete All moves every balance out first; only wallets with a
-        // payment still in flight are kept.
-        toast(
-          t("disconnectCircleHub.sweepPartialToast", {
-            count: result?.deletedChildIds?.length ?? 0,
-          }),
-          {
-            description: t("disconnectCircleHub.sweepPartialDescription", {
-              count: result?.skippedChildIds?.length ?? 0,
-            }),
-          }
-        );
-        onClose();
-        return;
-      }
-
       toast(
-        t("disconnectCircleHub.partialDeleteToast", {
-          count: result?.deletedChildIds?.length ?? 0,
+        t("disconnectCircleHub.closingToast", {
+          count: result?.closingChildIds?.length ?? 0,
         }),
-        {
-          description: t("disconnectCircleHub.partialDeleteDescription", {
-            count: result?.skippedChildIds?.length ?? 0,
-          }),
-        }
+        { description: t("disconnectCircleHub.closingDescription") }
       );
       onClose();
     } catch (error) {
@@ -125,17 +107,7 @@ export function DisconnectCircleHub({
 
   const nonEmpty = (children ?? []).filter((c) => c.balanceMloki !== 0);
   const totalLoki = nonEmpty.reduce((sum, c) => sum + c.balanceMloki / 1000, 0);
-  const hubLoki = (app.balance ?? 0) / 1000;
   const isLoading = children === null;
-  const sweepSummary =
-    totalLoki + hubLoki > 0 ? (
-      <p className="text-sm text-muted-foreground">
-        {t("disconnectCircleHub.sweepSummary", {
-          total: (totalLoki + hubLoki).toLocaleString(),
-          hub: hubLoki.toLocaleString(),
-        })}
-      </p>
-    ) : null;
 
   return (
     <AlertDialog open>
@@ -145,51 +117,51 @@ export function DisconnectCircleHub({
           <AlertDialogDescription asChild>
             {isLoading ? (
               <p>{t("disconnectCircleHub.checking")}</p>
-            ) : nonEmpty.length === 0 ? (
-              <div className="space-y-3">
-                <p>{t("disconnectCircleHub.allEmpty")}</p>
-                {sweepSummary}
-              </div>
             ) : (
               <div className="space-y-3">
                 <p>
-                  {t("disconnectCircleHub.hasBalance", {
-                    count: nonEmpty.length,
+                  {t("disconnectCircleHub.closeExplanation", {
+                    count: children?.length ?? 0,
                   })}
                 </p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("disconnectCircleHub.colName")}</TableHead>
-                      <TableHead>
-                        {t("disconnectCircleHub.colPubkey")}
-                      </TableHead>
-                      <TableHead className="text-end">
-                        {t("disconnectCircleHub.colBalance")}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {nonEmpty.map((c) => (
-                      <TableRow key={c.appId}>
-                        <TableCell>{c.name}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {c.appPubkey.slice(0, 12)}…{c.appPubkey.slice(-6)}
-                        </TableCell>
-                        <TableCell className="text-end">
-                          {(c.balanceMloki / 1000).toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <p className="text-sm text-muted-foreground">
-                  {t("disconnectCircleHub.totalSummary", {
-                    total: totalLoki.toLocaleString(),
-                    count: nonEmpty.length,
-                  })}
-                </p>
-                {sweepSummary}
+                {nonEmpty.length > 0 && (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>
+                            {t("disconnectCircleHub.colName")}
+                          </TableHead>
+                          <TableHead>
+                            {t("disconnectCircleHub.colPubkey")}
+                          </TableHead>
+                          <TableHead className="text-end">
+                            {t("disconnectCircleHub.colBalance")}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {nonEmpty.map((c) => (
+                          <TableRow key={c.appId}>
+                            <TableCell>{c.name}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {c.appPubkey.slice(0, 12)}…{c.appPubkey.slice(-6)}
+                            </TableCell>
+                            <TableCell className="text-end">
+                              {(c.balanceMloki / 1000).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <p className="text-sm text-muted-foreground">
+                      {t("disconnectCircleHub.balancesStay", {
+                        total: totalLoki.toLocaleString(),
+                        count: nonEmpty.length,
+                      })}
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </AlertDialogDescription>
@@ -198,21 +170,12 @@ export function DisconnectCircleHub({
           <AlertDialogCancel onClick={onClose} disabled={isDeleting}>
             {tc("actions.cancel")}
           </AlertDialogCancel>
-          {!isLoading && nonEmpty.length > 0 && (
-            <LoadingButton
-              variant="outline"
-              loading={isDeleting}
-              onClick={() => performDelete("empty_only")}
-            >
-              {t("disconnectCircleHub.deleteEmptyOnly")}
-            </LoadingButton>
-          )}
           <LoadingButton
             loading={isDeleting}
             disabled={isLoading}
-            onClick={() => performDelete("all")}
+            onClick={performClose}
           >
-            {t("disconnectCircleHub.deleteAll")}
+            {t("disconnectCircleHub.closeCircle")}
           </LoadingButton>
         </AlertDialogFooter>
       </AlertDialogContent>

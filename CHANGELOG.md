@@ -9,6 +9,17 @@ audits of both.
 
 ### Added
 
+- Adds the circle operator screens for NIP-CW: the circle settings editor
+  covers the default lifetime, receive ceiling, holdings ceiling, routing-fee
+  reserve, outbound ceiling and period, grace period, dust threshold and member
+  requests with their delay; the wallet list shows each wallet's state, grace
+  countdown, freeze and pending rotation, and its action is Close (the wallet
+  moves to Closing and keeps its balance); deleting a circle is Close circle
+  (teardown); a "New members" toggle closes or opens the circle
+  (`POST /api/apps/:id/circle/accepting`, and its Wails route); a member
+  request card submits a signed member request and shows the Hub's code. The
+  Cash Hub delete dialog reads the delete check and shows each blocker and the
+  earliest deletion time.
 - Serves NIP-CW §Recovering a Lost Connection on a Circle Wallet Hub that
   enables it (new settings: rotation on/off, delay default 5 days; `get_info`
   reports `rotation_delay_secs` and each wallet's details carry its own, fixed
