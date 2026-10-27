@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/constants"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 // previous key while bills in flight drain, and that grace set is not built yet.
 // Wiring it to configuration before the grace set exists would advertise a
 // capability the hub does not have.
-const privateTransportKeyIndex = 0
+const privateTransportKeyIndex = constants.PRIVATE_TRANSPORT_KEY_INDEX
 
 // privateTransport holds what the receive path needs, resolved once at startup so
 // the hot path never re-derives a key or re-reads config.

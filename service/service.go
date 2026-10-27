@@ -171,6 +171,10 @@ func NewService(ctx context.Context) (*service, error) {
 	socialCache.inboxKey = func() (string, error) {
 		return keys.GetPrivateTransportKey(privateTransportKeyIndex)
 	}
+	socialCache.retiredInboxKeys = func() []string { return retiredInboxKeys(gormDB, keys) }
+	socialCache.onResolved = func(provider, d string, set *FollowSet) {
+		ApplyFollowSetResolution(gormDB, eventPublisher, provider, d, set.IsMember, time.Now())
+	}
 
 	svc := &service{
 		cfg:            cfg,

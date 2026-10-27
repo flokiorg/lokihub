@@ -152,6 +152,10 @@ type App struct {
 	// CircleDustThresholdMloki is the largest balance the Hub may keep from a
 	// wallet it deletes, fixed when the member joined.
 	CircleDustThresholdMloki *int64
+	// CircleInboxKeyIndex is the private-transport inbox key index current when
+	// the circle_wallet was issued: hidden members encrypted to it stay
+	// readable while the wallet is Active or Suspended (NIP-CW §Hidden Members).
+	CircleInboxKeyIndex *uint32
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what

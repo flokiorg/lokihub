@@ -231,6 +231,14 @@ const (
 	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
 )
 
+// PRIVATE_TRANSPORT_KEY_INDEX is the rotation index of the private-transport
+// inbox key currently in use.
+const PRIVATE_TRANSPORT_KEY_INDEX = 0
+
+// CIRCLE_MEMBERSHIP_STALENESS_SECS bounds how old the membership a Circle
+// Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
+const CIRCLE_MEMBERSHIP_STALENESS_SECS = 600
+
 // MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:
 // the fee reserve plus 1 loki. Any less, and the reserve alone exceeds the cap,
 // so the wallet could never pay outside this node.
