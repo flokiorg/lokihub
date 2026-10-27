@@ -28,9 +28,10 @@ type SliceRef struct {
 // ClaimCashSliceTx claims one slice terminal inside tx, guarded on the exact
 // identity and version the caller authorized and on claimed_at IS NULL, so a
 // concurrent claim, transfer or removal makes it ErrSliceClaimed. spunOffTo, when
-// set, records the bill the slice's value moved into.
-func ClaimCashSliceTx(tx *gorm.DB, ref SliceRef, spunOffTo *uint, now time.Time) error {
-	updates := map[string]interface{}{"claimed_at": now}
+// set, records the bill the slice's value moved into; endedAs is the terminal
+// state the claim gives the slice (db.CashSliceStatus*).
+func ClaimCashSliceTx(tx *gorm.DB, ref SliceRef, spunOffTo *uint, endedAs string, now time.Time) error {
+	updates := map[string]interface{}{"claimed_at": now, "ended_as": endedAs}
 	if spunOffTo != nil {
 		updates["spun_off_to_wallet_app_id"] = *spunOffTo
 	}
@@ -49,9 +50,9 @@ func ClaimCashSliceTx(tx *gorm.DB, ref SliceRef, spunOffTo *uint, now time.Time)
 
 // ClaimCashSlicesTx claims every slice in refs, all or nothing: the first one
 // already taken fails the call, and the caller's rollback undoes the rest.
-func ClaimCashSlicesTx(tx *gorm.DB, refs []SliceRef, spunOffTo *uint, now time.Time) error {
+func ClaimCashSlicesTx(tx *gorm.DB, refs []SliceRef, spunOffTo *uint, endedAs string, now time.Time) error {
 	for i, ref := range refs {
-		if err := ClaimCashSliceTx(tx, ref, spunOffTo, now); err != nil {
+		if err := ClaimCashSliceTx(tx, ref, spunOffTo, endedAs, now); err != nil {
 			return fmt.Errorf("source %d: %w", i, err)
 		}
 	}

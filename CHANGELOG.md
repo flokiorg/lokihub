@@ -92,6 +92,11 @@ audits of both.
 
 ### Changed
 
+- Gives a destroyed bill's tombstone its reason: the terminal state of the slice
+  whose ending destroyed it (`redeemed`, `transferred`, `consolidated`,
+  `expired` or `reclaimed`), kept on the bill's archive row and none for a
+  written-off bill, on `cash_status`, the value methods and a lookup's rebuilt
+  result.
 - Answers a destroyed bill on kind 23194 with silence: its tombstone is served
   on the private transport only. The relay gate no longer keeps destroyed bills'
   wallets registered for their retention window, so the start-up reload, the

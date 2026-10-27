@@ -217,8 +217,12 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		if len(billApps) > 0 {
 			spunOffTo = &billApps[0].ID
 		}
+		endedAs := db.CashSliceStatusTransferred
+		if plan.op == "consolidate" {
+			endedAs = db.CashSliceStatusConsolidated
+		}
 		for i, ref := range plan.sources {
-			if err := apps.ClaimCashSliceTx(tx, ref, spunOffTo, now); err != nil {
+			if err := apps.ClaimCashSliceTx(tx, ref, spunOffTo, endedAs, now); err != nil {
 				return err
 			}
 			if err := deps.before(fmt.Sprintf("%s(%d)", StageAfterSourceClaim, i)); err != nil {

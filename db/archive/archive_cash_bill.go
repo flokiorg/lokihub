@@ -8,6 +8,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/ohstr/nmilat/nipcash"
+
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -120,6 +122,7 @@ func ArchiveAndDeleteCashBillTx(tx *gorm.DB, app *db.App, outcome string, reclai
 		EndedAt:              now,
 		ExpiresAt:            live.ExpiresAt,
 		Outcome:              outcome,
+		Reason:               billReason(claims, outcome),
 		TotalMloki:           total,
 		FundedMloki:          funded,
 		ReclaimedMloki:       reclaimedMloki,
@@ -234,6 +237,51 @@ func DeriveSliceOutcome(claim db.CashWalletClaim, billOutcome string) string {
 		// slice's own window had not passed, so this is not "expired".
 		return db.CashSliceStatusReclaimed
 	}
+}
+
+// SliceEndState is the terminal state a slice ended in, in the tombstone's
+// vocabulary: the one its claim recorded, else redeemed or transferred as the
+// claim row shows, else what the bill's own ending made of an unclaimed slice.
+func SliceEndState(claim db.CashWalletClaim, billOutcome string) string {
+	if claim.ClaimedAt != nil {
+		if claim.EndedAs != "" {
+			return claim.EndedAs
+		}
+		if claim.SpunOffToWalletAppID != nil {
+			return db.CashSliceStatusTransferred
+		}
+		return db.CashSliceStatusRedeemed
+	}
+	return DeriveSliceOutcome(claim, billOutcome)
+}
+
+// billReason is a destroyed bill's tombstone reason (NIP-CASH §Answering About
+// a Destroyed Bill): the terminal state of the last of its live slices to end.
+// Slices still unclaimed when the bill is destroyed end with it, so they are the
+// last; otherwise the latest claim is. nil for written-off, which has no reason.
+func billReason(claims []db.CashWalletClaim, billOutcome string) *string {
+	var last *db.CashWalletClaim
+	for i := range claims {
+		c := &claims[i]
+		if c.ClaimedAt == nil {
+			last = c
+			break
+		}
+		if last == nil || c.ClaimedAt.After(*last.ClaimedAt) {
+			last = c
+		}
+	}
+	state := ""
+	if last != nil {
+		state = SliceEndState(*last, billOutcome)
+	} else {
+		state = DeriveSliceOutcome(db.CashWalletClaim{}, billOutcome)
+	}
+	reason := nipcash.TombstoneReason(state)
+	if reason == "" {
+		return nil
+	}
+	return &reason
 }
 
 func buildSliceArchive(wallet *db.App, c db.CashWalletClaim, outcome string, now time.Time) db.CashBillSliceArchive {

@@ -80,6 +80,7 @@ func (svc *appsService) ClaimSliceForRedeem(c RedeemClaim, now time.Time) error 
 				"claimed_at":      now,
 				"payment_hash":    c.PaymentHash,
 				"redeem_proof_id": c.ProofID,
+				"ended_as":        db.CashSliceStatusRedeemed,
 			})
 		if result.Error != nil {
 			return result.Error
@@ -147,7 +148,7 @@ func releaseRedeemClaimTx(tx *gorm.DB, walletAppID uint, paymentHash string, coo
 	if err != nil {
 		return false, err
 	}
-	updates := map[string]interface{}{"claimed_at": nil, "payment_hash": "", "redeem_proof_id": ""}
+	updates := map[string]interface{}{"claimed_at": nil, "payment_hash": "", "redeem_proof_id": "", "ended_as": ""}
 	if cooldownUntil != nil {
 		updates["redeem_cooldown_until"] = *cooldownUntil
 	}

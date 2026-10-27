@@ -47,6 +47,8 @@ type SpentBillTombstone struct {
 	RetainedUntil    time.Time
 	ConnectionPubkey string
 	WalletAppID      uint
+	// Reason is the tombstone reason, "" for none.
+	Reason string
 }
 
 // SpentBillTombstoneFor is SpentBillRetainedUntil plus the bill's stored
@@ -60,9 +62,10 @@ func SpentBillTombstoneFor(tx *gorm.DB, walletPubkey string) (SpentBillTombstone
 		RetainedUntil    *time.Time
 		ConnectionPubkey string
 		WalletAppID      uint
+		Reason           *string
 	}
 	err := tx.Table("cash_bill_archives").
-		Select("cash_bill_archives.retained_until, cash_bill_archives.connection_pubkey, cash_bill_archives.wallet_app_id").
+		Select("cash_bill_archives.retained_until, cash_bill_archives.connection_pubkey, cash_bill_archives.wallet_app_id, cash_bill_archives.reason").
 		Joins("JOIN cash_hub_configs ON cash_hub_configs.app_id = cash_bill_archives.hub_app_id").
 		Where("cash_bill_archives.wallet_pubkey = ?", walletPubkey).
 		Where("cash_hub_configs.spent_retention_secs > 0").
@@ -74,11 +77,15 @@ func SpentBillTombstoneFor(tx *gorm.DB, walletPubkey string) (SpentBillTombstone
 		return SpentBillTombstone{}, false
 	}
 
-	return SpentBillTombstone{
+	out := SpentBillTombstone{
 		RetainedUntil:    *row.RetainedUntil,
 		ConnectionPubkey: row.ConnectionPubkey,
 		WalletAppID:      row.WalletAppID,
-	}, true
+	}
+	if row.Reason != nil {
+		out.Reason = *row.Reason
+	}
+	return out, true
 }
 
 // RetentionWindowOpen is the ONE definition of the retention boundary: is a
@@ -110,4 +117,15 @@ func RetentionWindowOpen(deadline, now time.Time) bool {
 func SpentBillStillAnswerable(tx *gorm.DB, walletPubkey string, now time.Time) bool {
 	deadline, ok := SpentBillRetainedUntil(tx, walletPubkey)
 	return ok && RetentionWindowOpen(deadline, now)
+}
+
+// SpentBillReason is a destroyed bill's tombstone reason whatever its retention:
+// a lookup's rebuilt result carries status and reason past retained_until.
+func SpentBillReason(tx *gorm.DB, walletPubkey string) (string, bool) {
+	var row struct{ Reason *string }
+	err := tx.Table("cash_bill_archives").Select("reason").Where("wallet_pubkey = ?", walletPubkey).Limit(1).Scan(&row).Error
+	if err != nil || row.Reason == nil {
+		return "", false
+	}
+	return *row.Reason, true
 }
