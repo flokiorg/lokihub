@@ -118,3 +118,29 @@ func TestCheckChainNotReset(t *testing.T) {
 	require.NoError(t, CheckChainNotReset(0, 0, 0), "a fresh stack")
 	require.True(t, errors.Is(CheckChainNotReset(0, 222, 0), ErrChainBehindNodes), "a restarted lokid")
 }
+
+func TestLokiFromMillis(t *testing.T) {
+	loki, err := LokiFromMillis(21_000)
+	require.NoError(t, err)
+	require.EqualValues(t, 21, loki)
+	for _, bad := range []uint64{0, 1, 999, 21_500} {
+		_, err := LokiFromMillis(bad)
+		require.Error(t, err, bad)
+	}
+}
+
+func TestHooksWithholdSet(t *testing.T) {
+	h := NewHooks(nil, nil)
+	txid := "6f459f073d807e4212c0b76f654f70caef935e27ce115e938cbb23b02b0ce95e"
+	require.NoError(t, h.Withhold(txid, true))
+	require.Len(t, h.Withheld(), 1)
+	for k := range h.Withheld() {
+		require.Equal(t, txid, k.String())
+	}
+	require.NoError(t, h.Withhold(txid, false))
+	require.Empty(t, h.Withheld())
+	require.Error(t, h.Withhold("not-a-txid", true))
+
+	_, err := h.Mine(t.Context(), 0, "")
+	require.Error(t, err, "zero blocks")
+}
