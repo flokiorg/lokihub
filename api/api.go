@@ -586,6 +586,22 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 	return nil
 }
 
+// refuseOwnerDeleteOfHeldBill refuses the Hub owner's delete of a bill holding
+// a live ordered slice (NIP-CASH §Data Model): only its holder ends it. Every
+// owner delete path (the Cash Hub's wallet list and the generic app delete
+// behind Disconnect) goes through it.
+func (api *api) refuseOwnerDeleteOfHeldBill(walletAppID uint) error {
+	var ordered int64
+	if err := api.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND ordered = ? AND claimed_at IS NULL", walletAppID, true).
+		Count(&ordered).Error; err != nil {
+		return err
+	}
+	if ordered > 0 {
+		return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
+	}
+	return nil
+}
+
 func (api *api) DeleteApp(userApp *db.App) error {
 	// cash_wallet/circle_wallet hold a shared balance that must be reclaimed
 	// back to their hub before the row disappears — apps.DeleteApp has no
@@ -608,6 +624,9 @@ func (api *api) DeleteApp(userApp *db.App) error {
 		return err
 	}
 	if userApp.Kind == db.AppKindCashWallet {
+		if err := api.refuseOwnerDeleteOfHeldBill(userApp.ID); err != nil {
+			return err
+		}
 		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
 			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp, service.SubWalletDeletion{
 				Outcome:        db.CashBillOutcomeDeleted,
@@ -3556,15 +3575,8 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 		}
 		return err
 	}
-	// A wallet holding a live ordered slice is never deleted by the Hub's owner
-	// (NIP-CASH §Data Model): only its holder ends it.
-	var ordered int64
-	if err := api.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND ordered = ? AND claimed_at IS NULL", walletAppID, true).
-		Count(&ordered).Error; err != nil {
+	if err := api.refuseOwnerDeleteOfHeldBill(walletAppID); err != nil {
 		return err
-	}
-	if ordered > 0 {
-		return fmt.Errorf("%w: a wallet holding an ordered slice cannot be deleted", constants.ErrInvalidParams)
 	}
 
 	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
