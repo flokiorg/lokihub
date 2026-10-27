@@ -146,14 +146,15 @@ func (c *freezeCircle) join(memberPriv string) *memberWallet {
 		MaxAmountMillis: 5_000_000,
 		Expiry:          time.Hour,
 	}
-	params, err := join.Request(*c.hub.WalletPubkey)
+	prepared, err := join.Prepare(*c.hub.WalletPubkey, time.Now())
 	require.NoError(c.t, err)
+	params := prepared.Request
 	resp := sendOverStandardTransport(c.t, c.svc, c.nip47svc, *c.hub.WalletPubkey, c.hubSecret,
 		map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": params})
 	require.Nil(c.t, resp.Error, "%+v", resp.Error)
 	raw, err := json.Marshal(resp.Result)
 	require.NoError(c.t, err)
-	issued, err := join.ParseResult(*c.hub.WalletPubkey, raw)
+	issued, err := prepared.ParseResult(raw)
 	require.NoError(c.t, err)
 
 	w := &memberWallet{c: c, walletPubkey: issued.WalletPubkey, secret: connection.Secret()}

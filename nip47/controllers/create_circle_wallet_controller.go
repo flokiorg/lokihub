@@ -52,35 +52,6 @@ var errCircleMemberAlreadyHasWallet = errors.New("identity already has an active
 // encrypted_details blob nipcw only exposes post-decryption to its own client
 // callers), so there's no exported type to adopt for it.
 
-// circleWalletDetails is everything a join hands back to the joining member.
-// It lives INSIDE the response's single NIP-44 encrypted field, keyed to the
-// joiner's own identity pubkey, and that placement is the security property:
-// create_circle_wallet is called over the *shared* circlehub connection, so the
-// NIP-47 response itself is encrypted only to a key every member holds. Any
-// field left outside is readable by every other member of the circle.
-//
-// That is why WalletPubkey in particular must be in here. It is the member's
-// wallet identity, and it appears in the clear `p` tag of every subsequent call
-// that wallet makes — so a co-member who could read it from the join response
-// would be able to follow that member's traffic for the wallet's whole life.
-// The terms travel alongside it because they describe this member's wallet
-// specifically, not the circle.
-//
-// It carries no secret and no connection string (NIP-CW §Response): the member
-// generated the connection key and builds its own connection string from
-// WalletPubkey, Relays and the secret it kept.
-type circleWalletDetails struct {
-	WalletPubkey string `json:"wallet_pubkey"`
-	// Relays is where the wallet listens, in failover order; never empty.
-	Relays []string `json:"relays"`
-	// MaxAmount is the cap the Hub actually set (NIP-CW): the request floored
-	// to whole loki, which is the unit the wallet's budget is stored in.
-	MaxAmount     uint64 `json:"max_amount"`
-	ExpiresAt     int64  `json:"expires_at"`
-	FeesPpm       int    `json:"fees_ppm"`
-	BudgetRenewal string `json:"budget_renewal"`
-}
-
 // createCircleWalletResponse carries exactly one field on purpose — see
 // circleWalletDetails. Anything added here is public to the whole circle.
 type createCircleWalletResponse struct {
@@ -241,7 +212,11 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	// 3. Expiration: cap the caller's requested duration, or default to the
 	// hub's own max when the caller omits it (an omitted/zero expiry used to
 	// produce an already-expired wallet — this closes that gap).
-	expirySecs := params.Expiry
+	if params.Expiry > uint64(constants.MAX_EXPIRY_SECS) {
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "expiry is out of range")
+		return
+	}
+	expirySecs := int(params.Expiry) //nolint:gosec // bounded by MAX_EXPIRY_SECS above
 	if expirySecs <= 0 {
 		expirySecs = providerConfig.MaxExpSecs
 	} else if providerConfig.MaxExpSecs > 0 && expirySecs > providerConfig.MaxExpSecs {
@@ -456,13 +431,16 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	}
 
-	detailsJSON, err := json.Marshal(circleWalletDetails{
-		WalletPubkey:  walletPubkey,
-		Relays:        relays,
-		MaxAmount:     params.MaxAmount / 1000 * 1000,
-		ExpiresAt:     expiresAt.Unix(),
-		FeesPpm:       providerConfig.FeesPpm,
-		BudgetRenewal: resolvedBudgetRenewal,
+	// The details (NIP-CW §Response). max_receive, dust_threshold_millis and
+	// rotation_delay_secs come with the circle money model and rotation (WP-15, WP-18).
+	detailsJSON, err := json.Marshal(nipcw.CircleWalletDetails{
+		WalletPubkey:     walletPubkey,
+		ConnectionPubkey: params.ConnectionPubkey,
+		Relays:           relays,
+		MaxAmount:        params.MaxAmount / 1000 * 1000,
+		ExpiresAt:        expiresAt.Unix(),
+		FeesPpm:          uint64(providerConfig.FeesPpm), //nolint:gosec // fees_ppm is validated non-negative
+		BudgetRenewal:    resolvedBudgetRenewal,
 	})
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to marshal circle wallet details")

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcw"
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nodesign"
@@ -35,4 +36,27 @@ func CashHub(ctx context.Context, ln lnclient.LNClient, pubkey string, relays []
 		return "", fmt.Errorf("could not sign the cash hub connection: %w", err)
 	}
 	return nipcash.EncodeCashHubConnection(signed)
+}
+
+// CircleHub is a signed circlehub1 string for a Circle Wallet Hub connection
+// (NIP-CW §The Circle Wallet Hub Connection), signed like CashHub.
+func CircleHub(ctx context.Context, ln lnclient.LNClient, pubkey string, relays []string, secret, label string) (string, error) {
+	identity, err := nodesign.XOnly(ctx, ln)
+	if err != nil {
+		return "", err
+	}
+	c := nipcw.CircleHubConnection{
+		Pubkey:      pubkey,
+		Relays:      relays,
+		Secret:      secret,
+		Label:       label,
+		HasLabel:    label != "",
+		HubIdentity: identity,
+		Chain:       nodesign.Chain,
+	}
+	signed, err := nipcw.SignCircleHubConnection(c, nodesign.Signer(ctx, ln), identity)
+	if err != nil {
+		return "", fmt.Errorf("could not sign the circle hub connection: %w", err)
+	}
+	return nipcw.EncodeCircleHubConnection(signed)
 }

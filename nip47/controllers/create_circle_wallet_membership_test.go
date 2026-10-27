@@ -146,7 +146,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           expirationSecs,
+		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
 	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}

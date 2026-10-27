@@ -137,27 +137,25 @@ func TestFollowSetCircle_PublicAndHiddenMemberJoin(t *testing.T) {
 		assert.NotContains(t, string(raw), hiddenPub, "the hidden member's pubkey appears nowhere in the published event")
 	})
 
-	client, err := cwclient.Connect(ctxT(t), resp.PairingUri)
+	client, err := cwclient.Connect(ctxT(t), resp.CircleHubToken, cwclient.Options{})
 	require.NoError(t, err)
 	t.Cleanup(client.Close)
+	journal := &memJoinJournal{}
 
 	t.Run("hidden member joins privately", func(t *testing.T) {
-		joined, err := client.Join(ctxT(t), joinParams(hiddenPriv), cwclient.JoinOptions{RequirePrivate: true})
-		require.NoError(t, err)
-		assert.True(t, joined.Private)
-		assert.NotEmpty(t, joined.WalletPubkey)
-	})
-
-	t.Run("public member joins over the standard transport", func(t *testing.T) {
-		joined, err := client.CreateCircleWallet(ctxT(t), joinParams(publicPriv))
+		joined, err := client.Join(ctxT(t), joinParams(hiddenPriv), joinOpts, journal)
 		require.NoError(t, err)
 		assert.NotEmpty(t, joined.WalletPubkey)
 	})
 
-	t.Run("non-member is refused on both transports", func(t *testing.T) {
-		_, err := client.Join(ctxT(t), joinParams(outsiderPriv), cwclient.JoinOptions{RequirePrivate: true})
-		requireWalletErrorCode(t, err, nipcw.ErrRestricted)
-		_, err = client.CreateCircleWallet(ctxT(t), joinParams(outsiderPriv))
+	t.Run("public member joins", func(t *testing.T) {
+		joined, err := client.Join(ctxT(t), joinParams(publicPriv), joinOpts, journal)
+		require.NoError(t, err)
+		assert.NotEmpty(t, joined.WalletPubkey)
+	})
+
+	t.Run("non-member is refused", func(t *testing.T) {
+		_, err := client.Join(ctxT(t), joinParams(outsiderPriv), joinOpts, journal)
 		requireWalletErrorCode(t, err, nipcw.ErrRestricted)
 	})
 
@@ -180,10 +178,10 @@ func TestFollowSetCircle_PublicAndHiddenMemberJoin(t *testing.T) {
 
 		// Membership is checked before the one-wallet rule, so a dropped
 		// member is refused even though they still hold a wallet...
-		_, err = client.Join(ctxT(t), joinParams(hiddenPriv), cwclient.JoinOptions{RequirePrivate: true})
+		_, err = client.Join(ctxT(t), joinParams(hiddenPriv), joinOpts, journal)
 		requireWalletErrorCode(t, err, nipcw.ErrRestricted)
 		// ...while a remaining member gets past it and hits that rule.
-		_, err = client.CreateCircleWallet(ctxT(t), joinParams(publicPriv))
+		_, err = client.Join(ctxT(t), joinParams(publicPriv), joinOpts, journal)
 		requireWalletErrorCode(t, err, nipcw.ErrWalletExists)
 	})
 }
