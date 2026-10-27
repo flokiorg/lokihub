@@ -306,7 +306,7 @@ func (svc *transactionsService) ResolveCircleHold(ctx context.Context, paymentHa
 // as after a restart.
 func (svc *transactionsService) ResolveAcceptedCircleHolds(ctx context.Context, lnClient lnclient.LNClient) {
 	var rows []db.Transaction
-	if err := svc.db.Table("transactions").Select("transactions.payment_hash").
+	if err := svc.db.Table("transactions").Select("transactions.payment_hash", "transactions.self_payment").
 		Joins("JOIN apps ON apps.id = transactions.app_id").
 		Where("apps.kind = ? AND transactions.type = ? AND transactions.state = ? AND transactions.hold = ?",
 			db.AppKindCircleWallet, constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_ACCEPTED, true).
@@ -315,7 +315,21 @@ func (svc *transactionsService) ResolveAcceptedCircleHolds(ctx context.Context, 
 		return
 	}
 	for _, row := range rows {
-		if err := svc.ResolveCircleHold(ctx, row.PaymentHash, -1, lnClient); err != nil {
+		// The amount the node holds is checked against the invoice's, as when
+		// the payment was accepted live: an over-payment is cancelled, never
+		// settled with the excess left to the host. A same-node payment has no
+		// node invoice; its amount is the payer's own.
+		amountPaid := int64(-1)
+		if !row.SelfPayment {
+			inv, err := lnClient.LookupInvoice(ctx, row.PaymentHash)
+			if err != nil || inv == nil {
+				svc.logger.Warn().Err(err).Str("payment_hash", row.PaymentHash).
+					Msg("Could not read an accepted circle wallet payment's amount; left for the next run")
+				continue
+			}
+			amountPaid = inv.AmountPaid
+		}
+		if err := svc.ResolveCircleHold(ctx, row.PaymentHash, amountPaid, lnClient); err != nil {
 			svc.logger.Error().Err(err).Str("payment_hash", row.PaymentHash).Msg("Failed to resolve an accepted circle wallet payment")
 		}
 	}

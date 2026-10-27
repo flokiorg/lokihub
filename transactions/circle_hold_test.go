@@ -184,3 +184,21 @@ func TestCircleInvoice_NotActive(t *testing.T) {
 	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, rowState(t, svc, invoice.ID).State)
 	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID))
 }
+
+// The sweep of accepted payments (as after a restart) checks the amount the
+// node holds like a live accept does: an over-payment is cancelled, never
+// settled with the excess left to the host.
+func TestCircleInvoice_SweepCancelsAnOverPayment(t *testing.T) {
+	svc, ts, wallet := holdCircle(t)
+	invoice, err := ts.MakeCircleInvoice(context.TODO(), wallet, 100_000, "", "", 3600, nil, svc.LNClient, nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&db.Transaction{}).Where("id = ?", invoice.ID).
+		Update("state", constants.TRANSACTION_STATE_ACCEPTED).Error)
+	mock := svc.LNClient.(*tests.MockLn)
+	mock.MockTransaction = &lnclient.Transaction{PaymentHash: invoice.PaymentHash, Amount: 100_000, AmountPaid: 150_000}
+
+	ts.ResolveAcceptedCircleHolds(context.TODO(), svc.LNClient)
+	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, rowState(t, svc, invoice.ID).State)
+	assert.Empty(t, mock.SettleHoldPreimages())
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID))
+}
