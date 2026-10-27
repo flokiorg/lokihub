@@ -61,6 +61,7 @@ func testBudgetQuotaExceeded(t *testing.T, cfg *Config, policy string) {
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
 		Pubkey:        pubkey,
 		MaxAmount:     maxAmountMloki,
+		MaxReceive:    100_000, // receives every payment it spends
 		Expiry:        happyPathExpirySecs,
 		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
 		IdentityEvent: eventJSON(t, identityEvent),

@@ -221,8 +221,10 @@ type CreateCircleWalletParams struct {
 	// something else.
 	ConnectionPubkey string `json:"connection_pubkey"`
 	MaxAmount        uint64 `json:"max_amount"`
-	Expiry           int    `json:"expiry"`
-	BudgetRenewal    string `json:"budget_renewal,omitempty"`
+	// MaxReceive is sent as max_amount when left 0 (bindJoinProof).
+	MaxReceive    uint64 `json:"max_receive,omitempty"`
+	Expiry        int    `json:"expiry"`
+	BudgetRenewal string `json:"budget_renewal,omitempty"`
 	// IdentityEvent is a JSON-encoded, freshly-signed kind-23199 proof that
 	// the caller controls Pubkey, bound to this specific hub via its d-tag
 	// and to ConnectionPubkey via its connection tag (see
@@ -298,6 +300,9 @@ type GetBudgetResult struct {
 	TotalBudget   uint64  `json:"total_budget"`
 	RenewsAt      *uint64 `json:"renews_at,omitempty"`
 	RenewalPeriod string  `json:"renewal_period"`
+	// A Circle Wallet's receive cap and what counts against it this period.
+	TotalReceiveBudget *uint64 `json:"total_receive_budget,omitempty"`
+	UsedReceiveBudget  *uint64 `json:"used_receive_budget,omitempty"`
 }
 
 type GetInfoResult struct {

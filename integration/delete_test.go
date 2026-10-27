@@ -10,11 +10,15 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcw"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -37,39 +41,33 @@ func findCircleChildAppID(t *testing.T, admin *adminClient, hubAppID uint, reque
 	return 0
 }
 
-// TestDeleteCircleHub_RefusedWhileChildrenExist proves apps.DeleteApp's own
-// child-count guard: a circle_hub with a live circle_wallet child attached
-// must refuse deletion outright (never orphan the child's ParentAppID, which
-// has no DB-level cascade), and must succeed once that child is gone.
-func TestDeleteCircleHub_RefusedWhileChildrenExist(t *testing.T) {
+// TestDeleteCircleHub_TeardownKeepsTheHubUntilItsLastWallet: deleting a
+// circle_hub tears it down (NIP-CW §Lifecycle and Deletion): its wallet moves
+// to Closing, the hub stays while it has one, and once the member deletes its
+// own (empty) wallet the lifecycle job deletes the hub.
+func TestDeleteCircleHub_TeardownKeepsTheHubUntilItsLastWallet(t *testing.T) {
 	cfg := requireConfig(t)
 	privkey := newTestPrivkey(t)
 	hub, hubAppID, admin := createEphemeralCircleHub(t, cfg, "delete-guard-circle-hub", circlePolicyAllowlist, []string{privkey},
 		ephemeralCircleHubOpts{FundLoki: 10_000})
-	hubClient := mustConnect(t, hub.Connection)
-	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
+	child := mintCircleChildFor(t, hub, privkey)
 
-	var created CreateCircleWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-		Pubkey:        pubkey,
-		MaxAmount:     circleHappyPathAmountMloki,
-		Expiry:        happyPathExpirySecs,
-		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
-		IdentityEvent: eventJSON(t, identityEvent),
-	}, &created))
+	require.NoError(t, admin.deleteApp(hubAppID), "a teardown, not a refusal")
+	var app map[string]interface{}
+	require.NoError(t, admin.do(http.MethodGet, fmt.Sprintf("/api/apps/%d", hubAppID), &app), "the hub stays while it has a wallet")
 
-	err := admin.deleteApp(hubAppID)
-	require.Error(t, err, "a circle_hub with a live child must refuse deletion")
-	require.True(t, strings.Contains(err.Error(), "member wallet"), "expected apps.DeleteApp's own child-count guard message, got: %v", err)
-
-	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
-	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
-	require.NoError(t, admin.deleteApp(hubAppID), "once the only child is gone, the hub itself must now delete cleanly")
+	var deleted map[string]interface{}
+	require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodDeleteCircleWallet, struct{}{}, &deleted),
+		"a Closing wallet holding no more than dust is deleted by its member")
+	require.Eventually(t, func() bool {
+		return admin.do(http.MethodGet, fmt.Sprintf("/api/apps/%d", hubAppID), &app) != nil
+	}, 3*time.Minute, 2*time.Second, "the lifecycle job deletes the hub after its last wallet")
 }
 
-// TestDeleteCashHub_RefusedWhileChildrenExist is
-// TestDeleteCircleHub_RefusedWhileChildrenExist's cash_hub mirror.
+// TestDeleteCashHub_RefusedWhileChildrenExist: a cash_hub with a live child
+// refuses deletion, and once the child is gone it still stays while the mint's
+// request record is retained (Q23), which the delete check reports with its
+// time.
 func TestDeleteCashHub_RefusedWhileChildrenExist(t *testing.T) {
 	cfg := requireConfig(t)
 	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "delete-guard-cash-hub", nil)
@@ -90,53 +88,46 @@ func TestDeleteCashHub_RefusedWhileChildrenExist(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, claims)
 	require.NoError(t, admin.deleteCashWallet(hubAppID, claims[0].WalletAppID))
-	require.NoError(t, admin.deleteApp(hubAppID), "once the only child is gone, the hub itself must now delete cleanly")
+
+	err = admin.deleteApp(hubAppID)
+	require.Error(t, err, "the mint's request record keeps the hub")
+	require.Contains(t, err.Error(), "request record")
+	var check struct {
+		Blockers []struct {
+			Kind  string `json:"kind"`
+			Count int64  `json:"count"`
+		} `json:"blockers"`
+	}
+	require.NoError(t, admin.do(http.MethodGet, fmt.Sprintf("/api/cash-hubs/%d/delete-check", hubAppID), &check))
+	require.Len(t, check.Blockers, 1)
+	assert.Equal(t, "records", check.Blockers[0].Kind)
 }
 
-// TestDeleteCircleChild_ReclaimsBalanceToHub proves
-// service.ReclaimAndDeleteSubWallet's reclaim half: deleting a funded child
-// must credit its exact remaining isolated balance back to the parent hub,
-// not write it off.
-func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
+// TestDeleteCircleChild_ClosesWithoutSweeping: the host's delete of a funded
+// member wallet moves it to Closing; its balance stays the member's and nothing
+// reaches the hub (NIP-CW §Lifecycle and Deletion: balances are never swept).
+func TestDeleteCircleChild_ClosesWithoutSweeping(t *testing.T) {
 	cfg := requireConfig(t)
 	privkey := newTestPrivkey(t)
 	hub, hubAppID, admin := createEphemeralCircleHub(t, cfg, "delete-reclaim-circle-hub", circlePolicyAllowlist, []string{privkey},
 		ephemeralCircleHubOpts{FundLoki: 10_000})
 	hubClient := mustConnect(t, hub.Connection)
 	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
 
 	var hubBalanceBefore GetBalanceResult
 	require.NoError(t, hubClient.Call(ctxT(t), "get_balance", struct{}{}, &hubBalanceBefore))
-
-	var created CreateCircleWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-		Pubkey:        pubkey,
-		MaxAmount:     circleHappyPathAmountMloki,
-		Expiry:        happyPathExpirySecs,
-		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
-		IdentityEvent: eventJSON(t, identityEvent),
-	}, &created))
-
-	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
-	require.NoError(t, err)
-	memberConn := CircleWalletConnection(circleDetails, pubkey)
-	child := mustConnectCircleWallet(t, memberConn)
-
+	child := mintCircleChildFor(t, hub, privkey)
 	const fundAmountMloki = 3000
-	fundCircleChild(t, cfg, child, fundAmountMloki, "integration delete-reclaim fund")
-
-	var childBalance GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &childBalance))
-	require.EqualValues(t, fundAmountMloki, childBalance.Balance)
+	fundCircleChild(t, cfg, child, fundAmountMloki, "integration delete-close fund")
 
 	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
 
+	assert.Equal(t, "closing", stateOf(t, admin, hubAppID, pubkey))
+	assert.EqualValues(t, fundAmountMloki, balanceOf(t, child), "the balance stays the member's")
 	var hubBalanceAfter GetBalanceResult
 	require.NoError(t, hubClient.Call(ctxT(t), "get_balance", struct{}{}, &hubBalanceAfter))
-	require.EqualValues(t, hubBalanceBefore.Balance+fundAmountMloki, hubBalanceAfter.Balance,
-		"deleting a funded child must reclaim its exact remaining balance back to the hub")
+	assert.Equal(t, hubBalanceBefore.Balance, hubBalanceAfter.Balance, "nothing reaches the hub")
 }
 
 // TestDeleteCashWallet_UnclaimedReclaimsFullAmountToHub is
@@ -213,51 +204,36 @@ func TestDeleteCircleChild_FreesIdentityForNewWallet(t *testing.T) {
 	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
 
-	ev3 := distinctCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey(), "third-after-delete")
+	// The Closing wallet keeps its connection key, so the new join uses a new
+	// one (NIP-CW step 9: a key in use is RESTRICTED).
+	newConnection := mustPubkey(t, newTestPrivkey(t))
+	ev3 := &nostr.Event{Kind: nostrKindCircleIdentityProof, CreatedAt: nostr.Now(),
+		Tags: nostr.Tags{{"d", hubClient.WalletPubkey()}, {"connection", newConnection}}}
+	require.NoError(t, ev3.Sign(privkey))
+	circleProofSigners.Store(ev3.ID, privkey)
 	var third CreateCircleWalletResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-		Pubkey:        pubkey,
-		MaxAmount:     circleHappyPathAmountMloki,
-		Expiry:        happyPathExpirySecs,
-		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
-		IdentityEvent: eventJSON(t, ev3),
-	}, &third), "the same identity must be free to mint again once its earlier wallet was deleted")
+		Pubkey:           pubkey,
+		ConnectionPubkey: newConnection,
+		MaxAmount:        circleHappyPathAmountMloki,
+		Expiry:           happyPathExpirySecs,
+		BudgetRenewal:    constants.BUDGET_RENEWAL_NEVER,
+		IdentityEvent:    eventJSON(t, ev3),
+	}, &third), "the same identity is free to join again once its earlier wallet is Closing")
 	thirdDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), third)
 	require.NoError(t, err)
 	require.NotEmpty(t, thirdDetails.WalletPubkey)
 }
 
-// TestDeleteCircleChild_DeferredWhilePaymentStillSettling proves
-// ReclaimAndDeleteSubWallet's HasPendingIncoming deferral end to end: a
-// child with any unpaid incoming invoice must refuse deletion (destroying
-// the app now would strand a payment that later settles into nothing to
-// credit), and must delete cleanly once that invoice is actually paid.
-//
-// Uses a one-shot admin.do call rather than the retrying deleteCircleChild
-// helper - this invoice is deliberately never going to settle on its own,
-// so retrying would just burn ~15s to reach the same error.
-func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
+// TestDeleteCircleChild_CancelsItsLiveInvoice: closing a member wallet with an
+// unpaid invoice cancels the invoice, so a later payment of it fails rather than
+// crediting a wallet that can no longer receive.
+func TestDeleteCircleChild_CancelsItsLiveInvoice(t *testing.T) {
 	cfg := requireConfig(t)
 	privkey := newTestPrivkey(t)
 	hub, hubAppID, admin := createEphemeralCircleHub(t, cfg, "delete-settling-hub", circlePolicyAllowlist, []string{privkey},
 		ephemeralCircleHubOpts{FundLoki: 10_000})
-	hubClient := mustConnect(t, hub.Connection)
-	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
-
-	var created CreateCircleWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-		Pubkey:        pubkey,
-		MaxAmount:     circleHappyPathAmountMloki,
-		Expiry:        happyPathExpirySecs,
-		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
-		IdentityEvent: eventJSON(t, identityEvent),
-	}, &created))
-
-	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
-	require.NoError(t, err)
-	memberConn := CircleWalletConnection(circleDetails, pubkey)
-	child := mustConnectCircleWallet(t, memberConn)
+	child := mintCircleChildFor(t, hub, privkey)
 
 	var invoice MakeInvoiceResult
 	require.NoError(t, child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{
@@ -265,45 +241,32 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 		Description: "integration delete-still-settling test",
 	}, &invoice))
 
-	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
+	childAppID := findCircleChildAppID(t, admin, hubAppID, mustPubkey(t, privkey))
+	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
 
-	deleteErr := admin.do(http.MethodDelete, deleteCircleChildPath(hubAppID, childAppID), nil)
-	require.Error(t, deleteErr, "a child with an unpaid incoming invoice must refuse deletion")
-	require.True(t, strings.Contains(deleteErr.Error(), "still settling"), "expected HasPendingIncoming's own deferral message, got: %v", deleteErr)
-
-	payInvoiceFromSimpleWallet(t, cfg, invoice.Invoice)
-
-	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID), "once the invoice is actually paid, deletion must succeed")
+	payer := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+	var paid PayInvoiceResult
+	assert.Error(t, payer.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice.Invoice}, &paid))
+	assert.Zero(t, balanceOf(t, child))
 }
 
-// TestDeleteCircleChild_AlreadyDeleted_Errors and
-// TestDeleteApp_Nonexistent_Errors both prove deletion isn't silently
-// idempotent - a second delete of the same child, or a delete of an id that
-// never existed, must surface an error rather than a quiet no-op success
-// (which would mask a caller's logic bug retrying a delete it thinks failed).
-func TestDeleteCircleChild_AlreadyDeleted_Errors(t *testing.T) {
+// TestDeleteCircleChild_Twice_NoChange: a second host delete of a Closing
+// wallet changes nothing (its grace is not restarted); a deleted wallet is gone.
+func TestDeleteCircleChild_Twice_NoChange(t *testing.T) {
 	cfg := requireConfig(t)
 	privkey := newTestPrivkey(t)
 	hub, hubAppID, admin := createEphemeralCircleHub(t, cfg, "delete-twice-hub", circlePolicyAllowlist, []string{privkey},
 		ephemeralCircleHubOpts{FundLoki: 10_000})
-	hubClient := mustConnect(t, hub.Connection)
-	pubkey := mustPubkey(t, privkey)
-	identityEvent := buildCircleWalletIdentityEvent(t, privkey, hubClient.WalletPubkey())
+	child := mintCircleChildFor(t, hub, privkey)
 
-	var created CreateCircleWalletResult
-	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-		Pubkey:        pubkey,
-		MaxAmount:     circleHappyPathAmountMloki,
-		Expiry:        happyPathExpirySecs,
-		BudgetRenewal: constants.BUDGET_RENEWAL_NEVER,
-		IdentityEvent: eventJSON(t, identityEvent),
-	}, &created))
-
-	childAppID := findCircleChildAppID(t, admin, hubAppID, pubkey)
+	childAppID := findCircleChildAppID(t, admin, hubAppID, mustPubkey(t, privkey))
 	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID))
+	require.NoError(t, admin.deleteCircleChild(hubAppID, childAppID), "a Closing wallet stays Closing")
+	assert.Equal(t, "closing", stateOf(t, admin, hubAppID, mustPubkey(t, privkey)))
 
-	err := admin.deleteCircleChild(hubAppID, childAppID)
-	require.Error(t, err, "deleting an already-deleted circle child must error, not silently succeed twice")
+	var deleted map[string]interface{}
+	require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodDeleteCircleWallet, struct{}{}, &deleted))
+	require.Error(t, admin.deleteCircleChild(hubAppID, childAppID), "a deleted wallet is gone")
 }
 
 func TestDeleteApp_Nonexistent_Errors(t *testing.T) {
@@ -396,7 +359,7 @@ func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 		require.Error(t, err, "the hub must still refuse deletion - one recipient is still live")
 	})
 
-	t.Run("LastRecipientRemoved_ListingGoesToZero_HubBecomesImmediatelyDeletable", func(t *testing.T) {
+	t.Run("LastRecipientRemoved_ListingGoesToZero_NoLiveBillKeepsTheHub", func(t *testing.T) {
 		claims, err := admin.listCashWalletClaims(hubAppID)
 		require.NoError(t, err)
 		claim2 := findCashClaimByIdentity(t, claims, pub2)
@@ -410,10 +373,12 @@ func TestCashWalletClaim_ListingReflectsDeletionState(t *testing.T) {
 		require.Len(t, archivedCashClaims(claimsAfter), 2,
 			"both removed recipients stay in the archive - the wallet is gone, its history is not")
 
-		require.NoError(t, admin.deleteApp(hubAppID),
-			"once the wallet's last recipient is removed, the hub must be immediately deletable - proving the "+
-				"now-empty wallet was itself reclaimed and deleted, not left behind as an orphan the listing "+
-				"can never surface again")
+		// The now-empty wallet was itself deleted (no live bill blocks the hub);
+		// only the mint's retained request record keeps the hub (Q23).
+		err = admin.deleteApp(hubAppID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "request record", "only the retained record, no live bill, keeps the hub")
+		require.NotContains(t, err.Error(), "issued wallet")
 	})
 }
 

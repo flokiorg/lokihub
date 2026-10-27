@@ -351,10 +351,11 @@ func TestNmilatSDK_CircleWallet_CreateAndRedeemCashIntoIt(t *testing.T) {
 	connection, err := nipcw.NewConnectionKey()
 	require.NoError(t, err)
 	resp, err := circleHubClient.Join(ctxT(t), nipcw.CreateCircleWalletParams{
-		Credential:      nipcw.BySigning(memberPriv),
-		Connection:      connection,
-		MaxAmountMillis: circleHappyPathAmountMloki,
-		Expiry:          nmilatHappyPathExpiry,
+		Credential:       nipcw.BySigning(memberPriv),
+		Connection:       connection,
+		MaxAmountMillis:  circleHappyPathAmountMloki,
+		MaxReceiveMillis: circleHappyPathAmountMloki, // room for the redeem below
+		Expiry:           nmilatHappyPathExpiry,
 	}, joinOpts, &memJoinJournal{})
 	require.NoError(t, err)
 	wallet := resp.Wallet()

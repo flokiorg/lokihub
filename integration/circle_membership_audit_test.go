@@ -135,20 +135,20 @@ func nwcErrorCode(err error) string {
 	return ""
 }
 
-// requireFrozen asserts the wallet refuses everything that moves money while
-// still answering reads, and that its balance is untouched.
+// requireFrozen asserts the wallet is Suspended (NIP-CW §Membership): it can no
+// longer receive or report a budget, still answers reads, and its balance is
+// untouched. Paying out stays allowed and is not exercised here, so the
+// balance check holds.
 func requireFrozen(t *testing.T, cfg *Config, child *nwcclient.Client, balanceMloki int64) {
 	t.Helper()
 	var invoice MakeInvoiceResult
 	requireNWCErrorCode(t, child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Amount: 1000}, &invoice), constants.ERROR_RESTRICTED)
-
-	payee := mintInvoiceFromSimpleWallet(t, cfg, 1000, "frozen circle wallet pays")
-	var paid PayInvoiceResult
-	requireNWCErrorCode(t, child.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: payee.Invoice}, &paid), constants.ERROR_RESTRICTED)
+	var budget GetBudgetResult
+	requireNWCErrorCode(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget), constants.ERROR_RESTRICTED)
 
 	var balance GetBalanceResult
-	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance), "a frozen wallet still shows its balance")
-	assert.EqualValues(t, balanceMloki, balance.Balance, "freezing moves no money")
+	require.NoError(t, child.Call(ctxT(t), "get_balance", struct{}{}, &balance), "a suspended wallet still shows its balance")
+	assert.EqualValues(t, balanceMloki, balance.Balance, "suspending moves no money")
 	var txs ListTransactionsResult
 	require.NoError(t, child.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs), "and its history")
 }
