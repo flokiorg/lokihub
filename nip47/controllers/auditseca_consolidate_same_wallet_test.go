@@ -47,16 +47,8 @@ import (
 // wallet_pubkey (the normal shape of a freshly-minted multi-recipient Cash
 // wallet) can now be consolidated together into one merged wallet.
 //
-// Amounts are 123_000/1_000 mloki, not an arbitrary split: cashwallet's own
-// internal-transfer funding step (fundInternal) pays a real bolt11 invoice
-// per source, and MockLn.MakeInvoice ignores its requested-amount argument
-// entirely unless MakeInvoiceQueue is pre-populated (a pre-existing mock
-// limitation) —
-// so, exactly like the pre-existing TestConsolidate_HappyPath_RecordsSourceLineage,
-// this test queues two distinct canned invoices (tests.MockInvoice /
-// tests.MockLNClientHoldTransaction.Invoice) whose amounts these claims must
-// match, so each of the two sequential internal transfers out of the SAME
-// source wallet pays a genuinely distinct payment_hash for the correct amount.
+// The merged bill is funded by one ledger transfer per source inside the
+// consolidate's commit, both out of the SAME source wallet.
 func TestAuditSecA_Consolidate_TwoDistinctSlicesOnSameWallet_Succeeds(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)

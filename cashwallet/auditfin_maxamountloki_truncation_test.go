@@ -56,10 +56,8 @@ import (
 // wallet funded with this same 21999-mloki total. Setup is built directly
 // (mirroring transactions/cash_redeem_fee_reconciliation_test.go's own
 // newCashHubAndWallet helper) rather than by driving the real mint path,
-// because the mock LN client's MakeInvoice ignores the requested amount --
-// a known test-infra limitation that would make
-// fundInternal move the WRONG amount in this unit-test environment and
-// confound the very check this test targets. This still exercises the REAL
+// so the wallet's funding is exactly the amount the check is about. This still
+// exercises the REAL
 // transactions.SendPaymentSync -> validateCanPay code path unchanged --
 // only the funding step is short-circuited.
 //

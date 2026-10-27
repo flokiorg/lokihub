@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -672,83 +674,6 @@ func TestHandleCashTransferEvent_PartialSplit_Success(t *testing.T) {
 	require.NotNil(t, sourceClaim.SpunOffToWalletAppID)
 }
 
-// TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeftInPlace
-// is a regression test: SplitInTwo's own carved-wallet compensation was already correctly gated
-// (only deletes the carved wallet once its reverse transfer is confirmed), but
-// the CALLER — this controller's rollback() — was still restoring the source
-// slice to its full original amount unconditionally, even when that reverse
-// transfer failed and the carved amount is still sitting in the (deliberately
-// retained) carved wallet. Restoring the claim in that case would let the
-// caller believe they have the full original amount when the source's real
-// balance is short by exactly the carved piece.
-//
-// Reaches the failure with a REAL "already paid" collision, reusing
-// tests.MockInvoice's payment_hash across all three internal transfers
-// (carved funding, remainder funding, and the carved reversal) — the same
-// technique cashwallet/consolidate_rollback_test.go and
-// TestConsolidate_StrandedSource_ClaimLeftInPlace use, not a fault-injection
-// seam: the carved transfer settles first, so the remainder attempt and the
-// reversal attempt both genuinely collide with that same now-settled hash.
-func TestHandleCashTransferEvent_PartialSplit_FailedCompensation_SourceClaimLeftInPlace(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	wallet, _, err := svc.AppsService.CreateApp(
-		"cash-wallet", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.CASH_REDEEM_SCOPE, constants.CASH_TRANSFER_SCOPE, constants.GET_BALANCE_SCOPE},
-		db.AppKindCashWallet, &hub.ID, db.ParentKindCash, nil,
-	)
-	require.NoError(t, err)
-	tests.FundApp(svc, wallet.ID, 200_000, tests.RandomHex32())
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p1", Amount: 2000}, // 1: fund carved from source — succeeds, settles MockInvoice's hash
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p2", Amount: 3000}, // 2: fund remainder from source — same hash: fails, starts compensation
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p3", Amount: 2000}, // 3: reverse the carved transfer — same hash: fails too
-	}
-
-	currentPrivkey := nostr.GeneratePrivateKey()
-	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 5000},
-	}))
-
-	newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	amount := uint64(2000)
-	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, newPubkey, "", 2000, nil, time.Now())
-	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
-		IdentityType:  db.CashIdentityPubkey,
-		IdentityValue: currentPubkey,
-		IdentityEvent: mustMarshal(t, proof),
-		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
-		AmountMillis:  &amount,
-	})
-	require.NotNil(t, response.Error)
-
-	sourceClaim := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, currentPubkey)
-	require.NotNil(t, sourceClaim)
-	assert.NotNil(t, sourceClaim.ClaimedAt,
-		"the carved reversal failed — its funds are stranded in the retained carved wallet, so the source claim must NOT be restored to the full original amount")
-
-	// The carved wallet (funded, then NOT deleted since its reversal failed)
-	// must still exist as a child of the hub, alongside the source itself.
-	var children []db.App
-	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&children).Error)
-	assert.Len(t, children, 2, "source + the retained carved wallet holding the stranded funds")
-
-	// A durable reconciliation record must exist too.
-	records, err := svc.AppsService.ListCashStrandedFunds(true)
-	require.NoError(t, err)
-	require.Len(t, records, 1)
-	assert.Equal(t, "split", records[0].Operation)
-	assert.Equal(t, wallet.ID, records[0].SourceWalletAppID)
-	assert.EqualValues(t, 2000, records[0].AmountMloki)
-	assert.Nil(t, records[0].ResolvedAt)
-}
-
 // TestHandleCashTransferEvent_PartialSplit_BelowMinTransferFloor_Rejected
 // verifies the new MinTransferMloki floor applies to the carved-off amount.
 func TestHandleCashTransferEvent_PartialSplit_BelowMinTransferFloor_Rejected(t *testing.T) {
@@ -1342,16 +1267,16 @@ func TestHandleCashTransferEvent_RaceAgainstCashRedeem_NeverBothSucceed(t *testi
 		"neither op succeeded against an unclaimed slice (redeem=%v transfer=%v)", redeemResp.Error, transferResp.Error)
 
 	// A losing cash_transfer here lost purely to timing (a concurrent redeem
-	// claimed the slice first), not to anything wrong with the transfer
-	// request itself — it must report NOT_FOUND, the same code cash_redeem's
-	// own identical race-loss case reports, not BAD_REQUEST (a bug found live
-	// against this fix: ReassignCashSliceIdentity's race-loss error used to be
-	// indistinguishable from a genuinely-invalid-request error, both of which
-	// the controller mapped to BAD_REQUEST at the time).
+	// claimed the slice first), not to anything wrong with the transfer request
+	// itself, so it must never be BAD_REQUEST. Lost before its read, there is no
+	// unclaimed slice (NOT_FOUND); lost after it, its commit finds the slice
+	// claimed by the concurrent call (RESTRICTED, NIP-CASH: "already claimed by a
+	// concurrent call").
 	if !transferWon {
 		require.NotNil(t, transferResp.Error)
-		assert.Equal(t, constants.ERROR_NOT_FOUND, transferResp.Error.Code,
-			"a cash_transfer that lost a race against a concurrent cash_redeem must report NOT_FOUND, not BAD_REQUEST")
+		assert.Contains(t, []string{constants.ERROR_NOT_FOUND, constants.ERROR_RESTRICTED}, transferResp.Error.Code,
+			"a cash_transfer that lost a race against a concurrent cash_redeem must report the loss, not %s: %s",
+			transferResp.Error.Code, transferResp.Error.Message)
 	}
 
 	if transferWon {
@@ -1435,9 +1360,12 @@ func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound
 		if !transferWon {
 			sawTransferLoss = true
 			require.NotNil(t, transferResp.Error)
-			assert.Equal(t, constants.ERROR_NOT_FOUND, transferResp.Error.Code,
+			// Lost before its read: no unclaimed slice (NOT_FOUND). Lost after it: the
+			// commit finds the slice claimed by the concurrent call (RESTRICTED,
+			// NIP-CASH: "already claimed by a concurrent call").
+			assert.Contains(t, []string{constants.ERROR_NOT_FOUND, constants.ERROR_RESTRICTED}, transferResp.Error.Code,
 				"trial %d: a cash_transfer that lost a race against a concurrent cash_redeem must report "+
-					"NOT_FOUND, not %s", trial, transferResp.Error.Code)
+					"the loss, not %s", trial, transferResp.Error.Code)
 		}
 	}
 
@@ -1445,12 +1373,10 @@ func TestHandleCashTransferEvent_RaceLossAgainstCashRedeem_AlwaysReportsNotFound
 		"the transfer never lost the race in %d trials — increase trials or check the race is still live", trials)
 }
 
-// TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack verifies
-// handleCashTransferSplit's claim-then-fund-then-rollback-on-failure
-// ordering: if the new wallet's funding transfer fails after the source
-// slice has already been exclusively claimed, that claim must be undone
-// (UnclaimCashSlice) rather than left stranded — a caller who hits this
-// error can safely retry the exact same request.
+// TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack verifies the
+// spin-off is one commit: a failure funding the new bill after the source was
+// claimed inside it leaves the source unclaimed, no new bill and the proof
+// unused, so the caller can retry the exact same request.
 func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -1459,12 +1385,13 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 200_000)
 
-	// No self-payment pubkey override here, deliberately: this forces
-	// SendPaymentSync down its normal (non-intercepted) path, where a queued
-	// PayInvoiceError actually has somewhere to bite.
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
-	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+	failing := NewTestNip47Controller(svc)
+	failing.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(0)" {
+			return errors.New("injected: funding failed")
+		}
+		return nil
+	}}
 
 	currentPrivkey := nostr.GeneratePrivateKey()
 	currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
@@ -1479,7 +1406,7 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 
 	_, newSecretHash := cashSecretAndHash(t)
 	proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
-	response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
+	response := handleCashTransferFor(t, svc, failing, wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
 		IdentityEvent: mustMarshal(t, proof),
@@ -1488,6 +1415,9 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 
 	require.NotNil(t, response.Error)
 	assert.Equal(t, constants.ERROR_INTERNAL, response.Error.Code)
+	used, err := cashrequest.New(svc.DB).IsProofConsumed(proof.ID)
+	require.NoError(t, err)
+	assert.False(t, used, "a call that did not commit leaves its proof unused")
 
 	// The source slice must be rolled back to unclaimed, not stranded.
 	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, currentPubkey)
@@ -1500,16 +1430,11 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 	require.NoError(t, err)
 	assert.Len(t, childrenAfter, len(childrenBefore), "a failed spin-off must not leave a half-created wallet behind")
 
-	// A retry (this time with the payment succeeding) must now work.
-	mockLN.Pubkey = "03cbd788f5b22bd56e2714bff756372d2293504c064e03250ed16a4dd80ad70e2c"
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-retry", Amount: 1000},
-	}
-	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityCash, newSecretHash, "", 1000, nil, time.Now())
+	// A retry with the identical proof must now work.
 	retryResponse := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,
 		IdentityValue: currentPubkey,
-		IdentityEvent: mustMarshal(t, retryProof),
+		IdentityEvent: mustMarshal(t, proof),
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 	require.Nil(t, retryResponse.Error, "a retry after a rolled-back spin-off must succeed")

@@ -116,7 +116,7 @@ func mustEncodeCashToken(t *testing.T, walletPubkey, secret string, relayURLs []
 	t.Helper()
 	ln, err := tests.NewMockLn()
 	require.NoError(t, err)
-	token, err := issueCashToken(context.TODO(), ln, walletPubkey, secret, relayURLs, identityRequired, amountMillis, &db.App{AppPubkey: hubPubkey})
+	_, token, err := issueCashToken(context.TODO(), ln, walletPubkey, secret, relayURLs, identityRequired, amountMillis, &db.App{AppPubkey: hubPubkey})
 	require.NoError(t, err)
 	return token
 }

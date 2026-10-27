@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -9,8 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -501,14 +504,11 @@ func TestConsolidate_GuardRejections(t *testing.T) {
 	}
 }
 
-// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers is a
-// regression test: a rejected consolidate could
-// permanently burn a caller's still-valid proofs, or (a botched fix) un-burn a
-// proof another request legitimately consumed. When source 2's proof is already
-// consumed (by a prior request) and the consolidate is therefore rejected: the
-// proof THIS request consumed for source 1 must be RELEASED (usable on retry),
-// while the pre-existing guard for source 2 must be PRESERVED (no replay
-// reopened), and every source must be left unclaimed.
+// TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers: when source 2's
+// proof was already used by an earlier call, the consolidate is refused
+// UNAUTHORIZED (NIP-CASH: a proof already used). Source 1's proof is left unused,
+// so the caller can retry with it; the earlier call's mark stays (no replay
+// reopened); every source is left unclaimed.
 func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -537,7 +537,7 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
 	assert.Contains(t, resp.Error.Message, "already used")
 
 	var count1, count2 int64
@@ -554,24 +554,11 @@ func TestConsolidate_RejectedRequest_ReleasesOwnProofsButNotOthers(t *testing.T)
 	}
 }
 
-// TestConsolidate_StrandedSource_ClaimLeftInPlace is the controller-level
-// regression test: Consolidate's own
-// F-1 fix (cashwallet/consolidate.go) correctly stops it from deleting the
-// merged wallet when a compensating reverse-transfer fails, but the CALLER was
-// still restoring every claimed source's slice to its full original amount
-// unconditionally — even a source whose reversal failed and whose real balance
-// is now short by exactly what never came back. Restoring that claim would let
-// it be redeemed against a balance that can no longer cover it (or, on a
-// multi-recipient source wallet, cannibalize the other recipients' backing).
-//
-// Reaches the failure with a REAL "already paid" collision (reusing
-// tests.MockInvoice's payment_hash across the forward funding, the second
-// source's forward funding, and the reversal), the same technique
-// cashwallet/consolidate_rollback_test.go uses — not a fault-injection seam.
-// s1 is listed first, so it is the one Consolidate actually funds and then
-// fails to reverse; s2's own forward funding fails before anything leaves it,
-// so it was never at risk and must be unclaimed as before.
-func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
+// TestConsolidate_FundingFailure_LeavesEverySourceClaimable: the consolidate is
+// one commit, so a failure funding the merged bill from the second source, after
+// both sources were claimed and the first one moved inside it, leaves both
+// sources unclaimed and funded, no merged bill and no used proof.
+func TestConsolidate_FundingFailure_LeavesEverySourceClaimable(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -588,14 +575,14 @@ func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
 	s2 := guardSource(t, svc, hub, ownerPub, moved, 0, 0)
 	tests.FundApp(svc, s2.ID, 200_000, "s2-fund")
 
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p1", Amount: int64(moved)}, // 1: fund merged from s1 — succeeds, settles MockInvoice's hash
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p2", Amount: int64(moved)}, // 2: fund merged from s2 — same hash: fails, starts rollback
-		{Type: "incoming", Invoice: tests.MockInvoice, Preimage: "p3", Amount: int64(moved)}, // 3: reversal reuses the same settled hash too: fails
-	}
-
-	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), caller, cashConsolidateParams{
+	controller := NewTestNip47Controller(svc)
+	controller.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(1)" {
+			return errors.New("injected: second funding failed")
+		}
+		return nil
+	}}
+	resp := handleCashConsolidateFor(t, svc, controller, caller, cashConsolidateParams{
 		Sources: []consolidateSourceParam{
 			guardParam(t, s1, ownerPriv, ownerPub, newPub, moved),
 			guardParam(t, s2, ownerPriv, ownerPub, newPub, moved),
@@ -603,16 +590,20 @@ func TestConsolidate_StrandedSource_ClaimLeftInPlace(t *testing.T) {
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 	})
 	require.NotNil(t, resp.Error)
+	assert.Equal(t, constants.ERROR_INTERNAL, resp.Error.Code)
 
-	claim1 := cashWalletClaimByIdentity(t, svc, s1.ID, db.CashIdentityPubkey, ownerPub)
-	require.NotNil(t, claim1)
-	assert.NotNil(t, claim1.ClaimedAt,
-		"s1's reversal failed — its funds are stranded in the retained merged wallet, so its claim must NOT be restored to the full original amount")
-
-	claim2 := cashWalletClaimByIdentity(t, svc, s2.ID, db.CashIdentityPubkey, ownerPub)
-	require.NotNil(t, claim2)
-	assert.Nil(t, claim2.ClaimedAt,
-		"s2 never funded the merged wallet (nothing left it), so it must be unclaimed and available to retry as before")
+	for _, s := range []*db.App{s1, s2} {
+		claim := cashWalletClaimByIdentity(t, svc, s.ID, db.CashIdentityPubkey, ownerPub)
+		require.NotNil(t, claim)
+		assert.Nil(t, claim.ClaimedAt, "a consolidate that did not commit leaves every source claimable")
+		assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, s.ID), "and every source funded")
+	}
+	var merged, used int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ? AND id NOT IN ?",
+		hub.ID, db.AppKindCashWallet, []uint{caller.ID, s1.ID, s2.ID}).Count(&merged).Error)
+	assert.Zero(t, merged)
+	require.NoError(t, svc.DB.Model(&db.CashConsumedProof{}).Count(&used).Error)
+	assert.Zero(t, used)
 }
 
 // TestConsolidate_HappyPath_RecordsSourceLineage is the regression for a

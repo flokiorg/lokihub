@@ -16,7 +16,7 @@ import (
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/flokiorg/lokihub/transactions"
@@ -362,9 +362,9 @@ func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
-	mockLN.PayInvoiceErrors = []error{errors.New("simulated payment failure")}
+	// The node cannot sign, so the commit fails after it has created the bill
+	// inside its transaction: everything it wrote must roll back.
+	svc.LNClient.(*tests.MockLn).SigningKey = nil
 
 	beneficiaryPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
@@ -379,5 +379,6 @@ func TestCreateCashWallet_TransferFailure_Rollback(t *testing.T) {
 
 	var childApps []db.App
 	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
-	assert.Empty(t, childApps, "the child Cash wallet app must be rolled back after a funding failure")
+	assert.Empty(t, childApps, "the bill must roll back with its failed commit")
+	assert.Equal(t, int64(10_000_000), queries.GetIsolatedBalance(svc.DB, hub.ID), "the Hub was never debited")
 }

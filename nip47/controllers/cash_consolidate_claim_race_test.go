@@ -16,25 +16,28 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// raceLosingApps lets a concurrent request claim one wallet's slice just before
-// this request gets to it: the window between consolidate resolving its sources
-// and claiming them.
+// raceLosingApps lets a concurrent request claim one wallet's slice just after
+// this request has read it: the window between consolidate resolving its sources
+// and its commit claiming them.
 type raceLosingApps struct {
 	apps.AppsService
 	lostWalletID uint
 }
 
-func (a raceLosingApps) ClaimCashSlice(walletAppID uint, identityType, identityValue string) (int64, error) {
-	if walletAppID == a.lostWalletID {
+func (a raceLosingApps) GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error) {
+	claim, err := a.AppsService.GetCashWalletClaim(walletAppID, identityType, identityValue)
+	if err == nil && claim != nil && walletAppID == a.lostWalletID {
 		if _, err := a.AppsService.ClaimCashSlice(walletAppID, identityType, identityValue); err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
-	return a.AppsService.ClaimCashSlice(walletAppID, identityType, identityValue)
+	return claim, err
 }
 
-// A consolidate that loses the race for one source must give back every source
-// it had already claimed, leave the winner's claim alone, and create nothing.
+// A consolidate that loses the race for one source is refused RESTRICTED (NIP-CASH:
+// a slice already claimed by a concurrent call), and its one commit leaves every
+// other source unclaimed, the winner's claim alone, no merged bill and no used
+// proof.
 func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -67,10 +70,10 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secretHash},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
 
 	assert.Nil(t, cashWalletClaimByIdentity(t, svc, s1.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt,
-		"the source this request had claimed is given back")
+		"the other source is untouched: its claim rolled back with the commit")
 	assert.NotNil(t, cashWalletClaimByIdentity(t, svc, s2.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt,
 		"the concurrent winner's claim is left alone")
 

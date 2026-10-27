@@ -10,6 +10,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
@@ -25,11 +26,17 @@ import (
 // through controller.cfg.GetEnv().CashWalletRateLimitPerHour instead.
 const cashRateLimitPerHour = 10
 
-// mapCashWalletErrorCode maps an error returned by cashwallet.Create to a NIP-47
-// error code. cashwallet.Create is protocol-agnostic, so it returns plain wrapped
-// errors rather than NIP-47 codes directly — this is the NWC-specific translation.
+// mapCashWalletErrorCode maps an error returned by cashwallet to a NIP-47 error
+// code. cashwallet is protocol-agnostic, so it returns plain wrapped errors
+// rather than NIP-47 codes directly — this is the NWC-specific translation.
 func mapCashWalletErrorCode(err error) string {
 	switch {
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return constants.ERROR_BAD_REQUEST
+	case errors.Is(err, apps.ErrSliceClaimed):
+		return constants.ERROR_RESTRICTED
+	case errors.Is(err, cashwallet.ErrProofUsed):
+		return constants.ERROR_UNAUTHORIZED
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
 		return constants.ERROR_INSUFFICIENT_BALANCE
 	case errors.Is(err, transactions.NewQuotaExceededError()):
@@ -144,15 +151,7 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		}
 	}
 
-	deps := cashwallet.Deps{
-		AppsService:         controller.appsService,
-		TransactionsService: controller.transactionsService,
-		LNClient:            controller.lnClient,
-		Keys:                controller.keys,
-		DB:                  controller.db,
-		RelayURLs:           controller.cfg.GetRelayUrls(),
-		IAChecker:           controller.iaChecker,
-	}
+	deps := controller.cashDeps()
 
 	// 2. Validate first: identity shapes, IA trust, amount/expiry caps, and hub
 	// balance are all read-only checks, so a request that was always going to
@@ -177,9 +176,27 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		return
 	}
 
-	result, err := cashwallet.Commit(ctx, deps, resolved)
+	// The record is written in the same commit as the bill, under the deadline
+	// (NIP-CASH §The Record): the Hub's connection is both the target and the
+	// authorizer of a mint.
+	echoed := make([]nipcash.RecipientResult, len(resolved.Recipients))
+	for i, r := range resolved.Recipients {
+		echoed[i] = nipcash.RecipientResult{
+			IdentityType:  r.IdentityType,
+			IdentityValue: r.IdentityValue,
+			IAPubkey:      r.IAPubkey,
+			AmountMillis:  r.AmountMloki,
+		}
+	}
+	record, err := mintRecord(params.RequestID, nip47Request.Method, app, meta.Deadline, resolved.ExpiresAt, echoed)
 	if err != nil {
-		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
+		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this call")
+		return
+	}
+
+	result, err := cashwallet.Commit(ctx, deps, resolved, record)
+	if err != nil {
+		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), commitErrorMessage(err))
 		return
 	}
 
@@ -223,6 +240,53 @@ func mintCashReply(walletPubkey, cashToken string, expiresAt *time.Time, recipie
 		out.ExpiresAt = &at
 	}
 	return out
+}
+
+// mintRecord is a mint's record: the Hub's connection is its target and its
+// authorizer, and result_meta holds the reply's non-secret fields other than the
+// bill itself (which the record's bill row carries).
+func mintRecord(requestID, method string, hub *db.App, deadline int64, expiresAt *time.Time, recipients []nipcash.RecipientResult) (*db.CashRequestRecord, error) {
+	target := hub.AppPubkey
+	if hub.WalletPubkey != nil && *hub.WalletPubkey != "" {
+		target = *hub.WalletPubkey
+	}
+	meta := struct {
+		ExpiresAt  *int64                    `json:"expires_at,omitempty"`
+		Recipients []nipcash.RecipientResult `json:"recipients"`
+	}{Recipients: recipients}
+	if expiresAt != nil {
+		at := expiresAt.Unix()
+		meta.ExpiresAt = &at
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return nil, err
+	}
+	return &db.CashRequestRecord{
+		RequestID:          requestID,
+		Method:             method,
+		HubAppID:           hub.ID,
+		TargetWalletPubkey: target,
+		TargetConnPubkey:   hub.AppPubkey,
+		AuthorizerKind:     "client",
+		Authorizer:         hub.AppPubkey,
+		Deadline:           deadline,
+		ResultMeta:         string(raw),
+	}, nil
+}
+
+// commitErrorMessage is the reply text for a failed commit: fixed for the
+// outcomes NIP-CASH names, the error itself otherwise.
+func commitErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, cashrequest.ErrDeadlinePassed):
+		return "reached commit after its deadline; nothing was committed"
+	case errors.Is(err, apps.ErrSliceClaimed):
+		return "this slice was already claimed by another call; nothing was committed"
+	case errors.Is(err, cashwallet.ErrProofUsed):
+		return "a claim proof of this call was already used"
+	}
+	return err.Error()
 }
 
 // mintDeadlineProblem is why a mint's deadline is refused, or "" when it holds: it

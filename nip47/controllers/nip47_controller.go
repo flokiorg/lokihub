@@ -38,6 +38,8 @@ type nip47Controller struct {
 	// privateIdentity returns the node identity get_info reports as
 	// circle_wallet.identity, or "" when the private transport is not running.
 	privateIdentity func() string
+	// cashHooks is the cash commit's fault-injection seam; tests only.
+	cashHooks *cashwallet.TestHooks
 
 	cfg config.Config
 }
