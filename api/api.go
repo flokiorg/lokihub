@@ -176,10 +176,12 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			createAppRequest.Metadata,
 			identityRef,
 			db.CircleHubConfig{
-				MaxExpSecs:        createAppRequest.CircleMaxExpSecs,
-				FeesPpm:           createAppRequest.CircleFeesPpm,
-				PerWalletMaxMloki: createAppRequest.CirclePerWalletMaxMloki,
-				MinBudgetRenewal:  createAppRequest.CircleMinBudgetRenewal,
+				MaxExpSecs:               createAppRequest.CircleMaxExpSecs,
+				DefaultExpSecs:           createAppRequest.CircleDefaultExpSecs,
+				FeesPpm:                  createAppRequest.CircleFeesPpm,
+				PerWalletMaxMloki:        createAppRequest.CirclePerWalletMaxMloki,
+				PerWalletMaxReceiveMloki: createAppRequest.CirclePerWalletMaxReceiveMloki,
+				MinBudgetRenewal:         createAppRequest.CircleMinBudgetRenewal,
 			},
 		)
 	default:
@@ -314,15 +316,26 @@ func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error
 	}, nil
 }
 
+// circleHubConfigPatch is the circle hub settings an update request carries.
+func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
+	return apps.CircleHubConfigPatch{
+		MaxExpSecs:               req.CircleMaxExpSecs,
+		DefaultExpSecs:           req.CircleDefaultExpSecs,
+		FeesPpm:                  req.CircleFeesPpm,
+		PerWalletMaxMloki:        req.CirclePerWalletMaxMloki,
+		PerWalletMaxReceiveMloki: req.CirclePerWalletMaxReceiveMloki,
+		MinBudgetRenewal:         req.CircleMinBudgetRenewal,
+	}
+}
+
 func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) error {
 	updatesCashHub := userApp.Kind == db.AppKindCashHub &&
 		(updateAppRequest.CashPerWalletMaxMloki != nil || updateAppRequest.CashMaxExpSecs != nil ||
 			updateAppRequest.CashMinTransferMloki != nil || updateAppRequest.CashRedeemFeePpm != nil ||
 			updateAppRequest.CashRedeemFeeBaseMloki != nil ||
 			updateAppRequest.CashSpentRetentionSecs != nil)
-	updatesCircleHub := userApp.Kind == db.AppKindCircleHub &&
-		(updateAppRequest.CircleMaxExpSecs != nil || updateAppRequest.CircleFeesPpm != nil ||
-			updateAppRequest.CirclePerWalletMaxMloki != nil || updateAppRequest.CircleMinBudgetRenewal != nil)
+	circlePatch := circleHubConfigPatch(updateAppRequest)
+	updatesCircleHub := userApp.Kind == db.AppKindCircleHub && !circlePatch.IsEmpty()
 
 	// The hub settings are saved after the app itself, so check them first: a
 	// rejected setting must leave the whole request unsaved.
@@ -336,9 +349,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 		}
 	}
 	if updatesCircleHub {
-		if err := api.appsSvc.ValidateCircleHubConfigUpdate(
-			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
-			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+		if err := api.appsSvc.ValidateCircleHubConfigUpdate(userApp.ID, circlePatch); err != nil {
 			return err
 		}
 	}
@@ -533,9 +544,7 @@ func (api *api) UpdateApp(userApp *db.App, updateAppRequest *UpdateAppRequest) e
 	}
 
 	if updatesCircleHub {
-		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID,
-			updateAppRequest.CircleMaxExpSecs, updateAppRequest.CircleFeesPpm,
-			updateAppRequest.CirclePerWalletMaxMloki, updateAppRequest.CircleMinBudgetRenewal); err != nil {
+		if err := api.appsSvc.UpdateCircleHubConfig(userApp.ID, circlePatch); err != nil {
 			return err
 		}
 	}
@@ -671,6 +680,8 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CircleFeesPpm = &cfg.FeesPpm
 			response.CirclePerWalletMaxMloki = &cfg.PerWalletMaxMloki
 			response.CircleMinBudgetRenewal = &cfg.MinBudgetRenewal
+			response.CircleDefaultExpSecs = &cfg.DefaultExpSecs
+			response.CirclePerWalletMaxReceiveMloki = &cfg.PerWalletMaxReceiveMloki
 		}
 	}
 

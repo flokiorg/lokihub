@@ -133,6 +133,9 @@ type App struct {
 	// affects only new members. Nil on wallets created before the column
 	// existed, which keep paying the Hub's current rate.
 	CircleFeesPpm *int
+	// CircleMaxReceiveMloki is a circle_wallet's receive cap per budget period
+	// (max_receive), as resolved at its join. Nil on every other kind.
+	CircleMaxReceiveMloki *int64
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
@@ -366,11 +369,17 @@ type CircleHubConfig struct {
 	// No OnDelete:CASCADE here — deleting this config (i.e. deleting the
 	// circle_hub app) must never delete the shared identity.
 	CircleIdentity CircleIdentity
+	// MaxExpSecs is the ceiling on a wallet's lifetime, 0 = none; DefaultExpSecs
+	// is the lifetime a join that names none gets, 0 = never. A default above a
+	// non-zero ceiling, or 0 under one, is refused (NIP-CW §Data Model).
 	MaxExpSecs     int
+	DefaultExpSecs int
 	FeesPpm        int
 	// PerWalletMaxMloki caps a caller's requested max_amount per issued wallet
 	// (required positive — mirrors CashHubConfig.PerWalletMaxMloki).
 	PerWalletMaxMloki int
+	// PerWalletMaxReceiveMloki caps a caller's requested max_receive.
+	PerWalletMaxReceiveMloki int64
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
 	// members resetting their spend cap too often. A request is rejected when

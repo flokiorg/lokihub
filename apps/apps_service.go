@@ -82,13 +82,13 @@ type AppsService interface {
 	// GetCircleHubConfig returns the CircleHubConfig (with CircleIdentity preloaded)
 	// for a circle_hub app.
 	GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error)
-	// UpdateCircleHubConfig updates a circle_hub's MaxExpSecs, FeesPpm,
-	// PerWalletMaxMloki, and/or MinBudgetRenewal. A nil pointer leaves that
-	// field unchanged.
-	UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	// UpdateCircleHubConfig applies a settings patch to a circle_hub's
+	// CircleHubConfig, checking the result as a whole. A nil field leaves that
+	// setting unchanged.
+	UpdateCircleHubConfig(appID uint, patch CircleHubConfigPatch) error
 	// ValidateCircleHubConfigUpdate runs UpdateCircleHubConfig's checks without
 	// saving, so a caller can refuse a request before changing anything else.
-	ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int, perWalletMaxMloki *int, minBudgetRenewal *string) error
+	ValidateCircleHubConfigUpdate(appID uint, patch CircleHubConfigPatch) error
 	// CreateCircleIdentity creates a standalone, reusable CircleIdentity.
 	// followSetD is the set's `d` identifier, required for follow_set only.
 	CreateCircleIdentity(name, policy, providerPubkey, followSetD string) (*db.CircleIdentity, error)

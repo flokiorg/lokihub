@@ -934,7 +934,7 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_FloorChangeIsNotRetroactive
 	// The hub owner now tightens the floor to "monthly" — stricter than the
 	// existing child's own "yearly" renewal.
 	monthly := constants.BUDGET_RENEWAL_MONTHLY
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, nil, &monthly))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MinBudgetRenewal: &monthly}))
 
 	// The existing child's own renewal must be untouched: there is no
 	// re-validation after creation, only at creation time.

@@ -165,9 +165,9 @@ func TestCreateCircleHub_NonexistentExistingIdentity_Rejected(t *testing.T) {
 	require.Error(t, err)
 }
 
-// --- MaxExpSecs / PerWalletMaxMloki required positive ---
+// --- MaxExpSecs at least 0 (0 = no ceiling, NIP-CW §Data Model); PerWalletMaxMloki required positive ---
 
-func TestCreateCircleHub_ZeroMaxExpSecs_Rejected(t *testing.T) {
+func TestCreateCircleHub_NegativeMaxExpSecs_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -177,7 +177,7 @@ func TestCreateCircleHub_ZeroMaxExpSecs_Rejected(t *testing.T) {
 		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
 		nil,
 		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{PerWalletMaxMloki: 100_000},
+		db.CircleHubConfig{MaxExpSecs: -1, PerWalletMaxMloki: 100_000},
 	)
 	require.ErrorIs(t, err, constants.ErrInvalidParams)
 }
@@ -267,7 +267,7 @@ func TestUpdateCircleHubConfig_PerWalletMaxMloki_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	newMax := 200_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &newMax, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &newMax}))
 
 	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
 	require.NoError(t, err)
@@ -289,7 +289,7 @@ func TestUpdateCircleHubConfig_PerWalletMaxMloki_ZeroRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	zero := 0
-	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &zero, nil)
+	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &zero})
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 
 	// Rejected update must not have partially applied.
@@ -313,7 +313,7 @@ func TestUpdateCircleHubConfig_MinBudgetRenewal_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	weekly := constants.BUDGET_RENEWAL_WEEKLY
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, nil, &weekly))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MinBudgetRenewal: &weekly}))
 
 	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
 	require.NoError(t, err)
@@ -335,7 +335,7 @@ func TestUpdateCircleHubConfig_MinBudgetRenewal_InvalidRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	bogus := "fortnightly"
-	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, nil, &bogus)
+	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MinBudgetRenewal: &bogus})
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 
 	cfg, cfgErr := svc.AppsService.GetCircleHubConfig(provider.ID)
@@ -411,7 +411,7 @@ func TestUpdateCircleHubConfig_FeesPpm_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	newFeesPpm := 25_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, &newFeesPpm, nil, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{FeesPpm: &newFeesPpm}))
 
 	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
 	require.NoError(t, err)
@@ -433,7 +433,7 @@ func TestUpdateCircleHubConfig_FeesPpm_NegativeRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	negative := -1
-	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, &negative, nil, nil)
+	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{FeesPpm: &negative})
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 
 	// Rejected update must not have partially applied.
@@ -457,7 +457,7 @@ func TestUpdateCircleHubConfig_FeesPpm_AboveMaxRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	tooHigh := constants.MAX_FEES_PPM + 1
-	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, &tooHigh, nil, nil)
+	err = svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{FeesPpm: &tooHigh})
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 
 	cfg, cfgErr := svc.AppsService.GetCircleHubConfig(provider.ID)
@@ -506,7 +506,83 @@ func TestUpdateCircleHubConfig_PerWalletMaxBelowFeeReserveFloor_Rejected(t *test
 	require.NoError(t, err)
 
 	below := 10_999
-	require.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &below, nil), constants.ErrInvalidParams)
+	require.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &below}), constants.ErrInvalidParams)
 	atFloor := 11_000
-	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, nil, nil, &atFloor, nil))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxMloki: &atFloor}))
+}
+
+// --- Lifetime default and receive ceiling (NIP-CW §Data Model, U-13.2) ---
+
+func createAllowlistHub(t *testing.T, svc *tests.TestService, config db.CircleHubConfig) (*db.App, error) {
+	t.Helper()
+	provider, _, err := svc.AppsService.CreateCircleHub(
+		"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE},
+		nil,
+		apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyAllowlist},
+		config,
+	)
+	return provider, err
+}
+
+func TestCreateCircleHub_LifetimeAndReceiveDefaults(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	// Left out: the default lifetime is the ceiling, the receive ceiling the send one.
+	provider, err := createAllowlistHub(t, svc, db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000})
+	require.NoError(t, err)
+	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3600, cfg.DefaultExpSecs)
+	assert.Equal(t, int64(100_000), cfg.PerWalletMaxReceiveMloki)
+
+	// No ceiling and no default: wallets never expire.
+	provider, err = createAllowlistHub(t, svc, db.CircleHubConfig{PerWalletMaxMloki: 100_000})
+	require.NoError(t, err)
+	cfg, err = svc.AppsService.GetCircleHubConfig(provider.ID)
+	require.NoError(t, err)
+	assert.Zero(t, cfg.MaxExpSecs)
+	assert.Zero(t, cfg.DefaultExpSecs)
+
+	// A default above the ceiling is refused.
+	_, err = createAllowlistHub(t, svc, db.CircleHubConfig{MaxExpSecs: 3600, DefaultExpSecs: 3601, PerWalletMaxMloki: 100_000})
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+	// A negative receive ceiling is refused.
+	_, err = createAllowlistHub(t, svc, db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000, PerWalletMaxReceiveMloki: -1})
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestUpdateCircleHubConfig_DefaultLifetimeAgainstCeiling(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	provider, err := createAllowlistHub(t, svc, db.CircleHubConfig{MaxExpSecs: 3600, DefaultExpSecs: 600, PerWalletMaxMloki: 100_000})
+	require.NoError(t, err)
+
+	over, zero, lowered := 3601, 0, 300
+	// The default against the stored ceiling, and the ceiling against the stored default.
+	assert.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{DefaultExpSecs: &over}), constants.ErrInvalidParams)
+	assert.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{DefaultExpSecs: &zero}), constants.ErrInvalidParams,
+		"0 (never) under a non-zero ceiling")
+	assert.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered}), constants.ErrInvalidParams,
+		"a ceiling below the default")
+	assert.ErrorIs(t, svc.AppsService.ValidateCircleHubConfigUpdate(provider.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered}), constants.ErrInvalidParams)
+
+	// Both together, consistent: accepted. Then no ceiling and never.
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MaxExpSecs: &lowered, DefaultExpSecs: &lowered}))
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{MaxExpSecs: &zero, DefaultExpSecs: &zero}))
+	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
+	require.NoError(t, err)
+	assert.Zero(t, cfg.MaxExpSecs)
+	assert.Zero(t, cfg.DefaultExpSecs)
+
+	receive := int64(50_000)
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxReceiveMloki: &receive}))
+	noReceive := int64(0)
+	assert.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{PerWalletMaxReceiveMloki: &noReceive}), constants.ErrInvalidParams)
+	cfg, err = svc.AppsService.GetCircleHubConfig(provider.ID)
+	require.NoError(t, err)
+	assert.Equal(t, receive, cfg.PerWalletMaxReceiveMloki)
 }

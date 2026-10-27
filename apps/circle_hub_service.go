@@ -36,22 +36,22 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 	identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error) {
 
-	if config.MaxExpSecs <= 0 {
-		return nil, "", fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
-	}
-	if err := validatePerWalletMaxMloki(config.PerWalletMaxMloki); err != nil {
-		return nil, "", err
-	}
 	if err := validateHubLabel(name); err != nil {
 		return nil, "", err
 	}
-	if config.FeesPpm < 0 || config.FeesPpm > constants.MAX_FEES_PPM {
-		return nil, "", fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+	// A receive ceiling left out takes the send ceiling, and a default lifetime
+	// left out under a ceiling takes the ceiling: what a join got before either
+	// setting existed.
+	if config.PerWalletMaxReceiveMloki == 0 {
+		config.PerWalletMaxReceiveMloki = int64(config.PerWalletMaxMloki)
+	}
+	if config.DefaultExpSecs == 0 {
+		config.DefaultExpSecs = config.MaxExpSecs
 	}
 	if config.MinBudgetRenewal == "" {
 		config.MinBudgetRenewal = constants.BUDGET_RENEWAL_MONTHLY
 	}
-	if err := validateBudgetRenewal(config.MinBudgetRenewal); err != nil {
+	if err := validateCircleHubConfig(&config); err != nil {
 		return nil, "", err
 	}
 
@@ -98,23 +98,80 @@ func (svc *appsService) GetCircleHubConfig(appID uint) (*db.CircleHubConfig, err
 	return &cfg, nil
 }
 
-func (svc *appsService) ValidateCircleHubConfigUpdate(maxExpSecs *int, feesPpm *int,
-	perWalletMaxMloki *int, minBudgetRenewal *string) error {
-	_, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+// CircleHubConfigPatch is a circle hub settings update: a nil field leaves that
+// setting unchanged.
+type CircleHubConfigPatch struct {
+	MaxExpSecs               *int
+	DefaultExpSecs           *int
+	FeesPpm                  *int
+	PerWalletMaxMloki        *int
+	PerWalletMaxReceiveMloki *int64
+	MinBudgetRenewal         *string
+}
+
+// IsEmpty reports whether the patch changes nothing.
+func (p CircleHubConfigPatch) IsEmpty() bool {
+	return p == CircleHubConfigPatch{}
+}
+
+// apply writes the patch's set fields onto cfg.
+func (p CircleHubConfigPatch) apply(cfg *db.CircleHubConfig) {
+	if p.MaxExpSecs != nil {
+		cfg.MaxExpSecs = *p.MaxExpSecs
+	}
+	if p.DefaultExpSecs != nil {
+		cfg.DefaultExpSecs = *p.DefaultExpSecs
+	}
+	if p.FeesPpm != nil {
+		cfg.FeesPpm = *p.FeesPpm
+	}
+	if p.PerWalletMaxMloki != nil {
+		cfg.PerWalletMaxMloki = *p.PerWalletMaxMloki
+	}
+	if p.PerWalletMaxReceiveMloki != nil {
+		cfg.PerWalletMaxReceiveMloki = *p.PerWalletMaxReceiveMloki
+	}
+	if p.MinBudgetRenewal != nil {
+		cfg.MinBudgetRenewal = *p.MinBudgetRenewal
+	}
+}
+
+// patchedCircleHubConfig is appID's stored config with the patch applied and
+// checked as a whole, so a setting is judged against the others it depends on
+// (a default lifetime against the ceiling, whichever of the two changes).
+func (svc *appsService) patchedCircleHubConfig(appID uint, patch CircleHubConfigPatch) (*db.CircleHubConfig, error) {
+	var cfg db.CircleHubConfig
+	if err := svc.db.Where("app_id = ?", appID).First(&cfg).Error; err != nil {
+		return nil, fmt.Errorf("circle hub config not found for app %d: %w", appID, err)
+	}
+	patch.apply(&cfg)
+	if err := validateCircleHubConfig(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (svc *appsService) ValidateCircleHubConfigUpdate(appID uint, patch CircleHubConfigPatch) error {
+	_, err := svc.patchedCircleHubConfig(appID, patch)
 	return err
 }
 
-func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesPpm *int,
-	perWalletMaxMloki *int, minBudgetRenewal *string) error {
-	updates, err := circleHubConfigUpdates(maxExpSecs, feesPpm, perWalletMaxMloki, minBudgetRenewal)
+func (svc *appsService) UpdateCircleHubConfig(appID uint, patch CircleHubConfigPatch) error {
+	if patch.IsEmpty() {
+		return nil
+	}
+	cfg, err := svc.patchedCircleHubConfig(appID, patch)
 	if err != nil {
 		return err
 	}
-	if len(updates) == 0 {
-		return nil
-	}
-
-	result := svc.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", appID).Updates(updates)
+	result := svc.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", appID).Updates(map[string]interface{}{
+		"max_exp_secs":                 cfg.MaxExpSecs,
+		"default_exp_secs":             cfg.DefaultExpSecs,
+		"fees_ppm":                     cfg.FeesPpm,
+		"per_wallet_max_mloki":         cfg.PerWalletMaxMloki,
+		"per_wallet_max_receive_mloki": cfg.PerWalletMaxReceiveMloki,
+		"min_budget_renewal":           cfg.MinBudgetRenewal,
+	})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -124,36 +181,33 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, maxExpSecs *int, feesP
 	return nil
 }
 
-// circleHubConfigUpdates checks a circle hub settings update and returns the
-// columns it sets. A nil pointer leaves that setting unchanged.
-func circleHubConfigUpdates(maxExpSecs *int, feesPpm *int,
-	perWalletMaxMloki *int, minBudgetRenewal *string) (map[string]interface{}, error) {
-	updates := map[string]interface{}{}
-	if maxExpSecs != nil {
-		if *maxExpSecs <= 0 {
-			return nil, fmt.Errorf("%w: max_exp_secs must be positive", constants.ErrInvalidParams)
-		}
-		updates["max_exp_secs"] = *maxExpSecs
+// validateCircleHubConfig checks a whole circle hub config (NIP-CW §Data Model):
+// the lifetime ceiling and default each 0..MAX_EXPIRY_SECS with 0 meaning none
+// or never, the default not above a non-zero ceiling nor 0 under one; both
+// per-wallet ceilings; the fee rate; the renewal floor.
+func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
+	if cfg.MaxExpSecs < 0 || cfg.MaxExpSecs > constants.MAX_EXPIRY_SECS {
+		return fmt.Errorf("%w: max_exp_secs must be between 0 (no ceiling) and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
-	if feesPpm != nil {
-		if *feesPpm < 0 || *feesPpm > constants.MAX_FEES_PPM {
-			return nil, fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
-		}
-		updates["fees_ppm"] = *feesPpm
+	if cfg.DefaultExpSecs < 0 || cfg.DefaultExpSecs > constants.MAX_EXPIRY_SECS {
+		return fmt.Errorf("%w: default_exp_secs must be between 0 (never) and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
 	}
-	if perWalletMaxMloki != nil {
-		if err := validatePerWalletMaxMloki(*perWalletMaxMloki); err != nil {
-			return nil, err
-		}
-		updates["per_wallet_max_mloki"] = *perWalletMaxMloki
+	if cfg.MaxExpSecs > 0 && cfg.DefaultExpSecs > cfg.MaxExpSecs {
+		return fmt.Errorf("%w: default_exp_secs must not exceed max_exp_secs", constants.ErrInvalidParams)
 	}
-	if minBudgetRenewal != nil {
-		if err := validateBudgetRenewal(*minBudgetRenewal); err != nil {
-			return nil, err
-		}
-		updates["min_budget_renewal"] = *minBudgetRenewal
+	if cfg.MaxExpSecs > 0 && cfg.DefaultExpSecs == 0 {
+		return fmt.Errorf("%w: default_exp_secs must not be 0 (never) under a non-zero max_exp_secs", constants.ErrInvalidParams)
 	}
-	return updates, nil
+	if err := validatePerWalletMaxMloki(cfg.PerWalletMaxMloki); err != nil {
+		return err
+	}
+	if cfg.PerWalletMaxReceiveMloki <= 0 {
+		return fmt.Errorf("%w: per_wallet_max_receive_mloki must be positive", constants.ErrInvalidParams)
+	}
+	if cfg.FeesPpm < 0 || cfg.FeesPpm > constants.MAX_FEES_PPM {
+		return fmt.Errorf("%w: fees_ppm must be between 0 and %d", constants.ErrInvalidParams, constants.MAX_FEES_PPM)
+	}
+	return validateBudgetRenewal(cfg.MinBudgetRenewal)
 }
 
 // validatePerWalletMaxMloki refuses a per-wallet ceiling below the smallest cap a
