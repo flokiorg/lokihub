@@ -258,6 +258,39 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	assert.Equal(t, hubBefore+7000, queries.GetIsolatedBalance(f.svc.DB, f.hub.ID))
 }
 
+// A payment seen before pay_by that then drops out of the wallet list (an RBF,
+// a double spend, a partial scan) still counts as seen: at pay_by the order is
+// closed, not expired, it is kept, and a later payment to its address mints
+// (NIP-CO §On-chain). closed stays closed.
+func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
+	f := newIntakeFixture(t)
+	res, buyer, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	placed := orderOf(t, res)
+	ghost := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43}
+	f.chain.outputs = []lnclient.OnchainOutput{ghost}
+	f.engine.ScanChain(context.TODO())
+	f.chain.outputs = nil
+	f.engine.ScanChain(context.TODO())
+	f.engine.ScanChain(context.TODO())
+	var dropped db.CashOrderPayment
+	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+ghost.TxID+":0").First(&dropped).Error)
+	require.Equal(t, db.CashOrderPaymentDropped, dropped.State)
+
+	f.clock = f.clock.Add(86401 * time.Second)
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "a payment was seen by pay_by")
+	f.engine.RunRetention()
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "closed is final, and the order is kept")
+
+	later := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 100, Confirmations: 1}
+	f.chain.outputs = []lnclient.OnchainOutput{later}
+	f.engine.ScanChain(context.TODO())
+	got := f.lookupOrder(t, buyer, p)
+	require.Len(t, got.Bills, 1, "a later payment to the address mints")
+	assert.Equal(t, nipCO.OrderClosed, got.State)
+}
+
 // U-22.6: an unpaid on-chain order expires at pay_by and is deleted at
 // UnpaidOnchainDeleteAt with its address burnt; a later payment to it is kept.
 func TestOrderIntake_OnchainUnpaidDeleted(t *testing.T) {

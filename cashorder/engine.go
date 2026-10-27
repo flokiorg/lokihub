@@ -210,6 +210,11 @@ func (e *Engine) restateTx(tx *gorm.DB, orderID uint) (*db.CashOrder, error) {
 		return nil, err
 	}
 	state := string(nipCO.OrderStateAt(facts, e.now().Unix()))
+	// closed is final (NIP-CO §Order State): a later payment still mints, and
+	// nothing turns it back.
+	if order.State == db.CashOrderClosed {
+		state = db.CashOrderClosed
+	}
 	reserved := order.ReservedMillis
 	if state == db.CashOrderMinted || state == db.CashOrderExpired || state == db.CashOrderClosed {
 		reserved = 0
@@ -244,6 +249,10 @@ func orderFactsTx(tx *gorm.DB, order *db.CashOrder) (nipCO.OrderFacts, error) {
 			f.Seen = true
 			f.Minted++
 		case db.CashOrderPaymentKept:
+			f.Seen = true
+		case db.CashOrderPaymentDropped:
+			// Gone from the mempool and the chain, but it was seen: an
+			// on-chain order that saw it by pay_by is kept (NIP-CO §On-chain).
 			f.Seen = true
 		}
 	}
