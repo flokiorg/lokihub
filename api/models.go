@@ -40,6 +40,9 @@ type API interface {
 	// (NIP-CW §Recovering a Lost Connection) to a circle hub; the result names
 	// the NIP-CW code it was refused with, if any.
 	SubmitCircleMemberRequest(app *db.App, event json.RawMessage) (*circlelife.MemberRequestResult, error)
+	// SetCircleAccepting opens or closes a circle hub to new members (NIP-CW
+	// §The Circle Wallet Hub Connection, accepting).
+	SetCircleAccepting(app *db.App, accepting bool) error
 	// DeleteCircleWalletChild removes a single circle_wallet child in any state
 	// (empty or with a remaining balance), unlike DeleteCircleHub which only
 	// operates on the whole hub at once.
@@ -1021,10 +1024,25 @@ type CircleChildBalance struct {
 	RequesterPubkey string `json:"requesterPubkey"`
 	AppPubkey       string `json:"appPubkey"`
 	BalanceMloki    int64  `json:"balanceMloki"`
-	// Frozen is true once the member has left the circle, so the wallet can't
-	// pay or take new invoices. Nil when membership isn't known without a relay
-	// fetch (a follow set not cached yet).
-	Frozen *bool `json:"frozen,omitempty"`
+	// State is the wallet's lifecycle state (NIP-CW §Lifecycle and Deletion):
+	// active, suspended, expired or closing; GraceEndsAt when its grace period
+	// ends (unix, nil while it has none); ExpiresAt its expiry (nil: never).
+	State       string `json:"state"`
+	GraceEndsAt *int64 `json:"graceEndsAt,omitempty"`
+	ExpiresAt   *int64 `json:"expiresAt,omitempty"`
+	// DustThresholdMloki is the most the Hub may keep when the wallet goes.
+	DustThresholdMloki int64 `json:"dustThresholdMloki"`
+	// Frozen is true while a member request froze the wallet: its key is
+	// refused everything until an unfreeze or a completed rotation.
+	Frozen bool `json:"frozen"`
+	// PendingRotation is the wallet's pending move to a new connection key.
+	PendingRotation *CirclePendingRotation `json:"pendingRotation,omitempty"`
+}
+
+// CirclePendingRotation is a pending rotation as the host sees it.
+type CirclePendingRotation struct {
+	ConnectionPubkey string `json:"connectionPubkey"`
+	CompletesAt      int64  `json:"completesAt"`
 }
 
 // ListCircleChildrenBalancesResponse is the paginated response for

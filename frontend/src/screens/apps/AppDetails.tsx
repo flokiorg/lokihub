@@ -36,7 +36,12 @@ import {
 } from "src/screens/subwallets/CircleAllowlist";
 import { CircleWallets } from "src/screens/subwallets/CircleWallets";
 import { CircleAnalytics } from "src/components/circles/CircleAnalytics";
+import {
+  CircleAcceptingCard,
+  CircleMemberRequestCard,
+} from "src/components/circles/CircleHubControls";
 import { CircleHubOverview } from "src/components/circles/CircleHubOverview";
+import { CircleHubSettingsFields } from "src/components/circles/CircleHubSettingsFields";
 import { OverviewCardSkeleton } from "src/components/OverviewCardSkeleton";
 import { useCircleHubStats } from "src/hooks/useCircleHubStats";
 import {
@@ -204,6 +209,20 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
   );
   const [circleMinBudgetRenewal, setCircleMinBudgetRenewal] =
     React.useState<BudgetRenewalType>(app.circleMinBudgetRenewal ?? "monthly");
+  // The NIP-CW settings beyond the four above, edited as one object.
+  const [circleSettings, setCircleSettings] = React.useState(() => ({
+    circleDefaultExpSecs: app.circleDefaultExpSecs ?? 0,
+    circlePerWalletMaxReceiveMloki: app.circlePerWalletMaxReceiveMloki ?? 0,
+    circleHoldingsCeilingMloki: app.circleHoldingsCeilingMloki ?? 0,
+    circleFeeReservePpm: app.circleFeeReservePpm ?? 0,
+    circleFeeReserveMinMloki: app.circleFeeReserveMinMloki ?? 0,
+    circleOutboundCeilingMloki: app.circleOutboundCeilingMloki ?? 0,
+    circleOutboundPeriod: app.circleOutboundPeriod ?? "monthly",
+    circleGraceSecs: app.circleGraceSecs ?? 0,
+    circleDustThresholdMloki: app.circleDustThresholdMloki ?? 0,
+    circleRotationEnabled: app.circleRotationEnabled ?? false,
+    circleRotationDelaySecs: app.circleRotationDelaySecs ?? 0,
+  }));
 
   // These kinds are system-managed — the backend rejects any scope change to
   // them via this generic update path (see IsPrivilegedKind in db/models.go),
@@ -264,6 +283,7 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
           circleFeesPpm,
           circlePerWalletMaxMloki: circlePerWalletMaxLoki * 1000,
           circleMinBudgetRenewal,
+          ...circleSettings,
         }),
       };
 
@@ -646,6 +666,12 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   identity={app.circleIdentity}
                 />
               )}
+              {app.kind === "circle_hub" && (
+                <>
+                  <CircleAcceptingCard app={app} onChanged={refetchApp} />
+                  <CircleMemberRequestCard app={app} />
+                </>
+              )}
               {(app.kind === "cash_wallet" || app.kind === "circle_wallet") && (
                 <ChildIdentityCard app={app} />
               )}
@@ -857,6 +883,10 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                     {t("circleHub.feePpmHelper")}
                   </p>
                 </div>
+                <CircleHubSettingsFields
+                  value={circleSettings}
+                  onChange={setCircleSettings}
+                />
               </CardContent>
             </Card>
           )}

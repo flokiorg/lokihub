@@ -3064,67 +3064,66 @@ func (api *api) ListCircleChildrenBalances(app *db.App, limit uint64, offset uin
 		return nil, 0, err
 	}
 
-	pagePubkeys := make([]string, 0, len(requesterPubkeysByID))
-	for _, pubkey := range requesterPubkeysByID {
-		pagePubkeys = append(pagePubkeys, pubkey)
-	}
-	isMember, err := api.circleMembershipWithoutFetch(app, pagePubkeys)
-	if err != nil {
+	// An Expired or Closing wallet has no membership row any more: its member
+	// is read from its join record.
+	var records []db.CircleJoinRecord
+	if err := api.db.Where("wallet_app_id IN ?", childAppIDs(children)).Find(&records).Error; err != nil {
 		return nil, 0, err
 	}
-
-	balances := make([]CircleChildBalance, 0, len(children))
-	for _, child := range children {
-		requester := requesterPubkeysByID[child.ID]
-		balance := CircleChildBalance{
-			AppID:           child.ID,
-			Name:            child.Name,
-			RequesterPubkey: requester,
-			AppPubkey:       child.AppPubkey,
-			BalanceMloki:    balancesByID[child.ID],
+	for _, r := range records {
+		if requesterPubkeysByID[r.WalletAppID] == "" {
+			requesterPubkeysByID[r.WalletAppID] = r.AuthorizerPubkey
 		}
-		if isMember != nil {
-			// No member on record is refused like a removed one.
-			frozen := requester == "" || !isMember(requester)
-			balance.Frozen = &frozen
+	}
+	var rotations []db.CircleRotation
+	if err := api.db.Where("wallet_app_id IN ? AND state = ?", childAppIDs(children), db.CircleRotationPending).Find(&rotations).Error; err != nil {
+		return nil, 0, err
+	}
+	pending := make(map[uint]*CirclePendingRotation, len(rotations))
+	for _, r := range rotations {
+		pending[r.WalletAppID] = &CirclePendingRotation{ConnectionPubkey: r.NewConnectionPubkey, CompletesAt: r.CompletesAt}
+	}
+
+	now := time.Now()
+	balances := make([]CircleChildBalance, 0, len(children))
+	for i := range children {
+		child := &children[i]
+		balance := CircleChildBalance{
+			AppID:              child.ID,
+			Name:               child.Name,
+			RequesterPubkey:    requesterPubkeysByID[child.ID],
+			AppPubkey:          child.AppPubkey,
+			BalanceMloki:       balancesByID[child.ID],
+			State:              circlelife.EffectiveState(child, now),
+			GraceEndsAt:        child.CircleGraceEndsAt,
+			DustThresholdMloki: circlelife.Dust(child),
+			Frozen:             child.CircleFrozen,
+			PendingRotation:    pending[child.ID],
+		}
+		if child.ExpiresAt != nil {
+			at := child.ExpiresAt.Unix()
+			balance.ExpiresAt = &at
 		}
 		balances = append(balances, balance)
 	}
 	return balances, totalCount, nil
 }
 
-// circleMembershipWithoutFetch returns which of pubkeys are still in hub's
-// circle, the same rule the circle wallet freeze applies, without waiting on a
-// relay. It returns nil when that isn't known yet (a follow set not cached).
-func (api *api) circleMembershipWithoutFetch(hub *db.App, pubkeys []string) (func(pubkey string) bool, error) {
-	cfg, err := api.appsSvc.GetCircleHubConfig(hub.ID)
+// SetCircleAccepting opens or closes a circle hub to new members: joins are
+// refused RESTRICTED while closed, and members keep their wallets and lookups.
+// A torn-down circle stays closed.
+func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
+	if app.Kind != db.AppKindCircleHub {
+		return fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
+	}
+	cfg, err := api.appsSvc.GetCircleHubConfig(app.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	identity := cfg.CircleIdentity
-	switch identity.Policy {
-	case db.CirclePolicyAllowlist:
-		var listed []string
-		if err := api.db.Model(&db.CircleIdentityAllowedPubkey{}).
-			Where("circle_identity_id = ? AND pubkey IN ?", identity.ID, pubkeys).Pluck("pubkey", &listed).Error; err != nil {
-			return nil, err
-		}
-		members := make(map[string]struct{}, len(listed))
-		for _, pubkey := range listed {
-			members[pubkey] = struct{}{}
-		}
-		return func(pubkey string) bool {
-			_, ok := members[pubkey]
-			return ok
-		}, nil
-	case db.CirclePolicyFollowSet:
-		set, ok := api.svc.PeekFollowSet(identity.ProviderPubkey, identity.FollowSetD)
-		if !ok {
-			return nil, nil
-		}
-		return set.IsMember, nil
+	if accepting && cfg.TeardownRequestedAt != nil {
+		return fmt.Errorf("%w: this circle is being torn down and takes no new members", constants.ErrInvalidParams)
 	}
-	return nil, nil
+	return api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error
 }
 
 // paginateSlice returns the [offset, offset+limit) window of s, clamped to

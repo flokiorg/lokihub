@@ -13,6 +13,7 @@ import {
 } from "src/components/ui/alert-dialog";
 import { SUBWALLET_APPSTORE_APP_ID } from "src/constants";
 import { useApps } from "src/hooks/useApps";
+import { useCashHubDeleteCheck } from "src/hooks/useCashHub";
 import { useDeleteApp } from "src/hooks/useDeleteApp";
 import { App } from "src/types";
 
@@ -62,8 +63,16 @@ export function DisconnectCashHub({
     { success: t("disconnectCashHub.deletedToast") }
   );
 
+  // Beyond live bills, a hub stays while a request record naming it is
+  // retained: the delete check lists each blocker and the earliest time.
+  const { data: deleteCheck } = useCashHubDeleteCheck(app.id);
+  const recordBlockers = (deleteCheck?.blockers ?? []).filter(
+    (b) => b.kind !== "live_bills"
+  );
+
   const isLoading = outstandingCount === null;
-  const hasOutstanding = (outstandingCount ?? 0) > 0;
+  const hasOutstanding =
+    (outstandingCount ?? 0) > 0 || recordBlockers.length > 0;
 
   return (
     <AlertDialog open>
@@ -74,11 +83,38 @@ export function DisconnectCashHub({
             {isLoading ? (
               <p>{t("disconnectCashHub.checking")}</p>
             ) : hasOutstanding ? (
-              <p>
-                {t("disconnectCashHub.hasOutstanding", {
-                  count: outstandingCount,
-                })}
-              </p>
+              <div className="space-y-2">
+                {(outstandingCount ?? 0) > 0 && (
+                  <p>
+                    {t("disconnectCashHub.hasOutstanding", {
+                      count: outstandingCount,
+                    })}
+                  </p>
+                )}
+                {recordBlockers.map((b) => (
+                  <p key={b.kind}>
+                    {b.until
+                      ? t("disconnectCashHub.recordsUntil", {
+                          count: b.count,
+                          until: new Date(b.until * 1000).toLocaleString(),
+                        })
+                      : t("disconnectCashHub.recordsUntilBillsGone", {
+                          count: b.count,
+                        })}
+                  </p>
+                ))}
+                {deleteCheck && recordBlockers.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {deleteCheck.earliest_delete_at
+                      ? t("disconnectCashHub.earliestDelete", {
+                          at: new Date(
+                            deleteCheck.earliest_delete_at * 1000
+                          ).toLocaleString(),
+                        })
+                      : t("disconnectCashHub.earliestAfterBills")}
+                  </p>
+                )}
+              </div>
             ) : (
               <>{t("disconnectCashHub.safeToDelete")}</>
             )}
