@@ -5,8 +5,7 @@
 // path from the NWC-facing mint_cash method every other fixture in this
 // suite mints through. It had solid mocked-LN unit coverage but zero
 // integration/live-node coverage: the
-// real internal-transfer funding step, the real mint_signature LND
-// SignMessage call, and NIP-CASH's "MUST be atomic" guarantee for this path
+// real internal-transfer funding step, the node's real provenance signature, and NIP-CASH's "MUST be atomic" guarantee for this path
 // had never been proven against a live node.
 package integration
 
@@ -84,9 +83,7 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 	})
 }
 
-// TestAdminCreateCashWallet_NoMintSignature_NoProvenance is the control:
-// omitting mint_signature (the default) produces a token with no
-// provenance, same as the NWC path's own default.
+// TestAdminCreateCashWallet_AlwaysCarriesProvenance:
 // Renamed and INVERTED from TestAdminCreateCashWallet_NoMintSignature_NoProvenance, which
 // asserted an admin-minted bill carried no provenance when the caller did not ask for it.
 //

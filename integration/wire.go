@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"net/url"
 
 	"github.com/nbd-wtf/go-nostr"
 
@@ -20,11 +19,9 @@ import (
 
 // --- mint_cash ---
 //
-// A cash_wallet's connection is now shared by every recipient named in one
-// mint_cash call — there is no more per-recipient encrypted reveal or
-// separate claim_cash_wallet step. The plaintext pairing_uri comes back
-// directly in the response, over the already end-to-end-encrypted NIP-47
-// channel the hub itself is using.
+// A bill's connection is shared by every recipient named in one mint_cash
+// call, and its cash_token is the whole credential: the reply carries no other
+// connection form.
 
 type CashWalletRecipientParam struct {
 	IdentityType  string `json:"identity_type"` // "pubkey" | "connection_key" | "cash"
@@ -160,9 +157,8 @@ type ConsolidateSourceParam struct {
 }
 
 type CashConsolidateParams struct {
-	Sources       []ConsolidateSourceParam     `json:"sources"`
-	NewIdentity   CashTransferNewIdentityParam `json:"new_identity"`
-	MintSignature bool                         `json:"mint_signature,omitempty"`
+	Sources     []ConsolidateSourceParam     `json:"sources"`
+	NewIdentity CashTransferNewIdentityParam `json:"new_identity"`
 }
 
 // CashConsolidateResult's NewWalletToken is the merged lokicash1... token,
@@ -258,16 +254,18 @@ func circleConnectionPubkey(memberPubkey string) string {
 	return pub
 }
 
-// CircleWalletURI is the connection string the member builds for itself from
-// the join's details and its own secret (NIP-CW §Response): the Hub sends
-// neither.
-func CircleWalletURI(details CircleWalletDetails, memberPubkey string) string {
-	query := url.Values{}
-	for _, relay := range details.Relays {
-		query.Add("relay", relay)
-	}
-	query.Set("secret", circleConnectionSecret(memberPubkey))
-	return "nostr+walletconnect://" + details.WalletPubkey + "?" + query.Encode()
+// circleWalletConnection is what a member connects through: the wallet pubkey
+// and relays from the join's details and its own secret (NIP-CW §Response); the
+// Hub sends neither a URI nor the secret.
+type circleWalletConnection struct {
+	WalletPubkey string
+	Relays       []string
+	Secret       string
+}
+
+// CircleWalletConnection is the member's connection to its circle wallet.
+func CircleWalletConnection(details CircleWalletDetails, memberPubkey string) circleWalletConnection {
+	return circleWalletConnection{WalletPubkey: details.WalletPubkey, Relays: details.Relays, Secret: circleConnectionSecret(memberPubkey)}
 }
 
 // CreateCircleWalletResult carries exactly one field on purpose: the join is

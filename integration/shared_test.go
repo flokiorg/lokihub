@@ -313,6 +313,19 @@ func mustConnect(t *testing.T, connection string) *nwcclient.Client {
 	return client
 }
 
+// mustConnectCircleWallet connects a member to its circle wallet and registers
+// the client for cleanup.
+func mustConnectCircleWallet(t *testing.T, c circleWalletConnection) *nwcclient.Client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := nwcclient.ConnectCircleWallet(ctx, c.WalletPubkey, c.Relays, c.Secret)
+	require.NoError(t, err, "connect to the circle wallet")
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
+	return client
+}
+
 // newTestPrivkey generates a fresh random nostr private key, e.g. to act as
 // a one-off Cash wallet beneficiary.
 func newTestPrivkey(t *testing.T) string {

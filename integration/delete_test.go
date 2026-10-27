@@ -120,8 +120,8 @@ func TestDeleteCircleChild_ReclaimsBalanceToHub(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := CircleWalletURI(circleDetails, pubkey)
-	child := mustConnect(t, pairingURI)
+	memberConn := CircleWalletConnection(circleDetails, pubkey)
+	child := mustConnectCircleWallet(t, memberConn)
 
 	const fundAmountMloki = 3000
 	fundCircleChild(t, cfg, child, fundAmountMloki, "integration delete-reclaim fund")
@@ -256,8 +256,8 @@ func TestDeleteCircleChild_DeferredWhilePaymentStillSettling(t *testing.T) {
 
 	circleDetails, err := DecryptCircleWalletDetails(privkey, hubClient.WalletPubkey(), created)
 	require.NoError(t, err)
-	pairingURI := CircleWalletURI(circleDetails, pubkey)
-	child := mustConnect(t, pairingURI)
+	memberConn := CircleWalletConnection(circleDetails, pubkey)
+	child := mustConnectCircleWallet(t, memberConn)
 
 	var invoice MakeInvoiceResult
 	require.NoError(t, child.Call(ctxT(t), "make_invoice", MakeInvoiceParams{
