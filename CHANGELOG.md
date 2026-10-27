@@ -63,6 +63,10 @@ audits of both.
 
 ### Changed
 
+- Checks `mint_cash` in NIP-CASH's order: recipients first (over 100, or one
+  amount or the total over the per-wallet ceiling, is `QUOTA_EXCEEDED`), then
+  the Identity Authorities (`RESTRICTED`), commitments and refused fields, then
+  the expiry (over the Hub's ceiling is `RESTRICTED`), then the balance.
 - Drops the stranded-fund records and the `void` bill outcome: a failed cash
   call now leaves nothing behind to reconcile.
 - Commits each `mint_cash`, `cash_transfer` and `cash_consolidate` as one

@@ -112,7 +112,17 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
+	// RefusedField names a field the request carried that mint_cash refuses
+	// whatever its value (a recipient's cash_secret, idempotency_key,
+	// min_transfer_millis), or "" (NIP-CASH §Minting Cash, step 4). Resolve
+	// refuses it at its place in the processing order.
+	RefusedField string
 }
+
+// ErrRestricted: Hub policy refuses the request (NIP-CASH RESTRICTED). It wraps
+// constants.ErrInvalidParams, so a caller that only knows that error still
+// treats it as the caller's fault.
+var ErrRestricted = fmt.Errorf("%w: refused by this Hub's policy", constants.ErrInvalidParams)
 
 // RecipientResult echoes back one recipient's committed slice; a cash-mode entry
 // echoes the caller's commitment.
@@ -177,50 +187,36 @@ type Resolved struct {
 // shared limit that's re-validated at insert time anyway).
 const maxRecipientsPerWallet = 100
 
-// Resolve performs every read-only validation needed to create a shared Cash
-// wallet, without creating or funding anything. It's the counterpart to
-// Commit — see Create, which is just Resolve followed by Commit for callers
-// that don't need to gate anything in between.
+// Resolve performs every read-only check of a mint, in NIP-CASH's order
+// (§Minting Cash, Processing Algorithm, steps 3 to 6; the caller has done steps
+// 1 and 2), without creating or funding anything:
+//
+//  3. recipients: at least one, at most maxRecipientsPerWallet
+//     (QUOTA_EXCEEDED), each well formed, none twice, a cash entry alone;
+//     amounts positive, each within the per-wallet ceiling before it is added
+//     (QUOTA_EXCEEDED), an overflow-checked sum (BAD_REQUEST) within the
+//     ceiling (QUOTA_EXCEEDED)
+//  4. every connection_key IA trusted now (RESTRICTED), every cash commitment
+//     well formed, no refused field (BAD_REQUEST)
+//  5. expiry: over a finite ceiling RESTRICTED, over the representational
+//     bound BAD_REQUEST
+//  6. the Hub's balance covers the sum (INSUFFICIENT_BALANCE)
+//
+// It's the counterpart to Commit; Create is Resolve then Commit.
 func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	if params.HubApp.Kind != db.AppKindCashHub {
 		return nil, fmt.Errorf("%w: mint_cash requires a cash_hub app", constants.ErrInvalidParams)
 	}
 	// Refuse to mint before spending any balance, rather than hand back a bill
 	// nobody can reach. A Cash Wallet is contacted only through the relays
-	// embedded in its own token or pairing URI — there is no discovery path and
-	// no client-side fallback (nipcash/client.Connect passes the list straight to
-	// the relay dialer), so a bill minted with no relay is permanently
-	// unspendable through the string its holder was given.
-	//
-	// It fails here, not at encode time, because by then the wallet exists and
-	// the funding transfers have run: the holder would own real value reachable
-	// only by an operator re-deriving the connection afterwards.
-	//
-	// config.GetRelayUrls already strips empty entries, so an unset Relay config
-	// arrives here as an empty list rather than as one relay named "".
+	// embedded in its own token — there is no discovery path and no client-side
+	// fallback, so a bill minted with no relay is permanently unspendable
+	// through the string its holder was given. config.GetRelayUrls already
+	// strips empty entries, so an unset Relay config arrives here as an empty
+	// list rather than as one relay named "".
 	if len(deps.RelayURLs) == 0 {
 		return nil, fmt.Errorf("%w: this hub has no relay configured, so a minted bill would be unreachable",
 			constants.ErrInvalidParams)
-	}
-	if len(params.Recipients) == 0 {
-		return nil, fmt.Errorf("%w: recipients list is empty", constants.ErrInvalidParams)
-	}
-	if len(params.Recipients) > maxRecipientsPerWallet {
-		return nil, fmt.Errorf("%w: at most %d recipients per wallet, got %d",
-			constants.ErrInvalidParams, maxRecipientsPerWallet, len(params.Recipients))
-	}
-	// A cash note is meant to be a self-contained, freely-handed-off
-	// object, like cash — whoever it's given to needs nothing else to
-	// redeem it. Mixing a cash-mode slice into a wallet that also serves other,
-	// identity-bound recipients would break that: redeeming the cash-mode
-	// slice requires the wallet's connection too, so handing the note to
-	// someone would also hand them a live channel into a multi-recipient
-	// wallet that isn't theirs. A cash-mode wallet is always exactly one slice.
-	for i, r := range params.Recipients {
-		if r.IdentityType == db.CashIdentityCash && len(params.Recipients) != 1 {
-			return nil, fmt.Errorf("%w: recipient %d: a cash-mode recipient must be the only recipient in this wallet",
-				constants.ErrInvalidParams, i)
-		}
 	}
 
 	hubConfig, err := deps.AppsService.GetCashHubConfig(params.HubApp.ID)
@@ -228,131 +224,170 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		return nil, fmt.Errorf("failed to load Cash Hub config: %w", err)
 	}
 
-	// Expiration: one shared value for the whole wallet.
+	// Step 3: every recipient.
+	if len(params.Recipients) == 0 {
+		return nil, fmt.Errorf("%w: recipients list is empty", constants.ErrInvalidParams)
+	}
+	if len(params.Recipients) > maxRecipientsPerWallet {
+		return nil, fmt.Errorf("%w: at most %d recipients per wallet, got %d",
+			transactions.NewQuotaExceededError(), maxRecipientsPerWallet, len(params.Recipients))
+	}
+	// The per-wallet ceiling is always positive (CreateCashHub refuses 0).
+	ceiling := uint64(max(hubConfig.PerWalletMaxMloki, 0)) //nolint:gosec // non-negative
+	var sum uint64
+	// One slice per identity on a bill: the slice is looked up by (type, value),
+	// so a repeat is refused whatever its ia_pubkey.
+	seen := make(map[string]bool, len(params.Recipients))
+	for i, r := range params.Recipients {
+		switch r.IdentityType {
+		case db.CashIdentityCash:
+			// A cash note is a self-contained bearer object: redeeming it needs
+			// the wallet's connection too, so a cash slice sharing a bill would
+			// hand its holder a live channel into other recipients' wallet.
+			if len(params.Recipients) != 1 {
+				return nil, fmt.Errorf("%w: recipient %d: a cash-mode recipient must be the only recipient in this wallet",
+					constants.ErrInvalidParams, i)
+			}
+			if r.IAPubkey != "" {
+				return nil, fmt.Errorf("%w: recipient %d: a cash entry must not carry ia_pubkey",
+					constants.ErrInvalidParams, i)
+			}
+		case db.CashIdentityPubkey, db.CashIdentityConnectionKey:
+			if err := validateIdentityForm(r.IdentityType, r.IdentityValue, r.IAPubkey); err != nil {
+				return nil, fmt.Errorf("recipient %d: %w", i, err)
+			}
+		default:
+			return nil, fmt.Errorf("%w: recipient %d: identity_type must be %q, %q, or %q", constants.ErrInvalidParams,
+				i, db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash)
+		}
+		key := r.IdentityType + ":" + r.IdentityValue
+		if seen[key] {
+			return nil, fmt.Errorf("%w: recipient %d: duplicate identity in this request", constants.ErrInvalidParams, i)
+		}
+		seen[key] = true
+
+		if r.AmountMloki == 0 {
+			return nil, fmt.Errorf("%w: recipient %d: amount_millis must be positive", constants.ErrInvalidParams, i)
+		}
+		// Each amount is bounded before it is added, so the sum below works on
+		// bounded terms (NIP-CASH §Security Considerations).
+		if r.AmountMloki > ceiling {
+			return nil, fmt.Errorf("%w: recipient %d: amount %d exceeds per_wallet_max_mloki %d",
+				transactions.NewQuotaExceededError(), i, r.AmountMloki, ceiling)
+		}
+		// The sum must stay an int64: the balance comparison and the slice rows
+		// use int64.
+		if r.AmountMloki > uint64(math.MaxInt64)-sum {
+			return nil, fmt.Errorf("%w: recipient %d: combined recipient amounts overflow", constants.ErrInvalidParams, i)
+		}
+		sum += r.AmountMloki
+	}
+	if sum > ceiling {
+		return nil, fmt.Errorf("%w: total amount %d exceeds per_wallet_max_mloki %d",
+			transactions.NewQuotaExceededError(), sum, ceiling)
+	}
+
+	// Step 4: every Identity Authority trusted now, every commitment well formed,
+	// no refused field.
+	for i, r := range params.Recipients {
+		switch r.IdentityType {
+		case db.CashIdentityConnectionKey:
+			if err := checkIATrusted(deps, r.IAPubkey); err != nil {
+				return nil, fmt.Errorf("recipient %d: %w", i, err)
+			}
+		case db.CashIdentityCash:
+			// The caller's commitment of a secret it generated; the Hub never
+			// sees the secret (NIP-CASH §Minting Cash).
+			if !nipcash.ValidCommitment(r.IdentityValue) {
+				return nil, fmt.Errorf("%w: recipient %d: a cash entry's identity_value must be a 64-character lowercase hex commitment",
+					constants.ErrInvalidParams, i)
+			}
+		}
+	}
+	if params.RefusedField != "" {
+		return nil, fmt.Errorf("%w: %s is not a mint_cash parameter", constants.ErrInvalidParams, params.RefusedField)
+	}
+
+	// Step 5: expiry, one shared value for the whole wallet.
 	//
-	// hubConfig.MaxExpSecs == 0 means the Hub itself imposes no ceiling
-	// ("never") — an omitted/zero caller expiry then produces a wallet that
-	// never expires (expiresAt stays nil) rather than the historical
-	// zero-duration bug this comment used to guard against (an omitted
-	// expiry defaulting straight to a zero MaxExpSecs used to produce an
-	// ALREADY-expired wallet). A caller may still request its own, shorter
-	// expiry even when the Hub itself has no ceiling — there's nothing to
-	// cap it against.
-	//
-	// hubConfig.MaxExpSecs > 0 ("never" is NOT the case at the Hub level):
-	// an omitted/zero caller expiry is downgraded to the Hub's own max
-	// exactly as before; an explicit request exceeding that ceiling is
-	// still rejected outright, per NIP-CASH's "Otherwise it MUST NOT exceed
-	// that ceiling."
+	// A Hub ceiling of 0 means "never": an omitted/zero expiry then produces a
+	// bill that never expires, and a caller's own finite expiry is honored up to
+	// the representational bound. A positive ceiling caps an explicit expiry
+	// (a longer one is RESTRICTED) and is the default for an omitted one.
+	if params.ExpirySecs < 0 || params.ExpirySecs > constants.MAX_EXPIRY_SECS {
+		return nil, fmt.Errorf("%w: expiry %d is outside 0 to %d", constants.ErrInvalidParams, params.ExpirySecs, constants.MAX_EXPIRY_SECS)
+	}
 	var expiresAt *time.Time
 	if hubConfig.MaxExpSecs == 0 {
 		if params.ExpirySecs > 0 {
-			// Unlike the ceiling branch below, there's no hub-configured
-			// max to bound this against — it's checked directly here
-			// instead, guarding against overflowing time.Duration's
-			// nanosecond range on the conversion just below (see
-			// constants.MAX_EXPIRY_SECS).
-			if params.ExpirySecs > constants.MAX_EXPIRY_SECS {
-				return nil, fmt.Errorf("%w: expiry %d exceeds %d", constants.ErrInvalidParams, params.ExpirySecs, constants.MAX_EXPIRY_SECS)
-			}
 			t := time.Now().Add(time.Duration(params.ExpirySecs) * time.Second)
 			expiresAt = &t
 		}
 	} else {
 		expirySecs := params.ExpirySecs
-		if expirySecs <= 0 {
+		if expirySecs == 0 {
 			expirySecs = hubConfig.MaxExpSecs
 		} else if expirySecs > hubConfig.MaxExpSecs {
-			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", constants.ErrInvalidParams, params.ExpirySecs, hubConfig.MaxExpSecs)
+			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", ErrRestricted, params.ExpirySecs, hubConfig.MaxExpSecs)
 		}
 		t := time.Now().Add(time.Duration(expirySecs) * time.Second)
 		expiresAt = &t
 	}
 
-	var sum uint64
-	seen := make(map[string]bool, len(params.Recipients))
-	resolvedRecipients := make([]RecipientInput, len(params.Recipients))
-	for i, r := range params.Recipients {
-		cashMode := r.IdentityType == db.CashIdentityCash
-		connKeyMode := r.IdentityType == db.CashIdentityConnectionKey
-		if !cashMode && !connKeyMode && r.IdentityType != db.CashIdentityPubkey {
-			return nil, fmt.Errorf("%w: recipient %d: identity_type must be %q, %q, or %q", constants.ErrInvalidParams,
-				i, db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash)
-		}
-
-		if cashMode {
-			// The caller's commitment of a secret it generated; the Hub never
-			// sees the secret (NIP-CASH §Minting Cash).
-			if r.IAPubkey != "" {
-				return nil, fmt.Errorf("%w: recipient %d: a cash entry must not carry ia_pubkey",
-					constants.ErrInvalidParams, i)
-			}
-			if !nipcash.ValidCommitment(r.IdentityValue) {
-				return nil, fmt.Errorf("%w: recipient %d: a cash entry's identity_value must be a 64-character lowercase hex commitment",
-					constants.ErrInvalidParams, i)
-			}
-		} else {
-			if err := ValidateIdentityShape(deps, r.IdentityType, r.IdentityValue, r.IAPubkey); err != nil {
-				return nil, fmt.Errorf("recipient %d: %w", i, err)
-			}
-			dedupeKey := r.IdentityType + ":" + r.IdentityValue
-			if seen[dedupeKey] {
-				return nil, fmt.Errorf("%w: recipient %d: duplicate identity in this request", constants.ErrInvalidParams, i)
-			}
-			seen[dedupeKey] = true
-		}
-
-		if r.AmountMloki == 0 {
-			return nil, fmt.Errorf("%w: recipient %d: amount_millis must be positive", constants.ErrInvalidParams, i)
-		}
-		// Reject a single value large enough to overflow int64 on casts used
-		// downstream (balance/quota comparisons), mirroring
-		// create_circle_wallet_controller.go's identical guard on its own
-		// (single, unsummed) max_amount.
-		if r.AmountMloki > math.MaxInt64 {
-			return nil, fmt.Errorf("%w: recipient %d: amount_millis %d is too large", constants.ErrInvalidParams, i, r.AmountMloki)
-		}
-		// Reject a sum that would exceed MaxInt64 — with N recipients each
-		// individually under MaxInt64, the running total could still overflow
-		// before the PerWalletMaxMloki check below ever sees it, silently
-		// wrapping to a small (or negative-when-cast) value that passes both
-		// that cap and the int64(sum) > balance check further down, while
-		// leaving individual recipients' stored entitlements at their
-		// original, un-wrapped (and uncollectable) amounts. Bounded by
-		// MaxInt64 rather than MaxUint64 specifically because that's what
-		// the balance comparison below actually casts sum into. Caught with
-		// a pre-add overflow check rather than trusting the cap comparison
-		// after the fact.
-		if r.AmountMloki > uint64(math.MaxInt64)-sum {
-			return nil, fmt.Errorf("%w: recipient %d: combined recipient amounts overflow", constants.ErrInvalidParams, i)
-		}
-
-		sum += r.AmountMloki
-		resolvedRecipients[i] = r
-	}
-
-	// PerWalletMaxMloki now caps the wallet's TOTAL (sum across every
-	// recipient) — a clean generalization of "per wallet" now that a wallet
-	// serves N recipients rather than exactly one.
-	if hubConfig.PerWalletMaxMloki > 0 && sum > uint64(hubConfig.PerWalletMaxMloki) {
-		return nil, fmt.Errorf("%w: total amount %d exceeds per_wallet_max_mloki %d",
-			transactions.NewQuotaExceededError(), sum, hubConfig.PerWalletMaxMloki)
-	}
-
-	// Pre-flight balance check (the transfer itself is the authoritative check).
+	// Step 6: the Hub's balance. The commit's own transfer re-checks it under the
+	// lock.
 	balance := queries.GetIsolatedBalance(deps.DB, params.HubApp.ID)
-	if int64(sum) > balance { //nolint:gosec // sum is bounded to <= MaxInt64 by the per-recipient/running-total guards above
+	if int64(sum) > balance { //nolint:gosec // sum is bounded to <= MaxInt64 above
 		return nil, fmt.Errorf("%w: insufficient balance in Cash Hub", transactions.NewInsufficientBalanceError())
 	}
 
 	return &Resolved{
 		HubApp:             params.HubApp,
-		Recipients:         resolvedRecipients,
+		Recipients:         append([]RecipientInput(nil), params.Recipients...),
 		ExpiresAt:          expiresAt,
 		MinTransferMloki:   hubConfig.MinTransferMloki,
 		RedeemFeePpm:       hubConfig.RedeemFeePpm,
 		RedeemFeeBaseMloki: hubConfig.RedeemFeeBaseMloki,
 	}, nil
+}
+
+// validateIdentityForm checks a pubkey or connection_key identity's shape:
+// 64-hex identity_value, and for connection_key a 64-hex ia_pubkey.
+func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
+	if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
+		return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
+	}
+	switch identityType {
+	case db.CashIdentityPubkey:
+		return nil
+	case db.CashIdentityConnectionKey:
+		if iaPubkey == "" {
+			return fmt.Errorf("%w: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams)
+		}
+		if decoded, decErr := hex.DecodeString(iaPubkey); decErr != nil || len(decoded) != 32 {
+			return fmt.Errorf("%w: ia_pubkey must be a valid 32-byte hex nostr pubkey", constants.ErrInvalidParams)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
+			db.CashIdentityPubkey, db.CashIdentityConnectionKey)
+	}
+}
+
+// checkIATrusted refuses an Identity Authority not on the allowlist right now
+// with ErrRestricted.
+func checkIATrusted(deps Deps, iaPubkey string) error {
+	if deps.IAChecker == nil {
+		return fmt.Errorf("%w: no Identity Authority trust checker configured", ErrRestricted)
+	}
+	trusted, trustErr := deps.IAChecker.IsTrusted(iaPubkey)
+	if trustErr != nil {
+		return fmt.Errorf("failed to check Identity Authority trust: %w", trustErr)
+	}
+	if !trusted {
+		return fmt.Errorf("%w: ia_pubkey is not a trusted Identity Authority", ErrRestricted)
+	}
+	return nil
 }
 
 // ValidateIdentityShape checks identity_type/identity_value/ia_pubkey for a
@@ -363,37 +398,13 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // caller-supplied (identity_type, identity_value, ia_pubkey) triple that
 // isn't a cash commitment. Does not accept db.CashIdentityCash.
 func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey string) error {
-	switch identityType {
-	case db.CashIdentityPubkey:
-		if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
-			return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
-		}
-		return nil
-	case db.CashIdentityConnectionKey:
-		if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
-			return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
-		}
-		if iaPubkey == "" {
-			return fmt.Errorf("%w: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams)
-		}
-		if decoded, decErr := hex.DecodeString(iaPubkey); decErr != nil || len(decoded) != 32 {
-			return fmt.Errorf("%w: ia_pubkey must be a valid 32-byte hex nostr pubkey", constants.ErrInvalidParams)
-		}
-		if deps.IAChecker == nil {
-			return fmt.Errorf("%w: no Identity Authority trust checker configured", constants.ErrInvalidParams)
-		}
-		trusted, trustErr := deps.IAChecker.IsTrusted(iaPubkey)
-		if trustErr != nil {
-			return fmt.Errorf("failed to check Identity Authority trust: %w", trustErr)
-		}
-		if !trusted {
-			return fmt.Errorf("%w: ia_pubkey is not a trusted Identity Authority", constants.ErrInvalidParams)
-		}
-		return nil
-	default:
-		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
-			db.CashIdentityPubkey, db.CashIdentityConnectionKey)
+	if err := validateIdentityForm(identityType, identityValue, iaPubkey); err != nil {
+		return err
 	}
+	if identityType == db.CashIdentityConnectionKey {
+		return checkIATrusted(deps, iaPubkey)
+	}
+	return nil
 }
 
 // cashWalletScopes are the ONLY scopes ever granted to a cash_wallet child.

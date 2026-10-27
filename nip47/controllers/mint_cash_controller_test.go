@@ -123,7 +123,7 @@ func TestHandleMintCashEvent_ExpiryExceedsMax(t *testing.T) {
 	}, testMintMeta())
 
 	assert.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code, "an expiry over the Hub's ceiling is RESTRICTED (NIP-CASH §Minting Cash, step 5)")
 }
 
 // An omitted/zero expiry must default to the hub's own max_exp_secs rather
@@ -427,7 +427,7 @@ func TestHandleMintCashEvent_ConnectionKeyMode_UntrustedIARejected(t *testing.T)
 	}, testMintMeta())
 
 	require.NotNil(t, publishedResponse.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, publishedResponse.Error.Code, "an untrusted IA refuses the whole request (NIP-CASH §Minting Cash, step 4)")
 }
 
 func TestHandleMintCashEvent_NonRoundMloki_FullDrainSucceeds(t *testing.T) {

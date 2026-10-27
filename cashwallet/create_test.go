@@ -406,7 +406,7 @@ func TestCreate_TooManyRecipients_Rejected(t *testing.T) {
 
 	_, err = Create(context.TODO(), newTestDeps(svc), Params{HubApp: hub, Recipients: recipients})
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, constants.ErrInvalidParams))
+	assert.True(t, errors.Is(err, transactions.NewQuotaExceededError()), "over the cap is QUOTA_EXCEEDED (NIP-CASH §Minting Cash)")
 }
 
 func TestCreate_DuplicateIdentityInBatch_Rejected(t *testing.T) {
@@ -573,7 +573,7 @@ func TestCreate_RecipientSumOverflow_Rejected(t *testing.T) {
 		ExpirySecs: 1800,
 	})
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, constants.ErrInvalidParams))
+	assert.True(t, errors.Is(err, transactions.NewQuotaExceededError()), "an amount over the ceiling is refused before it is added")
 }
 
 // TestCreate_RecipientSumExceedsInt64_Rejected is the regression test for a
@@ -585,18 +585,15 @@ func TestCreate_RecipientSumOverflow_Rejected(t *testing.T) {
 // less than any real balance and passing the pre-flight check regardless of
 // the hub's actual balance.
 //
-// PerWalletMaxMloki is forced to 0 directly via the DB (CreateCashHub's own
-// API validation rejects 0, so this simulates a pre-validation/legacy row)
-// so the PerWalletMaxMloki cap check - which, since a cap is itself
-// int-bounded, would otherwise always independently catch any sum this
-// large anyway - doesn't mask whether this guard specifically works.
+// PerWalletMaxMloki is raised to MaxInt64 directly in the DB, so each amount
+// passes its own ceiling check and only the overflow guard can refuse the sum.
 func TestCreate_RecipientSumExceedsInt64_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
 	hub := tests.CreateCashHub(t, svc, 1, 3600)
-	require.NoError(t, svc.DB.Model(&db.CashHubConfig{}).Where("app_id = ?", hub.ID).Update("per_wallet_max_mloki", 0).Error)
+	require.NoError(t, svc.DB.Model(&db.CashHubConfig{}).Where("app_id = ?", hub.ID).Update("per_wallet_max_mloki", int64(math.MaxInt64)).Error)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
