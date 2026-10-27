@@ -26,7 +26,7 @@ func TestSpecWithdraw_I56_StepThreeHooks(t *testing.T) {
 	h := newWithdrawHub(t, cfg, "withdraw-step3")
 	hooks := requireStackHooks(t, cfg, "GET /chain/tip", "POST /withdraw/hooks")
 	t.Cleanup(func() { _ = hooks.Hooks(context.Background(), map[string]bool{}) })
-	token, privs, _ := h.mintFor(t, 21_000_000, 1_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000, 1_000_000)
 	quote := func() *nipcash.WithdrawQuote {
 		q, err := quoteAs(t, token, privs[0], map[string]any{"address": regtestP2WPKH(t)})
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestSpecWithdraw_I61_Teardown(t *testing.T) {
 	// Held unsigned, the payout stays open whatever else runs.
 	require.NoError(t, hooks.Hooks(ctxT(t), map[string]bool{"hold_sign": true}))
 	t.Cleanup(func() { _ = hooks.Hooks(context.Background(), map[string]bool{}) })
-	token, privs, _ := h.mintFor(t, 21_000_000)
+	token, privs, _ := h.mintFor(t, 8_000_000)
 	q, err := quoteAs(t, token, privs[0], map[string]any{"address": regtestP2WPKH(t)})
 	require.NoError(t, err)
 	_, err = withdrawAs(t, token, privs[0], q, newTestPrivkey(t))
