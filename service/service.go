@@ -28,6 +28,7 @@ import (
 	"github.com/flokiorg/lokihub/swaps"
 	"github.com/flokiorg/lokihub/transactions"
 
+	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -133,6 +134,17 @@ func NewService(ctx context.Context) (*service, error) {
 	cfg, err := config.NewConfig(appConfig, gormDB)
 	if err != nil {
 		return nil, err
+	}
+
+	// The horizon H only ever increases (NIP-CASH §Deadlines): the stored H is
+	// raised to the configured one, and a lower configured H is ignored.
+	horizon, err := cashrequest.RaiseHorizon(gormDB, cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to store the horizon: %w", err)
+	}
+	if configured := int64(appConfig.CashMaxRequestAgeSecs); configured > 0 && configured < horizon {
+		logger.Logger.Error().Int64("configured", configured).Int64("in_force", horizon).
+			Msg("CASH_MAX_REQUEST_AGE_SECS is below the stored horizon, which can only increase; keeping the stored one")
 	}
 
 	// write auto unlock password from env to user config

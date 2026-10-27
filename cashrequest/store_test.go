@@ -169,6 +169,9 @@ func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 	stored, err := cashrequest.HorizonTx(svc.DB)
 	require.NoError(t, err)
 	assert.EqualValues(t, 600, stored)
+
+	// The configuration reports the stored H, whatever the env says.
+	assert.EqualValues(t, 600, svc.Cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 }
 
 // U-3.8: consumed claim proofs are single-use, releasable for a call that did not
