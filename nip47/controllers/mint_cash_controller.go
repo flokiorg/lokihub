@@ -37,6 +37,8 @@ func mapCashWalletErrorCode(err error) string {
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return constants.ERROR_UNAUTHORIZED
+	case errors.Is(err, cashwallet.ErrRestricted):
+		return constants.ERROR_RESTRICTED
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
 		return constants.ERROR_INSUFFICIENT_BALANCE
 	case errors.Is(err, transactions.NewQuotaExceededError()):
@@ -130,17 +132,6 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 		return
 	}
 
-	// 4. Fields mint_cash no longer takes are refused, whatever their value.
-	if field := removedMintField(nip47Request.Params); field != "" {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST,
-			field+" is not a mint_cash parameter")
-		return
-	}
-	if params.Expiry < 0 || params.Expiry > constants.MAX_EXPIRY_SECS {
-		respondError(publishResponse, nip47Request.Method, constants.ERROR_BAD_REQUEST, "expiry is out of range")
-		return
-	}
-
 	recipients := make([]cashwallet.RecipientInput, len(params.Recipients))
 	for i, r := range params.Recipients {
 		recipients[i] = cashwallet.RecipientInput{
@@ -153,21 +144,25 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 
 	deps := controller.cashDeps()
 
-	// 2. Validate first: identity shapes, IA trust, amount/expiry caps, and hub
-	// balance are all read-only checks, so a request that was always going to
-	// fail never burns rate-limit quota (mirrors create_circle_wallet_controller.go,
-	// where the same ordering applies).
+	// 4. [steps 3 to 6] Recipients, IA trust and refused fields, expiry, and the
+	// Hub's balance, in that order. All read-only, so a request that was always
+	// going to fail never burns rate-limit quota.
+	expiry := params.Expiry
+	if expiry > constants.MAX_EXPIRY_SECS {
+		expiry = constants.MAX_EXPIRY_SECS + 1 // still refused at step 5, without overflowing int
+	}
 	resolved, err := cashwallet.Resolve(ctx, deps, cashwallet.Params{
-		HubApp:     app,
-		Recipients: recipients,
-		ExpirySecs: int(params.Expiry),
+		HubApp:       app,
+		Recipients:   recipients,
+		ExpirySecs:   int(expiry),
+		RefusedField: removedMintField(nip47Request.Params),
 	})
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, mapCashWalletErrorCode(err), err.Error())
 		return
 	}
 
-	// 3. Rate limit per calling app pubkey (NWC-specific; the admin HTTP API has no
+	// 5. Rate limit per calling app pubkey (NWC-specific; the admin HTTP API has no
 	// equivalent caller-facing rate limit since it's already gated by hub ownership).
 	// Only requests that passed validation above reach here, so quota is spent
 	// only on requests that would otherwise actually create and fund a wallet.
