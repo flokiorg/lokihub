@@ -136,6 +136,9 @@ type App struct {
 	// CircleMaxReceiveMloki is a circle_wallet's receive cap per budget period
 	// (max_receive), as resolved at its join. Nil on every other kind.
 	CircleMaxReceiveMloki *int64
+	// CircleBudgetAnchorAt is when a circle_wallet's budget periods start
+	// counting from (NIP-CW §Budget Renewal Floor): its creation, unix seconds.
+	CircleBudgetAnchorAt *int64
 }
 
 // CashHubConfig holds the per-Cash-Hub parameters that constrain what
@@ -380,6 +383,19 @@ type CircleHubConfig struct {
 	PerWalletMaxMloki int
 	// PerWalletMaxReceiveMloki caps a caller's requested max_receive.
 	PerWalletMaxReceiveMloki int64
+	// HoldingsCeilingMloki is the most the circle's Active wallets may hold
+	// together, their open invoices included (NIP-CW §Own Funds and Caps).
+	HoldingsCeilingMloki int64
+	// FeeReservePpm and FeeReserveMinMloki are the routing-fee reserve rule a
+	// member's Lightning payment holds back and may spend: the larger of the
+	// minimum and amount × ppm / 1,000,000, rounded down.
+	FeeReservePpm      int
+	FeeReserveMinMloki int64
+	// OutboundCeilingMloki optionally bounds what the circle's wallets together
+	// send as external traffic in one OutboundPeriod of the Hub's own (daily to
+	// yearly, from the Hub's creation); 0 is no ceiling.
+	OutboundCeilingMloki int64
+	OutboundPeriod       string
 	// MinBudgetRenewal is the shortest (tightest) renewal period a caller may
 	// request for their wallet's budget_renewal — protects the hub from
 	// members resetting their spend cap too often. A request is rejected when
@@ -856,7 +872,7 @@ type ResponseEvent struct {
 
 type Transaction struct {
 	ID              uint
-	AppId           *uint `gorm:"index:idx_transactions_app_type_state,priority:1"`
+	AppId           *uint `gorm:"index:idx_transactions_app_type_state,priority:1;index:idx_transactions_app_period,priority:1"`
 	App             *App  `gorm:"constraint:OnDelete:CASCADE;"`
 	RequestEventId  *uint
 	RequestEvent    *RequestEvent `gorm:"constraint:OnDelete:SET NULL;foreignKey:RequestEventId"`
@@ -904,6 +920,21 @@ type Transaction struct {
 	FailureReason      string
 	Hold               bool
 	SettleDeadline     *uint32 // block number for accepted hold invoices
+
+	// PaymentKind is a circle wallet payment's kind (NIP-CW §Own Funds and
+	// Caps, 1 same circle … 4 Lightning) from the wallet's own side; 0 on a row
+	// no circle wallet is party to. Set when an outgoing payment starts and when
+	// an incoming one settles.
+	PaymentKind int `gorm:"index:idx_transactions_app_period,priority:3"`
+	// CountsSend marks an outgoing row of an Active circle wallet that counts
+	// on its send cap; PeriodStart is the wallet's budget period (unix) the row
+	// counts in: when the payment started, or when an incoming one settled.
+	CountsSend  bool
+	PeriodStart int64 `gorm:"index:idx_transactions_app_period,priority:2"`
+	// OutboundPeriodStart is the Hub period (unix) an external payment of a
+	// circle wallet counts in on the circle's outbound ceiling; 0 when it does
+	// not count.
+	OutboundPeriodStart int64
 }
 
 type Swap struct {

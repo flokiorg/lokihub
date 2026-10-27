@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -37,6 +38,9 @@ type transactionsService struct {
 	eventPublisher   events.EventPublisher
 	liquidityManager *manager.LiquidityManager
 	logger           zerolog.Logger
+	// lnClientProvider returns the node, for resolving a Circle Wallet payment
+	// the node reports accepted; nil until the service sets it.
+	lnClientProvider func() lnclient.LNClient
 }
 
 // InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
@@ -66,6 +70,14 @@ type TransactionsService interface {
 	SweepStalePendingOutgoing(ctx context.Context, lnClient lnclient.LNClient)
 	ReconcilePendingCashRedeems(ctx context.Context, lnClient lnclient.LNClient) int
 	PendingCashRedeems() ([]db.Transaction, error)
+	// MakeCircleInvoice issues a Circle Wallet's Hub-settled invoice.
+	MakeCircleInvoice(ctx context.Context, wallet *db.App, amount uint64, description, descriptionHash string, expiry uint64, metadata map[string]interface{}, lnClient lnclient.LNClient, requestEventId *uint) (*Transaction, error)
+	// ResolveCircleHold settles or cancels an accepted Circle Wallet payment.
+	ResolveCircleHold(ctx context.Context, paymentHash string, amountPaid int64, lnClient lnclient.LNClient) error
+	// ResolveAcceptedCircleHolds resolves every Circle Wallet payment left accepted.
+	ResolveAcceptedCircleHolds(ctx context.Context, lnClient lnclient.LNClient)
+	// SetLNClientProvider gives the service the node for Circle Wallet payments.
+	SetLNClientProvider(provider func() lnclient.LNClient)
 }
 
 const (
@@ -426,8 +438,22 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		paymentAmount = *amountMloki
 	}
 
+	var circleQuote *circlemoney.SendQuote
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" && appId != nil {
+		var feeSkim, feeReserve uint64
+		payer, err := loadApp(tx, appId)
+		if err != nil {
+			return err
+		}
+		isInternalTransfer, _ := metadata["internal_transfer"].(bool)
+		// A Circle Wallet's payment runs its own checks under its Hub's lock
+		// (NIP-CW §Own Funds and Caps).
+		circlePayer := circlemoney.IsCircleWallet(payer) && !isInternalTransfer
+		if circlePayer {
+			if err := lockCircleParties(tx, payer); err != nil {
+				return err
+			}
+		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
 			}
@@ -458,7 +484,6 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		// (enforceCashFullDrain) below. Internal transfers are additionally
 		// exempt from the MaxAmountLoki budget cap itself (skipBudgetCap) -
 		// see validateCanPay's doc comment.
-		isInternalTransfer, _ := metadata["internal_transfer"].(bool)
 		isCashClaimSlice, _ := metadata["cash_claim_slice"].(bool)
 		// cashRedeemFeeMloki is set only by cash_redeem_controller.go — the
 		// redeem fee it already quoted to the recipient (and deducted from
@@ -473,17 +498,35 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			cashRedeemFeeMloki = &v
 		}
 
-		balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment, validateCanPayExemptions{
-			SkipFeeReserve: isCashClaimSlice,
-			SkipBudgetCap:  isInternalTransfer,
-		})
-		if err != nil {
-			return err
-		}
-		// Cash wallets must drain their full balance in a single payment.
-		// Enforced here (shared layer) so the HTTP API and keysend paths cannot bypass it.
-		if err := enforceCashFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isCashClaimSlice); err != nil {
-			return err
+		if circlePayer {
+			var payee *db.App
+			if selfPayment {
+				if payee, err = incomingApp(tx, paymentRequest.PaymentHash); err != nil {
+					return err
+				}
+			}
+			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
+				Wallet: payer, Payee: payee, SameNode: selfPayment, Amount: paymentAmount, Now: time.Now(), Active: true,
+			}, circlemoney.SameCircleTransfers)
+			if err != nil {
+				return err
+			}
+			circleQuote = &quote
+		} else {
+			balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, paymentAmount, paymentRequest.Description, selfPayment, validateCanPayExemptions{
+				SkipFeeReserve: isCashClaimSlice,
+				SkipBudgetCap:  isInternalTransfer,
+			})
+			if err != nil {
+				return err
+			}
+			// Cash wallets must drain their full balance in a single payment.
+			// Enforced here (shared layer) so the HTTP API and keysend paths cannot bypass it.
+			if err := enforceCashFullDrain(parentKind, balance, paymentAmount, isInternalTransfer, isCashClaimSlice); err != nil {
+				return err
+			}
+			circleQuote = nil
+			feeSkim, feeReserve = feeSkimMloki, CalculateFeeReserveMloki(paymentAmount)
 		}
 
 		var expiresAt *time.Time
@@ -496,8 +539,8 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			RequestEventId:     requestEventId,
 			Type:               constants.TRANSACTION_TYPE_OUTGOING,
 			State:              constants.TRANSACTION_STATE_PENDING,
-			FeeReserveMloki:    CalculateFeeReserveMloki(paymentAmount),
-			FeeSkimMloki:       feeSkimMloki,
+			FeeReserveMloki:    feeReserve,
+			FeeSkimMloki:       feeSkim,
 			CashRedeemFeeMloki: cashRedeemFeeMloki,
 			AmountMloki:        paymentAmount,
 			PaymentRequest:     payReq,
@@ -507,6 +550,9 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			ExpiresAt:          expiresAt,
 			SelfPayment:        selfPayment,
 			Metadata:           datatypes.JSON(metadataBytes),
+		}
+		if circleQuote != nil {
+			stampSend(&dbTransaction, *circleQuote)
 		}
 		return tx.Create(&dbTransaction).Error
 	})
@@ -539,6 +585,12 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 		var routeCap *uint64
 		if v, ok := metadata[CashRedeemRouteCapKey].(uint64); ok {
 			routeCap = &v
+		}
+		// A Circle Wallet's Lightning payment never pays a routing fee above its
+		// reserve (NIP-CW §Own Funds and Caps).
+		if circleQuote != nil && circleQuote.Kind == circlemoney.KindLightning {
+			reserve := circleQuote.FeeReserve
+			routeCap = &reserve
 		}
 		response, err = lnClient.SendPaymentSync(payReq, amountMloki, routeCap)
 	}
@@ -661,25 +713,56 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 
 	selfPayment := destination == lnClient.GetPubkey()
 
+	var circleQuote *circlemoney.SendQuote
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" && appId != nil {
+		payer, err := loadApp(tx, appId)
+		if err != nil {
+			return err
+		}
+		// On this node the custom key record names the recipient app; anyone
+		// can write it, so a Circle Wallet named there is checked like any
+		// credit that names none of its invoices.
+		var recipient *db.App
+		if selfPayment {
+			if recipient, err = loadApp(tx, svc.findCustomKeyApp(customRecords, tx)); err != nil {
+				return err
+			}
+		}
+		circlePayer := circlemoney.IsCircleWallet(payer)
+		if circlePayer || circlemoney.IsCircleWallet(recipient) {
+			if err := lockCircleParties(tx, payer, recipient); err != nil {
+				return err
+			}
+		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
 			}
 		}
 
-		balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, amount, "", selfPayment, validateCanPayExemptions{})
-		if err != nil {
-			return err
+		feeSkim, feeReserve := uint64(0), CalculateFeeReserveMloki(amount)
+		if circlePayer {
+			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
+				Wallet: payer, Payee: recipient, SameNode: selfPayment, Amount: amount, Now: time.Now(), Active: true,
+			}, circlemoney.SameCircleTransfers)
+			if err != nil {
+				return err
+			}
+			circleQuote = &quote
+		} else {
+			balance, parentKind, feeSkimMloki, err := svc.validateCanPay(tx, appId, amount, "", selfPayment, validateCanPayExemptions{})
+			if err != nil {
+				return err
+			}
+			// SendKeysend has no internal-transfer or cash_redeem path today (see enforceCashFullDrain doc).
+			if err := enforceCashFullDrain(parentKind, balance, amount, false, false); err != nil {
+				return err
+			}
+			feeSkim = feeSkimMloki
 		}
-		// A self-payment naming a circle wallet with no room would leave the
-		// funds with the node, so refuse it before anything is sent.
-		if selfPayment && svc.namesCircleWalletWithoutRoom(tx, customRecords, amount) {
-			return NewQuotaExceededError()
-		}
-		// SendKeysend has no internal-transfer or cash_redeem path today (see enforceCashFullDrain doc).
-		if err := enforceCashFullDrain(parentKind, balance, amount, false, false); err != nil {
-			return err
+		if selfPayment {
+			if err := checkCircleKeysendCredit(tx, recipient, payer, true, amount); err != nil {
+				return err
+			}
 		}
 
 		dbTransaction = db.Transaction{
@@ -688,8 +771,8 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			RequestEventId:  requestEventId,
 			Type:            constants.TRANSACTION_TYPE_OUTGOING,
 			State:           constants.TRANSACTION_STATE_PENDING,
-			FeeReserveMloki: CalculateFeeReserveMloki(uint64(amount)),
-			FeeSkimMloki:    feeSkimMloki,
+			FeeReserveMloki: feeReserve,
+			FeeSkimMloki:    feeSkim,
 			AmountMloki:     amount,
 			Metadata:        datatypes.JSON(metadataBytes),
 			Boostagram:      datatypes.JSON(boostagramBytes),
@@ -697,7 +780,34 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 			Preimage:        &preimage,
 			SelfPayment:     selfPayment,
 		}
-		return tx.Create(&dbTransaction).Error
+		if circleQuote != nil {
+			stampSend(&dbTransaction, *circleQuote)
+		}
+		if err := tx.Create(&dbTransaction).Error; err != nil {
+			return err
+		}
+		if !selfPayment {
+			return nil
+		}
+		// A keysend on this node is credited by its own incoming row, written
+		// in the same transaction as the checks that admitted it, so a second
+		// keysend to the same wallet sees this one.
+		var recipientID *uint
+		if recipient != nil {
+			recipientID = &recipient.ID
+		}
+		return tx.Create(&db.Transaction{
+			AppId:       recipientID,
+			Type:        constants.TRANSACTION_TYPE_INCOMING,
+			State:       constants.TRANSACTION_STATE_PENDING,
+			AmountMloki: amount,
+			PaymentHash: paymentHash,
+			Preimage:    &preimage,
+			Description: svc.getDescriptionFromCustomRecords(customRecords),
+			Metadata:    datatypes.JSON(metadataBytes),
+			Boostagram:  datatypes.JSON(boostagramBytes),
+			SelfPayment: true,
+		}).Error
 	})
 
 	if err != nil {
@@ -711,33 +821,15 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 	var payKeysendResponse *lnclient.PayKeysendResponse
 
 	if selfPayment {
-		// for keysend self-payments we need to create an incoming payment at the time of the payment
-		recipientAppId := svc.getAppIdFromCustomRecords(customRecords, amount, svc.db)
-		dbTransaction := db.Transaction{
-			AppId:          recipientAppId,
-			RequestEventId: nil, // it is related to this request but for a different app
-			Type:           constants.TRANSACTION_TYPE_INCOMING,
-			State:          constants.TRANSACTION_STATE_PENDING,
-			AmountMloki:    amount,
-			PaymentHash:    paymentHash,
-			Preimage:       &preimage,
-			Description:    svc.getDescriptionFromCustomRecords(customRecords),
-			Metadata:       datatypes.JSON(metadataBytes),
-			Boostagram:     datatypes.JSON(boostagramBytes),
-			SelfPayment:    true,
-		}
-		err = svc.db.Create(&dbTransaction).Error
-		if err != nil {
-			svc.logger.Error().Err(err).Msg("Failed to create DB transaction")
-			return nil, err
-		}
-
 		_, err = svc.interceptSelfPayment(paymentHash, amount, lnClient)
 		if err == nil {
 			payKeysendResponse = &lnclient.PayKeysendResponse{
 				Fee: 0,
 			}
 		}
+	} else if limiter, ok := lnClient.(KeysendFeeLimiter); ok && circleQuote != nil && circleQuote.Kind == circlemoney.KindLightning {
+		// Within the Circle Wallet's routing-fee reserve, never above it.
+		payKeysendResponse, err = limiter.SendKeysendWithFeeLimit(amount, destination, customRecords, preimage, circleQuote.FeeReserve)
 	} else {
 		payKeysendResponse, err = lnClient.SendKeysend(amount, destination, customRecords, preimage)
 	}
@@ -1325,6 +1417,20 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			return
 		}
 		svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false)
+		// A Circle Wallet's invoice is the Hub's to settle, after re-checking
+		// the payment (NIP-CW §Own Funds and Caps).
+		if svc.lnClientProvider != nil {
+			if lnClient := svc.lnClientProvider(); lnClient != nil {
+				amountPaid := int64(-1)
+				if lnClientTransaction.AmountPaid > 0 {
+					amountPaid = lnClientTransaction.AmountPaid
+				}
+				if err := svc.ResolveCircleHold(ctx, lnClientTransaction.PaymentHash, amountPaid, lnClient); err != nil {
+					svc.logger.Error().Err(err).Str("payment_hash", lnClientTransaction.PaymentHash).
+						Msg("Failed to resolve an accepted circle wallet payment")
+				}
+			}
+		}
 
 	case "nwc_lnclient_payment_sent":
 		lnClientTransaction, ok := event.Properties.(*lnclient.Transaction)
@@ -1468,7 +1574,7 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 		svc.logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Failed DB transaction for hold invoice accepted event")
-	} else {
+	} else if publishHoldAccepted(svc.db, &dbTransaction) {
 		svc.eventPublisher.Publish(&events.Event{
 			Event:      "nwc_hold_invoice_accepted",
 			Properties: &dbTransaction,
@@ -1546,6 +1652,9 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 	}
 
 	if incomingTransaction.Hold {
+		if isCircleHold(svc.db, &incomingTransaction) {
+			return svc.interceptSelfCircleHold(&incomingTransaction, lnClient)
+		}
 		return svc.interceptSelfHoldPayment(paymentHash, lnClient)
 	}
 
@@ -1931,32 +2040,27 @@ func (svc *transactionsService) getDescriptionFromCustomRecords(customRecords []
 	return description
 }
 
-// namesCircleWalletWithoutRoom reports whether customRecords name a circle
-// wallet that has no room for amountMloki under its receive cap.
-func (svc *transactionsService) namesCircleWalletWithoutRoom(tx *gorm.DB, customRecords []lnclient.TLVRecord, amountMloki uint64) bool {
-	appID := svc.findCustomKeyApp(customRecords, tx)
-	return appID != nil && !circleWalletHasRoom(tx, *appID, amountMloki)
-}
-
-// getAppIdFromCustomRecords finds the app a keysend names in its custom key
-// record. Anyone can write that record, so a circle wallet is only named when
-// amountMloki fits under its receive cap; otherwise the payment stays with the
-// node.
+// getAppIdFromCustomRecords finds the app a Lightning keysend names in its
+// custom key record. Anyone can write that record, so a Circle Wallet is named
+// only when the credit passes its checks (its receive room, its circle's
+// holdings ceiling, under the Hub's lock); otherwise the payment is credited to
+// no wallet and stays with the node (a Lightning keysend cannot be failed
+// without a final-hop acceptor: lokihub never credits an over-room one).
 func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclient.TLVRecord, amountMloki uint64, tx *gorm.DB) *uint {
 	appID := svc.findCustomKeyApp(customRecords, tx)
-	if appID != nil && !circleWalletHasRoom(tx, *appID, amountMloki) {
-		svc.logger.Warn().Uint("app_id", *appID).Uint64("amount", amountMloki).
-			Msg("Keysend would exceed the circle wallet's cap, leaving it with the node")
+	recipient, err := loadApp(tx, appID)
+	if err != nil || !circlemoney.IsCircleWallet(recipient) {
+		return appID
+	}
+	if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
+		return nil
+	}
+	if err := checkCircleKeysendCredit(tx, recipient, nil, false, amountMloki); err != nil {
+		svc.logger.Warn().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
+			Msg("Keysend refused by the circle wallet's checks, leaving it with the node")
 		return nil
 	}
 	return appID
-}
-
-// circleWalletHasRoom is false only for a circle wallet that amountMloki would
-// push past its receive cap.
-func circleWalletHasRoom(tx *gorm.DB, appID uint, amountMloki uint64) bool {
-	room, capped := queries.CircleReceiveRoomMloki(tx, appID, time.Now())
-	return !capped || (amountMloki <= math.MaxInt64 && int64(amountMloki) <= room)
 }
 
 func (svc *transactionsService) findCustomKeyApp(customRecords []lnclient.TLVRecord, tx *gorm.DB) *uint {
@@ -2177,6 +2281,10 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 		Str("payment_hash", dbTransaction.PaymentHash).
 		Str("type", dbTransaction.Type).
 		Msg("Marked transaction as settled")
+
+	if err := stampCircleReceipt(tx, dbTransaction, selfPayment, now); err != nil {
+		return nil, err
+	}
 
 	if dbTransaction.Type == constants.TRANSACTION_TYPE_OUTGOING && dbTransaction.FeeSkimMloki > 0 {
 		if err := svc.creditCircleHubFeeSkim(tx, dbTransaction); err != nil {

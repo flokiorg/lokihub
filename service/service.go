@@ -186,6 +186,9 @@ func NewService(ctx context.Context) (*service, error) {
 	}
 
 	svc.nip47Service.SetPrivateIdentity(svc.privateJoinIdentity)
+	// A Circle Wallet payment the node reports accepted is settled by the Hub
+	// once re-checked, which needs the node.
+	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
 
 	eventPublisher.RegisterSubscriber(svc.transactionsService)
 	eventPublisher.RegisterSubscriber(svc.nip47Service)

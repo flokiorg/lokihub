@@ -12,7 +12,6 @@ package api
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +26,9 @@ func newTestAPIForGetApp(svc *tests.TestService) *api {
 	return &api{db: svc.DB, appsSvc: svc.AppsService, keys: svc.Keys}
 }
 
-func TestGetApp_CircleHub_SurfacesOwnBudget(t *testing.T) {
+// A circle_hub never spends: GetApp reports its holdings against its holdings
+// ceiling (NIP-CW §Own Funds and Caps) as its used and maximum budget.
+func TestGetApp_CircleHub_ReportsHoldingsAgainstCeiling(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -36,44 +37,19 @@ func TestGetApp_CircleHub_SurfacesOwnBudget(t *testing.T) {
 		"Circle Hub", "", 500, constants.BUDGET_RENEWAL_MONTHLY, nil,
 		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
 		apps.CircleIdentityRef{Name: "Circle Hub", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 1_000_000},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 1_000_000, HoldingsCeilingMloki: 5_000_000},
 	)
 	require.NoError(t, err)
 
-	theAPI := newTestAPIForGetApp(svc)
-	result := theAPI.GetApp(context.Background(), provider)
-
-	assert.Equal(t, uint64(500), result.MaxAmountLoki,
-		"a circle_hub's own budget (set at creation, no pay_invoice scope involved) must round-trip through GetApp")
-	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, result.BudgetRenewal)
-}
-
-func TestGetApp_CircleHub_BudgetUsageReflectsLiveCommitment(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	provider, _, err := svc.AppsService.CreateCircleHub(
-		"Circle Hub", "", 1000, constants.BUDGET_RENEWAL_NEVER, nil,
-		[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
-		apps.CircleIdentityRef{Name: "Circle Hub", Policy: db.CirclePolicyAllowlist},
-		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 1_000_000},
-	)
-	require.NoError(t, err)
-
-	// A live child committing 300 loki (300_000 mloki) — a circle_hub never
-	// spends directly itself, so its own outgoing-transaction sum (what
-	// GetBudgetUsageSat would compute) stays 0 regardless.
-	future := time.Now().Add(time.Hour)
-	_, _, err = svc.AppsService.CreateApp("existing-child", "", 300, "never", &future,
+	child, _, err := svc.AppsService.CreateApp("existing-child", "", 300, "never", nil,
 		[]string{constants.PAY_INVOICE_SCOPE}, db.AppKindCircleWallet, &provider.ID, db.ParentKindCircle, nil)
 	require.NoError(t, err)
+	tests.FundApp(svc, child.ID, 300_000, tests.RandomHex32())
 
-	theAPI := newTestAPIForGetApp(svc)
-	result := theAPI.GetApp(context.Background(), provider)
-
-	assert.Equal(t, uint64(300), result.BudgetUsage,
-		"a circle_hub's 'used' budget must reflect live commitment to children, not its own (always empty) outgoing spend")
+	result := newTestAPIForGetApp(svc).GetApp(context.Background(), provider)
+	assert.Equal(t, uint64(5_000), result.MaxAmountLoki, "the holdings ceiling")
+	assert.Equal(t, uint64(300), result.BudgetUsage, "the members' balances")
+	assert.Equal(t, constants.BUDGET_RENEWAL_MONTHLY, result.BudgetRenewal)
 }
 
 func TestGetApp_StandardPayInvoiceApp_StillUsesPayInvoiceRow(t *testing.T) {

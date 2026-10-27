@@ -18,8 +18,8 @@ import (
 // Production builds a new controller for every request, so these tests race
 // requests through separate controllers. Whatever keeps creation safe must
 // therefore live in the database: the Hub-scoped transaction lock for the
-// commitment check, and the membership unique index for one wallet per
-// identity (NIP-CW §Creating a Circle Wallet, steps 8-9).
+// holdings check, and the membership unique index for one wallet per identity
+// (NIP-CW §Creating a Circle Wallet, steps 8-9).
 
 // raceCircleJoins runs every request at once, each through its own controller.
 func raceCircleJoins(t *testing.T, svc *tests.TestService, provider *db.App, requests []string) []string {
@@ -61,25 +61,6 @@ func raceCircleJoins(t *testing.T, svc *tests.TestService, provider *db.App, req
 	close(ready)
 	wg.Wait()
 	return outcomes
-}
-
-// CW-creating-a-circle-wallet-15: two in-flight requests must not both pass the
-// commitment check against the same balance.
-func TestCreateCircleWallet_SeparateControllers_BalanceCoversOne_AtMostOneCommitted(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-	provider := createCircleHub(t, svc, 7200, 100_000) // room for exactly one 100,000 mloki wallet
-
-	requests := make([]string, 8)
-	for i := range requests {
-		requests[i] = makeCircleWalletRequest(t, nostr.GeneratePrivateKey(), *provider.WalletPubkey, 100_000, 3600)
-	}
-	outcomes := raceCircleJoins(t, svc, provider, requests)
-
-	var wallets int64
-	require.NoError(t, svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", provider.ID, db.AppKindCircleWallet).Count(&wallets).Error)
-	require.EqualValues(t, 1, wallets, "outcomes %v", outcomes)
 }
 
 // CW-creating-a-circle-wallet-16: with a generous balance every request can pass

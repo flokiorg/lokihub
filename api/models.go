@@ -268,6 +268,13 @@ type App struct {
 	// CirclePerWalletMaxReceiveMloki the ceiling on a member's max_receive.
 	CircleDefaultExpSecs           *int   `json:"circleDefaultExpSecs,omitempty"`
 	CirclePerWalletMaxReceiveMloki *int64 `json:"circlePerWalletMaxReceiveMloki,omitempty"`
+	// The circle money model (NIP-CW §Own Funds and Caps): holdings ceiling,
+	// routing-fee reserve rule, optional outbound ceiling and its period.
+	CircleHoldingsCeilingMloki *int64  `json:"circleHoldingsCeilingMloki,omitempty"`
+	CircleFeeReservePpm        *int    `json:"circleFeeReservePpm,omitempty"`
+	CircleFeeReserveMinMloki   *int64  `json:"circleFeeReserveMinMloki,omitempty"`
+	CircleOutboundCeilingMloki *int64  `json:"circleOutboundCeilingMloki,omitempty"`
+	CircleOutboundPeriod       *string `json:"circleOutboundPeriod,omitempty"`
 }
 
 // CircleIdentitySummary is the bare identity, used for the circle-creation-time picker.
@@ -393,6 +400,11 @@ type UpdateAppRequest struct {
 	CirclePerWalletMaxMloki        *int    `json:"circlePerWalletMaxMloki"`
 	CirclePerWalletMaxReceiveMloki *int64  `json:"circlePerWalletMaxReceiveMloki"`
 	CircleMinBudgetRenewal         *string `json:"circleMinBudgetRenewal"`
+	CircleHoldingsCeilingMloki     *int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm            *int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki       *int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki     *int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod           *string `json:"circleOutboundPeriod"`
 }
 
 type TransferRequest struct {
@@ -436,6 +448,12 @@ type CreateAppRequest struct {
 	// (0 = the send ceiling).
 	CircleDefaultExpSecs           int   `json:"circleDefaultExpSecs"`
 	CirclePerWalletMaxReceiveMloki int64 `json:"circlePerWalletMaxReceiveMloki"`
+	// The circle money model; 0 or empty takes lokihub's default.
+	CircleHoldingsCeilingMloki int64  `json:"circleHoldingsCeilingMloki"`
+	CircleFeeReservePpm        int    `json:"circleFeeReservePpm"`
+	CircleFeeReserveMinMloki   int64  `json:"circleFeeReserveMinMloki"`
+	CircleOutboundCeilingMloki int64  `json:"circleOutboundCeilingMloki"`
+	CircleOutboundPeriod       string `json:"circleOutboundPeriod"`
 	// CircleIdentityId reuses an existing CircleIdentity — when set, CirclePolicy/
 	// CircleIdentityName/ProviderPubkey below are ignored.
 	CircleIdentityId *uint `json:"circleIdentityId"`

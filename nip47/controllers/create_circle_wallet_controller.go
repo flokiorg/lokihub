@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/nbd-wtf/go-nostr"
@@ -24,15 +24,9 @@ import (
 // through controller.cfg.GetEnv().CircleWalletRateLimitPerHour instead.
 const circleRateLimitPerHour = 3
 
-// errCircleQuotaExceeded is a sentinel returned from inside the commitment-check
-// transaction so the caller can distinguish "budget exceeded" from any other
-// transaction failure and respond with the right NIP-47 error code.
-var errCircleQuotaExceeded = errors.New("circle commitment would exceed available balance")
-
-// errCircleHubBudgetExceeded is a sentinel for the hub's own admin-set budget
-// ceiling (distinct from errCircleQuotaExceeded, which reflects the hub's
-// real balance) — see the MaxAmountLoki check below.
-var errCircleHubBudgetExceeded = errors.New("circle commitment would exceed the hub's configured budget")
+// errCircleQuotaExceeded rolls a join back whose circle's holdings have reached
+// the holdings ceiling.
+var errCircleQuotaExceeded = errors.New("the circle's holdings have reached its ceiling")
 
 // errJoinPastDeadline rolls a join back that reached its commit after its
 // proof's freshness window (NIP-CW §Processing Algorithm, step 9).
@@ -247,41 +241,26 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		constants.GET_INFO_SCOPE,
 	}
 
-	// 7. Commitment check + wallet creation as one atomic unit. On Postgres, an
-	// advisory lock scoped to this transaction serialises concurrent requests
-	// for the same provider across processes — the lock is released automatically
-	// when the transaction commits or rolls back, so a failed/quota-exceeded
-	// attempt never leaves anything held.
+	// 9. The holdings check and the wallet's creation as one atomic unit. On
+	// Postgres, an advisory lock on the Hub scoped to this transaction
+	// serialises concurrent joins across processes, and every holdings check
+	// of the circle's payments takes the same lock.
 	var newApp *db.App
 	var encryptedDetails string
 	err = controller.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
-				return fmt.Errorf("acquire circle commitment lock: %w", err)
-			}
+		if err := db.LockApp(tx, app.ID); err != nil {
+			return fmt.Errorf("acquire circle lock: %w", err)
 		}
 
-		commitment, err := queries.GetCircleCommitmentMloki(tx, app.ID)
+		// The circle's holdings must be below its holdings ceiling (NIP-CW
+		// §Processing Algorithm step 9): a new wallet starts empty, so the
+		// check is the circle's room, not the requested caps.
+		holdings, err := circlemoney.Holdings(tx, app.ID, time.Now())
 		if err != nil {
-			return fmt.Errorf("commitment check failed: %w", err)
+			return fmt.Errorf("holdings check failed: %w", err)
 		}
-		balance := queries.GetIsolatedBalance(tx, app.ID)
-		if commitment+int64(params.MaxAmount) > balance { //nolint:gosec // params.MaxAmount > math.MaxInt64 already rejected above
+		if holdings >= providerConfig.HoldingsCeilingMloki {
 			return errCircleQuotaExceeded
-		}
-
-		// Hub-wide budget ceiling: an optional admin-set cap on the combined
-		// max_amount of every currently-live child, independent of the hub's
-		// real balance above. Stored on the hub's own circle_wallet-scope
-		// AppPermission (the hub is never granted pay_invoice, so this is not
-		// the standard payment-budget mechanism — see plan doc for context).
-		var hubPermission db.AppPermission
-		if err := tx.Where("app_id = ? AND scope = ?", app.ID, constants.CIRCLE_WALLET_SCOPE).
-			First(&hubPermission).Error; err != nil {
-			return fmt.Errorf("failed to load hub permission: %w", err)
-		}
-		if hubPermission.MaxAmountLoki > 0 && commitment+int64(params.MaxAmount) > int64(hubPermission.MaxAmountLoki)*1000 { //nolint:gosec // params.MaxAmount > math.MaxInt64 already rejected above; MaxAmountLoki is an app-internal budget value
-			return errCircleHubBudgetExceeded
 		}
 
 		// The member's own connection_pubkey is the wallet's client key, so no
@@ -306,10 +285,12 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 
 		// NIP-CW §Fees: the member's rate is the one in force now, and stays;
 		// its receive cap is the one it asked for.
+		// Its budget periods count from its creation (NIP-CW §Budget Renewal Floor).
 		maxReceive := int64(params.MaxReceive) //nolint:gosec // bounded by the Hub's ceiling above
 		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
 			"circle_fees_ppm":          providerConfig.FeesPpm,
 			"circle_max_receive_mloki": maxReceive,
+			"circle_budget_anchor_at":  createdApp.CreatedAt.Unix(),
 		}).Error; err != nil {
 			return fmt.Errorf("failed to record the member's terms: %w", err)
 		}
@@ -363,7 +344,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	})
 
 	switch {
-	case errors.Is(err, errCircleQuotaExceeded), errors.Is(err, errCircleHubBudgetExceeded):
+	case errors.Is(err, errCircleQuotaExceeded):
 		refuse(nipcw.ErrInsufficientCapacity, "the circle's holdings have reached its ceiling")
 		return
 	case errors.Is(err, errCircleMemberAlreadyHasWallet):

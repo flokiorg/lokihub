@@ -59,6 +59,9 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 		for {
 			if lnClient := getLNClient(); lnClient != nil {
 				transactionsSvc.ReconcilePendingCashRedeems(ctx, lnClient)
+				// A Circle Wallet payment accepted while lokihub was down is
+				// settled or cancelled now.
+				transactionsSvc.ResolveAcceptedCircleHolds(ctx, lnClient)
 				return
 			}
 			select {
@@ -86,6 +89,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				// without asking the node or releasing its slice.
 				transactionsSvc.ReconcilePendingCashRedeems(ctx, lnClient)
 				transactionsSvc.SweepStalePendingOutgoing(ctx, lnClient)
+				transactionsSvc.ResolveAcceptedCircleHolds(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneCashRequests(gormDB)
 				pruneCircleJoinRecords(gormDB, time.Now())

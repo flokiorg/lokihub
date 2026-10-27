@@ -30,6 +30,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
@@ -182,6 +183,11 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				PerWalletMaxMloki:        createAppRequest.CirclePerWalletMaxMloki,
 				PerWalletMaxReceiveMloki: createAppRequest.CirclePerWalletMaxReceiveMloki,
 				MinBudgetRenewal:         createAppRequest.CircleMinBudgetRenewal,
+				HoldingsCeilingMloki:     createAppRequest.CircleHoldingsCeilingMloki,
+				FeeReservePpm:            createAppRequest.CircleFeeReservePpm,
+				FeeReserveMinMloki:       createAppRequest.CircleFeeReserveMinMloki,
+				OutboundCeilingMloki:     createAppRequest.CircleOutboundCeilingMloki,
+				OutboundPeriod:           createAppRequest.CircleOutboundPeriod,
 			},
 		)
 	default:
@@ -316,6 +322,20 @@ func (api *api) GetSetupStatus(ctx context.Context) (*SetupStatusResponse, error
 	}, nil
 }
 
+// circleHoldingsLoki is a circle hub's holdings and holdings ceiling, in loki.
+func (api *api) circleHoldingsLoki(hubID uint) (holdings, ceiling uint64) {
+	cfg, err := api.appsSvc.GetCircleHubConfig(hubID)
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to read a circle hub's config")
+		return 0, 0
+	}
+	held, err := circlemoney.Holdings(api.db, hubID, time.Now())
+	if err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to compute a circle hub's holdings")
+	}
+	return uint64(max(held, 0)) / 1000, uint64(max(cfg.HoldingsCeilingMloki, 0)) / 1000
+}
+
 // circleHubConfigPatch is the circle hub settings an update request carries.
 func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
 	return apps.CircleHubConfigPatch{
@@ -325,6 +345,11 @@ func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
 		PerWalletMaxMloki:        req.CirclePerWalletMaxMloki,
 		PerWalletMaxReceiveMloki: req.CirclePerWalletMaxReceiveMloki,
 		MinBudgetRenewal:         req.CircleMinBudgetRenewal,
+		HoldingsCeilingMloki:     req.CircleHoldingsCeilingMloki,
+		FeeReservePpm:            req.CircleFeeReservePpm,
+		FeeReserveMinMloki:       req.CircleFeeReserveMinMloki,
+		OutboundCeilingMloki:     req.CircleOutboundCeilingMloki,
+		OutboundPeriod:           req.CircleOutboundPeriod,
 	}
 }
 
@@ -604,17 +629,10 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 	budgetUsage := uint64(0)
 	maxAmount := uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 	if dbApp.Kind == db.AppKindCircleHub {
-		// A circle_hub never spends directly (only its children do), so the
-		// generic outgoing-transaction usage sum below is always ~0 and
-		// meaningless here. "Used" for a hub's own budget means "currently
-		// committed to live children" — the same metric enforced in
-		// nip47/controllers/create_circle_wallet_controller.go.
-		commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID)
-		if err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
-		} else {
-			budgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
-		}
+		// A circle_hub never spends: its "used" budget is the circle's
+		// holdings and its maximum the holdings ceiling (NIP-CW §Own Funds and
+		// Caps).
+		budgetUsage, maxAmount = api.circleHoldingsLoki(dbApp.ID)
 	} else {
 		budgetUsage = queries.GetBudgetUsageSat(api.db, &budgetPermission)
 	}
@@ -682,6 +700,11 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CircleMinBudgetRenewal = &cfg.MinBudgetRenewal
 			response.CircleDefaultExpSecs = &cfg.DefaultExpSecs
 			response.CirclePerWalletMaxReceiveMloki = &cfg.PerWalletMaxReceiveMloki
+			response.CircleHoldingsCeilingMloki = &cfg.HoldingsCeilingMloki
+			response.CircleFeeReservePpm = &cfg.FeeReservePpm
+			response.CircleFeeReserveMinMloki = &cfg.FeeReserveMinMloki
+			response.CircleOutboundCeilingMloki = &cfg.OutboundCeilingMloki
+			response.CircleOutboundPeriod = &cfg.OutboundPeriod
 		}
 	}
 
@@ -992,13 +1015,8 @@ func (api *api) ListApps(limit uint64, offset uint64, filters ListAppsFilters, o
 			apiApp.BudgetRenewal = budgetPermission.BudgetRenewal
 			apiApp.MaxAmountLoki = uint64(budgetPermission.MaxAmountLoki) //nolint:gosec // app-internal budget value, always non-negative
 			if dbApp.Kind == db.AppKindCircleHub {
-				// See GetApp: "used" for a circle_hub means live commitment
-				// to children, not its own (always ~0) outgoing spend.
-				if commitmentMloki, err := queries.GetCircleCommitmentMloki(api.db, dbApp.ID); err != nil {
-					logger.Logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to compute circle hub commitment")
-				} else {
-					apiApp.BudgetUsage = uint64(commitmentMloki) / 1000 //nolint:gosec // sum of non-negative budget commitments
-				}
+				// See GetApp: a circle_hub's holdings against its ceiling.
+				apiApp.BudgetUsage, apiApp.MaxAmountLoki = api.circleHoldingsLoki(dbApp.ID)
 			} else {
 				apiApp.BudgetUsage = queries.GetBudgetUsageSat(api.db, budgetPermission)
 			}
