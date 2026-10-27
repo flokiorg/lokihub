@@ -71,6 +71,13 @@ audits of both.
 
 ### Changed
 
+- Runs `cash_consolidate` in NIP-CASH's order and codes: the item names its
+  first source; it requires a `request_id`, marked once every source's claim
+  proof verifies (now by nmilat, with the `s` sources hash); any proof failure
+  of any kind is one `UNAUTHORIZED` "sources not authorized"; a source's state,
+  another Hub, an untrusted IA and differing terms are `RESTRICTED`; over the
+  ceiling or the source cap is `QUOTA_EXCEEDED`; and the record commits with
+  the merge.
 - Runs `cash_transfer` in NIP-CASH's order and codes: a claimed or expired
   slice is `RESTRICTED`; a claim proof that does not verify (now checked by
   nmilat, `m` tag and exact tags included), a wrong cash secret, or an item proof

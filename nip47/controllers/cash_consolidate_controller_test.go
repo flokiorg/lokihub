@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,7 +28,72 @@ import (
 // internal transfer decodes. These unit tests cover the request-validation and
 // custody/same-hub guards, which fire before any funds move.
 
+// handleCashConsolidateFor runs cash_consolidate as its private item would: the
+// item's target is sources[0]'s bill when this node holds it (NIP-CASH: a
+// consolidate names its first source), app otherwise, and the item proof is
+// sources[0]'s claim signer's. A missing request_id is filled.
 func handleCashConsolidateFor(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params cashConsolidateParams) *models.Response {
+	t.Helper()
+	if params.RequestID == "" {
+		params.RequestID = testRequestID()
+	}
+	params.Sources = asConsolidateProofs(t, params.Sources)
+	signerOf := ""
+	if len(params.Sources) > 0 {
+		var first db.App
+		if svc.DB.Where("wallet_pubkey = ?", params.Sources[0].WalletPubkey).Limit(1).Find(&first).Error == nil && first.ID != 0 {
+			app = &first
+		}
+		signerOf = params.Sources[0].IdentityEvent
+	}
+	return consolidateAs(t, svc, controller, app, params, testPrivateCall(signerOf))
+}
+
+// asConsolidateProofs turns each source's proof built with buildTransferProofEvent
+// into the same signer's cash_consolidate proof (NIP-CASH §Claim Proofs): m is
+// cash_consolidate and s is this call's sources hash; every other tag, and so
+// every deliberately wrong binding a test made, is kept. A proof whose signer the
+// test did not register is left as it is.
+func asConsolidateProofs(t *testing.T, sources []consolidateSourceParam) []consolidateSourceParam {
+	t.Helper()
+	pubkeys := make([]string, len(sources))
+	for i, s := range sources {
+		pubkeys[i] = s.WalletPubkey
+	}
+	sourcesHash, err := nipcash.SourcesHash(pubkeys)
+	if err != nil {
+		return sources
+	}
+	out := append([]consolidateSourceParam(nil), sources...)
+	for i, s := range out {
+		var ev nostr.Event
+		if s.IdentityEvent == "" || json.Unmarshal([]byte(s.IdentityEvent), &ev) != nil {
+			continue
+		}
+		priv, ok := testSigners.Load(ev.PubKey)
+		if !ok {
+			continue
+		}
+		tags := nostr.Tags{}
+		for _, tag := range ev.Tags {
+			if len(tag) > 0 && tag[0] == "m" {
+				tag = nostr.Tag{"m", constants.NIP47MethodCashConsolidate}
+			}
+			if len(tag) > 0 && tag[0] == "s" {
+				continue
+			}
+			tags = append(tags, tag)
+		}
+		tags = append(tags, nostr.Tag{"s", sourcesHash})
+		re := &nostr.Event{Kind: ev.Kind, CreatedAt: ev.CreatedAt, Tags: tags}
+		require.NoError(t, re.Sign(priv.(string)))
+		out[i].IdentityEvent = mustMarshal(t, re)
+	}
+	return out
+}
+
+// consolidateAs runs cash_consolidate on target with an explicit private call.
+func consolidateAs(t *testing.T, svc *tests.TestService, controller *nip47Controller, app *db.App, params cashConsolidateParams, call *PrivateCall) *models.Response {
 	t.Helper()
 	content := map[string]interface{}{
 		"method": constants.NIP47MethodCashConsolidate,
@@ -43,7 +109,7 @@ func handleCashConsolidateFor(t *testing.T, svc *tests.TestService, controller *
 	var response *models.Response
 	controller.HandleCashConsolidateEvent(context.TODO(), nip47Request, dbRequestEvent.ID, app, func(r *models.Response, _ nostr.Tags) {
 		response = r
-	}, nostr.Tags{})
+	}, nostr.Tags{}, call)
 	return response
 }
 
@@ -91,7 +157,7 @@ func TestConsolidate_NewIdentityMustBeRecognizedType(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
-		Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+		Sources:     guardSourcesFor(t, svc, hub, "carrier-pigeon", "deadbeef", ""),
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: "carrier-pigeon", IdentityValue: "deadbeef"},
 	})
 	require.NotNil(t, resp.Error)
@@ -117,7 +183,7 @@ func TestConsolidate_CashTarget_MissingIdentityValue_Rejected(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
-		Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+		Sources:     guardSourcesFor(t, svc, hub, db.CashIdentityCash, "", ""),
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash},
 	})
 	require.NotNil(t, resp.Error)
@@ -134,7 +200,7 @@ func TestConsolidate_CashTarget_MalformedIdentityValue_Rejected(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
-		Sources:     []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+		Sources:     guardSourcesFor(t, svc, hub, db.CashIdentityCash, "not-hex-and-not-64-chars", ""),
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: "not-hex-and-not-64-chars"},
 	})
 	require.NotNil(t, resp.Error)
@@ -150,11 +216,12 @@ func TestConsolidate_CashTarget_IAPubkeySupplied_Rejected(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 	iaPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	commitment := tests.RandomHex32()
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
-		Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+		Sources: guardSourcesFor(t, svc, hub, db.CashIdentityCash, commitment, iaPub),
 		NewIdentity: cashTransferNewIdentityParam{
-			IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), IAPubkey: iaPub,
+			IdentityType: db.CashIdentityCash, IdentityValue: commitment, IAPubkey: iaPub,
 		},
 	})
 	require.NotNil(t, resp.Error)
@@ -170,15 +237,16 @@ func TestConsolidate_ConnectionKeyTarget_UntrustedIA_Rejected(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 	untrustedIA, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	ck := tests.RandomHex32()
 
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
-		Sources: []consolidateSourceParam{{WalletPubkey: "a"}, {WalletPubkey: "b"}},
+		Sources: guardSourcesFor(t, svc, hub, db.CashIdentityConnectionKey, ck, untrustedIA),
 		NewIdentity: cashTransferNewIdentityParam{
-			IdentityType: db.CashIdentityConnectionKey, IdentityValue: tests.RandomHex32(), IAPubkey: untrustedIA,
+			IdentityType: db.CashIdentityConnectionKey, IdentityValue: ck, IAPubkey: untrustedIA,
 		},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code, "an untrusted IA is RESTRICTED (NIP-CASH §Consolidating Tokens, step 4)")
 	assert.Contains(t, resp.Error.Message, "not a trusted Identity Authority")
 }
 
@@ -209,7 +277,7 @@ func TestConsolidate_RejectsCashSource(t *testing.T) {
 	})
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "cash-mode sources are not supported")
+	assert.Contains(t, resp.Error.Message, "cash-mode sources are not accepted")
 }
 
 func TestConsolidate_SourceNotCustodied(t *testing.T) {
@@ -221,18 +289,18 @@ func TestConsolidate_SourceNotCustodied(t *testing.T) {
 	wallet := newFundedCashWallet(t, svc, hub, 1000)
 	newPk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 
-	// Sources whose wallet_pubkey this node does not custody. Custody is
-	// checked before the identity fields are, so they can be left empty here.
+	// A source whose wallet_pubkey this node does not hold fails authorization
+	// with the one uniform answer (NIP-CASH §Consolidating Tokens, step 2).
 	resp := handleCashConsolidateFor(t, svc, NewTestNip47Controller(svc), wallet, cashConsolidateParams{
 		Sources: []consolidateSourceParam{
-			{WalletPubkey: "deadbeef"},
+			{WalletPubkey: *wallet.WalletPubkey},
 			{WalletPubkey: "cafebabe"},
 		},
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPk},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_NOT_FOUND, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "custodies")
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code)
+	assert.Equal(t, "sources not authorized", resp.Error.Message)
 }
 
 // TestHandleCashConsolidateEvent_CashTarget_HappyPath: sum of two pubkey
@@ -458,7 +526,7 @@ func TestConsolidate_ConnectionKeySource_UntrustedIA_Rejected(t *testing.T) {
 	})
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, constants.ERROR_RESTRICTED, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "revoked")
+	assert.Contains(t, resp.Error.Message, "no longer trusted")
 
 	// Untouched — neither source may have moved.
 	claim1 := cashWalletClaimByIdentity(t, svc, s1.ID, db.CashIdentityPubkey, ownerPub)
@@ -515,7 +583,7 @@ func TestConsolidate_ConnectionKeySource_AttestationForWrongClaimant_Rejected(t 
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPub},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, resp.Error.Code, "an attestation that fails is the uniform refusal (NIP-CASH §Consolidating Tokens, step 2)")
 }
 
 // countingIAChecker wraps a fixed trust map and counts how many times

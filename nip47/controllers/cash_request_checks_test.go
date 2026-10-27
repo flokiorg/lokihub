@@ -73,7 +73,7 @@ func TestConsolidate_OverTheCeiling_RefusedBeforeAnySourceIsClaimed(t *testing.T
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: secretHash},
 	})
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, resp.Error.Code)
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code, "a sum over the ceiling is QUOTA_EXCEEDED (NIP-CASH §Consolidating Tokens, step 5)")
 
 	for _, source := range []*db.App{s1, s2} {
 		assert.Nil(t, cashWalletClaimByIdentity(t, svc, source.ID, db.CashIdentityPubkey, ownerPub).ClaimedAt)
@@ -110,7 +110,7 @@ func TestCashTransferAndConsolidate_ThrottledCallsAreRateLimited(t *testing.T) {
 
 	consolidate := handleCashConsolidateFor(t, svc, controller, wallet, cashConsolidateParams{
 		Sources: []consolidateSourceParam{
-			{WalletPubkey: tests.RandomHex32(), IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
+			{WalletPubkey: *wallet.WalletPubkey, IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
 			{WalletPubkey: tests.RandomHex32(), IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), IdentityEvent: "{}"},
 		},
 		NewIdentity: cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32()},

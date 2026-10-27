@@ -336,28 +336,8 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		refuse(constants.ERROR_BAD_REQUEST, "a zap transfer's new_identity must be a pubkey")
 		return
 	}
-	switch newType {
-	case db.CashIdentityCash:
-		if newIA != "" {
-			refuse(constants.ERROR_BAD_REQUEST, "new_identity must not carry ia_pubkey when identity_type is cash")
-			return
-		}
-		if !nipcash.ValidCommitment(newValue) {
-			refuse(constants.ERROR_BAD_REQUEST, "new_identity.identity_value must be a 64-character lowercase hex commitment of a secret you keep")
-			return
-		}
-	case db.CashIdentityPubkey, db.CashIdentityConnectionKey:
-		if err := cashwallet.ValidateIdentityShape(cashwallet.Deps{IAChecker: controller.iaChecker}, newType, newValue, newIA); err != nil {
-			if errors.Is(err, cashwallet.ErrRestricted) {
-				refuse(constants.ERROR_RESTRICTED, err.Error())
-				return
-			}
-			refuse(constants.ERROR_BAD_REQUEST, err.Error())
-			return
-		}
-	default:
-		refuse(constants.ERROR_BAD_REQUEST, fmt.Sprintf("new_identity.identity_type must be %q, %q, or %q",
-			db.CashIdentityPubkey, db.CashIdentityConnectionKey, db.CashIdentityCash))
+	if code, message := validateNewIdentity(controller.iaChecker, newType, newValue, newIA); code != "" {
+		refuse(code, message)
 		return
 	}
 

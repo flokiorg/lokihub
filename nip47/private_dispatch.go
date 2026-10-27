@@ -293,7 +293,8 @@ func (svc *nip47Service) ServePrivateItem(
 		controller.HandleCashTransferEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
 			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCashConsolidate:
-		controller.HandleCashConsolidateEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil)
+		controller.HandleCashConsolidateEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
+			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.HandleCreateCircleWalletEvent(ctx, request, requestEvent.ID, &app, collector.publish)
 	default:
@@ -610,7 +611,8 @@ func (svc *nip47Service) privateItemIsAuthorized(
 // requestIDMethods are the private methods that are calls carrying a request_id
 // checked at I6 and I7.
 var requestIDMethods = map[string]bool{
-	constants.NIP47MethodCashTransfer: true,
+	constants.NIP47MethodCashTransfer:    true,
+	constants.NIP47MethodCashConsolidate: true,
 }
 
 // refuseRequestID is I6 and I7 for a call: a missing or malformed request_id is
