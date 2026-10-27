@@ -167,7 +167,7 @@ const (
 	// full roster of that bill's recipients (identity, entitled amount,
 	// claimed status) — no invoice or preimage detail, since a cash_wallet has
 	// no list_transactions grant — or, for a bill this hub has destroyed, with
-	// a "spent" tombstone (see nip47.tryReplySpentBill).
+	// a "spent" tombstone on the private transport.
 	//
 	// Despite the name it is NOT scoped to the caller's own slice: every
 	// holder of the connection sees every row (NIP-CASH §Cash Status).

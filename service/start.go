@@ -127,7 +127,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 
 	svc.nip47Service.StartNotifier(ctx, pool)
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
-	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher, svc.PruneExpiredSpentBills,
+	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher,
 		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
 
@@ -167,7 +167,6 @@ func (svc *service) startNostr(ctx context.Context) error {
 	// Keeps the relay gate in step when a Cash Hub's spent-bill retention
 	// changes: raising it brings wallets back into range that the sweep has
 	// already dropped.
-	svc.eventPublisher.RegisterSubscriber(&cashRetentionConsumer{svc: svc})
 
 	// Fresh per startNostr call, like nostrGroup above: ReloadNostr can
 	// re-invoke this while the app runs, and the set must be rebuilt from the
@@ -301,11 +300,6 @@ func (svc *service) startAllExistingAppsWalletSubscriptions(ctx context.Context,
 			pubkeys = append(pubkeys, *app.WalletPubkey)
 		}
 		svc.walletRegistry.Add(pubkeys...)
-		// Destroyed cash bills still inside their hub's retention window: the
-		// relay gate has to let their requests through for the handler to
-		// answer "spent" (nip47.tryReplySpentBill). Their timers did not
-		// survive this restart, so the set is rebuilt from the archive.
-		svc.walletRegistry.Add(svc.retainedSpentBillPubkeys()...)
 
 		// One consumer for every wallet: with a shared subscription there is
 		// no per-wallet subscription left to cancel on deletion, so the
