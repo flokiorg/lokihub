@@ -137,6 +137,11 @@ type cashTransferResponse struct {
 	// same nested-encrypted way as NewWalletToken.
 	RemainderWalletPubkey string `json:"remainder_wallet_pubkey,omitempty"`
 	RemainderWalletToken  string `json:"remainder_wallet_token,omitempty"`
+	// IssuedAt and ExpiresAt are a zap transfer's zap bill's, exactly as signed,
+	// and present only on a zap transfer; ExpiresAt is 0, not omitted, for a bill
+	// that never expires (NIP-CASH §Transferring and Splitting a Slice, Response).
+	IssuedAt  *uint64 `json:"issued_at,omitempty"`
+	ExpiresAt *uint64 `json:"expires_at,omitempty"`
 }
 
 // newIdentityHash binds a transfer proof to a specific target identity —
@@ -314,12 +319,9 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	}
 
 	// A zap transfer's source is bound to a pubkey (NIP-CZ).
-	if params.ZapTarget != nil {
-		if claim.IdentityType != db.CashIdentityPubkey {
-			refuse(constants.ERROR_RESTRICTED, "a zap transfer's source must be bound to a pubkey")
-			return
-		}
-		refuse(constants.ERROR_NOT_IMPLEMENTED, "this hub does not make zap transfers")
+	isZap := params.ZapTarget != nil
+	if isZap && claim.IdentityType != db.CashIdentityPubkey {
+		refuse(constants.ERROR_RESTRICTED, "a zap transfer's source must be bound to a pubkey")
 		return
 	}
 
@@ -329,6 +331,10 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 	newType := params.NewIdentity.IdentityType
 	newValue := params.NewIdentity.IdentityValue
 	newIA := params.NewIdentity.IAPubkey
+	if isZap && newType != db.CashIdentityPubkey {
+		refuse(constants.ERROR_BAD_REQUEST, "a zap transfer's new_identity must be a pubkey")
+		return
+	}
 	switch newType {
 	case db.CashIdentityCash:
 		if newIA != "" {
@@ -364,7 +370,11 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		return
 	}
 	full := requested == uint64(claim.AmountMloki) //nolint:gosec // non-negative
-	spinOff, err := controller.transferSpinsOff(app, claim, full, newType, newValue)
+	// A zap transfer always spins off.
+	spinOff, err := isZap, error(nil)
+	if !isZap {
+		spinOff, err = controller.transferSpinsOff(app, claim, full, newType, newValue)
+	}
 	if err != nil {
 		logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to read a Cash wallet's recipient history")
 		refuse(constants.ERROR_INTERNAL, "failed to check wallet recipient history")
@@ -414,9 +424,13 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		if partialCash {
 			remainderType, remainderValue, remainderIA = db.CashIdentityCash, params.RemainderCommitment, ""
 		}
+		var zap *cashwallet.ZapParams
+		if isZap {
+			zap = &cashwallet.ZapParams{Target: *params.ZapTarget, Sender: claim.IdentityValue}
+		}
 		controller.handleCashTransferSplit(ctx, method, app, claim, requested, remainder,
 			newType, newValue, newIA, remainderType, remainderValue, remainderIA,
-			claimSigner, source, proofs, record, publishResponse, tags)
+			claimSigner, source, proofs, zap, record, publishResponse, tags)
 		return
 	}
 
@@ -595,7 +609,7 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, method string, app *db.App,
 	claim *db.CashWalletClaim, amount, remainder uint64,
 	newType, newValue, newIA, remainderType, remainderValue, remainderIA string,
-	deliverTo string, source apps.SliceRef, proofs []cashwallet.ClaimProof,
+	deliverTo string, source apps.SliceRef, proofs []cashwallet.ClaimProof, zap *cashwallet.ZapParams,
 	record func(resultMeta any) (*db.CashRequestRecord, error), publishResponse publishFunc, tags nostr.Tags) {
 	if app.ParentAppID == nil {
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_wallet has no parent hub; cannot split off a slice")
@@ -638,6 +652,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		ExpiresAt:              app.ExpiresAt,
 		Proofs:                 proofs,
 		Record:                 rec,
+		Zap:                    zap,
 	})
 	if err != nil {
 		controller.respondCommitError(publishResponse, method, app, err, "failed to split off slice")
@@ -683,6 +698,10 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		IdentityValue:   newValue,
 		NewWalletPubkey: carvedPubkey,
 		NewWalletToken:  carvedToken,
+	}
+	if z := result.Carved.Zap; z != nil {
+		issued, expires := z.IssuedAt, z.ExpiresAt
+		resp.IssuedAt, resp.ExpiresAt = &issued, &expires
 	}
 	if result.Remainder != nil {
 		remPubkey, remToken, ok := deliver(result.Remainder)

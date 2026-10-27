@@ -115,6 +115,15 @@ type App struct {
 	// atomic guard, only by callers wanting to show lineage.
 	SplitFromWalletAppID *uint
 
+	// The scheme-2 fields of a bill created by a zap transfer (NIP-CASH §Mint
+	// Provenance), kept for the bill's life so its payload can be rebuilt; nil on
+	// every other bill. Never the zap_target itself, only its sha256.
+	ZapIssuedAt   *int64
+	ZapExpiresAt  *int64
+	ZapTargetHash *string `gorm:"size:64"`
+	ZapRecipient  *string `gorm:"size:80"`
+	ZapSender     *string `gorm:"size:80"`
+
 	// CircleFeesPpm is a circle_wallet's forwarding-fee rate, fixed when the
 	// member joined (NIP-CW §Fees): a host changing the Hub's rate later
 	// affects only new members. Nil on wallets created before the column

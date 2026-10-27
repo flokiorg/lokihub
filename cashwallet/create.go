@@ -559,6 +559,14 @@ func MintRecord(requestID string, hub *db.App, deadline int64, resolved *Resolve
 type SplitResult struct {
 	WalletApp *db.App
 	CashToken string
+	// Zap is set for the bill of a zap transfer: its signed issued_at and
+	// expires_at (0 for never), which the reply carries exactly as signed.
+	Zap *ZapTimes
+}
+
+// ZapTimes are a zap bill's signed issued_at and expires_at, in unix seconds.
+type ZapTimes struct {
+	IssuedAt, ExpiresAt uint64
 }
 
 // Create resolves every recipient, creates a spend-only cash_wallet child of

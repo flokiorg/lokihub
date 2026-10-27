@@ -45,6 +45,19 @@ type SplitInTwoParams struct {
 	Proofs []ClaimProof
 	// Record, when set, is the call's record, written last under its deadline.
 	Record *db.CashRequestRecord
+
+	// Zap, when set, makes this a zap transfer (NIP-CZ): the carved bill is
+	// signed under the zap scheme for its pubkey, the remainder under the ordinary
+	// one.
+	Zap *ZapParams
+}
+
+// ZapParams are a zap transfer's scheme-2 inputs besides the carved bill: the
+// zapped event (signed as its sha256, never stored) and the source slice's
+// pubkey, whose proof authorized the transfer.
+type ZapParams struct {
+	Target string
+	Sender string
 }
 
 // SplitInTwoResult carries the created bill(s). Remainder is nil for a full
@@ -84,12 +97,21 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*Split
 	if params.RemainderAmountMloki > 0 {
 		carvedRole = db.CashRecordBillCarved
 	}
+	carved := bill(carvedRole, params.CarvedIdentityType, params.CarvedIdentityValue, params.CarvedIAPubkey, params.CarvedAmountMloki)
+	if params.Zap != nil {
+		// The zap bill inherits the source's expiry, or 0 for never.
+		var expires uint64
+		if params.ExpiresAt != nil {
+			expires = uint64(params.ExpiresAt.Unix()) //nolint:gosec // a unix time
+		}
+		carved.zap = &zapBill{recipient: params.CarvedIdentityValue, sender: params.Zap.Sender,
+			target: params.Zap.Target, expiresAt: expires}
+	}
 	plan := commitPlan{
-		op:       "split",
-		hub:      params.HubApp,
-		lockApps: []uint{source},
-		bills: []newBill{bill(carvedRole, params.CarvedIdentityType, params.CarvedIdentityValue,
-			params.CarvedIAPubkey, params.CarvedAmountMloki)},
+		op:        "split",
+		hub:       params.HubApp,
+		lockApps:  []uint{source},
+		bills:     []newBill{carved},
 		sources:   []apps.SliceRef{params.Source},
 		transfers: []internalTransfer{{fromAppID: source, toBill: 0, amount: params.CarvedAmountMloki}},
 		proofs:    params.Proofs,
@@ -107,6 +129,9 @@ func SplitInTwo(ctx context.Context, deps Deps, params SplitInTwoParams) (*Split
 	}
 
 	result := &SplitInTwoResult{Carved: &SplitResult{WalletApp: out[0].App, CashToken: out[0].Token}}
+	if params.Zap != nil {
+		result.Carved.Zap = &ZapTimes{IssuedAt: out[0].ZapIssuedAt, ExpiresAt: out[0].ZapExpiresAt}
+	}
 	if len(out) > 1 {
 		result.Remainder = &SplitResult{WalletApp: out[1].App, CashToken: out[1].Token}
 	}
