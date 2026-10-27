@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip44"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -181,4 +182,25 @@ func longContent() string {
 		out[i] = 'A'
 	}
 	return string(out)
+}
+
+// auditDSecBRawSealer seals an arbitrary plaintext to pt's inbox, as a client would.
+func auditDSecBRawSealer(t *testing.T, pt *privateTransport) func(plaintext string) *nostr.Event {
+	t.Helper()
+	return func(plaintext string) *nostr.Event {
+		t.Helper()
+		ephemeralPriv := nostr.GeneratePrivateKey()
+		ephemeralPub, err := nostr.GetPublicKey(ephemeralPriv)
+		require.NoError(t, err)
+		ck, err := nip44.GenerateConversationKey(pt.inboxXOnly, ephemeralPriv)
+		require.NoError(t, err)
+		ciphertext, err := nip44.Encrypt(plaintext, ck)
+		require.NoError(t, err)
+		return &nostr.Event{
+			Kind:    transport.KindPrivateRequest,
+			PubKey:  ephemeralPub,
+			Tags:    nostr.Tags{nostr.Tag{"p", pt.inboxXOnly}},
+			Content: ciphertext,
+		}
+	}
 }

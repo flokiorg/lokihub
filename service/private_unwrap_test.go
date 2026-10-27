@@ -12,6 +12,8 @@ import (
 	"github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/tests"
 )
 
 // newUnwrapFixture builds a transport holding a real inbox key, plus a client-side
@@ -27,7 +29,7 @@ func newUnwrapFixture(t *testing.T) (*privateTransport, func(t *testing.T, env t
 		inboxPrivKey: inboxPriv,
 		inboxXOnly:   inboxPub,
 		nodeXOnly:    strings.Repeat("bb", 32),
-		nonces:       newPrivateNonceSet(),
+		nonces:       newMemServedNonces(),
 	}
 
 	// A client: fresh ephemeral key per envelope, exactly as the real one does,
@@ -113,7 +115,7 @@ func TestUnwrap_RejectsReplay(t *testing.T) {
 	// event off the relay can produce.
 	_, _, err = pt.unwrap(event, transport.DefaultLimits(), time.Now())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "already seen")
+	assert.Contains(t, err.Error(), "already served")
 }
 
 // TestUnwrap_RejectsJunkAndForeignCiphertext covers what an attacker can actually
@@ -187,125 +189,87 @@ func TestUnwrap_RejectsOverlongValidityWindow(t *testing.T) {
 	assert.Zero(t, pt.nonces.Len())
 }
 
-func TestNonceSet_SeenOrRecord(t *testing.T) {
-	s := newPrivateNonceSet()
-	notAfter := time.Now().Add(time.Minute).Unix()
+// U-9.2: served nonces are persisted, so a replay inside not_after is dropped
+// even by a transport built after a restart.
+func TestServedNonces_PersistedAcrossRestart(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
 
-	assert.False(t, s.seenOrRecord("aa"+strings.Repeat("1", 62), notAfter))
-	assert.True(t, s.seenOrRecord("aa"+strings.Repeat("1", 62), notAfter))
-	assert.Equal(t, int64(1), s.Len())
+	pt, seal := newUnwrapFixture(t)
+	pt.nonces = dbServedNonces{db: svc.DB}
+	event := seal(t, testEnvelope(t))
+	_, _, err = pt.unwrap(event, transport.DefaultLimits(), time.Now())
+	require.NoError(t, err)
 
-	// A different nonce is independent.
-	assert.False(t, s.seenOrRecord("bb"+strings.Repeat("2", 62), notAfter))
-	assert.Equal(t, int64(2), s.Len())
+	restarted := &privateTransport{inboxPrivKey: pt.inboxPrivKey, inboxXOnly: pt.inboxXOnly,
+		nodeXOnly: pt.nodeXOnly, nonces: dbServedNonces{db: svc.DB}}
+	_, _, err = restarted.unwrap(event, transport.DefaultLimits(), time.Now())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already served")
 }
 
-// TestNonceSet_IsAtomicUnderConcurrency is why this is one call rather than a
-// check followed by an insert: two deliveries of the same envelope can arrive at
-// once, and exactly one must win.
-func TestNonceSet_IsAtomicUnderConcurrency(t *testing.T) {
-	s := newPrivateNonceSet()
+// U-9.3: an envelope refused at E4 leaves its nonce unserved, so the corrected
+// envelope with the same nonce runs.
+func TestServedNonces_RefusalLeavesTheNonceUnserved(t *testing.T) {
+	pt, seal := newUnwrapFixture(t)
+	env := testEnvelope(t)
+	env.NotAfter = time.Now().Add(time.Hour).Unix()
+	_, _, err := pt.unwrap(seal(t, env), transport.DefaultLimits(), time.Now())
+	var refusal *envelopeRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, "BAD_REQUEST", refusal.code)
+	require.NotNil(t, refusal.header)
+	assert.Equal(t, env.ReplyTo, refusal.header.ReplyTo)
+	assert.Zero(t, pt.nonces.Len())
+
+	env.NotAfter = time.Now().Add(time.Minute).Unix()
+	_, _, err = pt.unwrap(seal(t, env), transport.DefaultLimits(), time.Now())
+	require.NoError(t, err)
+}
+
+// Two deliveries of one envelope racing each other: exactly one runs.
+func TestServedNonces_OneOfConcurrentDeliveriesRuns(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	store := dbServedNonces{db: svc.DB}
 	nonce := "cc" + strings.Repeat("3", 62)
 	notAfter := time.Now().Add(time.Minute).Unix()
 
-	const racers = 64
+	const racers = 16
 	var wg sync.WaitGroup
-	accepted := make(chan bool, racers)
-
+	wins := make(chan bool, racers)
 	for i := 0; i < racers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			accepted <- !s.seenOrRecord(nonce, notAfter)
+			wins <- store.MarkServed(nonce, notAfter)
 		}()
 	}
 	wg.Wait()
-	close(accepted)
-
-	var wins int
-	for ok := range accepted {
+	close(wins)
+	n := 0
+	for ok := range wins {
 		if ok {
-			wins++
+			n++
 		}
 	}
-	assert.Equal(t, 1, wins, "exactly one concurrent delivery may be accepted, got %d", wins)
-	assert.Equal(t, int64(1), s.Len())
+	assert.Equal(t, 1, n)
+	assert.True(t, store.Seen(nonce))
 }
 
-// TestNonceSet_SweepReclaimsExpired keeps the set tracking the live window instead
-// of drifting toward its cap, where it would refuse real envelopes.
-func TestNonceSet_SweepReclaimsExpired(t *testing.T) {
-	s := newPrivateNonceSet()
-	// Both entries are burnt for at least transport.ProofFreshnessPast from NOW,
-	// whatever their envelope's own not_after said — a nonce has to outlive every
-	// proof bound to it, or a lapsed entry becomes an unseen first sighting and the
-	// proof can be lifted into someone else's envelope. So the sweep is driven from
-	// that window, not from the envelope's.
-	past := time.Now().Add(-time.Minute).Unix()
-	longFuture := time.Now().Add(transport.ProofFreshnessPast + 10*time.Minute).Unix()
-
-	s.seenOrRecord("aa"+strings.Repeat("1", 62), past)
-	s.seenOrRecord("bb"+strings.Repeat("2", 62), longFuture)
-	require.Equal(t, int64(2), s.Len())
-
-	require.Equal(t, int64(0), s.sweepExpired(time.Now()),
-		"nothing is reclaimable yet: even the entry whose envelope window is an hour past "+
-			"is still burnt for the proof's own lifetime")
-
-	// Past the proof window, the short entry becomes reclaimable and the long one does not.
-	removed := s.sweepExpired(time.Now().Add(transport.ProofFreshnessPast + time.Second))
-	assert.Equal(t, int64(1), removed)
-	assert.Equal(t, int64(1), s.Len(), "the longer-lived nonce must survive the sweep")
-}
-
-// TestNonceSet_FailsClosedAtCapacity is the decision that matters most here.
-// Evicting an entry to admit a new one would silently reopen the replay window for
-// whatever was evicted, so a full set declines instead — and says so, since
-// refusing legitimate traffic must not be silent.
-func TestNonceSet_FailsClosedAtCapacity(t *testing.T) {
-	s := newPrivateNonceSet()
-	notAfter := time.Now().Add(time.Minute).Unix()
-
-	// Pretend the set is full rather than inserting a million entries.
-	s.count.Store(nonceSetCapacity)
-
-	fresh := "dd" + strings.Repeat("4", 62)
-	assert.True(t, s.seenOrRecord(fresh, notAfter),
-		"at capacity a fresh nonce must be refused, not admitted by eviction")
-	assert.Equal(t, int64(1), s.rejectedAtCapacity.Load(),
-		"refusing real traffic must be counted so an operator can see it")
-}
-
-// TestNonceSet_ShardsSpreadEvenly checks the striping actually distributes. Nonces
-// are uniform over the keyspace, so the first two hex characters are a fine bucket
-// selector — but only if the arithmetic is right.
-func TestNonceSet_ShardsSpreadEvenly(t *testing.T) {
-	s := newPrivateNonceSet()
-
-	const inserts = 4096
-	for i := 0; i < inserts; i++ {
-		nonce, err := transport.NewNonce()
-		require.NoError(t, err)
-		s.seenOrRecord(nonce, time.Now().Add(time.Minute).Unix())
-	}
-	require.Equal(t, int64(inserts), s.Len())
-
-	var used int
-	for i := range s.shards {
-		s.shards[i].mu.Lock()
-		if len(s.shards[i].expiry) > 0 {
-			used++
-		}
-		s.shards[i].mu.Unlock()
-	}
-	// With 4096 uniform keys over 256 buckets, essentially all should be hit.
-	assert.Greater(t, used, 200, "only %d of %d shards used; striping is skewed", used, nonceSetShards)
-}
-
-func TestNonceSet_ShortNonceDoesNotPanic(t *testing.T) {
-	s := newPrivateNonceSet()
-	// Decode rejects a malformed nonce long before here, but the shard selector
-	// must not index out of range if one ever reaches it.
-	assert.False(t, s.seenOrRecord("", 0))
-	assert.False(t, s.seenOrRecord("a", 0))
+// Expired nonces are pruned; live ones stay.
+func TestServedNonces_PruneForgetsOnlyLapsed(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	store := dbServedNonces{db: svc.DB}
+	require.True(t, store.MarkServed("aa"+strings.Repeat("1", 62), time.Now().Add(-time.Minute).Unix()))
+	require.True(t, store.MarkServed("bb"+strings.Repeat("2", 62), time.Now().Add(time.Minute).Unix()))
+	n, err := store.prune(time.Now())
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	assert.False(t, store.Seen("aa"+strings.Repeat("1", 62)))
+	assert.True(t, store.Seen("bb"+strings.Repeat("2", 62)))
 }

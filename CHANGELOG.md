@@ -9,6 +9,8 @@ audits of both.
 
 ### Added
 
+- Adds `PRIVATE_INBOX_EVENTS_PER_MIN` (600): the envelopes decrypted per relay
+  connection a minute; the rest are dropped undecrypted.
 - Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`
   (86400) and `CASH_REDEEM_MAX_FINAL_CLTV` (288) refuse an invoice over them
   `RESTRICTED`; `CASH_REDEEM_INFLIGHT_PER_HUB` (32) and
@@ -81,6 +83,12 @@ audits of both.
 
 ### Changed
 
+- Serves private-transport envelopes through nmilat's E1 to E6 classifier: an
+  envelope refused at E4 to E6 gets an envelope-level `BAD_REQUEST` or
+  `QUOTA_EXCEEDED` reply and its nonce stays unserved; served nonces are kept in
+  the database (`private_served_nonces`) until their `not_after`, so a replay is
+  dropped across a restart, and a nonce that cannot be recorded drops the
+  envelope. Replies are dated a random 0 to 48 hours in the past.
 - Serves private-transport items in NIP-CASH's I2 to I10 order: a destroyed
   bill is answered with its tombstone for `cash_redeem`, `cash_transfer` and
   `cash_consolidate` as well as `cash_status`; a method this hub does not serve is
