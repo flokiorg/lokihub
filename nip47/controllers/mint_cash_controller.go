@@ -172,18 +172,8 @@ func (controller *nip47Controller) HandleMintCashEvent(ctx context.Context, nip4
 	}
 
 	// The record is written in the same commit as the bill, under the deadline
-	// (NIP-CASH §The Record): the Hub's connection is both the target and the
-	// authorizer of a mint.
-	echoed := make([]nipcash.RecipientResult, len(resolved.Recipients))
-	for i, r := range resolved.Recipients {
-		echoed[i] = nipcash.RecipientResult{
-			IdentityType:  r.IdentityType,
-			IdentityValue: r.IdentityValue,
-			IAPubkey:      r.IAPubkey,
-			AmountMillis:  r.AmountMloki,
-		}
-	}
-	record, err := mintRecord(params.RequestID, nip47Request.Method, app, meta.Deadline, resolved.ExpiresAt, echoed)
+	// (NIP-CASH §The Record).
+	record, err := cashwallet.MintRecord(params.RequestID, app, meta.Deadline, resolved)
 	if err != nil {
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "could not record this call")
 		return
@@ -235,39 +225,6 @@ func mintCashReply(walletPubkey, cashToken string, expiresAt *time.Time, recipie
 		out.ExpiresAt = &at
 	}
 	return out
-}
-
-// mintRecord is a mint's record: the Hub's connection is its target and its
-// authorizer, and result_meta holds the reply's non-secret fields other than the
-// bill itself (which the record's bill row carries).
-func mintRecord(requestID, method string, hub *db.App, deadline int64, expiresAt *time.Time, recipients []nipcash.RecipientResult) (*db.CashRequestRecord, error) {
-	target := hub.AppPubkey
-	if hub.WalletPubkey != nil && *hub.WalletPubkey != "" {
-		target = *hub.WalletPubkey
-	}
-	meta := struct {
-		ExpiresAt  *int64                    `json:"expires_at,omitempty"`
-		Recipients []nipcash.RecipientResult `json:"recipients"`
-	}{Recipients: recipients}
-	if expiresAt != nil {
-		at := expiresAt.Unix()
-		meta.ExpiresAt = &at
-	}
-	raw, err := json.Marshal(meta)
-	if err != nil {
-		return nil, err
-	}
-	return &db.CashRequestRecord{
-		RequestID:          requestID,
-		Method:             method,
-		HubAppID:           hub.ID,
-		TargetWalletPubkey: target,
-		TargetConnPubkey:   hub.AppPubkey,
-		AuthorizerKind:     "client",
-		Authorizer:         hub.AppPubkey,
-		Deadline:           deadline,
-		ResultMeta:         string(raw),
-	}, nil
 }
 
 // commitErrorMessage is the reply text for a failed commit: fixed for the

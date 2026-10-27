@@ -20,6 +20,7 @@ package cashwallet
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sync"
@@ -508,6 +509,47 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved, record *db.CashR
 		CashToken:  bill.Token,
 		ExpiresAt:  resolved.ExpiresAt,
 		Recipients: recipientResults,
+	}, nil
+}
+
+// MintRecord is a mint's record (NIP-CASH §The Record): the Hub's connection is
+// its target and its authorizer, and result_meta holds the reply's non-secret
+// fields other than the bill itself, which the record's bill row carries.
+func MintRecord(requestID string, hub *db.App, deadline int64, resolved *Resolved) (*db.CashRequestRecord, error) {
+	target := hub.AppPubkey
+	if hub.WalletPubkey != nil && *hub.WalletPubkey != "" {
+		target = *hub.WalletPubkey
+	}
+	meta := struct {
+		ExpiresAt  *int64                    `json:"expires_at,omitempty"`
+		Recipients []nipcash.RecipientResult `json:"recipients"`
+	}{Recipients: make([]nipcash.RecipientResult, len(resolved.Recipients))}
+	for i, r := range resolved.Recipients {
+		meta.Recipients[i] = nipcash.RecipientResult{
+			IdentityType:  r.IdentityType,
+			IdentityValue: r.IdentityValue,
+			IAPubkey:      r.IAPubkey,
+			AmountMillis:  r.AmountMloki,
+		}
+	}
+	if resolved.ExpiresAt != nil {
+		at := resolved.ExpiresAt.Unix()
+		meta.ExpiresAt = &at
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return nil, err
+	}
+	return &db.CashRequestRecord{
+		RequestID:          requestID,
+		Method:             constants.NIP47MethodMintCash,
+		HubAppID:           hub.ID,
+		TargetWalletPubkey: target,
+		TargetConnPubkey:   hub.AppPubkey,
+		AuthorizerKind:     "client",
+		Authorizer:         hub.AppPubkey,
+		Deadline:           deadline,
+		ResultMeta:         string(raw),
 	}, nil
 }
 
