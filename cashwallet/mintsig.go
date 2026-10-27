@@ -19,11 +19,12 @@ func hubGroupInput(hub *db.App) string {
 	return hub.AppPubkey
 }
 
-// issueCashToken signs a new bill under cash-mint:v1 with the node identity and
+// issueCashToken signs a new bill with the node identity, under cash-mint:v1, or
+// under cash-zap:v1 when zap is set (a bill created by a zap transfer), and
 // encodes it (NIP-CASH §Mint Provenance, §Wire Format), returning the signed token
 // and its encoding. It runs inside the call's commit transaction, before COMMIT: a
 // Hub never issues an unsigned bill, and a failure here rolls the whole call back.
-func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hub *db.App) (nipcash.Token, string, error) {
+func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hub *db.App, zap *nipcash.ZapContext) (nipcash.Token, string, error) {
 	amt := amountMillis
 	tok := nipcash.Token{
 		HRP:                  constants.CashTokenHRP,
@@ -42,7 +43,11 @@ func issueCashToken(ctx context.Context, ln lnclient.LNClient, walletPubkey, sec
 	if err != nil {
 		return nipcash.Token{}, "", err
 	}
-	signed, err := nipcash.SignToken(tok, nipcash.SchemeMintV1, nil, xonly, nodesign.Signer(ctx, ln))
+	scheme := nipcash.SchemeMintV1
+	if zap != nil {
+		scheme = nipcash.SchemeZapV1
+	}
+	signed, err := nipcash.SignToken(tok, scheme, zap, xonly, nodesign.Signer(ctx, ln))
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("wallet_pubkey", walletPubkey).Msg("Could not sign a bill's mint provenance")
 		return nipcash.Token{}, "", fmt.Errorf("provenance unavailable; nothing was committed: %w", err)

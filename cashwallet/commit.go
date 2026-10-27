@@ -2,6 +2,7 @@ package cashwallet
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -81,6 +82,17 @@ type newBill struct {
 	claims           []db.CashWalletClaim
 	identityRequired bool
 	splitFrom        *uint
+	// zap, when set, makes this the bill of a zap transfer: signed under the zap
+	// scheme with issued_at taken from the clock inside the commit.
+	zap *zapBill
+}
+
+// zapBill is what a zap bill signs beside its amount (NIP-CASH §Mint Provenance,
+// scheme 2): recipient and sender pubkeys, the zap_target (signed as its sha256,
+// never stored) and the expiry inherited from the source, 0 for never.
+type zapBill struct {
+	recipient, sender, target string
+	expiresAt                 uint64
 }
 
 type internalTransfer struct {
@@ -110,10 +122,13 @@ type commitPlan struct {
 	record *db.CashRequestRecord
 }
 
-// committedBill is a bill a commit created, and the token it was issued with.
+// committedBill is a bill a commit created, and the token it was issued with;
+// ZapIssuedAt and ZapExpiresAt are set for a zap bill.
 type committedBill struct {
-	App   *db.App
-	Token string
+	App          *db.App
+	Token        string
+	ZapIssuedAt  uint64
+	ZapExpiresAt uint64
 }
 
 // commit runs plan in one transaction:
@@ -165,9 +180,18 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 
 		tokens := make([]string, len(plan.bills))
 		signed := make([]nipcash.Token, len(plan.bills))
+		zaps := make([]*nipcash.ZapContext, len(plan.bills))
 		for i, b := range plan.bills {
 			identityRequired := b.identityRequired
-			tok, encoded, err := issueCashToken(ctx, deps.LNClient, *billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub)
+			if b.zap != nil {
+				// issued_at is the clock inside the commit, before the signature.
+				zaps[i] = &nipcash.ZapContext{Recipient: b.zap.recipient, Sender: b.zap.sender, ZapTarget: b.zap.target,
+					IssuedAt: uint64(deps.now().Unix()), ExpiresAt: b.zap.expiresAt} //nolint:gosec // a unix time
+				if err := storeZapFieldsTx(tx, billApps[i].ID, zaps[i]); err != nil {
+					return err
+				}
+			}
+			tok, encoded, err := issueCashToken(ctx, deps.LNClient, *billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub, zaps[i])
 			if err != nil {
 				return fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
 			}
@@ -238,7 +262,7 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		if plan.record != nil {
 			bills := make([]db.CashRequestRecordBill, len(billApps))
 			for i := range billApps {
-				bills[i] = recordBill(plan.bills[i].role, billApps[i], signed[i])
+				bills[i] = recordBill(plan.bills[i].role, billApps[i], signed[i], zaps[i])
 			}
 			if err := deps.requests().CommitTx(tx, plan.record, bills); err != nil {
 				return err
@@ -258,6 +282,9 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		out = make([]committedBill, len(billApps))
 		for i := range billApps {
 			out[i] = committedBill{App: billApps[i], Token: tokens[i]}
+			if zaps[i] != nil {
+				out[i].ZapIssuedAt, out[i].ZapExpiresAt = zaps[i].IssuedAt, zaps[i].ExpiresAt
+			}
 		}
 		return nil
 	})
@@ -333,7 +360,7 @@ func createBillAppTx(tx *gorm.DB, deps Deps, hub *db.App, b newBill) (*db.App, s
 
 // recordBill is what a lookup needs to rebuild a bill's token without storing
 // it: the connection secret is re-derived from the app id.
-func recordBill(role string, app *db.App, tok nipcash.Token) db.CashRequestRecordBill {
+func recordBill(role string, app *db.App, tok nipcash.Token, zap *nipcash.ZapContext) db.CashRequestRecordBill {
 	relays, _ := json.Marshal(tok.RelayURLs)
 	if tok.RelayURLs == nil {
 		relays = []byte("[]")
@@ -360,5 +387,35 @@ func recordBill(role string, app *db.App, tok nipcash.Token) db.CashRequestRecor
 		g := hex.EncodeToString(tok.HubGroup)
 		rb.HubGroup = &g
 	}
+	if zap != nil {
+		f := zapFields(zap)
+		rb.ZapIssuedAt, rb.ZapExpiresAt, rb.ZapTargetHash, rb.ZapRecipient, rb.ZapSender =
+			f.issuedAt, f.expiresAt, f.targetHash, f.recipient, f.sender
+	}
 	return rb
+}
+
+// storedZapFields are a zap bill's scheme-2 fields as stored: the target only as
+// its sha256, the identities as pubkey/<hex>.
+type storedZapFields struct {
+	issuedAt, expiresAt           *int64
+	targetHash, recipient, sender *string
+}
+
+func zapFields(z *nipcash.ZapContext) storedZapFields {
+	sum := sha256.Sum256([]byte(z.ZapTarget))
+	issued, expires := int64(z.IssuedAt), int64(z.ExpiresAt) //nolint:gosec // unix times
+	hash := hex.EncodeToString(sum[:])
+	recipient, sender := "pubkey/"+z.Recipient, "pubkey/"+z.Sender
+	return storedZapFields{issuedAt: &issued, expiresAt: &expires, targetHash: &hash, recipient: &recipient, sender: &sender}
+}
+
+// storeZapFieldsTx keeps a zap bill's scheme-2 fields on its app for the bill's
+// life (NIP-CASH §Mint Provenance).
+func storeZapFieldsTx(tx *gorm.DB, appID uint, z *nipcash.ZapContext) error {
+	f := zapFields(z)
+	return tx.Model(&db.App{}).Where("id = ?", appID).Updates(map[string]interface{}{
+		"zap_issued_at": f.issuedAt, "zap_expires_at": f.expiresAt, "zap_target_hash": f.targetHash,
+		"zap_recipient": f.recipient, "zap_sender": f.sender,
+	}).Error
 }

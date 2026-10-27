@@ -97,16 +97,6 @@ func TestCashTransfer_StepOrder(t *testing.T) {
 			},
 			wantCode: constants.ERROR_BAD_REQUEST, wantMsg: "remainder_commitment", wantMarked: true,
 		},
-		{
-			name: "a zap_target on a pubkey source is not served",
-			build: func(t *testing.T, f *transferFixture) built {
-				to, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-				p := f.params(t, to, 5_000, false, testRequestID())
-				p.ZapTarget = strPtr(tests.RandomHex32())
-				return built{p, nil}
-			},
-			wantCode: constants.ERROR_NOT_IMPLEMENTED, wantMarked: true,
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

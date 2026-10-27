@@ -9,6 +9,10 @@ audits of both.
 
 ### Added
 
+- Makes zap transfers (NIP-CZ): a `cash_transfer` with `zap_target` spins the
+  slice off into a bill signed under the zap scheme, whose `issued_at` and
+  `expires_at` the reply returns exactly as signed; the hub keeps the zap fields
+  with the bill and stores the target only as its hash.
 - Adds `CASH_MAX_REQUEST_AGE_SECS`, the horizon H a request's deadline may lie
   ahead (default 300, 60 to 86400); it can be raised, never lowered.
 - Adds the Cash Hub, which issues multi-recipient cash bills held by a secret
@@ -68,8 +72,7 @@ audits of both.
   nmilat, `m` tag and exact tags included), a wrong cash secret, or an item proof
   by another key is `UNAUTHORIZED`; an untrusted IA and dust are `RESTRICTED`. A
   full transfer to an identity already holding a slice on the bill spins off, a
-  cash slice's partial split takes a fresh `remainder_commitment`, and a
-  `zap_target` is refused with `NOT_IMPLEMENTED` until zap transfers ship.
+  cash slice's partial split takes a fresh `remainder_commitment`.
 - Requires a `request_id` on `cash_transfer`: a missing or malformed one is
   refused before the item's proofs (`BAD_REQUEST`), a used one with
   `REQUEST_REUSED`; it is marked used once the call is authorized, and the
