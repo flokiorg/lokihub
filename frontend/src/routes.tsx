@@ -51,6 +51,7 @@ import { SetupSecurity } from "src/screens/setup/SetupSecurity";
 import { SetupServices } from "src/screens/setup/SetupServices";
 import { FLNDForm } from "src/screens/setup/node/FLNDForm";
 import { InternalAppDetail } from "src/screens/apps/InternalAppDetail";
+import { Listings } from "src/screens/listings/Listings";
 import { CashHubDashboard } from "src/screens/subwallets/CashHubDashboard";
 import { CashHubList } from "src/screens/subwallets/CashHubList";
 import { NewCircleHub } from "src/screens/subwallets/NewCircleHub";
@@ -346,6 +347,12 @@ const routes: RouteObject[] = [
                 element: <CashHubDashboard />,
               },
             ],
+          },
+          {
+            path: "listings",
+            element: <DefaultRedirect />,
+            handle: { crumb: () => "Listings" },
+            children: [{ index: true, element: <Listings /> }],
           },
           {
             path: "internal-apps",
