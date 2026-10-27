@@ -9,6 +9,20 @@ audits of both.
 
 ### Added
 
+- Sells a Cash Hub's cash through NIP-CO Order connections. The operator
+  creates any number per Cash Hub (`POST /api/cash-hubs/:id/order-connections`
+  returns the signed `cashorder1` string, shown again by the list), retires one
+  for good (`POST …/order-connections/:conn/retire`) and sets the selling terms
+  (`GET`/`PUT /api/cash-hubs/:id/order-terms`: Lightning and on-chain amounts,
+  fees, windows, confirmation tiers, bill terms and open-order ceilings,
+  refused rather than clamped out of bounds); the same routes exist in Wails.
+  An Order connection answers `get_info` only on the standard transport, with
+  its terms (`{}` once retired), and takes `cash_order` items on the private
+  transport: checked in NIP-CO's order, the order is recorded with its invoice
+  or a fresh address, its reservation and its request record, moving no funds;
+  `cash_lookup` reads it back with the buyer key. A Cash Hub's per-wallet
+  ceiling can no longer drop below an offered `max_millis`, and an Order
+  connection is deleted only with its Hub.
 - Adds the circle operator screens for NIP-CW: the circle settings editor
   covers the default lifetime, receive ceiling, holdings ceiling, routing-fee
   reserve, outbound ceiling and period, grace period, dust threshold and member

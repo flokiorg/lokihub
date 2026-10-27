@@ -194,6 +194,14 @@ type MockLn struct {
 	// than a finding. A test exercising the real preimage->hash binding sets this.
 	HoldInvoiceBindsPreimage bool
 
+	// Channels is what ListChannels answers (none by default).
+	Channels []lnclient.Channel
+	// OnchainAddresses, when non-empty, is dequeued one per GetNewOnchainAddress.
+	OnchainAddresses []string
+	// CancelledInvoices records the payment hashes CancelHoldInvoice was asked
+	// to cancel.
+	CancelledInvoices []string
+
 	callsMu              sync.Mutex
 	sendPaymentSyncCalls []SendPaymentSyncCall
 	makeInvoiceAmounts   []int64
@@ -422,6 +430,9 @@ func (mln *MockLn) SettleHoldInvoice(ctx context.Context, preimage string) (err 
 }
 
 func (mln *MockLn) CancelHoldInvoice(ctx context.Context, paymentHash string) (err error) {
+	mln.callsMu.Lock()
+	mln.CancelledInvoices = append(mln.CancelledInvoices, paymentHash)
+	mln.callsMu.Unlock()
 	return nil
 }
 
@@ -459,7 +470,7 @@ func (mln *MockLn) Shutdown() error {
 }
 
 func (mln *MockLn) ListChannels(ctx context.Context) (channels []lnclient.Channel, err error) {
-	return []lnclient.Channel{}, nil
+	return append([]lnclient.Channel{}, mln.Channels...), nil
 }
 func (mln *MockLn) GetNodeConnectionInfo(ctx context.Context) (nodeConnectionInfo *lnclient.NodeConnectionInfo, err error) {
 	return nil, nil
@@ -474,6 +485,13 @@ func (mln *MockLn) CloseChannel(ctx context.Context, closeChannelRequest *lnclie
 	return nil, nil
 }
 func (mln *MockLn) GetNewOnchainAddress(ctx context.Context) (string, error) {
+	mln.callsMu.Lock()
+	defer mln.callsMu.Unlock()
+	if len(mln.OnchainAddresses) > 0 {
+		a := mln.OnchainAddresses[0]
+		mln.OnchainAddresses = mln.OnchainAddresses[1:]
+		return a, nil
+	}
 	return "", nil
 }
 func (mln *MockLn) GetBalances(ctx context.Context, includeInactiveChannels bool) (*lnclient.BalancesResponse, error) {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appstore"
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/constants"
@@ -252,6 +253,11 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
 	fullAccessApiGroup.GET("/cash-hubs/stats", httpSvc.allCashHubStatsHandler)
 	fullAccessApiGroup.GET("/cash-hubs/:id/delete-check", httpSvc.cashHubDeleteCheckHandler)
+	fullAccessApiGroup.POST("/cash-hubs/:id/order-connections", httpSvc.orderConnectionCreateHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/order-connections", httpSvc.orderConnectionsListHandler)
+	fullAccessApiGroup.POST("/cash-hubs/:id/order-connections/:conn/retire", httpSvc.orderConnectionRetireHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/order-terms", httpSvc.orderTermsGetHandler)
+	fullAccessApiGroup.PUT("/cash-hubs/:id/order-terms", httpSvc.orderTermsPutHandler)
 	fullAccessApiGroup.GET("/apps/:id/circle-stats", httpSvc.circleHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
@@ -2198,6 +2204,97 @@ func (httpSvc *HttpService) cashHubDeleteCheckHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "could not read this hub's records"})
 	}
 	return c.JSON(http.StatusOK, check)
+}
+
+// orderError maps an Order connection or terms error to its HTTP answer: a
+// refused input 400, a node that cannot sign 503, anything else 500.
+func (httpSvc *HttpService) orderError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, constants.ErrInvalidParams):
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+	case errors.Is(err, cashorder.ErrSignerUnavailable):
+		return c.JSON(http.StatusServiceUnavailable, ErrorResponse{Message: err.Error()})
+	}
+	httpSvc.logger.Error().Err(err).Msg("Failed to serve an order connection request")
+	return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+}
+
+// orderConnectionCreateHandler creates an Order connection for a Cash Hub.
+func (httpSvc *HttpService) orderConnectionCreateHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Label string `json:"label"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	conn, err := httpSvc.api.CreateOrderConnection(dbApp, body.Label)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, conn)
+}
+
+// orderConnectionsListHandler lists a Cash Hub's Order connections.
+func (httpSvc *HttpService) orderConnectionsListHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	conns, err := httpSvc.api.ListOrderConnections(dbApp)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, conns)
+}
+
+// orderConnectionRetireHandler retires an Order connection (irreversible).
+func (httpSvc *HttpService) orderConnectionRetireHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	connID, err := strconv.ParseUint(c.Param("conn"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "invalid order connection id"})
+	}
+	if err := httpSvc.api.RetireOrderConnection(dbApp, uint(connID)); err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// orderTermsGetHandler is a Cash Hub's selling terms (null while it sells nothing).
+func (httpSvc *HttpService) orderTermsGetHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	terms, err := httpSvc.api.GetOrderTerms(dbApp)
+	if err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.JSON(http.StatusOK, terms)
+}
+
+// orderTermsPutHandler sets a Cash Hub's selling terms, refusing (never
+// clamping) any out of bounds.
+func (httpSvc *HttpService) orderTermsPutHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body cashorder.Settings
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	if err := httpSvc.api.PutOrderTerms(dbApp, body); err != nil {
+		return httpSvc.orderError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // circleIdentitiesListHandler lists every CircleIdentity, for the

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -71,6 +72,9 @@ type getInfoResponse struct {
 	Metadata         interface{}       `json:"metadata,omitempty"`
 	LightningAddress *string           `json:"lud16"`
 	CircleWallet     *circleWalletInfo `json:"circle_wallet,omitempty"`
+	// CashOrder is an Order connection's selling terms (NIP-CO §Terms): {} when
+	// it is retired or its Hub sells nothing.
+	CashOrder json.RawMessage `json:"cash_order,omitempty"`
 }
 
 func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47Request *models.Request, requestEventId uint, app *db.App, publishResponse publishFunc) {
@@ -163,6 +167,14 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 		network := cashNetwork(info.Network)
 		chain := nodesign.Chain
 		responsePayload.Network, responsePayload.Chain = &network, &chain
+		if app.Kind == db.AppKindCashOrder {
+			if err := controller.orderConnectionInfo(app, responsePayload); err != nil {
+				logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to read an order connection's terms")
+				publishResponse(&models.Response{ResultType: nip47Request.Method,
+					Error: &models.Error{Code: constants.ERROR_INTERNAL, Message: "could not read this connection's terms"}}, nostr.Tags{})
+				return
+			}
+		}
 		if app.Kind == db.AppKindCashHub || app.Kind == db.AppKindCircleHub {
 			// The node identity that signs the announcement and every string.
 			identity, err := nipcash.MinterXOnly(controller.lnClient.GetPubkey())
@@ -195,7 +207,7 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 // its bills, Circle Wallet Hubs and their wallets.
 func isCashConnection(kind string) bool {
 	switch kind {
-	case db.AppKindCashHub, db.AppKindCashWallet, db.AppKindCircleHub, db.AppKindCircleWallet:
+	case db.AppKindCashHub, db.AppKindCashWallet, db.AppKindCircleHub, db.AppKindCircleWallet, db.AppKindCashOrder:
 		return true
 	}
 	return false
@@ -244,4 +256,34 @@ func (controller *nip47Controller) circleWalletTerms(app *db.App, identity strin
 		MinBudgetRenewal:          providerConfig.MinBudgetRenewal,
 		Accepting:                 providerConfig.AcceptingJoins == nil || *providerConfig.AcceptingJoins,
 	}, nil
+}
+
+// orderConnectionInfo is an Order connection's get_info (NIP-CO §Terms): get_info
+// on this transport, cash_lookup and cash_order on the private one, the Hub
+// identity as pubkey, and the Hub's terms, or {} once the connection is retired
+// (from the moment the retirement commits) or while its Hub sells nothing.
+func (controller *nip47Controller) orderConnectionInfo(app *db.App, out *getInfoResponse) error {
+	identity, err := nipcash.MinterXOnly(controller.lnClient.GetPubkey())
+	if err != nil {
+		return err
+	}
+	out.Pubkey = &identity
+	out.Methods = []string{models.GET_INFO_METHOD}
+	out.PrivateMethods = []string{constants.NIP47MethodCashLookup, constants.NIP47MethodCashOrder}
+	out.Alias, out.Color, out.BlockHeight, out.BlockHash, out.Metadata, out.LightningAddress = nil, nil, nil, nil, nil, nil
+	out.CashOrder = json.RawMessage("{}")
+	conn, err := cashorder.ConnectionOf(controller.db, app.ID)
+	if err != nil || conn == nil || conn.RetiredAt != nil {
+		return err
+	}
+	settings, ok, err := cashorder.GetSettings(controller.db, conn.HubAppID)
+	if err != nil || !ok || settings.Terms.SellsNothing() {
+		return err
+	}
+	terms, err := json.Marshal(settings.Terms)
+	if err != nil {
+		return err
+	}
+	out.CashOrder = terms
+	return nil
 }

@@ -52,6 +52,10 @@ func Models() []any {
 		&db.CashHorizon{},
 		&db.CashBillArchive{},
 		&db.CashBillSliceArchive{},
+		&db.CashOrderConnection{},
+		&db.CashOrderTerms{},
+		&db.CashOrder{},
+		&db.CashOrderAddress{},
 	}
 }
 

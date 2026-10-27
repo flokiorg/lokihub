@@ -419,6 +419,21 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	// changes that. mint_cash stays on this transport because it is the hub
 	// owner's method on the hub's own connection, and NIP-CASH keeps it off the
 	// private transport for its own reasons.
+	// An Order connection is granted get_info only on this transport, and
+	// cash_order is never served here (NIP-CO §What It Allows), refused before
+	// any scope or method dispatch.
+	if (app.Kind == db.AppKindCashOrder && nip47Request.Method != models.GET_INFO_METHOD) ||
+		nip47Request.Method == constants.NIP47MethodCashOrder {
+		publishResponse(&models.Response{
+			ResultType: nip47Request.Method,
+			Error: &models.Error{
+				Code:    constants.ERROR_NOT_IMPLEMENTED,
+				Message: nip47Request.Method + " is not served on this connection over this transport",
+			},
+		}, nostr.Tags{})
+		return
+	}
+
 	switch nip47Request.Method {
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,

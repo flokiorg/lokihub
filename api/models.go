@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -40,6 +41,12 @@ type API interface {
 	// (NIP-CW §Recovering a Lost Connection) to a circle hub; the result names
 	// the NIP-CW code it was refused with, if any.
 	SubmitCircleMemberRequest(app *db.App, event json.RawMessage) (*circlelife.MemberRequestResult, error)
+	// Order connections and selling terms of a Cash Hub (NIP-CO).
+	CreateOrderConnection(hub *db.App, label string) (*cashorder.Connection, error)
+	ListOrderConnections(hub *db.App) ([]cashorder.Connection, error)
+	RetireOrderConnection(hub *db.App, connAppID uint) error
+	GetOrderTerms(hub *db.App) (*cashorder.Settings, error)
+	PutOrderTerms(hub *db.App, s cashorder.Settings) error
 	// SetCircleAccepting opens or closes a circle hub to new members (NIP-CW
 	// §The Circle Wallet Hub Connection, accepting).
 	SetCircleAccepting(app *db.App, accepting bool) error

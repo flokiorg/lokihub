@@ -51,6 +51,10 @@ var expectedTables = []string{
 	// drained.
 	"cash_bill_archives",
 	"cash_bill_slice_archives",
+	"cash_order_connections",
+	"cash_order_terms",
+	"cash_orders",
+	"cash_order_addresses",
 }
 
 func main() {
@@ -268,6 +272,10 @@ func migrateDB(from, to *gorm.DB) error {
 		{"cash_request_records", migrateTable[db.CashRequestRecord]},
 		{"cash_request_record_bills", migrateTable[db.CashRequestRecordBill]},
 		{"cash_horizon", migrateTable[db.CashHorizon]},
+		{"cash_order_connections", migrateTable[db.CashOrderConnection]},
+		{"cash_order_terms", migrateTable[db.CashOrderTerms]},
+		{"cash_orders", migrateTable[db.CashOrder]},
+		{"cash_order_addresses", migrateTable[db.CashOrderAddress]},
 	} {
 		logger.Logger.Info().Msg("migrating " + step.name + "...")
 		if err := step.run(from, tx); err != nil {

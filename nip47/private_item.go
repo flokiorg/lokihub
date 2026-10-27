@@ -38,6 +38,7 @@ var privateServableMethods = map[string]struct{}{
 	constants.NIP47MethodCashConsolidate:    {},
 	constants.NIP47MethodCashLookup:         {},
 	constants.NIP47MethodCreateCircleWallet: {},
+	constants.NIP47MethodCashOrder:          {},
 }
 
 // IsPrivateServableMethod reports whether a method may be served over the private

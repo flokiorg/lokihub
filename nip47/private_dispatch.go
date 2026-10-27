@@ -34,6 +34,9 @@ type PrivateItemBinding struct {
 	HubXOnly string
 	Nonce    string
 	NotAfter int64
+	// ArrivalRelay is the relay the envelope arrived on: an order's notices go
+	// there (NIP-CO §Order Notice).
+	ArrivalRelay string
 	// AuthFailures counts this envelope's items answered UNAUTHORIZED so far; once
 	// over maxEnvelopeAuthFailures, its further value items are RATE_LIMITED.
 	// Shared by every item of one envelope (items run one at a time); nil counts
@@ -158,7 +161,10 @@ func (svc *nip47Service) servePrivateItem(
 	}
 
 	// I5: a method this hub does not serve on this transport is NOT_IMPLEMENTED.
-	if !IsPrivateServableMethod(item.Method) {
+	// An Order connection is the target of cash_order (and its lookups) only,
+	// and cash_order targets nothing else (NIP-CO §What It Allows).
+	if !IsPrivateServableMethod(item.Method) ||
+		(app.Kind == db.AppKindCashOrder) != (item.Method == constants.NIP47MethodCashOrder) {
 		return refuse(constants.ERROR_NOT_IMPLEMENTED, item.Method+" is not served on this transport")
 	}
 
@@ -220,6 +226,12 @@ func (svc *nip47Service) servePrivateItem(
 			// The proof verified, but its signer holds no slice of this bill.
 			return refuse(constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
 		}
+	}
+
+	// An order is placed on a connection that grants nothing else: the app kind
+	// is its whole permission.
+	if item.Method == constants.NIP47MethodCashOrder {
+		return svc.servePrivateOrder(ctx, lnClient, item, binding, &app, signer)
 	}
 
 	// 4. Scope, checked per item. Batching MUST NOT be a way around permissions.
@@ -518,6 +530,23 @@ func (svc *nip47Service) privateItemIsAuthorized(
 	// authorizes it, and the controller checks that. Handled first because a hub
 	// legitimately has no claims at all.
 	isCircleJoin := item.Method == constants.NIP47MethodCreateCircleWallet
+	if item.Method == constants.NIP47MethodCashOrder {
+		// An order acts on an Order connection, which has no slices: its item
+		// proof's signer is the buyer key, the order's authorizer (NIP-CO §The
+		// Item). I8 already required the proof.
+		paramsHash, err := transport.CanonicalParamsHash(item.Params)
+		if err != nil {
+			return "", false, false, nil
+		}
+		signer, err := transport.VerifyItemProof(item.Proof, transport.ProofBinding{
+			Target: item.Target, HubXOnly: binding.HubXOnly, Method: item.Method,
+			ParamsHash: paramsHash, Nonce: binding.Nonce, NotAfter: binding.NotAfter,
+		}, time.Now())
+		if err != nil {
+			return "", false, false, nil
+		}
+		return signer, false, true, nil
+	}
 
 	claims, err := svc.appsService.ListClaimsForWallet(app.ID)
 	if err != nil {
@@ -645,6 +674,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 // requestIDMethods are the private methods that are calls carrying a request_id
 // checked at I6 and I7.
 var requestIDMethods = map[string]bool{
+	constants.NIP47MethodCashOrder:       true,
 	constants.NIP47MethodCashTransfer:    true,
 	constants.NIP47MethodCashConsolidate: true,
 }
