@@ -28,9 +28,22 @@ func TestResolveItemTarget_PrefersTheCircleHubRowOverAnotherSharingItsKey(t *tes
 	require.NoError(t, err)
 	assert.Equal(t, hub.ID, got.ID)
 
-	assert.True(t, billProofLive(got.AppPubkey, liveHubConnKeys(&got)))
-	assert.False(t, billProofLive(other.AppPubkey, liveHubConnKeys(&got)), "a key that is no live connection of the Hub")
-	assert.False(t, billProofLive("", liveHubConnKeys(&got)))
+	assert.True(t, billProofLive(got.AppPubkey, h.svc.liveHubConnKeys(&got)))
+	assert.False(t, billProofLive(other.AppPubkey, h.svc.liveHubConnKeys(&got)), "a key that is no live connection of the Hub")
+	assert.False(t, billProofLive("", h.svc.liveHubConnKeys(&got)))
+
+	// A listing connection of the circle is a live connection; a circle_hub_conn
+	// never resolves as the target itself.
+	parent := hub.ID
+	listing := db.App{Name: "listing conn", AppPubkey: strings.Repeat("cf", 32), WalletPubkey: &shared,
+		Kind: db.AppKindCircleHubConn, ParentAppID: &parent}
+	require.NoError(t, h.ts.DB.Create(&listing).Error)
+	assert.True(t, billProofLive(listing.AppPubkey, h.svc.liveHubConnKeys(&got)))
+	got, err = h.svc.resolveItemTarget(shared)
+	require.NoError(t, err)
+	assert.Equal(t, hub.ID, got.ID)
+	require.NoError(t, h.ts.DB.Delete(&listing).Error)
+	assert.False(t, billProofLive(listing.AppPubkey, h.svc.liveHubConnKeys(&got)), "a revoked listing connection")
 }
 
 // A join lookup still resolves once the Hub is gone, through the connections its
