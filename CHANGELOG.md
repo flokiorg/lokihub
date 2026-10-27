@@ -144,8 +144,8 @@ audits of both.
   in the node's own graph; the user ticks the LSPs they trust, and trusting
   runs a live check of the LSP's LSPS answers against its announcement. Only
   trusted LSPs are contacted; a paused one sells nothing new and a closed one
-  disappears. An LSP can be added by its node key. On the regtest stack,
-  `docker-compose.flspd.yml` runs flspd as the test LSP.
+  disappears. An LSP can be added by its node key. The regtest dev stack
+  runs flspd as the test LSP (compose profile `lsp`).
 - Keeps a record of every circle join and serves the NIP-CW join lookup:
   `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
   joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's
