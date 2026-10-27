@@ -54,7 +54,6 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: params,
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		require.NotEmpty(t, "")
 
 		// All three recipients share the SAME connection. Bill methods now travel over
 		// the private transport, which authorizes PER ITEM — so the connection carries the
@@ -238,7 +237,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, "")
+		shared := mustConnectBill(t, created.CashToken, "").Client
 
 		var budget GetBudgetResult
 		err = shared.Call(ctxT(t), "get_budget", struct{}{}, &budget)
@@ -257,7 +256,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnect(t, "")
+		shared := mustConnectBill(t, created.CashToken, "").Client
 
 		var txs ListTransactionsResult
 		err = shared.Call(ctxT(t), "list_transactions", ListTransactionsParams{Limit: 10}, &txs)

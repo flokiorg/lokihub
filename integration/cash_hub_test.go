@@ -75,7 +75,6 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 		require.NoError(t, err)
 		t.Logf("created cash wallet: pubkey=%s", result.WalletPubkey)
 		require.NotEmpty(t, result.WalletPubkey)
-		require.NotEmpty(t, "", "the connection is shared/known upfront now — no more encrypted reveal")
 		require.Len(t, result.Recipients, 1)
 		require.EqualValues(t, happyPathAmountMloki, result.Recipients[0].AmountMillis)
 
@@ -250,7 +249,6 @@ func testCashHub(t *testing.T, cfg *Config, hub CashHubConfig) {
 			},
 			Expiry: happyPathExpirySecs,
 		}, &result))
-		require.NotEmpty(t, "", "connection_key mode also gets an immediate, shared connection now — no separate claim_cash_wallet reveal step")
 
 		// cash_token generation doesn't depend on recipient identity
 		// mode — it's derived purely from the wallet's own pairing data, not

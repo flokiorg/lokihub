@@ -226,7 +226,7 @@ func TestSpec_ScopeSurface_BillDoesNotAdvertiseWhatItCannotServe(t *testing.T) {
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	billClient := mustConnect(t, "")
+	billClient := mustConnectBill(t, created.CashToken, "").Client
 	var info struct {
 		Methods        []string `json:"methods"`
 		PrivateMethods []string `json:"private_methods"`
