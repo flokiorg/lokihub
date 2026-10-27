@@ -136,40 +136,31 @@ func TestAuditDSecB_NonceSetSweepReturnsNoMemory(t *testing.T) {
 	runtime.KeepAlive(s)
 }
 
-// TestAuditDSecB_NonceHeldLongPastItsOwnEnvelopeWindow quantifies the Session B change.
-//
-// A nonce is burned for max(not_after, now+ProofFreshnessPast). An envelope may only claim
-// 120 s of validity (MaxNotAfterWindow) but its nonce is held for 300 s. So for 3 minutes the
-// set holds slots for envelopes that could no longer be accepted by any other check -- which
-// is where the ~2.5x comes from, and, more usefully, it is the recovery time after a burst:
-// 5 minutes of refusals, not 2.
-func TestAuditDSecB_NonceHeldLongPastItsOwnEnvelopeWindow(t *testing.T) {
+// TestAuditDSecB_NonceHeldAsLongAsTheHorizon: a nonce is burned for
+// max(not_after, now+ProofFreshnessPast), and an envelope may claim up to the
+// horizon H of validity. With the default H equal to ProofFreshnessPast the set
+// holds a slot exactly as long as its envelope could still be accepted, so a
+// burst drains in H, no later.
+func TestAuditDSecB_NonceHeldAsLongAsTheHorizon(t *testing.T) {
+	require.Equal(t, transport.ProofFreshnessPast, testHorizon, "the default horizon equals the proof freshness window")
 	s := newPrivateNonceSet()
 	now := time.Now()
 
 	// The longest-lived envelope a client may legally send.
-	maximal := now.Add(transport.MaxNotAfterWindow).Unix()
+	maximal := now.Add(testHorizon).Unix()
 	nonces := auditDSecBNonces(t, 1000)
 	for _, n := range nonces {
 		require.False(t, s.seenOrRecord(n, maximal))
 	}
 	require.Equal(t, int64(1000), s.Len())
 
-	// One second after every one of those envelopes has expired, nothing is reclaimable.
-	stillHeld := s.sweepExpired(now.Add(transport.MaxNotAfterWindow + time.Second))
-	assert.Equal(t, int64(0), stillHeld,
-		"no slot is reclaimable once every envelope in it has expired")
+	// Still held while those envelopes could be accepted.
+	assert.Equal(t, int64(0), s.sweepExpired(now.Add(testHorizon-time.Second)))
 	assert.Equal(t, int64(1000), s.Len())
 
-	// Only at ProofFreshnessPast do they go.
-	gone := s.sweepExpired(now.Add(transport.ProofFreshnessPast + time.Second))
-	assert.Equal(t, int64(1000), gone)
+	// Reclaimed one second after every one of them has expired.
+	assert.Equal(t, int64(1000), s.sweepExpired(now.Add(testHorizon+time.Second)))
 	assert.Equal(t, int64(0), s.Len())
-
-	ratio := float64(transport.ProofFreshnessPast) / float64(transport.MaxNotAfterWindow)
-	t.Logf("slot lifetime %s vs maximum envelope window %s: %.1fx entries at the same request rate; a saturated set takes %s to drain",
-		transport.ProofFreshnessPast, transport.MaxNotAfterWindow, ratio, transport.ProofFreshnessPast)
-	assert.InDelta(t, 2.5, ratio, 0.01)
 }
 
 // TestAuditDSecB_CapacityRefusalIsReportedAsAReplay is the honesty question.
@@ -329,7 +320,7 @@ func TestAuditDSecB_StaleEnvelopeStillCannotConsumeASlot(t *testing.T) {
 
 	// Same for an over-long window.
 	env2 := testEnvelope(t)
-	env2.NotAfter = time.Now().Add(transport.MaxNotAfterWindow + time.Minute).Unix()
+	env2.NotAfter = time.Now().Add(testHorizon + time.Minute).Unix()
 	_, _, err = pt.unwrap(seal(t, env2), transport.DefaultLimits(), time.Now())
 	require.Error(t, err)
 	assert.Equal(t, int64(0), pt.nonces.Len())

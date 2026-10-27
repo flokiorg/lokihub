@@ -104,7 +104,7 @@ func TestVerifyTransferIdentityEvent_Bindings(t *testing.T) {
 func TestVerifyTransferIdentityEvent_ConnectionKeyBindings(t *testing.T) {
 	priv, _, wallet, newHash := transferProofFixture(t)
 	const amount uint64 = 2000
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	attestationID := tests.RandomHex32()
 	base := nostr.Tags{{"d", wallet}, {"new_identity_hash", newHash}, {"amount_millis", strconv.FormatUint(amount, 10)}}
 	with := func(extra ...nostr.Tag) nostr.Tags { return append(append(nostr.Tags{}, base...), extra...) }

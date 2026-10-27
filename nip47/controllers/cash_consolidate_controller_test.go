@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -251,7 +250,7 @@ func TestHandleCashConsolidateEvent_CashTarget_HappyPath(t *testing.T) {
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
 
-	secretHex, secretHash, err := cashwallet.GenerateCashSecret()
+	secretHex, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	// amount matches tests.MockInvoice's own fixed encoded bolt11 amount
@@ -379,7 +378,7 @@ func TestHandleCashConsolidateEvent_ConnectionKeySource_HappyPath(t *testing.T) 
 	iaPriv := nostr.GeneratePrivateKey()
 	iaPub, _ := nostr.GetPublicKey(iaPriv)
 	registerTrustedIA(t, svc, iaPub)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPriv := nostr.GeneratePrivateKey()
 	claimantPub, _ := nostr.GetPublicKey(claimantPriv)
 	s2 := guardCashWallet(t, svc, hub)
@@ -434,7 +433,7 @@ func TestConsolidate_ConnectionKeySource_UntrustedIA_Rejected(t *testing.T) {
 	// untrustedIA is never registered — no registerTrustedIA call.
 	untrustedIAPriv := nostr.GeneratePrivateKey()
 	untrustedIAPub, _ := nostr.GetPublicKey(untrustedIAPriv)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPriv := nostr.GeneratePrivateKey()
 	claimantPub, _ := nostr.GetPublicKey(claimantPriv)
 	s2 := guardCashWallet(t, svc, hub)
@@ -488,7 +487,7 @@ func TestConsolidate_ConnectionKeySource_AttestationForWrongClaimant_Rejected(t 
 	iaPriv := nostr.GeneratePrivateKey()
 	iaPub, _ := nostr.GetPublicKey(iaPriv)
 	registerTrustedIA(t, svc, iaPub)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPriv := nostr.GeneratePrivateKey()
 	strangerPriv := nostr.GeneratePrivateKey()
 	strangerPub, _ := nostr.GetPublicKey(strangerPriv)

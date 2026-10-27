@@ -9,6 +9,8 @@ audits of both.
 
 ### Added
 
+- Adds `CASH_MAX_REQUEST_AGE_SECS`, the horizon H a request's deadline may lie
+  ahead (default 300, 60 to 86400); it can be raised, never lowered.
 - Adds the Cash Hub, which issues multi-recipient cash bills held by a secret
   or bound to an identity, shared as a `lokicash1...` token. (#90)
 - Adds `cash_transfer` to split a slice off a bill, `cash_consolidate` to merge
@@ -61,6 +63,17 @@ audits of both.
 
 ### Changed
 
+- Takes a `request_id` on `mint_cash` and, for a cash recipient, the
+  caller's commitment; the Hub no longer generates or returns a cash secret.
+  `idempotency_key`, `min_transfer_millis` and a recipient `cash_secret` are
+  refused, and the reply carries `cash_token` without `pairing_uri`.
+- Signs every bill under `cash-mint:v1` and every `cashhub1` string with the
+  node identity and chain, as the final NIP-CASH requires.
+- Refuses to sign text starting with `cash-mint:`, `cash-zap:`, `cash-hub:`,
+  `cash-order:` or `circle-hub:` over NWC (`RESTRICTED`).
+- Answers `cash_status` on a cash-mode bill from the bill proof alone and
+  refuses one that carries a `cash_secret`; a destroyed bill's answer is
+  `{"status":"spent"}`.
 - Refuses to start on a database created before 0.5.0's final schema, and no
   longer converts older databases. Reset the database before upgrading.
 - Breaking: renames NIP-CASH's bearer mode to cash mode (`identity_type:

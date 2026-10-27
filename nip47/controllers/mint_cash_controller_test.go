@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -31,7 +29,7 @@ func onePubkeyRecipientJSON(pubkey string, amountMloki uint64) string {
 func makeCashWalletRequest(pubkey string, amountMloki uint64, expirationSecs int) string {
 	return fmt.Sprintf(`{
 		"method": "mint_cash",
-		"params": {
+		"params": {"request_id":"`+testRequestID()+`",
 			"recipients": [%s],
 			"expiry": %d
 		}
@@ -146,7 +144,7 @@ func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 	// No "expiry" field at all (defaults to zero value on unmarshal).
 	err = json.Unmarshal([]byte(fmt.Sprintf(`{
 		"method": "mint_cash",
-		"params": {
+		"params": {"request_id":"`+testRequestID()+`",
 			"recipients": [%s]
 		}
 	}`, onePubkeyRecipientJSON(beneficiaryPubkey, 1000))), nip47Request)
@@ -161,9 +159,9 @@ func TestHandleMintCashEvent_OmittedExpiry_DefaultsToHubMax(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(nipcash.MintCashResult)
-	require.NotZero(t, result.ExpiresAt)
-	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(result.ExpiresAt, 0), 5*time.Second,
+	result := publishedResponse.Result.(MintCashReply)
+	require.NotNil(t, result.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(3600*time.Second), time.Unix(*result.ExpiresAt, 0), 5*time.Second,
 		"wallet must default to the hub's max_exp_secs, not expire immediately")
 }
 
@@ -255,26 +253,28 @@ func TestHandleMintCashEvent_HappyPath_SingleRecipient(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(nipcash.MintCashResult)
-	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
+	result := publishedResponse.Result.(MintCashReply)
 	assert.NotEmpty(t, result.WalletPubkey)
-	require.NotZero(t, result.ExpiresAt)
-	assert.Greater(t, result.ExpiresAt, time.Now().Unix())
+	require.NotNil(t, result.ExpiresAt)
+	assert.Greater(t, *result.ExpiresAt, time.Now().Unix())
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMillis)
 
-	// The wire response's cash_token must decode to the exact same
-	// wallet pubkey and secret as pairing_uri — the fund-safety property
-	// that matters most, since either string alone is a sufficient
-	// connection credential (NIP-CASH §The Cash Token).
-	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
-	pairingURI, err := url.Parse(result.PairingURI)
-	require.NoError(t, err)
-	decoded, err := lokicash.Decode(result.CashToken)
+	// cash_token alone is the bill's credential (NIP-CASH §Minting Cash): it names
+	// the wallet, carries its connection secret and is signed by the node under
+	// cash-mint:v1. No pairing_uri is returned.
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	assert.Equal(t, result.WalletPubkey, decoded.WalletPubkey)
-	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
-	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
+	assert.Equal(t, nipcash.SchemeMintV1, decoded.Scheme)
+	minter, ok := nipcash.VerifyProvenance(decoded)
+	require.True(t, ok)
+	assert.Equal(t, tests.MockNodePubkey, minter)
+	raw, err := json.Marshal(publishedResponse.Result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "pairing_uri")
+	assert.Contains(t, string(raw), `"cash_token":"`+result.CashToken+`"`)
 
 	// Verify the Cash wallet sub-app was created with correct kind and parent.
 	var childApps []db.App
@@ -305,14 +305,14 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
 	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	connKey := tests.RandomHex32()
+	connKey := tests.NewTestConnectionKey()
 	iaPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	registerTrustedIA(t, svc, iaPubkey)
 
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(fmt.Sprintf(`{
 		"method": "mint_cash",
-		"params": {
+		"params": {"request_id":"`+testRequestID()+`",
 			"recipients": [
 				{"identity_type":"pubkey","identity_value":"%s","amount_millis":1000},
 				{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":2000}
@@ -331,7 +331,7 @@ func TestHandleMintCashEvent_HappyPath_MultipleRecipients_MixedIdentityTypes(t *
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(nipcash.MintCashResult)
+	result := publishedResponse.Result.(MintCashReply)
 	require.Len(t, result.Recipients, 2)
 
 	// Exactly one shared wallet app.
@@ -398,14 +398,14 @@ func TestHandleMintCashEvent_ConnectionKeyMode_UntrustedIARejected(t *testing.T)
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
-	connKey := tests.RandomHex32()
+	connKey := tests.NewTestConnectionKey()
 	iaPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	// Deliberately not registered as trusted.
 
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(fmt.Sprintf(`{
 		"method": "mint_cash",
-		"params": {
+		"params": {"request_id":"`+testRequestID()+`",
 			"recipients": [{"identity_type":"connection_key","identity_value":"%s","ia_pubkey":"%s","amount_millis":1000}],
 			"expiry": 1800
 		}
@@ -505,11 +505,14 @@ func TestHandleMintCashEvent_Cash_HappyPath(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
 
+	_, cashCommitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(`{
 		"method": "mint_cash",
-		"params": {
-			"recipients": [{"identity_type":"cash","amount_millis":1000}],
+		"params": {"request_id":"`+testRequestID()+`",
+			"recipients": [{"identity_type":"cash","identity_value":"`+cashCommitment+`","amount_millis":1000}],
 			"expiry": 1800
 		}
 	}`), nip47Request)
@@ -524,11 +527,13 @@ func TestHandleMintCashEvent_Cash_HappyPath(t *testing.T) {
 	})
 
 	require.Nil(t, publishedResponse.Error)
-	result := publishedResponse.Result.(nipcash.MintCashResult)
+	result := publishedResponse.Result.(MintCashReply)
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, db.CashIdentityCash, result.Recipients[0].IdentityType)
-	assert.NotEmpty(t, result.Recipients[0].CashSecret, "the plaintext secret must be returned exactly once")
-	assert.Empty(t, result.Recipients[0].IdentityValue)
+	assert.Equal(t, cashCommitment, result.Recipients[0].IdentityValue, "the caller's commitment is echoed")
+	raw, err := json.Marshal(publishedResponse.Result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "cash_secret")
 }
 
 func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
@@ -545,7 +550,7 @@ func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
 	nip47Request := &models.Request{}
 	err = json.Unmarshal([]byte(fmt.Sprintf(`{
 		"method": "mint_cash",
-		"params": {
+		"params": {"request_id":"`+testRequestID()+`",
 			"recipients": [
 				{"identity_type":"pubkey","identity_value":"%s","amount_millis":500},
 				{"identity_type":"cash","amount_millis":500}

@@ -45,9 +45,6 @@ var expectedTables = []string{
 	// drained.
 	"cash_bill_archives",
 	"cash_bill_slice_archives",
-	// mint_cash's replay guard — losing it forgets every served key, so a caller's
-	// retry could mint a second wallet on the new database.
-	"cash_mint_idempotencies",
 }
 
 func main() {
@@ -271,11 +268,6 @@ func migrateDB(from, to *gorm.DB) error {
 	logger.Logger.Info().Msg("migrating cash_bill_slice_archives...")
 	if err := migrateTable[db.CashBillSliceArchive](from, tx); err != nil {
 		return fmt.Errorf("failed to migrate cash_bill_slice_archives: %w", err)
-	}
-
-	logger.Logger.Info().Msg("migrating cash_mint_idempotencies...")
-	if err := migrateTable[db.CashMintIdempotency](from, tx); err != nil {
-		return fmt.Errorf("failed to migrate cash_mint_idempotencies: %w", err)
 	}
 
 	logger.Logger.Info().Msg("migrating swaps...")

@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -55,6 +56,17 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 		targets = append(targets, target)
 		privs = append(privs, priv)
 		connPrivs = append(connPrivs, connPriv)
+
+		// A reply chunk holds up to NIP-44's ceiling (65535 bytes, NIP-CASH
+		// §Addressing the Response), so the rosters must be large for twelve of them
+		// to need several chunks: every bill gets 99 more recipients (100 is the cap).
+		var bill db.App
+		require.NoError(t, svc.DB.Where("wallet_pubkey = ?", target).First(&bill).Error)
+		extra := make([]db.CashWalletClaim, 0, 99)
+		for j := 0; j < 99; j++ {
+			extra = append(extra, db.CashWalletClaim{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1})
+		}
+		require.NoError(t, svc.AppsService.CreateCashWalletClaims(bill.ID, extra))
 	}
 
 	nonce, err := transport.NewNonce()
@@ -69,7 +81,7 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 	}
 	for i := 0; i < bills; i++ {
 		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i], connPrivs[i],
-			nipcash.CashStatusParams{}, nipcash.BySigning(privs[i]), binding)
+			nipcash.CashStatusParams{Scope: "all"}, nipcash.BySigning(privs[i]), binding)
 		require.NoError(t, err)
 		envelope.Items = append(envelope.Items, item)
 	}
@@ -96,29 +108,14 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 		results = append(results, result)
 	}
 
-	// A hub whose announced max_bytes cannot hold six rosters at once.
+	// The Hub's own policy: a reply is bounded by NIP-44's ceiling, not by max_bytes.
 	replyLimits := requestLimits
-	// 3072 is just above the SMALLEST LEGAL reply envelope, which is worth writing
-	// down: MaxConsolidateSources has a hard floor of 2 (a one-source consolidate
-	// means nothing), and EstimatedConsolidateItemBytes(2) is ~2914 bytes, so no hub
-	// may announce a max_bytes below that. Both earlier attempts here were refused —
-	// first for the ceiling rule, then for the two-source minimum.
-	replyLimits.MaxEnvelopeBytes = 3072
-	replyLimits.PadBucketBytes = 256
-	// Lowered with it, and not incidentally: §Ceilings makes it a MUST that a hub not
-	// announce a max_consolidate_sources its own max_bytes cannot hold, and
-	// Limits.Validate enforces it — the first version of this test shrank max_bytes
-	// alone and was correctly refused ("48 sources is ~46706 bytes, over the 1536
-	// envelope limit"). A small hub announces small ceilings on BOTH.
-	replyLimits.MaxConsolidateSources = 2
-	require.NoError(t, replyLimits.Validate(),
-		"the tightened reply policy must still be a legal one — this is a small hub, not a broken one")
 
 	chunks, err := chunkResults(got.Nonce, results, replyLimits)
 	require.NoError(t, err)
 	require.Greater(t, len(chunks), 1,
 		"these limits were chosen to force the multi-chunk branch; got %d chunk(s) — "+
-			"retune MaxEnvelopeBytes rather than deleting the assertion, or this test "+
+			"enlarge the rosters rather than deleting the assertion, or this test "+
 			"silently stops testing the thing it exists for", len(chunks))
 
 	replyKey, err := transport.DeriveReplyKey(hubConversationKey, got.ReplyTo)

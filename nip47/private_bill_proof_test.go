@@ -345,12 +345,12 @@ func TestPrivateTombstone_HolderInsideRetentionGetsSpent(t *testing.T) {
 	require.True(t, served, "a destroyed bill inside retention must answer its holder definitively")
 	require.Nil(t, result.Error, "a tombstone travels as a RESULT, not a transport error")
 
-	var status nipcash.CashStatusResult
-	require.NoError(t, json.Unmarshal(result.Result, &status))
-	assert.Equal(t, nipcash.ErrorSpent, status.Error)
+	status, ok := nipcash.ParseTombstone(result.Result)
+	require.True(t, ok, "the answer is a tombstone: %s", result.Result)
+	assert.Equal(t, nipcash.StatusSpent, status.Status)
 	require.NotNil(t, status.RetainedUntil, "a tombstone must say when the hub will stop answering")
 	assert.Equal(t, endedAt.Add(3600*time.Second).Unix(), *status.RetainedUntil)
-	assert.Empty(t, status.Recipients, "a destroyed bill has no roster to disclose")
+	assert.NotContains(t, string(result.Result), "recipients", "a destroyed bill has no roster to disclose")
 }
 
 // TestPrivateTombstone_NonHolderGetsSilence is the gate that keeps the tombstone

@@ -14,8 +14,8 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // newProvenanceTestSourceWallet creates a funded, single-recipient cash_wallet
@@ -59,13 +59,13 @@ func TestCreate_WithMintProvenance(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, tok.MintSignature)
-	require.NotNil(t, tok.AttestedAmount)
-	assert.Equal(t, uint64(1000), *tok.AttestedAmount)
+	require.NotNil(t, tok.AttestedAmountMillis)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmountMillis)
 
-	recovered, ok := lokicash.VerifyMint(tok)
+	recovered, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recovered)
 }
@@ -95,10 +95,10 @@ func TestCreate_AlwaysSigned(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	assert.NotNil(t, tok.MintSignature, "every minted bill must carry provenance")
-	assert.NotNil(t, tok.AttestedAmount, "provenance without an attested amount is meaningless")
+	assert.NotNil(t, tok.AttestedAmountMillis, "provenance without an attested amount is meaningless")
 }
 
 // TestCreate_SigningFailureAbortsWithNothingCommitted is the inverse of a test that
@@ -170,13 +170,13 @@ func TestSplit_WithMintProvenance(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, tok.MintSignature)
-	require.NotNil(t, tok.AttestedAmount)
-	assert.Equal(t, uint64(1000), *tok.AttestedAmount)
+	require.NotNil(t, tok.AttestedAmountMillis)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmountMillis)
 
-	recovered, ok := lokicash.VerifyMint(tok)
+	recovered, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recovered)
 }
@@ -224,21 +224,21 @@ func TestSplitInTwo_WithMintProvenance_BothWalletsSigned(t *testing.T) {
 	require.NotNil(t, result.Carved)
 	require.NotNil(t, result.Remainder)
 
-	carvedTok, err := lokicash.Decode(result.Carved.CashToken)
+	carvedTok, err := nipcash.Decode(result.Carved.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, carvedTok.MintSignature)
-	require.NotNil(t, carvedTok.AttestedAmount)
-	assert.Equal(t, uint64(2000), *carvedTok.AttestedAmount)
-	recoveredCarved, ok := lokicash.VerifyMint(carvedTok)
+	require.NotNil(t, carvedTok.AttestedAmountMillis)
+	assert.Equal(t, uint64(2000), *carvedTok.AttestedAmountMillis)
+	recoveredCarved, ok := nipcash.VerifyProvenance(carvedTok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recoveredCarved)
 
-	remainderTok, err := lokicash.Decode(result.Remainder.CashToken)
+	remainderTok, err := nipcash.Decode(result.Remainder.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, remainderTok.MintSignature)
-	require.NotNil(t, remainderTok.AttestedAmount)
-	assert.Equal(t, uint64(3000), *remainderTok.AttestedAmount)
-	recoveredRemainder, ok := lokicash.VerifyMint(remainderTok)
+	require.NotNil(t, remainderTok.AttestedAmountMillis)
+	assert.Equal(t, uint64(3000), *remainderTok.AttestedAmountMillis)
+	recoveredRemainder, ok := nipcash.VerifyProvenance(remainderTok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recoveredRemainder)
 }

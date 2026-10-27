@@ -143,13 +143,20 @@ func (svc *nip47Service) ServePrivateItem(
 	// to be informative: the sender has proved they hold this bill, so naming their mistake
 	// discloses nothing, and an omission would leave a malformed client with no way to
 	// learn why it is being ignored.
-	if item.HasProof() && item.IsBearer() {
+	//
+	// I8 as a whole is nmilat's BearerShapeOK: never both; a value method needs one;
+	// cash_status never carries a cash_secret.
+	if !transport.BearerShapeOK(item.Method, item.HasProof(), item.IsBearer()) {
+		message := "this item's proof and cash_secret do not fit " + item.Method
+		if item.HasProof() && item.IsBearer() {
+			message = "an item must carry either a slice proof or a cash secret, never both"
+		}
 		return transport.Result{
 			ID:         item.ID,
 			ResultType: item.Method,
 			Error: &transport.ResultError{
 				Code:    constants.ERROR_BAD_REQUEST,
-				Message: "an item must carry either a slice proof or a cash secret, never both",
+				Message: message,
 			},
 		}, true
 	}
@@ -348,8 +355,8 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string,
 	}
 
 	deadline := retainedUntil.Unix()
-	body, err := json.Marshal(nipcash.CashStatusResult{
-		Error:         nipcash.ErrorSpent,
+	body, err := json.Marshal(nipcash.Tombstone{
+		Status:        nipcash.StatusSpent,
 		RetainedUntil: &deadline,
 	})
 	if err != nil {
@@ -563,9 +570,14 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// proofless bearer item was refused and cash-mode bills could not be served
 		// over this transport at all.
 		//
-		// The secret must also match one of this bill's cash-mode slices (NIP-CASH
-		// §Bearer Items). Not every controller checks it — cash_status never did — so it
-		// is checked here, once, for every method.
+		// A cash_status on a cash-mode bill carries neither proof nor secret and is
+		// answered from the bill proof alone (NIP-CASH §Bearer Items, §Scoping the
+		// Roster); I8 already refused one carrying a secret.
+		if item.Method == constants.NIP47MethodCashStatus && !item.IsBearer() {
+			return "", billIsCashMode, billIsCashMode, nil
+		}
+		// Otherwise the secret must match one of this bill's cash-mode slices
+		// (NIP-CASH §Bearer Items), checked here once for every method.
 		return "", billIsCashMode, billIsCashMode && cashSecretMatchesBill(item, claims), nil
 	}
 

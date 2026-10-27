@@ -9,8 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // Every bill a Hub mints must carry that Hub's own fingerprint, on every path that
@@ -40,9 +41,9 @@ func TestMint_StampsTheHubFingerprint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
-	assert.Equal(t, lokicash.HubGroupFor(hub.AppPubkey), tok.HubGroup,
+	assert.Equal(t, nipcash.HubGroupFor(hub.AppPubkey), tok.HubGroup,
 		"a minted bill must carry its issuing Hub's fingerprint")
 }
 
@@ -66,19 +67,19 @@ func TestEncodeCashToken_StampsTheHubFingerprint(t *testing.T) {
 	relays := []string{"wss://relay.test"}
 	hubA, hubB := "hub-pubkey-aaaa", "hub-pubkey-bbbb"
 
-	tokenA := mustEncodeCashToken(t, walletHex(1), secretHex(1), relays, &identityRequired, fakeMintSig(), 1000, hubA)
-	tokenA2 := mustEncodeCashToken(t, walletHex(2), secretHex(2), relays, &identityRequired, fakeMintSig(), 2000, hubA)
-	tokenB := mustEncodeCashToken(t, walletHex(3), secretHex(3), relays, &identityRequired, fakeMintSig(), 1000, hubB)
+	tokenA := mustEncodeCashToken(t, walletHex(1), secretHex(1), relays, &identityRequired, 1000, hubA)
+	tokenA2 := mustEncodeCashToken(t, walletHex(2), secretHex(2), relays, &identityRequired, 2000, hubA)
+	tokenB := mustEncodeCashToken(t, walletHex(3), secretHex(3), relays, &identityRequired, 1000, hubB)
 
-	a, err := lokicash.Decode(tokenA)
+	a, err := nipcash.Decode(tokenA)
 	require.NoError(t, err)
-	a2, err := lokicash.Decode(tokenA2)
+	a2, err := nipcash.Decode(tokenA2)
 	require.NoError(t, err)
-	b, err := lokicash.Decode(tokenB)
+	b, err := nipcash.Decode(tokenB)
 	require.NoError(t, err)
 
-	require.Len(t, a.HubGroup, lokicash.HubGroupLen)
-	assert.Equal(t, lokicash.HubGroupFor(hubA), a.HubGroup)
+	require.Len(t, a.HubGroup, nipcash.HubGroupLen)
+	assert.Equal(t, nipcash.HubGroupFor(hubA), a.HubGroup)
 
 	// Stable across bills of one Hub — grouping is an equality test, so a per-bill
 	// value would group nothing.
@@ -98,9 +99,9 @@ func TestEncodeCashToken_StampsTheHubFingerprint(t *testing.T) {
 // field exists to prevent, which is strictly worse than not grouping at all.
 func TestEncodeCashToken_NoHubPubkeyMeansNoFingerprint(t *testing.T) {
 	identityRequired := true
-	token := mustEncodeCashToken(t, walletHex(9), secretHex(9), []string{"wss://relay.test"}, &identityRequired, fakeMintSig(), 1000, "")
+	token := mustEncodeCashToken(t, walletHex(9), secretHex(9), []string{"wss://relay.test"}, &identityRequired, 1000, "")
 
-	tok, err := lokicash.Decode(token)
+	tok, err := nipcash.Decode(token)
 	require.NoError(t, err)
 	assert.Nil(t, tok.HubGroup, "an unknown Hub must leave the bill ungrouped, not share a fingerprint with every other Hub")
 }
@@ -110,14 +111,12 @@ func TestEncodeCashToken_NoHubPubkeyMeansNoFingerprint(t *testing.T) {
 func walletHex(n byte) string { return hex.EncodeToString(bytes.Repeat([]byte{0xa0 + n}, 32)) }
 func secretHex(n byte) string { return hex.EncodeToString(bytes.Repeat([]byte{0xc0 + n}, 32)) }
 
-// fakeMintSig is a well-formed (not valid) 65-byte recoverable signature. These tests
-// assert on the hub-group TLV, not on provenance — but provenance is mandatory, so
-// encodeCashToken refuses to produce a token without something of the right shape.
-func fakeMintSig() []byte { return bytes.Repeat([]byte{0x01}, 65) }
-
-func mustEncodeCashToken(t *testing.T, walletPubkey, secret string, relayURLs []string, identityRequired *bool, mintSig []byte, amountMillis uint64, hubPubkey string) string {
+// mustEncodeCashToken issues a signed bill through the mock node, as a mint does.
+func mustEncodeCashToken(t *testing.T, walletPubkey, secret string, relayURLs []string, identityRequired *bool, amountMillis uint64, hubPubkey string) string {
 	t.Helper()
-	token, err := encodeCashToken(walletPubkey, secret, relayURLs, identityRequired, mintSig, amountMillis, hubPubkey)
+	ln, err := tests.NewMockLn()
+	require.NoError(t, err)
+	token, err := issueCashToken(context.TODO(), ln, walletPubkey, secret, relayURLs, identityRequired, amountMillis, &db.App{AppPubkey: hubPubkey})
 	require.NoError(t, err)
 	return token
 }

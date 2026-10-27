@@ -18,7 +18,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
@@ -334,7 +333,7 @@ func TestHandleCashTransferEvent_ConnectionKeyMode_HappyPath(t *testing.T) {
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	registerTrustedIA(t, svc, iaPubkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -369,7 +368,7 @@ func TestHandleCashTransferEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	// Deliberately NOT registered as trusted.
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -1251,7 +1250,7 @@ func TestHandleCashTransferEvent_TransferIntoCash_ClaimedCotenant_SpinsOffToNewW
 	require.NoError(t, err)
 	decrypted, err := victimCipher.Decrypt(result.NewWalletToken)
 	require.NoError(t, err, "the intended recipient must be able to decrypt the inner token")
-	decodedToken, err := lokicash.Decode(decrypted)
+	decodedToken, err := nipcash.Decode(decrypted)
 	require.NoError(t, err)
 	assert.Equal(t, *newWallet.WalletPubkey, decodedToken.WalletPubkey)
 

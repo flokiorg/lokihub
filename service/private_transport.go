@@ -247,7 +247,7 @@ func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, 
 	if err != nil {
 		return nil, conversationKey, fmt.Errorf("decode: %w", err)
 	}
-	if err := envelope.CheckFreshness(now); err != nil {
+	if err := transport.CheckFreshness(*envelope, now, limits.MaxRequestAgeSeconds); err != nil {
 		return nil, conversationKey, err
 	}
 	if pt.nonces.seenOrRecord(envelope.Nonce, envelope.NotAfter) {

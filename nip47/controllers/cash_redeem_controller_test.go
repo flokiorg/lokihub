@@ -85,7 +85,7 @@ func buildIAAttestationEvent(t *testing.T, iaPrivkey, connectionKey, claimantNos
 		{"d", connectionKey},
 		{"p", claimantNostrPubkey},
 		{"platform", "discord"},
-		{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
+		{"evidence", tests.TestAttestationEvidence(connectionKey)},
 	}
 	if expiration != nil {
 		tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(*expiration, 10)})
@@ -330,7 +330,7 @@ func TestHandleCashRedeemEvent_HappyPath_ConnectionKeyMode(t *testing.T) {
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	registerTrustedIA(t, svc, iaPubkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -686,7 +686,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_UntrustedIA_Rejected(t *testing
 	realIAPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	registerTrustedIA(t, svc, realIAPubkey)
 	imposterIAPrivkey := nostr.GeneratePrivateKey() // signs the attestation, but isn't the recorded IA for this slice
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 
@@ -733,7 +733,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_AttestationForDifferentClaimant
 	iaPrivkey := nostr.GeneratePrivateKey()
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	registerTrustedIA(t, svc, iaPubkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 
 	realClaimantPrivkey := nostr.GeneratePrivateKey()
 	realClaimantPubkey, _ := nostr.GetPublicKey(realClaimantPrivkey)
@@ -1042,7 +1042,7 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	validExpiration := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
 
 	baseTags := func() nostr.Tags {
@@ -1068,17 +1068,17 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 		{
 			name:      "missing platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "#platform tag is required",
+			wantError: `"platform" tag is required`,
 		},
 		{
 			name:      "empty platform tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: "#platform tag is required",
+			wantError: `"platform" tag is required`,
 		},
 		{
 			name:      "missing evidence tag rejected",
 			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}),
-			wantError: "#evidence tag is required",
+			wantError: `"evidence" tag is required`,
 		},
 		{
 			name:      "malformed evidence tag rejected",
@@ -1087,7 +1087,7 @@ func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
 		},
 		{
 			name:      "platform and evidence present accepted",
-			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", `{"version":1,"platform":"discord"}`}),
+			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", tests.TestAttestationEvidence(connectionKey)}),
 			wantError: "",
 		},
 	}

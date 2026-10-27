@@ -16,7 +16,7 @@ package main
 //   - cash_transfer_proofs — burnt-nonce replay guards, so every nonce was forgotten.
 //   - cash_hub_configs / circle_hub_configs — each hub's fee, expiry and limit policy.
 //   - circle_identities and their allowlists — Identity Authority trust.
-//   - swaps, forwards, cash_mint_idempotencies.
+//   - swaps, forwards.
 //
 // This test seeds one row in each previously-dropped table and requires it on the
 // other side. It is deliberately a row-count check per table rather than a deep
@@ -63,9 +63,6 @@ func seedOneRowPerTable(t *testing.T, conn *gorm.DB) []string {
 		{"cash_stranded_funds", &db.CashStrandedFund{
 			Operation: "consolidate", SourceWalletAppID: wallet.ID,
 			RetainedWalletAppID: hub.ID, AmountMloki: 7}},
-		{"cash_mint_idempotencies", &db.CashMintIdempotency{
-			HubAppID: hub.ID, IdempotencyKey: "migkey",
-			WalletAppID: wallet.ID, WalletPubkey: walletPub}},
 		{"swaps", &db.Swap{SwapId: "migswap"}},
 	}
 	seeded := []string{"apps"}
@@ -121,7 +118,7 @@ func TestMigrate_EveryExpectedTableIsCopied(t *testing.T) {
 	for _, table := range []string{
 		"apps", "circle_identities", "circle_identity_allowed_pubkeys",
 		"cash_hub_configs", "cash_wallet_claims", "cash_transfer_proofs",
-		"cash_stranded_funds", "cash_mint_idempotencies", "swaps",
+		"cash_stranded_funds", "swaps",
 	} {
 		var n int64
 		require.NoError(t, env.dest.Table(table).Count(&n).Error)

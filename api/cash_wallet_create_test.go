@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"net/url"
@@ -16,10 +17,10 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/tests/mocks"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // newTestAPI returns an api wired to the test service's real DB and AppsService.
@@ -67,7 +68,7 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
-	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
 	assert.NotZero(t, result.AppID)
 	require.Len(t, result.Recipients, 1)
 
@@ -93,7 +94,7 @@ func TestCreateCashWallet_HappyPath_SingleRecipient(t *testing.T) {
 	// string alone is a sufficient connection credential.
 	pairingURI, err := url.Parse(result.PairingURI)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(result.CashToken)
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
 	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
@@ -133,13 +134,13 @@ func TestCreateCashWallet_ProducesSignedToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := lokicash.Decode(result.CashToken)
+	tok, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, tok.MintSignature)
-	require.NotNil(t, tok.AttestedAmount)
-	assert.Equal(t, uint64(1000), *tok.AttestedAmount)
+	require.NotNil(t, tok.AttestedAmountMillis)
+	assert.Equal(t, uint64(1000), *tok.AttestedAmountMillis)
 
-	recovered, ok := lokicash.VerifyMint(tok)
+	recovered, ok := nipcash.VerifyProvenance(tok)
 	require.True(t, ok)
 	assert.Equal(t, minterPubkey, recovered)
 }
@@ -195,8 +196,32 @@ func TestCreateCashWallet_Cash_HappyPath(t *testing.T) {
 
 	r := result.Recipients[0]
 	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
-	assert.NotEmpty(t, r.CashSecret, "the admin HTTP API must also surface the plaintext secret exactly once")
-	assert.Empty(t, r.IdentityValue, "the admin HTTP API must not surface the internal secret hash either")
+	assert.NotEmpty(t, r.CashSecret, "the operator gets the secret generated for it, once")
+	secret, err := hex.DecodeString(r.CashSecret)
+	require.NoError(t, err)
+	commitment := sha256.Sum256(secret)
+	assert.Equal(t, hex.EncodeToString(commitment[:]), r.IdentityValue, "the entry echoes the commitment, as over NWC")
+}
+
+// The operator may send the commitment itself, as a mint_cash caller does; then no
+// secret is generated or returned.
+func TestCreateCashWallet_Cash_OperatorCommitment(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+
+	_, commitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+	result, err := newTestAPIWithService(t, svc).CreateCashWallet(hub.ID, &CreateCashWalletRequest{
+		Recipients: []CashWalletRecipient{{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 1000}},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Recipients, 1)
+	assert.Equal(t, commitment, result.Recipients[0].IdentityValue)
+	assert.Empty(t, result.Recipients[0].CashSecret)
 }
 
 func TestCreateCashWallet_Cash_RejectsMixedRecipients(t *testing.T) {

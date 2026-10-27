@@ -15,8 +15,8 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // NIP-CASH §Minting Cash: a Hub MUST NOT return an empty cash_token. A relay URL too
@@ -109,9 +109,9 @@ func TestSplit_StoresTokenWithHubFingerprint(t *testing.T) {
 	require.NoError(t, svc.DB.First(&stored, res.WalletApp.ID).Error)
 	assert.Equal(t, res.CashToken, stored.CashToken, "the issued token is stored verbatim")
 
-	tok, err := lokicash.Decode(res.CashToken)
+	tok, err := nipcash.Decode(res.CashToken)
 	require.NoError(t, err)
-	assert.Equal(t, lokicash.HubGroupFor(hub.AppPubkey), tok.HubGroup, "the split-off bill carries its Hub's fingerprint")
+	assert.Equal(t, nipcash.HubGroupFor(hub.AppPubkey), tok.HubGroup, "the split-off bill carries its Hub's fingerprint")
 }
 
 func TestConsolidate_NoUsableRelay_RefusedBeforeFunding(t *testing.T) {
@@ -183,11 +183,11 @@ func TestConsolidate_StoresTokenWithHintAndFingerprint(t *testing.T) {
 			require.NoError(t, svc.DB.First(&stored, result.WalletApp.ID).Error)
 			assert.Equal(t, result.CashToken, stored.CashToken, "the issued token is stored verbatim")
 
-			tok, err := lokicash.Decode(result.CashToken)
+			tok, err := nipcash.Decode(result.CashToken)
 			require.NoError(t, err)
 			require.NotNil(t, tok.IdentityRequired)
 			assert.Equal(t, tc.identityRequired, *tok.IdentityRequired)
-			assert.Equal(t, lokicash.HubGroupFor(hub.AppPubkey), tok.HubGroup)
+			assert.Equal(t, nipcash.HubGroupFor(hub.AppPubkey), tok.HubGroup)
 		})
 	}
 }
@@ -196,7 +196,7 @@ func TestConsolidate_StoresTokenWithHintAndFingerprint(t *testing.T) {
 func TestEncodeCashToken_EmitsEveryRelayHint(t *testing.T) {
 	identityRequired := true
 	relays := []string{"wss://one.relay.test", "wss://two.relay.test"}
-	tok, err := lokicash.Decode(mustEncodeCashToken(t, walletHex(4), secretHex(4), relays, &identityRequired, fakeMintSig(), 1000, "hub"))
+	tok, err := nipcash.Decode(mustEncodeCashToken(t, walletHex(4), secretHex(4), relays, &identityRequired, 1000, "hub"))
 	require.NoError(t, err)
 	assert.Equal(t, relays, tok.RelayURLs)
 }

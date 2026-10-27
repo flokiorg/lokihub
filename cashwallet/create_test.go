@@ -2,18 +2,14 @@ package cashwallet
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"math"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	nmilatnip47 "github.com/ohstr/nmilat/nip47"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,9 +17,9 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/transactions"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 func newTestDeps(svc *tests.TestService) Deps {
@@ -52,9 +48,14 @@ func onePubkeyRecipient(amountMloki uint64) []RecipientInput {
 	}
 }
 
+// oneCashRecipient is a cash-mode recipient carrying a fresh caller commitment.
 func oneCashRecipient(amountMloki uint64) []RecipientInput {
+	_, commitment, err := generateCashSecret()
+	if err != nil {
+		panic(err)
+	}
 	return []RecipientInput{
-		{IdentityType: db.CashIdentityCash, AmountMloki: amountMloki},
+		{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: amountMloki},
 	}
 }
 
@@ -73,10 +74,9 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.WalletApp)
-	assert.Contains(t, result.PairingURI, "nostr+walletconnect://")
-	parsedPairing, err := nmilatnip47.ParsePairingURI(result.PairingURI)
+	parsedToken, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
-	assert.Contains(t, parsedPairing.RelayURLs, "wss://relay.test")
+	assert.Contains(t, parsedToken.RelayURLs, "wss://relay.test")
 	require.Len(t, result.Recipients, 1)
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
 	require.NotNil(t, result.ExpiresAt)
@@ -129,17 +129,16 @@ func TestCreate_CashTokenMatchesPairingURI(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.CashToken)
-	assert.True(t, strings.HasPrefix(result.CashToken, lokicash.HRP+"1"))
+	assert.True(t, strings.HasPrefix(result.CashToken, constants.CashTokenHRP+"1"))
 
-	pairingURI, err := url.Parse(result.PairingURI)
+	wantPubkey := *result.WalletApp.WalletPubkey
+	wantSecret, err := svc.Keys.GetCashPairingKey(result.WalletApp.ID)
 	require.NoError(t, err)
-	wantPubkey := pairingURI.Host
-	wantSecret := pairingURI.Query().Get("secret")
-	wantRelays := pairingURI.Query()["relay"]
+	wantRelays := newTestDeps(svc).RelayURLs
 
-	decoded, err := lokicash.Decode(result.CashToken)
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
-	assert.Equal(t, lokicash.HRP, decoded.HRP)
+	assert.Equal(t, constants.CashTokenHRP, decoded.HRP)
 	assert.Equal(t, wantPubkey, decoded.WalletPubkey)
 	assert.Equal(t, wantSecret, decoded.Secret)
 	assert.Equal(t, wantRelays, decoded.RelayURLs)
@@ -167,7 +166,7 @@ func TestCreate_CashTokenIdentityRequiredHint(t *testing.T) {
 			ExpirySecs: 1800,
 		})
 		require.NoError(t, err)
-		decoded, err := lokicash.Decode(result.CashToken)
+		decoded, err := nipcash.Decode(result.CashToken)
 		require.NoError(t, err)
 		require.NotNil(t, decoded.IdentityRequired)
 		assert.True(t, *decoded.IdentityRequired)
@@ -187,7 +186,7 @@ func TestCreate_CashTokenIdentityRequiredHint(t *testing.T) {
 			ExpirySecs: 1800,
 		})
 		require.NoError(t, err)
-		decoded, err := lokicash.Decode(result.CashToken)
+		decoded, err := nipcash.Decode(result.CashToken)
 		require.NoError(t, err)
 		require.NotNil(t, decoded.IdentityRequired)
 		assert.False(t, *decoded.IdentityRequired)
@@ -229,7 +228,7 @@ func TestSplit_CashTarget_CashTokenHints(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	decoded, err := lokicash.Decode(result.CashToken)
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decoded.IdentityRequired)
 	assert.False(t, *decoded.IdentityRequired)
@@ -272,7 +271,7 @@ func TestSplit_PubkeyTarget_CashTokenHints(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	decoded, err := lokicash.Decode(result.CashToken)
+	decoded, err := nipcash.Decode(result.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decoded.IdentityRequired)
 	assert.True(t, *decoded.IdentityRequired, "a pubkey-mode split target requires identity proof to redeem/transfer")
@@ -334,7 +333,7 @@ func TestCreate_MultipleRecipients_OneSharedWallet_CustomAmounts_SharedExpiry(t 
 
 	pk1, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	pk2, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	connKey := tests.RandomHex32()
+	connKey := tests.NewTestConnectionKey()
 	iaPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
 	registerTrustedIA(t, svc, iaPubkey)
 
@@ -805,8 +804,6 @@ func TestCreate_Cash_HappyPath(t *testing.T) {
 	r := result.Recipients[0]
 	assert.Equal(t, db.CashIdentityCash, r.IdentityType)
 	assert.Equal(t, uint64(1000), r.AmountMloki)
-	assert.NotEmpty(t, r.CashSecret, "the plaintext secret must be returned exactly once")
-	assert.Empty(t, r.IdentityValue, "the response must never surface the internal secret hash as identity_value")
 
 	var childApps []db.App
 	require.NoError(t, svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps).Error)
@@ -817,49 +814,7 @@ func TestCreate_Cash_HappyPath(t *testing.T) {
 	require.Len(t, claims, 1)
 	assert.Equal(t, db.CashIdentityCash, claims[0].IdentityType)
 	assert.Equal(t, int64(1000), claims[0].AmountMloki)
-
-	// The critical fund-safety property: the DB row must never hold the raw
-	// secret, only its hash. A read of this table (backup leak, SQL
-	// injection, a careless log line) must not by itself be enough to steal
-	// every unclaimed cash-mode slice on the instance.
-	assert.NotEqual(t, r.CashSecret, claims[0].IdentityValue,
-		"the stored identity_value must be a hash of the secret, never the secret itself")
-	rawSecret, hexErr := hex.DecodeString(r.CashSecret)
-	require.NoError(t, hexErr)
-	wantHash := sha256.Sum256(rawSecret)
-	assert.Equal(t, hex.EncodeToString(wantHash[:]), claims[0].IdentityValue,
-		"stored identity_value must be exactly sha256(secret)")
-}
-
-func TestCreate_Cash_SecretsAreUnique(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
-
-	// The mock LN client returns a fixed invoice/payment_hash regardless of
-	// amount unless explicitly queued — two Create calls in the same test
-	// need distinct queued invoices, or the second payment fails as an
-	// already-paid replay. Same workaround as the concurrent-creation test
-	// below.
-	mockLN := svc.LNClient.(*tests.MockLn)
-	mockLN.MakeInvoiceQueue = []*lnclient.Transaction{
-		{Type: "incoming", Invoice: tests.MockInvoice, PaymentHash: tests.MockPaymentHash, Preimage: "preimage-a", Amount: 1000},
-		{Type: "incoming", Invoice: tests.MockZeroAmountInvoice, PaymentHash: tests.MockZeroAmountPaymentHash, Preimage: "preimage-b", Amount: 1000},
-	}
-
-	result1, err := Create(context.TODO(), newTestDeps(svc), Params{
-		HubApp: hub, Recipients: oneCashRecipient(1000), ExpirySecs: 1800,
-	})
-	require.NoError(t, err)
-	result2, err := Create(context.TODO(), newTestDeps(svc), Params{
-		HubApp: hub, Recipients: oneCashRecipient(1000), ExpirySecs: 1800,
-	})
-	require.NoError(t, err)
-
-	assert.NotEqual(t, result1.Recipients[0].CashSecret, result2.Recipients[0].CashSecret)
+	assert.Equal(t, r.IdentityValue, claims[0].IdentityValue, "the stored value is the caller's commitment")
 }
 
 func TestCreate_Cash_RejectsMixedRecipients(t *testing.T) {
@@ -904,25 +859,6 @@ func TestCreate_Cash_RejectsTwoCashRecipients(t *testing.T) {
 		ExpirySecs: 1800,
 	})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, constants.ErrInvalidParams)
-}
-
-func TestCreate_Cash_RejectsCallerSuppliedIdentityValue(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
-	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
-
-	_, err = Create(context.TODO(), newTestDeps(svc), Params{
-		HubApp: hub,
-		Recipients: []RecipientInput{
-			{IdentityType: db.CashIdentityCash, IdentityValue: tests.RandomHex32(), AmountMloki: 500},
-		},
-		ExpirySecs: 1800,
-	})
-	require.Error(t, err, "the caller has no way to prove the entropy of a self-supplied secret; only the Hub may generate one")
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
 }
 

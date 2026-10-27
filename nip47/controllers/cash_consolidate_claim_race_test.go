@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/apps"
-	"github.com/flokiorg/lokihub/cashwallet"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/permissions"
@@ -45,7 +44,7 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 	caller := guardCashWallet(t, svc, hub)
 	ownerPriv := nostr.GeneratePrivateKey()
 	ownerPub, _ := nostr.GetPublicKey(ownerPriv)
-	_, secretHash, err := cashwallet.GenerateCashSecret()
+	_, secretHash, err := tests.GenerateCashSecret()
 	require.NoError(t, err)
 
 	s1 := guardSource(t, svc, hub, ownerPub, 2_000, 0, 0)

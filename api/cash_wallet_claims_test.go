@@ -11,8 +11,8 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // selfPaymentPubkey is the destination pubkey embedded in tests.MockInvoice —
@@ -43,14 +43,15 @@ func newBareCashWallet(t *testing.T, svc *tests.TestService, hub *db.App, maxAmo
 	require.NoError(t, err)
 	attested := uint64(1000)
 	required := true
-	token, err := lokicash.Encode(lokicash.Token{
-		HRP:              lokicash.HRP,
-		WalletPubkey:     *wallet.WalletPubkey,
-		Secret:           pairingSecretKey,
-		RelayURLs:        svc.Cfg.GetRelayUrls(),
-		IdentityRequired: &required,
-		MintSignature:    make([]byte, 65), // shaped like provenance; these tests never verify it
-		AttestedAmount:   &attested,
+	token, err := nipcash.Encode(nipcash.Token{
+		HRP:                  constants.CashTokenHRP,
+		WalletPubkey:         *wallet.WalletPubkey,
+		Secret:               pairingSecretKey,
+		RelayURLs:            svc.Cfg.GetRelayUrls(),
+		IdentityRequired:     &required,
+		MintSignature:        make([]byte, 65), // shaped like provenance; these tests never verify it
+		AttestedAmountMillis: &attested,
+		Scheme:               nipcash.SchemeMintV1,
 	})
 	require.NoError(t, err)
 	require.NoError(t, svc.DB.Model(wallet).Update("cash_token", token).Error)
@@ -152,7 +153,7 @@ func TestListCashWalletClaims_CashTokenPerWallet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, conn.CashToken, tokenByWallet[walletA.ID])
 
-	decoded, err := lokicash.Decode(tokenByWallet[walletA.ID])
+	decoded, err := nipcash.Decode(tokenByWallet[walletA.ID])
 	require.NoError(t, err)
 	require.NotNil(t, walletA.WalletPubkey)
 	assert.Equal(t, *walletA.WalletPubkey, decoded.WalletPubkey)
@@ -440,7 +441,7 @@ func TestGetCashWalletConnection_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, conn.PairingURI, "nostr+walletconnect://")
 	assert.Contains(t, conn.PairingURI, "&secret=")
-	assert.True(t, strings.HasPrefix(conn.CashToken, lokicash.HRP+"1"))
+	assert.True(t, strings.HasPrefix(conn.CashToken, constants.CashTokenHRP+"1"))
 
 	// Deterministic: re-deriving must return the exact same URI and token
 	// every time — a stale lokicash1... token handed out earlier must still
@@ -454,7 +455,7 @@ func TestGetCashWalletConnection_HappyPath(t *testing.T) {
 	// internally deterministic.
 	pairingURI, err := url.Parse(conn.PairingURI)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(conn.CashToken)
+	decoded, err := nipcash.Decode(conn.CashToken)
 	require.NoError(t, err)
 	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
 	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
@@ -487,7 +488,7 @@ func TestGetCashWalletConnection_IssuedTokenIsFrozen(t *testing.T) {
 	theAPI := newTestAPI(svc)
 	conn, err := theAPI.GetCashWalletConnection(wallet.ID)
 	require.NoError(t, err)
-	decoded, err := lokicash.Decode(conn.CashToken)
+	decoded, err := nipcash.Decode(conn.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decoded.IdentityRequired)
 	assert.True(t, *decoded.IdentityRequired)
@@ -501,7 +502,7 @@ func TestGetCashWalletConnection_IssuedTokenIsFrozen(t *testing.T) {
 
 	connAfter, err := theAPI.GetCashWalletConnection(wallet.ID)
 	require.NoError(t, err)
-	decodedAfter, err := lokicash.Decode(connAfter.CashToken)
+	decodedAfter, err := nipcash.Decode(connAfter.CashToken)
 	require.NoError(t, err)
 	require.NotNil(t, decodedAfter.IdentityRequired)
 	assert.True(t, *decodedAfter.IdentityRequired,

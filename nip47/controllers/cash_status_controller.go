@@ -97,10 +97,9 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		claims = claimsForCaller(claims, caller)
 	}
 
-	var expiresAt *int64
+	var expiresAt nipcash.Expiry
 	if app.ExpiresAt != nil {
-		ts := app.ExpiresAt.Unix()
-		expiresAt = &ts
+		expiresAt = nipcash.Expiry{At: app.ExpiresAt.Unix(), Present: true}
 	}
 
 	recipients := make([]nipcash.RecipientStatus, len(claims))

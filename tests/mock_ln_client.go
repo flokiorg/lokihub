@@ -13,7 +13,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
+	"github.com/ohstr/nmilat/nipcash"
 	"github.com/tv42/zbase32"
 )
 
@@ -27,10 +27,21 @@ const MockPaymentHash = "23277d5e13fce5534f9752c62fcf9337a2a6b0ebea9d21fa816a4c9
 const MockZeroAmountInvoice = "lntbs1pnkjfgudqjd3hkueeqv4u8q6tj0ynp4qws83mqzuqptu5kfvxeles7qmyhsj6u2s6zyuft26mcr4tdmcupuupp533y9nwnsaktr9zlvyxmv97ta23faerygh3t9xvsfwytsr28lgggssp5mku3023z3kdxlpx6vrwtfxvvrxpffrquy6veex4ndk7rxhdtslhq9qyysgqcqpcxqxfvltyqva6y7k89jwtcljx399jl6wsq4lkq29vnm3rj4jxmapc6vcs358sx8mtpgh93rdc6ccqpxwwfga59zrla5m55zwzck2y2rsrxumu852sqkvpcm7"
 const MockZeroAmountPaymentHash = "8c4859ba70ed96328bec21b6c2f97d5453dc8c88bc56533209711701a8ff4211"
 
+// mockNodeKey is the mock node's identity key, fixed so MockNodeInfo can name it:
+// bills and connection strings are signed by the node, and nipcash checks the
+// signature recovers to the pubkey GetInfo reports.
+var mockNodeKey, _ = btcec.PrivKeyFromBytes(func() []byte {
+	sum := sha256.Sum256([]byte("lokihub mock node identity"))
+	return sum[:]
+}())
+
+// MockNodePubkey is mockNodeKey's compressed public key, hex.
+var MockNodePubkey = hex.EncodeToString(mockNodeKey.PubKey().SerializeCompressed())
+
 var MockNodeInfo = lnclient.NodeInfo{
 	Alias:       "bob",
 	Color:       "#3399FF",
-	Pubkey:      "123pubkey",
+	Pubkey:      MockNodePubkey,
 	Network:     "testnet",
 	BlockHeight: 12,
 	BlockHash:   "123blockhash",
@@ -243,11 +254,7 @@ func NewMockLn() (*MockLn, error) {
 	// A signing node by default. Minting is impossible without one now, so a mock
 	// without a key would make almost every cash test fail for a reason unrelated to
 	// what it is testing.
-	key, err := btcec.NewPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	return &MockLn{SigningKey: key}, nil
+	return &MockLn{SigningKey: mockNodeKey}, nil
 }
 
 // LookupPayment implements lnclient.PaymentLooker from PaymentLookups.
@@ -319,8 +326,14 @@ func (mln *MockLn) SendKeysend(amount uint64, destination string, custom_records
 	}, nil
 }
 
+// GetInfo reports MockNodeInfo, with the pubkey of the node's signing key: the
+// identity a bill's provenance must recover to.
 func (mln *MockLn) GetInfo(ctx context.Context) (info *lnclient.NodeInfo, err error) {
-	return &MockNodeInfo, nil
+	out := MockNodeInfo
+	if mln.SigningKey != nil {
+		out.Pubkey = hex.EncodeToString(mln.SigningKey.PubKey().SerializeCompressed())
+	}
+	return &out, nil
 }
 
 func (mln *MockLn) MakeInvoice(ctx context.Context, amount int64, description string, descriptionHash string, expiry int64, throughNodePubkey *string, lspJitChannelSCID *string, lspCltvExpiryDelta *uint16, lspFeeBaseMloki *uint64, lspFeeProportionalMillionths *uint32) (transaction *lnclient.Transaction, err error) {
@@ -497,7 +510,7 @@ func (mln *MockLn) SignMessage(ctx context.Context, message string) (string, err
 	// Mirror flnd's node SignMessage: prepend its context prefix, then a compact
 	// recoverable signature over the double-SHA256 of the prefixed message,
 	// zbase32-encoded.
-	digest := chainhash.DoubleHashB([]byte(lokicash.LNSignedMessagePrefix + message))
+	digest := chainhash.DoubleHashB([]byte(nipcash.LNSignedMessagePrefix + message))
 	sig := ecdsa.SignCompact(mln.SigningKey, digest, true)
 	return zbase32.EncodeToString(sig), nil
 }
@@ -538,7 +551,7 @@ func (mln *MockLn) GetPubkey() string {
 		return mln.Pubkey
 	}
 
-	return "123pubkey"
+	return MockNodePubkey
 }
 
 func (mln *MockLn) GetCustomNodeCommandDefinitions() []lnclient.CustomNodeCommandDef {

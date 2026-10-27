@@ -19,10 +19,7 @@ package cashwallet
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -37,7 +34,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
 	"github.com/nbd-wtf/go-nostr"
-	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
 )
 
@@ -104,17 +101,14 @@ type Deps struct {
 
 // RecipientInput describes one recipient's requested slice of a shared Cash
 // wallet. IAPubkey is only meaningful when IdentityType is
-// db.CashIdentityConnectionKey. For db.CashIdentityCash, the caller
-// MUST leave IdentityValue and IAPubkey empty — Resolve generates the slice's
-// secret itself and fills in IdentityValue (as the secret's hash) and
-// CashSecret (the plaintext, populated by Resolve for Commit/the caller to
-// return exactly once — never read back out of the caller's own input).
+// db.CashIdentityConnectionKey. For db.CashIdentityCash, IdentityValue is the
+// sha256 commitment of a secret the caller generated (NIP-CASH §Minting Cash);
+// the Hub never sees the secret.
 type RecipientInput struct {
 	IdentityType  string // db.CashIdentityPubkey | db.CashIdentityConnectionKey | db.CashIdentityCash
 	IdentityValue string
 	IAPubkey      string
 	AmountMloki   uint64
-	CashSecret    string
 }
 
 // Params describes the shared wallet to create. MinTransferMloki is
@@ -125,30 +119,22 @@ type Params struct {
 	HubApp     *db.App
 	Recipients []RecipientInput
 	ExpirySecs int
-	// IdempotencyKey is optional; see Resolved.IdempotencyKey.
-	IdempotencyKey string
 }
 
-// RecipientResult echoes back one recipient's resolved/committed slice.
-// CashSecret is populated only for a db.CashIdentityCash recipient,
-// and only this once — it is never retrievable again after this response
-// (NIP-CASH §Cash-Mode Slices).
+// RecipientResult echoes back one recipient's committed slice; a cash-mode entry
+// echoes the caller's commitment.
 type RecipientResult struct {
 	IdentityType  string
 	IdentityValue string
+	IAPubkey      string
 	AmountMloki   uint64
-	CashSecret    string
 }
 
 // Result carries everything a caller needs to build its own protocol-specific
-// response. PairingURI is always plaintext and always populated — unlike the
-// old per-recipient design, there is no encrypted-reveal step: the wallet's
-// connection is meant to be distributed to the whole recipient group by
-// whoever created it.
+// response. CashToken alone is the bill's credential (NIP-CASH §Minting Cash).
 type Result struct {
-	WalletApp  *db.App
-	PairingURI string
-	CashToken  string
+	WalletApp *db.App
+	CashToken string
 	// ExpiresAt is nil when this wallet never expires — the Cash Hub's own
 	// MaxExpSecs is 0 ("never") and the caller didn't request its own
 	// expiry. See Resolved.ExpiresAt.
@@ -164,10 +150,7 @@ type Result struct {
 // quota (mirroring create_circle_wallet_controller.go).
 type Resolved struct {
 	HubApp *db.App
-	// Recipients: amounts already validated. IdentityType/Value are unchanged
-	// from the caller's input for pubkey/connection_key recipients; for a
-	// cash-mode recipient, IdentityValue and CashSecret were just generated
-	// by Resolve (the caller supplied neither).
+	// Recipients: validated, exactly as the caller sent them.
 	Recipients []RecipientInput
 	// ExpiresAt is nil when the wallet being created will never expire —
 	// only possible when the Hub's own MaxExpSecs is 0 ("never") and the
@@ -193,29 +176,7 @@ type Resolved struct {
 	// RedeemFeeBaseMloki is the flat part of the same quoted fee, carried under the
 	// same rules — the two are one price and must never travel separately.
 	RedeemFeeBaseMloki int64
-	// IdempotencyKey, when non-empty, is recorded against the new wallet INSIDE
-	// Commit's own transaction, so the replay guard and the wallet it guards commit
-	// or roll back together. Recording it afterwards would leave a window where the
-	// mint is durable and the guard is not, and the caller's next retry would mint
-	// again — the whole defect this exists to close.
-	//
-	// It also means a concurrent duplicate loses on the unique index and rolls the
-	// entire mint back, instead of minting and then failing to record. A caller
-	// retrying on a timeout races its own original request by construction, which is
-	// exactly why it timed out, so that case is the normal one rather than the exotic
-	// one. Any read-before-commit a caller does is only for a legible refusal; this
-	// is the guard.
-	IdempotencyKey string
 }
-
-// ErrMintIdempotencyKeyReused means this Hub has already served a mint_cash carrying
-// this idempotency key, so Commit refused rather than minting a second wallet.
-//
-// Raised from inside Commit's transaction, by the unique index — so it also covers the
-// concurrent case, where a caller's retry races the original request it is retrying.
-// The whole mint rolls back, which is correct: the other attempt is creating the
-// wallet.
-var ErrMintIdempotencyKeyReused = errors.New("mint_cash: this idempotency key has already been used by this Hub")
 
 // maxRecipientsPerWallet mirrors apps.maxRecipientsPerWallet — duplicated as
 // a small local constant since apps doesn't export its own (kept private to
@@ -327,23 +288,16 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		}
 
 		if cashMode {
-			// The caller supplies no identity for a cash-mode recipient — the
-			// Hub is the only party that can vouch for its secret's entropy,
-			// so it generates (and hashes) that secret itself, here.
-			if r.IdentityValue != "" || r.IAPubkey != "" {
-				return nil, fmt.Errorf("%w: recipient %d: cash mode must not carry identity_value or ia_pubkey",
+			// The caller's commitment of a secret it generated; the Hub never
+			// sees the secret (NIP-CASH §Minting Cash).
+			if r.IAPubkey != "" {
+				return nil, fmt.Errorf("%w: recipient %d: a cash entry must not carry ia_pubkey",
 					constants.ErrInvalidParams, i)
 			}
-			secretHex, secretHash, genErr := GenerateCashSecret()
-			if genErr != nil {
-				return nil, fmt.Errorf("failed to generate cash secret: %w", genErr)
+			if !nipcash.ValidCommitment(r.IdentityValue) {
+				return nil, fmt.Errorf("%w: recipient %d: a cash entry's identity_value must be a 64-character lowercase hex commitment",
+					constants.ErrInvalidParams, i)
 			}
-			r.IdentityValue = secretHash
-			r.CashSecret = secretHex
-			// No dedupe check: a fresh, independently-random secret can't
-			// collide with anything already `seen`, and a cash-mode recipient
-			// is already guaranteed to be the only one in this request by
-			// the mixing check above.
 		} else {
 			if err := ValidateIdentityShape(deps, r.IdentityType, r.IdentityValue, r.IAPubkey); err != nil {
 				return nil, fmt.Errorf("recipient %d: %w", i, err)
@@ -405,7 +359,6 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		MinTransferMloki:   hubConfig.MinTransferMloki,
 		RedeemFeePpm:       hubConfig.RedeemFeePpm,
 		RedeemFeeBaseMloki: hubConfig.RedeemFeeBaseMloki,
-		IdempotencyKey:     params.IdempotencyKey,
 	}, nil
 }
 
@@ -415,8 +368,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // Authority. Shared by Resolve's per-recipient validation and cash_transfer's
 // new_identity validation — the only two places this codebase accepts a
 // caller-supplied (identity_type, identity_value, ia_pubkey) triple that
-// isn't a cash secret. Does not accept db.CashIdentityCash: a cash-mode
-// target has no caller-supplied shape to validate — see GenerateCashSecret.
+// isn't a cash commitment. Does not accept db.CashIdentityCash.
 func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey string) error {
 	switch identityType {
 	case db.CashIdentityPubkey:
@@ -449,27 +401,6 @@ func ValidateIdentityShape(deps Deps, identityType, identityValue, iaPubkey stri
 		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
 			db.CashIdentityPubkey, db.CashIdentityConnectionKey)
 	}
-}
-
-// cashSecretLen is 32 bytes — same size as every other Nostr key/secret in
-// this codebase, and comfortably enough entropy that guessing a cash-mode
-// secret is infeasible (NIP-CASH §Cash-Mode Slices).
-const cashSecretLen = 32
-
-// GenerateCashSecret returns a fresh, high-entropy cash secret (hex) and
-// the hex-encoded SHA-256 hash that gets persisted in its place — the raw
-// secret itself is never written to storage, only ever handed back once, in
-// the response that generated it. Called only from Resolve (mint_cash's own
-// cash-mode-recipient path) — cash_transfer's cash-mode target never calls this:
-// the caller supplies its own commitment there instead (NIP-CASH §Cash-Mode
-// Slices explains why this asymmetry is load-bearing, not an oversight).
-func GenerateCashSecret() (secretHex, secretHash string, err error) {
-	var secret [cashSecretLen]byte
-	if _, err := rand.Read(secret[:]); err != nil {
-		return "", "", err
-	}
-	hash := sha256.Sum256(secret[:])
-	return hex.EncodeToString(secret[:]), hex.EncodeToString(hash[:]), nil
 }
 
 // cashWalletScopes are the ONLY scopes ever granted to a cash_wallet child.
@@ -628,23 +559,6 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			return fmt.Errorf("failed to store recipient claims: %w", err)
 		}
 
-		// Same transaction as the wallet it guards. The unique index on
-		// (hub_app_id, idempotency_key) is what enforces the guard, so a concurrent
-		// duplicate fails here and takes the whole mint down with it — which is the
-		// correct outcome, not a lost one: the other attempt is minting the wallet.
-		//
-		// Token is filled in afterwards, best-effort. It is a convenience for the
-		// refusal message rather than part of the guard, and it is not known yet.
-		if resolved.IdempotencyKey != "" {
-			if err := tx.Create(&db.CashMintIdempotency{
-				HubAppID:       resolved.HubApp.ID,
-				IdempotencyKey: resolved.IdempotencyKey,
-				WalletAppID:    newApp.ID,
-				WalletPubkey:   *newApp.WalletPubkey,
-			}).Error; err != nil {
-				return fmt.Errorf("%w: %v", ErrMintIdempotencyKeyReused, err)
-			}
-		}
 		return nil
 	})
 	if err != nil {
@@ -674,21 +588,6 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 			return
 		}
 		deleteAppWithRetry(deps, newApp)
-		// The idempotency record goes with it. It committed in the transaction above,
-		// but the mint as a whole did NOT happen — the wallet is being compensated
-		// away — so leaving the key behind would refuse the caller's legitimate retry
-		// forever, naming a wallet that no longer exists. A guard that blocks a retry
-		// of a FAILED mint is worse than no guard: it turns a transient funding
-		// failure into a permanently unusable key.
-		if resolved.IdempotencyKey != "" {
-			if delErr := deps.DB.Where("hub_app_id = ? AND idempotency_key = ?",
-				resolved.HubApp.ID, resolved.IdempotencyKey).
-				Delete(&db.CashMintIdempotency{}).Error; delErr != nil {
-				logger.Logger.Error().Err(delErr).
-					Uint("hub_app_id", resolved.HubApp.ID).
-					Msg("Could not release the mint_cash idempotency key after a failed mint; the caller's retry with that key will be refused although nothing was created")
-			}
-		}
 	}()
 
 	// Mint provenance is obtained HERE, before the funds move, because it is
@@ -704,16 +603,9 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 	// speaks for the whole wallet. The provenance attests the wallet's total committed
 	// amount (sum), immutable for the wallet's life (§Mint Provenance).
 	identityRequired := resolved.Recipients[0].IdentityType != db.CashIdentityCash
-	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, sum)
+	lokicashToken, err := issueCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, sum, resolved.HubApp)
 	if err != nil {
-		return nil, fmt.Errorf("refusing to mint a bill without provenance: %w", err)
-	}
-	// The token too, for the same reason: it can fail (a relay URL too long for the
-	// format, say), and NIP-CASH forbids returning an empty one, so it must fail here,
-	// while nothing has moved.
-	lokicashToken, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, sum, resolved.HubApp.AppPubkey)
-	if err != nil {
-		return nil, fmt.Errorf("refusing to mint a bill whose token cannot be encoded: %w", err)
+		return nil, fmt.Errorf("refusing to mint a bill without a signed token: %w", err)
 	}
 
 	// Transfer funds from Cash Hub to Cash wallet. This is the one genuinely
@@ -728,20 +620,12 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 
 	recipientResults := make([]RecipientResult, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
-		result := RecipientResult{
-			IdentityType: r.IdentityType,
-			AmountMloki:  r.AmountMloki,
+		recipientResults[i] = RecipientResult{
+			IdentityType:  r.IdentityType,
+			IdentityValue: r.IdentityValue,
+			IAPubkey:      r.IAPubkey,
+			AmountMloki:   r.AmountMloki,
 		}
-		if r.IdentityType == db.CashIdentityCash {
-			// r.IdentityValue here is the secret's hash — an internal
-			// storage detail, never meant for the wire response. Only the
-			// plaintext secret is; the hash on its own is useless to a
-			// recipient and would just be a stray, meaningless-looking field.
-			result.CashSecret = r.CashSecret
-		} else {
-			result.IdentityValue = r.IdentityValue
-		}
-		recipientResults[i] = result
 	}
 
 	storeCashToken(deps, newApp.ID, lokicashToken)
@@ -755,7 +639,6 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved) (*Result, error)
 
 	return &Result{
 		WalletApp:  newApp,
-		PairingURI: nmilatnip47.BuildPairingURI(walletPubkey, deps.RelayURLs, pairingSecretKey, nil),
 		CashToken:  lokicashToken,
 		ExpiresAt:  resolved.ExpiresAt,
 		Recipients: recipientResults,
@@ -909,13 +792,9 @@ func prepareSplit(ctx context.Context, deps Deps, params SplitParams) (prepared 
 	// never creates anything else), so the identity type is known without inspecting
 	// the claim just stored.
 	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, params.AmountMloki)
+	lokicashToken, err := issueCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, params.AmountMloki, params.HubApp)
 	if err != nil {
-		return nil, fmt.Errorf("refusing to split off a bill without provenance: %w", err)
-	}
-	lokicashToken, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, params.AmountMloki, params.HubApp.AppPubkey)
-	if err != nil {
-		return nil, fmt.Errorf("refusing to split off a bill whose token cannot be encoded: %w", err)
+		return nil, fmt.Errorf("refusing to split off a bill without a signed token: %w", err)
 	}
 
 	return &preparedSplit{app: newApp, token: lokicashToken, params: params}, nil
