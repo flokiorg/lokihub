@@ -36,6 +36,7 @@ func (svc *service) newOrderEngine(gormDB *gorm.DB, k keys.Keys, cfg config.Conf
 		},
 	}
 	svc.transactionsService.SetOrderIntake(e.IntakeLightning, e.SelfPayLightning)
+	svc.nip47Service.SetOrderIntake(e.IntakeLightning, e.SelfPayLightning)
 	return e
 }
 
