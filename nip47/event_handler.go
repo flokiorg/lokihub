@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gorm.io/gorm"
 	"slices"
 	"time"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
@@ -79,6 +81,11 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	if pTag != nil {
 		walletPubkey = pTag[1]
 	}
+
+	// A Circle Wallet rotation that has come due completes before a request
+	// by either of its keys is resolved, so the old key stops working at once
+	// and the new one is served (NIP-CW §Recovering a Lost Connection).
+	svc.completeDueRotationsFor(event.PubKey)
 
 	app := db.App{}
 
@@ -428,6 +435,17 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		return
 	}
 
+	// A request validly signed by a Circle Wallet's current key cancels its
+	// pending rotation, unless the wallet is frozen (NIP-CW §Recovering a Lost
+	// Connection).
+	if app.Kind == db.AppKindCircleWallet && !app.CircleFrozen {
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, time.Now())
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
+		}
+		circlelife.Publish(svc.eventPublisher, notices)
+	}
+
 	// A Circle Wallet serves only the methods its state allows, before any scope
 	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
 	if ok, code, message := circleWalletGate(&app, nip47Request.Method, time.Now()); !ok {
@@ -683,4 +701,28 @@ func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
 	deadline, present, err := nmilatnip47.RequestExpiration(&nmilatnip01.Event{Tags: tags})
 	meta.Deadline, meta.DeadlinePresent, meta.DeadlineMalformed = deadline, present, err != nil
 	return meta
+}
+
+// completeDueRotationsFor completes the due rotations whose old or new key is
+// key (NIP-CW §Recovering a Lost Connection: lazily, by the request of either
+// key at or after completes_at; the job does the rest).
+func (svc *nip47Service) completeDueRotationsFor(key string) {
+	now := time.Now()
+	filter := func(q *gorm.DB) *gorm.DB {
+		return q.Where("new_connection_pubkey = ? OR wallet_app_id IN (?)", key,
+			svc.db.Model(&db.App{}).Select("id").Where("app_pubkey = ? AND kind = ?", key, db.AppKindCircleWallet))
+	}
+	// A read first: almost every request has no rotation due, and needs no
+	// write transaction.
+	var due int64
+	if err := filter(svc.db.Model(&db.CircleRotation{}).Where("state = ? AND completes_at <= ?", db.CircleRotationPending, now.Unix())).
+		Count(&due).Error; err != nil || due == 0 {
+		return
+	}
+	notices, _, err := circlelife.CompleteDueRotations(svc.db, now, filter)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to complete due circle rotations")
+		return
+	}
+	circlelife.Publish(svc.eventPublisher, notices)
 }

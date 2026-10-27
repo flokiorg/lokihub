@@ -191,6 +191,8 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				OutboundPeriod:           createAppRequest.CircleOutboundPeriod,
 				GraceSecs:                createAppRequest.CircleGraceSecs,
 				DustThresholdMloki:       createAppRequest.CircleDustThresholdMloki,
+				RotationEnabled:          createAppRequest.CircleRotationEnabled,
+				RotationDelaySecs:        createAppRequest.CircleRotationDelaySecs,
 			},
 		)
 	default:
@@ -355,6 +357,8 @@ func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
 		OutboundPeriod:           req.CircleOutboundPeriod,
 		GraceSecs:                req.CircleGraceSecs,
 		DustThresholdMloki:       req.CircleDustThresholdMloki,
+		RotationEnabled:          req.CircleRotationEnabled,
+		RotationDelaySecs:        req.CircleRotationDelaySecs,
 	}
 }
 
@@ -727,6 +731,8 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			accepting := cfg.AcceptingJoins == nil || *cfg.AcceptingJoins
 			response.CircleAccepting = &accepting
 			response.CircleTeardownRequestedAt = cfg.TeardownRequestedAt
+			response.CircleRotationEnabled = &cfg.RotationEnabled
+			response.CircleRotationDelaySecs = &cfg.RotationDelaySecs
 		}
 	}
 

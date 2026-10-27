@@ -262,6 +262,7 @@ func migrateDB(from, to *gorm.DB) error {
 		{"cash_consumed_proofs", migrateTable[db.CashConsumedProof]},
 		{"private_served_nonces", migrateTable[db.PrivateServedNonce]},
 		{"circle_join_records", migrateTable[db.CircleJoinRecord]},
+		{"circle_rotations", migrateTable[db.CircleRotation]},
 		{"cash_used_request_ids", migrateTable[db.CashUsedRequestID]},
 		{"cash_request_records", migrateTable[db.CashRequestRecord]},
 		{"cash_request_record_bills", migrateTable[db.CashRequestRecordBill]},

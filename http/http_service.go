@@ -241,6 +241,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/circle/children", httpSvc.circleChildrenListHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/circle/children/:childId", httpSvc.circleChildDeleteHandler)
 	fullAccessApiGroup.POST("/apps/:id/circle/delete", httpSvc.circleHubDeleteHandler)
+	fullAccessApiGroup.POST("/circle-hubs/:id/member-requests", httpSvc.circleMemberRequestHandler)
 	fullAccessApiGroup.GET("/circle-identities", httpSvc.circleIdentitiesListHandler)
 	fullAccessApiGroup.GET("/circle-identities/:id", httpSvc.circleIdentityGetHandler)
 	fullAccessApiGroup.DELETE("/circle-identities/:id", httpSvc.circleIdentityDeleteHandler)
@@ -2133,6 +2134,28 @@ func (httpSvc *HttpService) circleHubDeleteHandler(c echo.Context) error {
 		httpSvc.logger.Error().Err(deleteErr).Uint("app_id", dbApp.ID).
 			Msg("Failed to delete circle hub")
 		code, msg := mapCircleAllowlistError(deleteErr)
+		return c.JSON(code, ErrorResponse{Message: msg})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// circleMemberRequestHandler submits a member request the member signed (NIP-CW
+// §Recovering a Lost Connection) to a circle hub: {event}. A refusal is a 200
+// with the NIP-CW code, which the host's UI shows.
+func (httpSvc *HttpService) circleMemberRequestHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Event json.RawMessage `json:"event"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+	}
+	result, err := httpSvc.api.SubmitCircleMemberRequest(dbApp, body.Event)
+	if err != nil {
+		code, msg := mapCircleAllowlistError(err)
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusOK, result)

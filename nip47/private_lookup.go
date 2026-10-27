@@ -11,9 +11,11 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcash/transport"
+	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/logger"
@@ -450,6 +452,59 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 		logger.Logger.Error().Err(err).Msg("Failed to read a join record")
 		return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
 	}
-	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: time.Now().Unix(), Deadline: params.Deadline, Join: true})
+	// No join to this key: the rotation that installed it, or will, answers
+	// (NIP-CW §Recovering a Lost Connection), read from its row and the clock
+	// alone; the lookup writes nothing.
+	now := time.Now()
+	outcome, rotation, err := circlelife.LookupRotation(svc.db, signer, params.ConnectionPubkey, now)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to read a rotation")
+		return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
+	}
+	switch outcome {
+	case circlelife.RotationPendingUntil:
+		return answer(nipcash.CashLookupResult{Status: nipcash.LookupPending, RetryAfter: rotation.CompletesAt})
+	case circlelife.RotationDone:
+		body, err := svc.rotatedJoinDetails(item.Target, signer, rotation)
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("wallet_app_id", rotation.WalletAppID).Msg("Failed to rebuild a rotated wallet's details")
+			return refuse(constants.ERROR_INTERNAL, "the hub could not rebuild this wallet's details")
+		}
+		return answer(nipcash.CashLookupResult{Status: nipcash.LookupDone, Result: body})
+	}
+	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: now.Unix(), Deadline: params.Deadline, Join: true})
 	return answer(nipcash.CashLookupResult{Status: decision.Status, RetryAfter: decision.RetryAfter})
+}
+
+// rotatedJoinDetails is the join's encrypted_details of the wallet rotation
+// moved, with connection_pubkey set to the new key, encrypted to the member
+// exactly as at join (from the Hub's connection key).
+func (svc *nip47Service) rotatedJoinDetails(hubWalletPubkey, member string, rotation *db.CircleRotation) (json.RawMessage, error) {
+	var rec db.CircleJoinRecord
+	if err := svc.db.Where("wallet_app_id = ? AND authorizer_pubkey = ? AND hub_wallet_pubkey = ?", rotation.WalletAppID, member, hubWalletPubkey).
+		Order("id DESC").First(&rec).Error; err != nil {
+		return nil, err
+	}
+	hubPriv, err := svc.keys.GetAppWalletKey(rec.CircleHubAppID)
+	if err != nil {
+		return nil, err
+	}
+	c, err := cipher.NewNip47Cipher(constants.ENCRYPTION_TYPE_NIP44_V2, member, hubPriv)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := c.Decrypt(rec.EncryptedDetails)
+	if err != nil {
+		return nil, err
+	}
+	var details nipcw.CircleWalletDetails
+	if err := json.Unmarshal([]byte(plain), &details); err != nil {
+		return nil, err
+	}
+	details.ConnectionPubkey = rotation.NewConnectionPubkey
+	wrapped, err := nipcw.EncryptDetails(hubPriv, member, details)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(wrapped), nil
 }

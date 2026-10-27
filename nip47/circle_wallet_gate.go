@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ohstr/nmilat/nipcw"
+
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -46,6 +48,11 @@ func circleWalletGate(app *db.App, method string, now time.Time) (ok bool, code,
 			return false, constants.ERROR_RESTRICTED, "delete_circle_wallet is served on a circle wallet's own connection only"
 		}
 		return true, "", ""
+	}
+	// A frozen wallet's current key is refused everything (NIP-CW §Recovering
+	// a Lost Connection), and such a request cancels nothing.
+	if app.CircleFrozen {
+		return false, nipcw.ErrFrozen, "this wallet is frozen: its current key is refused until it is unfrozen or rotated"
 	}
 	state := circlelife.EffectiveState(app, now)
 	allowed := circlePayoutMethods

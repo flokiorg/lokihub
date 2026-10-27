@@ -36,6 +36,9 @@ type circleWalletInfo struct {
 	MinBudgetRenewal          string `json:"min_budget_renewal,omitempty"`
 	// Accepting is false once the host closes the circle to new members.
 	Accepting bool `json:"accepting"`
+	// RotationDelaySecs is present iff the Hub serves NIP-CW §Recovering a
+	// Lost Connection.
+	RotationDelaySecs *int64 `json:"rotation_delay_secs,omitempty"`
 }
 
 // feeReserve is the most routing fee a payment holds back: ppm of the amount,

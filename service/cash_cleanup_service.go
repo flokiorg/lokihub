@@ -168,7 +168,10 @@ const circleWalletIdentityProofRetention = time.Hour
 // the table from growing unbounded. Piggybacks on the existing Cash cleanup
 // ticker rather than running its own goroutine.
 func pruneStaleCircleWalletIdentityProofs(gormDB *gorm.DB) {
-	if err := gormDB.Where("created_at < ?", time.Now().Add(-circleWalletIdentityProofRetention)).
+	// Each id is kept until its own retention ends (a join's created_at + 360,
+	// a member request's + 86460); a row without one, for an hour.
+	if err := gormDB.Where("(retain_until > 0 AND retain_until < ?) OR (retain_until = 0 AND created_at < ?)",
+		time.Now().Unix(), time.Now().Add(-circleWalletIdentityProofRetention)).
 		Delete(&db.CircleWalletIdentityProof{}).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale circle wallet identity proofs")
 	}
