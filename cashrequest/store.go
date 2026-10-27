@@ -128,6 +128,14 @@ func (s Store) ConsumeProofTx(tx *gorm.DB, eventID string, proofCreatedAt int64,
 	return err
 }
 
+// IsProofConsumed reports whether a claim proof was already used: a read-only
+// pre-check. The commit's own ConsumeProofTx decides a race between two calls.
+func (s Store) IsProofConsumed(eventID string) (bool, error) {
+	var n int64
+	err := s.DB.Model(&db.CashConsumedProof{}).Where("event_id = ?", eventID).Count(&n).Error
+	return n > 0, err
+}
+
 // ReleaseProof forgets a consumed proof whose call did not happen, so the caller's
 // legitimate retry is not refused.
 func (s Store) ReleaseProof(eventID string) error {
