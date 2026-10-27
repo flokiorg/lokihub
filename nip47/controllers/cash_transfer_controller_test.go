@@ -49,8 +49,14 @@ func buildTransferProofEvent(t *testing.T, signerPrivkey, walletPubkey, newIdent
 		Tags:      tags,
 	}
 	require.NoError(t, ev.Sign(signerPrivkey))
+	testSigners.Store(ev.PubKey, signerPrivkey)
 	return ev
 }
+
+// testSigners maps a claim-proof signer's pubkey to its private key, so a test
+// helper can re-sign a proof built for one method as the same signer's proof
+// for another (asConsolidateProofs).
+var testSigners sync.Map
 
 // handleCashTransferFor dispatches HandleCashTransferEvent against app and
 // returns the decoded response.

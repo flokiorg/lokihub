@@ -55,7 +55,7 @@ func TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary(t *testing.T
 			notAfter := time.Now().Add(time.Minute).Unix()
 			// A call carries its request_id, which I6 checks before the method runs.
 			params := `{}`
-			if method == constants.NIP47MethodCashTransfer {
+			if method == constants.NIP47MethodCashTransfer || method == constants.NIP47MethodCashConsolidate {
 				params = `{"request_id":"` + tests.RandomHex32() + `"}`
 			}
 			item := buildItem(t, "x", walletPubkey, method, params, recipientPriv, connPriv, hubXOnly, nonce, notAfter)

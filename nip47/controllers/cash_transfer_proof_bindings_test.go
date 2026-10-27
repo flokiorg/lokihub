@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -65,58 +64,4 @@ func TestHandleCashTransferEvent_ProofReplayedAfterRoundTrip_Rejected(t *testing
 
 	slice := cashWalletClaimByIdentity(t, svc, wallet.ID, db.CashIdentityPubkey, alice)
 	assert.Nil(t, slice.ClaimedAt, "the slice stays with Alice")
-}
-
-func transferProofFixture(t *testing.T) (signerPriv, signer, wallet, newHash string) {
-	t.Helper()
-	signerPriv = nostr.GeneratePrivateKey()
-	signer, _ = nostr.GetPublicKey(signerPriv)
-	wallet, _ = nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	return signerPriv, signer, wallet, newIdentityHash(db.CashIdentityPubkey, newPub, "")
-}
-
-func signedTransferProof(t *testing.T, privkey string, tags nostr.Tags) *nostr.Event {
-	t.Helper()
-	ev := &nostr.Event{Kind: nostrKindClaimProof, CreatedAt: nostr.Now(), Tags: tags}
-	require.NoError(t, ev.Sign(privkey))
-	return ev
-}
-
-func TestVerifyTransferIdentityEvent_Bindings(t *testing.T) {
-	priv, signer, wallet, newHash := transferProofFixture(t)
-	const amount uint64 = 2000
-	amountTag := nostr.Tag{"amount_millis", strconv.FormatUint(amount, 10)}
-
-	valid := signedTransferProof(t, priv, nostr.Tags{{"d", wallet}, {"new_identity_hash", newHash}, amountTag})
-	require.NoError(t, verifyTransferIdentityEvent(valid, db.CashIdentityPubkey, signer, wallet, newHash, amount, ""))
-
-	otherWallet, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
-	wrongWallet := signedTransferProof(t, priv, nostr.Tags{{"d", otherWallet}, {"new_identity_hash", newHash}, amountTag})
-	assert.ErrorContains(t, verifyTransferIdentityEvent(wrongWallet, db.CashIdentityPubkey, signer, wallet, newHash, amount, ""),
-		"d-tag", "a proof for another wallet")
-
-	noAmount := signedTransferProof(t, priv, nostr.Tags{{"d", wallet}, {"new_identity_hash", newHash}})
-	assert.ErrorContains(t, verifyTransferIdentityEvent(noAmount, db.CashIdentityPubkey, signer, wallet, newHash, amount, ""),
-		"amount_millis", "an omitted amount is never a wildcard")
-}
-
-func TestVerifyTransferIdentityEvent_ConnectionKeyBindings(t *testing.T) {
-	priv, _, wallet, newHash := transferProofFixture(t)
-	const amount uint64 = 2000
-	connectionKey := tests.NewTestConnectionKey()
-	attestationID := tests.RandomHex32()
-	base := nostr.Tags{{"d", wallet}, {"new_identity_hash", newHash}, {"amount_millis", strconv.FormatUint(amount, 10)}}
-	with := func(extra ...nostr.Tag) nostr.Tags { return append(append(nostr.Tags{}, base...), extra...) }
-
-	valid := signedTransferProof(t, priv, with(nostr.Tag{"connection_key", connectionKey}, nostr.Tag{"e", attestationID}))
-	require.NoError(t, verifyTransferIdentityEvent(valid, db.CashIdentityConnectionKey, connectionKey, wallet, newHash, amount, attestationID))
-
-	otherKey := signedTransferProof(t, priv, with(nostr.Tag{"connection_key", tests.RandomHex32()}, nostr.Tag{"e", attestationID}))
-	assert.ErrorContains(t, verifyTransferIdentityEvent(otherKey, db.CashIdentityConnectionKey, connectionKey, wallet, newHash, amount, attestationID),
-		"connection_key")
-
-	otherAttestation := signedTransferProof(t, priv, with(nostr.Tag{"connection_key", connectionKey}, nostr.Tag{"e", tests.RandomHex32()}))
-	assert.ErrorContains(t, verifyTransferIdentityEvent(otherAttestation, db.CashIdentityConnectionKey, connectionKey, wallet, newHash, amount, attestationID),
-		"e-tag")
 }

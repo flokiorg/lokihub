@@ -16,22 +16,23 @@ import (
 	"github.com/flokiorg/lokihub/transactions"
 )
 
-// raceLosingApps lets a concurrent request claim one wallet's slice just after
-// this request has read it: the window between consolidate resolving its sources
-// and its commit claiming them.
+// raceLosingApps lets a concurrent request claim one wallet's slice after this
+// request checked its sources' state and before its commit claims them: the
+// Hub's config is read in between (NIP-CASH §Consolidating Tokens, step 5).
 type raceLosingApps struct {
 	apps.AppsService
-	lostWalletID uint
+	lostWalletID  uint
+	identityType  string
+	identityValue string
+	claimed       *bool
 }
 
-func (a raceLosingApps) GetCashWalletClaim(walletAppID uint, identityType, identityValue string) (*db.CashWalletClaim, error) {
-	claim, err := a.AppsService.GetCashWalletClaim(walletAppID, identityType, identityValue)
-	if err == nil && claim != nil && walletAppID == a.lostWalletID {
-		if _, err := a.AppsService.ClaimCashSlice(walletAppID, identityType, identityValue); err != nil {
-			return nil, err
-		}
+func (a raceLosingApps) GetAppById(id uint) *db.App {
+	if !*a.claimed {
+		*a.claimed = true
+		_, _ = a.AppsService.ClaimCashSlice(a.lostWalletID, a.identityType, a.identityValue)
 	}
-	return claim, err
+	return a.AppsService.GetAppById(id)
 }
 
 // A consolidate that loses the race for one source is refused RESTRICTED (NIP-CASH:
@@ -57,7 +58,7 @@ func TestConsolidate_LosesClaimRace_RestoresOwnClaimsOnly(t *testing.T) {
 
 	controller := NewNip47Controller(svc.LNClient, svc.DB, svc.EventPublisher,
 		permissions.NewPermissionsService(svc.DB, svc.EventPublisher), transactions.NewTransactionsService(svc.DB, svc.EventPublisher),
-		raceLosingApps{AppsService: svc.AppsService, lostWalletID: s2.ID}, svc.Keys, nil,
+		raceLosingApps{AppsService: svc.AppsService, lostWalletID: s2.ID, identityType: db.CashIdentityPubkey, identityValue: ownerPub, claimed: new(bool)}, svc.Keys, nil,
 		NewRateLimiter(), NewRateLimiter(), NewRateLimiter(), svc.Cfg, apps.NewIdentityAuthorityManager(svc.DB))
 
 	proof1 := buildTransferProofEvent(t, ownerPriv, *s1.WalletPubkey, db.CashIdentityCash, secretHash, "", 2_000, nil, time.Now())
