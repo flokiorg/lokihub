@@ -315,7 +315,9 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	// bill that never expires, and a caller's own finite expiry is honored up to
 	// the representational bound. A positive ceiling caps an explicit expiry
 	// (a longer one is RESTRICTED) and is the default for an omitted one.
-	if params.ExpirySecs < 0 || params.ExpirySecs > constants.MAX_EXPIRY_SECS {
+	// The representational bound is BAD_REQUEST only under a "never" ceiling; a
+	// finite ceiling refuses anything above it RESTRICTED, below.
+	if params.ExpirySecs < 0 || (hubConfig.MaxExpSecs == 0 && params.ExpirySecs > constants.MAX_EXPIRY_SECS) {
 		return nil, fmt.Errorf("%w: expiry %d is outside 0 to %d", constants.ErrInvalidParams, params.ExpirySecs, constants.MAX_EXPIRY_SECS)
 	}
 	var expiresAt *time.Time
