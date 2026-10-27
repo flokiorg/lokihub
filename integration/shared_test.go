@@ -165,6 +165,7 @@ func rebindConsolidateProofs(t *testing.T, raw json.RawMessage) json.RawMessage 
 		}
 		ev.Tags = append(tags, nostr.Tag{"m", "cash_consolidate"}, nostr.Tag{"s", sHash})
 		require.NoError(t, ev.Sign(priv.(string)))
+		transferProofSigners.Store(ev.ID, priv)
 		rebound, err := json.Marshal(ev)
 		require.NoError(t, err)
 		src["identity_event"], err = json.Marshal(string(rebound))

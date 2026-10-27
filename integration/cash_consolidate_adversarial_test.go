@@ -360,7 +360,7 @@ func TestAudit_CashConsolidateConnectionKey_RevokedIA_Rejected(t *testing.T) {
 		IdentityEvent: eventJSON(t, redeemProof), AttestationEvent: eventJSON(t, attestation),
 	}, &rr)
 	requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
-	require.ErrorContains(t, err, "revoked")
+	require.ErrorContains(t, err, "no longer trusted")
 }
 
 // TestProvenance_TamperedTokenFailsVerification takes a REAL node-signed token
