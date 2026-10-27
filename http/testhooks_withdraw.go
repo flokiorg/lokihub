@@ -15,7 +15,7 @@ import (
 )
 
 // registerWithdrawTestHooks mounts the payout engine's holds and the
-// withdraw-scoped clock under /api/test, behind the full-access admin token,
+// withdraw-scoped and listing clocks under /api/test, behind the full-access admin token,
 // in a testhooks build with LOKIHUB_TEST_HOOKS=1 beside a regtest node only
 // (plan WP-20 item 0h, G1).
 func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
@@ -104,8 +104,17 @@ func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
 		}
-		if req.Scope != "withdraw" {
-			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: `only scope "withdraw" is served`})
+		switch req.Scope {
+		case "listing":
+			l, ok := httpSvc.svc.(interface{ SetListingClockOffset(int64) })
+			if !ok {
+				return c.JSON(http.StatusServiceUnavailable, ErrorResponse{Message: "no listing clock"})
+			}
+			l.SetListingClockOffset(req.OffsetSecs)
+			return c.JSON(http.StatusOK, map[string]any{"offset_secs": req.OffsetSecs, "scope": req.Scope})
+		case "withdraw":
+		default:
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: `scope must be "withdraw" or "listing"`})
 		}
 		e := engine()
 		if e == nil {
