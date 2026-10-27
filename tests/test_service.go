@@ -49,7 +49,7 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 		CircleWalletRateLimitPerHour: 3,
 		// Off: the mock invoices never expire. The policy tests turn it on.
 		CashRedeemMaxInvoiceExpirySecs:    0,
-		CashRedeemMaxFinalCLTV:            288,
+		CashRedeemMaxFinalCLTV:            2880,
 		CashRedeemInflightPerHub:          32,
 		CashRedeemInflightNode:            256,
 		CashRedeemLateFailureCooldownSecs: 600,

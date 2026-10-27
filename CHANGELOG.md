@@ -21,7 +21,7 @@ audits of both.
 - Adds `PRIVATE_INBOX_EVENTS_PER_MIN` (600): the envelopes decrypted per relay
   connection a minute; the rest are dropped undecrypted.
 - Adds the `cash_redeem` operator limits: `CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS`
-  (86400) and `CASH_REDEEM_MAX_FINAL_CLTV` (288) refuse an invoice over them
+  (86400) and `CASH_REDEEM_MAX_FINAL_CLTV` (2880 blocks) refuse an invoice over them
   `RESTRICTED`; `CASH_REDEEM_INFLIGHT_PER_HUB` (32) and
   `CASH_REDEEM_INFLIGHT_NODE` (256) bound the payouts in flight
   (`RATE_LIMITED` before the claim); `CASH_REDEEM_LATE_FAILURE_COOLDOWN_SECS`

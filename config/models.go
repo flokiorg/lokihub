@@ -57,9 +57,11 @@ type AppConfig struct {
 	CashClaimCallsPerHour int `envconfig:"CASH_CLAIM_CALLS_PER_HOUR" default:"120"`
 	// CashRedeemMaxInvoiceExpirySecs and CashRedeemMaxFinalCLTV are the redeem
 	// invoice policy: an invoice whose expiry or final CLTV delta exceeds them is
-	// refused RESTRICTED before the claim. 0 disables the check.
+	// refused RESTRICTED before the claim. 0 disables the check. The CLTV limit
+	// is in blocks: 2880 is two days of one-minute Flokicoin blocks, above flnd's
+	// own invoice default (800).
 	CashRedeemMaxInvoiceExpirySecs int `envconfig:"CASH_REDEEM_MAX_INVOICE_EXPIRY_SECS" default:"86400"`
-	CashRedeemMaxFinalCLTV         int `envconfig:"CASH_REDEEM_MAX_FINAL_CLTV" default:"288"`
+	CashRedeemMaxFinalCLTV         int `envconfig:"CASH_REDEEM_MAX_FINAL_CLTV" default:"2880"`
 	// CashRedeemInflightPerHub and CashRedeemInflightNode bound the cash_redeem
 	// payouts in flight per Cash Hub and node-wide; over either a redeem is
 	// RATE_LIMITED before it claims anything. 0 disables that bound.
