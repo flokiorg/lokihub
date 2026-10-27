@@ -129,11 +129,11 @@ func TestHandleCashStatusEvent_ExpiresAtOmittedForNeverExpiringWallet(t *testing
 	require.Len(t, result.Recipients, 1)
 	assert.True(t, result.Recipients[0].ExpiresAt.Never())
 
-	// nipcash.Expiry writes a never-expiring wallet as null, which every client
-	// decodes as never (absent, null and 0 alike); never a real timestamp.
+	// A never-expiring wallet's expires_at is omitted, which every client decodes
+	// as never (absent, null and 0 alike); never a real timestamp.
 	raw, err := json.Marshal(response.Result)
 	require.NoError(t, err)
-	assert.Contains(t, string(raw), `"expires_at":null`)
+	assert.NotContains(t, string(raw), `"expires_at"`)
 	var back nipcash.CashStatusResult
 	require.NoError(t, json.Unmarshal(raw, &back))
 	assert.True(t, back.Recipients[0].ExpiresAt.Never())
