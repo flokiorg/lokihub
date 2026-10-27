@@ -1,6 +1,7 @@
 package circlemoney_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -323,4 +324,21 @@ func TestNotActive_NoCreditAndOutOfHoldings(t *testing.T) {
 	require.NoError(t, c.svc.DB.First(w, w.ID).Error)
 	assert.Equal(t, constants.ERROR_PAYMENT_FAILED, refusalCode(t,
 		circlemoney.CheckCredit(c.svc.DB, circlemoney.CreditInput{Wallet: w, Amount: 1, Now: now})))
+}
+
+// A usage sum the database cannot answer reads as full, so the caps and
+// ceilings it feeds refuse rather than pass.
+func TestUsageSumsFailClosed(t *testing.T) {
+	c := newCircle(t)
+	w := c.wallet(t, 100_000, 100_000, constants.BUDGET_RENEWAL_NEVER, time.Now(), 0)
+	assert.Zero(t, circlemoney.SendUsage(c.svc.DB, w.ID, 0))
+	// Drop the table every sum reads; each now reads as full.
+	require.NoError(t, c.svc.DB.Migrator().RenameTable("transactions", "transactions_gone"))
+	t.Cleanup(func() { _ = c.svc.DB.Migrator().RenameTable("transactions_gone", "transactions") })
+	assert.Equal(t, int64(math.MaxInt64), circlemoney.SendUsage(c.svc.DB, w.ID, 0))
+	assert.Equal(t, int64(math.MaxInt64), circlemoney.Receipts(c.svc.DB, w.ID, 0))
+	assert.Equal(t, int64(math.MaxInt64), circlemoney.OutboundUsage(c.svc.DB, c.hub.ID, 0))
+	sum, count := circlemoney.OpenInvoices(c.svc.DB, []uint{w.ID}, time.Now())
+	assert.Equal(t, int64(math.MaxInt64), sum)
+	assert.GreaterOrEqual(t, count, circlemoney.MaxOpenInvoices)
 }
