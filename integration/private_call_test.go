@@ -78,6 +78,9 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 		rawParams, err = nwcclient.WithRequestID(rawParams)
 		require.NoError(t, err)
 	}
+	if method == nipcash.MethodCashConsolidate {
+		rawParams = rebindConsolidateProofs(t, rawParams)
+	}
 	paramsHash, err := transport.CanonicalParamsHash(rawParams)
 	require.NoError(t, err)
 

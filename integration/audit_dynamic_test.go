@@ -24,11 +24,11 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 )
 
-// oneCashRecipient builds a single-cash-mode-recipient mint_cash
-// request. The Hub mints the cash secret and returns it once in the create
-// response (over the Hub's own single-owner connection).
-func oneCashRecipient(amountMloki uint64) []CashWalletRecipientParam {
-	return []CashWalletRecipientParam{{IdentityType: "cash", AmountMillis: amountMloki}}
+// oneCashRecipient builds a single-cash-mode-recipient mint_cash request:
+// the caller generates the secret and sends only its commitment (NIP-CASH
+// §Creating a Cash-Mode Slice); the Hub never returns a secret.
+func oneCashRecipient(commitment string, amountMloki uint64) []CashWalletRecipientParam {
+	return []CashWalletRecipientParam{{IdentityType: "cash", IdentityValue: commitment, AmountMillis: amountMloki}}
 }
 
 // createCashModeWallet mints a fresh single-recipient cash-mode wallet and returns its
@@ -39,15 +39,16 @@ func oneCashRecipient(amountMloki uint64) []CashWalletRecipientParam {
 // one, so a caller holding only that can mint but cannot act on the bill.
 func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki uint64) (pairingURI, token, walletPubkey, cashSecret string) {
 	t.Helper()
+	secret, commitment := cashSecretAndHash(t)
 	var created MintCashResult
 	require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-		Recipients: oneCashRecipient(amountMloki),
+		Recipients: oneCashRecipient(commitment, amountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 	require.Len(t, created.Recipients, 1)
 	require.Equal(t, "cash", created.Recipients[0].IdentityType)
-	require.NotEmpty(t, created.Recipients[0].CashSecret, "hub must mint the cash secret in the create response")
-	return "", created.CashToken, created.WalletPubkey, created.Recipients[0].CashSecret
+	require.Empty(t, created.Recipients[0].CashSecret, "the hub never returns a cash secret")
+	return "", created.CashToken, created.WalletPubkey, secret
 }
 
 // fireBarrier runs two funcs as simultaneously as the Go scheduler + the real
