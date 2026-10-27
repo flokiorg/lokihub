@@ -71,6 +71,13 @@ func privateCallCtx(t *testing.T, ctx context.Context, billToken, method string,
 
 	rawParams, err := json.Marshal(params)
 	require.NoError(t, err, "marshal params")
+	// cash_transfer and cash_consolidate are calls: they carry a request_id
+	// (NIP-CASH §request_id). A test that sets its own, or none on purpose with
+	// an explicit null, keeps it.
+	if method == nipcash.MethodCashTransfer || method == nipcash.MethodCashConsolidate {
+		rawParams, err = nwcclient.WithRequestID(rawParams)
+		require.NoError(t, err)
+	}
 	paramsHash, err := transport.CanonicalParamsHash(rawParams)
 	require.NoError(t, err)
 
@@ -246,10 +253,16 @@ func (b *billConn) Bearer() *billConn {
 // pairing URI does not carry.
 //
 // pairingURI is still needed for the non-bill methods the embedded client serves.
-func mustConnectBill(t *testing.T, pairingURI, token, signerPriv string) *billConn {
+func mustConnectBill(t *testing.T, token, signerPriv string) *billConn {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := nwcclient.ConnectBill(ctx, token)
+	require.NoError(t, err, "connect to the bill")
+	client.Logger = t.Logf
+	t.Cleanup(client.Close)
 	return &billConn{
-		Client:     mustConnect(t, pairingURI),
+		Client:     client,
 		t:          t,
 		token:      token,
 		signerPriv: signerPriv,

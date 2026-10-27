@@ -92,7 +92,7 @@ func mintCashChild(t *testing.T, hub CashHubConfig, amountMloki uint64) cashChil
 	return cashChildFixture{
 		// The beneficiary signs each item's slice proof: the private transport authorizes
 		// per item, so the identity that was implicit in this connection is now named.
-		Client:             mustConnectBill(t, result.PairingURI, result.CashToken, beneficiaryPriv),
+		Client:             mustConnectBill(t, result.CashToken, beneficiaryPriv),
 		WalletPubkey:       result.WalletPubkey,
 		BeneficiaryPrivkey: beneficiaryPriv,
 		BeneficiaryPubkey:  beneficiaryPub,

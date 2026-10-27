@@ -85,8 +85,8 @@ func TestAudit_CashConcurrentPartialSplits_MoneyConserved(t *testing.T) {
 
 		// Two independent connections so the two splits genuinely race on the
 		// wire, not behind one client's internal lock.
-		clientA := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
-		clientB := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		clientA := mustConnectBill(t, created.CashToken, curPriv)
+		clientB := mustConnectBill(t, created.CashToken, curPriv)
 
 		var resA, resB CashTransferResult
 		var errA, errB error
@@ -191,8 +191,8 @@ func TestAudit_CashRedeemVsPartialSplit_MoneyConserved(t *testing.T) {
 			Expiry:     happyPathExpirySecs,
 		}, &created))
 
-		redeemConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
-		splitConn := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+		redeemConn := mustConnectBill(t, created.CashToken, curPriv)
+		splitConn := mustConnectBill(t, created.CashToken, curPriv)
 
 		redeemInvoice := mintInvoiceFromSimpleWallet(t, cfg, fullAmount, "audit redeem-vs-split full")
 		redeemProof := buildClaimProofEvent(t, curPriv, created.WalletPubkey, redeemInvoice.PaymentHash, nil, time.Now())
@@ -314,7 +314,7 @@ func TestAudit_CashPartialSplit_AmountBoundaries(t *testing.T) {
 			Recipients: onePubkeyRecipient(curPub, amount),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		return mustConnectBill(t, created.PairingURI, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
+		return mustConnectBill(t, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
 	}
 
 	t.Run("Zero_Rejected", func(t *testing.T) {
@@ -413,7 +413,7 @@ func TestAudit_CashSplitProofReplay_DifferentAmount(t *testing.T) {
 		Recipients: onePubkeyRecipient(curPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, curPriv)
+	shared := mustConnectBill(t, created.CashToken, curPriv)
 
 	// A single proof, bound to newPub. Use it once to split 30k off.
 	newPriv := newTestPrivkey(t)

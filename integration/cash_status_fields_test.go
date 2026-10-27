@@ -56,7 +56,7 @@ func TestCashStatus_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T) {
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	hubClient := mustConnect(t, resp.PairingUri)
+	hubClient := mustConnect(t, resp.CashHubToken)
 
 	// The beneficiary's KEY is kept, not just their pubkey: cash_status now travels over
 	// the private transport, which authorizes per item, so the caller has to sign for the

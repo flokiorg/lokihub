@@ -105,7 +105,7 @@ func TestSpec_Archive_IsUnreachableOverNWC(t *testing.T) {
 		Expiry:     happyPathExpirySecs,
 	}, &created))
 
-	bill := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	bill := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	// Drain it in full, which empties the bill and has the Hub destroy it.
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spec archive drain")

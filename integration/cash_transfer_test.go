@@ -36,7 +36,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+		shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 		newPriv := newTestPrivkey(t)
 		newPub, err := nostr.GetPublicKey(newPriv)
@@ -93,7 +93,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+		shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 		// The caller generates their own cash secret and submits only its
 		// commitment — the wallet never mints or returns one over this
@@ -133,7 +133,7 @@ func testCashTransfer(t *testing.T, cfg *Config, hub CashHubConfig) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+		shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 		intendedPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/constants"
@@ -25,9 +24,7 @@ import (
 
 // TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted proves a wallet
 // minted via the admin HTTP path behaves identically to one minted via NWC
-// mint_cash: same connection shape (cash_token decodes to the same
-// pairing_uri, matching requireLokicashMatchesPairingURI's own invariant),
-// same balance, and — the part that actually proves real fund movement, not
+// mint_cash: the same token shape, the same balance, and — the part that actually proves real fund movement, not
 // just a plausible-looking response — a real cash_redeem against it succeeds
 // exactly like it would for an NWC-minted wallet.
 func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
@@ -49,18 +46,15 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 		ExpirySecs: happyPathExpirySecs,
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.PairingURI)
 	require.NotEmpty(t, resp.CashToken)
 	require.Len(t, resp.Recipients, 1)
 	require.EqualValues(t, happyPathAmountMloki, resp.Recipients[0].AmountMloki)
 	t.Cleanup(func() { _ = admin.deleteCashWallet(hubAppID, resp.AppID) })
 
-	requireLokicashMatchesPairingURI(t, resp.PairingURI, resp.CashToken)
-
 	decoded, err := nipcash.Decode(resp.CashToken)
 	require.NoError(t, err)
 
-	child := mustConnectBill(t, resp.PairingURI, resp.CashToken, beneficiaryPriv)
+	child := mustConnectBill(t, resp.CashToken, beneficiaryPriv)
 
 	var balance CashStatusResult
 	require.NoError(t, child.Call(ctxT(t), constants.NIP47MethodCashStatus, CashStatusParams{Scope: "all"}, &balance))
@@ -90,44 +84,6 @@ func TestAdminCreateCashWallet_RedeemsIdenticallyToNWCMinted(t *testing.T) {
 	})
 }
 
-// TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode proves the
-// admin path's mint_signature field (previously this path
-// had no provenance field at all) produces a token that verifies against the
-// live node's real signing key — mirrors
-// TestCashMintProvenance/SignedTokenVerifiesToAStableNodeIdentity's own
-// pattern (cash_consolidate_test.go), but through the admin path.
-func TestAdminCreateCashWallet_MintSignatureVerifiesAgainstLiveNode(t *testing.T) {
-	cfg := requireConfig(t)
-	admin, ok := newAdminClient(cfg)
-	if !ok {
-		t.Skip("skipping: admin_api not configured - see integration/README.md")
-	}
-	_, hubAppID, _ := createEphemeralCashHub(t, cfg, "admin-mint-provenance-hub", nil)
-
-	beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
-	require.NoError(t, err)
-
-	resp, err := admin.createCashWallet(hubAppID, adminCreateCashWalletRequest{
-		Recipients: []adminCashWalletRecipient{
-			{IdentityType: "pubkey", IdentityValue: beneficiaryPub, AmountMloki: happyPathAmountMloki},
-		},
-		ExpirySecs:    happyPathExpirySecs,
-		MintSignature: true,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = admin.deleteCashWallet(hubAppID, resp.AppID) })
-
-	decoded, err := nipcash.Decode(resp.CashToken)
-	require.NoError(t, err)
-	require.NotNil(t, decoded.MintSignature, "admin-minted token with mint_signature:true must carry a mint signature")
-	require.NotNil(t, decoded.AttestedAmountMillis)
-	assert.EqualValues(t, happyPathAmountMloki, *decoded.AttestedAmountMillis)
-
-	minter, verified := nipcash.VerifyProvenance(decoded)
-	require.True(t, verified, "admin-minted token's provenance signature must verify against the live node's real signing key")
-	assert.Len(t, minter, 66, "recovered minter must be a compressed secp256k1 pubkey (hex)")
-}
-
 // TestAdminCreateCashWallet_NoMintSignature_NoProvenance is the control:
 // omitting mint_signature (the default) produces a token with no
 // provenance, same as the NWC path's own default.
@@ -149,7 +105,7 @@ func TestAdminCreateCashWallet_AlwaysCarriesProvenance(t *testing.T) {
 	if !ok {
 		t.Skip("skipping: admin_api not configured - see integration/README.md")
 	}
-	_, hubAppID, _ := createEphemeralCashHub(t, cfg, "admin-mint-no-provenance-hub", nil)
+	hub, hubAppID, _ := createEphemeralCashHub(t, cfg, "admin-mint-no-provenance-hub", nil)
 
 	beneficiaryPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 	require.NoError(t, err)
@@ -170,5 +126,12 @@ func TestAdminCreateCashWallet_AlwaysCarriesProvenance(t *testing.T) {
 		"an admin-minted bill must carry provenance; without it the bill cannot reach the private transport and is unspendable")
 	minter, verified := nipcash.VerifyProvenance(decoded)
 	require.True(t, verified, "the provenance must verify, not merely be present")
-	require.NotEmpty(t, minter, "a verified signature must recover its minting node")
+	require.Equal(t, nipcash.SchemeMintV1, decoded.Scheme, "an admin mint is signed under cash-mint:v1")
+
+	// The minter is the Cash Hub's own node identity, as get_info reports it.
+	var info struct {
+		Pubkey string `json:"pubkey"`
+	}
+	require.NoError(t, mustConnect(t, hub.Connection).Call(ctxT(t), "get_info", struct{}{}, &info))
+	require.True(t, nipcash.HubIdentityEqual(minter, info.Pubkey), "minter %s, get_info pubkey %s", minter, info.Pubkey)
 }

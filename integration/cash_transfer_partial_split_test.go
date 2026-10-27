@@ -37,7 +37,7 @@ func TestCashTransferPartialSplit(t *testing.T) {
 			Recipients: onePubkeyRecipient(currentPub, fullAmount),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+		shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 		newPriv := newTestPrivkey(t)
 		newPub, err := nostr.GetPublicKey(newPriv)
@@ -73,7 +73,7 @@ func TestCashTransferPartialSplit(t *testing.T) {
 		// currentPriv, not newPriv: a partial split leaves the REMAINDER with the original
 		// caller and carves the split amount off to the new target. The remainder's slice is
 		// still theirs, so they sign for it.
-		remWalletClient := mustConnectBill(t, nwcURIFromLokicash(remWalletToken), remDecrypted, currentPriv)
+		remWalletClient := mustConnectBill(t, remDecrypted, currentPriv)
 		remainderInvoice := mintInvoiceFromSimpleWallet(t, cfg, uint64(fullAmount)-splitAmount, "partial split remainder redeem")
 		remainderProof := buildClaimProofEvent(t, currentPriv, remWalletToken.WalletPubkey, remainderInvoice.PaymentHash, nil, time.Now())
 		var remainderClaim ClaimFundsResult
@@ -110,10 +110,10 @@ func TestCashTransferPartialSplit(t *testing.T) {
 		require.NoError(t, err)
 		decrypted, err := newWalletCipher.Decrypt(transferResult.NewWalletToken)
 		require.NoError(t, err)
-		newWalletToken, err := nipcash.Decode(decrypted)
+		_, err = nipcash.Decode(decrypted)
 		require.NoError(t, err)
 
-		newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, newPriv)
+		newWalletClient := mustConnectBill(t, decrypted, newPriv)
 		newWalletInvoice := mintInvoiceFromSimpleWallet(t, cfg, splitAmount, "partial split new wallet redeem")
 		newWalletProof := buildClaimProofEvent(t, newPriv, transferResult.NewWalletPubkey, newWalletInvoice.PaymentHash, nil, time.Now())
 		var newWalletClaim ClaimFundsResult
@@ -136,7 +136,7 @@ func TestCashTransferPartialSplit(t *testing.T) {
 			Recipients: onePubkeyRecipient(currentPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+		shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 		newPub, err := nostr.GetPublicKey(newTestPrivkey(t))
 		require.NoError(t, err)
@@ -196,7 +196,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	hubClient := mustConnect(t, resp.PairingUri)
+	hubClient := mustConnect(t, resp.CashHubToken)
 
 	currentPriv := newTestPrivkey(t)
 	currentPub, err := nostr.GetPublicKey(currentPriv)
@@ -207,7 +207,7 @@ func TestCashTransferMinTransferFloor(t *testing.T) {
 		Recipients: onePubkeyRecipient(currentPub, fullAmount),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, currentPriv)
+	shared := mustConnectBill(t, created.CashToken, currentPriv)
 
 	t.Run("SplitAmountBelowFloor_Rejected", func(t *testing.T) {
 		newPub, err := nostr.GetPublicKey(newTestPrivkey(t))
@@ -290,7 +290,7 @@ func TestCashTransferFullTransfer_IdentityBoundTarget_StaysInPlace(t *testing.T)
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, otherPriv)
+	shared := mustConnectBill(t, created.CashToken, otherPriv)
 
 	newPriv := newTestPrivkey(t)
 	newPub, err := nostr.GetPublicKey(newPriv)

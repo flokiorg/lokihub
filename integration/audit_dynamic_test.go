@@ -47,7 +47,7 @@ func createCashModeWallet(t *testing.T, hubClient *nwcclient.Client, amountMloki
 	require.Len(t, created.Recipients, 1)
 	require.Equal(t, "cash", created.Recipients[0].IdentityType)
 	require.NotEmpty(t, created.Recipients[0].CashSecret, "hub must mint the cash secret in the create response")
-	return created.PairingURI, created.CashToken, created.WalletPubkey, created.Recipients[0].CashSecret
+	return "", created.CashToken, created.WalletPubkey, created.Recipients[0].CashSecret
 }
 
 // fireBarrier runs two funcs as simultaneously as the Go scheduler + the real
@@ -97,12 +97,12 @@ func TestAudit_CashTransferVsRedeem_NeverBothSucceed(t *testing.T) {
 	const iterations = 40
 
 	for i := 0; i < iterations; i++ {
-		pairingURI, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
+		_, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
 
 		// Two independent clients (each its own relay connection) so the two
 		// requests genuinely race on the wire, not through one client's lock.
-		redeemClient := mustConnectBill(t, pairingURI, pairingURIToken, "")
-		transferClient := mustConnectBill(t, pairingURI, pairingURIToken, "")
+		redeemClient := mustConnectBill(t, pairingURIToken, "")
+		transferClient := mustConnectBill(t, pairingURIToken, "")
 
 		redeemInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit redeem-vs-transfer")
 		secret2Hex, secret2Hash := cashSecretAndHash(t)
@@ -187,9 +187,9 @@ func TestAudit_CashConcurrentTransfers_ExactlyOneWinner(t *testing.T) {
 	const iterations = 6
 	for i := 0; i < iterations; i++ {
 		t.Run("iteration", func(t *testing.T) {
-			pairingURI, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
-			clientA := mustConnectBill(t, pairingURI, pairingURIToken, "")
-			clientB := mustConnectBill(t, pairingURI, pairingURIToken, "")
+			_, pairingURIToken, _, secret1 := createCashModeWallet(t, hubClient, happyPathAmountMloki)
+			clientA := mustConnectBill(t, pairingURIToken, "")
+			clientB := mustConnectBill(t, pairingURIToken, "")
 
 			aHex, aHash := cashSecretAndHash(t)
 			bHex, bHash := cashSecretAndHash(t)
@@ -264,7 +264,7 @@ func TestAudit_CashTransferCashTarget_Boundaries(t *testing.T) {
 			Recipients: onePubkeyRecipient(curPub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		return mustConnectBill(t, created.PairingURI, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
+		return mustConnectBill(t, created.CashToken, curPriv), curPriv, curPub, created.WalletPubkey
 	}
 
 	t.Run("CashTarget_MissingIdentityValue_Rejected_NoServerMintedSecret", func(t *testing.T) {
@@ -408,7 +408,7 @@ func TestAudit_CashTransferIntoCash_SpinsOffOnSharedWallet(t *testing.T) {
 		},
 		Expiry: happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, aPriv)
+	shared := mustConnectBill(t, created.CashToken, aPriv)
 
 	secretHex, secretHash := cashSecretAndHash(t)
 	proof := buildTransferProofEvent(t, aPriv, created.WalletPubkey, "cash", secretHash, "", happyPathAmountMloki, nil, time.Now())
@@ -426,12 +426,12 @@ func TestAudit_CashTransferIntoCash_SpinsOffOnSharedWallet(t *testing.T) {
 	require.NoError(t, err)
 	decrypted, err := aCipher.Decrypt(res.NewWalletToken)
 	require.NoError(t, err)
-	newWalletToken, err := nipcash.Decode(decrypted)
+	_, err = nipcash.Decode(decrypted)
 	require.NoError(t, err)
 
 	// Bearer: this spun-off bill is cash-mode, so its secret in params IS the authorization
 	// and the item must carry no slice proof (§Bearer Items).
-	newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, "")
+	newWalletClient := mustConnectBill(t, decrypted, "")
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "audit spinoff redeem")
 	var claim ClaimFundsResult
 	require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

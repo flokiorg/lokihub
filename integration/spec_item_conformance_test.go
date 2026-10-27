@@ -81,7 +81,7 @@ func TestSpec_MintCash_OverPerWalletCeilingIsRejectedWhole(t *testing.T) {
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	hubClient := mustConnect(t, resp.PairingUri)
+	hubClient := mustConnect(t, resp.CashHubToken)
 
 	before, err := admin.listCashWalletClaims(resp.ID)
 	require.NoError(t, err)

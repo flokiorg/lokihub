@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/integration/nwcclient"
 )
 
 type adminClient struct {
@@ -394,15 +396,17 @@ type adminCashWalletRecipient struct {
 
 // adminCreateCashWalletRequest mirrors api.CreateCashWalletRequest.
 type adminCreateCashWalletRequest struct {
-	Recipients    []adminCashWalletRecipient `json:"recipients"`
-	ExpirySecs    int                        `json:"expiry_secs,omitempty"`
-	MintSignature bool                       `json:"mint_signature,omitempty"`
+	Recipients []adminCashWalletRecipient `json:"recipients"`
+	ExpirySecs int                        `json:"expiry_secs,omitempty"`
+	// RequestID and Expiration make the mint recoverable; createCashWallet fills
+	// them when the test leaves them empty.
+	RequestID  string `json:"request_id,omitempty"`
+	Expiration int64  `json:"expiration,omitempty"`
 }
 
 // adminCreateCashWalletResponse mirrors api.CreateCashWalletResponse.
 type adminCreateCashWalletResponse struct {
 	AppID      uint                       `json:"app_id"`
-	PairingURI string                     `json:"pairing_uri"`
 	CashToken  string                     `json:"cash_token"`
 	ExpiresAt  *int64                     `json:"expires_at,omitempty"`
 	Recipients []adminCashWalletRecipient `json:"recipients"`
@@ -415,6 +419,10 @@ type adminCreateCashWalletResponse struct {
 // specifically to give this path — which had unit coverage but zero
 // live-node coverage — an integration-level entry point at all.
 func (c *adminClient) createCashWallet(hubAppID uint, req adminCreateCashWalletRequest) (adminCreateCashWalletResponse, error) {
+	if req.RequestID == "" {
+		req.RequestID = nwcclient.NewRequestID()
+		req.Expiration = time.Now().Add(nwcclient.MintDeadline).Unix()
+	}
 	var resp adminCreateCashWalletResponse
 	err := c.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/cash-wallets", hubAppID), req, &resp)
 	return resp, err

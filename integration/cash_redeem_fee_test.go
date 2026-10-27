@@ -58,7 +58,7 @@ func TestCashRedeemFee_SameNodeExemptAndCashStatusQuote(t *testing.T) {
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	hubClient := mustConnect(t, resp.PairingUri)
+	hubClient := mustConnect(t, resp.CashHubToken)
 
 	beneficiaryPriv := newTestPrivkey(t)
 	beneficiaryPub := mustPubkey(t, beneficiaryPriv)
@@ -68,7 +68,7 @@ func TestCashRedeemFee_SameNodeExemptAndCashStatusQuote(t *testing.T) {
 		Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	t.Run("CashStatus_QuotesWorstCaseFee", func(t *testing.T) {
 		var recipients CashStatusResult
@@ -146,7 +146,7 @@ func TestCashRedeemFee_QuotedNetAmount_RejectedForSameNodeRedemption(t *testing.
 		}
 	})
 	require.NoError(t, admin.transfer(nil, resp.ID, ephemeralCashHubFundLoki))
-	hubClient := mustConnect(t, resp.PairingUri)
+	hubClient := mustConnect(t, resp.CashHubToken)
 
 	beneficiaryPriv := newTestPrivkey(t)
 	beneficiaryPub := mustPubkey(t, beneficiaryPriv)
@@ -156,7 +156,7 @@ func TestCashRedeemFee_QuotedNetAmount_RejectedForSameNodeRedemption(t *testing.
 		Recipients: onePubkeyRecipient(beneficiaryPub, happyPathAmountMloki),
 		Expiry:     happyPathExpirySecs,
 	}, &created))
-	shared := mustConnectBill(t, created.PairingURI, created.CashToken, beneficiaryPriv)
+	shared := mustConnectBill(t, created.CashToken, beneficiaryPriv)
 
 	netAmount := uint64(happyPathAmountMloki) - uint64(happyPathAmountMloki)*redeemFeePpm/1_000_000
 	invoice := mintInvoiceFromSimpleWallet(t, cfg, netAmount, "integration redeem-fee mismatch test")

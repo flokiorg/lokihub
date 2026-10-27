@@ -34,9 +34,8 @@ func TestCashMintProvenance(t *testing.T) {
 		t.Helper()
 		var created MintCashResult
 		require.NoError(t, hubClient.Call(ctxT(t), constants.NIP47MethodMintCash, MintCashParams{
-			Recipients:    onePubkeyRecipient(recipientPub, amount),
-			Expiry:        happyPathExpirySecs,
-			MintSignature: true,
+			Recipients: onePubkeyRecipient(recipientPub, amount),
+			Expiry:     happyPathExpirySecs,
 		}, &created))
 		decoded, err := nipcash.Decode(created.CashToken)
 		require.NoError(t, err)
@@ -115,7 +114,7 @@ func TestCashConsolidate(t *testing.T) {
 			Recipients: onePubkeyRecipient(callerPub, amt),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		sources[i] = src{walletPubkey: created.WalletPubkey, conn: created.PairingURI, token: created.CashToken, amount: amt}
+		sources[i] = src{walletPubkey: created.WalletPubkey, conn: "", token: created.CashToken, amount: amt}
 		sum += amt
 	}
 
@@ -141,7 +140,7 @@ func TestCashConsolidate(t *testing.T) {
 
 	// Call cash_consolidate over one source's own shared connection. callerPriv signs the
 	// item, and also each source's own proof inside params — authorization is per source.
-	callConn := mustConnectBill(t, sources[0].conn, sources[0].token, callerPriv)
+	callConn := mustConnectBill(t, sources[0].token, callerPriv)
 	var result CashConsolidateResult
 	require.NoError(t, callConn.Call(ctxT(t), constants.NIP47MethodCashConsolidate, params, &result))
 	assert.EqualValues(t, sum, result.AmountMillis)
@@ -158,7 +157,7 @@ func TestCashConsolidate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, result.NewWalletPubkey, mergedToken.WalletPubkey)
 
-	merged := mustConnectBill(t, nwcURIFromLokicash(mergedToken), decryptedToken, newPriv)
+	merged := mustConnectBill(t, decryptedToken, newPriv)
 
 	// The merged wallet holds exactly the sum.
 	var mergedBalance CashStatusResult
@@ -172,7 +171,7 @@ func TestCashConsolidate(t *testing.T) {
 		// Hub retains it for a bounded window precisely so its holder gets a definitive
 		// answer. What must hold is that the tombstone discloses nothing: it names the
 		// state and carries no roster.
-		srcConn := mustConnectBill(t, s.conn, s.token, callerPriv)
+		srcConn := mustConnectBill(t, s.token, callerPriv)
 		requireSpentBillTombstoned(t, srcConn)
 	}
 

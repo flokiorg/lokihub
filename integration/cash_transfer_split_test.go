@@ -19,7 +19,6 @@ package integration
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -35,21 +34,6 @@ func TestCashTransferSpinOff(t *testing.T) {
 	cfg := requireConfig(t)
 	hub, hubAppID, admin := createEphemeralCashHub(t, cfg, "cash-transfer-spinoff-cash-hub", nil)
 	testCashTransferSpinOff(t, cfg, hub, hubAppID, admin)
-}
-
-// nwcURIFromLokicash mirrors nip47/controllers/pairing.go's
-// buildNWCPairingURI — a real recipient has only the decoded lokicash token,
-// not a ready-made pairing_uri, for a spun-off wallet (see NIP-CASH: only the
-// token travels, nested-encrypted, inside the cash_transfer response).
-func nwcURIFromLokicash(token nipcash.Token) string {
-	var b strings.Builder
-	b.WriteString("nostr+walletconnect://")
-	b.WriteString(token.WalletPubkey)
-	b.WriteString("?relay=")
-	b.WriteString(strings.Join(token.RelayURLs, "&relay="))
-	b.WriteString("&secret=")
-	b.WriteString(token.Secret)
-	return b.String()
 }
 
 func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAppID uint, admin *adminClient) {
@@ -71,7 +55,7 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 			},
 			Expiry: happyPathExpirySecs,
 		}, &created))
-		shared := mustConnectBill(t, created.PairingURI, created.CashToken, victimPriv)
+		shared := mustConnectBill(t, created.CashToken, victimPriv)
 
 		// The attacker redeems their own slice first. It's now claimed, but
 		// the attacker still holds this shared connection and can decrypt
@@ -144,7 +128,7 @@ func testCashTransferSpinOff(t *testing.T, cfg *Config, hub CashHubConfig, hubAp
 		// the cash secret the victim generated locally.
 		// Bearer: the spun-off bill is cash-mode, so its secret in params IS the
 		// authorization and the item carries no slice proof (§Bearer Items).
-		newWalletClient := mustConnectBill(t, nwcURIFromLokicash(newWalletToken), decrypted, "")
+		newWalletClient := mustConnectBill(t, decrypted, "")
 		newWalletInvoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "spinoff new wallet redeem")
 		var newWalletClaim ClaimFundsResult
 		require.NoError(t, newWalletClient.Call(ctxT(t), constants.NIP47MethodCashRedeem, ClaimFundsParams{

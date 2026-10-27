@@ -229,14 +229,16 @@ func requireConfig(t *testing.T) *Config {
 	return cfg
 }
 
-// mustConnect connects an nwcclient.Client and registers it for cleanup.
-func mustConnect(t *testing.T, pairingURI string) *nwcclient.Client {
+// mustConnect connects an nwcclient.Client through a signed cashhub1 or
+// circlehub1 string (or a simple wallet's pairing URI) and registers it for
+// cleanup.
+func mustConnect(t *testing.T, connection string) *nwcclient.Client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := nwcclient.Connect(ctx, pairingURI)
-	require.NoError(t, err, "connect to %s", pairingURI)
+	client, err := nwcclient.ConnectAny(ctx, connection)
+	require.NoError(t, err, "connect to %s", connection)
 	client.Logger = t.Logf
 	t.Cleanup(client.Close)
 	return client
