@@ -94,6 +94,7 @@ func (c *adminClient) doBody(method, path string, body, out any) error {
 type adminApp struct {
 	ID           uint   `json:"id"`
 	WalletPubkey string `json:"walletPubkey"`
+	Kind         string `json:"kind"`
 }
 
 type adminListAppsResponse struct {
@@ -146,19 +147,10 @@ func deleteCircleChildPath(hubAppID, childAppID uint) string {
 	return fmt.Sprintf("/api/apps/%d/circle/children/%d", hubAppID, childAppID)
 }
 
-// deleteCircleChild reclaims childAppID's remaining balance to its parent
-// hub and hard-deletes it (service.ReclaimAndDeleteSubWallet), which
-// cascade-deletes the CircleWalletMembership row the one-active-wallet-per-
-// identity cap check queries - freeing that requester pubkey to mint a new
-// circle wallet under this hub again.
-//
-// Retries on "a payment is still settling into this wallet" - a real,
-// expected-transient guard in ReclaimAndDeleteSubWallet (service/
-// cash_cleanup_service.go) against deleting a wallet out from under a
-// payment that hasn't finished settling yet, whose own doc comment says
-// "the caller retries". Immediately re-running this test suite right after
-// a prior run's last real payment can race that settlement, so a bare,
-// unretried delete call would spuriously fail cleanup here.
+// deleteCircleChild is the host's delete of a member wallet: it moves the
+// wallet to Closing (NIP-CW §Lifecycle and Deletion) and never sweeps its
+// balance. The wallet keeps its identity's membership until it is deleted.
+// Retries on "still settling", kept for older hosts.
 func (c *adminClient) deleteCircleChild(hubAppID, childAppID uint) error {
 	const maxAttempts = 5
 	var err error
@@ -326,6 +318,10 @@ type adminCreateAppRequest struct {
 	CircleFeesPpm           int             `json:"circleFeesPpm,omitempty"`
 	CirclePerWalletMaxMloki int             `json:"circlePerWalletMaxMloki,omitempty"`
 	CircleMinBudgetRenewal  string          `json:"circleMinBudgetRenewal,omitempty"`
+	// CircleGraceSecs and CircleDustThresholdMloki: the lifecycle settings; 0
+	// takes the server's defaults.
+	CircleGraceSecs          int64 `json:"circleGraceSecs,omitempty"`
+	CircleDustThresholdMloki int64 `json:"circleDustThresholdMloki,omitempty"`
 }
 
 // adminFollowSet mirrors api.FollowSetRequest: a version of a follow set the
@@ -579,4 +575,22 @@ func unclaimedMlokiForWallet(t *testing.T, admin *adminClient, hubAppID uint, wa
 		total += c.AmountMloki
 	}
 	return total
+}
+
+// cashHubDeleteBlockers is GET /api/cash-hubs/:id/delete-check: what still
+// keeps a Cash Hub from being deleted.
+func (c *adminClient) cashHubDeleteBlockers(hubAppID uint) ([]string, error) {
+	var check struct {
+		Blockers []struct {
+			Kind string `json:"kind"`
+		} `json:"blockers"`
+	}
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/cash-hubs/%d/delete-check", hubAppID), &check); err != nil {
+		return nil, err
+	}
+	kinds := make([]string, 0, len(check.Blockers))
+	for _, b := range check.Blockers {
+		kinds = append(kinds, b.Kind)
+	}
+	return kinds, nil
 }

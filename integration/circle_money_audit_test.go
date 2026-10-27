@@ -39,7 +39,10 @@ func roomOf(t *testing.T, c *nwcclient.Client) uint64 {
 	t.Helper()
 	var budget GetBudgetResult
 	require.NoError(t, c.Call(ctxT(t), "get_budget", struct{}{}, &budget))
-	return budget.TotalBudget - uint64(balanceOf(t, c)) //nolint:gosec // a wallet balance is never negative
+	require.NotNil(t, budget.TotalReceiveBudget, "a circle wallet reports its receive cap")
+	// NIP-CW §What a Circle Wallet Connection Allows: the receive room is the
+	// receive cap less what counts against it this period.
+	return *budget.TotalReceiveBudget - *budget.UsedReceiveBudget
 }
 
 type payKeysendParams struct {
@@ -65,20 +68,22 @@ func TestCircleMoneyAudit(t *testing.T) {
 	a := mintCircleChildFor(t, hub, memberA)
 	b := mintCircleChildFor(t, hub, memberB)
 
-	t.Run("HoldInvoice_AboveCap_QuotaExceeded", func(t *testing.T) {
+	// A member cannot issue a hold invoice at all (NIP-CW §What a Circle Wallet
+	// Connection Allows), whatever its amount.
+	t.Run("HoldInvoice_Restricted", func(t *testing.T) {
 		var result MakeInvoiceResult
 		err := a.Call(ctxT(t), "make_hold_invoice", map[string]any{
-			"amount":       roomOf(t, a) + 1_000,
-			"description":  "integration circle audit hold cap",
+			"amount":       1_000,
+			"description":  "integration circle audit hold",
 			"payment_hash": newTestPrivkey(t), // any 32 random bytes in hex
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("ZeroAmountInvoice_Refused", func(t *testing.T) {
 		var result MakeInvoiceResult
 		err := a.Call(ctxT(t), "make_invoice", MakeInvoiceParams{Description: "integration circle audit zero amount"}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_BAD_REQUEST)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 
 	t.Run("MemberWallet_CannotCreateCircleWallets", func(t *testing.T) {
@@ -117,10 +122,12 @@ func TestCircleMoneyAudit(t *testing.T) {
 		assert.Equal(t, bBefore+amount, balanceOf(t, b))
 	})
 
-	// A keysend names its recipient app by ID, which anyone can write. Sent
-	// from this node to a member wallet with no room, it is refused before it
-	// leaves; one that fits is credited.
-	t.Run("Keysend_ToMemberWallet_HeldToItsCap", func(t *testing.T) {
+	// A keysend names its recipient app by ID, which anyone can write. From
+	// another member of the circle it is a same-circle transfer, counted on no
+	// cap; from any other app on this node it is external, and one larger than
+	// the wallet's receive room is refused before it leaves (NIP-CW §Own Funds
+	// and Caps); one that fits is credited.
+	t.Run("Keysend_ToMemberWallet_HeldToItsReceiveRoom", func(t *testing.T) {
 		var info GetInfoResult
 		require.NoError(t, a.Call(ctxT(t), "get_info", struct{}{}, &info))
 		require.NotNil(t, info.Pubkey)
@@ -128,28 +135,32 @@ func TestCircleMoneyAudit(t *testing.T) {
 		require.NoError(t, err)
 		namesB := []tlvRecord{{Type: customKeyTLVType, Value: hex.EncodeToString([]byte(strconv.FormatUint(uint64(bID), 10)))}}
 
-		// Fill B nearly to its cap, and give A more than B's remaining room.
-		if room := roomOf(t, b); room > 5_000 {
-			fundCircleChild(t, cfg, b, room-4_000, "integration circle audit fill B")
-		}
-		if balanceOf(t, a) < 20_000 {
-			fundCircleChild(t, cfg, a, 20_000, "integration circle audit fund A for keysend")
-		}
 		room := roomOf(t, b)
-		require.Greater(t, balanceOf(t, a), int64(room+1_000), "A needs more than B's room for this to mean anything")
+		if balanceOf(t, a) < int64(room+2_000) { //nolint:gosec // test amounts
+			fundCircleChild(t, cfg, a, room+2_000, "integration circle audit fund A for keysend")
+		}
 		bBefore := balanceOf(t, b)
-		err = a.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: room + 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{})
+		require.NoError(t, a.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: room + 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}),
+			"a same-circle keysend counts on no cap")
+		assert.Equal(t, bBefore+int64(room)+1_000, balanceOf(t, b)) //nolint:gosec // test amounts
+		assert.Equal(t, room, roomOf(t, b), "and leaves the receive room as it was")
+
+		outsider := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+		bBefore = balanceOf(t, b)
+		err = outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: room + 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{})
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 		assert.Equal(t, bBefore, balanceOf(t, b))
 
-		require.NoError(t, a.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}))
+		require.NoError(t, outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}))
 		assert.Equal(t, bBefore+1_000, balanceOf(t, b))
+		assert.Equal(t, room-1_000, roomOf(t, b), "an external receipt counts on the receive cap")
 	})
 }
 
-// "Empty wallets only" means nothing can still arrive or leave: a member
-// wallet with a live invoice is kept, and so is the hub.
-func TestCircleMoneyAudit_HubDeleteEmptyOnly_KeepsWalletWithLiveInvoice(t *testing.T) {
+// Closing a circle moves a member wallet with a live invoice to Closing, which
+// cancels the invoice: a later payment of it fails (NIP-CW §Own Funds and Caps:
+// only Active wallets receive).
+func TestCircleMoneyAudit_CloseCircle_CancelsLiveInvoices(t *testing.T) {
 	cfg := requireConfig(t)
 	member := newTestPrivkey(t)
 	hub, hubID, admin := createEphemeralCircleHub(t, cfg, "money-audit-delete", circlePolicyAllowlist,
@@ -161,16 +172,18 @@ func TestCircleMoneyAudit_HubDeleteEmptyOnly_KeepsWalletWithLiveInvoice(t *testi
 
 	var result struct {
 		HubDeleted      bool   `json:"hubDeleted"`
-		SkippedChildIDs []uint `json:"skippedChildIds"`
+		ClosingChildIDs []uint `json:"closingChildIds"`
 	}
 	require.NoError(t, admin.doBody(http.MethodPost, fmt.Sprintf("/api/apps/%d/circle/delete", hubID),
 		map[string]string{"mode": "empty_only"}, &result))
-	assert.False(t, result.HubDeleted, "the hub stays while a member wallet has a live invoice")
-	assert.Len(t, result.SkippedChildIDs, 1)
+	assert.False(t, result.HubDeleted, "the hub stays while it has a wallet")
+	assert.Len(t, result.ClosingChildIDs, 1)
 
-	// Settle the invoice so cleanup can reclaim and delete the wallet now
-	// rather than after the invoice lapses.
-	payInvoiceFromSimpleWallet(t, cfg, invoice.Invoice)
+	payer := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+	var paid PayInvoiceResult
+	assert.Error(t, payer.Call(ctxT(t), "pay_invoice", PayInvoiceParams{Invoice: invoice.Invoice}, &paid),
+		"a Closing wallet's invoice was cancelled")
+	assert.Zero(t, balanceOf(t, child))
 }
 
 // A hidden follow-set member joins over the private transport, the only one that

@@ -12,7 +12,9 @@
 package integration
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
@@ -26,17 +28,63 @@ func TestZZZ_NoLeakedEphemeralFixtures(t *testing.T) {
 	// listCashWalletClaims's own doc comment on api.ListApps) - this only
 	// catches leaked hubs/circle_wallet/isolated apps, but a leaked hub is
 	// the visible symptom: every child under it was necessarily leaked too.
-	apps, err := admin.listAppsByNamePrefix(ephemeralFixtureNamePrefix)
-	if err != nil {
-		t.Fatalf("failed to list apps by ephemeral fixture name prefix: %v", err)
+	//
+	// Two kinds of leftover are expected and waited for or accepted:
+	//   - a torn-down circle_hub and its Closing wallets, which the lifecycle
+	//     job deletes once their (short, ephemeral) grace ends;
+	//   - a cash_hub kept only by its retained request records (NIP-CASH Q23).
+	var leaked []adminApp
+	deadline := time.Now().Add(ephemeralCircleGraceSecs*time.Second + 3*time.Minute)
+	for {
+		apps, err := admin.listAppsByNamePrefix(ephemeralFixtureNamePrefix)
+		if err != nil {
+			t.Fatalf("failed to list apps by ephemeral fixture name prefix: %v", err)
+		}
+		leaked = leaked[:0]
+		circles := 0
+		for _, app := range apps {
+			switch app.Kind {
+			case "circle_hub", "circle_wallet":
+				circles++
+				continue
+			case "cash_hub":
+				if blockers, err := admin.cashHubDeleteBlockers(app.ID); err == nil && onlyRecords(blockers) {
+					continue
+				}
+			}
+			leaked = append(leaked, app)
+		}
+		if circles == 0 || time.Now().After(deadline) {
+			if circles > 0 {
+				t.Errorf("%d torn-down circle hub(s) or wallet(s) are still there after their grace", circles)
+			}
+			break
+		}
+		time.Sleep(5 * time.Second)
 	}
-	if len(apps) == 0 {
-		return
+	for _, app := range leaked {
+		t.Errorf("leaked ephemeral fixture: app_id=%d kind=%s wallet_pubkey=%s - a t.Cleanup somewhere didn't tear this down (delete it via the admin API, then find and fix the missing/failing cleanup)", app.ID, app.Kind, app.WalletPubkey)
 	}
 
-	for _, app := range apps {
-		t.Errorf("leaked ephemeral fixture: app_id=%d wallet_pubkey=%s - a t.Cleanup somewhere didn't tear this down (delete it via the admin API, then find and fix the missing/failing cleanup)", app.ID, app.WalletPubkey)
+	// The identities of torn-down hubs can go now their hubs are gone.
+	pendingCircleIdentities.Range(func(key, _ any) bool {
+		if err := admin.deleteCircleIdentity(key.(uint)); err != nil && !strings.Contains(err.Error(), "not found") {
+			t.Logf("cleanup: failed to delete ephemeral circle identity id=%d (%v)", key, err)
+		}
+		return true
+	})
+}
+
+func onlyRecords(blockers []string) bool {
+	if len(blockers) == 0 {
+		return false
 	}
+	for _, b := range blockers {
+		if b != "records" {
+			return false
+		}
+	}
+	return true
 }
 
 // TestZZZ_NoLeakedEphemeralCircleIdentities is zz_leak_check_test.go's
