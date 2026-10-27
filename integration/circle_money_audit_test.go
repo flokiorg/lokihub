@@ -135,25 +135,29 @@ func TestCircleMoneyAudit(t *testing.T) {
 		require.NoError(t, err)
 		namesB := []tlvRecord{{Type: customKeyTLVType, Value: hex.EncodeToString([]byte(strconv.FormatUint(uint64(bID), 10)))}}
 
-		room := roomOf(t, b)
-		if balanceOf(t, a) < int64(room+2_000) { //nolint:gosec // test amounts
-			fundCircleChild(t, cfg, a, room+2_000, "integration circle audit fund A for keysend")
+		// Leave B 1,000 of receive room, then send it more than that.
+		if room := roomOf(t, b); room > 1_000 {
+			fundCircleChild(t, cfg, b, room-1_000, "integration circle audit fill B")
+		}
+		require.EqualValues(t, 1_000, roomOf(t, b))
+		if balanceOf(t, a) < 2_000 {
+			fundCircleChild(t, cfg, a, 2_000, "integration circle audit fund A for keysend")
 		}
 		bBefore := balanceOf(t, b)
-		require.NoError(t, a.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: room + 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}),
+		require.NoError(t, a.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 2_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}),
 			"a same-circle keysend counts on no cap")
-		assert.Equal(t, bBefore+int64(room)+1_000, balanceOf(t, b)) //nolint:gosec // test amounts
-		assert.Equal(t, room, roomOf(t, b), "and leaves the receive room as it was")
+		assert.Equal(t, bBefore+2_000, balanceOf(t, b))
+		assert.EqualValues(t, 1_000, roomOf(t, b), "and leaves the receive room as it was")
 
 		outsider := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
 		bBefore = balanceOf(t, b)
-		err = outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: room + 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{})
+		err = outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 2_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{})
 		requireNWCErrorCode(t, err, constants.ERROR_QUOTA_EXCEEDED)
 		assert.Equal(t, bBefore, balanceOf(t, b))
 
 		require.NoError(t, outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{}))
 		assert.Equal(t, bBefore+1_000, balanceOf(t, b))
-		assert.Equal(t, room-1_000, roomOf(t, b), "an external receipt counts on the receive cap")
+		assert.Zero(t, roomOf(t, b), "an external receipt counts on the receive cap")
 	})
 }
 
