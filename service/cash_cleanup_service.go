@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/ohstr/nmilat/nipcash"
 	"time"
 
@@ -223,6 +224,15 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 	}
 	if app.ParentAppID == nil {
 		return fmt.Errorf("app %d has no parent app to reclaim balance into", app.ID)
+	}
+	// A bill a cancelled withdrawal re-minted cannot be deleted by its owner
+	// (NIP-CASH §Cancelling a Payout); its expiry still ends it.
+	if opts.Outcome == db.CashBillOutcomeDeleted && app.Kind == db.AppKindCashWallet {
+		if reminted, err := cashwithdraw.IsRemintedBill(gormDB, app.ID); err != nil {
+			return err
+		} else if reminted {
+			return fmt.Errorf("%w: this bill was re-minted by a cancelled withdrawal and cannot be deleted", constants.ErrInvalidParams)
+		}
 	}
 
 	// A payment may still be settling into this wallet (e.g. an invoice created

@@ -437,7 +437,8 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	switch nip47Request.Method {
 	case constants.NIP47MethodCashRedeem, constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate, constants.NIP47MethodCashStatus,
-		constants.NIP47MethodCashLookup, constants.NIP47MethodCreateCircleWallet:
+		constants.NIP47MethodCashLookup, constants.NIP47MethodCreateCircleWallet,
+		constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error: &models.Error{

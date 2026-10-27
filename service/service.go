@@ -30,6 +30,7 @@ import (
 
 	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -58,14 +59,16 @@ type service struct {
 	// timer rather than logged per event.
 	droppedRequestEvents atomic.Int64
 	nip47Service         nip47.Nip47Service
-	socialCache          *nostrSocialCache
-	lsps5Listener        *lspsnostr.Listener
-	liquidityManager     *manager.LiquidityManager
-	appCancelFn          context.CancelFunc
-	nostrCancelFn        context.CancelFunc
-	keys                 keys.Keys
-	relayStatuses        []RelayStatus
-	startupState         string
+	// withdraw serves on-chain withdrawals (service/withdraw.go).
+	withdraw         *cashwithdraw.Service
+	socialCache      *nostrSocialCache
+	lsps5Listener    *lspsnostr.Listener
+	liquidityManager *manager.LiquidityManager
+	appCancelFn      context.CancelFunc
+	nostrCancelFn    context.CancelFunc
+	keys             keys.Keys
+	relayStatuses    []RelayStatus
+	startupState     string
 	// privateTransportStatus is set by setPrivateTransportIdentity /
 	// setPrivateTransportAnnounceResult (service/private_transport.go) and
 	// read by GetPrivateTransportStatus. A pointer so a read never races a
@@ -197,6 +200,7 @@ func NewService(ctx context.Context) (*service, error) {
 	// once re-checked, which needs the node.
 	svc.transactionsService.SetLNClientProvider(svc.GetLNClient)
 	svc.orders = svc.newOrderEngine(gormDB, keys, cfg, eventPublisher)
+	svc.setupWithdraw()
 
 	eventPublisher.RegisterSubscriber(svc.transactionsService)
 	eventPublisher.RegisterSubscriber(svc.nip47Service)

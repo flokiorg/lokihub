@@ -39,6 +39,9 @@ var privateServableMethods = map[string]struct{}{
 	constants.NIP47MethodCashLookup:         {},
 	constants.NIP47MethodCreateCircleWallet: {},
 	constants.NIP47MethodCashOrder:          {},
+	// Served only while the item's Cash Hub offers on-chain withdrawals (I5).
+	constants.NIP47MethodCashWithdrawQuote: {},
+	constants.NIP47MethodCashWithdraw:      {},
 }
 
 // IsPrivateServableMethod reports whether a method may be served over the private
@@ -99,6 +102,7 @@ func (c *itemResponseCollector) result(itemID string) (transport.Result, bool, e
 		out.Error = &transport.ResultError{
 			Code:    c.response.Error.Code,
 			Message: c.response.Error.Message,
+			Detail:  c.response.Error.Detail,
 		}
 		// An error and a result together would be ambiguous, and the response
 		// codec rejects it — so never carry both, even if a handler set both.

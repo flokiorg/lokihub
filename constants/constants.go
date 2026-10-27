@@ -178,6 +178,11 @@ const (
 	// Despite the name it is NOT scoped to the caller's own slice: every
 	// holder of the connection sees every row (NIP-CASH §Cash Status).
 	NIP47MethodCashStatus = nipcash.MethodCashStatus
+	// NIP47MethodCashWithdrawQuote and NIP47MethodCashWithdraw quote and commit an
+	// on-chain withdrawal of a slice (NIP-CASH §Redeeming On-chain). Private
+	// transport only.
+	NIP47MethodCashWithdrawQuote = nipcash.MethodCashWithdrawQuote
+	NIP47MethodCashWithdraw      = nipcash.MethodCashWithdraw
 )
 
 // Bech32 HRPs for a Cash Hub's / Circle Wallet Hub's own connection string

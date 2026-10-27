@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/cashrequest"
+	"github.com/flokiorg/lokihub/cashwithdraw"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
@@ -34,8 +35,8 @@ type PrivateItemBinding struct {
 	HubXOnly string
 	Nonce    string
 	NotAfter int64
-	// ArrivalRelay is the relay the envelope arrived on: an order's notices go
-	// there (NIP-CO §Order Notice).
+	// ArrivalRelay is the relay the envelope arrived on: an order's notices
+	// (NIP-CO §Order Notice) and a cash_withdraw's state notices go there.
 	ArrivalRelay string
 	// AuthFailures counts this envelope's items answered UNAUTHORIZED so far; once
 	// over maxEnvelopeAuthFailures, its further value items are RATE_LIMITED.
@@ -53,6 +54,7 @@ var valueMethods = map[string]bool{
 	constants.NIP47MethodCashRedeem:      true,
 	constants.NIP47MethodCashTransfer:    true,
 	constants.NIP47MethodCashConsolidate: true,
+	constants.NIP47MethodCashWithdraw:    true,
 }
 
 // ServePrivateItem runs one item from a private-transport envelope.
@@ -111,6 +113,11 @@ func (svc *nip47Service) servePrivateItem(
 	if item.Method == constants.NIP47MethodCashLookup {
 		return svc.servePrivateLookup(item, binding, signer, signed)
 	}
+	// A cash_withdraw cancel request is served as the cash_lookup of that call
+	// (nipcash.ServingMethod), on the bill a kept record names.
+	if result, served, isCancel := svc.maybeServeWithdrawCancel(item, binding, signer, signed); isCancel {
+		return result, served
+	}
 
 	// The destroyed-bill record is read for every item, live bill or not, so a
 	// target this hub never served costs no less than a live one.
@@ -129,7 +136,7 @@ func (svc *nip47Service) servePrivateItem(
 			omitted(item, "bill proof missing, malformed, or not verifiable")
 			return transport.Result{}, false
 		}
-		if result, ok := svc.tryPrivateSpentBill(item, signer, tombstone, tombstoned); ok {
+		if result, ok := svc.tryPrivateSpentBill(item, binding, signer, tombstone, tombstoned); ok {
 			return result, true
 		}
 		omitted(item, "no bill with this target wallet_pubkey")
@@ -166,6 +173,11 @@ func (svc *nip47Service) servePrivateItem(
 	if !IsPrivateServableMethod(item.Method) ||
 		(app.Kind == db.AppKindCashOrder) != (item.Method == constants.NIP47MethodCashOrder) {
 		return refuse(constants.ERROR_NOT_IMPLEMENTED, item.Method+" is not served on this transport")
+	}
+	// Both withdrawal methods are on the allowlist, but are NOT_IMPLEMENTED
+	// while the bill's Cash Hub does not offer on-chain withdrawals.
+	if withdrawMethods[item.Method] && !svc.withdrawOffered(&app) {
+		return refuse(constants.ERROR_NOT_IMPLEMENTED, item.Method+" is not offered by this hub")
 	}
 
 	// I6 and I7: a call's request_id must be present and well formed (BAD_REQUEST),
@@ -292,7 +304,7 @@ func (svc *nip47Service) servePrivateItem(
 
 	switch item.Method {
 	case constants.NIP47MethodCashStatus:
-		controller.HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
+		controller.WithWithdraw(svc.withdrawSvc()).HandleCashStatusEvent(ctx, request, requestEvent.ID, &app, collector.publish,
 			&controllers.CashStatusCaller{IdentityValue: signer, IsCash: billIsCashMode})
 	case constants.NIP47MethodCashRedeem:
 		controller.HandleCashRedeemEvent(ctx, request, requestEvent.ID, &app, collector.publish, nil,
@@ -305,6 +317,14 @@ func (svc *nip47Service) servePrivateItem(
 			&controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer})
 	case constants.NIP47MethodCreateCircleWallet:
 		controller.HandleCreateCircleWalletEvent(ctx, request, requestEvent.ID, &app, collector.publish)
+	case constants.NIP47MethodCashWithdrawQuote, constants.NIP47MethodCashWithdraw:
+		call := &controllers.PrivateCall{Meta: privateCallMeta(binding), ItemSigner: signer}
+		withdrawCaller := cashwithdraw.Caller{ItemSigner: signer, CashMode: billIsCashMode, LimitKey: signer}
+		if signer == "" {
+			withdrawCaller.LimitKey = "envelope:" + binding.Nonce
+		}
+		svc.serveWithdrawItem(ctx, controller.WithWithdraw(svc.withdrawSvc()), request, requestEvent.ID, &app,
+			collector.publish, call, withdrawCaller, binding)
 	default:
 		// Unreachable: step 1 filtered to the allowlist. Omitted rather than panicking, so
 		// a method added to the allowlist and forgotten here degrades to "not served"
@@ -350,9 +370,10 @@ func (svc *nip47Service) servePrivateItem(
 //
 // cash_status and the value methods are answered (I4), each under its own
 // result_type: the tombstone is a result, never an error.
-func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
-	// I4: cash_status and the value methods are answered with the tombstone.
-	if item.Method != nipcash.MethodCashStatus && !valueMethods[item.Method] {
+func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding PrivateItemBinding, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
+	// I4: cash_status and the value methods, the withdrawal methods included,
+	// are answered with the tombstone.
+	if !nipcash.AnswersWithTombstone(item.Method) {
 		return transport.Result{}, false
 	}
 
@@ -373,9 +394,10 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string,
 
 	deadline := retainedUntil.Unix()
 	body, err := json.Marshal(nipcash.Tombstone{
-		Status:        nipcash.StatusSpent,
-		Reason:        tombstone.Reason,
-		RetainedUntil: &deadline,
+		Status:            nipcash.StatusSpent,
+		Reason:            tombstone.Reason,
+		RetainedUntil:     &deadline,
+		WithdrawRequestID: svc.tombstoneWithdrawRequestID(item, binding),
 	})
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("walletPubkey", item.Target).
@@ -576,7 +598,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 		// A cash_status on a cash-mode bill carries neither proof nor secret and is
 		// answered from the bill proof alone (NIP-CASH §Bearer Items, §Scoping the
 		// Roster); I8 already refused one carrying a secret.
-		if item.Method == constants.NIP47MethodCashStatus && !item.IsBearer() {
+		if (item.Method == constants.NIP47MethodCashStatus || item.Method == constants.NIP47MethodCashWithdrawQuote) && !item.IsBearer() {
 			return "", billIsCashMode, billIsCashMode, nil
 		}
 		// Otherwise the secret must match one of this bill's cash-mode slices
@@ -677,6 +699,7 @@ var requestIDMethods = map[string]bool{
 	constants.NIP47MethodCashOrder:       true,
 	constants.NIP47MethodCashTransfer:    true,
 	constants.NIP47MethodCashConsolidate: true,
+	constants.NIP47MethodCashWithdraw:    true,
 }
 
 // refuseRequestID is I6 and I7 for a call: a missing or malformed request_id is
