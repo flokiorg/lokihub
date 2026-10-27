@@ -144,8 +144,12 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 		opened, err := gonip44.Decrypt(sealed, clientReplyKey)
 		require.NoError(t, err, "the client could not decrypt chunk %d", chunk.Seq)
 
-		decoded, err := transport.DecodeResponse([]byte(opened), envelope.Nonce, requestedIDs, replyLimits)
+		// A client collecting a chunked reply reads each chunk with DecodeResponseChunk,
+		// which allows NIP-44's ceiling: a reply pads past the request's max_bytes.
+		decoded, err := transport.DecodeResponseChunk([]byte(opened), envelope.Nonce, requestedIDs, replyLimits.MaxEnvelopeBytes)
 		require.NoError(t, err, "the SDK could not decode chunk %d of %d", chunk.Seq, chunk.Total)
+		require.Empty(t, decoded.AlienIDs)
+		require.Empty(t, decoded.DuplicateIDs)
 
 		if declaredTotal == 0 {
 			declaredTotal = decoded.Total
