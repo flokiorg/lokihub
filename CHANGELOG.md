@@ -105,6 +105,11 @@ audits of both.
 
 ### Changed
 
+- Resolves a private item whose target several connections share to the
+  Circle Wallet Hub's row, and checks a circle's bill proof against every live
+  connection of the Hub (nmilat's `VerifyBillProofAny` rule) for joins and join
+  lookups; a join lookup still resolves through the retained join records once
+  the Hub is gone.
 - Breaking: serves `create_circle_wallet` on the private transport only (kind
   23194 answers `NOT_IMPLEMENTED` before any proof is read) and in NIP-CW's
   order and codes: params `BAD_REQUEST`; a Hub not accepting joins
