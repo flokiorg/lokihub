@@ -138,6 +138,14 @@ audits of both.
 - Adds "Revoke and reissue the Cash Hub connection": the old `cashhub1` stops
   working at once and a new one is shown once; bills, records and the hub
   group are untouched.
+- Builds the LSP list from NIP-LSP announcements (kind 10735) on the Hub's
+  relays: every LSP announced for its chain and network is shown unranked in
+  Settings > Services with its services, fee hint, status and whether it is
+  in the node's own graph; the user ticks the LSPs they trust, and trusting
+  runs a live check of the LSP's LSPS answers against its announcement. Only
+  trusted LSPs are contacted; a paused one sells nothing new and a closed one
+  disappears. An LSP can be added by its node key. On the regtest stack,
+  `docker-compose.flspd.yml` runs flspd as the test LSP.
 - Keeps a record of every circle join and serves the NIP-CW join lookup:
   `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
   joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's
@@ -257,6 +265,12 @@ audits of both.
   connection of the Hub (nmilat's `VerifyBillProofAny` rule) for joins and join
   lookups; a join lookup still resolves through the retained join records once
   the Hub is gone.
+- Breaking: the LSP list no longer comes from `services.json`, the `LSP`
+  setting and env, or `pubkey@host` input, and setup no longer picks LSPs:
+  the LSP table is recreated, and LSPs are trusted again from their
+  announcements. `/api/info`'s `lsps` lists the trusted LSPs; the
+  `/api/lsps/:pubkey` update and delete routes are replaced by
+  `PUT /api/lsps/:pubkey/trust` and `POST /api/lsps/:pubkey/check`.
 - Breaking: serves `create_circle_wallet` on the private transport only (kind
   23194 answers `NOT_IMPLEMENTED` before any proof is read) and in NIP-CW's
   order and codes: params `BAD_REQUEST`; a Hub not accepting joins
