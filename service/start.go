@@ -489,8 +489,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 			logger.Logger.Error().Err(err).Msg("Failed to start LiquidityManager")
 		} else {
 			logger.Logger.Info().Msg("LiquidityManager started")
-			// Sync system LSPs asynchronously
-			// Start background sync service
+			// services.json (rates, currencies, info, faq; no LSPs).
 			svc.shutdownGroup.Go(func() error {
 				url := svc.cfg.GetLokihubServicesURL()
 				lm.StartSyncService(ctx, url)
@@ -499,6 +498,7 @@ func (svc *service) StartApp(encryptionKey string) error {
 		}
 	}
 
+	svc.startLSPCatalogue(ctx, lspManager)
 	svc.publishAllAppInfoEvents()
 	svc.startListings(ctx)
 

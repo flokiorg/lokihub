@@ -112,13 +112,6 @@ func (cfg *config) init(env *AppConfig) error {
 		}
 	}
 
-	if cfg.Env.LSP != "" {
-		err := cfg.SetUpdate("LSP", cfg.Env.LSP, "")
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -976,27 +969,6 @@ func (cfg *config) GetDefaultWorkDir() string {
 		return cfg.Env.Workdir
 	}
 	return filepath.Join(xdg.DataHome, "lokihub")
-}
-
-func (cfg *config) GetLSP() string {
-	url, err := cfg.Get("LSP", "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to fetch LSP")
-	}
-	if url != "" {
-		return url
-	}
-	return cfg.Env.LSP
-}
-
-func (cfg *config) SetLSP(value string) error {
-	// LSP can be empty
-	err := cfg.SetUpdate("LSP", value, "")
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to update LSP")
-		return err
-	}
-	return nil
 }
 
 func (cfg *config) GetCachedServicesJSON() string {

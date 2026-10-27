@@ -1768,18 +1768,21 @@ func (api *api) GetInfo(ctx context.Context) (*InfoResponse, error) {
 	}
 	info.SearchRelay = api.cfg.GetSearchRelay()
 
-	// Populate selected LSPs
+	// The trusted LSPs (WP-26).
 	if lm := api.svc.GetLiquidityManager(); lm != nil {
 		selected, err := lm.GetSelectedLSPs()
 		if err == nil {
 			info.LSPs = make([]LSPInfo, len(selected))
 			for i, lsp := range selected {
 				info.LSPs[i] = LSPInfo{
+					NodeKey: lsp.NodeKey,
 					Name:    lsp.Name,
 					Pubkey:  lsp.Pubkey,
 					Host:    lsp.Host,
 					Website: lsp.Website,
-					Active:  lsp.Active,
+					Active:  lsp.Trusted,
+					Status:  lsp.Status,
+					Usable:  lsp.Usable,
 				}
 			}
 		}
@@ -1977,13 +1980,6 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 		err := api.cfg.SetMessageboardNwcUrl(updateSettingsRequest.MessageboardNwcUrl)
 		if err != nil {
 			return fmt.Errorf("failed to set MessageboardNwcUrl: %w", err)
-		}
-	}
-
-	// Process LSP updates using new helper (which uses LSPManager and atomic updates)
-	if updateSettingsRequest.LSPs != nil {
-		if err := api.saveLSPsToDatabase(updateSettingsRequest.LSPs); err != nil {
-			return fmt.Errorf("failed to update LSPs: %w", err)
 		}
 	}
 
@@ -2281,14 +2277,6 @@ func (api *api) Setup(ctx context.Context, setupRequest *SetupRequest) error {
 		err = api.cfg.SetUpdate("LNDMacaroonHex", setupRequest.FLNDMacaroonHex, setupRequest.UnlockPassword)
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save FLND macaroon hex")
-			return err
-		}
-	}
-
-	if setupRequest.LSP != "" {
-		err = api.cfg.SetLSP(setupRequest.LSP)
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to save LSP")
 			return err
 		}
 	}
@@ -2692,12 +2680,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 		return err
 	}
 
-	if req.LSP != "" {
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
-			return err
-		}
-	}
-
 	if req.LokihubServicesURL != "" {
 		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
 			return fmt.Errorf("invalid Hub Services URL: %w", err)
@@ -2738,18 +2720,6 @@ func (api *api) SetupLocal(ctx context.Context, req *SetupLocalRequest) error {
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
-			return err
-		}
-	}
-
-	// Process LSPs array (new approach)
-	if len(req.LSPs) > 0 {
-		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
-			return fmt.Errorf("failed to save LSPs: %w", err)
-		}
-	} else if req.LSP != "" {
-		// Backward compatibility: single LSP string (deprecated)
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
 			return err
 		}
 	}
@@ -2803,12 +2773,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 		return err
 	}
 
-	if req.LSP != "" {
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
-			return err
-		}
-	}
-
 	if req.LokihubServicesURL != "" {
 		if err := utils.ValidateHTTPURL(req.LokihubServicesURL); err != nil {
 			return fmt.Errorf("invalid Hub Services URL: %w", err)
@@ -2849,18 +2813,6 @@ func (api *api) SetupManual(ctx context.Context, req *SetupManualRequest) error 
 			return fmt.Errorf("invalid Flokicoin Explorer URL: %w", err)
 		}
 		if err := api.cfg.SetMempoolApi(req.MempoolApi); err != nil {
-			return err
-		}
-	}
-
-	// Process LSPs array (new approach)
-	if len(req.LSPs) > 0 {
-		if err := api.saveLSPsToDatabase(req.LSPs); err != nil {
-			return fmt.Errorf("failed to save LSPs: %w", err)
-		}
-	} else if req.LSP != "" {
-		// Backward compatibility: single LSP string (deprecated)
-		if err := api.cfg.SetLSP(req.LSP); err != nil {
 			return err
 		}
 	}
@@ -2908,7 +2860,7 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 	if cachedJSON != "" {
 		var result interface{}
 		if err := json.Unmarshal([]byte(cachedJSON), &result); err == nil {
-			return result, nil
+			return withoutServicesLSPs(result), nil
 		}
 		logger.Logger.Error().Msg("Failed to unmarshal cached services JSON, falling back to network")
 	}
@@ -2943,7 +2895,17 @@ func (api *api) GetServices(ctx context.Context) (interface{}, error) {
 		return nil, err
 	}
 
-	return result, nil
+	return withoutServicesLSPs(result), nil
+}
+
+// withoutServicesLSPs drops services.json's lsps: the LSP list comes from
+// NIP-LSP announcements only (WP-26, LP-2). Rates, currencies, info and faq
+// stay.
+func withoutServicesLSPs(result interface{}) interface{} {
+	if m, ok := result.(map[string]interface{}); ok {
+		delete(m, "lsps")
+	}
+	return result
 }
 
 // ReplaceCircleAllowlist replaces the full allowlist for the CircleIdentity

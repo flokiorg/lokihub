@@ -80,7 +80,7 @@ func TestMaintainConnections_InactiveLSPs(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	// Setup
-	_, err := lspManager.AddLSP("InactiveLSP", "pubkey1", "1.2.3.4:5521", false, false)
+	_, err := lspManager.addTestLSP("InactiveLSP", "pubkey1", "1.2.3.4:5521", false)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestMaintainConnections_ActiveLSP_AlreadyConnected(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	pubkey := "pubkey_active"
-	_, err := lspManager.AddLSP("ActiveLSP", pubkey, "1.2.3.4:5521", true, false)
+	_, err := lspManager.addTestLSP("ActiveLSP", pubkey, "1.2.3.4:5521", true)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestMaintainConnections_ActiveLSP_Disconnected_Success(t *testing.T) {
 
 	pubkey := "pubkey_disconnected"
 	host := "1.2.3.4:5521"
-	_, err := lspManager.AddLSP("DisconnectedLSP", pubkey, host, true, false)
+	_, err := lspManager.addTestLSP("DisconnectedLSP", pubkey, host, true)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestMaintainConnections_ActiveLSP_Disconnected_Failure(t *testing.T) {
 	mockLN, lspManager, cm := setupTestEnvironment(t)
 
 	pubkey := "pubkey_fail"
-	_, err := lspManager.AddLSP("FailLSP", pubkey, "1.2.3.4:5521", true, false)
+	_, err := lspManager.addTestLSP("FailLSP", pubkey, "1.2.3.4:5521", true)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestMaintainConnections_SyncsCaseInsensitively(t *testing.T) {
 
 	// User adds LSP (stored as lowercase in DB internally by AddLSP)
 	pubkeyLower := "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	_, err := lspManager.AddLSP("MixedCaseLSP", pubkeyLower, "1.2.3.4:5521", true, false)
+	_, err := lspManager.addTestLSP("MixedCaseLSP", pubkeyLower, "1.2.3.4:5521", true)
 	if err != nil {
 		t.Fatalf("Failed to add LSP: %v", err)
 	}

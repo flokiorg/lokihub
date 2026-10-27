@@ -12,7 +12,6 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
-	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 )
 
@@ -157,19 +156,8 @@ type API interface {
 	UpdateLSPS1OrderState(ctx context.Context, lspPubkey, orderID, state string) error
 	LSPS1ListOrders(ctx context.Context) (*LSPS1ListOrdersResponse, error)
 
-	// LSP Management
-	HandleListLSPs(ctx context.Context) ([]manager.SettingsLSP, error)
-	HandleAddLSP(ctx context.Context, req *AddLSPRequest) (*manager.SettingsLSP, error)
-	HandleUpdateLSP(ctx context.Context, pubkey string, req *UpdateLSPRequest) error
-	HandleDeleteLSP(ctx context.Context, pubkey string) error
-
-	// Legacy wrappers (to be deprecated)
-	ListLSPs() ([]manager.SettingsLSP, error)
-	GetSelectedLSPs() ([]manager.SettingsLSP, error)
-	AddSelectedLSP(pubkey string) error
-	RemoveSelectedLSP(pubkey string) error
-	AddLSP(name, uri string) error
-	RemoveLSP(pubkey string) error
+	// LSP catalogue (NIP-LSP announcements, WP-26)
+	LSPCatalogueAPI
 
 	// Invoice Fee Estimation
 	EstimateInvoiceFee(ctx context.Context, invoice string) (uint64, error)
@@ -956,36 +944,31 @@ type SetupRequest struct {
 	Relay                 string `json:"relay"`
 	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
 	MempoolApi            string `json:"mempoolApi"`
-	LSP                   string `json:"lsp"`
 	EnableSwap            *bool  `json:"enableSwap"`
 	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupLocalRequest struct {
-	UnlockPassword        string            `json:"unlockPassword"`
-	LokihubServicesURL    string            `json:"lokihubServicesURL"`
-	SwapServiceUrl        string            `json:"swapServiceUrl"`
-	Relay                 string            `json:"relay"`
-	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
-	MempoolApi            string            `json:"mempoolApi"`
-	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
-	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
-	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
+	UnlockPassword        string `json:"unlockPassword"`
+	LokihubServicesURL    string `json:"lokihubServicesURL"`
+	SwapServiceUrl        string `json:"swapServiceUrl"`
+	Relay                 string `json:"relay"`
+	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
+	MempoolApi            string `json:"mempoolApi"`
+	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupManualRequest struct {
-	UnlockPassword        string            `json:"unlockPassword"`
-	FLNDAddress           string            `json:"flndAddress"`
-	FLNDCertHex           string            `json:"flndCertHex"`
-	FLNDMacaroonHex       string            `json:"flndMacaroonHex"`
-	LokihubServicesURL    string            `json:"lokihubServicesURL"`
-	SwapServiceUrl        string            `json:"swapServiceUrl"`
-	Relay                 string            `json:"relay"`
-	MessageboardNwcUrl    string            `json:"messageboardNwcUrl"`
-	MempoolApi            string            `json:"mempoolApi"`
-	LSP                   string            `json:"lsp"` // Deprecated: Use LSPs instead
-	LSPs                  []LSPSettingInput `json:"lsps,omitempty"`
-	EnableMessageboardNwc *bool             `json:"enableMessageboardNwc"`
+	UnlockPassword        string `json:"unlockPassword"`
+	FLNDAddress           string `json:"flndAddress"`
+	FLNDCertHex           string `json:"flndCertHex"`
+	FLNDMacaroonHex       string `json:"flndMacaroonHex"`
+	LokihubServicesURL    string `json:"lokihubServicesURL"`
+	SwapServiceUrl        string `json:"swapServiceUrl"`
+	Relay                 string `json:"relay"`
+	MessageboardNwcUrl    string `json:"messageboardNwcUrl"`
+	MempoolApi            string `json:"mempoolApi"`
+	EnableMessageboardNwc *bool  `json:"enableMessageboardNwc"`
 }
 
 type SetupStatusResponse struct {
@@ -1079,12 +1062,17 @@ type InfoResponseRelay struct {
 	Online bool   `json:"online"`
 }
 
+// LSPInfo is a trusted LSP (WP-26): Pubkey is the node id LSPS uses, empty
+// until resolved; Status and Usable are its announcement's.
 type LSPInfo struct {
+	NodeKey string `json:"nodeKey"`
 	Name    string `json:"name"`
 	Pubkey  string `json:"pubkey"`
 	Host    string `json:"host"`
 	Website string `json:"website"`
 	Active  bool   `json:"active"`
+	Status  string `json:"status"`
+	Usable  bool   `json:"usable"`
 }
 
 type InfoResponse struct {
@@ -1218,17 +1206,8 @@ type UpdateSettingsRequest struct {
 	SearchRelay           *string              `json:"searchRelay"`
 	MessageboardNwcUrl    string               `json:"messageboardNwcUrl"`
 	MempoolApi            string               `json:"mempoolApi"`
-	LSPs                  []LSPSettingInput    `json:"lsps,omitempty"`
 	EnableSwap            *bool                `json:"enableSwap"`
 	EnableMessageboardNwc *bool                `json:"enableMessageboardNwc"`
-}
-
-type LSPSettingInput struct {
-	Name        string `json:"name"`
-	Pubkey      string `json:"pubkey"`
-	Host        string `json:"host"`
-	Active      bool   `json:"active"`
-	IsCommunity bool   `json:"isCommunity"`
 }
 
 type SetNodeAliasRequest struct {
