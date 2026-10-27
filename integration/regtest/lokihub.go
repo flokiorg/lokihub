@@ -110,6 +110,12 @@ func (l *Lokihub) Unlock(ctx context.Context, password string, days uint64) (str
 	return out.Token, err
 }
 
+// EnableWithdrawals turns on the node switch of on-chain withdrawals
+// (PUT /api/cash-withdraw/node); a backend without them answers 404.
+func (l *Lokihub) EnableWithdrawals(ctx context.Context, token string) error {
+	return l.do(ctx, http.MethodPut, "/api/cash-withdraw/node", token, map[string]any{"enabled": true}, nil)
+}
+
 // SetGeneralRelay sets the GeneralRelay setting, which follow-set lookups read.
 func (l *Lokihub) SetGeneralRelay(ctx context.Context, token, relay string) error {
 	return l.do(ctx, http.MethodPatch, "/api/settings", token, map[string]any{"generalRelay": relay}, nil)

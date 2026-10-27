@@ -55,6 +55,20 @@ dev subcommand="" *args:
         mkdir -p frontend/dist
         [ -e frontend/dist/index.html ] || echo '<!doctype html><title>lokihub dev placeholder</title>' > frontend/dist/index.html
     }
+    # flspd, the test LSP, runs in the compose "lsp" profile, on when its image
+    # exists (built in an flspd checkout: `just image-regtest <nmilat checkout>`).
+    lsp_image() {
+        local img="${FLSPD_IMAGE:-}"
+        [ -n "$img" ] || img=$(grep -E '^FLSPD_IMAGE=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)
+        echo "${img:-flspd:regtest}"
+    }
+    lsp_profile() {
+        if docker image inspect "$(lsp_image)" >/dev/null 2>&1; then
+            export COMPOSE_PROFILES=lsp
+        elif [ "${1:-}" = "warn" ]; then
+            echo "note: no $(lsp_image) image, so the stack runs without flspd (the LSP catalogue tests skip)" >&2
+        fi
+    }
     wait_backend() {
         for i in $(seq 1 90); do
             {{DOCKER_COMPOSE_DEV}} logs backend --since "$1" 2>&1 | grep -q "http server started" && return 0
@@ -64,8 +78,13 @@ dev subcommand="" *args:
     }
     case "$1" in
         setup)
-            mkdir -p "{{DATA_DIR}}"/{chain,flnd,payer,hub,relay}
+            mkdir -p "{{DATA_DIR}}"/{chain,flnd,payer,hub,relay,flnd-lsp,flspd-creds,flspd-config,flspd-db}
             [ -f .env ] || cp .env.example .env
+            if [ ! -f "{{DATA_DIR}}/flspd.env" ]; then
+                # flspd's own key (not the node key): any 32 random bytes in hex.
+                key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+                sed "s/^FLSPD_PRIVATE_KEY=.*/FLSPD_PRIVATE_KEY=$key/" dev/regtest/flspd/flspd.env.example > "{{DATA_DIR}}/flspd.env"
+            fi
             if [ ! -f "{{DATA_DIR}}/relay/relay.yaml" ]; then
                 key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
                 sed "s/__RELAY_PRIVKEY__/$key/" dev/regtest/relay.yaml.tmpl > "{{DATA_DIR}}/relay/relay.yaml"
@@ -76,6 +95,7 @@ dev subcommand="" *args:
             guard
             just -f "{{justfile()}}" dev setup
             dist_placeholder
+            lsp_profile warn
             {{DOCKER_COMPOSE_DEV}} up -d --build
             just -f "{{justfile()}}" dev bootstrap
             ;;
@@ -85,14 +105,14 @@ dev subcommand="" *args:
             just -f "{{justfile()}}" dev seed-relay
             ;;
         down)
-            {{DOCKER_COMPOSE_DEV}} down
+            COMPOSE_PROFILES=lsp {{DOCKER_COMPOSE_DEV}} down
             ;;
         wipe)
             if [ "${2:-}" != "--yes" ]; then
                 read -r -p "Delete {{DATA_DIR}}/ (chain, both nodes, the hub and the relay)? [y/N] " answer
                 [ "$answer" = "y" ] || [ "$answer" = "Y" ] || exit 1
             fi
-            {{DOCKER_COMPOSE_DEV}} down
+            COMPOSE_PROFILES=lsp {{DOCKER_COMPOSE_DEV}} down
             # The containers write as root, so remove through one if a plain rm cannot.
             rm -rf "{{DATA_DIR}}" 2>/dev/null || docker run --rm -v "$PWD/data:/d" alpine rm -rf /d/regtest
             ;;
@@ -109,14 +129,17 @@ dev subcommand="" *args:
             ;;
         restart)
             shift
+            lsp_profile
             dist_placeholder
             {{DOCKER_COMPOSE_DEV}} restart "$@"
             ;;
         logs)
             shift
+            lsp_profile
             {{DOCKER_COMPOSE_DEV}} logs -f "${1:-}"
             ;;
         status)
+            lsp_profile
             {{DOCKER_COMPOSE_DEV}} ps
             {{REGTEST}} status
             ;;
@@ -151,7 +174,9 @@ dev subcommand="" *args:
         flncli)
             shift
             node=flnd; port=10005
-            if [ "${1:-}" = "payer" ]; then node=payer; port=10006; shift; elif [ "${1:-}" = "hub" ]; then shift; fi
+            if [ "${1:-}" = "payer" ]; then node=payer; port=10006; shift
+            elif [ "${1:-}" = "lsp" ]; then node=flnd-lsp; port=10007; lsp_profile; shift
+            elif [ "${1:-}" = "hub" ]; then shift; fi
             {{DOCKER_COMPOSE_DEV}} exec "$node" flncli --network=regtest --rpcserver=localhost:$port "$@"
             ;;
         lokid-cli)
@@ -169,12 +194,14 @@ dev subcommand="" *args:
 
     The dev and test stack runs on a regtest chain only: lokid (`chain`), the
     Hub's flnd (`flnd`), a second flnd that tests pay from and to (`payer`), the
-    dev relay, the hot-reloading backend and frontend, and Caddy.
+    dev relay, the hot-reloading backend and frontend, and Caddy; with the
+    flspd:regtest image present, also flspd, the test LSP, on its own flnd
+    (`flnd-lsp`, compose profile "lsp").
 
     subcommands:
       setup                    create data/regtest/, .env from .env.example, the relay config and the chain RPC cert
       up                       setup, start the stack, then bootstrap
-      bootstrap                fund both nodes, open a channel each way, set lokihub up, write
+      bootstrap                fund the nodes, open a channel each way (and flnd-lsp -> payer), set lokihub up, write
                                integration/config.local.yaml, seed the relay (idempotent; `up` runs it)
       down                     stop the stack (data kept)
       wipe [--yes]             stop the stack and delete data/regtest/ - the only way to a fresh chain
@@ -187,7 +214,7 @@ dev subcommand="" *args:
       reset                    mine 1, restart relay and backend, reseed the relay (`just test integration` runs it)
       restart-empty-relay      restart the backend on an emptied relay (INTEGRATION_RESTART_CMD)
       seed-relay               publish the integration suite's fixed follow set to the dev relay
-      flncli [hub|payer] <args...>   flncli --network=regtest against either node
+      flncli [hub|payer|lsp] <args...>   flncli --network=regtest against a node
       lokid-cli <args...>      lokid-cli --regtest against the chain node
       wails                    run the Wails desktop app locally (not the docker stack)
 

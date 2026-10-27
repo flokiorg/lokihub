@@ -1,7 +1,7 @@
 // Command regtest bootstraps and drives the regtest dev stack (docker-compose.dev.yml):
 //
 //	regtest certs                     write the chain node's RPC cert (valid for chain and DEV_HOST)
-//	regtest bootstrap                 fund both nodes, open channels, set lokihub up, write the test config
+//	regtest bootstrap                 fund the nodes, open channels (flnd-lsp's too), set lokihub up, write the test config
 //	regtest mine [N] [address]        mine N blocks (default 1) to the payer, or to address
 //	regtest fund <hub|payer|address> <loki>   pay from the payer's wallet, then mine 1
 //	regtest channels                  reopen either channel if it is missing
@@ -35,7 +35,7 @@ func env(key, def string) string {
 type settings struct {
 	host, dataDir, relay, password, configPath string
 	chain                                      regtest.ChainConfig
-	hub, payer                                 regtest.NodeConfig
+	hub, payer, lsp                            regtest.NodeConfig
 	lokihubURL                                 string
 }
 
@@ -61,6 +61,12 @@ func load() settings {
 		payer: regtest.NodeConfig{
 			Name: "payer", Address: host + ":" + env("PAYER_RPC_PORT", "10006"),
 			Dir: filepath.Join(data, "payer"), P2P: "payer:9735",
+		},
+		// flspd's node, in the compose "lsp" profile: dialled only when its data
+		// directory holds a macaroon.
+		lsp: regtest.NodeConfig{
+			Name: "lsp", Address: host + ":" + env("LSP_RPC_PORT", "10007"),
+			Dir: filepath.Join(data, "flnd-lsp"), P2P: "flnd-lsp:9735",
 		},
 		lokihubURL: env("LOKIHUB_URL", "http://"+host+":"+env("CADDY_PORT", "5610")),
 	}
@@ -91,9 +97,28 @@ func dial(ctx context.Context, s settings) (*regtest.Stack, error) {
 			time.Sleep(2 * time.Second)
 		}
 	}
+	if _, statErr := os.Stat(regtest.MacaroonPath(s.lsp.Dir)); statErr == nil {
+		deadline := time.Now().Add(2 * time.Minute)
+		for {
+			node, err := regtest.DialNode(ctx, s.lsp)
+			if err == nil {
+				st.Lsp = node
+				break
+			}
+			if time.Now().After(deadline) || errorsIsNotRegtest(err) {
+				st.Close()
+				return nil, err
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
 	tip, err := st.Chain.Tip()
 	if err == nil {
-		err = regtest.CheckChainNotReset(tip, st.Hub.Height, st.Payer.Height)
+		heights := []int32{st.Hub.Height, st.Payer.Height}
+		if st.Lsp != nil {
+			heights = append(heights, st.Lsp.Height)
+		}
+		err = regtest.CheckChainNotReset(tip, heights...)
 	}
 	if err != nil {
 		st.Close()
@@ -184,9 +209,24 @@ func bootstrap(ctx context.Context, st *regtest.Stack, s settings) error {
 	if err := st.EnsureChannels(ctx); err != nil {
 		return err
 	}
+	if st.Lsp != nil {
+		// flspd opens LSPS1 and JIT channels from flnd-lsp's wallet, and a JIT
+		// payment from the payer reaches the Hub through flnd-lsp.
+		if err := st.EnsureLSP(ctx); err != nil {
+			return err
+		}
+	} else {
+		logf("no flnd-lsp (the flspd image is not built): the LSP catalogue tests skip")
+	}
 	token, err := st.SetupLokihub(ctx, s.password, s.relay)
 	if err != nil {
 		return err
+	}
+	// The node switch of on-chain withdrawals (a backend without them answers
+	// 404, which is fine): the Hub node's wallet is funded above, so its Cash
+	// Hubs can offer them once their terms are on.
+	if err := st.Lokihub.EnableWithdrawals(ctx, token); err != nil {
+		logf("on-chain withdrawals not switched on: %v", err)
 	}
 	var cfg regtest.IntegrationConfig
 	cfg.AdminAPI.BaseURL = s.lokihubURL
@@ -219,7 +259,11 @@ func status(ctx context.Context, st *regtest.Stack) error {
 		return err
 	}
 	fmt.Printf("tip height        %d\n", tip)
-	for _, n := range []*regtest.Node{st.Hub, st.Payer} {
+	nodes := []*regtest.Node{st.Hub, st.Payer}
+	if st.Lsp != nil {
+		nodes = append(nodes, st.Lsp)
+	}
+	for _, n := range nodes {
 		bal, err := n.RPC.WalletBalance(ctx, &lnrpc.WalletBalanceRequest{})
 		if err != nil {
 			return err

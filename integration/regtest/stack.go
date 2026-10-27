@@ -24,9 +24,11 @@ const (
 
 // Stack is the whole regtest stack.
 type Stack struct {
-	Chain   *Chain
-	Hub     *Node
-	Payer   *Node
+	Chain *Chain
+	Hub   *Node
+	Payer *Node
+	// Lsp is flspd's node (flnd-lsp), nil when the stack runs without flspd.
+	Lsp     *Node
 	Lokihub *Lokihub
 	Logf    func(format string, args ...any)
 }
@@ -41,6 +43,9 @@ func (s *Stack) Close() {
 	}
 	if s.Payer != nil {
 		s.Payer.Close()
+	}
+	if s.Lsp != nil {
+		s.Lsp.Close()
 	}
 }
 
@@ -98,6 +103,10 @@ func (s *Stack) node(name string) (*Node, error) {
 		return s.Hub, nil
 	case "payer":
 		return s.Payer, nil
+	case "lsp":
+		if s.Lsp != nil {
+			return s.Lsp, nil
+		}
 	}
 	return nil, fmt.Errorf("unknown node %q", name)
 }
@@ -106,9 +115,11 @@ func (s *Stack) node(name string) (*Node, error) {
 // address, then waits for both nodes to see the new tip.
 func (s *Stack) MineTo(ctx context.Context, n int, to string) error {
 	address := to
-	if to == "hub" || to == "payer" {
-		node, _ := s.node(to)
-		var err error
+	if to == "hub" || to == "payer" || to == "lsp" {
+		node, err := s.node(to)
+		if err != nil {
+			return err
+		}
 		if address, err = node.NewAddress(ctx); err != nil {
 			return err
 		}
@@ -125,8 +136,12 @@ func (s *Stack) WaitSynced(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	nodes := []*Node{s.Hub, s.Payer}
+	if s.Lsp != nil {
+		nodes = append(nodes, s.Lsp)
+	}
 	return poll(ctx, 2*time.Minute, func() (bool, error) {
-		for _, n := range []*Node{s.Hub, s.Payer} {
+		for _, n := range nodes {
 			ok, err := n.Synced(ctx, tip)
 			if err != nil || !ok {
 				return false, nil //nolint:nilerr // retried until the deadline
@@ -140,9 +155,11 @@ func (s *Stack) WaitSynced(ctx context.Context) error {
 // then mines one block.
 func (s *Stack) Fund(ctx context.Context, to string, amount int64) error {
 	address := to
-	if to == "hub" || to == "payer" {
-		node, _ := s.node(to)
-		var err error
+	if to == "hub" || to == "payer" || to == "lsp" {
+		node, err := s.node(to)
+		if err != nil {
+			return err
+		}
 		if address, err = node.NewAddress(ctx); err != nil {
 			return err
 		}
@@ -260,6 +277,73 @@ func (s *Stack) EnsureChannels(ctx context.Context) error {
 			}
 		}
 		return true, nil
+	})
+}
+
+// LSPFundLoki is what flnd-lsp's wallet gets from the payer: room for its
+// channel to the payer and for the channels flspd opens (LSPS1, JIT).
+const LSPFundLoki = 4 * ChannelLoki
+
+// EnsureLSP funds flnd-lsp's on-chain wallet from the payer when it holds less
+// than LSPFundLoki, connects it to the payer and the Hub node, and opens a
+// channel flnd-lsp -> payer (half pushed), so a JIT payment from the payer
+// reaches the Hub through it. Each step is skipped when done.
+func (s *Stack) EnsureLSP(ctx context.Context) error {
+	if s.Lsp == nil {
+		return nil
+	}
+	bal, err := s.Lsp.RPC.WalletBalance(ctx, &lnrpc.WalletBalanceRequest{})
+	if err != nil {
+		return err
+	}
+	if bal.ConfirmedBalance < LSPFundLoki {
+		s.logf("funding flnd-lsp with %d loki from the payer", LSPFundLoki)
+		if err := s.Fund(ctx, "lsp", LSPFundLoki); err != nil {
+			return err
+		}
+	}
+	for _, peer := range []*Node{s.Payer, s.Hub} {
+		connected, err := hasPeer(ctx, s.Lsp, peer.Pubkey)
+		if err != nil {
+			return err
+		}
+		if connected {
+			continue
+		}
+		_, err = s.Lsp.RPC.ConnectPeer(ctx, &lnrpc.ConnectPeerRequest{
+			Addr: &lnrpc.LightningAddress{Pubkey: peer.Pubkey, Host: peer.Config.P2P},
+			Perm: true,
+		})
+		if err != nil && !strings.Contains(err.Error(), "already connected") {
+			return fmt.Errorf("connect lsp to %s: %w", peer.Config.Name, err)
+		}
+		if err := poll(ctx, time.Minute, func() (bool, error) {
+			ok, err := hasPeer(ctx, s.Lsp, peer.Pubkey)
+			return err == nil && ok, nil
+		}); err != nil {
+			return fmt.Errorf("lsp never saw %s online: %w", peer.Config.Name, err)
+		}
+	}
+	has, err := openedBy(ctx, s.Lsp, s.Payer.Pubkey)
+	if err != nil {
+		return err
+	}
+	if !has {
+		s.logf("opening a %d loki channel lsp -> payer", ChannelLoki)
+		if _, err := s.Lsp.RPC.OpenChannelSync(ctx, &lnrpc.OpenChannelRequest{
+			NodePubkey:         mustHex(s.Payer.Pubkey),
+			LocalFundingAmount: ChannelLoki,
+			PushSat:            PushLoki,
+		}); err != nil {
+			return fmt.Errorf("open channel lsp -> payer: %w", err)
+		}
+		if err := s.MineTo(ctx, 6, "payer"); err != nil {
+			return err
+		}
+	}
+	return poll(ctx, 2*time.Minute, func() (bool, error) {
+		chans, err := s.Lsp.RPC.ListChannels(ctx, &lnrpc.ListChannelsRequest{ActiveOnly: true, Peer: mustHex(s.Payer.Pubkey)})
+		return err == nil && len(chans.Channels) > 0, nil
 	})
 }
 
