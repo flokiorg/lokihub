@@ -14,6 +14,7 @@ import (
 
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/logger"
 )
 
@@ -50,6 +51,20 @@ type PlaceInput struct {
 
 // ErrNotReceivable: the node could not be asked whether it can receive.
 var ErrNotReceivable = errors.New("could not read the node's inbound capacity")
+
+// InvoicePayBy is when a Lightning order's invoice expires: its BOLT11
+// timestamp plus its expiry. That instant is the order's pay_by exactly
+// (NIP-CO §Lightning), which clients check against the invoice.
+func InvoicePayBy(invoice string) (int64, error) {
+	decoded, err := decodepay.Decode(invoice)
+	if err != nil {
+		return 0, fmt.Errorf("decode the order invoice: %w", err)
+	}
+	if decoded.CreatedAt <= 0 || decoded.Expiry <= 0 {
+		return 0, fmt.Errorf("the order invoice has no expiry")
+	}
+	return decoded.CreatedAt + decoded.Expiry, nil
+}
 
 // orderTerms is what an order keeps of the terms it was placed under: its
 // kind's terms and the bill terms.
@@ -132,6 +147,13 @@ func Place(ctx context.Context, deps PlaceDeps, in PlaceInput) (*nipCO.Order, er
 				logger.Logger.Error().Err(err).Str("payment_hash", hash).
 					Msg("Failed to cancel the invoice of an order that was not placed; a payment of it is kept by the Hub")
 			}
+		}
+		// The node stamps the invoice with its own clock, after an RPC or two, so
+		// pay_by is read back from the invoice rather than computed here.
+		order.PayBy, err = InvoicePayBy(invoice)
+		if err != nil {
+			undo()
+			return nil, err
 		}
 	case nipCO.PaymentOnchain:
 		address, err := NewOrderAddress(ctx, deps.Deps, conn.HubAppID, now)
