@@ -63,7 +63,8 @@ func TestDispatchEnvelope_ServesItemsAfterOmittedAndMalformedOnes(t *testing.T) 
 	limits := ts.Cfg.PrivateEnvelopeLimits()
 	envelope, err := transport.Decode(raw, limits)
 	require.NoError(t, err)
-	require.Len(t, envelope.Rejected, 1, "Decode drops the malformed item")
+	// Decode keeps an item whose bill proof is missing; the Hub omits it when the
+	// bill proof does not verify (NIP-CASH §Serving an Envelope I3).
 
 	var conversationKey [32]byte
 	_, err = rand.Read(conversationKey[:])

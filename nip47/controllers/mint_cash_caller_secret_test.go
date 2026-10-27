@@ -29,7 +29,7 @@ func TestHandleMintCashEvent_CallerSuppliedCashSecret_Rejected(t *testing.T) {
 	nip47Request := &models.Request{}
 	require.NoError(t, json.Unmarshal([]byte(`{
 		"method": "mint_cash",
-		"params": {"recipients": [{"identity_type":"cash","amount_millis":1000,"cash_secret":"`+callerSecret+`"}], "expiry": 1800}
+		"params": {"request_id":"`+testRequestID()+`","recipients": [{"identity_type":"cash","amount_millis":1000,"cash_secret":"`+callerSecret+`"}], "expiry": 1800}
 	}`), nip47Request))
 
 	dbRequestEvent := &db.RequestEvent{}

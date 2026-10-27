@@ -44,7 +44,6 @@ func Models() []any {
 		&db.CircleWalletMembership{},
 		&db.CashTransferProof{},
 		&db.CashStrandedFund{},
-		&db.CashMintIdempotency{},
 		&db.CashBillArchive{},
 		&db.CashBillSliceArchive{},
 	}

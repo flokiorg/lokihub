@@ -27,7 +27,8 @@ import (
 // nil here rather than mocked (see create_app_follow_set_test.go for those).
 func newTestAPIForCreateApp(t *testing.T, svc *tests.TestService) *api {
 	t.Helper()
-	return &api{db: svc.DB, appsSvc: svc.AppsService, cfg: svc.Cfg, keys: svc.Keys}
+	// The node signs the cashhub1 string, so the API needs the running node.
+	return newTestAPIWithService(t, svc)
 }
 
 func TestCreateApp_CashHub_EmitsCashHubToken(t *testing.T) {
@@ -55,10 +56,16 @@ func TestCreateApp_CashHub_EmitsCashHubToken(t *testing.T) {
 
 	got, err := nipcash.DecodeCashHubConnection(*resp.CashHubToken)
 	require.NoError(t, err)
-	assert.Equal(t, wantPairing.WalletPubkey, got.WalletPubkey)
+	assert.Equal(t, wantPairing.WalletPubkey, got.Pubkey)
 	assert.Equal(t, wantPairing.Secret, got.Secret)
-	assert.Equal(t, wantPairing.RelayURLs, got.RelayURLs)
+	assert.Equal(t, wantPairing.RelayURLs, got.Relays)
 	assert.Equal(t, "My Cash Hub", got.Label)
+	// Signed by the node identity under the chain this Hub runs (NIP-CASH §Connection Signatures).
+	require.NoError(t, got.Verify())
+	assert.Equal(t, "flokicoin", got.Chain)
+	nodeXOnly, err := nipcash.MinterXOnly(tests.MockNodePubkey)
+	require.NoError(t, err)
+	assert.Equal(t, nodeXOnly, got.HubIdentity)
 }
 
 func TestCreateApp_CircleHub_EmitsCircleHubToken(t *testing.T) {

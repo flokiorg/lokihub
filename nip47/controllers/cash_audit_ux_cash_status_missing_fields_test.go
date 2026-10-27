@@ -84,8 +84,8 @@ func TestHandleCashStatusEvent_SurfacesMinTransferMlokiAndExpiresAt(t *testing.T
 
 	assert.Equal(t, uint64(500), recipient.MinTransferMillis,
 		"a recipient must be able to learn their split floor before attempting a cash_transfer, not only from a failed attempt's error text")
-	require.NotNil(t, recipient.ExpiresAt, "a recipient must be able to learn their wallet's redemption deadline via protocol")
-	assert.Equal(t, expiresAt.Unix(), *recipient.ExpiresAt)
+	require.False(t, recipient.ExpiresAt.Never(), "a recipient must be able to learn their wallet's redemption deadline via protocol")
+	assert.Equal(t, expiresAt.Unix(), recipient.ExpiresAt.At)
 
 	// Wire-level confirmation too: the raw JSON a real recipient's NWC client
 	// receives must actually carry both fields, not just the Go struct.
@@ -127,9 +127,14 @@ func TestHandleCashStatusEvent_ExpiresAtOmittedForNeverExpiringWallet(t *testing
 	result, ok := response.Result.(nipcash.CashStatusResult)
 	require.True(t, ok)
 	require.Len(t, result.Recipients, 1)
-	assert.Nil(t, result.Recipients[0].ExpiresAt)
+	assert.True(t, result.Recipients[0].ExpiresAt.Never())
 
+	// nipcash.Expiry writes a never-expiring wallet as null, which every client
+	// decodes as never (absent, null and 0 alike); never a real timestamp.
 	raw, err := json.Marshal(response.Result)
 	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "expires_at", "a never-expiring wallet must omit expires_at, not send a null/zero timestamp")
+	assert.Contains(t, string(raw), `"expires_at":null`)
+	var back nipcash.CashStatusResult
+	require.NoError(t, json.Unmarshal(raw, &back))
+	assert.True(t, back.Recipients[0].ExpiresAt.Never())
 }

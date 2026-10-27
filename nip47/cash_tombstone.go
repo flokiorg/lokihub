@@ -111,8 +111,8 @@ func (svc *nip47Service) tryReplySpentBill(ctx context.Context, pool nostrmodels
 		// Echo the method the caller actually used, so a client still on the
 		// old name gets a result_type it recognises.
 		ResultType: nip47Request.Method,
-		Result: nipcash.CashStatusResult{
-			Error:         nipcash.ErrorSpent,
+		Result: nipcash.Tombstone{
+			Status:        nipcash.StatusSpent,
 			RetainedUntil: &deadline,
 		},
 	}, nostr.Tags{}, nip47Cipher, walletPrivKey)

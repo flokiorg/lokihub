@@ -40,7 +40,7 @@ func TestHandleCashRedeemEvent_ConnectionKeyMode_RevokedIA_Rejected(t *testing.T
 	_, err = iaManager.Add(iaPubkey, "compromised-ia", nil)
 	require.NoError(t, err)
 
-	connectionKey := tests.RandomHex32()
+	connectionKey := tests.NewTestConnectionKey()
 	claimantPrivkey := nostr.GeneratePrivateKey()
 	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
 

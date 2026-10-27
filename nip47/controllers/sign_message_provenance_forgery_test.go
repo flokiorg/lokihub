@@ -15,9 +15,9 @@ import (
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // A wallet pubkey the attacker does not control and an amount they were never
@@ -84,98 +84,96 @@ func signMessageRequest(t *testing.T, message string) *models.Request {
 	return req
 }
 
-// TestSignMessage_RefusesMintProvenancePayload is the security property: an app
-// holding the sign_message scope must not be able to borrow the hub's node key
-// to produce a mint-provenance signature. The hub's node key is the same key
-// lokicash.VerifyMint recovers a minter from, so a signature over a
-// MintPayload string is indistinguishable from real provenance.
-func TestSignMessage_RefusesMintProvenancePayload(t *testing.T) {
-	setup := setupSignMessageTest(t)
-	defer setup.TearDown()
+// forgeryRelays and forgerySecret are the hints and connection secret of the
+// forged bill; the cash-mint:v1 payload binds both through relay_hash.
+var (
+	forgeryRelays = []string{"wss://relay.example.com"}
+	forgerySecret = strings.Repeat("5a", 32)
+)
 
-	payload := lokicash.MintPayload(lokicash.HRP, forgeryVictimWalletPubkey, forgeryInflatedAmount)
-	req := signMessageRequest(t, payload)
-
-	NewTestNip47Controller(setup.svc).
-		HandleSignMessageEvent(setup.ctx, req, setup.dbRequestEvent.ID, setup.PublishResponse)
-
-	require.True(t, setup.publishCalled)
-	require.NotNil(t, setup.response.Error, "signing a mint payload must be refused")
-	assert.Equal(t, constants.ERROR_RESTRICTED, setup.response.Error.Code)
-	// No signature may leak, not even alongside an error.
-	assert.Nil(t, setup.response.Result)
+func forgeryPayload(t *testing.T) string {
+	t.Helper()
+	relayHash, err := nipcash.RelayHash(forgeryRelays, forgerySecret)
+	require.NoError(t, err)
+	return nipcash.MintPayloadV1(constants.CashTokenHRP, forgeryVictimWalletPubkey, forgeryInflatedAmount, relayHash)
 }
 
-// TestSignMessage_RefusesMintProvenancePayloadAnyCase pins that the refusal does
-// not hinge on the payload's casing.
-func TestSignMessage_RefusesMintProvenancePayloadAnyCase(t *testing.T) {
-	payload := lokicash.MintPayload(lokicash.HRP, forgeryVictimWalletPubkey, forgeryInflatedAmount)
-
-	for name, variant := range map[string]string{
-		"upper":      strings.ToUpper(payload),
-		"mixedcase":  strings.Replace(payload, "lokicash-mint:", "LokiCash-Mint:", 1),
-		"prefixOnly": lokicash.MintPayloadPrefix,
+// U-2.5: an app holding the sign_message scope must not borrow the node key to
+// sign a text the protocol signs (NIP-CASH §Security Considerations): a bill, a
+// zap bill, or a cash hub, order or circle hub connection string.
+func TestSignMessage_RefusesReservedPrefixes(t *testing.T) {
+	for name, message := range map[string]string{
+		"mintPayload":  "", // filled below
+		"zap":          "cash-zap:v1:lokicash:deadbeef",
+		"cashHub":      "cash-hub:v1:flokicoin:aa:bb:cc:dd",
+		"cashOrder":    "cash-order:v1:flokicoin:aa:bb:cc:dd",
+		"circleHub":    "circle-hub:v1:flokicoin:aa:bb:cc:dd",
+		"upper":        "CASH-MINT:V1:LOKICASH:AA:1:BB",
+		"mixedcase":    "Cash-Hub:v1:x",
+		"prefixOnly":   "cash-mint:",
+		"circlePrefix": "circle-hub:",
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setupSignMessageTest(t)
 			defer setup.TearDown()
+			if message == "" {
+				message = forgeryPayload(t)
+			}
 
 			NewTestNip47Controller(setup.svc).
-				HandleSignMessageEvent(setup.ctx, signMessageRequest(t, variant),
+				HandleSignMessageEvent(setup.ctx, signMessageRequest(t, message),
 					setup.dbRequestEvent.ID, setup.PublishResponse)
 
 			require.True(t, setup.publishCalled)
-			require.NotNil(t, setup.response.Error, "variant %q must be refused", variant)
+			require.NotNil(t, setup.response.Error, "%q must be refused", message)
 			assert.Equal(t, constants.ERROR_RESTRICTED, setup.response.Error.Code)
+			// No signature may leak, not even alongside an error.
+			assert.Nil(t, setup.response.Result)
 		})
 	}
 }
 
-// TestSignMessage_MintPayloadIsGenuinelyForgeable is what keeps the test above
-// from going vacuous. It proves the refused payload really is a forgery vector:
-// signed through the very same node primitive, it yields a token whose
-// provenance verifies as this hub's own, for a wallet pubkey the signer never
-// minted and an amount it never attested.
-//
-// If MintPayload's shape or the provenance scheme ever changes such that this
-// no longer forges, this test fails and the guard above should be re-derived
-// rather than trusted.
+// TestSignMessage_MintPayloadIsGenuinelyForgeable keeps the test above from going
+// vacuous: the refused payload, signed through the very same node primitive,
+// yields a bill whose provenance verifies as this hub's own, for a wallet the
+// signer never minted and an amount it never attested.
 func TestSignMessage_MintPayloadIsGenuinelyForgeable(t *testing.T) {
 	setup := setupSignMessageTest(t)
 	defer setup.TearDown()
 
-	payload := lokicash.MintPayload(lokicash.HRP, forgeryVictimWalletPubkey, forgeryInflatedAmount)
-
 	// Bypass the controller and hit the node primitive directly — this is what
 	// the guard is denying access to.
-	zsig, err := setup.svc.LNClient.SignMessage(setup.ctx, payload)
+	zsig, err := setup.svc.LNClient.SignMessage(setup.ctx, forgeryPayload(t))
 	require.NoError(t, err)
 	raw, err := zbase32.DecodeString(zsig)
 	require.NoError(t, err)
 	require.Len(t, raw, 65, "a node signature is a 65-byte recoverable compact sig")
 
 	amount := forgeryInflatedAmount
-	forged := lokicash.Token{
-		HRP:            lokicash.HRP,
-		WalletPubkey:   forgeryVictimWalletPubkey,
-		MintSignature:  raw,
-		AttestedAmount: &amount,
+	forged := nipcash.Token{
+		HRP:                  constants.CashTokenHRP,
+		WalletPubkey:         forgeryVictimWalletPubkey,
+		Secret:               forgerySecret,
+		RelayURLs:            forgeryRelays,
+		MintSignature:        raw,
+		AttestedAmountMillis: &amount,
+		Scheme:               nipcash.SchemeMintV1,
 	}
 
-	recovered, ok := lokicash.VerifyMint(forged)
+	recovered, ok := nipcash.VerifyProvenance(forged)
 	require.True(t, ok, "the forged token must verify — otherwise the guard defends nothing")
 	assert.Equal(t, setup.hubNodePubkey, recovered,
 		"forged provenance recovers to this hub's node key, which is exactly the attack")
 }
 
 // TestSignMessage_AllowsOrdinaryMessage guards against over-blocking: the method
-// must keep working for everything that is not a mint payload.
+// keeps working for everything that does not start with a reserved label.
 func TestSignMessage_AllowsOrdinaryMessage(t *testing.T) {
 	for name, message := range map[string]string{
 		"plain":              "hello world",
 		"mentionsLokicash":   "paying you in lokicash today",
-		"prefixNotAtStart":   "see also lokicash-mint:v1:lokicash:deadbeef:1",
-		"similarButDistinct": "lokicash-minted:v1:lokicash:deadbeef:1",
+		"prefixNotAtStart":   "see also cash-mint:v1:lokicash:deadbeef:1",
+		"similarButDistinct": "cash-minted:v1:lokicash:deadbeef:1",
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setupSignMessageTest(t)

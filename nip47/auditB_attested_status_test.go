@@ -2,8 +2,6 @@ package nip47
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -59,8 +57,7 @@ func TestAuditB_AttestedConnectionKeyReadsOnlyItsOwnRow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Bob's connection_key identity, and the keypair the IA will attest for it.
-	sum := sha256.Sum256([]byte("platform:bob-external-id"))
-	bobConnKey := hex.EncodeToString(sum[:])
+	bobConnKey := tests.NewTestConnectionKey()
 	bobPriv := nostr.GeneratePrivateKey()
 	bobPub, err := nostr.GetPublicKey(bobPriv)
 	require.NoError(t, err)
@@ -79,7 +76,7 @@ func TestAuditB_AttestedConnectionKeyReadsOnlyItsOwnRow(t *testing.T) {
 	notAfter := time.Now().Add(time.Minute).Unix()
 
 	ask := func(nonce, signerPriv, attestationJSON string) (transport.Result, bool) {
-		params := nipcash.CashStatusRequest{Scope: "mine", AttestationEvent: attestationJSON}
+		params := map[string]string{"scope": "mine", "attestation_event": attestationJSON}
 		raw, mErr := json.Marshal(params)
 		require.NoError(t, mErr)
 		binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
@@ -155,7 +152,7 @@ func buildIAAttestationEventFor(t *testing.T, iaPrivkey, connectionKey, claimant
 			{"d", connectionKey},
 			{"p", claimantPubkey},
 			{"platform", "discord"},
-			{"evidence", `{"version":1,"platform":"discord","auth_type":"public_post","user_id":"test-user"}`},
+			{"evidence", tests.TestAttestationEvidence(connectionKey)},
 			// Required: VerifyClaimAttestationEvent refuses an attestation with no
 			// expiration at all, so an IA cannot vouch for someone indefinitely.
 			{"expiration", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)},

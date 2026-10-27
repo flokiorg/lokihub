@@ -33,10 +33,11 @@ func TestAuditAQA_ChunkResults_SeqAndTotalMatchTheChunksActuallyProduced(t *test
 
 	nonce := strings.Repeat("ab", 32)
 
-	// Results big enough that several cannot share one envelope.
+	// Results big enough that several cannot share one reply, which is bounded by
+	// NIP-44's ceiling (65535 bytes), not by max_bytes.
 	results := make([]transport.Result, 0, 8)
 	for i := 0; i < 8; i++ {
-		body, err := json.Marshal(map[string]string{"roster": strings.Repeat("x", 3000)})
+		body, err := json.Marshal(map[string]string{"roster": strings.Repeat("x", 20000)})
 		require.NoError(t, err)
 		results = append(results, transport.Result{
 			ID: fmt.Sprintf("i%d", i), ResultType: "cash_status", Result: body,

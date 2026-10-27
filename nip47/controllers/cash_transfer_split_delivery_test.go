@@ -11,8 +11,8 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
-	"github.com/flokiorg/lokihub/lokicash"
 	"github.com/flokiorg/lokihub/tests"
+	"github.com/ohstr/nmilat/nipcash"
 )
 
 // TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear is
@@ -68,12 +68,12 @@ func TestHandleCashTransferEvent_CashCurrentPartialSplit_DeliversTokenInClear(t 
 	// decodable directly, no NIP-44 decryption involved (there is no co-holder
 	// to encrypt against for a cash-mode caller, whose source wallet is
 	// structurally single-recipient).
-	tok, err := lokicash.Decode(result.NewWalletToken)
+	tok, err := nipcash.Decode(result.NewWalletToken)
 	require.NoError(t, err, "cash-mode carved delivery must be a plain, directly-decodable lokicash token")
 	assert.Equal(t, result.NewWalletPubkey, tok.WalletPubkey)
 
 	require.NotEmpty(t, result.RemainderWalletToken, "the remainder is now its own new dedicated wallet")
-	remTok, err := lokicash.Decode(result.RemainderWalletToken)
+	remTok, err := nipcash.Decode(result.RemainderWalletToken)
 	require.NoError(t, err, "cash-mode remainder delivery must also be a plain token")
 	assert.Equal(t, result.RemainderWalletPubkey, remTok.WalletPubkey)
 	require.NotNil(t, result.RemainingAmountMillis)

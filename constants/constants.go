@@ -327,3 +327,7 @@ const (
 const (
 	LSPS1_EVENT_NOTIFICATION = "lsps1.notification"
 )
+
+// CashTokenHRP is the bech32 prefix of this Hub's bills (`lokicash1...`). The
+// provenance labels are nmilat's and the same for every prefix.
+const CashTokenHRP = "lokicash"

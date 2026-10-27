@@ -1,11 +1,13 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
 
@@ -24,10 +26,9 @@ import (
 // id the way a relay does. Comparing them is the whole point — either alone is
 // self-consistent and proves nothing.
 //
-// The announcement is specifically the event worth pinning: it is the only one this
-// system builds with NO tags, since it is addressed by author alone (a replaceable
-// kind plus one author returns exactly one event), so it is the only event that can
-// expose a nil-tags serialization bug.
+// The announcement carries its fields as tags (inbox, limit, r), so it is now the
+// richest event both implementations serialize; the empty-tags hazard is pinned by
+// the test below.
 func TestAnnouncementID_AgreesWithGoNostr(t *testing.T) {
 	ev, err := transport.NewAnnouncement(
 		"c9a6e09e2e9d1529c87c034891e05ddf32343fad7a9af563b9de6958c95f5990",
@@ -36,7 +37,7 @@ func TestAnnouncementID_AgreesWithGoNostr(t *testing.T) {
 		[]string{"ws://relay.example:5500"},
 	)
 	require.NoError(t, err)
-	require.Empty(t, ev.Tags, "the announcement is expected to carry no tags — that is what makes it the event worth testing here")
+	require.NotEmpty(t, ev.Tags, "the announcement carries its fields as tags (NIP-CASH §The Hub Announcement)")
 
 	published, err := toGoNostrEvent(ev)
 	require.NoError(t, err)
@@ -51,13 +52,9 @@ func TestAnnouncementID_AgreesWithGoNostr(t *testing.T) {
 // hazard: the conversion must not turn an absent tag list into something that
 // serializes differently, since the id was already computed over the original.
 func TestToGoNostrEvent_EmptyTagsSurviveTheConversion(t *testing.T) {
-	ev, err := transport.NewAnnouncement(
-		"c9a6e09e2e9d1529c87c034891e05ddf32343fad7a9af563b9de6958c95f5990",
-		"66e016a38c70ef4c9d511aceb74406e96e86fde6f797a35825c32d79cb086d5b",
-		transport.DefaultLimits(),
-		nil,
-	)
+	ev, err := nmilatnip01.NewSignedEvent(1, "no tags", strings.Repeat("07", 32))
 	require.NoError(t, err)
+	require.Empty(t, ev.Tags)
 
 	published, err := toGoNostrEvent(ev)
 	require.NoError(t, err)

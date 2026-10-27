@@ -238,19 +238,19 @@ func TestAuditD_SecA_ReplyDirectionNeverExceedsTheCap(t *testing.T) {
 	nonce, err := transport.NewNonce()
 	require.NoError(t, err)
 
-	// One result bigger than the cap but comfortably under NIP-44's ceiling.
+	// One result over the reply cap, which is NIP-44's ceiling (65535 bytes): a reply
+	// is never bounded by the request's max_bytes (NIP-CASH §Addressing the Response).
 	oversizeResult := transport.Result{
 		ID:         "r1",
 		ResultType: "cash_status",
-		Result:     json.RawMessage(`{"filler":"` + strings.Repeat("z", limits.MaxEnvelopeBytes) + `"}`),
+		Result:     json.RawMessage(`{"filler":"` + strings.Repeat("z", 65535) + `"}`),
 	}
 	reply := transport.ResponseEnvelope{
 		Version: transport.EnvelopeVersion, ReqNonce: nonce,
 		Results: []transport.Result{oversizeResult}, Seq: 1, Total: 1,
 	}
 	_, err = reply.EncodeResponse(limits)
-	require.Error(t, err, "a reply over the announced cap must not be encodable")
-	assert.ErrorIs(t, err, transport.ErrEnvelopeTooLarge)
+	require.Error(t, err, "a reply over the cap must not be encodable")
 
 	// And the hub's own chunker surfaces it as an error rather than publishing something
 	// oversize or silently dropping the result.

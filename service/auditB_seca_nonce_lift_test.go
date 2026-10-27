@@ -100,7 +100,7 @@ func TestAuditBSecA_LapsedNonceReadmitsALiftedBillProof(t *testing.T) {
 	require.NoError(t, err)
 	env2 := transport.Envelope{
 		Version:  transport.EnvelopeVersion,
-		NotAfter: now.Add(transport.MaxNotAfterWindow).Unix(),
+		NotAfter: now.Add(testHorizon).Unix(),
 		Nonce:    nonce, // the lapsed one
 		ReplyTo:  replyTo2,
 		// One item, not three copies: the lift is about reusing the NONCE, and an

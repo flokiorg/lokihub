@@ -2,8 +2,6 @@ package nip47
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -17,11 +15,11 @@ import (
 	"github.com/flokiorg/lokihub/tests"
 )
 
-// NIP-CASH §Bearer Items: "a Hub presented with a proofless item MUST look the target up,
-// and serve it only if that slice is genuinely cash-mode and the supplied secret matches."
-// A wrong secret clears the envelope gate (nmilat only asks that cash_secret be non-empty),
-// so the hub itself has to compare it.
-func TestPrivateItem_ProoflessCashStatus_WrongSecretIsNotServed(t *testing.T) {
+// NIP-CASH I8: a cash_status item carrying a cash_secret is refused BAD_REQUEST. A
+// cash-mode cash_status is answered from the bill proof alone, so a secret in it
+// is a client error that would put the secret where the roster read does not need
+// it. nmilat refuses the shape when the envelope is decoded.
+func TestPrivateItem_ProoflessCashStatus_SecretIsRefused(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -30,19 +28,18 @@ func TestPrivateItem_ProoflessCashStatus_WrongSecretIsNotServed(t *testing.T) {
 	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
 	tests.FundApp(svc, hub.ID, 10_000_000, "fundtx")
 
-	realSecret := strings.Repeat("11", 32)
-	sb, _ := hex.DecodeString(realSecret)
-	commit := sha256.Sum256(sb)
-	walletPubkey, connPriv, _ := auditBBill(t, svc, hub.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityCash, IdentityValue: hex.EncodeToString(commit[:]), AmountMloki: 4200},
+	secret, commitment, err := tests.GenerateCashSecret()
+	require.NoError(t, err)
+	walletPubkey, connPriv, walletID := auditBBill(t, svc, hub.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 4200},
 	})
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("ef", 32)
 	notAfter := time.Now().Add(time.Minute).Unix()
 
-	wrongSecret := strings.Repeat("22", 32)
-	params := json.RawMessage(`{"cash_secret":"` + wrongSecret + `","scope":"all"}`)
+	// Even the RIGHT secret is refused: the roster read never needs it.
+	params := json.RawMessage(`{"cash_secret":"` + secret + `","scope":"all"}`)
 	hash, err := transport.CanonicalParamsHash(params)
 	require.NoError(t, err)
 	billProof, err := transport.BuildBillProof(connPriv, transport.ProofBinding{Target: walletPubkey,
@@ -51,17 +48,14 @@ func TestPrivateItem_ProoflessCashStatus_WrongSecretIsNotServed(t *testing.T) {
 	item := transport.Item{ID: "w", Target: walletPubkey, Method: constants.NIP47MethodCashStatus,
 		Params: params, BillProof: billProof}
 
-	env := transport.Envelope{Version: 1, NotAfter: notAfter, Nonce: nonce,
-		ReplyTo: strings.Repeat("cd", 32), Items: []transport.Item{item}}
-	plain, err := env.Encode(transport.DefaultLimits())
-	require.NoError(t, err)
-	_, err = transport.Decode(plain, transport.DefaultLimits())
-	require.NoError(t, err, "the item clears the envelope gate")
-
 	res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item,
 		PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
 	require.True(t, served)
-	require.NotNil(t, res.Error, "a wrong cash_secret must not be served: %s", string(res.Result))
-	require.Equal(t, constants.ERROR_NOT_FOUND, res.Error.Code)
+	require.NotNil(t, res.Error)
+	require.Equal(t, constants.ERROR_BAD_REQUEST, res.Error.Code)
 	require.Nil(t, res.Result)
+	var events int64
+	require.NoError(t, svc.DB.Model(&db.RequestEvent{}).Where("nostr_id = ?", nonce+":w").Count(&events).Error)
+	require.Zero(t, events)
+	_ = walletID
 }

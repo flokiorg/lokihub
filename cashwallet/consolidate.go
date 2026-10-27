@@ -232,13 +232,9 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (resu
 	// follows NewIdentity; the provenance attests the merged total, immutable for the
 	// wallet's life.
 	identityRequired := params.NewIdentityType != db.CashIdentityCash
-	mintSig, err := MintProvenance(ctx, deps.LNClient, walletPubkey, total)
+	token, err := issueCashToken(ctx, deps.LNClient, walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, total, params.HubApp)
 	if err != nil {
-		return nil, nil, fmt.Errorf("refusing to consolidate into a bill without provenance: %w", err)
-	}
-	token, err := encodeCashToken(walletPubkey, pairingSecretKey, deps.RelayURLs, &identityRequired, mintSig, total, params.HubApp.AppPubkey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("refusing to consolidate into a bill whose token cannot be encoded: %w", err)
+		return nil, nil, fmt.Errorf("refusing to consolidate into a bill without a signed token: %w", err)
 	}
 
 	// Fund the merged wallet from each source in turn. A failure here returns,
