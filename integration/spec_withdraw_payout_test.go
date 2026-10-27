@@ -5,17 +5,17 @@
 // regtest chain, to final, through bumps, evictions, a reorganisation, the
 // Hub's own cancel, the holder's cancel request, batching and a crash.
 //
-// NOT YET RUN LIVE: written with WP-24 on spec-sync/wp-24-payout and only
-// compiled (go vet -tags integration). It needs the regtest chain hooks of
-// spec-sync/regtest-hooks (mine, withhold, invalidateblock) and the withdraw
-// hooks and withdraw-scoped clock of WP-20 G1 (POST /test/withdraw/hooks,
-// POST /test/clock {scope: "withdraw"}); newWithdrawChain skips until they are
-// wired in at the rebase. Each test also skips unless the backend reports the
-// on-chain capability.
+// They drive the regtest stack's chain hooks (mine, withhold, reorg) and the
+// payout engine's holds and withdraw-scoped clock (POST /api/test/withdraw/hooks,
+// POST /api/test/clock {scope: "withdraw"}) through stackHooks, and skip when the
+// stack serves none (a backend built without the testhooks tag), or unless the
+// backend reports the on-chain capability. lokid cannot evict one transaction,
+// so I-57 checks the bump only.
 package integration
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -46,14 +46,16 @@ type withdrawChain interface {
 	ClockOffset(ctx context.Context, secs int64) error
 }
 
-// newWithdrawChain is the stack's withdrawChain.
-//
-// TODO(regtest-hooks, WP-20 G1): return the regtest hooks client once
-// spec-sync/regtest-hooks is merged and the withdraw hooks exist.
+// newWithdrawChain is the stack's withdrawChain: its test hooks, reset after
+// the test.
 func newWithdrawChain(t *testing.T, cfg *Config) withdrawChain {
 	t.Helper()
-	t.Skip("skipping: needs the regtest chain hooks (spec-sync/regtest-hooks) and the withdraw hooks and clock (WP-20 G1)")
-	return nil
+	h := requireStackHooks(t, cfg, "GET /chain/tip", "POST /withdraw/hooks")
+	t.Cleanup(func() {
+		_ = h.Hooks(context.Background(), map[string]bool{})
+		_ = h.ClockOffset(context.Background(), 0)
+	})
+	return h
 }
 
 // lookupPayout reads a payout through cash_lookup.
@@ -126,8 +128,12 @@ func TestSpecWithdraw_I57_BumpAndEviction(t *testing.T) {
 	require.NoError(t, chain.Mine(ctxT(t), 6))
 	second := waitPayout(t, chain, token, priv, rid, false, func(p *nipcash.Payout) bool { return p.Txid != first.Txid })
 	require.NoError(t, nipcash.VerifyPayoutTx(second.Tx, second.Txid, *second.Vout, q.Address, "", q.PayoutMillis))
-	require.NoError(t, chain.Evict(ctxT(t), second.Txid))
-	require.NoError(t, chain.Hooks(ctxT(t), map[string]bool{}))
+	require.NoError(t, chain.Withhold(first.Txid, false))
+	if err := chain.Evict(ctxT(t), second.Txid); errors.Is(err, errEvictUnsupported) {
+		t.Log("eviction not checked: " + err.Error())
+	} else {
+		require.NoError(t, err)
+	}
 	waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutFinal })
 }
 
