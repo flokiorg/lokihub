@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/flokiorg/go-flokicoin/chaincfg"
@@ -78,6 +79,8 @@ type Service struct {
 	Funds Funds
 	// Orders are the NIP-CO facts a withdrawal reads; nil reads as none.
 	Orders OrderFacts
+	// CancelClockOffset moves the withdraw-scoped clock (cancelNow), seconds.
+	CancelClockOffset atomic.Int64
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 	// Hooks is the commit's fault-injection seam (tests only).
@@ -96,6 +99,14 @@ func (s *Service) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+// cancelNow is the withdraw-scoped clock: the clock CancelDue,
+// CancelRequestAnswer and RemintExpiry read, moved by CancelClockOffset (a
+// regtest test hook only; 0 in production). Envelopes, proofs, lookups and
+// quotes read the ordinary clock.
+func (s *Service) cancelNow() time.Time {
+	return s.now().Add(time.Duration(s.CancelClockOffset.Load()) * time.Second)
 }
 
 func (s *Service) orders() OrderFacts {

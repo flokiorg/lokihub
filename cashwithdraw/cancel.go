@@ -13,7 +13,7 @@ import (
 // answers with the payout's current state, which stays broadcast until the
 // invalidation is final.
 func (s *Service) CancelRequest(w *db.CashWithdrawal) (*db.CashWithdrawal, error) {
-	now := s.now().Unix()
+	now := s.cancelNow().Unix()
 	state := nipcash.PayoutStateOf(nipcash.PayoutFacts{Cancelled: w.State == db.CashWithdrawCancelled,
 		Broadcast: w.Txid != nil, FinalReached: w.FinalReached, Depth: uint32(max(w.Depth, 0)), FinalDepth: uint32(w.FinalDepth)}) //nolint:gosec // small
 	invalidate, err := nipcash.CancelRequestAnswer(nipcash.CancelFacts{AboutToSign: w.Signed, Broadcast: w.Txid != nil,

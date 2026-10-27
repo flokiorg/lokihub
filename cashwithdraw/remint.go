@@ -94,7 +94,7 @@ func (s *Service) Remint(ctx context.Context, withdrawalID uint, reason string) 
 			def = &v
 		}
 		var expiresAt *time.Time
-		if e := nipcash.RemintExpiry(cur.SliceExpiresAt, now.Unix(), def); e != nil {
+		if e := nipcash.RemintExpiry(cur.SliceExpiresAt, s.cancelNow().Unix(), def); e != nil {
 			t := time.Unix(*e, 0)
 			expiresAt = &t
 		}

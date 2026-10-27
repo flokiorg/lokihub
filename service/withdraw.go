@@ -38,6 +38,7 @@ func (svc *service) setupWithdraw() {
 	// The payout engine is the withdrawal service's Funds; it runs for the
 	// app's life and idles while the node lacks the on-chain capability.
 	svc.withdrawEngine = cashwithdraw.NewEngine(svc.withdraw)
+	svc.withdrawEngine.Hooks = withdrawEngineHooks()
 	svc.withdrawEngine.Notices = poolNoticeSender{svc: svc}
 	if w, ok := svc.nip47Service.(interface{ SetWithdraw(*cashwithdraw.Service) }); ok {
 		w.SetWithdraw(svc.withdraw)

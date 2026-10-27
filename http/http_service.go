@@ -61,6 +61,9 @@ type HttpService struct {
 
 	shutdownOnce sync.Once
 	shutdownCh   chan struct{}
+
+	// svc is read only by the test hooks (testhooks builds).
+	svc service.Service
 }
 
 func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *HttpService {
@@ -74,6 +77,7 @@ func NewHttpService(svc service.Service, eventPublisher events.EventPublisher) *
 		appStoreSvc:    svc.GetAppStoreSvc(),
 		logger:         logger.Logger.With().Str("component", "http").Logger(),
 		shutdownCh:     make(chan struct{}),
+		svc:            svc,
 	}
 }
 
@@ -229,6 +233,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 
 	fullAccessApiGroup.POST("/api/event", httpSvc.eventHandler)
 	httpSvc.registerWithdrawRoutes(fullAccessApiGroup)
+	httpSvc.registerWithdrawTestHooks(fullAccessApiGroup)
 	fullAccessApiGroup.PATCH("/unlock-password", httpSvc.changeUnlockPasswordHandler)
 	fullAccessApiGroup.PATCH("/auto-unlock", httpSvc.autoUnlockHandler)
 	fullAccessApiGroup.PATCH("/settings", httpSvc.updateSettingsHandler)
