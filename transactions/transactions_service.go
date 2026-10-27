@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -78,6 +79,8 @@ type TransactionsService interface {
 	ResolveAcceptedCircleHolds(ctx context.Context, lnClient lnclient.LNClient)
 	// SetLNClientProvider gives the service the node for Circle Wallet payments.
 	SetLNClientProvider(provider func() lnclient.LNClient)
+	// CancelOpenCircleInvoices cancels a Circle Wallet's open invoices.
+	CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error
 }
 
 const (
@@ -506,7 +509,7 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 				}
 			}
 			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
-				Wallet: payer, Payee: payee, SameNode: selfPayment, Amount: paymentAmount, Now: time.Now(), Active: true,
+				Wallet: payer, Payee: payee, SameNode: selfPayment, Amount: paymentAmount, Now: time.Now(), Active: circlelife.IsActive(payer, time.Now()),
 			}, circlemoney.SameCircleTransfers)
 			if err != nil {
 				return err
@@ -742,7 +745,7 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		feeSkim, feeReserve := uint64(0), CalculateFeeReserveMloki(amount)
 		if circlePayer {
 			quote, err := circlemoney.CheckSend(tx, circlemoney.SendInput{
-				Wallet: payer, Payee: recipient, SameNode: selfPayment, Amount: amount, Now: time.Now(), Active: true,
+				Wallet: payer, Payee: recipient, SameNode: selfPayment, Amount: amount, Now: time.Now(), Active: circlelife.IsActive(payer, time.Now()),
 			}, circlemoney.SameCircleTransfers)
 			if err != nil {
 				return err

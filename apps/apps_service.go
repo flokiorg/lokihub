@@ -79,6 +79,8 @@ type AppsService interface {
 	CreateCircleHub(name string, pubkey string, maxAmountLoki uint64, budgetRenewal string,
 		expiresAt *time.Time, scopes []string, metadata map[string]interface{},
 		identityRef CircleIdentityRef, config db.CircleHubConfig) (*db.App, string, error)
+	// CashHubDeleteCheck reports what keeps a Cash Hub from being deleted.
+	CashHubDeleteCheck(hubID uint) (CashHubDeleteCheck, error)
 	// GetCircleHubConfig returns the CircleHubConfig (with CircleIdentity preloaded)
 	// for a circle_hub app.
 	GetCircleHubConfig(appID uint) (*db.CircleHubConfig, error)
@@ -609,6 +611,17 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 			// (api.DeleteCircleHub) that checks each child's balance and lets
 			// the caller choose how to proceed instead.
 			return fmt.Errorf("%w: %s still has %d %s", constants.ErrInvalidParams, kindLabel, childCount, hint)
+		}
+		// A Cash Hub also stays while a request record naming it is retained
+		// (Q23, XQ-22(1)): a lookup may still need it.
+		if app.Kind == db.AppKindCashHub {
+			check, err := CashHubDeleteCheckTx(tx, app.ID, time.Now())
+			if err != nil {
+				return err
+			}
+			if check.Blocked() {
+				return fmt.Errorf("%w: %s", constants.ErrInvalidParams, check.Message())
+			}
 		}
 
 		return tx.Delete(app).Error

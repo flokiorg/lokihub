@@ -8,6 +8,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
@@ -151,11 +152,17 @@ type CreditInput struct {
 }
 
 // CheckCredit decides whether a credit that names none of the wallet's open
-// invoices may be credited: within the wallet's receive room when it is
+// invoices may be credited: only to an Active wallet (PAYMENT_FAILED), within
+// the wallet's receive room when it is
 // external (QUOTA_EXCEEDED), and within the circle's holdings ceiling unless it
 // only moves money between two Active wallets of the circle
 // (INSUFFICIENT_CAPACITY). The caller holds the receiving Hub's lock.
 func CheckCredit(tx *gorm.DB, in CreditInput) error {
+	// Only an Active wallet receives; every payment to any other fails
+	// (NIP-CW §Own Funds and Caps).
+	if !circlelife.IsActive(in.Wallet, in.Now) {
+		return refuse(constants.ERROR_PAYMENT_FAILED, "the receiving circle wallet is not active")
+	}
 	kind := Kind(in.Wallet, in.Payer, in.SameNode)
 	if External(kind) {
 		room, err := ReceiveRoom(tx, in.Wallet, in.Now)

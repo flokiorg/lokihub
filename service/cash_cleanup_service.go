@@ -115,9 +115,11 @@ const maxBatchesPerTick = 10
 func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient, eventPublisher events.EventPublisher) {
 	for batchNum := 0; batchNum < maxBatchesPerTick; batchNum++ {
 		var batch []db.App
+		// A Circle Wallet's expiry moves it to Expired, never to a sweep
+		// (circle_lifecycle.go).
 		err := gormDB.Where(
-			"parent_app_id IS NOT NULL AND expires_at < ? AND cleanup_in_progress = ?",
-			time.Now(), false,
+			"parent_app_id IS NOT NULL AND kind <> ? AND expires_at < ? AND cleanup_in_progress = ?",
+			db.AppKindCircleWallet, time.Now(), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")
@@ -213,6 +215,9 @@ func pruneArchivedSplitLinks(gormDB *gorm.DB, retention time.Duration) {
 // reclaiming this wallet) that callers may retry; any other error is a real
 // failure.
 func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transactionsSvc transactions.TransactionsService, lnClient lnclient.LNClient, app db.App, opts SubWalletDeletion) error {
+	if app.Kind == db.AppKindCircleWallet {
+		return errCircleWalletNeverSwept
+	}
 	if app.ParentAppID == nil {
 		return fmt.Errorf("app %d has no parent app to reclaim balance into", app.ID)
 	}

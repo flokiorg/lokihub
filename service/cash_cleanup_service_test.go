@@ -155,27 +155,6 @@ func TestRunCashCleanup_WithBalance_TransferAndDeleted(t *testing.T) {
 	assert.Greater(t, parentBalance, int64(0), "parent must gain balance after cleanup transfer")
 }
 
-func TestRunCashCleanup_CircleChild_NoMakeInvoice(t *testing.T) {
-	ctx := context.TODO()
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	parent, _, err := svc.AppsService.CreateApp("circle", "", 0, "never", nil,
-		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleHub, nil, "", nil)
-	require.NoError(t, err)
-
-	child := createSubWallet(t, svc, db.AppKindCircleWallet, parent.ID, db.ParentKindCircle, makeExpiredTime())
-
-	// Zero balance — cleanup must delete without calling Transfer.
-	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
-	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
-
-	var found db.App
-	err = svc.DB.First(&found, child.ID).Error
-	assert.Error(t, err, "expired zero-balance circle_child must be deleted")
-}
-
 // TestRunCashCleanup_CircleChild_PendingIncoming_DeferredNotDeleted verifies that a
 // wallet with a payment still settling in is not torn down: deleting it would
 // cascade-delete the pending transaction row (App.OnDelete:CASCADE), and the

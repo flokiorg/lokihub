@@ -295,3 +295,32 @@ func TestPeriod_ServerTimeZoneIrrelevant(t *testing.T) {
 	assert.Equal(t, time.Date(2024, 2, 29, 10, 0, 0, 0, time.UTC), utcStart)
 	assert.Equal(t, time.Date(2024, 3, 31, 10, 0, 0, 0, time.UTC), utcNext)
 }
+
+// Only an Active wallet receives and counts toward the holdings (NIP-CW
+// §Lifecycle and Deletion): a credit to any other fails, and its balance leaves
+// the holdings.
+func TestNotActive_NoCreditAndOutOfHoldings(t *testing.T) {
+	c := newCircle(t)
+	now := time.Now()
+	w := c.wallet(t, 1_000_000, 1_000_000, constants.BUDGET_RENEWAL_NEVER, now, 400_000)
+	held, err := circlemoney.Holdings(c.svc.DB, c.hub.ID, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(400_000), held)
+
+	for _, state := range []string{"suspended", "expired", "closing"} {
+		require.NoError(t, c.svc.DB.Model(&db.App{}).Where("id = ?", w.ID).Update("circle_state", state).Error)
+		require.NoError(t, c.svc.DB.First(w, w.ID).Error)
+		assert.Equal(t, constants.ERROR_PAYMENT_FAILED, refusalCode(t,
+			circlemoney.CheckCredit(c.svc.DB, circlemoney.CreditInput{Wallet: w, Amount: 1, Now: now})), state)
+		held, err = circlemoney.Holdings(c.svc.DB, c.hub.ID, now)
+		require.NoError(t, err)
+		assert.Zero(t, held, state)
+	}
+
+	// Past its expires_at an Active wallet is Expired at once (S-CW-131).
+	past := now.Add(-time.Second)
+	require.NoError(t, c.svc.DB.Model(&db.App{}).Where("id = ?", w.ID).Updates(map[string]interface{}{"circle_state": "active", "expires_at": &past}).Error)
+	require.NoError(t, c.svc.DB.First(w, w.ID).Error)
+	assert.Equal(t, constants.ERROR_PAYMENT_FAILED, refusalCode(t,
+		circlemoney.CheckCredit(c.svc.DB, circlemoney.CreditInput{Wallet: w, Amount: 1, Now: now})))
+}

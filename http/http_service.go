@@ -249,6 +249,7 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	fullAccessApiGroup.GET("/apps/:id/cash-wallets", httpSvc.cashWalletClaimsListHandler)
 	fullAccessApiGroup.GET("/apps/:id/cash-stats", httpSvc.cashHubStatsHandler)
 	fullAccessApiGroup.GET("/cash-hubs/stats", httpSvc.allCashHubStatsHandler)
+	fullAccessApiGroup.GET("/cash-hubs/:id/delete-check", httpSvc.cashHubDeleteCheckHandler)
 	fullAccessApiGroup.GET("/apps/:id/circle-stats", httpSvc.circleHubStatsHandler)
 	fullAccessApiGroup.POST("/apps/:id/cash-wallets", httpSvc.cashWalletsCreateHandler)
 	fullAccessApiGroup.DELETE("/apps/:id/cash-wallets/:walletId", httpSvc.cashWalletDeleteHandler)
@@ -2135,6 +2136,25 @@ func (httpSvc *HttpService) circleHubDeleteHandler(c echo.Context) error {
 		return c.JSON(code, ErrorResponse{Message: msg})
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+// cashHubDeleteCheckHandler reports what keeps a Cash Hub from being deleted,
+// without deleting anything (Q23): each blocker with its count and time, and the
+// earliest possible deletion.
+func (httpSvc *HttpService) cashHubDeleteCheckHandler(c echo.Context) error {
+	dbApp, err := httpSvc.getAppByIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+	if dbApp.Kind != lokidb.AppKindCashHub {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Message: "app is not a cash_hub"})
+	}
+	check, err := httpSvc.appsSvc.CashHubDeleteCheck(dbApp.ID)
+	if err != nil {
+		httpSvc.logger.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to check a cash hub's deletion")
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{Message: "could not read this hub's records"})
+	}
+	return c.JSON(http.StatusOK, check)
 }
 
 // circleIdentitiesListHandler lists every CircleIdentity, for the

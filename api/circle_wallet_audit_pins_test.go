@@ -37,11 +37,12 @@ func TestTransfer_CircleWallet_RefusedBothWays(t *testing.T) {
 	assert.Equal(t, int64(500_000), queries.GetIsolatedBalance(svc.DB, hub.ID))
 }
 
-func TestDeleteApp_CircleWallet_ReclaimsToHub(t *testing.T) {
+// The generic app delete of a Circle Wallet is a host delete: Closing, the
+// balance left where it is (NIP-CW §Lifecycle and Deletion).
+func TestDeleteApp_CircleWallet_MovesToClosing(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
-	svc.LNClient.(*tests.MockLn).Pubkey = selfPaymentPubkey
 
 	hub := newCircleHub(t, svc, 300_000, 3600)
 	wallet, _, err := svc.AppsService.CreateApp("member", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
@@ -51,6 +52,9 @@ func TestDeleteApp_CircleWallet_ReclaimsToHub(t *testing.T) {
 
 	require.NoError(t, newTestAPIWithService(t, svc).DeleteApp(wallet))
 
-	assert.Nil(t, svc.AppsService.GetAppById(wallet.ID))
-	assert.Greater(t, queries.GetIsolatedBalance(svc.DB, hub.ID), int64(0), "the balance went back to the hub, not away with the wallet")
+	closing := svc.AppsService.GetAppById(wallet.ID)
+	require.NotNil(t, closing)
+	assert.Equal(t, "closing", closing.CircleState)
+	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, wallet.ID))
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, hub.ID))
 }

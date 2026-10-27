@@ -221,6 +221,24 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
 	}
 
+	cashHubDeleteCheckRegex := regexp.MustCompile(
+		`^/api/cash-hubs/([0-9]+)/delete-check$`,
+	)
+	if m := cashHubDeleteCheckRegex.FindStringSubmatch(route); len(m) == 2 && method == "GET" {
+		dbApp, errResp := app.getAppOrErrorResponse(m[1])
+		if dbApp == nil {
+			return *errResp
+		}
+		if dbApp.Kind != db.AppKindCashHub {
+			return WailsRequestRouterResponse{Body: nil, Error: "app is not a cash_hub"}
+		}
+		check, err := app.appsSvc.CashHubDeleteCheck(dbApp.ID)
+		if err != nil {
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: check, Error: ""}
+	}
+
 	circleHubDeleteRegex := regexp.MustCompile(
 		`^/api/apps/([0-9]+)/circle/delete$`,
 	)

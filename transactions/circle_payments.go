@@ -12,6 +12,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -130,9 +131,10 @@ func checkCircleKeysendCredit(tx *gorm.DB, recipient, payer *db.App, sameNode bo
 	if !circlemoney.IsCircleWallet(recipient) {
 		return nil
 	}
+	now := time.Now()
 	return circlemoney.CheckCredit(tx, circlemoney.CreditInput{
-		Wallet: recipient, Payer: payer, SameNode: sameNode, Amount: amount, Now: time.Now(),
-		PayerActive: circlemoney.IsCircleWallet(payer),
+		Wallet: recipient, Payer: payer, SameNode: sameNode, Amount: amount, Now: now,
+		PayerActive: circlemoney.IsCircleWallet(payer) && circlelife.IsActive(payer, now),
 	})
 }
 
@@ -180,6 +182,14 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
 		if err := lockCircleParties(tx, wallet); err != nil {
 			return err
+		}
+		// Only an Active wallet receives (NIP-CW §Own Funds and Caps).
+		current, err := loadApp(tx, &wallet.ID)
+		if err != nil {
+			return err
+		}
+		if current == nil || !circlelife.IsActive(current, now) {
+			return &circlemoney.Refusal{Code: constants.ERROR_RESTRICTED, Message: "this circle wallet is not active, so it cannot receive"}
 		}
 		room, err := circlemoney.ReceiveRoom(tx, wallet, now)
 		if err != nil {
@@ -249,12 +259,15 @@ func isCircleHold(tx *gorm.DB, row *db.Transaction) bool {
 }
 
 // circleHoldAcceptable re-checks an accepted Circle Wallet payment before the
-// Hub settles it: the wallet still exists, the amount paid is the invoice's
+// Hub settles it: the wallet still exists and is Active, the amount paid is the invoice's
 // (amountPaid < 0 when not known), and the invoice had not expired.
 func circleHoldAcceptable(tx *gorm.DB, row *db.Transaction, amountPaid int64, now time.Time) (bool, string) {
 	wallet, err := loadApp(tx, row.AppId)
 	if err != nil || wallet == nil {
 		return false, "the wallet is gone"
+	}
+	if !circlelife.IsActive(wallet, now) {
+		return false, "the wallet is no longer active"
 	}
 	if amountPaid >= 0 && uint64(amountPaid) != row.AmountMloki {
 		return false, "the amount paid is not the invoice's"
@@ -335,4 +348,36 @@ func (svc *transactionsService) interceptSelfCircleHold(row *db.Transaction, lnC
 // a Circle Wallet's are the Hub's own, never the member's to settle.
 func publishHoldAccepted(tx *gorm.DB, row *db.Transaction) bool {
 	return !isCircleHold(tx, row)
+}
+
+// CancelOpenCircleInvoices cancels every open invoice of a Circle Wallet at the
+// node and fails its row, as a wallet that leaves Active or is deleted must
+// (NIP-CW §Own Funds and Caps, §Deleting a Circle Wallet). A held payment the
+// Hub accepted is cancelled too. The first node failure is returned; the rows
+// already cancelled stay so.
+func (svc *transactionsService) CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error {
+	var rows []db.Transaction
+	if err := svc.db.Where("app_id = ? AND type = ? AND state IN ?", walletID, constants.TRANSACTION_TYPE_INCOMING,
+		[]string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_ACCEPTED}).Find(&rows).Error; err != nil {
+		return err
+	}
+	for i := range rows {
+		row := &rows[i]
+		if row.State == constants.TRANSACTION_STATE_ACCEPTED {
+			if err := svc.CancelHoldInvoice(ctx, row.PaymentHash, lnClient); err != nil {
+				return err
+			}
+			continue
+		}
+		if row.Hold && !row.SelfPayment && lnClient != nil {
+			if err := lnClient.CancelHoldInvoice(ctx, row.PaymentHash); err != nil {
+				return fmt.Errorf("cancel invoice %s at the node: %w", row.PaymentHash, err)
+			}
+		}
+		if err := svc.db.Model(&db.Transaction{}).Where("id = ? AND state = ?", row.ID, constants.TRANSACTION_STATE_PENDING).
+			Updates(map[string]interface{}{"state": constants.TRANSACTION_STATE_FAILED, "failure_reason": "cancelled: the circle wallet cannot receive"}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -146,3 +146,21 @@ func TestMakeCircleInvoice_Refusals(t *testing.T) {
 	_, err = ts.MakeCircleInvoice(context.TODO(), wallet, 1_000, "", "", 3600, nil, svc.LNClient, nil)
 	assertCircleRefusal(t, err, constants.ERROR_RATE_LIMITED)
 }
+
+// A wallet that left Active issues no invoice, and a payment it accepted is
+// cancelled, not settled (NIP-CW §Own Funds and Caps: only Active wallets
+// receive).
+func TestCircleInvoice_NotActive(t *testing.T) {
+	svc, ts, wallet := holdCircle(t)
+	ts.SetLNClientProvider(func() lnclient.LNClient { return svc.LNClient })
+	invoice, err := ts.MakeCircleInvoice(context.TODO(), wallet, 10_000, "", "", 3600, nil, svc.LNClient, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", wallet.ID).Update("circle_state", "suspended").Error)
+	_, err = ts.MakeCircleInvoice(context.TODO(), wallet, 10_000, "", "", 3600, nil, svc.LNClient, nil)
+	assertCircleRefusal(t, err, constants.ERROR_RESTRICTED)
+
+	acceptExternally(t, ts, invoice.PaymentHash, 10_000)
+	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, rowState(t, svc, invoice.ID).State)
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID))
+}

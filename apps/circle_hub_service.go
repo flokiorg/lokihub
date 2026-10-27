@@ -65,6 +65,12 @@ func (svc *appsService) CreateCircleHub(name string, pubkey string, maxAmountLok
 	if config.OutboundPeriod == "" {
 		config.OutboundPeriod = constants.CIRCLE_DEFAULT_OUTBOUND_PERIOD
 	}
+	if config.GraceSecs == 0 {
+		config.GraceSecs = constants.CIRCLE_DEFAULT_GRACE_SECS
+	}
+	if config.DustThresholdMloki == 0 {
+		config.DustThresholdMloki = constants.CIRCLE_DEFAULT_DUST_MLOKI
+	}
 	if err := validateCircleHubConfig(&config); err != nil {
 		return nil, "", err
 	}
@@ -126,6 +132,8 @@ type CircleHubConfigPatch struct {
 	FeeReserveMinMloki       *int64
 	OutboundCeilingMloki     *int64
 	OutboundPeriod           *string
+	GraceSecs                *int64
+	DustThresholdMloki       *int64
 }
 
 // IsEmpty reports whether the patch changes nothing.
@@ -167,6 +175,12 @@ func (p CircleHubConfigPatch) apply(cfg *db.CircleHubConfig) {
 	}
 	if p.OutboundPeriod != nil {
 		cfg.OutboundPeriod = *p.OutboundPeriod
+	}
+	if p.GraceSecs != nil {
+		cfg.GraceSecs = *p.GraceSecs
+	}
+	if p.DustThresholdMloki != nil {
+		cfg.DustThresholdMloki = *p.DustThresholdMloki
 	}
 }
 
@@ -210,6 +224,8 @@ func (svc *appsService) UpdateCircleHubConfig(appID uint, patch CircleHubConfigP
 		"fee_reserve_min_mloki":        cfg.FeeReserveMinMloki,
 		"outbound_ceiling_mloki":       cfg.OutboundCeilingMloki,
 		"outbound_period":              cfg.OutboundPeriod,
+		"grace_secs":                   cfg.GraceSecs,
+		"dust_threshold_mloki":         cfg.DustThresholdMloki,
 	})
 	if result.Error != nil {
 		return result.Error
@@ -265,6 +281,14 @@ func validateCircleHubConfig(cfg *db.CircleHubConfig) error {
 	case constants.BUDGET_RENEWAL_DAILY, constants.BUDGET_RENEWAL_WEEKLY, constants.BUDGET_RENEWAL_MONTHLY, constants.BUDGET_RENEWAL_YEARLY:
 	default:
 		return fmt.Errorf("%w: outbound_period must be daily, weekly, monthly or yearly", constants.ErrInvalidParams)
+	}
+	// A grace period is required before a wallet the member did not delete
+	// may go (NIP-CW §Lifecycle and Deletion).
+	if cfg.GraceSecs <= 0 || cfg.GraceSecs > constants.MAX_EXPIRY_SECS {
+		return fmt.Errorf("%w: grace_secs must be between 1 and %d", constants.ErrInvalidParams, constants.MAX_EXPIRY_SECS)
+	}
+	if cfg.DustThresholdMloki < 0 {
+		return fmt.Errorf("%w: dust_threshold_mloki must not be negative", constants.ErrInvalidParams)
 	}
 	return validateBudgetRenewal(cfg.MinBudgetRenewal)
 }

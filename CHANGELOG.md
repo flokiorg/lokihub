@@ -9,6 +9,30 @@ audits of both.
 
 ### Added
 
+- Adds NIP-CW's Circle Wallet lifecycle (new `circlelife` package): Active,
+  Suspended, Expired and Closing, with only the spec's edges; a wallet past its
+  `expires_at` is Expired at once, whether or not the job has run; the grace
+  period (new Hub setting, default 7 days) starts when a wallet first leaves
+  Active and is never restarted; reaching Expired or Closing frees the member to
+  join again; a wallet that is not Active has its open invoices cancelled,
+  stops counting toward the holdings and cannot receive (`PAYMENT_FAILED` to a
+  same-node payer). A job every minute records expiries, closes Suspended
+  wallets past their grace, and deletes Expired or Closing wallets past their
+  grace that hold at most their dust (new Hub setting, default 1000 mloki,
+  fixed per wallet at join and reported in the join details) and have nothing
+  in flight, keeping the dust on the Hub.
+- Serves `delete_circle_wallet` on a Circle Wallet's own connection in every
+  state: refused `RESTRICTED` while it holds more than dust or a payment is in
+  flight; otherwise its open invoices are cancelled at the node first and the
+  wallet is deleted in one step. Any other connection is refused `RESTRICTED`.
+- Gates every Circle Wallet request by state (NIP-CW §What a Circle Wallet
+  Connection Allows): an Active wallet serves `pay_invoice`, `pay_keysend`,
+  `make_invoice`, `lookup_invoice`, `list_transactions`, `get_balance`,
+  `get_budget`, `get_info` and `delete_circle_wallet`; any other state only
+  pays out, reads and deletes; everything else is `RESTRICTED`.
+- Adds `GET /api/cash-hubs/:id/delete-check` (and its Wails route): what keeps
+  a Cash Hub from being deleted (live bills, retained request records) with
+  each blocker's time and the earliest possible deletion.
 - Adds NIP-CW's money model for Circle Wallets (new `circlemoney` package).
   Every payment is classified as same circle, another circle on the node, any
   other connection on the node, or Lightning; only Lightning carries the
@@ -126,6 +150,12 @@ audits of both.
 
 ### Changed
 
+- Breaking: a host delete of a Circle Wallet (the wallet list, the generic app
+  delete) moves it to Closing instead of sweeping its balance to the Hub, and
+  deleting a circle hub tears it down: every wallet Closing, the circle closed
+  to joins, the hub deleted only after its last wallet (at once if it has
+  none). The cash expiry sweep never touches a Circle Wallet. A Cash Hub is not
+  deleted while a request record naming it is retained.
 - Breaking: a Circle Wallet's join checks the circle's holdings against its
   holdings ceiling instead of committing each wallet's `max_amount` against the
   Hub's balance; the Hub-wide budget ceiling is gone, and a circle hub's app

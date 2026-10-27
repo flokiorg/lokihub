@@ -30,6 +30,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwallet"
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/connstr"
@@ -188,6 +189,8 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 				FeeReserveMinMloki:       createAppRequest.CircleFeeReserveMinMloki,
 				OutboundCeilingMloki:     createAppRequest.CircleOutboundCeilingMloki,
 				OutboundPeriod:           createAppRequest.CircleOutboundPeriod,
+				GraceSecs:                createAppRequest.CircleGraceSecs,
+				DustThresholdMloki:       createAppRequest.CircleDustThresholdMloki,
 			},
 		)
 	default:
@@ -350,6 +353,8 @@ func circleHubConfigPatch(req *UpdateAppRequest) apps.CircleHubConfigPatch {
 		FeeReserveMinMloki:       req.CircleFeeReserveMinMloki,
 		OutboundCeilingMloki:     req.CircleOutboundCeilingMloki,
 		OutboundPeriod:           req.CircleOutboundPeriod,
+		GraceSecs:                req.CircleGraceSecs,
+		DustThresholdMloki:       req.CircleDustThresholdMloki,
 	}
 }
 
@@ -586,7 +591,19 @@ func (api *api) DeleteApp(userApp *db.App) error {
 	// DeleteCashWallet/DeleteCircleWalletChild endpoints use, so this generic
 	// path (e.g. the app detail page's Disconnect action) is safe too,
 	// regardless of claim state.
-	if userApp.Kind == db.AppKindCashWallet || userApp.Kind == db.AppKindCircleWallet {
+	// A host delete of a Circle Wallet moves it to Closing: a member's balance
+	// is never swept, and the wallet goes once its grace is over and it holds
+	// at most dust (NIP-CW §Lifecycle and Deletion).
+	if userApp.Kind == db.AppKindCircleWallet {
+		return api.closeCircleWallet(userApp.ID)
+	}
+	// A circle hub is torn down: every wallet Closing, the hub kept until the
+	// last one is deleted.
+	if userApp.Kind == db.AppKindCircleHub {
+		_, err := api.teardownCircleHub(userApp)
+		return err
+	}
+	if userApp.Kind == db.AppKindCashWallet {
 		return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
 			api.svc.GetTransactionsService(), api.svc.GetLNClient(), *userApp, service.SubWalletDeletion{
 				Outcome:        db.CashBillOutcomeDeleted,
@@ -705,6 +722,11 @@ func (api *api) GetApp(ctx context.Context, dbApp *db.App) *App {
 			response.CircleFeeReserveMinMloki = &cfg.FeeReserveMinMloki
 			response.CircleOutboundCeilingMloki = &cfg.OutboundCeilingMloki
 			response.CircleOutboundPeriod = &cfg.OutboundPeriod
+			response.CircleGraceSecs = &cfg.GraceSecs
+			response.CircleDustThresholdMloki = &cfg.DustThresholdMloki
+			accepting := cfg.AcceptingJoins == nil || *cfg.AcceptingJoins
+			response.CircleAccepting = &accepting
+			response.CircleTeardownRequestedAt = cfg.TeardownRequestedAt
 		}
 	}
 
@@ -3079,12 +3101,10 @@ func childAppIDs(children []db.App) []uint {
 	return ids
 }
 
-// DeleteCircleWalletChild removes a single circle_wallet child from a
-// circle_hub, in any state (empty or with a remaining balance) — unlike
-// DeleteCircleHub, which only ever operates on the whole hub at once. Any
-// remaining balance is first reclaimed back to the hub and the child app
-// deleted (service.ReclaimAndDeleteSubWallet), the same way
-// DeleteCashHubAllocation handles a claimed Cash wallet.
+// DeleteCircleWalletChild is the host's delete of one of a circle hub's
+// wallets: it moves the wallet to Closing (NIP-CW §Lifecycle and Deletion),
+// starting its grace period unless it is already in one, and never moves its
+// balance. An Expired or Closing wallet is left as it is.
 func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 	var hub db.App
 	if err := api.db.First(&hub, hubAppID).Error; err != nil {
@@ -3102,22 +3122,60 @@ func (api *api) DeleteCircleWalletChild(hubAppID uint, childAppID uint) error {
 		}
 		return err
 	}
-
-	return service.ReclaimAndDeleteSubWallet(context.Background(), api.db,
-		api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
-			Outcome:        db.CashBillOutcomeDeleted,
-			EventPublisher: api.eventPublisher,
-		})
+	return api.closeCircleWallet(child.ID)
 }
 
-// DeleteCircleHub deletes a circle_hub app and its circle_wallet children.
-// mode must be db.CircleDeleteModeAll (sweep every child's balance back to the hub
-// and the hub's to the main balance, then delete; see sweepAndDeleteCircleHub) or
-// db.CircleDeleteModeEmptyOnly (delete only zero-balance children with no payment
-// in flight). In both modes, a child that can't go yet leaves the provider itself
-// intact so the admin can retry once it has drained. Guarded by the same
-// per-provider advisory lock used by create_circle_wallet, so this can't race a
-// concurrent wallet creation on the app.
+// closeCircleWallet moves one Circle Wallet to Closing under its Hub's lock, then
+// cancels its open invoices at the node (the lifecycle job retries a failure).
+func (api *api) closeCircleWallet(walletID uint) error {
+	var wallet db.App
+	err := api.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ?", walletID).First(&wallet).Error; err != nil {
+			return err
+		}
+		if wallet.ParentAppID == nil {
+			return fmt.Errorf("%w: circle wallet has no hub", constants.ErrInvalidParams)
+		}
+		if err := db.LockApp(tx, *wallet.ParentAppID); err != nil {
+			return err
+		}
+		cfg, err := circlemoney.HubConfig(tx, *wallet.ParentAppID)
+		if err != nil {
+			return err
+		}
+		err = circlelife.Transition(tx, &wallet, circlelife.EventHostDelete, time.Now(), cfg.GraceSecs)
+		if errors.Is(err, circlelife.ErrForbiddenEdge) {
+			return nil // Expired or Closing already: nothing changes
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	api.cancelCircleInvoices(walletID)
+	return nil
+}
+
+// cancelCircleInvoices cancels a wallet's open invoices at the node, best
+// effort: the lifecycle job retries.
+func (api *api) cancelCircleInvoices(walletID uint) {
+	if api.svc == nil {
+		return
+	}
+	lnClient := api.svc.GetLNClient()
+	if lnClient == nil {
+		return
+	}
+	if err := api.svc.GetTransactionsService().CancelOpenCircleInvoices(context.Background(), walletID, lnClient); err != nil {
+		logger.Logger.Warn().Err(err).Uint("app_id", walletID).Msg("Failed to cancel a closing circle wallet's invoices; the lifecycle job retries")
+	}
+}
+
+// DeleteCircleHub tears a circle hub down (NIP-CW §Lifecycle and Deletion, Hub
+// teardown), whatever mode is asked: every wallet moves to Closing as a host
+// delete does, the circle stops accepting joins, and the hub itself goes only
+// once its last wallet is deleted (at once when it has none). mode is still
+// checked, for the clients that send it; both values do the same.
 func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResult, error) {
 	if app.Kind != db.AppKindCircleHub {
 		return nil, fmt.Errorf("%w: app is not a circle_hub", constants.ErrInvalidParams)
@@ -3126,149 +3184,59 @@ func (api *api) DeleteCircleHub(app *db.App, mode string) (*DeleteCircleHubResul
 		return nil, fmt.Errorf("%w: mode must be %q or %q", constants.ErrInvalidParams,
 			db.CircleDeleteModeAll, db.CircleDeleteModeEmptyOnly)
 	}
-	if mode == db.CircleDeleteModeAll {
-		return api.sweepAndDeleteCircleHub(app)
-	}
+	return api.teardownCircleHub(app)
+}
 
-	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
+// teardownCircleHub moves every wallet of hub to Closing in one transaction
+// under the hub's lock, records the teardown and closes the circle to joins;
+// the hub is deleted now if it has no wallet, else by the lifecycle job after
+// its last one.
+func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
+	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}, ClosingChildIDs: []uint{}}
+	now := time.Now()
 	err := api.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
-				return fmt.Errorf("acquire circle delete lock: %w", err)
-			}
+		if err := db.LockApp(tx, app.ID); err != nil {
+			return err
 		}
-
+		cfg, err := circlemoney.HubConfig(tx, app.ID)
+		if err != nil {
+			return err
+		}
 		children, err := getCircleChildren(tx, app.ID)
 		if err != nil {
 			return err
 		}
-
-		balancesByID, err := queries.GetIsolatedBalancesByAppIDs(tx, childAppIDs(children))
-		if err != nil {
-			return err
-		}
-
-		var idsToDelete []uint
-		for _, child := range children {
-			// Empty also means nothing can still arrive or leave: deleting a child
-			// cascade-deletes a pending row, and its settlement would then have
-			// nowhere to land (the same rule ReclaimAndDeleteSubWallet applies).
-			if balancesByID[child.ID] != 0 ||
-				queries.HasPendingIncoming(tx, child.ID) || queries.HasPendingOutgoing(tx, child.ID) {
-				result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
-				continue
-			}
-			idsToDelete = append(idsToDelete, child.ID)
-		}
-
-		if len(idsToDelete) > 0 {
-			if err := tx.Where("id IN ?", idsToDelete).Delete(&db.App{}).Error; err != nil {
+		for i := range children {
+			err := circlelife.Transition(tx, &children[i], circlelife.EventTeardown, now, cfg.GraceSecs)
+			if err != nil && !errors.Is(err, circlelife.ErrForbiddenEdge) {
 				return err
 			}
-			result.DeletedChildIDs = idsToDelete
+			result.ClosingChildIDs = append(result.ClosingChildIDs, children[i].ID)
 		}
-
-		if len(result.SkippedChildIDs) > 0 {
-			// At least one child still has balance and was left intact — abort the
-			// provider deletion so an admin can retry once it drains.
-			return nil
+		updates := map[string]interface{}{"accepting_joins": false}
+		if cfg.TeardownRequestedAt == nil {
+			updates["teardown_requested_at"] = now.Unix()
 		}
-
-		if err := tx.Delete(app).Error; err != nil {
+		if err := tx.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Updates(updates).Error; err != nil {
 			return err
 		}
-		result.HubDeleted = true
+		if len(children) == 0 {
+			if err := tx.Delete(&db.App{}, app.ID).Error; err != nil {
+				return err
+			}
+			result.HubDeleted = true
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	for _, childID := range result.DeletedChildIDs {
-		api.eventPublisher.Publish(&events.Event{
-			Event:      "nwc_app_deleted",
-			Properties: map[string]interface{}{"id": childID},
-		})
+	for _, id := range result.ClosingChildIDs {
+		api.cancelCircleInvoices(id)
 	}
 	if result.HubDeleted {
 		api.publishCircleHubDeleted(app)
 	}
-
-	return result, nil
-}
-
-// errCircleHubChanged aborts the final delete when a member joined or a
-// payment started after the sweep.
-var errCircleHubChanged = errors.New("circle hub changed while deleting")
-
-// sweepAndDeleteCircleHub is DeleteCircleHub's mode=all: each child's balance
-// goes back to the hub (ReclaimAndDeleteSubWallet, which also deletes the
-// child), then the hub's balance goes to the node's main balance as a recorded
-// transfer, and only then is the hub deleted. Lightning payments can't sit in
-// a DB transaction, so this can stop part-way: a child with a payment in flight
-// is skipped and the hub kept, and a retry picks up where this one left off.
-func (api *api) sweepAndDeleteCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
-	ctx := context.Background()
-	result := &DeleteCircleHubResult{DeletedChildIDs: []uint{}, SkippedChildIDs: []uint{}}
-
-	children, err := getCircleChildren(api.db, app.ID)
-	if err != nil {
-		return nil, err
-	}
-	for _, child := range children {
-		err := service.ReclaimAndDeleteSubWallet(ctx, api.db,
-			api.svc.GetTransactionsService(), api.svc.GetLNClient(), child, service.SubWalletDeletion{
-				Outcome:        db.CashBillOutcomeDeleted,
-				EventPublisher: api.eventPublisher,
-			})
-		switch {
-		case err == nil:
-			result.DeletedChildIDs = append(result.DeletedChildIDs, child.ID)
-		case errors.Is(err, constants.ErrInvalidParams):
-			// A payment is still in flight: retry once it ends.
-			result.SkippedChildIDs = append(result.SkippedChildIDs, child.ID)
-		default:
-			return nil, fmt.Errorf("reclaim circle wallet %d: %w", child.ID, err)
-		}
-	}
-	if len(result.SkippedChildIDs) > 0 {
-		return result, nil
-	}
-
-	if queries.HasPendingIncoming(api.db, app.ID) || queries.HasPendingOutgoing(api.db, app.ID) {
-		return nil, fmt.Errorf("%w: a payment to or from this hub is still in flight, try again shortly", constants.ErrInvalidParams)
-	}
-	if balance := queries.GetIsolatedBalance(api.db, app.ID); balance > 0 {
-		if err := api.Transfer(ctx, &app.ID, nil, uint64(balance)); err != nil { //nolint:gosec // guarded by the balance > 0 check
-			return nil, fmt.Errorf("move the hub's balance to the main balance: %w", err)
-		}
-	}
-
-	err = api.db.Transaction(func(tx *gorm.DB) error {
-		if tx.Name() == "postgres" {
-			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(app.ID)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
-				return fmt.Errorf("acquire circle delete lock: %w", err)
-			}
-		}
-		remaining, err := getCircleChildren(tx, app.ID)
-		if err != nil {
-			return err
-		}
-		if len(remaining) > 0 || queries.GetIsolatedBalance(tx, app.ID) != 0 ||
-			queries.HasPendingIncoming(tx, app.ID) || queries.HasPendingOutgoing(tx, app.ID) {
-			return errCircleHubChanged
-		}
-		return tx.Delete(app).Error
-	})
-	if errors.Is(err, errCircleHubChanged) {
-		return nil, fmt.Errorf("%w: a member joined or a payment arrived while deleting, try again", constants.ErrInvalidParams)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	result.HubDeleted = true
-	api.publishCircleHubDeleted(app)
 	return result, nil
 }
 
