@@ -363,9 +363,11 @@ func TestGetPermittedMethods_CircleWalletScope(t *testing.T) {
 	}).Error)
 
 	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+	// NIP-CW joins are private-only: listed in private_methods, never in methods.
 	result := permissionsSvc.GetPermittedMethods(app, svc.LNClient)
-	assert.Contains(t, result, constants.NIP47MethodCreateCircleWallet)
+	assert.NotContains(t, result, constants.NIP47MethodCreateCircleWallet)
 	assert.NotContains(t, result, constants.NIP47MethodMintCash)
+	assert.Contains(t, permissionsSvc.GetPrivateMethods(app), constants.NIP47MethodCreateCircleWallet)
 }
 
 // A cash_wallet refuses get_budget (its connection is shared, and the budget would

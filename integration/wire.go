@@ -301,12 +301,13 @@ type GetBudgetResult struct {
 }
 
 type GetInfoResult struct {
-	Alias         *string           `json:"alias"`
-	Pubkey        *string           `json:"pubkey"`
-	Network       *string           `json:"network"`
-	Methods       []string          `json:"methods"`
-	Notifications []string          `json:"notifications"`
-	CircleWallet  *CircleWalletInfo `json:"circle_wallet,omitempty"`
+	Alias          *string           `json:"alias"`
+	Pubkey         *string           `json:"pubkey"`
+	Network        *string           `json:"network"`
+	Methods        []string          `json:"methods"`
+	PrivateMethods []string          `json:"private_methods"`
+	Notifications  []string          `json:"notifications"`
+	CircleWallet   *CircleWalletInfo `json:"circle_wallet,omitempty"`
 }
 
 // CircleWalletInfo mirrors nip47/controllers/get_info_controller.go's

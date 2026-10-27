@@ -175,6 +175,9 @@ var privateOnlyMethods = map[string]bool{
 	constants.NIP47MethodCashRedeem:      true,
 	constants.NIP47MethodCashTransfer:    true,
 	constants.NIP47MethodCashConsolidate: true,
+	// NIP-CW joins are private-only: a Circle Wallet Hub lists create_circle_wallet
+	// in private_methods, never in methods (NIP-CW §Private Join).
+	constants.NIP47MethodCreateCircleWallet: true,
 }
 
 func (svc *permissionsService) PermitsNotifications(app *db.App) bool {

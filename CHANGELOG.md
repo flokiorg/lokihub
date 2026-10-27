@@ -92,6 +92,14 @@ audits of both.
 
 ### Changed
 
+- Answers `get_info` on every connection a Cash Hub serves (its own, its
+  bills, Circle Wallet Hubs and their wallets) with `network` and `chain`
+  whatever the connection's scopes; a Cash Hub's `pubkey` is its node identity
+  as 64-hex x-only (the `cashhub1` string's TLV 4). A Circle Wallet Hub's
+  `circle_wallet` block always carries `identity`, `fee_reserve`,
+  `dust_threshold_millis` and `accepting`, and caps `available_millis` at the
+  per-wallet ceiling. `create_circle_wallet` moves from `methods` to
+  `private_methods`.
 - Gives a destroyed bill's tombstone its reason: the terminal state of the slice
   whose ending destroyed it (`redeemed`, `transferred`, `consolidated`,
   `expired` or `reclaimed`), kept on the bill's archive row and none for a

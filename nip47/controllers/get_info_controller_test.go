@@ -420,7 +420,14 @@ func TestHandleGetInfoEvent_CircleAdmin_CircleWalletBlock(t *testing.T) {
 	assert.Nil(t, publishedResponse.Error)
 	nodeInfo := publishedResponse.Result.(*getInfoResponse)
 	require.NotNil(t, nodeInfo.CircleWallet, "circle_admin app must have circle_wallet block in get_info response")
-	assert.Equal(t, int64(150_000), nodeInfo.CircleWallet.AvailableMillis) // 200k - 50k commitment
+	// 200k - 50k commitment, capped at the 100k per-wallet ceiling (the MAY cap).
+	assert.Equal(t, int64(100_000), nodeInfo.CircleWallet.AvailableMillis)
+	assert.True(t, nodeInfo.CircleWallet.Accepting)
+	assert.Len(t, nodeInfo.CircleWallet.Identity, 64, "the node identity, x-only")
+	require.NotNil(t, nodeInfo.Network)
+	require.NotNil(t, nodeInfo.Chain)
+	assert.Equal(t, "flokicoin", *nodeInfo.Chain)
+	assert.Equal(t, int64(10_000), nodeInfo.CircleWallet.FeeReserve.Ppm)
 	assert.Equal(t, 7200, nodeInfo.CircleWallet.MaxExpSecs)
 	assert.Equal(t, 500, nodeInfo.CircleWallet.FeesPpm)
 	assert.Equal(t, db.CirclePolicyAllowlist, nodeInfo.CircleWallet.CirclePolicy)
