@@ -139,7 +139,7 @@ func TestPrivateJoin_ItemProofSignedByAnotherKey_Refused(t *testing.T) {
 	res, served := h.serve(t, "x", string(tampered), assembler, strings.Repeat("06", 32))
 	require.True(t, served, "the sender holds the hub connection, so the refusal is an error")
 	require.NotNil(t, res.Error, "a join signed by another key must not be served")
-	assert.Equal(t, constants.ERROR_NOT_FOUND, res.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, res.Error.Code)
 	assert.Nil(t, res.Result)
 	assert.Empty(t, h.children(t), "no wallet is issued")
 

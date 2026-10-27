@@ -294,10 +294,11 @@ func TestBillProof_MissingSliceProofOnIdentityBoundBillIsARefusal(t *testing.T) 
 		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
 	item.Proof = nil // a bill cannot dodge its slice proof by looking bearer
 
+	// I9: a proofless item on a slice that is not cash-mode is UNAUTHORIZED.
 	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
 	require.True(t, served)
 	require.NotNil(t, result.Error)
-	assert.Equal(t, constants.ERROR_BAD_REQUEST, result.Error.Code)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, result.Error.Code)
 }
 
 // seedDestroyedBillWithConnKey extends seedDestroyedBill with the bill's connection
@@ -401,13 +402,10 @@ func TestPrivateTombstone_PastRetentionGetsSilence(t *testing.T) {
 	assert.False(t, served, "past retention the hub falls silent again, holder or not")
 }
 
-// TestPrivateTombstone_OnlyStatusIsAnswered: a redeem or transfer naming a destroyed
-// bill keeps its silence even from the holder.
-//
-// Answering those would return a result_type that does not match the request, and
-// would widen the disclosure past the three-outcome design agreed for the STATUS
-// method alone. Same rule the standard transport applies.
-func TestPrivateTombstone_OnlyStatusIsAnswered(t *testing.T) {
+// TestPrivateTombstone_ValueMethodsAreAnswered: I4 answers cash_status and every
+// value method naming a destroyed bill with its tombstone, under the method's own
+// result_type, once the bill proof verifies.
+func TestPrivateTombstone_ValueMethodsAreAnswered(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
@@ -428,8 +426,17 @@ func TestPrivateTombstone_OnlyStatusIsAnswered(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			item := buildItem(t, "t4", walletPubkey, method, `{}`,
 				nostr.GeneratePrivateKey(), connPriv, hubXOnly, nonce, notAfter)
-			_, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
-			assert.False(t, served, "%s on a destroyed bill must stay silent", method)
+			res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+			require.True(t, served, "%s on a destroyed bill is answered with its tombstone", method)
+			require.Nil(t, res.Error)
+			assert.Equal(t, method, res.ResultType)
+			assert.Contains(t, string(res.Result), `"status":"spent"`)
 		})
 	}
+
+	// A foreign bill proof still gets silence.
+	item := buildItem(t, "t5", walletPubkey, constants.NIP47MethodCashRedeem, `{}`,
+		nostr.GeneratePrivateKey(), nostr.GeneratePrivateKey(), hubXOnly, nonce, notAfter)
+	_, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	assert.False(t, served)
 }

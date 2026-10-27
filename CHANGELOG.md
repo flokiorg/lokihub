@@ -81,6 +81,13 @@ audits of both.
 
 ### Changed
 
+- Serves private-transport items in NIP-CASH's I2 to I10 order: a destroyed
+  bill is answered with its tombstone for `cash_redeem`, `cash_transfer` and
+  `cash_consolidate` as well as `cash_status`; a method this hub does not serve is
+  `NOT_IMPLEMENTED` once the bill proof verifies (no longer omitted); an item
+  proof that does not verify, or a proofless item on an identity-bound bill, is
+  `UNAUTHORIZED`; and after more than eight items of one envelope fail
+  authorization its further value items are `RATE_LIMITED`.
 - Runs `cash_redeem` in NIP-CASH's order and codes: locate (`NOT_FOUND`, a
   claimed or expired slice `RESTRICTED`), authorize (a claim proof that does not
   verify, now checked by nmilat with its `m` tag, or a wrong cash secret is

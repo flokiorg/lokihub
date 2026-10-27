@@ -208,12 +208,6 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 				recipientPriv, connPriv, hubXOnly, strings.Repeat("77", 32), notAfter),
 			why: "a banked proof must not be replayable in a later envelope",
 		},
-		{
-			name: "a method this transport does not serve",
-			item: buildItem(t, "x5", walletPubkey, constants.NIP47MethodMintCash, `{}`,
-				recipientPriv, connPriv, hubXOnly, nonce, notAfter),
-			why: "the allowlist itself must not be discoverable",
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, tc.item, binding)
@@ -222,6 +216,19 @@ func TestServePrivateItem_OmitsRatherThanErrors(t *testing.T) {
 				"an omitted item must carry no error — an error would distinguish it from a bill the hub does not hold")
 		})
 	}
+
+	// I5: once the bill proof verifies, a method this hub does not serve here is
+	// NOT_IMPLEMENTED; for a target it does not hold it stays an omission.
+	item := buildItem(t, "x5", walletPubkey, constants.NIP47MethodMintCash, `{}`,
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+	result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	require.True(t, served)
+	require.NotNil(t, result.Error)
+	assert.Equal(t, constants.ERROR_NOT_IMPLEMENTED, result.Error.Code)
+	item = buildItem(t, "x6", unknownTarget, constants.NIP47MethodMintCash, `{}`,
+		recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+	_, served = nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+	assert.False(t, served)
 }
 
 // TestServePrivateItem_RecordsOneRequestEventPerItem: the controllers take a

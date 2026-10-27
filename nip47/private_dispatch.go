@@ -33,6 +33,22 @@ type PrivateItemBinding struct {
 	HubXOnly string
 	Nonce    string
 	NotAfter int64
+	// AuthFailures counts this envelope's items answered UNAUTHORIZED so far; once
+	// over maxEnvelopeAuthFailures, its further value items are RATE_LIMITED.
+	// Shared by every item of one envelope (items run one at a time); nil counts
+	// nothing.
+	AuthFailures *int
+}
+
+// maxEnvelopeAuthFailures is how many items of one envelope may fail
+// authorization before its further value items are refused RATE_LIMITED.
+const maxEnvelopeAuthFailures = 8
+
+// valueMethods are the methods that move a slice's value.
+var valueMethods = map[string]bool{
+	constants.NIP47MethodCashRedeem:      true,
+	constants.NIP47MethodCashTransfer:    true,
+	constants.NIP47MethodCashConsolidate: true,
 }
 
 // ServePrivateItem runs one item from a private-transport envelope.
@@ -58,49 +74,51 @@ func (svc *nip47Service) ServePrivateItem(
 	item transport.Item,
 	binding PrivateItemBinding,
 ) (transport.Result, bool) {
-	// 1. Servable at all? First because it is free, and because the allowlist must not
-	// leak: an unserved method is omitted exactly like an unknown bill.
-	if !IsPrivateServableMethod(item.Method) {
-		omitted(item, "method is not on the private-transport allowlist")
-		return transport.Result{}, false
+	result, served := svc.servePrivateItem(ctx, lnClient, item, binding)
+	if served && result.Error != nil && result.Error.Code == constants.ERROR_UNAUTHORIZED && binding.AuthFailures != nil {
+		*binding.AuthFailures++
+	}
+	return result, served
+}
+
+// servePrivateItem is NIP-CASH §Serving an Envelope's I2 to I10 for one item (I1,
+// the item's shape, was judged when the envelope was decoded).
+func (svc *nip47Service) servePrivateItem(
+	ctx context.Context,
+	lnClient lnclient.LNClient,
+	item transport.Item,
+	binding PrivateItemBinding,
+) (transport.Result, bool) {
+	refuse := func(code, message string) (transport.Result, bool) {
+		return transport.Result{ID: item.ID, ResultType: item.Method,
+			Error: &transport.ResultError{Code: code, Message: message}}, true
 	}
 
-	// 2. Verify the bill proof's SIGNATURE first, before the bill is looked up.
+	// Verify the bill proof's SIGNATURE first, before the target is looked up.
 	//
-	// The verification is bill-independent and is the expensive step, so doing it here
-	// makes a missing bill and a foreign proof cost the same — see billProofSigner for
-	// the timing oracle this closes. Who the signer must BE is decided after the
-	// lookup, because the answer differs for a live bill and a tombstoned one.
+	// The verification is target-independent and is the expensive step, so doing it
+	// here makes a missing bill and a foreign proof cost the same — see
+	// billProofSigner for the timing oracle this closes. Who the signer must BE is
+	// decided after the lookup (I3).
 	signer, signed := svc.billProofSigner(item, binding)
-	if !signed {
-		omitted(item, "bill proof missing, malformed, or not verifiable")
-		return transport.Result{}, false
-	}
 
-	// The destroyed-bill record is read for every cash_status item, live bill or not,
-	// and only used below when there is no live bill. Read only on a miss, it made a
-	// target this hub never served cost one more query than a live one, which is
-	// measurable.
-	var tombstone db.SpentBillTombstone
-	var tombstoned bool
-	if item.Method == nipcash.MethodCashStatus {
-		tombstone, tombstoned = db.SpentBillTombstoneFor(svc.db, item.Target)
-	}
+	// The destroyed-bill record is read for every item, live bill or not, so a
+	// target this hub never served costs no less than a live one.
+	tombstone, tombstoned := db.SpentBillTombstoneFor(svc.db, item.Target)
 
-	// 3. Resolve the bill by wallet_pubkey ALONE. There is no app_pubkey to use — the
-	// envelope's outer key is ephemeral — which is why apps.wallet_pubkey carries its own
-	// index; the composite one leads with app_pubkey and cannot serve this.
+	// I2: the target, by wallet_pubkey alone (the envelope's outer key is ephemeral).
 	var app db.App
 	if err := svc.db.Where("wallet_pubkey = ?", item.Target).First(&app).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Logger.Error().Err(err).Msg("Failed to resolve a private item's target")
 		}
-		// No live bill. That is usually a wallet pubkey this hub never served, and the
-		// answer is silence — but a bill this hub DESTROYED also lands here, and its
-		// holder is entitled to a definitive "spent" for a bounded window. The
-		// standard transport has answered that since tombstones existed; this is the
-		// same answer, reached through the bill proof instead of through a request
-		// encrypted to the bill.
+		// No live bill: usually a target this hub never served, answered by silence;
+		// a bill it DESTROYED whose retention window is open is held (I2), and,
+		// once its bill proof verifies (I3), answered with its tombstone (I4).
+		if !signed {
+			omitted(item, "bill proof missing, malformed, or not verifiable")
+			return transport.Result{}, false
+		}
 		if result, ok := svc.tryPrivateSpentBill(item, signer, tombstone, tombstoned); ok {
 			return result, true
 		}
@@ -108,75 +126,57 @@ func (svc *nip47Service) ServePrivateItem(
 		return transport.Result{}, false
 	}
 
-	// 2.5. Prove the sender HOLDS this bill, before anything else about it is
-	// considered.
+	// I3: the bill proof must verify and be signed by the target's connection key.
 	//
 	// This is the gate the standard transport got for free: a request there was
 	// encrypted to the bill's own wallet pubkey, so sending one at all demonstrated
-	// possession. An envelope is encrypted to the hub's inbox instead and merely
-	// NAMES a target, and a wallet pubkey is public, so without this gate anyone
-	// could ask about any bill they could name.
-	//
-	// It is what makes every answer below safe to give. Once the sender has proved
-	// possession, confirming the bill exists — by declining, or by tombstoning it —
-	// tells them nothing they did not already know. Failing it is an OMISSION, so a
-	// caller who cannot prove possession learns nothing at all, which is what keeps
-	// a guessed wallet pubkey from becoming an existence oracle.
+	// possession. An envelope is encrypted to the hub's inbox and merely NAMES a
+	// target, and a wallet pubkey is public. Failing it is an OMISSION, so a caller
+	// who cannot prove possession learns nothing; once it passes, every answer below
+	// is safe to give, since it tells the sender nothing they did not know.
+	if !signed {
+		omitted(item, "bill proof missing, malformed, or not verifiable")
+		return transport.Result{}, false
+	}
 	if !billProofHolder(signer, app.AppPubkey) {
 		omitted(item, "bill proof not signed by this bill's connection key")
 		return transport.Result{}, false
 	}
 
-	// 2.55. I6 and I7 (NIP-CASH §Serving an Envelope): a call's request_id must be
-	// present and well formed (BAD_REQUEST), then unused (REQUEST_REUSED), before
-	// its proofs are looked at. Only checked here; the method marks it used once
-	// the call is authorized.
+	// I5: a method this hub does not serve on this transport is NOT_IMPLEMENTED.
+	if !IsPrivateServableMethod(item.Method) {
+		return refuse(constants.ERROR_NOT_IMPLEMENTED, item.Method+" is not served on this transport")
+	}
+
+	// I6 and I7: a call's request_id must be present and well formed (BAD_REQUEST),
+	// then unused (REQUEST_REUSED), before its proofs are looked at. Only checked
+	// here; the method marks it used once the call is authorized.
 	if refusal, refused := svc.refuseRequestID(item); refused {
 		return refusal, true
 	}
 
-	// 2.6. An item MUST NOT carry BOTH a slice proof and a cash secret
-	// (NIP-CASH §Bearer Items). They authorize differently, and an item asserting both
-	// leaves this hub to choose — either choice hiding the sender's mistake.
-	//
-	// Checked at the TRANSPORT, because the requirement is about the item. The money
-	// methods do reject the mixed PARAM shape themselves (cash_redeem step 3), but
-	// cash_status's params carry no identity fields at all, so nothing downstream can see
-	// the conflict: the proof is on the envelope and the secret is in params. That the
-	// stray secret is currently harmless there is an accident of which fields each method
-	// happens to carry, not a property anyone arranged — exactly what breaks when a field
-	// is added.
-	//
-	// An error rather than an omission, and placed after the possession gate so it is safe
-	// to be informative: the sender has proved they hold this bill, so naming their mistake
-	// discloses nothing, and an omission would leave a malformed client with no way to
-	// learn why it is being ignored.
-	//
-	// I8 as a whole is nmilat's BearerShapeOK: never both; a value method needs one;
-	// cash_status never carries a cash_secret.
+	// I8 is nmilat's BearerShapeOK: never both a proof and a cash_secret; a value
+	// method needs one; cash_status never carries a cash_secret.
 	if !transport.BearerShapeOK(item.Method, item.HasProof(), item.IsBearer()) {
 		message := "this item's proof and cash_secret do not fit " + item.Method
 		if item.HasProof() && item.IsBearer() {
 			message = "an item must carry either a slice proof or a cash secret, never both"
 		}
-		return transport.Result{
-			ID:         item.ID,
-			ResultType: item.Method,
-			Error: &transport.ResultError{
-				Code:    constants.ERROR_BAD_REQUEST,
-				Message: message,
-			},
-		}, true
+		return refuse(constants.ERROR_BAD_REQUEST, message)
 	}
 
-	// 3. Authorize the ITEM. The envelope proves nothing about who may act on a bill, since
-	// its author is a throwaway key.
+	// An envelope whose items keep failing authorization runs no more value items:
+	// a cash secret or proof being guessed is bounded per envelope, never per bill.
+	if valueMethods[item.Method] && binding.AuthFailures != nil && *binding.AuthFailures > maxEnvelopeAuthFailures {
+		return refuse(constants.ERROR_RATE_LIMITED, "too many items of this envelope failed authorization")
+	}
+
+	// I9: authorize the ITEM. The envelope proves nothing about who may act on a
+	// bill, since its author is a throwaway key.
 	//
-	// The authorized identity comes back rather than being discarded, because cash_status
-	// needs it: scoping the roster to "mine" MUST be decided from the proof's own signer and
-	// never from anything the item asserts about itself (NIP-CASH §Scoping the Roster). An
-	// item that could name its own scope subject could read a co-recipient's row by naming
-	// theirs.
+	// The authorized identity comes back because cash_status needs it: "mine" MUST be
+	// decided from the proof's own signer, never from anything the item asserts
+	// (NIP-CASH §Scoping the Roster).
 	signer, billIsCashMode, authorized, lookupErr := svc.privateItemIsAuthorized(item, binding, &app)
 	if lookupErr != nil {
 		// The hub could not read its own records, which says nothing about the
@@ -186,47 +186,26 @@ func (svc *nip47Service) ServePrivateItem(
 		if item.Method == constants.NIP47MethodCreateCircleWallet {
 			code = constants.ERROR_NOT_READY
 		}
-		return transport.Result{
-			ID:         item.ID,
-			ResultType: item.Method,
-			Error:      &transport.ResultError{Code: code, Message: "the hub could not read this wallet's records, please retry"},
-		}, true
+		return refuse(code, "the hub could not read this wallet's records, please retry")
 	}
 	if !authorized {
-		// An ERROR now, not an omission, and only because gate 2.5 passed: the sender
-		// has proved they hold this bill, so telling them they hold no SLICE of it
-		// discloses nothing further — they could have learned as much by trying to
-		// spend it.
-		//
-		// This used to be an omission, which was correct while possession was
-		// unprovable but cost real information: "this bill is not addressed to you"
-		// became indistinguishable from "the hub is down", and clients reported it as
-		// retryable, so they retried a token that would never be theirs.
-		//
-		// Two distinguishable reasons, both safe to state now, and worth separating
-		// because they call for different actions: a caller missing a slice proof has
-		// built the item wrong, while one whose signer holds no slice is holding a
-		// bill that simply is not addressed to them.
-		code, message := constants.ERROR_NOT_FOUND,
-			"no slice of this bill is registered for the identity that signed this item"
-		if !item.HasProof() && !item.IsBearer() {
-			code, message = constants.ERROR_BAD_REQUEST,
-				"this item carries no slice proof, and this bill is identity-bound"
-			if billIsCashMode {
-				message = "this item carries neither a slice proof nor a cash secret"
-			}
-		} else if !item.HasProof() {
-			// A cash secret that does not verify is UNAUTHORIZED (NIP-CASH §Errors, §Bearer
-			// Items, I9), whether the bill is cash-mode or identity-bound.
-			code, message = constants.ERROR_UNAUTHORIZED, "this cash secret does not verify for this bill"
-		} else if item.Method == constants.NIP47MethodCreateCircleWallet {
-			message = "a join's item proof must be signed by the pubkey that is joining"
+		switch {
+		case item.HasProof() && signer == "":
+			// The item proof did not verify.
+			return refuse(constants.ERROR_UNAUTHORIZED, "this item's proof does not verify")
+		case !item.HasProof() && !billIsCashMode:
+			// A proofless item on a slice that is not cash-mode by the hub's records.
+			return refuse(constants.ERROR_UNAUTHORIZED, "this bill is identity-bound and the item carries no slice proof")
+		case !item.HasProof():
+			// A cash secret that does not verify is UNAUTHORIZED (NIP-CASH §Errors,
+			// §Bearer Items), never NOT_FOUND.
+			return refuse(constants.ERROR_UNAUTHORIZED, "this cash secret does not verify for this bill")
+		case item.Method == constants.NIP47MethodCreateCircleWallet:
+			return refuse(constants.ERROR_UNAUTHORIZED, "a join's item proof must be signed by the pubkey that is joining")
+		default:
+			// The proof verified, but its signer holds no slice of this bill.
+			return refuse(constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
 		}
-		return transport.Result{
-			ID:         item.ID,
-			ResultType: item.Method,
-			Error:      &transport.ResultError{Code: code, Message: message},
-		}, true
 	}
 
 	// 4. Scope, checked per item. Batching MUST NOT be a way around permissions.
@@ -343,12 +322,11 @@ func (svc *nip47Service) ServePrivateItem(
 // keeps the app id, and the pairing key is deterministic from it, so a destroyed
 // bill needs no secret retained to stay verifiable.
 //
-// Only cash_status is answered. A cash_redeem or cash_transfer naming a destroyed
-// bill keeps its silence, exactly as on the standard transport: the agreed design is
-// three outcomes on the STATUS method, and answering the others would return a
-// result_type that does not match the request.
+// cash_status and the value methods are answered (I4), each under its own
+// result_type: the tombstone is a result, never an error.
 func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
-	if item.Method != nipcash.MethodCashStatus {
+	// I4: cash_status and the value methods are answered with the tombstone.
+	if item.Method != nipcash.MethodCashStatus && !valueMethods[item.Method] {
 		return transport.Result{}, false
 	}
 
@@ -549,7 +527,7 @@ func (svc *nip47Service) privateItemIsAuthorized(
 			Pubkey string `json:"pubkey"`
 		}
 		if err := json.Unmarshal(item.Params, &join); err != nil || join.Pubkey != signer {
-			return "", billIsCashMode, false, nil
+			return signer, billIsCashMode, false, nil
 		}
 		return signer, billIsCashMode, true, nil
 	}
@@ -608,7 +586,9 @@ func (svc *nip47Service) privateItemIsAuthorized(
 			return signer, billIsCashMode, true, nil
 		}
 	}
-	return "", billIsCashMode, false, nil
+	// Verified, but the signer holds no slice: the signer comes back so the caller
+	// can tell this NOT_FOUND from a proof that did not verify.
+	return signer, billIsCashMode, false, nil
 }
 
 // requestIDMethods are the private methods that are calls carrying a request_id
