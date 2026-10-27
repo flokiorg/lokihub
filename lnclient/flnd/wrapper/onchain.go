@@ -13,7 +13,9 @@ func (wrapper *FLNDWrapper) WalletKit() walletrpc.WalletKitClient { return wrapp
 func (wrapper *FLNDWrapper) Lightning() lnrpc.LightningClient { return wrapper.client }
 
 // ChainKit is flnd's chain-kit subserver on the same connection.
-func (wrapper *FLNDWrapper) ChainKit() chainrpc.ChainKitClient { return chainrpc.NewChainKitClient(wrapper.conn) }
+func (wrapper *FLNDWrapper) ChainKit() chainrpc.ChainKitClient {
+	return chainrpc.NewChainKitClient(wrapper.conn)
+}
 
 // ChainNotifier is flnd's chain notifier on the same connection.
 func (wrapper *FLNDWrapper) ChainNotifier() chainrpc.ChainNotifierClient {
