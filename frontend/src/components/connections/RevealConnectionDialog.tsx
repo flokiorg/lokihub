@@ -38,7 +38,8 @@ export function RevealConnectionDialog({
   onClose,
 }: {
   app: App;
-  pairingUri: string;
+  // Absent for a Cash bill: its cash_token is its only credential.
+  pairingUri?: string;
   // lokicashToken: the same connection as pairingUri, packaged as a
   // single lokicash1... string (NIP-CASH §The Lokicash Token) — optional
   // since not every app kind this dialog is reused for has one.
@@ -177,7 +178,7 @@ export function RevealConnectionDialog({
         )}
         <ConnectAppCard
           app={shouldPollForConnection ? (polledApp ?? app) : app}
-          pairingUri={pairingUri}
+          pairingUri={pairingUri ?? ""}
           lokicashToken={lokicashToken}
           cashSecret={cashSecret}
           variant="reveal"

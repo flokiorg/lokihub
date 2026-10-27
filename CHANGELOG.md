@@ -63,6 +63,9 @@ audits of both.
 
 ### Changed
 
+- Returns only the `cash_token` from the admin mint and the bill connection
+  endpoint, the bill's one credential; neither carries a `pairing_uri` any more,
+  and the Cash screens show the token alone.
 - Marks an admin mint's `request_id` used and commits its record with the bill,
   as over NWC, when the request carries one with its `expiration`.
 - Checks `mint_cash` in NIP-CASH's order: recipients first (over 100, or one

@@ -1194,7 +1194,7 @@ export interface CashWalletRecipient {
 
 export interface CreateCashWalletResponse {
   app_id: number;
-  pairing_uri: string;
+  // The bill's only credential (NIP-CASH §Minting Cash, Response).
   cash_token: string;
   // Optional because the backend omits it entirely for a wallet that never
   // expires — api.CreateCashWalletResponse.ExpiresAt is *int64 with
@@ -1237,10 +1237,8 @@ export interface CreateCashWalletRequest {
 }
 
 // CashWalletConnectionResponse is GET /api/apps/{id}/cash-connection's
-// response — the same connection data CreateCashWalletResponse carries,
-// re-derivable at any later time (NIP-CASH §The Pairing Connection).
+// response: the bill's cash_token as issued, its only credential.
 export interface CashWalletConnectionResponse {
-  pairing_uri: string;
   cash_token: string;
 }
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"net/url"
 	"strings"
 	"testing"
 
@@ -439,27 +438,20 @@ func TestGetCashWalletConnection_HappyPath(t *testing.T) {
 	theAPI := newTestAPI(svc)
 	conn, err := theAPI.GetCashWalletConnection(wallet.ID)
 	require.NoError(t, err)
-	assert.Contains(t, conn.PairingURI, "nostr+walletconnect://")
-	assert.Contains(t, conn.PairingURI, "&secret=")
 	assert.True(t, strings.HasPrefix(conn.CashToken, constants.CashTokenHRP+"1"))
 
-	// Deterministic: re-deriving must return the exact same URI and token
-	// every time — a stale lokicash1... token handed out earlier must still
-	// resolve to the same wallet as a freshly re-derived one.
+	// The token as issued, every time.
 	again, err := theAPI.GetCashWalletConnection(wallet.ID)
 	require.NoError(t, err)
-	assert.Equal(t, conn.PairingURI, again.PairingURI)
 	assert.Equal(t, conn.CashToken, again.CashToken)
 
-	// And the two must actually agree with each other, not just each be
-	// internally deterministic.
-	pairingURI, err := url.Parse(conn.PairingURI)
-	require.NoError(t, err)
+	// It names this bill and carries the connection secret derived from its id.
 	decoded, err := nipcash.Decode(conn.CashToken)
 	require.NoError(t, err)
-	assert.Equal(t, pairingURI.Host, decoded.WalletPubkey)
-	assert.Equal(t, pairingURI.Query().Get("secret"), decoded.Secret)
-	assert.Equal(t, pairingURI.Query()["relay"], decoded.RelayURLs)
+	assert.Equal(t, *wallet.WalletPubkey, decoded.WalletPubkey)
+	secret, err := svc.Keys.GetCashPairingKey(wallet.ID)
+	require.NoError(t, err)
+	assert.Equal(t, secret, decoded.Secret)
 }
 
 // TestGetCashWalletConnection_LokicashHintsReflectCurrentClaims verifies the

@@ -3508,13 +3508,8 @@ func (api *api) DeleteCashWallet(hubAppID uint, walletAppID uint) error {
 		})
 }
 
-// GetCashWalletConnection returns the NWC pairing URI for an already-created Cash
-// wallet. Unlike a normal app's pairing secret (a random key generated once at
-// creation and never persisted), a Cash wallet's pairing key is deterministic —
-// derived on demand from the wallet's own app ID via keys.GetCashPairingKey,
-// specifically so the connection_key claim flow never has to store it. That
-// same determinism means it can be safely re-derived here any number of
-// times: nothing is rotated or invalidated for a client already using it.
+// GetCashWalletConnection returns an already-created bill's cash_token, its only
+// credential (NIP-CASH §The Cash Token).
 func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionResponse, error) {
 	var app db.App
 	if err := api.db.First(&app, appID).Error; err != nil {
@@ -3523,18 +3518,6 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 	if app.Kind != db.AppKindCashWallet {
 		return nil, fmt.Errorf("app is not a cash_wallet")
 	}
-	if app.WalletPubkey == nil {
-		return nil, fmt.Errorf("cash wallet has no wallet pubkey")
-	}
-
-	pairingSecretKey, err := api.keys.GetCashPairingKey(app.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Cash pairing key: %w", err)
-	}
-
-	relayUrls := api.cfg.GetRelayUrls()
-
-	pairingURI := nmilatnip47.BuildPairingURI(*app.WalletPubkey, relayUrls, pairingSecretKey, nil)
 
 	// The token is returned VERBATIM as issued, never re-derived.
 	//
@@ -3554,7 +3537,7 @@ func (api *api) GetCashWalletConnection(appID uint) (*CashWalletConnectionRespon
 		return nil, fmt.Errorf("cash wallet %d has no issued token stored, and one cannot be re-derived: a re-encode would lack the mint signature and be unspendable", app.ID)
 	}
 
-	return &CashWalletConnectionResponse{PairingURI: pairingURI, CashToken: app.CashToken}, nil
+	return &CashWalletConnectionResponse{CashToken: app.CashToken}, nil
 }
 
 // GetCashWalletRecipients returns every recipient slice of a single
@@ -3628,11 +3611,10 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 	return result, nil
 }
 
-// CreateCashWallet is the admin equivalent of a hub calling mint_cash
-// over NWC: it immediately creates, funds, and returns the plaintext pairing
-// URI for a shared Cash wallet serving every recipient in the request in one
-// shot — the connection is meant to be distributed to the whole recipient
-// group by the hub owner afterward.
+// CreateCashWallet is the admin equivalent of a hub calling mint_cash over NWC:
+// it creates and funds a shared Cash wallet serving every recipient in the
+// request in one shot and returns its cash_token, which the hub owner
+// distributes to the recipients afterward.
 func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*CreateCashWalletResponse, error) {
 	var hub db.App
 	if err := api.db.First(&hub, hubID).Error; err != nil {
@@ -3754,15 +3736,8 @@ func (api *api) CreateCashWallet(hubID uint, req *CreateCashWalletRequest) (*Cre
 		expiresAt = &ts
 	}
 
-	// The operator's screen still reveals the URI form (until WP-19); the bill's
-	// credential is cash_token.
-	pairingSecret, err := api.keys.GetCashPairingKey(result.WalletApp.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive the bill's pairing key: %w", err)
-	}
 	return &CreateCashWalletResponse{
 		AppID:      result.WalletApp.ID,
-		PairingURI: nmilatnip47.BuildPairingURI(*result.WalletApp.WalletPubkey, api.cfg.GetRelayUrls(), pairingSecret, nil),
 		CashToken:  result.CashToken,
 		ExpiresAt:  expiresAt,
 		Recipients: recipientResults,
