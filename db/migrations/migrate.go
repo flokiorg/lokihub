@@ -47,7 +47,6 @@ func Models() []any {
 		&db.CashRequestRecord{},
 		&db.CashRequestRecordBill{},
 		&db.CashHorizon{},
-		&db.CashStrandedFund{},
 		&db.CashBillArchive{},
 		&db.CashBillSliceArchive{},
 	}

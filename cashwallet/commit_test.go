@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	mrand "math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -592,5 +593,21 @@ func TestCommit_ConservationUnderRandomFaults(t *testing.T) {
 			}
 		}
 		require.Equal(t, int64(commitHubFunds), total, "iteration %d: value conserved", i)
+	}
+}
+
+// U-4.R2a: the compensating saga is gone, with every name it used.
+func TestNoSagaSymbolsRemain(t *testing.T) {
+	banned := []string{
+		"Cash" + "StrandedFund", "CashBillOutcome" + "Void", "CashSliceStatus" + "Void",
+		"fund" + "Internal", "FundInternal" + "Override", "deleteIf" + "Drained", "cash_stranded" + "_funds",
+	}
+	files := goFilesOfModule(t)
+	sort.Strings(files)
+	for _, f := range files {
+		raw := readFile(t, f)
+		for _, b := range banned {
+			assert.False(t, strings.Contains(raw, b), "%s still names %s", f, b)
+		}
 	}
 }

@@ -455,27 +455,6 @@ type CashHorizon struct {
 // TableName is cash_horizon: one row, not a collection.
 func (CashHorizon) TableName() string { return "cash_horizon" }
 
-// CashStrandedFund is a durable record of one compensating-saga reversal that
-// itself failed during cashwallet.Consolidate/SplitInTwo, so an operator can
-// find and resolve it by querying data instead of grepping logs.
-// SourceWalletAppID is the wallet whose contribution was debited but never
-// returned; RetainedWalletAppID is the wallet deliberately left un-deleted
-// (the merged wallet for a consolidate, the carved wallet for a split),
-// still holding those funds. No foreign key to either App row: this record's
-// own lifecycle is independent of whatever later happens to them (e.g. an
-// operator manually sweeping and deleting the retained wallet must not
-// silently erase the reconciliation history). ResolvedAt is set once an
-// operator has manually swept the funds back — nil means still outstanding.
-type CashStrandedFund struct {
-	ID                  uint   `gorm:"primaryKey"`
-	Operation           string `gorm:"not null"` // "consolidate" | "split" | "mint" (an unfunded wallet a failed mint could not delete; AmountMloki 0)
-	SourceWalletAppID   uint   `gorm:"not null;index"`
-	RetainedWalletAppID uint   `gorm:"not null;index"`
-	AmountMloki         uint64 `gorm:"not null"`
-	CreatedAt           time.Time
-	ResolvedAt          *time.Time `gorm:"index"`
-}
-
 // How a cash bill itself ended. Deliberately a different set from the
 // slice-level vocabulary below: a bill whose slices ended differently — one
 // redeemed, one split away — has no single slice value that describes it.
@@ -491,10 +470,6 @@ const (
 	// CashBillOutcomeWrittenOff: the parent hub was gone, so a remaining
 	// balance could not be reclaimed anywhere and was abandoned.
 	CashBillOutcomeWrittenOff = "written-off"
-	// CashBillOutcomeVoid: a rollback of a bill whose funding (or whose
-	// compensating reversal) failed. No recipient ever saw it, so it is kept
-	// for forensics but excluded from listings by default.
-	CashBillOutcomeVoid = "void"
 )
 
 // How one slice ended. This is the vocabulary shared by live and archived
@@ -518,8 +493,6 @@ const (
 	// CashSliceStatusWrittenOff: unclaimed, and the value could not be
 	// returned anywhere because the parent hub was gone.
 	CashSliceStatusWrittenOff = "written-off"
-	// CashSliceStatusVoid: belonged to a bill that never came into existence.
-	CashSliceStatusVoid = "void"
 )
 
 // CashBillArchive is the durable record of one cash bill — a cash_wallet app —
@@ -531,9 +504,8 @@ const (
 // CashWalletClaim and Transaction alike, so without this table a bill leaves no
 // trace at all and the operator cannot account for money that passed through.
 //
-// No foreign key to any App row, for the same reason CashStrandedFund has
-// none: every app this record names is already gone by the time it exists, so
-// a constraint could only ever be a liability. Retained forever — this is the
+// No foreign key to any App row: every app this record names is already gone by
+// the time it exists, so a constraint could only ever be a liability. Retained forever — this is the
 // only remaining evidence the bill existed.
 //
 // WalletAppID is unique: app IDs are never reused, so it is this table's

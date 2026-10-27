@@ -350,7 +350,6 @@ func TestDeriveSliceOutcome(t *testing.T) {
 		{"a claimed slice ignores the bill outcome", db.CashWalletClaim{ClaimedAt: &claimed}, db.CashBillOutcomeExpired, db.CashSliceStatusRedeemed},
 		{"unclaimed on an expired bill", db.CashWalletClaim{}, db.CashBillOutcomeExpired, db.CashSliceStatusExpired},
 		{"unclaimed on a written-off bill", db.CashWalletClaim{}, db.CashBillOutcomeWrittenOff, db.CashSliceStatusWrittenOff},
-		{"unclaimed on a void bill", db.CashWalletClaim{}, db.CashBillOutcomeVoid, db.CashSliceStatusVoid},
 		// The distinction that matters: an operator deleting a bill cuts a
 		// recipient off before their window passed, which is not "expired".
 		{"unclaimed on an operator-deleted bill is reclaimed", db.CashWalletClaim{}, db.CashBillOutcomeDeleted, db.CashSliceStatusReclaimed},

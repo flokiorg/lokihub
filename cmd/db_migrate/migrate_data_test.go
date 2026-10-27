@@ -63,9 +63,6 @@ func seedOneRowPerTable(t *testing.T, conn *gorm.DB) []string {
 			EventID: "migproofevent", ProofCreatedAt: 1, ConsumedAt: 2, Method: "cash_transfer"}},
 		{"cash_used_request_ids", &db.CashUsedRequestID{RequestID: strings.Repeat("ab", 32), Method: "mint_cash", UsedAt: 3}},
 		{"cash_horizon", &db.CashHorizon{ID: 1, HSecs: 300, UpdatedAt: 4}},
-		{"cash_stranded_funds", &db.CashStrandedFund{
-			Operation: "consolidate", SourceWalletAppID: wallet.ID,
-			RetainedWalletAppID: hub.ID, AmountMloki: 7}},
 		{"swaps", &db.Swap{SwapId: "migswap"}},
 	}
 	seeded := []string{"apps"}
@@ -121,7 +118,7 @@ func TestMigrate_EveryExpectedTableIsCopied(t *testing.T) {
 	for _, table := range []string{
 		"apps", "circle_identities", "circle_identity_allowed_pubkeys",
 		"cash_hub_configs", "cash_wallet_claims", "cash_consumed_proofs", "cash_used_request_ids", "cash_horizon",
-		"cash_stranded_funds", "swaps",
+		"swaps",
 	} {
 		var n int64
 		require.NoError(t, env.dest.Table(table).Count(&n).Error)

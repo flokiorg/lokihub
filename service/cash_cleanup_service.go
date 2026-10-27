@@ -319,23 +319,6 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 			resetCleanupInProgress(gormDB, app.ID)
 			return fmt.Errorf("failed to delete sub-wallet: %w", err)
 		}
-		// If this wallet was the retained side of a failed compensating-saga
-		// reversal (cashwallet.Consolidate/SplitInTwo — see db.CashStrandedFund),
-		// its balance has just been correctly reclaimed to the parent hub above
-		// (or written off, if the parent no longer exists — still no funds left
-		// behind in this now-deleted app). Resolve the reconciliation record so
-		// an operator's query doesn't show a permanently "unresolved" entry
-		// pointing at a wallet that no longer exists and whose funds are already
-		// accounted for. Best-effort: must never fail the cleanup itself.
-		//
-		// The cash-bill branch above does this inside its own transaction
-		// instead, so a crash cannot separate the two.
-		if err := gormDB.Model(&db.CashStrandedFund{}).
-			Where("retained_wallet_app_id = ? AND resolved_at IS NULL", app.ID).
-			Update("resolved_at", now).Error; err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).
-				Msg("Cash cleanup: failed to auto-resolve a stranded-fund reconciliation record for a reclaimed wallet")
-		}
 	}
 
 	// Published after the delete commits. This is what drops the wallet from
