@@ -114,6 +114,10 @@ type App struct {
 	// on the NEW wallet, which wallet it came from). Never read by any
 	// atomic guard, only by callers wanting to show lineage.
 	SplitFromWalletAppID *uint
+	// CashLineageRootID is the minted bill a bill's value descends from: a
+	// minted bill's own id, a spin-off's source's root, a merge's first source's
+	// root. Spin-offs are rate-limited per lineage.
+	CashLineageRootID *uint `gorm:"index"`
 
 	// The scheme-2 fields of a bill created by a zap transfer (NIP-CASH §Mint
 	// Provenance), kept for the bill's life so its payload can be rebuilt; nil on

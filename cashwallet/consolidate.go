@@ -74,6 +74,8 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (*Con
 		transfers = append(transfers, internalTransfer{fromAppID: s.WalletApp.ID, toBill: 0, amount: s.AmountMloki})
 	}
 
+	// A merge continues its first source's lineage.
+	root := LineageRoot(params.Sources[0].WalletApp)
 	out, err := commit(ctx, deps, commitPlan{
 		op:       "consolidate",
 		hub:      params.HubApp,
@@ -93,6 +95,7 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (*Con
 				RedeemFeeBaseMloki: params.RedeemFeeBaseMloki,
 			}},
 			identityRequired: params.NewIdentityType != db.CashIdentityCash,
+			lineageRoot:      &root,
 		}},
 		sources:   refs,
 		transfers: transfers,

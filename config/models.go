@@ -54,6 +54,14 @@ type AppConfig struct {
 	// app pubkey (separate limiter from CashWalletRateLimitPerHour). 0 disables
 	// the limit entirely.
 	CashWalletClaimRateLimitPerHour int `envconfig:"CASH_WALLET_CLAIM_RATE_LIMIT_PER_HOUR" default:"20"`
+	// CashLineageSpinOffsPerHour bounds how often one bill's lineage spins off
+	// new bills, per hour (NIP-CASH §Security Considerations for Cash-Mode
+	// Slices); over it a spin-off is RATE_LIMITED. 0 disables the limit.
+	CashLineageSpinOffsPerHour int `envconfig:"CASH_LINEAGE_SPIN_OFFS_PER_HOUR" default:"20"`
+	// CashMaxLiveBillsPerHub caps the live bills under one Cash Hub that a
+	// spin-off or consolidate may create; over it the call is QUOTA_EXCEEDED. A
+	// mint is the hub owner's own call and is not bounded. 0 disables the cap.
+	CashMaxLiveBillsPerHub int `envconfig:"CASH_MAX_LIVE_BILLS_PER_HUB" default:"10000"`
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`

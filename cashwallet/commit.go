@@ -82,6 +82,8 @@ type newBill struct {
 	claims           []db.CashWalletClaim
 	identityRequired bool
 	splitFrom        *uint
+	// lineageRoot is the bill's lineage root; nil makes the bill its own root.
+	lineageRoot *uint
 	// zap, when set, makes this the bill of a zap transfer: signed under the zap
 	// scheme with issued_at taken from the clock inside the commit.
 	zap *zapBill
@@ -346,7 +348,11 @@ func createBillAppTx(tx *gorm.DB, deps Deps, hub *db.App, b newBill) (*db.App, s
 	if err != nil {
 		return nil, "", fmt.Errorf("derive the bill's pairing pubkey: %w", err)
 	}
-	updates := map[string]interface{}{"app_pubkey": pubkey}
+	root := app.ID
+	if b.lineageRoot != nil {
+		root = *b.lineageRoot
+	}
+	updates := map[string]interface{}{"app_pubkey": pubkey, "cash_lineage_root_id": root}
 	if b.splitFrom != nil {
 		updates["split_from_wallet_app_id"] = *b.splitFrom
 	}
@@ -355,7 +361,17 @@ func createBillAppTx(tx *gorm.DB, deps Deps, hub *db.App, b newBill) (*db.App, s
 	}
 	app.AppPubkey = pubkey
 	app.SplitFromWalletAppID = b.splitFrom
+	app.CashLineageRootID = &root
 	return app, secret, nil
+}
+
+// LineageRoot is the lineage root of bill: the minted bill its value descends
+// from (its own id when it was minted).
+func LineageRoot(bill *db.App) uint {
+	if bill.CashLineageRootID != nil {
+		return *bill.CashLineageRootID
+	}
+	return bill.ID
 }
 
 // recordBill is what a lookup needs to rebuild a bill's token without storing
