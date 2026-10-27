@@ -1431,6 +1431,16 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			svc.logger.Error().Interface("event", event).Msg("Failed to cast event properties for hold invoice accepted")
 			return
 		}
+		// A keysend has no payment request and no row of ours: the node holds
+		// it for lokihub to settle or fail (flnd keysend-hold-time).
+		if lnClientTransaction.Invoice == "" && !svc.hasIncomingRow(lnClientTransaction.PaymentHash) {
+			if svc.lnClientProvider != nil {
+				if lnClient := svc.lnClientProvider(); lnClient != nil {
+					svc.resolveHeldKeysend(ctx, lnClientTransaction, lnClient)
+				}
+			}
+			return
+		}
 		if lnClientTransaction.SettleDeadline == nil {
 			svc.logger.Error().Interface("event", event).Msg("Transaction has no settle deadline")
 			return
@@ -2112,8 +2122,10 @@ func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclie
 		return nil
 	}
 	if err := checkCircleKeysendCredit(tx, recipient, nil, false, amountMloki); err != nil {
-		svc.logger.Warn().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
-			Msg("Keysend refused by the circle wallet's checks, leaving it with the node")
+		// Only a node that settles keysends itself gets here: a held one is
+		// failed by resolveHeldKeysend.
+		svc.logger.Error().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
+			Msg("The node settled a keysend the circle wallet's checks refuse; it stays with the node. Run flnd with keysend-hold-time so lokihub can fail such a keysend")
 		return nil
 	}
 	return appID

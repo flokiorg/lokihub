@@ -122,3 +122,48 @@ func TestSendKeysend_SelfPaymentToFullCircleWallet_Refused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(50_000), queries.GetIsolatedBalance(svc.DB, child.ID))
 }
+
+// holdKeysend delivers a keysend the node holds at the final hop, as flnd run
+// with keysend-hold-time reports it: accepted, with no payment request.
+func holdKeysend(t *testing.T, ts *transactionsService, paymentHash, preimage string, amountMloki int64, records []lnclient.TLVRecord) {
+	t.Helper()
+	deadline := uint32(800_000)
+	ts.ConsumeEvent(context.TODO(), &events.Event{Event: "nwc_lnclient_hold_invoice_accepted", Properties: &lnclient.Transaction{
+		Type: "incoming", Preimage: preimage, PaymentHash: paymentHash, Amount: amountMloki, AmountPaid: amountMloki,
+		SettleDeadline: &deadline, Metadata: map[string]interface{}{"tlv_records": records},
+	}}, map[string]interface{}{})
+}
+
+// NIP-CW §Own Funds and Caps: a Lightning keysend a Circle Wallet's checks
+// refuse is failed at the final hop, never kept by the host; one they pass, and
+// any keysend to another app, is settled.
+func TestHeldKeysend_FailedWhenTheCircleWalletRefusesIt(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	ts := NewTransactionsService(svc.DB, svc.EventPublisher)
+	ts.SetLNClientProvider(func() lnclient.LNClient { return svc.LNClient })
+	mock := svc.LNClient.(*tests.MockLn)
+	child := keysendCircleChild(t, svc)
+
+	over := tests.RandomHex32()
+	holdKeysend(t, ts, over, tests.RandomHex32(), 1_000_000, []lnclient.TLVRecord{customKeyRecord(child.ID)})
+	assert.Contains(t, mock.CancelledInvoices, over, "over the receive room: failed")
+
+	within, withinPreimage := tests.RandomHex32(), tests.RandomHex32()
+	holdKeysend(t, ts, within, withinPreimage, 50_000, []lnclient.TLVRecord{customKeyRecord(child.ID)})
+	assert.NotContains(t, mock.CancelledInvoices, within)
+	assert.Contains(t, mock.SettleHoldPreimages(), withinPreimage, "within the room: settled")
+
+	other, _, err := tests.CreateApp(svc)
+	require.NoError(t, err)
+	plainPreimage := tests.RandomHex32()
+	holdKeysend(t, ts, tests.RandomHex32(), plainPreimage, 1_000_000, []lnclient.TLVRecord{customKeyRecord(other.ID)})
+	assert.Contains(t, mock.SettleHoldPreimages(), plainPreimage, "a keysend to another app is settled as the node would")
+
+	// A wallet that is not Active takes nothing.
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", child.ID).Update("circle_state", "suspended").Error)
+	inactive := tests.RandomHex32()
+	holdKeysend(t, ts, inactive, tests.RandomHex32(), 10_000, []lnclient.TLVRecord{customKeyRecord(child.ID)})
+	assert.Contains(t, mock.CancelledInvoices, inactive, "not Active: failed")
+}
