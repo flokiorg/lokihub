@@ -93,6 +93,7 @@ func (controller *nip47Controller) HandleCashStatusEvent(ctx context.Context, ni
 		respondError(publishResponse, nip47Request.Method, constants.ERROR_INTERNAL, "failed to list recipients")
 		return
 	}
+	claims = oneRowPerIdentity(claims)
 	if scope == nipcash.ScopeMine {
 		claims = claimsForCaller(claims, caller)
 		// "mine" comes from the item-proof signer alone (NIP-CASH §Scoping the Roster,
@@ -165,6 +166,36 @@ func resolveCashStatusScope(nip47Request *models.Request, caller *CashStatusCall
 		return nipcash.ScopeMine, nil
 	}
 	return params.Scope, nil
+}
+
+// oneRowPerIdentity keeps one row per identity: its live (unclaimed) row when
+// it has one, else its newest claimed row. An identity can hold a claimed
+// history row and a live row on one bill, after a slice was transferred in
+// place to a former holder; the roster shows the slice it holds now, so "mine"
+// is exactly one row (NIP-CASH §Scoping the Roster). Order is kept.
+func oneRowPerIdentity(claims []db.CashWalletClaim) []db.CashWalletClaim {
+	type key struct{ typ, value, ia string }
+	at := map[key]int{}
+	out := make([]db.CashWalletClaim, 0, len(claims))
+	for _, c := range claims {
+		k := key{c.IdentityType, c.IdentityValue, c.IAPubkey}
+		i, seen := at[k]
+		if !seen {
+			at[k] = len(out)
+			out = append(out, c)
+			continue
+		}
+		cur := out[i]
+		switch {
+		case cur.ClaimedAt == nil:
+			// The live row stays.
+		case c.ClaimedAt == nil:
+			out[i] = c
+		case c.ClaimedAt.After(*cur.ClaimedAt) || (c.ClaimedAt.Equal(*cur.ClaimedAt) && c.ID > cur.ID):
+			out[i] = c
+		}
+	}
+	return out
 }
 
 // claimsForCaller narrows a roster to the asking recipient's own row.
