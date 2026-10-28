@@ -485,6 +485,10 @@ audits of both.
   the parent's change it spends, which no longer exists, was leased every pass
   ("unknown output"). The change of a conflicted, replaced or invalid version
   is no longer leased.
+- Keeps an on-chain order open past `pay_by` while the node's wallet cannot be
+  scanned, instead of expiring it and keeping a payment seen in time. The next
+  good scan judges each output by the node's first-seen time, or by the chain
+  tip read at `pay_by`; failed scans are logged as errors.
 - Publishes a payout's CPFP child on its own when the node refuses it as a
   package. lokid has no package relay, so the child of a reorganised payout
   was refused every pass; now its parent is republished and the child sent

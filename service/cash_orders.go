@@ -66,7 +66,7 @@ func (svc *service) startOrderJobs(ctx context.Context, pool *nostr.SimplePool) 
 				return
 			case <-ticker.C:
 				e.RunPayBy(ctx)
-				e.ScanChain(ctx)
+				_ = e.ScanChain(ctx) // logged inside; retried next tick
 				e.RetryMints(ctx)
 			case <-retention.C:
 				e.RunRetention()

@@ -1,15 +1,20 @@
 package nip47
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcash/transport"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,18 +23,33 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/tests"
 	"github.com/flokiorg/lokihub/transactions"
 )
 
 // chainLN is the test node with a wallet whose outputs the test sets.
+// err fails every listing; tip, when set, is the chain height GetInfo reports.
 type chainLN struct {
 	*tests.MockLn
 	outputs []lnclient.OnchainOutput
+	err     error
+	tip     uint32
 }
 
 func (c *chainLN) ListOnchainOutputs(context.Context) ([]lnclient.OnchainOutput, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
 	return append([]lnclient.OnchainOutput(nil), c.outputs...), nil
+}
+
+func (c *chainLN) GetInfo(ctx context.Context) (*lnclient.NodeInfo, error) {
+	info, err := c.MockLn.GetInfo(ctx)
+	if err == nil && c.tip > 0 {
+		info.BlockHeight = c.tip
+	}
+	return info, err
 }
 
 type intakeFixture struct {
@@ -465,4 +485,284 @@ func TestOrderIntake_OnchainSeenBeforePayByScannedAfter(t *testing.T) {
 	f.engine.ScanChain(context.TODO())
 	got := f.lookupOrder(t, buyer, p)
 	require.Len(t, got.Bills, 1, "the payment mints for its order")
+}
+
+// --- A3-LH-1: a failed chain scan never ends an on-chain window ---
+
+var errScan = errors.New("wallet unreachable")
+
+// onchainOrder places an on-chain order and returns its request id and address.
+func (f *intakeFixture) onchainOrder(t *testing.T) (string, string, nipCO.CashOrderParams) {
+	t.Helper()
+	res, buyer, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	return buyer, orderOf(t, res).Address, p
+}
+
+// mintedBills is every ordered bill minted so far.
+func (f *intakeFixture) mintedBills(t *testing.T) []db.CashWalletClaim {
+	t.Helper()
+	var claims []db.CashWalletClaim
+	require.NoError(t, f.svc.DB.Where("ordered = ?", true).Find(&claims).Error)
+	return claims
+}
+
+func (f *intakeFixture) requireMintedOnce(t *testing.T, requestID string) {
+	t.Helper()
+	o := f.orderRow(t, requestID)
+	claims := f.mintedBills(t)
+	require.Len(t, claims, 1, "exactly one bill")
+	assert.Equal(t, int64(21_000), claims[0].AmountMloki)
+	assert.Equal(t, o.PayMillis-o.FeeMillis, claims[0].AmountMloki, "pay_millis less the fee")
+	assert.Equal(t, db.CashOrderClosed, o.State)
+}
+
+// Test 1: the scan fails at pay_by: the order stays open; the next good scan
+// mints the payment the node saw before pay_by.
+func TestOrderIntake_ScanFailureAtPayByKeepsOrderOpen(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, addr, p := f.onchainOrder(t)
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, Confirmations: 1, SeenAt: f.clock.Unix()}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.chain.err = errScan
+
+	f.pastPayBy(t, p.RequestID)
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State, "not expired on a failed scan")
+
+	f.chain.err = nil
+	f.clock = f.clock.Add(30 * time.Second)
+	f.engine.RunPayBy(context.TODO())
+	f.requireMintedOnce(t, p.RequestID)
+}
+
+// Test 2: the same through a read of the order (EndWindowIfDue).
+func TestOrderIntake_ScanFailureOnReadKeepsOrderOpen(t *testing.T) {
+	f := newIntakeFixture(t)
+	f.nip47svc.SetOrderPayBy(f.engine.EndWindowIfDue)
+	buyer, addr, p := f.onchainOrder(t)
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, Confirmations: 1, SeenAt: f.clock.Unix()}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.chain.err = errScan
+
+	f.pastPayBy(t, p.RequestID)
+	assert.Equal(t, nipCO.OrderOpen, f.lookupOrder(t, buyer, p).State)
+	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
+
+	f.chain.err = nil
+	got := f.lookupOrder(t, buyer, p)
+	require.Len(t, got.Bills, 1)
+	f.requireMintedOnce(t, p.RequestID)
+}
+
+// Test 3: no node, or a node that cannot list its wallet, ends no on-chain window.
+func TestOrderIntake_NoChainAtPayByKeepsOrderOpen(t *testing.T) {
+	for name, ln := range map[string]func(f *intakeFixture) lnclient.LNClient{
+		"no node":   func(*intakeFixture) lnclient.LNClient { return nil },
+		"no lister": func(f *intakeFixture) lnclient.LNClient { return f.ln },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newIntakeFixture(t)
+			_, _, p := f.onchainOrder(t)
+			f.engine.LN = func() lnclient.LNClient { return ln(f) }
+			f.pastPayBy(t, p.RequestID)
+			f.engine.RunPayBy(context.TODO())
+			f.engine.EndWindowIfDue(context.TODO(), f.orderRow(t, p.RequestID).ID)
+			assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
+		})
+	}
+}
+
+// Test 4: found late, an output is judged by the node's first-seen time:
+// at or before pay_by it pays the order, after it the Hub keeps it.
+func TestOrderIntake_ScanFailureSeenAtBoundary(t *testing.T) {
+	for name, tc := range map[string]struct {
+		offset int64
+		minted bool
+	}{"at pay_by": {0, true}, "before pay_by": {-1, true}, "after pay_by": {1, false}} {
+		t.Run(name, func(t *testing.T) {
+			f := newIntakeFixture(t)
+			_, addr, p := f.onchainOrder(t)
+			payBy := f.orderRow(t, p.RequestID).PayBy
+			f.chain.err = errScan
+			f.pastPayBy(t, p.RequestID)
+			f.engine.RunPayBy(context.TODO())
+
+			f.chain.err = nil
+			f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43,
+				Confirmations: 1, SeenAt: payBy + tc.offset}}
+			f.clock = time.Unix(payBy+60, 0)
+			f.engine.RunPayBy(context.TODO())
+			if tc.minted {
+				f.requireMintedOnce(t, p.RequestID)
+				return
+			}
+			assert.Empty(t, f.mintedBills(t))
+			assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
+			var kept db.CashOrderPayment
+			require.NoError(t, f.svc.DB.First(&kept).Error)
+			assert.Equal(t, db.CashOrderPaymentKept, kept.State)
+			assert.Nil(t, kept.OrderID)
+		})
+	}
+}
+
+// Test 5: a good scan that sees nothing still expires the order at pay_by.
+func TestOrderIntake_HealthyScanNothingSeenExpires(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, _, p := f.onchainOrder(t)
+	f.pastPayBy(t, p.RequestID)
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
+}
+
+// Test 6: a failed scan holds back only on-chain windows; a Lightning order
+// past pay_by in the same run expires.
+func TestOrderIntake_ScanFailureLeavesLightningAlone(t *testing.T) {
+	f := newIntakeFixture(t)
+	f.ln.MockTransaction = &lnclient.Transaction{}
+	_, _, onchain := f.onchainOrder(t)
+	res, _, lightning := f.order(t, nipCO.PaymentLightning, 21_000, nil)
+	orderOf(t, res)
+	f.chain.err = errScan
+	f.clock = time.Unix(max(f.orderRow(t, onchain.RequestID).PayBy, f.orderRow(t, lightning.RequestID).PayBy)+1, 0)
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, onchain.RequestID).State)
+	assert.Equal(t, db.CashOrderExpired, f.orderRow(t, lightning.RequestID).State)
+}
+
+// Test 7: a payment's seen_at is the node's first-seen time when it gives an
+// earlier one, else the time of the scan.
+func TestOrderIntake_PaymentSeenAtIsNodeTime(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, addr, _ := f.onchainOrder(t)
+	now := f.clock.Unix()
+	outs := []lnclient.OnchainOutput{
+		{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, SeenAt: now - 10},
+		{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, SeenAt: 0},
+		{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, SeenAt: now + 100},
+	}
+	f.chain.outputs = outs
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	want := []int64{now - 10, now, now}
+	for i, o := range outs {
+		var p db.CashOrderPayment
+		require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+o.TxID+":0").First(&p).Error)
+		assert.Equal(t, want[i], p.SeenAt, "output %d", i)
+	}
+}
+
+// Test 8: scans failing over several runs, then one good one, mint once.
+func TestOrderIntake_RepeatedScanFailuresMintOnce(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, addr, p := f.onchainOrder(t)
+	f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, Confirmations: 1, SeenAt: f.clock.Unix()}}
+	f.chain.err = errScan
+	f.pastPayBy(t, p.RequestID)
+	for range 4 {
+		f.engine.RunPayBy(context.TODO())
+		require.Error(t, f.engine.ScanChain(context.TODO()))
+		f.clock = f.clock.Add(30 * time.Second)
+		assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
+	}
+	f.chain.err = nil
+	for range 3 {
+		f.engine.RunPayBy(context.TODO())
+		require.NoError(t, f.engine.ScanChain(context.TODO()))
+		f.engine.RetryMints(context.TODO())
+	}
+	f.requireMintedOnce(t, p.RequestID)
+}
+
+// Test 9 (G10): the pay_by job and reads racing over a failing scan expire
+// nothing; racing again once it recovers mint once.
+func TestOrderIntake_ConcurrentPayByWithFailingScan(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, addr, p := f.onchainOrder(t)
+	id := f.orderRow(t, p.RequestID).ID
+	f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, Confirmations: 1, SeenAt: f.clock.Unix()}}
+	f.chain.err = errScan
+	f.pastPayBy(t, p.RequestID)
+	race := func() {
+		var wg sync.WaitGroup
+		for i := range 6 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if i%2 == 0 {
+					f.engine.RunPayBy(context.TODO())
+				} else {
+					f.engine.EndWindowIfDue(context.TODO(), id)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+	race()
+	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
+
+	f.chain.err = nil
+	race()
+	f.engine.RetryMints(context.TODO())
+	f.requireMintedOnce(t, p.RequestID)
+}
+
+// Test 10 (G1): an output the node reports no first-seen time for, in a block
+// at or below the tip read when pay_by passed, pays its order; one in a later
+// block is kept by the Hub.
+func TestOrderIntake_UnknownSeenAtJudgedByPayByHeight(t *testing.T) {
+	for name, tc := range map[string]struct {
+		height int32
+		minted bool
+	}{"at the tip": {100, true}, "below the tip": {99, true}, "above the tip": {101, false}} {
+		t.Run(name, func(t *testing.T) {
+			f := newIntakeFixture(t)
+			_, addr, p := f.onchainOrder(t)
+			f.chain.err, f.chain.tip = errScan, 100
+			f.pastPayBy(t, p.RequestID)
+			f.engine.RunPayBy(context.TODO())
+			o := f.orderRow(t, p.RequestID)
+			require.NotNil(t, o.PayByHeight)
+			assert.Equal(t, int64(100), *o.PayByHeight)
+
+			f.chain.err, f.chain.tip = nil, 110
+			f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43,
+				Confirmations: uint32(110 - tc.height + 1), BlockHeight: tc.height}} //nolint:gosec // small
+			f.clock = f.clock.Add(time.Hour)
+			f.engine.RunPayBy(context.TODO())
+			assert.Equal(t, int64(100), *f.orderRow(t, p.RequestID).PayByHeight, "recorded once")
+			if tc.minted {
+				f.requireMintedOnce(t, p.RequestID)
+				return
+			}
+			assert.Empty(t, f.mintedBills(t))
+			assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
+		})
+	}
+}
+
+// Test 11 (G2): a scan failing long past pay_by keeps the order open and logs
+// an error every run; a good scan then applies the normal rule.
+func TestOrderIntake_LongScanFailureLogsAndStaysOpen(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, _, p := f.onchainOrder(t)
+	var logs bytes.Buffer
+	saved := logger.Logger
+	logger.Logger = zerolog.New(&logs).Level(zerolog.ErrorLevel)
+	t.Cleanup(func() { logger.Logger = saved })
+
+	f.chain.err = errScan
+	f.clock = time.Unix(f.orderRow(t, p.RequestID).PayBy+f.engine.Horizon()+3600, 0)
+	for range 3 {
+		f.engine.RunPayBy(context.TODO())
+		f.clock = f.clock.Add(30 * time.Second)
+	}
+	assert.Equal(t, 3, strings.Count(logs.String(), "cash_order_scan_failed_total"), logs.String())
+	assert.Contains(t, logs.String(), `"orders":1`)
+	o := f.orderRow(t, p.RequestID)
+	assert.Equal(t, db.CashOrderOpen, o.State)
+	assert.Nil(t, o.PayByHeight, "no tip read long after pay_by")
+
+	f.chain.err = nil
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
 }
