@@ -167,3 +167,39 @@ func TestHeldKeysend_FailedWhenTheCircleWalletRefusesIt(t *testing.T) {
 	holdKeysend(t, ts, inactive, tests.RandomHex32(), 10_000, []lnclient.TLVRecord{customKeyRecord(child.ID)})
 	assert.Contains(t, mock.CancelledInvoices, inactive, "not Active: failed")
 }
+
+// R2-F2: two held keysends that each fit the receive room alone, but not
+// together, are not both settled: the first is reserved from its settle until
+// the node's settle event credits it, so the second is failed rather than
+// settled and then left with the host. Once the first is credited the
+// reservation ends.
+func TestHeldKeysend_SecondPastTheRoomFailedWhileFirstIsCredited(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	ts := NewTransactionsService(svc.DB, svc.EventPublisher)
+	ts.SetLNClientProvider(func() lnclient.LNClient { return svc.LNClient })
+	mock := svc.LNClient.(*tests.MockLn)
+	child := keysendCircleChild(t, svc) // 100_000 mloki of room
+	records := []lnclient.TLVRecord{customKeyRecord(child.ID)}
+
+	first, firstPreimage := tests.RandomHex32(), tests.RandomHex32()
+	holdKeysend(t, ts, first, firstPreimage, 60_000, records)
+	require.Contains(t, mock.SettleHoldPreimages(), firstPreimage)
+
+	second, secondPreimage := tests.RandomHex32(), tests.RandomHex32()
+	holdKeysend(t, ts, second, secondPreimage, 60_000, records)
+	assert.Contains(t, mock.CancelledInvoices, second, "past the room with the first: failed")
+	assert.NotContains(t, mock.SettleHoldPreimages(), secondPreimage)
+
+	// The node's settle event credits the first.
+	ts.ConsumeEvent(context.TODO(), &events.Event{Event: "nwc_lnclient_payment_received", Properties: &lnclient.Transaction{
+		Type: "incoming", Preimage: firstPreimage, PaymentHash: first, Amount: 60_000, SettledAt: &tests.MockTimeUnix,
+		Metadata: map[string]interface{}{"tlv_records": records},
+	}}, map[string]interface{}{})
+	assert.Equal(t, int64(60_000), queries.GetIsolatedBalance(svc.DB, child.ID))
+
+	third, thirdPreimage := tests.RandomHex32(), tests.RandomHex32()
+	holdKeysend(t, ts, third, thirdPreimage, 40_000, records)
+	assert.Contains(t, mock.SettleHoldPreimages(), thirdPreimage, "the room left after the credit, nothing reserved twice")
+}
