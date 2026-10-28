@@ -59,11 +59,19 @@ func (svc *service) dispatchEnvelope(
 	}
 
 	// Items Decode dropped as malformed are omitted too: each item stands on its own,
-	// so the rest of the envelope is still served.
-	pt.omittedItems.Add(int64(len(envelope.Rejected)))
+	// so the rest of the envelope is still served. One Decode refused with a code
+	// (a consolidate over max_consolidate_sources: QUOTA_EXCEEDED) is answered.
+	answered := answeredRejections(envelope)
+	pt.omittedItems.Add(int64(len(envelope.Rejected) - len(answered)))
 
-	results := make([]transport.Result, 0, len(envelope.Items))
-	for _, item := range envelope.Items {
+	results := make([]transport.Result, 0, len(envelope.Items)+len(answered))
+	wire := itemWireIndices(envelope)
+	for i, item := range envelope.Items {
+		// The answered refusals keep their place in array order.
+		for len(answered) > 0 && answered[0].index < wire[i] {
+			results = append(results, answered[0].result)
+			answered = answered[1:]
+		}
 		if stalled, ok := stallCommitFault(ctx, item, envelope.NotAfter); ok {
 			results = append(results, stalled)
 			continue
@@ -77,6 +85,9 @@ func (svc *service) dispatchEnvelope(
 			continue
 		}
 		results = append(results, result)
+	}
+	for _, a := range answered {
+		results = append(results, a.result)
 	}
 
 	if testknobs.DropReply() {

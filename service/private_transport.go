@@ -275,6 +275,7 @@ func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, 
 	if !pt.nonces.MarkServed(envelope.Nonce, envelope.NotAfter) {
 		return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", envelope.Nonce[:8])
 	}
+	markAnsweredRejections([]byte(plaintext), envelope)
 	return envelope, conversationKey, nil
 }
 
