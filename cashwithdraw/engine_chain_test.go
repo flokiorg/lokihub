@@ -391,3 +391,43 @@ func TestEngine_FailedBumpDoesNotStopOtherPayouts(t *testing.T) {
 	assert.Equal(t, db.CashWithdrawFinal, w.payout(t, other.ID).State)
 	assert.Equal(t, db.CashWithdrawFinal, w.payout(t, wd.ID).State)
 }
+
+// fundFails is the chain whose node funds no PSBT while on is set: what lnd
+// answers for a replacement whose input its own broadcast version already
+// spends ("is not an unspent wallet coin").
+type fundFails struct {
+	*fakechain.Chain
+	on *bool
+}
+
+func (c fundFails) FundPsbtFixed(ctx context.Context, raw []byte, id [32]byte, lockSecs int64) ([]byte, error) {
+	if *c.on {
+		return nil, fmt.Errorf("input is not an unspent wallet coin")
+	}
+	return c.Chain.FundPsbtFixed(ctx, raw, id, lockSecs)
+}
+
+// An invalidation that cannot be built now is retried next pass: the pass
+// does not fail on it, and once it can be built the cancel goes through.
+func TestEngine_FailedInvalidationDoesNotFailThePass(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	wd := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	txid := *w.payout(t, wd.ID).Txid
+	w.chain.Withhold(txid, true)
+	w.hooks.HoldBump.Store(true)
+	w.mu.Lock()
+	w.now = time.Unix(wd.SentBy+604800, 0)
+	w.mu.Unlock()
+	_, err := w.s.CancelRequest(w.payout(t, wd.ID))
+	require.NoError(t, err)
+
+	fail := true
+	w.node.payer = fundFails{w.chain, &fail}
+	require.NoError(t, w.eng.Pass(context.TODO()), "the invalidation failing is retried, not the pass's failure")
+	require.Len(t, w.versions(t), 1, "nothing built yet")
+
+	fail = false
+	w.pass(t)
+	require.Len(t, w.versions(t), 2, "the invalidation, built on a later pass")
+}

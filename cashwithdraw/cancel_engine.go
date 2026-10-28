@@ -2,6 +2,7 @@ package cashwithdraw
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
@@ -90,8 +91,14 @@ func (e *Engine) cancelStep(ctx context.Context, p lnclient.OnchainPayer, tip in
 			continue
 		}
 		if w.CancelReason != nil && *w.CancelReason != db.CashWithdrawCancelNoRecord && w.BatchID != nil {
+			// A batch whose invalidation cannot be built now is retried next
+			// pass; it does not stop the other payouts' steps.
 			if err := e.invalidate(ctx, p, tip, rates, *w.BatchID); err != nil {
-				return err
+				if errors.Is(err, ErrEngineStopped) {
+					return err
+				}
+				logger.Logger.Warn().Err(err).Uint("withdrawal_id", w.ID).Uint("batch_id", *w.BatchID).
+					Msg("Invalidating a payout batch failed; retried next pass")
 			}
 		}
 	}
