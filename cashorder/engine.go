@@ -551,10 +551,29 @@ func (e *Engine) RunPayBy(ctx context.Context) {
 		logger.Logger.Error().Err(err).Msg("Failed to list orders past pay_by")
 		return
 	}
+	if hasOnchain(orders) {
+		// An output already in the mempool at pay_by keeps its order: scan
+		// before ending any on-chain window.
+		e.ScanChain(ctx)
+	}
 	ln := e.LN()
 	for _, o := range orders {
+		if o.Payment == nipCO.PaymentOnchain {
+			if err := e.DB.First(&o, o.ID).Error; err != nil {
+				continue
+			}
+		}
 		e.endWindow(ctx, ln, o)
 	}
+}
+
+func hasOnchain(orders []db.CashOrder) bool {
+	for _, o := range orders {
+		if o.Payment == nipCO.PaymentOnchain {
+			return true
+		}
+	}
+	return false
 }
 
 // EndWindowIfDue is RunPayBy for one order, for a read of it: an order past
@@ -565,6 +584,12 @@ func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) {
 	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, e.now().Unix(),
 		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil || o.ID == 0 {
 		return
+	}
+	if o.Payment == nipCO.PaymentOnchain {
+		e.ScanChain(ctx)
+		if err := e.DB.First(&o, o.ID).Error; err != nil {
+			return
+		}
 	}
 	e.endWindow(ctx, e.LN(), o)
 }
