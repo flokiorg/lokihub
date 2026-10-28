@@ -811,3 +811,25 @@ func TestDeleteCashHub_RefusedWhileRecordsRetained(t *testing.T) {
 	require.NoError(t, svc.DB.Delete(&rec).Error)
 	require.NoError(t, svc.AppsService.DeleteApp(hub), "once the record dropped")
 }
+
+// A cash_withdraw record is kept by the withdraw rules and reported by the
+// withdraw blocker (registered by cashwithdraw, absent here): the records
+// blocker does not count it again with no time.
+func TestDeleteCashHub_WithdrawRecordNotCountedAsARequestRecord(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub, _, err := svc.AppsService.CreateCashHub("hub", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.CASH_HUB_SCOPE}, nil, db.CashHubConfig{PerWalletMaxMloki: 1_000_000, MaxExpSecs: 3600})
+	require.NoError(t, err)
+	rec := db.CashRequestRecord{RequestID: strings.Repeat("ac", 16), Method: constants.NIP47MethodCashWithdraw, HubAppID: hub.ID,
+		TargetWalletPubkey: strings.Repeat("cd", 32), TargetConnPubkey: strings.Repeat("ef", 32), AuthorizerKind: "client",
+		Authorizer: strings.Repeat("01", 32), Deadline: 1, ResultMeta: "{}", CommittedAt: 1}
+	require.NoError(t, svc.DB.Create(&rec).Error)
+
+	check, err := svc.AppsService.CashHubDeleteCheck(hub.ID)
+	require.NoError(t, err)
+	for _, b := range check.Blockers {
+		assert.NotEqual(t, apps.CashHubBlockerRecords, b.Kind, "%+v", b)
+	}
+}

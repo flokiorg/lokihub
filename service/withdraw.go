@@ -9,6 +9,7 @@ import (
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -55,9 +56,11 @@ func (svc *service) setupWithdraw() {
 			case <-svc.ctx.Done():
 				return
 			case <-ticker.C:
-				if _, err := svc.withdraw.PruneRecords(withdrawPruneBatch); err != nil {
-					logger.Logger.Error().Err(err).Msg("Failed to drop withdraw records past their retention")
-				}
+			case <-hubclock.Moved():
+				// The clock was moved (a regtest test hook): retention is due now.
+			}
+			if _, err := svc.withdraw.PruneRecords(withdrawPruneBatch); err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to drop withdraw records past their retention")
 			}
 		}
 	}()
