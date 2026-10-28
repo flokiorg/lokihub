@@ -496,6 +496,10 @@ audits of both.
   orders it: the claim proof's `q` now binds the quote's id as sent, and the
   quote's own check finds that the content no longer hashes to it. It was
   refused `UNAUTHORIZED` at step 2.
+- Holds a `cash_withdraw` claim proof's freshness to the wall clock, as
+  `cash_redeem` and the item proofs are, not to the test hooks' Hub clock
+  offset: with the offset moved a fresh proof was refused `UNAUTHORIZED`.
+  Production runs no offset, so nothing changes there.
 - Takes a circle join at any `max_amount`. A join was refused
   `LIMIT_EXCEEDED` under 11,000 mloki (the fee reserve plus 1 loki), a floor
   NIP-CW step 6 does not allow and `get_info` never advertised. The cap is

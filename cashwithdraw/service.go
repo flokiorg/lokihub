@@ -95,6 +95,17 @@ type Service struct {
 	quotes   map[string][]int64
 }
 
+// proofNow is the clock a claim proof's freshness is held to: the wall clock,
+// as cash_redeem and the private transport's item proofs use, never the test
+// hooks' Hub clock offset (hubclock), which moves the Hub's protocol state
+// (expiry, retention, payouts) but not the time a caller signs at.
+func (s *Service) proofNow() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
+}
+
 func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
