@@ -150,10 +150,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 // Concurrent double-submit race for the same identity: with generous balance

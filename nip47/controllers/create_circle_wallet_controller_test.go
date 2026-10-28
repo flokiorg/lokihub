@@ -90,6 +90,23 @@ func bindJoinTerms(t testing.TB, req *models.Request) *models.Request {
 	return &models.Request{Method: req.Method, Params: raw}
 }
 
+// joinRequestJSON is a create_circle_wallet request carrying params, with an
+// empty budget_renewal left out: absent asks for the Hub default, while an
+// explicit "" is refused (NIP-CW §Request).
+func joinRequestJSON(t testing.TB, params nipcw.CreateCircleWalletRequest) string {
+	t.Helper()
+	raw, err := json.Marshal(params)
+	require.NoError(t, err)
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(raw, &fields))
+	if params.BudgetRenewal == "" {
+		delete(fields, "budget_renewal")
+	}
+	b, err := json.Marshal(map[string]any{"method": constants.NIP47MethodCreateCircleWallet, "params": fields})
+	require.NoError(t, err)
+	return string(b)
+}
+
 // testConnectionSecret and testConnectionPubkey are the member-generated
 // connection key (NIP-CW §Request) the test helpers use for a requester. It is
 // derived from the requester's pubkey, so every helper and every hand-built
@@ -122,10 +139,7 @@ func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey str
 		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 // createCircleHub creates a circle_hub app with the given config and pre-funds it.
@@ -492,10 +506,7 @@ func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubWalle
 		BudgetRenewal:    budgetRenewal,
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 func TestHandleCreateCircleWalletEvent_ExpiryOmitted_DefaultsToMaxExpSecs(t *testing.T) {
@@ -674,6 +685,48 @@ func TestHandleCreateCircleWalletEvent_BudgetRenewal_InvalidValue_Rejected(t *te
 
 	require.NotNil(t, publishedResponse.Error)
 	assert.Equal(t, constants.ERROR_BAD_REQUEST, publishedResponse.Error.Code)
+}
+
+// budget_renewal is OPTIONAL, but when present it is one of the five values:
+// an explicit "" is refused, while leaving it out gets the Hub default.
+func TestHandleCreateCircleWalletEvent_BudgetRenewal_EmptyRefused_AbsentAccepted(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	provider := createCircleHub(t, svc, 7200, 10_000_000)
+	requesterKey := nostr.GeneratePrivateKey()
+	controller := NewTestNip47ControllerWithSocialCache(svc, &mockSocialCache{authorized: true})
+	join := func(withEmptyRenewal bool) *models.Response {
+		var content map[string]any
+		require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *provider.WalletPubkey, 11_000, 3600)), &content))
+		params := content["params"].(map[string]any)
+		_, present := params["budget_renewal"]
+		require.False(t, present, "the helper leaves an empty budget_renewal out")
+		if withEmptyRenewal {
+			params["budget_renewal"] = ""
+		}
+		raw, err := json.Marshal(content)
+		require.NoError(t, err)
+		req := &models.Request{}
+		require.NoError(t, json.Unmarshal(raw, req))
+		ev := &db.RequestEvent{NostrId: tests.RandomHex32()}
+		require.NoError(t, svc.DB.Create(ev).Error)
+		var resp *models.Response
+		controller.testJoin(t, ctx, req, ev.ID, provider, func(r *models.Response, _ nostr.Tags) { resp = r })
+		require.NotNil(t, resp)
+		return resp
+	}
+
+	refused := join(true)
+	require.NotNil(t, refused.Error, "an explicit empty budget_renewal is not one of the five values")
+	assert.Equal(t, constants.ERROR_BAD_REQUEST, refused.Error.Code)
+
+	accepted := join(false)
+	require.Nil(t, accepted.Error, "an absent budget_renewal asks for the Hub default")
+	details := decryptCircleWalletDetails(t, requesterKey, *provider.WalletPubkey, accepted.Result.(createCircleWalletResponse).EncryptedDetails)
+	assert.Equal(t, constants.BUDGET_RENEWAL_NEVER, details.BudgetRenewal)
 }
 
 // MinBudgetRenewal is enforced only at the moment create_circle_wallet is

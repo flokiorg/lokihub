@@ -49,10 +49,7 @@ func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki
 		Expiry:           uint64(expirationSecs),
 		IdentityEvent:    identityEventJSON,
 	}
-	content := map[string]interface{}{"method": "create_circle_wallet", "params": params}
-	b, err := json.Marshal(content)
-	require.NoError(t, err)
-	return string(b)
+	return joinRequestJSON(t, params)
 }
 
 func TestHandleCreateCircleWalletEvent_IdentityEvent_Missing_Rejected(t *testing.T) {

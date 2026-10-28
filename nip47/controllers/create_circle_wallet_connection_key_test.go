@@ -45,12 +45,11 @@ func joinWithConnection(t *testing.T, svc *tests.TestService, provider *db.App, 
 	require.NoError(t, proof.Sign(member))
 	joinProofSigners.Store(proof.ID, member)
 
-	raw, err := json.Marshal(map[string]interface{}{"method": constants.NIP47MethodCreateCircleWallet, "params": nipcw.CreateCircleWalletRequest{
+	raw := joinRequestJSON(t, nipcw.CreateCircleWalletRequest{
 		Pubkey: memberPub, ConnectionPubkey: connectionPubkey, MaxAmount: 100_000, Expiry: 3600, IdentityEvent: mustMarshal(t, proof),
-	}})
-	require.NoError(t, err)
+	})
 	req := &models.Request{}
-	require.NoError(t, json.Unmarshal(raw, req))
+	require.NoError(t, json.Unmarshal([]byte(raw), req))
 	ev := &db.RequestEvent{NostrId: tests.RandomHex32()}
 	require.NoError(t, svc.DB.Create(ev).Error)
 
