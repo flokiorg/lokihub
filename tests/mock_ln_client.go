@@ -299,13 +299,17 @@ func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki 
 		time.Sleep(*mln.PaymentDelay)
 	}
 
+	// Concurrent payments (multi_pay_invoice) each take one queued answer.
+	mln.callsMu.Lock()
 	if len(mln.PayInvoiceResponses) > 0 {
 		response := mln.PayInvoiceResponses[0]
 		err := mln.PayInvoiceErrors[0]
 		mln.PayInvoiceResponses = mln.PayInvoiceResponses[1:]
 		mln.PayInvoiceErrors = mln.PayInvoiceErrors[1:]
+		mln.callsMu.Unlock()
 		return response, err
 	}
+	mln.callsMu.Unlock()
 
 	return &lnclient.PayInvoiceResponse{
 		Preimage: "123preimage",
