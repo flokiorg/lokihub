@@ -3,6 +3,7 @@ package cashwithdraw
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"testing"
 	"time"
 
@@ -135,4 +136,25 @@ func TestR2_FailedSignatureRetriedNextPass(t *testing.T) {
 	require.Equal(t, db.CashWithdrawBroadcast, got.State)
 	require.Equal(t, *vs[0].Txid, *got.Txid)
 	require.True(t, w.chain.InMempool(*got.Txid))
+}
+
+// R2-P-M3: a pass leases the coins a commit set aside before it reads the
+// chain, so a chain read that fails leaves no set-aside coin unleased.
+func TestR2_SetAsideLeasedBeforeChainRead(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	a := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	require.NotNil(t, w.payout(t, a.ID).Txid, "a version exists, so the chain step reads the wallet")
+	w.hooks.HoldSign.Store(true)
+	b := w.commitTo(t, 22_000_000)
+	var coins []db.CashWithdrawCoin
+	require.NoError(t, w.svc.DB.Where("withdrawal_id = ? AND state = ?", b.ID, db.CashCoinSetAside).Find(&coins).Error)
+	require.NotEmpty(t, coins)
+	w.chain.WalletTxErr = errors.New("wallet busy")
+	require.Error(t, w.eng.Pass(context.TODO()))
+	id, err := w.eng.lease()
+	require.NoError(t, err)
+	for _, c := range coins {
+		require.Positive(t, w.chain.LeaseOf(id, c.Outpoint), "leased although the chain read failed")
+	}
 }
