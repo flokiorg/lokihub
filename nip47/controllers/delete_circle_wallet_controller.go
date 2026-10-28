@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/gorm"
@@ -71,7 +71,7 @@ func (controller *nip47Controller) HandleDeleteCircleWalletEvent(ctx context.Con
 		if err := tx.Model(&db.RequestEvent{}).Where("id = ?", requestEventId).Update("app_id", nil).Error; err != nil {
 			return err
 		}
-		return circlewallet.DeleteWallet(tx, &current, time.Now())
+		return circlewallet.DeleteWallet(tx, &current, hubclock.Now())
 	})
 	switch {
 	case errors.Is(err, circlewallet.ErrNotDeletable):

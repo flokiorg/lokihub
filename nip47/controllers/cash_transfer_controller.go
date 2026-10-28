@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"strconv"
 	"time"
 
@@ -494,7 +495,7 @@ func (controller *nip47Controller) locateSlice(app *db.App, isCash bool, identit
 			}
 		}
 		return nil, constants.ERROR_RESTRICTED, message
-	case app.ExpiresAt != nil && time.Now().After(*app.ExpiresAt):
+	case app.ExpiresAt != nil && hubclock.Now().After(*app.ExpiresAt):
 		return nil, constants.ERROR_RESTRICTED, "this cash wallet is past its redemption deadline"
 	}
 	return live, "", ""

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"sort"
 	"strings"
 	"time"
@@ -433,7 +434,7 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 			return err
 		}
 		now := s.now()
-		if !nipcash.CommitAllowed(in.meta.Deadline, now.Unix()) {
+		if !nipcash.CommitAllowed(in.meta.Deadline, hubclock.Wall(now).Unix()) {
 			return errDeadline
 		}
 		if !nipcash.QuoteValidAt(in.quote.HoldsUntil, in.tip) {
@@ -576,7 +577,7 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 		if err := s.before(StageBeforeCommit); err != nil {
 			return err
 		}
-		if !nipcash.CommitAllowed(in.meta.Deadline, s.now().Unix()) {
+		if !nipcash.CommitAllowed(in.meta.Deadline, hubclock.Wall(s.now()).Unix()) {
 			return errDeadline
 		}
 		out = w

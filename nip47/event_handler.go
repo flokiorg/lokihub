@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"gorm.io/gorm"
 	"slices"
 	"time"
@@ -462,7 +463,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 	// pending rotation, unless the wallet is frozen (NIP-CW §Recovering a Lost
 	// Connection).
 	if app.Kind == db.AppKindCircleWallet && !app.CircleFrozen {
-		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, time.Now())
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, hubclock.Now())
 		if err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
 		}
@@ -471,7 +472,7 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 
 	// A Circle Wallet serves only the methods its state allows, before any scope
 	// is read; delete_circle_wallet needs no scope (NIP-CW §Methods).
-	if ok, code, message := circleWalletGate(&app, nip47Request.Method, time.Now()); !ok {
+	if ok, code, message := circleWalletGate(&app, nip47Request.Method, hubclock.Now()); !ok {
 		publishResponse(&models.Response{
 			ResultType: nip47Request.Method,
 			Error:      &models.Error{Code: code, Message: message},
@@ -730,7 +731,7 @@ func standardCallMeta(event *nostr.Event, arrived time.Time) models.CallMeta {
 // key (NIP-CW §Recovering a Lost Connection: lazily, by the request of either
 // key at or after completes_at; the job does the rest).
 func (svc *nip47Service) completeDueRotationsFor(key string) {
-	now := time.Now()
+	now := hubclock.Now()
 	filter := func(q *gorm.DB) *gorm.DB {
 		return q.Where("new_connection_pubkey = ? OR wallet_app_id IN (?)", key,
 			svc.db.Model(&db.App{}).Select("id").Where("app_pubkey = ? AND kind = ?", key, db.AppKindCircleWallet))

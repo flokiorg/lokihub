@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"github.com/ohstr/nmilat/nipcash/transport"
@@ -91,7 +91,7 @@ func (svc *nip47Service) orderBills(rec *db.CashRequestRecord) ([]nipCO.OrderBil
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
+	now := hubclock.Now()
 	out := make([]nipCO.OrderBill, 0, len(rows))
 	for i := range rows {
 		b := &rows[i]

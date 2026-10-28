@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/ohstr/nmilat/nipcash"
 	"time"
 
@@ -93,7 +94,7 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 				transactionsSvc.ResolveAcceptedCircleHolds(ctx, lnClient)
 				pruneStaleCircleWalletIdentityProofs(gormDB)
 				pruneCashRequests(gormDB)
-				pruneCircleJoinRecords(gormDB, time.Now())
+				pruneCircleJoinRecords(gormDB, hubclock.Now())
 				pruneArchivedSplitLinks(gormDB, splitLinkRetention)
 			}
 		}
@@ -120,7 +121,7 @@ func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transa
 		// (circle_lifecycle.go).
 		err := gormDB.Where(
 			"parent_app_id IS NOT NULL AND kind <> ? AND expires_at < ? AND cleanup_in_progress = ?",
-			db.AppKindCircleWallet, time.Now(), false,
+			db.AppKindCircleWallet, hubclock.Now(), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")
@@ -172,7 +173,7 @@ func pruneStaleCircleWalletIdentityProofs(gormDB *gorm.DB) {
 	// Each id is kept until its own retention ends (a join's created_at + 360,
 	// a member request's + 86460); a row without one, for an hour.
 	if err := gormDB.Where("(retain_until > 0 AND retain_until < ?) OR (retain_until = 0 AND created_at < ?)",
-		time.Now().Unix(), time.Now().Add(-circleWalletIdentityProofRetention)).
+		hubclock.Now().Unix(), hubclock.Now().Add(-circleWalletIdentityProofRetention)).
 		Delete(&db.CircleWalletIdentityProof{}).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to prune stale circle wallet identity proofs")
 	}
@@ -201,7 +202,7 @@ func pruneArchivedSplitLinks(gormDB *gorm.DB, retention time.Duration) {
 	if retention <= 0 {
 		return
 	}
-	if _, err := db.ClearArchivedSplitLinks(gormDB, time.Now().Add(-retention)); err != nil {
+	if _, err := db.ClearArchivedSplitLinks(gormDB, hubclock.Now().Add(-retention)); err != nil {
 		logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to clear archived split links")
 	}
 }
@@ -304,7 +305,7 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		}
 	}
 
-	now := time.Now()
+	now := hubclock.Now()
 	if app.Kind == db.AppKindCashWallet {
 		// A cash bill is archived and deleted atomically, so it can never
 		// disappear unrecorded. Deliberately AFTER the reclaim above: that is a
