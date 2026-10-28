@@ -21,18 +21,6 @@ type gate struct {
 	off chan struct{} // closed when the gate turns off
 }
 
-func (g *gate) set(on bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	switch {
-	case on && !g.on:
-		g.off = make(chan struct{})
-	case !on && g.on:
-		close(g.off)
-	}
-	g.on = on
-}
-
 func (g *gate) isOn() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
