@@ -55,10 +55,30 @@ services:
     image: ghcr.io/ohstr/ncli:rc
     hostname: relay
     restart: unless-stopped
-    command: ["relay", "--config", "/config/relay.yaml"]
+    # A small supervisor around `ncli relay`, for the test hook POST
+    # /api/test/relay/min-pow: the relay reads its proof-of-work minimum from
+    # its config at start only, so when relay-ctl/min-pow changes the relay
+    # process is restarted on relay.yaml plus a strict `pow` block (none for 0).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ctl=/ctl/min-pow; cfg=/tmp/relay.yaml; pid=; last=unset
+        trap 'kill $$pid 2>/dev/null; wait $$pid; exit 0' TERM INT
+        while :; do
+          cur=$$(cat $$ctl 2>/dev/null || true)
+          if [ "$$cur" != "$$last" ] || ! kill -0 "$$pid" 2>/dev/null; then
+            if [ -n "$$pid" ]; then kill $$pid 2>/dev/null; wait $$pid 2>/dev/null; fi
+            cp /config/relay.yaml $$cfg
+            case "$$cur" in ''|0|*[!0-9]*) ;; *) printf 'pow:\n  strict: true\n  min: %s\n' "$$cur" >> $$cfg ;; esac
+            /bin/ncli relay --config $$cfg &
+            pid=$$!; last=$$cur
+          fi
+          sleep 1
+        done
     volumes:
       - ./data/regtest/relay/relay.yaml:/config/relay.yaml:ro
       - ./data/regtest/relay:/data
+      - ./data/regtest/relay-ctl:/ctl:ro
     ports:
       # Published so the host-run integration suite reaches the same relay the
       # backend uses (see RELAY in .env.example).
@@ -236,7 +256,10 @@ services:
     # container and runs out on a busy host ("too many open files").
     # Built with the testhooks tag: the chain and payer hooks under /api/test
     # (http/testhooks.go), which release builds never contain.
+    # rerun: a backend that exits is run again, which is how the test hook
+    # POST /api/test/restart reloads the Hub from its store.
     command: ["--build.poll", "true", "--build.poll_interval", "1000",
+              "--build.rerun", "true", "--build.rerun_delay", "500",
               "--build.cmd", "go build -tags testhooks -o ./tmp/main ./cmd/http"]
     environment:
       - WORK_DIR=/data
@@ -248,6 +271,12 @@ services:
       - LOKIHUB_TEST_CHAIN_RPC_CERT=/chain/rpc.cert
       - LOKIHUB_TEST_PAYER_GRPC=payer:10006
       - LOKIHUB_TEST_PAYER_DIR=/payer-data
+      # The relay's supervisor reads min-pow here (POST /api/test/relay/min-pow).
+      - LOKIHUB_TEST_RELAY_CTL_DIR=/relay-ctl
+      # flspd's dashboard and its admin key (POST /api/test/flspd/...), when the
+      # lsp profile runs.
+      - LOKIHUB_TEST_FLSPD_DASHBOARD=http://flspd:8080
+      - LOKIHUB_TEST_FLSPD_ADMIN_KEY_FILE=/flspd-admin/admin.key
       # No BASE_URL/FRONTEND_URL: the stack is reached only through Caddy, and an
       # unset value makes /logout redirect to a same-origin "/".
       - LN_BACKEND_TYPE=FLND
@@ -275,6 +304,8 @@ services:
       - ./data/regtest/flnd:/flnd-data:ro
       - ./data/regtest/payer:/payer-data:ro
       - ./data/regtest/chain/rpc.cert:/chain/rpc.cert:ro
+      - ./data/regtest/relay-ctl:/relay-ctl
+      - ./data/regtest/flspd-admin:/flspd-admin:ro
       - lokihub-go-mod-cache:/go/pkg/mod
       - lokihub-go-build-cache:/root/.cache/go-build
     depends_on:

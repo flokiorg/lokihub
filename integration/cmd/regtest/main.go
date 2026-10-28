@@ -6,6 +6,7 @@
 //	regtest fund <hub|payer|address> <loki>   pay from the payer's wallet, then mine 1
 //	regtest channels                  reopen either channel if it is missing
 //	regtest status                    tip, wallet and channel balances, lokihub state
+//	regtest flspd-admin-key           make flspd's dashboard admin key once; print its pubkey
 //
 // It reads the stack's ports and paths from the environment (the repo's .env), and
 // refuses any chain or node that is not on regtest.
@@ -18,9 +19,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/flokiorg/flnd/lnrpc"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/flokiorg/lokihub/integration/regtest"
 )
@@ -142,7 +145,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: regtest certs|bootstrap|mine|fund|channels|status")
+		return fmt.Errorf("usage: regtest certs|bootstrap|mine|fund|channels|status|flspd-admin-key")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -150,6 +153,9 @@ func run(args []string) error {
 	if args[0] == "certs" {
 		// Before the chain node first starts: it then uses this cert instead of its own.
 		return regtest.WriteChainCerts(filepath.Join(s.dataDir, "chain"), []string{"chain", s.host})
+	}
+	if args[0] == "flspd-admin-key" {
+		return flspdAdminKey(filepath.Join(s.dataDir, "flspd-admin", "admin.key"))
 	}
 	st, err := dial(ctx, s)
 	if err != nil {
@@ -288,5 +294,29 @@ func status(ctx context.Context, st *regtest.Stack) error {
 		return nil
 	}
 	fmt.Printf("lokihub           setup=%t running=%t network=%s\n", info.SetupCompleted, info.Running, info.Network)
+	return nil
+}
+
+// flspdAdminKey makes the key that logs in to flspd's dashboard (NIP-98) once,
+// at path, and prints its pubkey for flspd's DASHBOARD_ADMIN_PUBKEY. The
+// backend's flspd test hooks sign with it (LOKIHUB_TEST_FLSPD_ADMIN_KEY_FILE).
+func flspdAdminKey(path string) error {
+	raw, err := os.ReadFile(path) //nolint:gosec // the stack's own data dir
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		raw = []byte(nostr.GeneratePrivateKey())
+		if err := os.WriteFile(path, raw, 0o644); err != nil { //nolint:gosec // read by the backend container; a regtest throwaway
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	pub, err := nostr.GetPublicKey(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	fmt.Println(pub)
 	return nil
 }

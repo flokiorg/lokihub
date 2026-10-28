@@ -78,12 +78,17 @@ dev subcommand="" *args:
     }
     case "$1" in
         setup)
-            mkdir -p "{{DATA_DIR}}"/{chain,flnd,payer,hub,relay,flnd-lsp,flspd-creds,flspd-config,flspd-db}
+            mkdir -p "{{DATA_DIR}}"/{chain,flnd,payer,hub,relay,relay-ctl,flnd-lsp,flspd-creds,flspd-config,flspd-db,flspd-admin}
             [ -f .env ] || cp .env.example .env
             if [ ! -f "{{DATA_DIR}}/flspd.env" ]; then
                 # flspd's own key (not the node key): any 32 random bytes in hex.
                 key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
                 sed "s/^FLSPD_PRIVATE_KEY=.*/FLSPD_PRIVATE_KEY=$key/" dev/regtest/flspd/flspd.env.example > "{{DATA_DIR}}/flspd.env"
+            fi
+            # The dashboard admin the backend's flspd test hooks log in as.
+            if grep -q '^DASHBOARD_ADMIN_PUBKEY=$' "{{DATA_DIR}}/flspd.env"; then
+                admin=$({{REGTEST}} flspd-admin-key)
+                sed -i "s/^DASHBOARD_ADMIN_PUBKEY=$/DASHBOARD_ADMIN_PUBKEY=$admin/" "{{DATA_DIR}}/flspd.env"
             fi
             if [ ! -f "{{DATA_DIR}}/relay/relay.yaml" ]; then
                 key=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
