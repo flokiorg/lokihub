@@ -7,8 +7,9 @@
 // flspd:regtest image exists; bootstrap funds flnd-lsp and opens its channel to
 // the payer) and the dev relay among the Hub's General relays. Every
 // test skips when no LSP announcement is in the catalogue. I-83 and I-84 drive
-// flspd's dashboard (fee hot-swap, unlist) and skip unless FLSPD_ADMIN_URL
-// names a hook that does it.
+// flspd's dashboard (fee hot-swap, unlist) through the stack's test hooks
+// (POST /api/test/flspd/..., or FLSPD_ADMIN_URL when set) and skip without
+// them.
 package integration
 
 import (
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,20 +140,38 @@ func TestSpecLSP_I82_JITThroughTrustedLSP(t *testing.T) {
 	assert.NotEmpty(t, buy.InterceptSCID)
 }
 
+// flspdAdmin drives flspd's dashboard: POST path (fee/raise, fee/restore,
+// announce/unlist, announce/resume) to FLSPD_ADMIN_URL when it is set, else to
+// the stack's test hook /api/test/flspd. False when neither answers.
+func flspdAdmin(t *testing.T, admin *adminClient, path string) bool {
+	t.Helper()
+	if hook := os.Getenv("FLSPD_ADMIN_URL"); hook != "" {
+		resp, err := http.Post(strings.TrimRight(hook, "/")+"/"+path, "application/json", nil)
+		if err != nil {
+			t.Logf("FLSPD_ADMIN_URL %s: %v", path, err)
+			return false
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode < 300
+	}
+	if err := admin.doBody(http.MethodPost, "/api/test/flspd/"+path, map[string]any{}, nil); err != nil {
+		t.Logf("flspd test hook %s: %v", path, err)
+		return false
+	}
+	return true
+}
+
 // I-83: a fee hot-swap on flspd makes the live terms worse: the next live
 // check says so (the UI asks again before buying).
 func TestSpecLSP_I83_WorseLiveTerms(t *testing.T) {
-	hook := os.Getenv("FLSPD_ADMIN_URL")
-	if hook == "" {
-		t.Skip("FLSPD_ADMIN_URL unset: no hook to hot-swap flspd's fees")
-	}
 	cfg := requireConfig(t)
 	admin := requireAdmin(t, cfg)
 	l := flspdLSP(t, cfg, admin)
 	require.NoError(t, admin.doBody(http.MethodPut, fmt.Sprintf("/api/lsps/%s/trust", l.NodeKey), map[string]any{"trusted": true}, &l))
-	resp, err := http.Post(hook+"/fee/raise", "application/json", nil)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
+	if !flspdAdmin(t, admin, "fee/raise") {
+		t.Skip("no hook to hot-swap flspd's fees (POST /api/test/flspd/fee/raise, or FLSPD_ADMIN_URL)")
+	}
+	t.Cleanup(func() { flspdAdmin(t, admin, "fee/restore") })
 	require.NoError(t, admin.doBody(http.MethodPost, fmt.Sprintf("/api/lsps/%s/check", l.NodeKey), nil, &l))
 	require.NotNil(t, l.LastCheck)
 	assert.True(t, l.LastCheck.Worse)
@@ -160,16 +180,13 @@ func TestSpecLSP_I83_WorseLiveTerms(t *testing.T) {
 // I-84: flspd unlists: the closed announcement hides it from new purchases,
 // and existing channels stay.
 func TestSpecLSP_I84_ClosedHides(t *testing.T) {
-	hook := os.Getenv("FLSPD_ADMIN_URL")
-	if hook == "" {
-		t.Skip("FLSPD_ADMIN_URL unset: no hook to unlist flspd")
-	}
 	cfg := requireConfig(t)
 	admin := requireAdmin(t, cfg)
 	l := flspdLSP(t, cfg, admin)
-	resp, err := http.Post(hook+"/announce/unlist", "application/json", nil)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
+	if !flspdAdmin(t, admin, "announce/unlist") {
+		t.Skip("no hook to unlist flspd (POST /api/test/flspd/announce/unlist, or FLSPD_ADMIN_URL)")
+	}
+	t.Cleanup(func() { flspdAdmin(t, admin, "announce/resume") })
 	require.Eventually(t, func() bool {
 		_ = admin.doBody(http.MethodPost, "/api/lsps", map[string]any{"pubkey": l.NodeKey}, nil)
 		var all []adminLSP
