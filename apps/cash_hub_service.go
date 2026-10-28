@@ -303,24 +303,6 @@ func (svc *appsService) ClaimCashSlice(walletAppID uint, identityType, identityV
 	return claim.AmountMloki, nil
 }
 
-// UnclaimCashSlice reverts ClaimCashSlice, guarded so it can only
-// undo a slice that is currently claimed for this exact identity — never
-// clobbers a different, legitimate claim. Used to roll back when the
-// invoice-amount check or the payment itself subsequently fails.
-func (svc *appsService) UnclaimCashSlice(walletAppID uint, identityType, identityValue string) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL",
-			walletAppID, identityType, identityValue).
-		Updates(map[string]interface{}{"claimed_at": nil, "payment_hash": ""}).Error
-}
-
-func (svc *appsService) SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND payment_hash = ?",
-			walletAppID, identityType, identityValue, "").
-		Update("payment_hash", paymentHash).Error
-}
-
 // ReleaseCashSliceForFailedPayment is how a slice comes back after cash_redeem
 // had to keep it claimed because its payment's outcome was unknown. The ledger
 // must show that payment FAILED and nothing pending or settled under its hash,
@@ -382,23 +364,9 @@ func (svc *appsService) ReassignCashSliceIdentity(walletAppID uint, currentIdent
 	return claim.AmountMloki, nil
 }
 
-// SetCashSliceSplitTarget records which new wallet a just-claimed
-// slice's value was spun off into — purely informational (see
-// db.CashWalletClaim.SpunOffToWalletAppID doc comment). Called only after the
-// new wallet has been successfully created and funded, so the guard here is
-// defensive rather than load-bearing: nothing else can be racing this exact
-// row once the split has claimed it (ClaimCashSlice).
-func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error {
-	return svc.db.Model(&db.CashWalletClaim{}).
-		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NULL",
-			walletAppID, identityType, identityValue).
-		Update("spun_off_to_wallet_app_id", newWalletAppID).Error
-}
-
 // SetCashSliceRedeemPayment records the payout facts for a slice that was just
 // redeemed over Lightning — purely informational (see the payment-fact fields
-// on db.CashWalletClaim), and the redeem-side mirror of
-// SetCashSliceSplitTarget.
+// on db.CashWalletClaim).
 //
 // Recorded here, at redeem time, because it cannot be recovered later: a
 // Transaction carries no identity, so nothing links a payout back to its slice
@@ -407,7 +375,7 @@ func (svc *appsService) SetCashSliceSplitTarget(walletAppID uint, identityType, 
 //
 // Called only after SendPaymentSync has returned a settled transaction, so the
 // guard is defensive rather than load-bearing — the slice is already terminally
-// claimed by then, and a failed payment is rolled back by UnclaimCashSlice
+// claimed by then, and a failed payment is released (ReleaseRedeemClaim)
 // instead of reaching here.
 func (svc *appsService) SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error {
 	return svc.db.Model(&db.CashWalletClaim{}).
@@ -444,8 +412,8 @@ func (svc *appsService) RecordCashSliceRedeemSettlement(walletAppID uint, paymen
 
 // SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 // source cash_wallet it was split from — purely informational (see
-// db.App.SplitFromWalletAppID doc comment), the reverse of
-// SetCashSliceSplitTarget. Called only after the new wallet has been
+// db.App.SplitFromWalletAppID doc comment), the reverse of the source slice's
+// spun_off_to_wallet_app_id. Called only after the new wallet has been
 // successfully created and funded.
 func (svc *appsService) SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error {
 	return svc.db.Model(&db.App{}).

@@ -177,10 +177,6 @@ type AppsService interface {
 	// (never existed, wrong identity, already claimed, or raced against a
 	// concurrent split/transfer — all look identical to the caller by design).
 	ClaimCashSlice(walletAppID uint, identityType, identityValue string) (amountMloki int64, err error)
-	// UnclaimCashSlice reverts ClaimCashSlice, guarded so it can only
-	// undo the exact claim it's asked to. Used to roll back a slice claim when
-	// the invoice-amount check or the payment itself subsequently fails.
-	UnclaimCashSlice(walletAppID uint, identityType, identityValue string) error
 	// ReassignCashSliceIdentity atomically reassigns one unclaimed slice's
 	// registered identity from (currentIdentityType, currentIdentityValue) to
 	// (newIdentityType, newIdentityValue, newIAPubkey), guarded by
@@ -192,20 +188,10 @@ type AppsService interface {
 	// (ClaimCashSlice) and re-issues its value as new bills (cashwallet.SplitInTwo).
 	ReassignCashSliceIdentity(walletAppID uint, currentIdentityType, currentIdentityValue,
 		newIdentityType, newIdentityValue, newIAPubkey string) (amountMloki int64, err error)
-	// SetCashSliceSplitTarget records which new wallet a
-	// just-claimed slice's value was spun off into. Purely informational
-	// (see db.CashWalletClaim.SpunOffToWalletAppID) — call only after the
-	// new wallet has been created and funded.
-	SetCashSliceSplitTarget(walletAppID uint, identityType, identityValue string, newWalletAppID uint) error
 	// SetCashSliceRedeemPayment records the payout facts for a slice just
-	// redeemed over Lightning — the redeem-side mirror of
-	// SetCashSliceSplitTarget, and equally informational. Call only after
+	// redeemed over Lightning. Purely informational. Call only after
 	// SendPaymentSync has returned a settled transaction.
 	SetCashSliceRedeemPayment(walletAppID uint, identityType, identityValue string, payment CashSliceRedeemPayment) error
-	// SetCashSliceRedeemPaymentHash records, on a claimed slice, the hash of the
-	// payment about to redeem it, so ReleaseCashSliceForFailedPayment can find
-	// the slice again if that payment's outcome is only learned later.
-	SetCashSliceRedeemPaymentHash(walletAppID uint, identityType, identityValue, paymentHash string) error
 	// ReleaseCashSliceForFailedPayment reopens a slice whose redeem payment has
 	// definitely failed. A no-op unless walletAppID has a claimed slice whose
 	// payment carries paymentHash and recorded no preimage.
@@ -232,7 +218,8 @@ type AppsService interface {
 	DeleteCashBill(app *db.App, outcome string) error
 	// SetCashWalletSplitSource records, on the NEW wallet's own App row, which
 	// source cash_wallet it was split from — purely informational (see
-	// db.App.SplitFromWalletAppID), the reverse of SetCashSliceSplitTarget.
+	// db.App.SplitFromWalletAppID), the reverse of the source slice's
+	// spun_off_to_wallet_app_id.
 	// Call only after the new wallet has been created and funded.
 	SetCashWalletSplitSource(newWalletAppID, sourceWalletAppID uint) error
 	// DeleteCashClaim removes an unclaimed slice from a cash_wallet, calling
