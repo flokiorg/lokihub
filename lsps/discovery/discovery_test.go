@@ -56,15 +56,17 @@ func (v vectors) event(id string) *nip01.Event {
 }
 
 type fakeFetcher struct {
-	mu     sync.Mutex
-	evs    []*nip01.Event
-	relays [][]string
+	mu      sync.Mutex
+	evs     []*nip01.Event
+	relays  [][]string
+	filters []nip01.SubscriptionFilter
 }
 
 func (f *fakeFetcher) Fetch(_ context.Context, relays []string, flt nip01.SubscriptionFilter) ([]*nip01.Event, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.relays = append(f.relays, relays)
+	f.filters = append(f.filters, flt)
 	var out []*nip01.Event
 	for _, ev := range f.evs {
 		if len(flt.Authors) > 0 && flt.Authors[0] != ev.PubKey {
@@ -323,4 +325,20 @@ func TestU26_14_SanitizedText(t *testing.T) {
 func TestPreferredAddr(t *testing.T) {
 	assert.Equal(t, "x.onion:9735", PreferredAddr([]string{"1.2.3.4:9735", "x.onion:9735"}))
 	assert.Equal(t, []string{"x.onion:9735", "1.2.3.4:9735"}, OrderedAddrs([]string{"1.2.3.4:9735", "x.onion:9735"}))
+}
+
+// R2-S3: a refresh also reads trusted LSPs' announcements by author, so spam
+// in the kind-only read cannot crowd out a trusted LSP's newer event.
+func TestDiscoverReadsTrustedByAuthor(t *testing.T) {
+	f := newFixture(t)
+	key := strings.Repeat("ab", 32)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSP{NodeKey: key, Trusted: true}).Error)
+	require.NoError(t, f.s.Discover(context.Background()))
+	var byAuthor bool
+	for _, flt := range f.fetch.filters {
+		if len(flt.Authors) == 1 && flt.Authors[0] == key {
+			byAuthor = true
+		}
+	}
+	require.True(t, byAuthor)
 }

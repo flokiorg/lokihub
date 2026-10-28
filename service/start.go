@@ -559,6 +559,11 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to fetch node info")
 	}
+	if refusal := testBuildNetworkRefusal(buildHasTestHooks, info, err); refusal != nil {
+		svc.lnClient = nil
+		_ = lnClient.Shutdown()
+		return refusal
+	}
 	if info != nil {
 		svc.eventPublisher.SetGlobalProperty("node_id", info.Pubkey)
 		svc.eventPublisher.SetGlobalProperty("network", info.Network)

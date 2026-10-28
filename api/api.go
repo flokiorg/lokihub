@@ -1505,6 +1505,13 @@ func (api *api) OpenChannel(ctx context.Context, openChannelRequest *OpenChannel
 	if api.svc.GetLNClient() == nil {
 		return nil, errors.New("LNClient not started")
 	}
+	// A channel's funding is an on-chain spend: it may not take coins set
+	// aside for withdrawals.
+	if w, err := api.withdrawService(); err == nil && openChannelRequest != nil && openChannelRequest.AmountLoki > 0 {
+		if err := w.OnchainSpendCheck(ctx, uint64(openChannelRequest.AmountLoki), false); err != nil {
+			return nil, err
+		}
+	}
 	return api.svc.GetLNClient().OpenChannel(ctx, openChannelRequest)
 }
 

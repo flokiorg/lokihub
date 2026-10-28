@@ -36,6 +36,9 @@ const (
 	CashVersionReplaced    = "replaced"
 	CashVersionConflicted  = "conflicted"
 	CashVersionInvalid     = "invalid"
+	// CashVersionMismatch is a version whose signed transaction differed from
+	// its record: it counts as possibly signed forever and is never broadcast.
+	CashVersionMismatch = "mismatch"
 )
 
 // CashWithdrawVersion is one transaction of a batch. Inputs, outputs and the

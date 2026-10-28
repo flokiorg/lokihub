@@ -182,7 +182,8 @@ func needSat(payoutMillis, networkFeeMillis uint64) int64 {
 }
 
 // CanSetAsideTx: the coins neither in a version nor below the floor, less what
-// is already set aside, cover need.
+// is already set aside for payouts in no batch, cover need. A batched payout's
+// coins are in a version, so not among the coins counted (R2-P-L3).
 func (e *Engine) CanSetAsideTx(tx *gorm.DB, payoutMillis, networkFeeMillis uint64) (bool, error) {
 	if e.held(func(h *EngineHooks) bool { return h.StarveCoins.Load() }) {
 		return false, nil
@@ -192,7 +193,9 @@ func (e *Engine) CanSetAsideTx(tx *gorm.DB, payoutMillis, networkFeeMillis uint6
 		Select("COALESCE(SUM(value_sat), 0)").Scan(&coins).Error; err != nil {
 		return false, err
 	}
-	if err := tx.Model(&db.CashWithdrawSetAside{}).Select("COALESCE(SUM(amount_sat), 0)").Scan(&aside).Error; err != nil {
+	if err := tx.Model(&db.CashWithdrawSetAside{}).
+		Joins("JOIN cash_withdrawals w ON w.id = cash_withdraw_set_asides.withdrawal_id").
+		Where("w.batch_id IS NULL").Select("COALESCE(SUM(cash_withdraw_set_asides.amount_sat), 0)").Scan(&aside).Error; err != nil {
 		return false, err
 	}
 	return coins-e.floorSat.Load()-aside >= needSat(payoutMillis, networkFeeMillis), nil
@@ -257,8 +260,13 @@ func (e *Engine) IsChangeScriptTx(tx *gorm.DB, script []byte) (bool, error) {
 }
 
 // PayoutTxHexTx is the raw transaction a payout reports: the confirmed version
-// paying it, else the last signed one.
+// paying it, else the one last broadcast (whose id is the payout's txid, as
+// §Response requires), else, before any broadcast, the last signed one.
 func (e *Engine) PayoutTxHexTx(tx *gorm.DB, withdrawalID uint) (string, error) {
+	var w db.CashWithdrawal
+	if err := tx.Select("txid").Where("id = ?", withdrawalID).Limit(1).Find(&w).Error; err != nil {
+		return "", err
+	}
 	var vs []db.CashWithdrawVersion
 	if err := tx.Joins("JOIN cash_withdraw_version_outputs o ON o.version_id = cash_withdraw_versions.id").
 		Where("o.withdrawal_id = ? AND cash_withdraw_versions.raw_tx IS NOT NULL", withdrawalID).
@@ -268,6 +276,13 @@ func (e *Engine) PayoutTxHexTx(tx *gorm.DB, withdrawalID uint) (string, error) {
 	for _, v := range vs {
 		if v.State == db.CashVersionConfirmed || v.State == db.CashVersionFinal {
 			return *v.RawTx, nil
+		}
+	}
+	if w.Txid != nil {
+		for _, v := range vs {
+			if v.Txid != nil && *v.Txid == *w.Txid {
+				return *v.RawTx, nil
+			}
 		}
 	}
 	if len(vs) > 0 {
@@ -440,6 +455,15 @@ func (e *Engine) Pass(ctx context.Context) error {
 	if err := e.saveTip(best); err != nil {
 		return err
 	}
+	// Coins a commit set aside are leased first, so no chain read failing
+	// leaves them open to the node's own coin selection (R2-P-M3).
+	id, err := e.lease()
+	if err != nil {
+		return err
+	}
+	if err := e.leaseCoins(ctx, p, id, false); err != nil {
+		return err
+	}
 	if err := e.chainStep(ctx, p, best.Height); err != nil {
 		return err
 	}
@@ -447,6 +471,9 @@ func (e *Engine) Pass(ctx context.Context) error {
 		return err
 	}
 	if err := e.invalidateGone(best.Height); err != nil {
+		return err
+	}
+	if err := e.signPending(ctx, p); err != nil {
 		return err
 	}
 	rates, err := e.S.Rates(ctx)

@@ -839,7 +839,9 @@ func TestMaybeAutoDeleteDrainedCashWallet_DeletesWhenFullyDrained(t *testing.T) 
 	// archive derives a slice's outcome from it — without it a split slice is
 	// indistinguishable from one redeemed over Lightning.
 	const spunOffTo = uint(987654)
-	require.NoError(t, svc.AppsService.SetCashSliceSplitTarget(wallet.ID, db.CashIdentityPubkey, pubkey, spunOffTo))
+	require.NoError(t, svc.DB.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL", wallet.ID, db.CashIdentityPubkey, pubkey).
+		Update("spun_off_to_wallet_app_id", spunOffTo).Error)
 
 	controller := NewTestNip47Controller(svc)
 	controller.maybeAutoDeleteDrainedCashWallet(wallet)

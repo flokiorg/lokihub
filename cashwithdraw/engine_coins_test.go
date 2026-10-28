@@ -207,3 +207,41 @@ func strings64(s string) string {
 }
 
 var _ = hex.EncodeToString
+
+// R2-P-M2: a coin another lease holds for a while (a channel open's coin
+// selection) is not vanished for good: an available one is dropped quietly,
+// a set-aside one is replaced, and either is available again once the wallet
+// lists it unleased.
+func TestR2_ForeignLeaseEnds(t *testing.T) {
+	w := newEngineWorld(t, 4)
+	wd := w.commitTo(t, 21_000_000)
+	var assigned []db.CashWithdrawCoin
+	require.NoError(t, w.svc.DB.Where("withdrawal_id = ?", wd.ID).Find(&assigned).Error)
+	require.Len(t, assigned, 1)
+	var free []db.CashWithdrawCoin
+	require.NoError(t, w.svc.DB.Where("state = ?", db.CashCoinAvailable).Order("outpoint").Find(&free).Error)
+	require.Len(t, free, 3)
+	c := free[0].Outpoint
+
+	w.hooks.HoldSign.Store(true)
+	w.chain.LeaseForeign(c)
+	w.chain.LeaseForeign(assigned[0].Outpoint)
+	w.pass(t)
+	assert.Nil(t, w.coin(t, c), "not ours while another lease holds it")
+	assert.Equal(t, db.CashCoinVanished, w.coin(t, assigned[0].Outpoint).State)
+	assert.Equal(t, int64(1), w.eng.Vanished.Load(), "only the set-aside coin is reported vanished")
+
+	// The other leases end (the channel open was abandoned).
+	foreignID := [32]byte{0xee}
+	require.NoError(t, w.chain.ReleaseOutput(context.TODO(), foreignID, c))
+	require.NoError(t, w.chain.ReleaseOutput(context.TODO(), foreignID, assigned[0].Outpoint))
+	w.pass(t)
+	require.NotNil(t, w.coin(t, c))
+	assert.Equal(t, db.CashCoinAvailable, w.coin(t, c).State)
+	got := w.coin(t, assigned[0].Outpoint)
+	assert.Equal(t, db.CashCoinAvailable, got.State, "listed again, unleased: available")
+	assert.Nil(t, got.WithdrawalID)
+	var avail int64
+	require.NoError(t, w.svc.DB.Model(&db.CashWithdrawCoin{}).Where("state = ?", db.CashCoinAvailable).Count(&avail).Error)
+	assert.Equal(t, int64(3), avail, "four coins, one set aside")
+}

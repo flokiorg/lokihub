@@ -2,10 +2,12 @@ package cashwithdraw
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -75,9 +77,10 @@ func propertyRuns() int {
 	return 100
 }
 
-// U-24.3 / U-24.17: over random runs of adds, passes, blocks, reorganisations,
-// evictions, withheld and fee-refused versions, cancel requests and a crash at
-// every engine stage, no two transactions paying one payout ever confirm,
+// U-24.3 / U-24.17: over random runs of adds (before and between passes),
+// passes, blocks, reorganisations, evictions, withheld and fee-refused versions,
+// an earlier version of a batch confirming instead of a later one, cancel
+// requests and a crash at every engine stage, no two transactions paying one payout ever confirm,
 // every new version spends from each earlier one, value is conserved, and in
 // the end every payout is paid exactly payout_millis or re-minted, never both.
 func TestU_24_3_Property(t *testing.T) {
@@ -92,8 +95,14 @@ func propertyRun(t *testing.T, seed int64) {
 	rng := rand.New(rand.NewSource(seed))
 	w := newEngineWorld(t, 8)
 	n := 1 + rng.Intn(4)
+	// Some payouts commit after a first pass, so they join a batch whose
+	// version is unconfirmed (R2-P-H1).
+	split := 1 + rng.Intn(n)
 	var ws []*db.CashWithdrawal
-	for range n {
+	for i := range n {
+		if i == split {
+			w.passAfterWindow(t)
+		}
 		ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000)))
 	}
 	base := w.conserved(t)
@@ -114,7 +123,7 @@ func propertyRun(t *testing.T, seed int64) {
 		}
 	}
 	for range 25 {
-		switch rng.Intn(10) {
+		switch rng.Intn(12) {
 		case 0, 1:
 			w.passAfterWindow(t)
 		case 2:
@@ -176,6 +185,20 @@ func propertyRun(t *testing.T, seed int64) {
 		case 9:
 			w.advance(time.Duration(w.s.env().RebroadcastSecs()) * time.Second)
 			w.pass(t)
+		case 10:
+			// A payout commits mid-run: it may join an unconfirmed batch by
+			// replacement (R2-P-H1).
+			// The holder's proof is signed at the real time, which must be
+			// fresh at the Hub's clock.
+			if len(ws) < 7 && w.clock().Sub(time.Now()) < 200*time.Second {
+				before := w.conserved(t)
+				ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000)))
+				require.Equal(t, before, w.conserved(t), "seed %d: a commit conserves value", seed)
+				w.passAfterWindow(t)
+			}
+		case 11:
+			// An earlier version of a batch confirms instead of a later one.
+			w.earlierVersionWins(t, rng)
 		}
 		check()
 	}
@@ -215,4 +238,45 @@ func propertyRun(t *testing.T, seed int64) {
 			t.Fatalf("seed %d: payout %d ended %s", seed, got.ID, got.State)
 		}
 	}
+}
+
+// earlierVersionWins picks a batch with no confirmed version and at least two
+// payout versions, makes the network forget the later ones and mines an
+// earlier one.
+func (w *engineWorld) earlierVersionWins(t *testing.T, rng *rand.Rand) {
+	t.Helper()
+	byBatch := map[uint][]db.CashWithdrawVersion{}
+	confirmed := map[uint]bool{}
+	for _, v := range w.versions(t) {
+		if v.Kind == db.CashVersionChild {
+			continue
+		}
+		if v.ConfirmedOnce || v.State == db.CashVersionConfirmed || v.State == db.CashVersionFinal {
+			confirmed[v.BatchID] = true
+		}
+		if v.RawTx != nil && v.State != db.CashVersionInvalid {
+			byBatch[v.BatchID] = append(byBatch[v.BatchID], v)
+		}
+	}
+	var ids []uint
+	for id, vs := range byBatch {
+		if !confirmed[id] && len(vs) >= 2 {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	vs := byBatch[ids[rng.Intn(len(ids))]]
+	k := rng.Intn(len(vs) - 1)
+	for _, later := range vs[k+1:] {
+		w.chain.Evict(*later.Txid)
+		w.chain.Withhold(*later.Txid, true)
+	}
+	raw, err := hex.DecodeString(*vs[k].RawTx)
+	require.NoError(t, err)
+	_ = w.chain.PublishTx(context.TODO(), raw)
+	w.chain.Mine(1)
+	w.pass(t)
 }

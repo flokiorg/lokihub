@@ -91,6 +91,28 @@ func (e *Engine) coinStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 			return err
 		}
 	}
+	// A coin marked vanished that the wallet lists again, unleased by anyone
+	// else and spent by none of our versions, was only leased for a while (a
+	// channel open's coin selection): it is available again (R2-P-M2).
+	var back []db.CashWithdrawCoin
+	if err := e.S.DB.Where("state = ?", db.CashCoinVanished).Find(&back).Error; err != nil {
+		return err
+	}
+	for _, c := range back {
+		if !seen[c.Outpoint] {
+			continue
+		}
+		if spent, err := e.spentByOurVersion(c.Outpoint); err != nil {
+			return err
+		} else if spent {
+			continue
+		}
+		if err := e.S.DB.Model(&db.CashWithdrawCoin{}).Where("outpoint = ? AND state = ?", c.Outpoint, db.CashCoinVanished).
+			Updates(map[string]interface{}{"state": db.CashCoinAvailable, "withdrawal_id": nil, "batch_id": nil,
+				"vanished_at": nil, "vanished_height": nil}).Error; err != nil {
+			return err
+		}
+	}
 
 	// Coins we hold as available or set aside that the wallet no longer lists.
 	var ours []db.CashWithdrawCoin
@@ -107,9 +129,10 @@ func (e *Engine) coinStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 		} else if spentByVersion {
 			state = db.CashCoinInVersion
 		}
-		if state == db.CashCoinVanished && c.State == db.CashCoinAvailable && !foreign[c.Outpoint] {
+		if state == db.CashCoinVanished && c.State == db.CashCoinAvailable {
 			// An available coin the wallet stopped listing: spent elsewhere,
-			// or leased by someone else now. Not ours to use.
+			// or leased by someone else now. Not ours to use; listed again
+			// unleased, it comes back as a new row.
 			if err := e.S.DB.Where("outpoint = ? AND state = ?", c.Outpoint, db.CashCoinAvailable).Delete(&db.CashWithdrawCoin{}).Error; err != nil {
 				return err
 			}
@@ -136,7 +159,9 @@ func (e *Engine) coinStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 		if err := e.S.DB.Where("id = ?", a.WithdrawalID).Limit(1).Find(&w).Error; err != nil {
 			return err
 		}
-		if w.ID == 0 || w.Signed {
+		// A signed payout keeps its coins; one released from its batch
+		// (signed, in no batch) is paid afresh and may take new ones.
+		if w.ID == 0 || w.BatchID != nil {
 			continue
 		}
 		if err := e.S.DB.Transaction(func(tx *gorm.DB) error {

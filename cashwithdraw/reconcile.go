@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/logger"
 )
 
 // Reconcile is step 11, before anything is offered: every coin set aside or in
@@ -50,5 +52,25 @@ func (e *Engine) Reconcile(ctx context.Context) error {
 		return err
 	}
 	e.ready.Store(true)
+	return nil
+}
+
+// signPending signs again, from its stored PSBT, every about-to-sign version
+// still without its transaction, as the startup reconcile does: a signature
+// that failed (a node timeout, a locked wallet) is retried every pass, not only
+// after a restart (R2-P-M1). A failure is logged and retried next pass.
+func (e *Engine) signPending(ctx context.Context, p lnclient.OnchainPayer) error {
+	var pending []db.CashWithdrawVersion
+	if err := e.S.DB.Where("state = ? AND raw_tx IS NULL", db.CashVersionAboutToSign).Order("id").Find(&pending).Error; err != nil {
+		return err
+	}
+	for i := range pending {
+		if err := e.finalizeAndStore(ctx, p, &pending[i]); err != nil {
+			if errors.Is(err, ErrEngineStopped) {
+				return err
+			}
+			logger.Logger.Warn().Err(err).Uint("version_id", pending[i].ID).Msg("Signing a recorded payout version failed; retried next pass")
+		}
+	}
 	return nil
 }

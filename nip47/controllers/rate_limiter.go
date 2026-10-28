@@ -64,6 +64,21 @@ func (rl *pubkeyRateLimiter) Allow(pubkey string, maxPerHour int) bool {
 	return true
 }
 
+// Refund gives back one call Allow admitted for pubkey in the current window:
+// a call that took an allowance and then did not happen.
+func (rl *pubkeyRateLimiter) Refund(pubkey string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if entry, ok := rl.entries[pubkey]; ok && entry.count > 0 && time.Now().Before(entry.resetAt) {
+		entry.count--
+	}
+}
+
+// refunder is a RateLimiter that can give a call back.
+type refunder interface {
+	Refund(pubkey string)
+}
+
 // evictExpiredLocked removes entries whose window has already reset, so the
 // map stays bounded to pubkeys with recent activity instead of growing for
 // the lifetime of the process. Must be called with rl.mu held.

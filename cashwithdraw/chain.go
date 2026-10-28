@@ -25,6 +25,7 @@ func (e *Engine) chainStep(ctx context.Context, p lnclient.OnchainPayer, tip int
 		return err
 	}
 	var remints []remintDue
+	var unlease []string
 	for i := range vs {
 		v := &vs[i]
 		wt, err := p.WalletTx(ctx, *v.Txid)
@@ -33,11 +34,12 @@ func (e *Engine) chainStep(ctx context.Context, p lnclient.OnchainPayer, tip int
 		}
 		switch {
 		case wt.Confs >= 1:
-			due, err := e.onConfirmed(v, wt)
+			due, freed, err := e.onConfirmed(v, wt)
 			if err != nil {
 				return err
 			}
 			remints = append(remints, due...)
+			unlease = append(unlease, freed...)
 		case v.State == db.CashVersionConfirmed || v.State == db.CashVersionFinal:
 			if err := e.onReorged(v); err != nil {
 				return err
@@ -47,6 +49,13 @@ func (e *Engine) chainStep(ctx context.Context, p lnclient.OnchainPayer, tip int
 	for _, r := range remints {
 		if _, err := e.S.Remint(ctx, r.id, r.reason); err != nil && err != ErrAlreadyReminted {
 			logger.Logger.Error().Err(err).Uint("withdrawal_id", r.id).Msg("Re-mint of a cancelled payout failed; retried next pass")
+		}
+	}
+	if len(unlease) > 0 {
+		if id, err := e.lease(); err == nil {
+			for _, c := range unlease {
+				_ = p.ReleaseOutput(ctx, id, c)
+			}
 		}
 	}
 	return e.before(EngineAfterChainUpdate)
@@ -86,9 +95,18 @@ func minerFeeShare(v *db.CashWithdrawVersion) *int64 {
 	return &share
 }
 
-func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) ([]remintDue, error) {
-	var due []remintDue
-	err := e.S.DB.Transaction(func(tx *gorm.DB) error {
+// onConfirmed follows a confirmed version: the payouts it pays to confirmed and
+// final. A payout of the batch it does not pay (one that joined by a later
+// version, or one an invalidation excludes) can be paid by no other version
+// once it is at the payout's final_depth, since every version of a batch
+// spends from every other: then a payout being cancelled is re-minted, and
+// any other is released from the batch to be paid in a new one (R2-P-H1).
+// The batch settles once every payout has ended or left; only the confirmed
+// version's inputs are spent, the coins only other versions used return to
+// the pool, and their leases are returned (freed).
+func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) (due []remintDue, freed []string, err error) {
+	err = e.S.DB.Transaction(func(tx *gorm.DB) error {
+		due, freed = nil, nil
 		ws, err := e.batchPayouts(tx, v.BatchID)
 		if err != nil {
 			return err
@@ -126,15 +144,22 @@ func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) ([
 				if w.State == db.CashWithdrawCancelled {
 					continue
 				}
-				if v.Kind == db.CashVersionInvalidation && w.CancelReason != nil && wt.Confs >= int64(w.FinalDepth) {
-					// No version of this payout can confirm any more.
+				if wt.Confs < int64(w.FinalDepth) {
+					// A reorganisation could still confirm a version paying it.
+					allEnded = false
+					continue
+				}
+				// No version of this payout can confirm any more.
+				if w.CancelReason != nil {
 					if err := tx.Delete(&db.CashWithdrawSetAside{}, "withdrawal_id = ?", w.ID).Error; err != nil {
 						return err
 					}
 					due = append(due, remintDue{id: w.ID, reason: *w.CancelReason})
 					continue
 				}
-				allEnded = false
+				if err := e.releaseFromBatchTx(tx, w, v); err != nil {
+					return err
+				}
 				continue
 			}
 			depth := int(min(wt.Confs, int64(w.FinalDepth)))
@@ -174,16 +199,19 @@ func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) ([
 			if err := tx.Model(&db.CashWithdrawBatch{}).Where("id = ?", v.BatchID).Update("state", db.CashBatchSettled).Error; err != nil {
 				return err
 			}
-			var vs []db.CashWithdrawVersion
-			if err := tx.Where("batch_id = ?", v.BatchID).Find(&vs).Error; err != nil {
-				return err
-			}
-			var ins []string
-			for i := range vs {
-				ins = append(ins, inputsOf(&vs[i])...)
-			}
+			// Only the confirmed version's inputs are spent; a coin only a
+			// replaced or conflicted version used is still the wallet's.
+			ins := append(inputsOf(v), "")
 			if err := tx.Model(&db.CashWithdrawCoin{}).Where("outpoint IN ?", ins).
 				Updates(map[string]interface{}{"state": db.CashCoinSpent, "withdrawal_id": nil}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&db.CashWithdrawCoin{}).Where("batch_id = ? AND state = ? AND outpoint NOT IN ?", v.BatchID, db.CashCoinInVersion, ins).
+				Pluck("outpoint", &freed).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&db.CashWithdrawCoin{}).Where("outpoint IN ?", append(freed, "")).
+				Updates(map[string]interface{}{"state": db.CashCoinAvailable, "withdrawal_id": nil, "batch_id": nil, "leased_until": nil}).Error; err != nil {
 				return err
 			}
 			if err := tx.Model(&db.CashWithdrawVersion{}).Where("id = ?", v.ID).Update("state", db.CashVersionFinal).Error; err != nil {
@@ -192,7 +220,28 @@ func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) ([
 		}
 		return nil
 	})
-	return due, err
+	return due, freed, err
+}
+
+// releaseFromBatchTx takes a payout out of a batch whose confirmed version v,
+// at the payout's final_depth, does not pay it: every version that pays it
+// conflicts with v, so none can confirm. It keeps its about-to-sign mark and
+// its set-aside; its own coins v did not spend are set aside for it again,
+// and the build step pays it in a new batch.
+func (e *Engine) releaseFromBatchTx(tx *gorm.DB, w *db.CashWithdrawal, v *db.CashWithdrawVersion) error {
+	ins := append(inputsOf(v), "")
+	if err := tx.Model(&db.CashWithdrawCoin{}).Where("withdrawal_id = ? AND state = ? AND batch_id = ? AND outpoint NOT IN ?",
+		w.ID, db.CashCoinInVersion, v.BatchID, ins).
+		Updates(map[string]interface{}{"state": db.CashCoinSetAside, "batch_id": nil}).Error; err != nil {
+		return err
+	}
+	if err := tx.Model(&db.CashWithdrawal{}).Where("id = ? AND batch_id = ?", w.ID, v.BatchID).
+		Update("batch_id", nil).Error; err != nil {
+		return err
+	}
+	logger.Logger.Warn().Uint("withdrawal_id", w.ID).Uint("batch_id", v.BatchID).
+		Msg("An earlier version of a payout's batch confirmed without it; the payout is paid in a new batch")
+	return nil
 }
 
 // onReorged returns a version whose block left the best chain to broadcast,
