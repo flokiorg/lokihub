@@ -80,6 +80,15 @@ func (e *Engine) cancelStep(ctx context.Context, p lnclient.OnchainPayer, tip in
 				w.CancelReason = &reason
 			}
 		}
+		if w.CancelReason != nil && *w.CancelReason != db.CashWithdrawCancelNoRecord && w.BatchID == nil && w.Signed {
+			// Released from a batch whose final version does not pay it, and
+			// in no new one yet: no version of it can confirm, so it is
+			// cancelled at once.
+			if err := e.cancelReleased(ctx, p, id, w); err != nil {
+				return err
+			}
+			continue
+		}
 		if w.CancelReason != nil && *w.CancelReason != db.CashWithdrawCancelNoRecord && w.BatchID != nil {
 			if err := e.invalidate(ctx, p, tip, rates, *w.BatchID); err != nil {
 				return err
@@ -89,12 +98,57 @@ func (e *Engine) cancelStep(ctx context.Context, p lnclient.OnchainPayer, tip in
 	return nil
 }
 
+// cancelReleased cancels and re-mints a payout released from its batch: its
+// set-aside and coins are returned first.
+func (e *Engine) cancelReleased(ctx context.Context, p lnclient.OnchainPayer, id [32]byte, w *db.CashWithdrawal) error {
+	var coins []string
+	err := e.S.DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockTx(tx, w.HubAppID); err != nil {
+			return err
+		}
+		var cur db.CashWithdrawal
+		if err := tx.Where("id = ?", w.ID).Limit(1).Find(&cur).Error; err != nil {
+			return err
+		}
+		if cur.BatchID != nil || cur.State == db.CashWithdrawCancelled {
+			return nil
+		}
+		if err := tx.Model(&db.CashWithdrawCoin{}).Where("state = ? AND withdrawal_id = ?", db.CashCoinSetAside, w.ID).
+			Pluck("outpoint", &coins).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&db.CashWithdrawCoin{}).Where("state = ? AND withdrawal_id = ?", db.CashCoinSetAside, w.ID).
+			Updates(map[string]interface{}{"state": db.CashCoinAvailable, "withdrawal_id": nil, "leased_until": nil}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&db.CashWithdrawSetAside{}, "withdrawal_id = ?", w.ID).Error
+	})
+	if err != nil {
+		return err
+	}
+	for _, c := range coins {
+		_ = p.ReleaseOutput(ctx, id, c)
+	}
+	if _, err := e.S.Remint(ctx, w.ID, *w.CancelReason); err != nil && err != ErrAlreadyReminted {
+		logger.Logger.Error().Err(err).Uint("withdrawal_id", w.ID).Msg("Re-mint of a released payout failed; retried next pass")
+	}
+	return nil
+}
+
 // invalidate builds the batch's invalidating transaction unless a live one
 // already excludes every payout being cancelled (then bumping keeps it moving).
+// While a version of the batch is confirmed nothing is built: its inputs are
+// spent, so no invalidation could confirm; that version, at final_depth,
+// invalidates every payout it does not pay (onConfirmed).
 func (e *Engine) invalidate(ctx context.Context, p lnclient.OnchainPayer, tip int64, rates Rates, batchID uint) error {
 	vs, err := e.batchVersions(e.S.DB, batchID)
 	if err != nil {
 		return err
+	}
+	for i := range vs {
+		if vs[i].State == db.CashVersionConfirmed || vs[i].State == db.CashVersionFinal {
+			return nil
+		}
 	}
 	ws, err := e.batchPayouts(e.S.DB, batchID)
 	if err != nil {
