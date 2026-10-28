@@ -117,7 +117,12 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 		check.Blockers = append(check.Blockers, CashHubDeleteBlocker{Kind: CashHubBlockerLiveBills, Count: bills})
 	}
 	var records []db.CashRequestRecord
-	if err := tx.Select("id", "drop_after").Where("hub_app_id = ? AND method <> ?", hubID, constants.NIP47MethodCashOrder).
+	// Order and withdraw records are kept by their own rules and reported by
+	// their own blockers (orders below; withdrawals registered by cashwithdraw),
+	// with their real times: counting them here too named them "kept until
+	// their bills are gone" with no time at all.
+	if err := tx.Select("id", "drop_after").Where("hub_app_id = ? AND method NOT IN ?", hubID,
+		[]string{constants.NIP47MethodCashOrder, constants.NIP47MethodCashWithdraw}).
 		Find(&records).Error; err != nil {
 		return check, err
 	}
