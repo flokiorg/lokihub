@@ -36,13 +36,14 @@ type fakeNode struct {
 	tipFn   func() int64
 	privHex string
 	signErr error
+	tipErr  error
 	payer   lnclient.OnchainPayer
 }
 
 func (n *fakeNode) Tip(context.Context) (int64, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return n.tip, nil
+	return n.tip, n.tipErr
 }
 func (n *fakeNode) HRP(context.Context) (string, error) {
 	return chaincfg.RegressionNetParams.Bech32HRPSegwit, nil
@@ -62,6 +63,7 @@ func (n *fakeNode) SignEvent(_ context.Context, ev *nip01.Event) error {
 }
 func (n *fakeNode) Payer() lnclient.OnchainPayer { return n.payer }
 func (n *fakeNode) setTip(t int64)               { n.mu.Lock(); n.tip = t; n.mu.Unlock() }
+func (n *fakeNode) setTipErr(err error)          { n.mu.Lock(); n.tipErr = err; n.mu.Unlock() }
 
 // fakePayer answers the two calls the withdrawal service makes before the
 // engine: fee estimates and the wallet's scripts.

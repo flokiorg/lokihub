@@ -526,3 +526,68 @@ func mustJSON(t *testing.T, v any) string {
 	require.NoError(t, err)
 	return string(b)
 }
+
+// A3-LH-2 / G3: the commit judges the quote and the slice by the tip and the
+// bill row read under its locks, not by the reads made before them.
+func TestU_4_11_CommitRereadsUnderLock(t *testing.T) {
+	// atLock runs f once when the commit holds its locks.
+	atLock := func(w *world, f func()) {
+		w.s.Hooks = &TestHooks{Before: func(s string) error {
+			if s == StageAfterLock {
+				f()
+			}
+			return nil
+		}}
+	}
+	refused := func(t *testing.T, w *world, bill *db.App, hs []holder, q *nipcash.WithdrawQuote, want string, detail nipcash.Detail) {
+		t.Helper()
+		before := w.snapshot(t)
+		bal := balance(w, bill.ID)
+		_, err := w.withdraw(t, bill, hs[0], request(t, bill, nipcash.BySigning(hs[0].priv), q, newRID(), nil))
+		if want == "" {
+			require.Error(t, err)
+		} else {
+			requireCode(t, err, want, detail)
+		}
+		after := w.snapshot(t)
+		assert.Equal(t, before.used+1, after.used, "the id stays used")
+		after.used = before.used
+		assert.Equal(t, before, after, "nothing committed, the slice still live")
+		assert.Equal(t, bal, balance(w, bill.ID), "no payout held")
+	}
+
+	t.Run("tip past holds_until at the lock", func(t *testing.T) {
+		w := newWorld(t)
+		bill, hs := w.mintPubkey(t, 21_000_000, 1_000_000)
+		q := w.mustQuote(t, bill, hs[0], address(t, 0, 20))
+		atLock(w, func() { w.node.setTip(q.HoldsUntil + 1) })
+		refused(t, w, bill, hs, q, constants.ERROR_RESTRICTED, nipcash.DetailQuoteExpired)
+	})
+	t.Run("tip at holds_until at the lock", func(t *testing.T) {
+		w := newWorld(t)
+		bill, hs := w.mintPubkey(t, 21_000_000, 1_000_000)
+		q := w.mustQuote(t, bill, hs[0], address(t, 0, 20))
+		atLock(w, func() { w.node.setTip(q.HoldsUntil) })
+		_, err := w.withdraw(t, bill, hs[0], request(t, bill, nipcash.BySigning(hs[0].priv), q, newRID(), nil))
+		require.NoError(t, err)
+	})
+	t.Run("tip unreadable at the lock", func(t *testing.T) {
+		w := newWorld(t)
+		bill, hs := w.mintPubkey(t, 21_000_000, 1_000_000)
+		q := w.mustQuote(t, bill, hs[0], address(t, 0, 20))
+		atLock(w, func() { w.node.setTipErr(errors.New("node unreachable")) })
+		refused(t, w, bill, hs, q, "", "")
+	})
+	t.Run("bill expired since the caller read it", func(t *testing.T) {
+		w := newWorld(t)
+		bill, hs := w.mintPubkey(t, 21_000_000, 1_000_000)
+		q := w.mustQuote(t, bill, hs[0], address(t, 0, 20))
+		// The caller's row is stale: the bill expired since it was read. (The
+		// row cannot be written from a hook while the commit holds the
+		// SQLite write lock.)
+		stale := *bill
+		past := w.clock().Add(-time.Second)
+		require.NoError(t, w.svc.DB.Model(&db.App{}).Where("id = ?", bill.ID).Update("expires_at", past).Error)
+		refused(t, w, &stale, hs, q, constants.ERROR_RESTRICTED, "")
+	})
+}
