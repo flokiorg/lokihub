@@ -411,7 +411,7 @@ func (e *Engine) finalizeAndStore(ctx context.Context, p lnclient.OnchainPayer, 
 	if !matchesRecord(&mtx, v) {
 		e.InvariantFailures.Add(1)
 		logger.Logger.Error().Uint("version_id", v.ID).Msg("A signed version differs from its record; kept as possibly signed, never broadcast")
-		return e.S.DB.Model(&db.CashWithdrawVersion{}).Where("id = ?", v.ID).Update("state", db.CashVersionInvalid).Error
+		return e.S.DB.Model(&db.CashWithdrawVersion{}).Where("id = ?", v.ID).Update("state", db.CashVersionMismatch).Error
 	}
 	values, err := e.coinValues(e.S.DB, inputsOf(v))
 	if err != nil {
