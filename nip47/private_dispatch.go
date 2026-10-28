@@ -261,7 +261,8 @@ func (svc *nip47Service) servePrivateItem(
 		omitted(item, "method maps to no permission scope")
 		return transport.Result{}, false
 	}
-	if hasPermission, code, message := svc.permissionsService.HasPermission(&app, scope); !hasPermission {
+	if hasPermission, code, message := svc.permissionsService.HasPermission(&app, scope); !hasPermission &&
+		!svc.statusOfExpiredBill(&app, item.Method, scope) {
 		return transport.Result{
 			ID:         item.ID,
 			ResultType: item.Method,
@@ -507,6 +508,22 @@ type targetGoneKey struct{}
 func reservedAfterTargetGone(ctx context.Context) bool {
 	v, _ := ctx.Value(targetGoneKey{}).(bool)
 	return v
+}
+
+// statusOfExpiredBill reports a cash_status on a cash wallet that holds the
+// scope and is refused only because its deadline passed: NIP-CASH answers
+// cash_status with the roster and its expires_at whatever the expiry (only
+// the spending methods refuse a slice past its expiry, RESTRICTED), so a
+// client can read the deadline that passed.
+func (svc *nip47Service) statusOfExpiredBill(app *db.App, method, scope string) bool {
+	if method != constants.NIP47MethodCashStatus || app.Kind != db.AppKindCashWallet {
+		return false
+	}
+	var n int64
+	if err := svc.db.Model(&db.AppPermission{}).Where("app_id = ? AND scope = ?", app.ID, scope).Count(&n).Error; err != nil {
+		return false
+	}
+	return n > 0
 }
 
 // appExists reports whether the app row id is still there; a read error counts
