@@ -172,6 +172,19 @@ func (svc *FLNDService) ListLeases(ctx context.Context) ([]lnclient.Lease, error
 // FundPsbtFixed decorates every input of the template with its wallet output
 // (the signer needs it) and leases it under id; it selects no coin and adds no
 // change, so the transaction stays exactly as built.
+//
+// An input the wallet lists as unspent is decorated from that listing. An input
+// it no longer lists is one an unmined version of our own already spends: a
+// replacement (an RBF bump, or an invalidation) of a broadcast version re-uses
+// its inputs, and the wallet leaves a coin an unmined transaction spends out of
+// ListUnspent. Such an input is decorated from its parent transaction, read
+// from the wallet, and only when the wallet marks that output its own. The
+// wallet still knows the coin (an unmined spend keeps it unspent in its store),
+// so it leases and signs it like any other. A coin a confirmed transaction
+// spent is gone: its lease fails "unknown output", and the call fails.
+//
+// On failure the call releases the leases it took itself, never one id held
+// before the call (the payout engine's own lease on a set-aside coin).
 func (svc *FLNDService) FundPsbtFixed(ctx context.Context, raw []byte, id [32]byte, lockSecs int64) ([]byte, error) {
 	p, err := psbt.NewFromRawBytes(bytes.NewReader(raw), false)
 	if err != nil {
@@ -181,27 +194,112 @@ func (svc *FLNDService) FundPsbtFixed(ctx context.Context, raw []byte, id [32]by
 	if err != nil {
 		return nil, err
 	}
-	byOutpoint := map[string]lnclient.Utxo{}
-	for _, u := range utxos {
-		byOutpoint[u.Outpoint] = u
+	leases, err := svc.ListLeases(ctx)
+	if err != nil {
+		return nil, err
 	}
-	for i, in := range p.UnsignedTx.TxIn {
-		o := in.PreviousOutPoint.String()
-		u, ok := byOutpoint[o]
-		if !ok {
-			return nil, fmt.Errorf("input %s is not an unspent wallet coin", o)
+	held := map[string]bool{}
+	for _, l := range leases {
+		if l.LeaseID == id {
+			held[l.Outpoint] = true
 		}
-		if _, err := svc.LeaseOutput(ctx, id, o, lockSecs); err != nil {
-			return nil, fmt.Errorf("lease input %s: %w", o, err)
-		}
-		p.Inputs[i].WitnessUtxo = wire.NewTxOut(u.ValueSat, u.Script)
-		p.Inputs[i].SighashType = sighashFor(u.Script)
+	}
+	err = fundFixed(p, utxos, held,
+		func(op wire.OutPoint) (*wire.TxOut, error) { return svc.ownParentOutput(ctx, op) },
+		func(o string) error { _, err := svc.LeaseOutput(ctx, id, o, lockSecs); return err },
+		func(o string) { _ = svc.ReleaseOutput(ctx, id, o) })
+	if err != nil {
+		return nil, err
 	}
 	var buf bytes.Buffer
 	if err := p.Serialize(&buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// fundFixed decorates and leases p's inputs: from utxos when listed, else
+// from ownOutput (the wallet's own output of the parent transaction). It
+// releases the leases it took, except those in held, when an input fails.
+func fundFixed(p *psbt.Packet, utxos []lnclient.Utxo, held map[string]bool,
+	ownOutput func(wire.OutPoint) (*wire.TxOut, error), lease func(string) error, release func(string)) error {
+	byOutpoint := map[string]lnclient.Utxo{}
+	for _, u := range utxos {
+		byOutpoint[u.Outpoint] = u
+	}
+	var took []string
+	fail := func(err error) error {
+		for _, o := range took {
+			release(o)
+		}
+		return err
+	}
+	for i, in := range p.UnsignedTx.TxIn {
+		o := in.PreviousOutPoint.String()
+		var out *wire.TxOut
+		if u, ok := byOutpoint[o]; ok {
+			out = wire.NewTxOut(u.ValueSat, u.Script)
+		} else {
+			parent, err := ownOutput(in.PreviousOutPoint)
+			if err != nil {
+				return fail(fmt.Errorf("input %s is not a wallet coin: %w", o, err))
+			}
+			out = parent
+		}
+		if err := lease(o); err != nil {
+			return fail(fmt.Errorf("lease input %s: %w", o, err))
+		}
+		if !held[o] {
+			took = append(took, o)
+		}
+		p.Inputs[i].WitnessUtxo = out
+		p.Inputs[i].SighashType = sighashFor(out.PkScript)
+	}
+	return nil
+}
+
+// errNotOwnOutput is an outpoint the wallet holds no output of.
+var errNotOwnOutput = errors.New("not an output of the wallet")
+
+// ownParentOutput is op's output, read from its parent transaction in the
+// wallet, when the wallet marks it its own.
+func (svc *FLNDService) ownParentOutput(ctx context.Context, op wire.OutPoint) (*wire.TxOut, error) {
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+	tx, err := svc.client.WalletKit().GetTransaction(ctx, &walletrpc.GetTransactionRequest{Txid: op.Hash.String()})
+	if err != nil {
+		if txUnknown(err) {
+			return nil, errNotOwnOutput
+		}
+		return nil, err
+	}
+	return parentOutput(tx, op.Index)
+}
+
+// parentOutput is output index of the wallet transaction tx, when the wallet
+// marks it its own.
+func parentOutput(tx *lnrpc.Transaction, index uint32) (*wire.TxOut, error) {
+	rawTx, err := hex.DecodeString(tx.RawTxHex)
+	if err != nil {
+		return nil, err
+	}
+	var msg wire.MsgTx
+	if err := msg.Deserialize(bytes.NewReader(rawTx)); err != nil {
+		return nil, err
+	}
+	if int(index) >= len(msg.TxOut) {
+		return nil, fmt.Errorf("output %d of a %d-output transaction", index, len(msg.TxOut))
+	}
+	own := false
+	for _, d := range tx.OutputDetails {
+		if d.OutputIndex == int64(index) && d.IsOurAddress {
+			own = true
+		}
+	}
+	if !own {
+		return nil, errNotOwnOutput
+	}
+	return msg.TxOut[index], nil
 }
 
 func (svc *FLNDService) FinalizePsbt(ctx context.Context, funded []byte) ([]byte, error) {
