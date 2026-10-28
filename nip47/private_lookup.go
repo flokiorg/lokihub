@@ -458,6 +458,12 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 	var rec db.CircleJoinRecord
 	err := svc.db.Where("hub_wallet_pubkey = ? AND authorizer_pubkey = ? AND connection_pubkey = ?",
 		item.Target, signer, params.ConnectionPubkey).First(&rec).Error
+	if err == nil && rec.Deadline < hubclock.Now().Unix()-nipcash.JoinLookupWindow && !svc.appExists(rec.WalletAppID) {
+		// A record the Hub may drop already (its wallet deleted, the lookup
+		// window over) is answered as dropped, whenever the sweep gets to it:
+		// the lookup then answers expired (NIP-CW §Lost Join Reply).
+		err = gorm.ErrRecordNotFound
+	}
 	if err == nil {
 		body, err := json.Marshal(map[string]string{"encrypted_details": rec.EncryptedDetails})
 		if err != nil {
