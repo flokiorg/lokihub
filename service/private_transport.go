@@ -262,6 +262,13 @@ func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, 
 	case transport.ServeDrop:
 		return nil, conversationKey, fmt.Errorf("dropped: %w", verdict.Reason)
 	case transport.ServeRefuse:
+		// Past E4 the nonce counts as served, refused or not (§Serving an
+		// Envelope): an E5/E6 refusal, or a later BAD_REQUEST, marks it, so a
+		// replay of the refused envelope is dropped at E3, not answered again.
+		if refusalPastE4([]byte(plaintext), limits, now) &&
+			!pt.nonces.MarkServed(verdict.Envelope.Nonce, verdict.Envelope.NotAfter) {
+			return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", verdict.Envelope.Nonce[:8])
+		}
 		return nil, conversationKey, &envelopeRefusal{code: verdict.Code, header: verdict.Envelope, reason: verdict.Reason}
 	}
 	envelope := verdict.Envelope

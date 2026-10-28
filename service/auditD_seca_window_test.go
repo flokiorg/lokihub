@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -162,19 +163,17 @@ func TestAuditD_SecA_HubEnforcesItsOwnAnnouncedCap(t *testing.T) {
 	}
 }
 
-// TestAuditD_SecA_OversizeDoesNotConsumeReplayState checks the side-effect ordering.
+// TestAuditD_SecA_OversizeConsumesItsNonce checks the side-effect ordering.
 //
-// unwrap's documented order is decode -> freshness -> replay, specifically so a bad
-// envelope cannot burn a slot in a bounded nonce set. An oversize envelope is rejected
-// at decode, so its nonce must stay unused — otherwise an attacker inside the window
-// could pre-poison the nonces of envelopes a legitimate client has not sent yet.
-func TestAuditD_SecA_OversizeDoesNotConsumeReplayState(t *testing.T) {
+// An oversize envelope is refused at E5, past E4, and NIP-CASH §Serving an
+// Envelope counts a nonce served once its envelope passes E4, refused or not:
+// the same nonce sent again, even at a legal size, is a replay and is dropped
+// at E3. The nonce sits inside the NIP-44 ciphertext, so no one but the client
+// can spend it ahead of time.
+func TestAuditD_SecA_OversizeConsumesItsNonce(t *testing.T) {
 	pt, sealRaw := auditDSecAWindowTransport(t)
 	limits := transport.DefaultLimits()
 
-	// Build one oversize envelope, remember its nonce, then re-send the SAME nonce at a
-	// legal size. If the oversize attempt had recorded the nonce, the legal one would be
-	// refused as a replay.
 	oversize := auditDSecAEnvelopeOfExactly(t, 60000)
 	var decoded transport.Envelope
 	require.NoError(t, json.Unmarshal(oversize, &decoded))
@@ -182,6 +181,8 @@ func TestAuditD_SecA_OversizeDoesNotConsumeReplayState(t *testing.T) {
 
 	_, _, err := pt.unwrap(sealRaw(t, oversize), limits, time.Now())
 	require.ErrorIs(t, err, transport.ErrEnvelopeTooLarge)
+	var refusal *envelopeRefusal
+	require.ErrorAs(t, err, &refusal, "an E5 refusal is answered, not dropped")
 
 	legal := auditDSecAEnvelopeOfExactly(t, limits.PadBucketBytes)
 	var legalEnv transport.Envelope
@@ -191,8 +192,14 @@ func TestAuditD_SecA_OversizeDoesNotConsumeReplayState(t *testing.T) {
 	require.NoError(t, err)
 
 	got, _, err := pt.unwrap(sealRaw(t, reseal), limits, time.Now())
-	require.NoError(t, err, "an oversize envelope must not have consumed its nonce")
-	require.Equal(t, nonce, got.Nonce)
+	require.Error(t, err, "the E5 refusal served the nonce, so its reuse is a replay")
+	require.Nil(t, got)
+	assert.Contains(t, err.Error(), "already served")
+
+	// The refused envelope itself, replayed, is dropped rather than refused again.
+	_, _, err = pt.unwrap(sealRaw(t, oversize), limits, time.Now())
+	require.Error(t, err)
+	assert.False(t, errors.As(err, &refusal), "a replayed refused envelope is dropped at E3")
 }
 
 // TestAuditD_SecA_HonestClientCannotBuildIntoTheWindow is the outbound half of the same
