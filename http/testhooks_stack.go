@@ -108,7 +108,7 @@ func (t *testHooks) registerStackTestHooks(g *echo.Group) {
 	})
 
 	// flspd's dashboard, as its operator (I-83, I-84): POST
-	// /api/test/flspd/fee/raise and /fee/restore change the LSP's opening fee
+	// /api/test/flspd/fee/raise and /fee/restore change the LSP's terms
 	// (a hot-swap through update_config); /announce/{pause,resume,unlist} set
 	// its NIP-LSP announcement state (set_announce_state).
 	f := &flspdDashboard{}
@@ -248,8 +248,11 @@ func (f *flspdDashboard) call(ctx context.Context, method string, params, out an
 	return nil
 }
 
-// fee raises the LSP's opening fee (twice the rate plus 1%, the floor up 1,000
-// loki) or restores the one in force before the first raise.
+// fee raises the LSP's terms or restores the ones in force before the first
+// raise. The raise doubles the opening fee rate plus 1 % and lifts its floor by
+// 1,000 loki (the LSPS2 menu, which flspd syncs from its config only at start)
+// and lifts the smallest channel by 1,000 loki (LSPS1's min_channel_balance,
+// which flspd reads live).
 func (f *flspdDashboard) fee(ctx context.Context, raise bool) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -259,29 +262,33 @@ func (f *flspdDashboard) fee(ctx context.Context, raise bool) (map[string]any, e
 	if err := f.call(ctx, "get_config", map[string]any{}, &got); err != nil {
 		return nil, err
 	}
-	cur, _ := got.Config["opening_fee"].(map[string]any)
-	if cur == nil {
-		return nil, fmt.Errorf("flspd's config has no opening_fee block")
+	fee, _ := got.Config["opening_fee"].(map[string]any)
+	size, _ := got.Config["channel_size"].(map[string]any)
+	if fee == nil || size == nil {
+		return nil, fmt.Errorf("flspd's config has no opening_fee or channel_size block")
 	}
 	switch {
 	case raise:
 		if !f.hasSave {
-			f.saved, f.hasSave = cloneJSON(cur), true
+			f.saved, f.hasSave = cloneJSON(map[string]any{"opening_fee": fee, "channel_size": size}), true
 		}
-		rate, _ := cur["rate_percent"].(float64)
-		floor, _ := cur["min_loki"].(float64)
-		cur["rate_percent"] = rate*2 + 1
-		cur["min_loki"] = floor + 1000
+		rate, _ := fee["rate_percent"].(float64)
+		floor, _ := fee["min_loki"].(float64)
+		fee["rate_percent"] = rate*2 + 1
+		fee["min_loki"] = floor + 1000
+		minChan, _ := size["min_loki"].(float64)
+		size["min_loki"] = minChan + 1000
 	case f.hasSave:
-		got.Config["opening_fee"] = f.saved
+		saved, _ := f.saved.(map[string]any)
+		got.Config["opening_fee"], got.Config["channel_size"] = saved["opening_fee"], saved["channel_size"]
 		f.hasSave = false
 	default:
-		return map[string]any{"opening_fee": cur, "changed": false}, nil
+		return map[string]any{"opening_fee": fee, "channel_size": size, "changed": false}, nil
 	}
 	if err := f.call(ctx, "update_config", map[string]any{"config": got.Config}, nil); err != nil {
 		return nil, err
 	}
-	return map[string]any{"opening_fee": got.Config["opening_fee"], "changed": true}, nil
+	return map[string]any{"opening_fee": got.Config["opening_fee"], "channel_size": got.Config["channel_size"], "changed": true}, nil
 }
 
 func cloneJSON(v any) any {
