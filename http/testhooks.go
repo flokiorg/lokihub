@@ -217,4 +217,5 @@ func (httpSvc *HttpService) registerTestHooks(full *echo.Group) {
 		}
 		return c.JSON(http.StatusOK, map[string]string{"address": addr})
 	}))
+	t.registerStackTestHooks(g)
 }

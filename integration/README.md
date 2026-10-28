@@ -57,6 +57,12 @@ regtest, and release builds never contain them:
 | `POST /api/test/payer/invoice {amount_millis}` | an invoice from the payer, for an external payment |
 | `GET /api/test/payer/invoice/{hash}` | that invoice's state |
 | `GET /api/test/payer/address` | a fresh payer address |
+| `POST /api/test/chain/reorg {depth}` | reorganises the last `depth` blocks (default 1) away and mines `depth + 1` new ones to the payer, leaving out withheld transactions |
+| `POST /api/test/circle/fund {wallet_pubkey, amount_millis}` | an invoice on that wallet's app (a Circle Wallet's Hub-settled one), paid by the payer |
+| `POST /api/test/relay/min-pow {difficulty}` | the relay enforces and announces that NIP-13 minimum (0 clears); its supervisor restarts the relay process, and the hook answers once NIP-11 shows it |
+| `POST /api/test/restart` | the backend stops and air runs it again, reloading the Hub from its store; `202` at once, back when `GET /api/info` answers |
+| `POST /api/test/flspd/fee/{raise,restore}` | raises flspd's opening fee (rate twice plus 1 %, floor plus 1,000 loki) by its dashboard, or restores it |
+| `POST /api/test/flspd/announce/{pause,resume,unlist}` | sets flspd's NIP-LSP announcement state by its dashboard |
 
 `relay_url` is the Hub's own relay (the `RELAY` value in `.env`), and it must be
 one of the Hub's `GeneralRelay` settings, which the backend's `follow_set`
