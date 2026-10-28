@@ -240,7 +240,7 @@ func (s *Service) Withdraw(ctx context.Context, bill *db.App, c Caller, meta Cal
 				used, err := store.IsProofConsumed(id)
 				return err == nil && used
 			},
-		}, now)
+		}, s.proofNow())
 		if vErr != nil {
 			var ce *nipcash.ClaimError
 			if errors.As(vErr, &ce) && ce.Code == nipcash.ErrCodeRestricted {
