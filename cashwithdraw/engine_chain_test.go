@@ -1,15 +1,20 @@
 package cashwithdraw
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/go-flokicoin/chainutil/psbt"
+
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/lnclient"
+	"github.com/flokiorg/lokihub/tests/fakechain"
 )
 
 // U-24.5 / U-24.10: a reorganisation takes a confirmed payout back to broadcast,
@@ -342,4 +347,47 @@ func TestU_24_16_UnconfirmedBound(t *testing.T) {
 	v, err := UnconfirmedValueTx(w.svc.DB)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(wd.PayoutMillis), v)
+}
+
+// childFundFails is the chain whose node cannot fund a one-input child: the
+// parent's change output is not an unspent wallet coin (the parent left the
+// node's mempool).
+type childFundFails struct{ *fakechain.Chain }
+
+func (c childFundFails) FundPsbtFixed(ctx context.Context, raw []byte, id [32]byte, lockSecs int64) ([]byte, error) {
+	p, err := psbt.NewFromRawBytes(bytes.NewReader(raw), false)
+	if err == nil && len(p.UnsignedTx.TxIn) == 1 && len(p.UnsignedTx.TxOut) == 1 {
+		return nil, fmt.Errorf("input %s is not an unspent wallet coin", p.UnsignedTx.TxIn[0].PreviousOutPoint)
+	}
+	return c.Chain.FundPsbtFixed(ctx, raw, id, lockSecs)
+}
+
+// A batch whose bump fails (a child its node cannot fund) is retried next
+// pass; it does not stop the pass, so another batch's payout is still built,
+// broadcast and paid.
+func TestEngine_FailedBumpDoesNotStopOtherPayouts(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	wd := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	txid := *w.payout(t, wd.ID).Txid
+	w.chain.Mine(1)
+	w.pass(t)
+	w.chain.Reorg(1, txid)
+	w.pass(t)
+	require.Equal(t, db.CashWithdrawBroadcast, w.payout(t, wd.ID).State)
+
+	w.node.payer = childFundFails{w.chain}
+	w.chain.Withhold(txid, true)
+	w.chain.Mine(7)
+	require.NoError(t, w.eng.Pass(context.TODO()), "the failed child is the batch's own")
+
+	other := w.commitTo(t, 31_000_000)
+	w.passAfterWindow(t)
+	got := w.payout(t, other.ID)
+	require.NotNil(t, got.Txid, "the other payout is built and broadcast")
+	w.chain.Withhold(txid, false)
+	w.chain.Mine(7)
+	w.pass(t)
+	assert.Equal(t, db.CashWithdrawFinal, w.payout(t, other.ID).State)
+	assert.Equal(t, db.CashWithdrawFinal, w.payout(t, wd.ID).State)
 }
