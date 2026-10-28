@@ -262,7 +262,7 @@ func TestU25_5_Republish(t *testing.T) {
 	f.clock.add(1)
 	f.s.Tick(ctx)
 	assert.Equal(t, 2, countKind(f, nmlisting.KindListing))
-	assert.Equal(t, int64(startClock+RepublishSecs), int64(lastListing(t, f).CreatedAt))
+	assert.EqualValues(t, startClock+RepublishSecs, lastListing(t, f).CreatedAt)
 
 	// A relay change republishes at once (on the next tick).
 	f.clock.add(5)
@@ -551,7 +551,7 @@ func TestRelistAfterDeletion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, v.ID, v2.ID)
 	assert.Equal(t, "open", v2.Status)
-	assert.Greater(t, v2.LastCreatedAt, int64(del.CreatedAt))
+	assert.Greater(t, v2.LastCreatedAt, int64(del.CreatedAt)) //nolint:gosec // a unix time
 	assert.NotZero(t, v2.ConnAppID)
 }
 
@@ -564,7 +564,7 @@ func TestPreview(t *testing.T) {
 	ev, err := f.s.Preview(context.Background(), v.ID)
 	require.NoError(t, err)
 	assert.Empty(t, ev.Sig)
-	assert.Greater(t, int64(ev.CreatedAt), v.LastCreatedAt)
+	assert.Greater(t, int64(ev.CreatedAt), v.LastCreatedAt) //nolint:gosec // a unix time
 	raw, _ := json.Marshal(ev)
 	assert.Contains(t, string(raw), "circlehub1")
 }

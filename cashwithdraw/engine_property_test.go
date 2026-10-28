@@ -92,7 +92,7 @@ func TestU_24_3_Property(t *testing.T) {
 }
 
 func propertyRun(t *testing.T, seed int64) {
-	rng := rand.New(rand.NewSource(seed))
+	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // a seeded, reproducible property run, not a secret
 	w := newEngineWorld(t, 8)
 	n := 1 + rng.Intn(4)
 	// Some payouts commit after a first pass, so they join a batch whose
@@ -103,7 +103,7 @@ func propertyRun(t *testing.T, seed int64) {
 		if i == split {
 			w.passAfterWindow(t)
 		}
-		ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000)))
+		ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000))) //nolint:gosec // Intn is never negative
 	}
 	base := w.conserved(t)
 	check := func() {
@@ -190,9 +190,9 @@ func propertyRun(t *testing.T, seed int64) {
 			// replacement (R2-P-H1).
 			// The holder's proof is signed at the real time, which must be
 			// fresh at the Hub's clock.
-			if len(ws) < 7 && w.clock().Sub(time.Now()) < 200*time.Second {
+			if len(ws) < 7 && time.Until(w.clock()) < 200*time.Second {
 				before := w.conserved(t)
-				ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000)))
+				ws = append(ws, w.commitTo(t, uint64(5_000_000+rng.Intn(50)*1_000_000))) //nolint:gosec // Intn is never negative
 				require.Equal(t, before, w.conserved(t), "seed %d: a commit conserves value", seed)
 				w.passAfterWindow(t)
 			}

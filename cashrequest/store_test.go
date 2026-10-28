@@ -75,10 +75,10 @@ func TestU_3_3_ConcurrentMarksOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			switch err := s.MarkUsed(rid(3), "mint_cash"); {
-			case err == nil:
+			switch err := s.MarkUsed(rid(3), "mint_cash"); err {
+			case nil:
 				wins.Add(1)
-			case err == cashrequest.ErrRequestReused:
+			case cashrequest.ErrRequestReused:
 				reused.Add(1)
 			}
 		}()

@@ -287,7 +287,7 @@ func TestCommit_RecordRebuildsEveryTokenByteForByte(t *testing.T) {
 		require.NoError(t, err)
 		amount := uint64(b.AmountMillis) //nolint:gosec // positive
 		tok := nipcash.Token{HRP: constants.CashTokenHRP, WalletPubkey: b.WalletPubkey, Secret: secret, RelayURLs: relays,
-			MintSignature: sig, AttestedAmountMillis: &amount, Scheme: nipcash.SignatureScheme(b.Scheme)}
+			MintSignature: sig, AttestedAmountMillis: &amount, Scheme: nipcash.SignatureScheme(b.Scheme)} //nolint:gosec // the column holds a SignatureScheme byte
 		if b.IdentityRequired != nil {
 			v := *b.IdentityRequired == 1
 			tok.IdentityRequired = &v

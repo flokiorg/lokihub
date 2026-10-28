@@ -51,7 +51,7 @@ func newEngineWorld(t *testing.T, coins int) *engineWorld {
 	t.Helper()
 	w := newWorld(t)
 	// A one-second batch window keeps the clock near the proofs' time.
-	w.svc.Cfg.GetEnv().WithdrawEnv.CashWithdrawBatchWindowSecs = 1
+	w.svc.Cfg.GetEnv().CashWithdrawBatchWindowSecs = 1
 	chain := fakechain.New()
 	chain.SetNow(w.clock)
 	for range coins {

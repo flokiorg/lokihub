@@ -27,7 +27,7 @@ func LockApp(tx *gorm.DB, appID uint) error {
 	if tx.Name() != "postgres" {
 		return nil
 	}
-	if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(appID)).Error; err != nil {
+	if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(appID)).Error; err != nil { //nolint:gosec // a row id, far below MaxInt64
 		return fmt.Errorf("lock app %d: %w", appID, err)
 	}
 	return nil

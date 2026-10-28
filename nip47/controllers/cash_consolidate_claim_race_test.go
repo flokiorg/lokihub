@@ -30,7 +30,7 @@ type raceLosingApps struct {
 func (a raceLosingApps) GetAppById(id uint) *db.App {
 	if !*a.claimed {
 		*a.claimed = true
-		_, _ = a.AppsService.ClaimCashSlice(a.lostWalletID, a.identityType, a.identityValue)
+		_, _ = a.ClaimCashSlice(a.lostWalletID, a.identityType, a.identityValue)
 	}
 	return a.AppsService.GetAppById(id)
 }

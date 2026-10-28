@@ -346,7 +346,7 @@ func TestU_24_16_UnconfirmedBound(t *testing.T) {
 	wd := w.commitTo(t, 21_000_000)
 	v, err := UnconfirmedValueTx(w.svc.DB)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(wd.PayoutMillis), v)
+	assert.EqualValues(t, wd.PayoutMillis, v)
 }
 
 // childFundFails is the chain whose node cannot fund a one-input child: the

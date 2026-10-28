@@ -40,13 +40,13 @@ func callCreateCircleWallet(t *testing.T, svc *tests.TestService, provider *db.A
 // arbitrary, pre-built identity_event string (rather than a freshly-signed,
 // correctly-bound one) — used to exercise malformed/adversarial identity
 // proofs that makeCircleWalletRequest can't express.
-func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs int, identityEventJSON string) string {
+func rawCircleWalletRequest(t *testing.T, requesterPubkey string, maxAmountMloki uint64, expirationSecs uint64, identityEventJSON string) string {
 	t.Helper()
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           uint64(expirationSecs),
+		Expiry:           expirationSecs,
 		IdentityEvent:    identityEventJSON,
 	}
 	return joinRequestJSON(t, params)

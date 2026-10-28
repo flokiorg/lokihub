@@ -72,7 +72,7 @@ func (e *Engine) broadcastStep(ctx context.Context, p lnclient.OnchainPayer, tip
 		if err != nil {
 			return err
 		}
-		if cur := current(vs); cur != nil && !cur.ConfirmedOnce && !(cancelling && cur.Kind == db.CashVersionPayout) {
+		if cur := current(vs); cur != nil && !cur.ConfirmedOnce && (!cancelling || cur.Kind != db.CashVersionPayout) {
 			due := cur.State == db.CashVersionSigned ||
 				(cur.LastBroadcastAt != nil && now-*cur.LastBroadcastAt >= e.env().RebroadcastSecs())
 			if due {

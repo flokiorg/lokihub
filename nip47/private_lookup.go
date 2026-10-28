@@ -394,7 +394,7 @@ func (svc *nip47Service) rebuildToken(b *db.CashRequestRecordBill, delivery *str
 		RelayURLs:            relays,
 		MintSignature:        sig,
 		AttestedAmountMillis: &amount,
-		Scheme:               nipcash.SignatureScheme(b.Scheme),
+		Scheme:               nipcash.SignatureScheme(b.Scheme), //nolint:gosec // the column holds a SignatureScheme byte
 	}
 	if b.IdentityRequired != nil {
 		v := *b.IdentityRequired == 1
@@ -494,6 +494,8 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 			return refuse(constants.ERROR_INTERNAL, "the hub could not rebuild this wallet's details")
 		}
 		return answer(nipcash.CashLookupResult{Status: nipcash.LookupDone, Result: body})
+	default:
+		// RotationNone: decided from the deadline below.
 	}
 	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: now.Unix(), Deadline: params.Deadline, Join: true})
 	return answer(nipcash.CashLookupResult{Status: decision.Status, RetryAfter: decision.RetryAfter})

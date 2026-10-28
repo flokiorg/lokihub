@@ -61,8 +61,8 @@ func TestCashTransfer_ZapTransfer(t *testing.T) {
 			result := resp.Result.(cashTransferResponse)
 			require.NotNil(t, result.IssuedAt, "a zap reply carries issued_at")
 			require.NotNil(t, result.ExpiresAt, "a zap reply carries expires_at")
-			assert.GreaterOrEqual(t, int64(*result.IssuedAt), before)
-			assert.LessOrEqual(t, int64(*result.IssuedAt), after)
+			assert.GreaterOrEqual(t, int64(*result.IssuedAt), before) //nolint:gosec // a unix time
+			assert.LessOrEqual(t, int64(*result.IssuedAt), after)     //nolint:gosec // a unix time
 			require.NotNil(t, f.wallet.ExpiresAt)
 			assert.EqualValues(t, f.wallet.ExpiresAt.Unix(), *result.ExpiresAt, "the zap bill inherits the source's expiry")
 

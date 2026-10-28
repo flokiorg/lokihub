@@ -18,7 +18,7 @@ import (
 
 // joinWithTerms joins provider with the given max_receive and expiry (0 =
 // omitted), the proof's terms tag signed over them.
-func joinWithTerms(t *testing.T, svc *tests.TestService, provider *db.App, member string, maxReceive uint64, expiry int) *models.Response {
+func joinWithTerms(t *testing.T, svc *tests.TestService, provider *db.App, member string, maxReceive uint64, expiry uint64) *models.Response {
 	t.Helper()
 	var content struct {
 		Method string         `json:"method"`

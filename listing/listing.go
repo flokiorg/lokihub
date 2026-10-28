@@ -106,7 +106,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*View, error) 
 	if req.Type != "" && req.Type != typ {
 		return nil, refused("type %q does not match the offer (%s)", req.Type, typ)
 	}
-	if err := req.Fields.validate(isCF, typ == db.ListingTypeCircleWallet); err != nil {
+	if err := req.validate(isCF, typ == db.ListingTypeCircleWallet); err != nil {
 		return nil, err
 	}
 	if hub.WalletPubkey == nil {

@@ -81,7 +81,7 @@ func TestExpirySweepAfterRedeemClaim_RedeemWins(t *testing.T) {
 		PaymentHash: tests.RandomHex32()}, time.Now()))
 	r.expireAndSweep(t)
 	assert.False(t, r.billGone(t), "the sweep defers while the redeem is in flight")
-	assert.Equal(t, int64(r.sliceMloki), queries.GetIsolatedBalance(r.svc.DB, r.bill.ID), "the redeem's funds stay in the bill")
+	assert.EqualValues(t, r.sliceMloki, queries.GetIsolatedBalance(r.svc.DB, r.bill.ID), "the redeem's funds stay in the bill")
 }
 
 // G5: a cash_redeem after the expiry sweep took the bill is refused as claimed.
@@ -109,7 +109,7 @@ func TestExpirySweepAfterTransfer_TransferWins(t *testing.T) {
 	r.expireAndSweep(t)
 	require.True(t, r.billGone(t))
 	assert.Equal(t, db.CashSliceStatusSplit, r.archivedAs(t), "the bill-death archive's word for a value moved on")
-	assert.Equal(t, int64(r.sliceMloki), queries.GetIsolatedBalance(r.svc.DB, target.ID), "the transfer keeps its value")
+	assert.EqualValues(t, r.sliceMloki, queries.GetIsolatedBalance(r.svc.DB, target.ID), "the transfer keeps its value")
 }
 
 // G5: a transfer after the sweep took the bill is refused as claimed.

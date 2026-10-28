@@ -196,7 +196,7 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 		if err != nil {
 			return err
 		}
-		if int64(min(amount, uint64(1)<<62)) > room {
+		if int64(min(amount, uint64(1)<<62)) > room { //nolint:gosec // capped at 2^62 by min
 			return &circlemoney.Refusal{Code: constants.ERROR_QUOTA_EXCEEDED, Message: "the invoice is larger than the wallet's receive room"}
 		}
 		cfg, err := circlemoney.HubConfig(tx, *wallet.ParentAppID)

@@ -57,7 +57,7 @@ func TestGetBudget_CircleWallet_BothCapsClamped(t *testing.T) {
 	require.NotNil(t, budget.RenewsAt)
 	next, err := nipcw.BudgetPeriodStart(anchor, constants.BUDGET_RENEWAL_MONTHLY, 1)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(next.Unix()), *budget.RenewsAt)
+	assert.EqualValues(t, next.Unix(), *budget.RenewsAt)
 	require.NotNil(t, budget.TotalReceiveBudget)
 	assert.Equal(t, uint64(50_000), *budget.TotalReceiveBudget)
 	assert.Equal(t, uint64(30_000), *budget.UsedReceiveBudget)

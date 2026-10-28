@@ -31,10 +31,10 @@ func TestU_2_10_NoLegacyProvenanceLabels(t *testing.T) {
 			return nil
 		}
 		ext := filepath.Ext(path)
-		if ext != ".go" && ext != ".ts" && ext != ".tsx" && !(ext == ".json" && strings.Contains(path, "i18n")) {
+		if ext != ".go" && ext != ".ts" && ext != ".tsx" && (ext != ".json" || !strings.Contains(path, "i18n")) {
 			return nil
 		}
-		body, err := os.ReadFile(path)
+		body, err := os.ReadFile(path) //nolint:gosec // a file of the repo tree being walked
 		if err != nil {
 			return err
 		}
