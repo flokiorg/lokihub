@@ -585,7 +585,7 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 
 		invoice := mintInvoiceFromSimpleWallet(t, cfg, happyPathAmountMloki, "integration stale-proof test")
 
-		// Signed well outside cashRedeemIdentityFreshnessWindow (5 minutes) —
+		// Signed well outside the claim proof freshness window (5 minutes) —
 		// defense-in-depth on top of the invoice/wallet binding, so even a
 		// correctly-bound proof must be rejected once it's stale.
 		staleProof := buildClaimProofEvent(t, beneficiaryPriv, created.WalletPubkey, invoice.PaymentHash, nil, time.Now().Add(-10*time.Minute))

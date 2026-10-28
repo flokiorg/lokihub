@@ -50,7 +50,6 @@ type mintFixtures struct {
 	hub       *db.App
 	requestID string
 	pubkey    string
-	trustedIA string
 	limiter   *countingLimiter
 }
 

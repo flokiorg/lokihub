@@ -403,7 +403,6 @@ type commitInput struct {
 	quoteID        string
 	meta           CallMeta
 	pf             prefetched
-	tip            int64
 	amount         uint64
 	authorizerKind string
 	authorizer     string
