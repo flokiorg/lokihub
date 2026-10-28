@@ -47,3 +47,24 @@ func TestClose_FailureDueNow(t *testing.T) {
 	assert.Equal(t, db.ListingPhaseListed, row.Phase)
 	assert.LessOrEqual(t, row.DueAt, f.clock.Now().Unix(), "due now")
 }
+// R2-L5: an operator's write relays are taken only when public wss relays.
+func TestPublicRelay(t *testing.T) {
+	for url, ok := range map[string]bool{
+		"wss://relay.example.com":      true,
+		"wss://relay.example.com:4443": true,
+		"wss://8.8.8.8":                true,
+		"ws://relay.example.com":       false,
+		"https://relay.example.com":    false,
+		"wss://localhost":              false,
+		"wss://127.0.0.1":              false,
+		"wss://10.0.0.5":               false,
+		"wss://192.168.1.2":            false,
+		"wss://169.254.169.254":        false,
+		"wss://[::1]":                  false,
+		"wss://relay.local":            false,
+		"wss://intranet":               false,
+		"wss://user@relay.example.com": false,
+	} {
+		assert.Equal(t, ok, publicRelay(url), url)
+	}
+}
