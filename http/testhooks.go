@@ -27,14 +27,19 @@ func envOr(key, def string) string {
 
 type testHooks struct {
 	httpSvc *HttpService
-	once    sync.Once
+	mu      sync.Mutex
 	hooks   *regtest.Hooks
-	err     error
 }
 
-// connect dials the chain node and the payer once; both are refused unless on regtest.
+// connect dials the chain node and the payer on first use, and again after a
+// failed dial (a stack still starting); both are refused unless on regtest.
 func (t *testHooks) connect(ctx context.Context) (*regtest.Hooks, error) {
-	t.once.Do(func() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.hooks != nil {
+		return t.hooks, nil
+	}
+	err := func() error {
 		chain, err := regtest.DialChain(regtest.ChainConfig{
 			Host:     envOr("LOKIHUB_TEST_CHAIN_RPC", "chain:25213"),
 			User:     envOr("LOKIHUB_TEST_CHAIN_RPC_USER", "dev"),
@@ -42,8 +47,7 @@ func (t *testHooks) connect(ctx context.Context) (*regtest.Hooks, error) {
 			CertPath: envOr("LOKIHUB_TEST_CHAIN_RPC_CERT", "/chain/rpc.cert"),
 		})
 		if err != nil {
-			t.err = err
-			return
+			return err
 		}
 		payer, err := regtest.DialNode(ctx, regtest.NodeConfig{
 			Name:    "payer",
@@ -52,12 +56,12 @@ func (t *testHooks) connect(ctx context.Context) (*regtest.Hooks, error) {
 		})
 		if err != nil {
 			chain.Close()
-			t.err = err
-			return
+			return err
 		}
 		t.hooks = regtest.NewHooks(chain, payer)
-	})
-	return t.hooks, t.err
+		return nil
+	}()
+	return t.hooks, err
 }
 
 // requireRegtest refuses every hook unless this backend's own node is on regtest,

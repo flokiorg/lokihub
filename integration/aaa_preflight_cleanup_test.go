@@ -100,6 +100,11 @@ func TestAAA_PreflightCleanup(t *testing.T) {
 
 // hubNetwork is get_info's network on a throwaway NWC connection of the Hub.
 func hubNetwork(t *testing.T, admin *adminClient) (string, error) {
+	return hubNetworkLogf(t.Logf, admin)
+}
+
+// hubNetworkLogf is hubNetwork for a caller with no *testing.T (TestMain).
+func hubNetworkLogf(logf func(string, ...any), admin *adminClient) (string, error) {
 	resp, err := admin.createApp(adminCreateAppRequest{
 		Name:   ephemeralFixtureNamePrefix + " preflight network",
 		Scopes: []string{constants.GET_INFO_SCOPE},
@@ -110,7 +115,7 @@ func hubNetwork(t *testing.T, admin *adminClient) (string, error) {
 	}
 	defer func() {
 		if err := admin.deleteApp(resp.ID); err != nil {
-			t.Logf("preflight: failed to delete the network-check app_id=%d: %v", resp.ID, err)
+			logf("preflight: failed to delete the network-check app_id=%d: %v", resp.ID, err)
 		}
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
