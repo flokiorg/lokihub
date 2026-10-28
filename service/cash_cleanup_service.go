@@ -256,6 +256,13 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 	if queries.HasPendingOutgoing(gormDB, app.ID) {
 		return fmt.Errorf("%w: a payment from this wallet is still in flight, try again shortly", constants.ErrInvalidParams)
 	}
+	// A cash_redeem that claimed a slice won it, even before its payment
+	// reaches the ledger: reclaiming now would leave that payment unfunded.
+	if starting, err := redeemStarting(gormDB, app.ID, hubclock.Now()); err != nil {
+		return err
+	} else if starting {
+		return fmt.Errorf("%w: a redemption from this wallet is starting, try again shortly", constants.ErrInvalidParams)
+	}
 
 	// Atomically claim the cleanup slot (acts as a mutex per app row) so a
 	// concurrent expiry-cleanup tick and a manual delete can't both process
@@ -368,6 +375,23 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		logger.Logger.Info().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).Msg("sub-wallet balance reclaimed and app deleted")
 	}
 	return nil
+}
+
+// redeemStartWindow bounds how long a redeem claim with no payment row yet
+// holds off the sweep: one older never started its payment (the process
+// stopped in between) and no longer counts.
+const redeemStartWindow = 10 * time.Minute
+
+// redeemStarting reports a slice of wallet claimed for a cash_redeem within
+// redeemStartWindow whose payment is not in the ledger yet.
+func redeemStarting(gormDB *gorm.DB, walletAppID uint, now time.Time) (bool, error) {
+	var n int64
+	err := gormDB.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND claimed_at > ? AND payment_hash <> '' AND preimage = ''", walletAppID, now.Add(-redeemStartWindow)).
+		Where("NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)", constants.TRANSACTION_TYPE_OUTGOING).
+		Count(&n).Error
+	return n > 0, err
 }
 
 // pruneCircleJoinRecords drops a join's record once its wallet is gone and its
