@@ -203,12 +203,10 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		limit("max_receive")
 		return
 	}
-	// Paying out over Lightning holds back at least the fee reserve on top of the
-	// amount, so a lower cap makes a wallet that can never pay outside this node.
-	if params.MaxAmount < constants.MIN_CIRCLE_WALLET_MAX_MLOKI {
-		refuse(nipcw.ErrLimitExceeded, fmt.Sprintf("max_amount is below the Hub's minimum of %d", constants.MIN_CIRCLE_WALLET_MAX_MLOKI))
-		return
-	}
+	// No floor on max_amount: step 6 checks only the ceilings, the renewal floor
+	// and the expiry ceiling, and get_info has no field to advertise a floor. A
+	// cap below the fee reserve is a wallet that pays only on this node; one
+	// below 1 loki rounds down to 0 (resolvedMaxAmount), a real zero cap.
 	resolvedBudgetRenewal := params.BudgetRenewal
 	if resolvedBudgetRenewal == "" {
 		resolvedBudgetRenewal = constants.BUDGET_RENEWAL_NEVER
@@ -326,9 +324,11 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// Its budget periods count from its creation (NIP-CW §Budget Renewal Floor).
 		// It starts Active, with the Hub's dust threshold fixed for its life.
 		maxReceive := int64(params.MaxReceive) //nolint:gosec // bounded by the Hub's ceiling above
+		maxAmount := int64(resolvedMaxAmount(params.MaxAmount)) //nolint:gosec // at most the request, a JSON integer up to 2^63-1
 		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
 			"circle_fees_ppm":             providerConfig.FeesPpm,
 			"circle_max_receive_mloki":    maxReceive,
+			"circle_max_amount_mloki":     maxAmount,
 			"circle_budget_anchor_at":     createdApp.CreatedAt.Unix(),
 			"circle_state":                circlelife.StateActive,
 			"circle_state_at":             createdApp.CreatedAt.Unix(),
@@ -457,7 +457,7 @@ func (controller *nip47Controller) joinDetails(hub, wallet *db.App, params nipcw
 		WalletPubkey:     *wallet.WalletPubkey,
 		ConnectionPubkey: params.ConnectionPubkey,
 		Relays:           relays,
-		MaxAmount:        params.MaxAmount / 1000 * 1000,
+		MaxAmount:        resolvedMaxAmount(params.MaxAmount),
 		// max_receive is applied as requested, within the Hub's ceiling.
 		MaxReceive:          params.MaxReceive,
 		ExpiresAt:           expiresAtUnix,
@@ -511,4 +511,13 @@ func rotationDelayDetail(cfg *db.CircleHubConfig) *uint64 {
 		return &v
 	}
 	return nil
+}
+
+// resolvedMaxAmount is the send cap a join applies for a requested max_amount:
+// rounded down to whole loki, the unit the node's budgets count in, never
+// raised (NIP-CW §Response). It is stored exactly on the wallet
+// (CircleMaxAmountMloki), so a request under 1 loki is a cap of 0, never "no
+// cap".
+func resolvedMaxAmount(requested uint64) uint64 {
+	return requested / 1000 * 1000
 }

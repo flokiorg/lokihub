@@ -109,7 +109,7 @@ func (svc *appsService) GetCircleHubStats(hubID uint, now time.Time) (*CircleHub
 	}
 	if err := svc.db.Raw(`
 		SELECT a.id AS id, a.name AS name,
-		       COALESCE(p.max_amount_loki, 0) AS max_amount_loki
+		       COALESCE(a.circle_max_amount_mloki / 1000, p.max_amount_loki, 0) AS max_amount_loki
 		FROM apps a
 		LEFT JOIN app_permissions p ON p.app_id = a.id AND p.scope = ?
 		WHERE a.parent_app_id = ? AND a.parent_kind = ? AND a.kind = ?`,

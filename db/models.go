@@ -141,6 +141,12 @@ type App struct {
 	// CircleMaxReceiveMloki is a circle_wallet's receive cap per budget period
 	// (max_receive), as resolved at its join. Nil on every other kind.
 	CircleMaxReceiveMloki *int64
+	// CircleMaxAmountMloki is a circle_wallet's send cap per budget period
+	// (max_amount) as the join resolved it, in mloki: exact, so a cap of 0 is
+	// a cap of 0. The pay_invoice permission's whole-loki MaxAmountLoki, where
+	// 0 means "no cap", cannot carry a cap under 1 loki. Nil on a wallet not
+	// made by a join (WalletCaps then reads the permission).
+	CircleMaxAmountMloki *int64
 	// CircleBudgetAnchorAt is when a circle_wallet's budget periods start
 	// counting from (NIP-CW §Budget Renewal Floor): its creation, unix seconds.
 	CircleBudgetAnchorAt *int64
