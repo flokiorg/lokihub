@@ -241,9 +241,15 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			earliest = e
 		}
 	}
-	// A merge is bounded by the live-bill cap only: it ends more bills than it
-	// makes, so it spends no lineage's spin-off allowance.
-	if code, message := controller.spinOffLimitRefusal(sources[0].bill, 1, false); code != "" {
+	// A merge spends no lineage's spin-off allowance, and the live-bill cap
+	// bounds it only when it adds a bill: one that drains a source bill (takes
+	// its last live slice) does not raise the count, so it passes at the cap.
+	ending, err := controller.billsEndedBy(sources)
+	if err != nil {
+		refuse(constants.ERROR_INTERNAL, "failed to check this hub's live bills")
+		return
+	}
+	if code, message, _ := controller.spinOffLimitRefusal(sources[0].bill, 1-ending, false); code != "" {
 		refuse(code, message)
 		return
 	}
@@ -384,6 +390,27 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 const consolidateUnauthorized = "sources not authorized"
 
 // authorizedSource is a source whose claim proof verified.
+// billsEndedBy counts the source bills a merge drains: those whose every
+// unclaimed slice is one of its sources.
+func (controller *nip47Controller) billsEndedBy(sources []authorizedSource) (int, error) {
+	taken := map[uint]int{}
+	for _, s := range sources {
+		taken[s.bill.ID]++
+	}
+	ending := 0
+	for billID, n := range taken {
+		var live int64
+		if err := controller.db.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ? AND claimed_at IS NULL", billID).
+			Count(&live).Error; err != nil {
+			return 0, err
+		}
+		if live <= int64(n) {
+			ending++
+		}
+	}
+	return ending, nil
+}
+
 type authorizedSource struct {
 	bill           *db.App
 	claim          *db.CashWalletClaim

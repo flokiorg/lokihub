@@ -408,7 +408,8 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		if remainder > 0 {
 			newBills = 2
 		}
-		if code, message := controller.spinOffLimitRefusal(app, newBills, true); code != "" {
+		code, message, refund := controller.spinOffLimitRefusal(app, newBills, true)
+		if code != "" {
 			refuse(code, message)
 			return
 		}
@@ -422,7 +423,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		}
 		controller.handleCashTransferSplit(ctx, method, app, claim, requested, remainder,
 			newType, newValue, newIA, remainderType, remainderValue, remainderIA,
-			claimSigner, source, proofs, zap, record, publishResponse, tags)
+			claimSigner, source, proofs, zap, record, publishResponse, tags, refund)
 		return
 	}
 
@@ -595,28 +596,36 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 }
 
 // spinOffLimitRefusal bounds spin-offs (NIP-CASH §Security Considerations for
-// Cash-Mode Slices): the live bills under the Cash Hub (QUOTA_EXCEEDED), then,
-// when lineage is set, per bill lineage per hour (RATE_LIMITED). The cap is read
+// Cash-Mode Slices): the live bills under the Cash Hub (QUOTA_EXCEEDED), for a
+// call that adds newBills (one that adds none passes the cap), then, when
+// lineage is set, per bill lineage per hour (RATE_LIMITED). The cap is read
 // first, so a call it refuses spends none of the lineage's allowance. "" when
-// the spin-off may proceed.
-func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (string, string) {
+// the spin-off may proceed; refund then gives the allowance back, for a call
+// whose commit does not happen.
+func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (code, message string, refund func()) {
+	refund = func() {}
 	env := controller.cfg.GetEnv()
-	if limit := env.CashMaxLiveBillsPerHub; limit > 0 && app.ParentAppID != nil {
+	if limit := env.CashMaxLiveBillsPerHub; limit > 0 && app.ParentAppID != nil && newBills > 0 {
 		var live int64
 		if err := controller.db.Model(&db.App{}).
 			Where("parent_app_id = ? AND kind = ?", *app.ParentAppID, db.AppKindCashWallet).Count(&live).Error; err != nil {
 			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to count a Cash Hub's live bills")
-			return constants.ERROR_INTERNAL, "failed to check this hub's live bills"
+			return constants.ERROR_INTERNAL, "failed to check this hub's live bills", refund
 		}
 		if live+int64(newBills) > int64(limit) {
-			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit)
+			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit), refund
 		}
 	}
-	if lineage && controller.lineageLimiter != nil &&
-		!controller.lineageLimiter.Allow(strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10), env.CashLineageSpinOffsPerHour) {
-		return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
+	if lineage && controller.lineageLimiter != nil {
+		key := strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10)
+		if !controller.lineageLimiter.Allow(key, env.CashLineageSpinOffsPerHour) {
+			return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later", refund
+		}
+		if r, ok := controller.lineageLimiter.(refunder); ok {
+			refund = func() { r.Refund(key) }
+		}
 	}
-	return "", ""
+	return "", "", refund
 }
 
 // handleCashTransferSplit spins a slice off into one or two new dedicated bills
@@ -626,11 +635,18 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 // commit (cashwallet.SplitInTwo): a failure leaves the slice claimable and the
 // proof unused. Each token is nested-encrypted to deliverTo, the claim signer, or
 // returned in the clear for a cash source (single-recipient by construction).
+// refund gives back the lineage's spin-off allowance when nothing commits.
 func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, method string, app *db.App,
 	claim *db.CashWalletClaim, amount, remainder uint64,
 	newType, newValue, newIA, remainderType, remainderValue, remainderIA string,
 	deliverTo string, source apps.SliceRef, proofs []cashwallet.ClaimProof, zap *cashwallet.ZapParams,
-	record func(resultMeta any) (*db.CashRequestRecord, error), publishResponse publishFunc, tags nostr.Tags) {
+	record func(resultMeta any) (*db.CashRequestRecord, error), publishResponse publishFunc, tags nostr.Tags, refund func()) {
+	committed := false
+	defer func() {
+		if !committed {
+			refund()
+		}
+	}()
 	if app.ParentAppID == nil {
 		logger.Logger.Error().Uint("app_id", app.ID).Msg("cash_wallet has no parent hub; cannot split off a slice")
 		respondError(publishResponse, method, constants.ERROR_INTERNAL, "failed to split off slice")
@@ -680,6 +696,7 @@ func (controller *nip47Controller) handleCashTransferSplit(ctx context.Context, 
 		controller.respondCommitError(publishResponse, method, app, err, "failed to split off slice")
 		return
 	}
+	committed = true
 
 	// The commit is done, so the source slice is terminal on every path from here,
 	// including a connection that cannot be delivered below. A drained source is
