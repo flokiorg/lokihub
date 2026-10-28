@@ -87,7 +87,7 @@ func (e *Engine) observeOutput(ctx context.Context, addr db.CashOrderAddress, o 
 	}
 	var order *db.CashOrder
 	if p.ID == 0 {
-		order = e.liveOrderFor(addr)
+		order = e.liveOrderFor(addr, o.SeenAt)
 		hub := addr.HubAppID
 		address := addr.Address
 		p = db.CashOrderPayment{PaymentKey: key, HubAppID: &hub, Address: &address, ValueMillis: value,
@@ -190,8 +190,10 @@ func requiredConfirmations(order *db.CashOrder, value uint64) int {
 
 // liveOrderFor is the order a new output to addr pays: the address's order,
 // unless it is gone or expired (nothing seen by pay_by); nil means the Hub keeps
-// the payment.
-func (e *Engine) liveOrderFor(addr db.CashOrderAddress) *db.CashOrder {
+// the payment. seenAt is when the node's wallet first saw the output's
+// transaction (0 unknown): an output in the mempool by pay_by pays its order
+// even when the scan that finds it runs after pay_by.
+func (e *Engine) liveOrderFor(addr db.CashOrderAddress, seenAt int64) *db.CashOrder {
 	if addr.OrderID == nil || addr.Burnt {
 		return nil
 	}
@@ -201,7 +203,11 @@ func (e *Engine) liveOrderFor(addr db.CashOrderAddress) *db.CashOrder {
 	}
 	// Nothing seen by pay_by: the order expired (whether or not the pay_by job
 	// has stated it yet), and a first payment after it is kept.
-	if o.State == db.CashOrderExpired || (o.State == db.CashOrderOpen && e.now().Unix() > o.PayBy) {
+	seen := e.now().Unix()
+	if seenAt > 0 && seenAt < seen {
+		seen = seenAt
+	}
+	if o.State == db.CashOrderExpired || (o.State == db.CashOrderOpen && seen > o.PayBy) {
 		return nil
 	}
 	return &o

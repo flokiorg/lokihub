@@ -435,3 +435,26 @@ func TestOrderIntake_ReadPastPayByExpiresTheOrder(t *testing.T) {
 	assert.Equal(t, db.CashOrderExpired, o.State)
 	assert.Contains(t, f.ln.CancelledInvoices, *o.PaymentHash)
 }
+
+// NIP-CO §On-chain intake: an output in the mempool by pay_by keeps its order
+// (closed, then minted at its tier), even when no scan ran between the
+// payment and pay_by: the window is ended only after a scan, and the output
+// is judged by when the node's wallet first saw it.
+func TestOrderIntake_OnchainSeenBeforePayByScannedAfter(t *testing.T) {
+	f := newIntakeFixture(t)
+	res, buyer, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	placed := orderOf(t, res)
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Vout: 0, Address: placed.Address, AmountLoki: 43,
+		SeenAt: f.clock.Unix()}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+
+	f.clock = f.clock.Add(86401 * time.Second) // past pay_by, no scan yet
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "seen by pay_by: closed, not expired")
+
+	out.Confirmations = 1
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	got := f.lookupOrder(t, buyer, p)
+	require.Len(t, got.Bills, 1, "the payment mints for its order")
+}

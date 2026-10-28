@@ -150,6 +150,9 @@ type OnchainOutput struct {
 	AmountLoki    int64
 	Confirmations uint32
 	BlockHeight   int32
+	// SeenAt is when the node's wallet first saw the transaction (unix
+	// seconds), 0 when unknown.
+	SeenAt int64
 }
 
 // OnchainOutputLister lists the outputs to the node's own addresses of every

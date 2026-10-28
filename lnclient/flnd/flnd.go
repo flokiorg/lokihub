@@ -2290,6 +2290,7 @@ func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.Onch
 				out = append(out, lnclient.OnchainOutput{
 					TxID: tx.TxHash, Vout: uint32(o.OutputIndex), Address: o.Address, AmountLoki: o.Amount, //nolint:gosec // an output index
 					Confirmations: uint32(max(tx.NumConfirmations, 0)), BlockHeight: tx.BlockHeight, //nolint:gosec // non-negative
+					SeenAt: tx.TimeStamp,
 				})
 			}
 		}
