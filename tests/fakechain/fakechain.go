@@ -72,6 +72,8 @@ type Chain struct {
 	FailFinalize int
 	// PublishHook, when set, may refuse a publish with its error.
 	PublishHook func(txid string) error
+	// WalletTxErr, when set, is every WalletTx call's answer.
+	WalletTxErr error
 
 	now  func() time.Time
 	subs []chan lnclient.BlockEpoch
@@ -647,6 +649,9 @@ func (c *Chain) NextChangeScript(context.Context) ([]byte, error) { return c.Wal
 func (c *Chain) WalletTx(_ context.Context, txid string) (lnclient.WalletTx, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.WalletTxErr != nil {
+		return lnclient.WalletTx{}, c.WalletTxErr
+	}
 	if c.txs[txid] == nil {
 		return lnclient.WalletTx{}, nil
 	}

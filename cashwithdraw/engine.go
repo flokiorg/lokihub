@@ -440,6 +440,15 @@ func (e *Engine) Pass(ctx context.Context) error {
 	if err := e.saveTip(best); err != nil {
 		return err
 	}
+	// Coins a commit set aside are leased first, so no chain read failing
+	// leaves them open to the node's own coin selection (R2-P-M3).
+	id, err := e.lease()
+	if err != nil {
+		return err
+	}
+	if err := e.leaseCoins(ctx, p, id, false); err != nil {
+		return err
+	}
 	if err := e.chainStep(ctx, p, best.Height); err != nil {
 		return err
 	}
