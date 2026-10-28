@@ -401,6 +401,9 @@ func (e *Engine) finalizeAndStore(ctx context.Context, p lnclient.OnchainPayer, 
 	if err != nil {
 		return err
 	}
+	if v.Kind == db.CashVersionPayout && e.Hooks != nil && e.Hooks.CrashAfterSign.Load() {
+		return errSignatureLost
+	}
 	if err := e.before(EngineAfterFinalize); err != nil {
 		return err
 	}

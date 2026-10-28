@@ -40,6 +40,11 @@ var EngineStages = []string{EngineAfterFund, EngineAfterAboutToSign, EngineAfter
 // crash would (the next engine resumes from the database).
 var ErrEngineStopped = errors.New("payout engine stopped by a test hook")
 
+// errSignatureLost is the CrashAfterSign hook's loss of one payout version's
+// signature: the pass building it stops, and a pass re-signing recorded
+// versions skips it and goes on, as a Hub restarted without that signature.
+var errSignatureLost = fmt.Errorf("%w: a payout version's signature was lost", ErrEngineStopped)
+
 // EngineHooks are the engine's test seams: Before runs at every stage (an error
 // ends the pass there), and the holds stop signing, broadcasting or bumping.
 // nil in production; the regtest dev build drives the holds over HTTP.
@@ -48,8 +53,10 @@ type EngineHooks struct {
 	HoldSign      atomic.Bool
 	HoldBroadcast atomic.Bool
 	HoldBump      atomic.Bool
-	// CrashAfterSign ends every pass right after a version is signed, before
-	// it is stored as signed or published, as a crash there would.
+	// CrashAfterSign loses every payout version's signature right after it
+	// is made, before it is stored as signed or published, as a crash there
+	// would, while the rest of the engine runs on (an invalidation of that
+	// payout is signed and published as usual).
 	CrashAfterSign atomic.Bool
 	// CrashAt, when set to one of EngineStages, ends every pass at that stage
 	// as a crash there would.
@@ -102,9 +109,6 @@ func (e *Engine) env() config.WithdrawEnv { return e.S.env() }
 func (e *Engine) before(stage string) error {
 	if e.Hooks == nil {
 		return nil
-	}
-	if stage == EngineAfterFinalize && e.Hooks.CrashAfterSign.Load() {
-		return ErrEngineStopped
 	}
 	if at, _ := e.Hooks.CrashAt.Load().(string); at != "" && at == stage {
 		return ErrEngineStopped

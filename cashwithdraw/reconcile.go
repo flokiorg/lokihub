@@ -41,7 +41,7 @@ func (e *Engine) Reconcile(ctx context.Context) error {
 		return err
 	}
 	for i := range pending {
-		if err := e.finalizeAndStore(ctx, p, &pending[i]); err != nil {
+		if err := e.finalizeAndStore(ctx, p, &pending[i]); err != nil && !errors.Is(err, errSignatureLost) {
 			return err
 		}
 	}
@@ -66,6 +66,9 @@ func (e *Engine) signPending(ctx context.Context, p lnclient.OnchainPayer) error
 	}
 	for i := range pending {
 		if err := e.finalizeAndStore(ctx, p, &pending[i]); err != nil {
+			if errors.Is(err, errSignatureLost) {
+				continue
+			}
 			if errors.Is(err, ErrEngineStopped) {
 				return err
 			}
