@@ -286,3 +286,40 @@ func TestSpecWithdraw_I66_PaidWhileOff(t *testing.T) {
 	require.NoError(t, h.admin.do(http.MethodGet, "/api/cash-withdraw/status", &st))
 	assert.Positive(t, st.Payouts["final"])
 }
+
+// I-57 (replacement half): a broadcast version held out of blocks is replaced
+// twice by RBF, each replacement funded from the inputs the version before it
+// already spends (the wallet no longer lists them unspent); the last
+// replacement is the one that confirms and goes final, paying the quote.
+func TestSpecWithdraw_I57_ReplacementConfirms(t *testing.T) {
+	cfg := requireConfig(t)
+	h := newWithdrawHub(t, cfg, "withdraw-rbf")
+	chain := newWithdrawChain(t, cfg)
+	token, priv, rid, q := commitWithdraw(t, h)
+	first := waitPayout(t, chain, token, priv, rid, false, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutBroadcast })
+	held := []string{first.Txid}
+	t.Cleanup(func() {
+		for _, txid := range held {
+			_ = chain.Withhold(txid, false)
+		}
+	})
+	cur := first
+	for range 2 {
+		require.NoError(t, chain.Withhold(cur.Txid, true))
+		require.NoError(t, chain.Mine(ctxT(t), 6))
+		prev := cur.Txid
+		cur = waitPayout(t, chain, token, priv, rid, false, func(p *nipcash.Payout) bool {
+			return p.State == nipcash.PayoutBroadcast && p.Txid != prev
+		})
+		require.NoError(t, nipcash.VerifyPayoutTx(cur.Tx, cur.Txid, *cur.Vout, q.Address, "", q.PayoutMillis))
+		held = append(held, cur.Txid)
+	}
+	last := cur.Txid
+	// Every earlier version stays held: only the last replacement can confirm.
+	conf := waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutConfirmed })
+	assert.Equal(t, last, conf.Txid, "the last replacement confirmed")
+	final := waitPayout(t, chain, token, priv, rid, true, func(p *nipcash.Payout) bool { return p.State == nipcash.PayoutFinal })
+	assert.Equal(t, last, final.Txid)
+	assert.NotEqual(t, first.Txid, final.Txid)
+	require.NoError(t, nipcash.VerifyPayoutTx(final.Tx, final.Txid, *final.Vout, q.Address, "", q.PayoutMillis))
+}
