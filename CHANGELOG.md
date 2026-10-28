@@ -468,6 +468,19 @@ audits of both.
 
 ### Fixed
 
+- Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
+  cancel needs) from the inputs its broadcast version already spends. The node
+  no longer lists a coin an unmined transaction of its own spends, so a
+  replacement could fail "not an unspent wallet coin" whenever such an input
+  was not leased; the input is now read from its parent transaction in the
+  wallet, only when the wallet marks that output its own, then leased and
+  signed as before.
+- Publishes a payout's CPFP child on its own when the node refuses it as a
+  package. lokid has no package relay, so the child of a reorganised payout
+  was refused every pass; now its parent is republished and the child sent
+  after it, which relays whenever the parent meets the minimum relay fee by
+  itself. A parent below that fee still needs package relay: both are retried
+  each pass while the parent keeps being republished.
 - Reads a payment's update stream until it succeeds or fails. A node run with
   `routerrpc.usestatusinitiated` sends `INITIATED` first, which was taken as a
   failure while the payment's HTLCs were still out.
