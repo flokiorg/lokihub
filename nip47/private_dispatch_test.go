@@ -412,3 +412,50 @@ func TestServePrivateItem_ClaimsLookupFailure_IsRetryable(t *testing.T) {
 	require.NotNil(t, result.Error)
 	assert.Equal(t, constants.ERROR_INTERNAL, result.Error.Code)
 }
+
+// An item proof by a key other than its claim proof's signer is one that does
+// not verify (NIP-CASH §Item Proofs): UNAUTHORIZED, even though that key holds
+// no slice of the bill. A signer holding no slice whose claim proof is its own
+// gets NOT_FOUND.
+func TestServePrivateItem_ItemSignerOtherThanClaimSigner(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	walletPubkey, recipientPriv, _, connPriv := privateDispatchFixture(t, svc)
+	recipientPub, err := nostr.GetPublicKey(recipientPriv)
+	require.NoError(t, err)
+	stranger := nostr.GeneratePrivateKey()
+	strangerPub, err := nostr.GetPublicKey(stranger)
+	require.NoError(t, err)
+
+	hubXOnly := strings.Repeat("ab", 32)
+	nonce := strings.Repeat("cd", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	binding := PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
+	params := func(claimSigner string) string {
+		ev, err := json.Marshal(map[string]any{"pubkey": claimSigner, "kind": 23198})
+		require.NoError(t, err)
+		raw, err := json.Marshal(map[string]any{"invoice": "lnbcrt1x", "identity_type": "pubkey",
+			"identity_value": claimSigner, "identity_event": string(ev)})
+		require.NoError(t, err)
+		return string(raw)
+	}
+
+	// cash_withdraw, cash_transfer and cash_consolidate take the same path once
+	// their own earlier checks pass (this fixture offers no withdrawals).
+	for _, method := range []string{constants.NIP47MethodCashRedeem} {
+		item := buildItem(t, "r1", walletPubkey, method, params(recipientPub), stranger, connPriv, hubXOnly, nonce, notAfter)
+		result, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+		require.True(t, served)
+		require.NotNil(t, result.Error, method)
+		assert.Equal(t, constants.ERROR_UNAUTHORIZED, result.Error.Code, method)
+
+		item = buildItem(t, "r2", walletPubkey, method, params(strangerPub), stranger, connPriv, hubXOnly, nonce, notAfter)
+		result, served = nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item, binding)
+		require.True(t, served)
+		require.NotNil(t, result.Error, method)
+		assert.Equal(t, constants.ERROR_NOT_FOUND, result.Error.Code, method)
+	}
+}

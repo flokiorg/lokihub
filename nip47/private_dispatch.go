@@ -243,6 +243,11 @@ func (svc *nip47Service) servePrivateItem(
 			return refuse(constants.ERROR_UNAUTHORIZED, "this cash secret does not verify for this bill")
 		case item.Method == constants.NIP47MethodCreateCircleWallet:
 			return refuse(constants.ERROR_UNAUTHORIZED, "a join's item proof must be signed by the pubkey that is joining")
+		case claimSignerDiffers(item, signer):
+			// For a call carrying a claim proof, an item proof by any key but
+			// the claim proof's signer is one that does not verify (NIP-CASH
+			// §Item Proofs): UNAUTHORIZED, not "no slice for this signer".
+			return refuse(constants.ERROR_UNAUTHORIZED, "the item proof was not signed by the claim proof's signer")
 		default:
 			// The proof verified, but its signer holds no slice of this bill.
 			return refuse(constants.ERROR_NOT_FOUND, "no slice of this bill is registered for the identity that signed this item")
@@ -594,6 +599,43 @@ func billProofHolder(signer, wantPubkey string) bool {
 // behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
 // itemCashSecretMalformed reports whether item's params carry a cash_secret that
 // is not 64 lowercase hex characters.
+// claimSignerDiffers reports an item of a method whose item proof must be
+// signed by its claim proof's signer (cash_redeem, cash_withdraw, cash_transfer,
+// and cash_consolidate's first source) carrying a claim proof by a key other
+// than signer. An item with no claim proof (a cash_withdraw cancel request, a
+// cash-mode call) or one that does not parse reports false.
+func claimSignerDiffers(item transport.Item, signer string) bool {
+	if !valueMethods[item.Method] {
+		return false
+	}
+	var params struct {
+		IdentityEvent string `json:"identity_event"`
+		Sources       []struct {
+			IdentityEvent string `json:"identity_event"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal(item.Params, &params); err != nil {
+		return false
+	}
+	raw := params.IdentityEvent
+	if item.Method == constants.NIP47MethodCashConsolidate {
+		raw = ""
+		if len(params.Sources) > 0 {
+			raw = params.Sources[0].IdentityEvent
+		}
+	}
+	if raw == "" {
+		return false
+	}
+	var ev struct {
+		PubKey string `json:"pubkey"`
+	}
+	if err := json.Unmarshal([]byte(raw), &ev); err != nil || ev.PubKey == "" {
+		return false
+	}
+	return !strings.EqualFold(ev.PubKey, signer)
+}
+
 func itemCashSecretMalformed(item transport.Item) bool {
 	var params struct {
 		CashSecret *string `json:"cash_secret"`
