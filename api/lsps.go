@@ -16,12 +16,30 @@ import (
 // lspsRequestTimeout is the timeout for LSPS protocol requests
 const lspsRequestTimeout = 15 * time.Second
 
+// contactLSP is the liquidity manager, once the LSP named is one this node may
+// send LSPS messages to: trusted, its newest announcement usable and not
+// closed (NIP-LSP §Client Behavior). Purchases check more (CheckPurchase).
+func (api *api) contactLSP(pubkey string) (*manager.LiquidityManager, error) {
+	lm := api.svc.GetLiquidityManager()
+	if lm == nil {
+		return nil, fmt.Errorf("LiquidityManager not started")
+	}
+	if err := lm.CheckContact(pubkey); err != nil {
+		return nil, err
+	}
+	return lm, nil
+}
+
 // LSPS0ListProtocols lists supported protocols
 func (api *api) LSPS0ListProtocols(ctx context.Context, req *LSPS0ListProtocolsRequest) (*LSPS0ListProtocolsResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
-	client := api.svc.GetLiquidityManager().LSPS0Client()
+	lm, err := api.contactLSP(req.LSPPubkey)
+	if err != nil {
+		return nil, err
+	}
+	client := lm.LSPS0Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS0 client not available")
 	}
@@ -51,7 +69,11 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 	// So let's assume I fix manager.go to use `lsps1.Options`.
 
 	// Assuming manager is fixed:
-	options, err := api.svc.GetLiquidityManager().GetLSPS1InfoList(ctx, req.LSPPubkey)
+	lm, err := api.contactLSP(req.LSPPubkey)
+	if err != nil {
+		return nil, err
+	}
+	options, err := lm.GetLSPS1InfoList(ctx, req.LSPPubkey)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Logger.Warn().Str("lsp", req.LSPPubkey).Msg("LSPS1 GetInfo timeout")
@@ -171,14 +193,15 @@ func (api *api) LSPS1GetOrder(ctx context.Context, req *LSPS1GetOrderRequest) (i
 
 // LSPS2GetInfo requests JIT channel opening params
 func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (interface{}, error) {
-	if api.svc.GetLiquidityManager() == nil {
-		return nil, fmt.Errorf("LiquidityManager not started")
+	lm, err := api.contactLSP(req.LSPPubkey)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
-	fees, err := api.svc.GetLiquidityManager().GetLSPS2FeeParams(ctx, req.LSPPubkey)
+	fees, err := lm.GetLSPS2FeeParams(ctx, req.LSPPubkey)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Logger.Warn().Str("lsp", req.LSPPubkey).Msg("LSPS2 GetInfo timeout")
@@ -237,7 +260,11 @@ func (api *api) LSPS5SetWebhook(ctx context.Context, req *LSPS5SetWebhookRequest
 	ctx, cancel := context.WithTimeout(ctx, lspsRequestTimeout)
 	defer cancel()
 
-	client := api.svc.GetLiquidityManager().LSPS5Client()
+	lm, err := api.contactLSP(req.LSPPubkey)
+	if err != nil {
+		return nil, err
+	}
+	client := lm.LSPS5Client()
 	if client == nil {
 		return nil, fmt.Errorf("LSPS5 client not available")
 	}
