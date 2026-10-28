@@ -416,3 +416,22 @@ func TestOrderIntake_SameNodePayment(t *testing.T) {
 	_, _, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis))
 	assert.ErrorIs(t, err, cashorder.ErrOrderNotPayable, "past pay_by nothing is debited")
 }
+
+// NIP-CO §Order State: a Lightning order unpaid at pay_by is expired. A read
+// past pay_by ends the window itself (the invoice cancelled, the order
+// expired) rather than showing the state the last job run left.
+func TestOrderIntake_ReadPastPayByExpiresTheOrder(t *testing.T) {
+	f := newIntakeFixture(t)
+	f.nip47svc.SetOrderPayBy(f.engine.EndWindowIfDue)
+	f.ln.MockTransaction = &lnclient.Transaction{}
+	res, buyer, p := f.order(t, nipCO.PaymentLightning, 21_000, nil)
+	orderOf(t, res)
+	assert.Equal(t, nipCO.OrderOpen, f.lookupOrder(t, buyer, p).State)
+
+	f.clock = f.clock.Add(3601 * time.Second)
+	got := f.lookupOrder(t, buyer, p)
+	assert.Equal(t, nipCO.OrderExpired, got.State, "no RunPayBy ran: the read ended the window")
+	o := f.orderRow(t, p.RequestID)
+	assert.Equal(t, db.CashOrderExpired, o.State)
+	assert.Contains(t, f.ln.CancelledInvoices, *o.PaymentHash)
+}

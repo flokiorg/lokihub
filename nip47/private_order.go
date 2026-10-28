@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/flokiorg/lokihub/hubclock"
+	"time"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"github.com/ohstr/nmilat/nipcash/transport"
@@ -70,6 +71,11 @@ func (svc *nip47Service) servePrivateOrder(ctx context.Context, lnClient lnclien
 func (svc *nip47Service) orderView(rec *db.CashRequestRecord) (json.RawMessage, error) {
 	if rec.OrderID == nil {
 		return nil, errors.New("an order record without its order")
+	}
+	if end := svc.orderPayBy.Load(); end != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		(*end)(ctx, *rec.OrderID)
+		cancel()
 	}
 	var order db.CashOrder
 	if err := svc.db.First(&order, *rec.OrderID).Error; err != nil {
