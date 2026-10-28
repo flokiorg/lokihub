@@ -48,6 +48,8 @@ type transactionsService struct {
 	// orderSelfPay takes in a same-node payment of an order's invoice: handled
 	// false when the hash names no order.
 	orderSelfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (preimage string, handled bool, err error)
+	// heldKeysends are held keysends being settled, reserved until credited.
+	heldKeysends *keysendReservations
 }
 
 // InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
@@ -237,6 +239,7 @@ func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *
 	return &transactionsService{
 		db:             db,
 		eventPublisher: eventPublisher,
+		heldKeysends:   newKeysendReservations(),
 		logger:         logger.Logger.With().Str("component", "transactions").Logger(),
 	}
 }
@@ -1428,6 +1431,8 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			return txErr
 		})
 
+		// A held keysend's reservation ends once its credit is recorded.
+		svc.heldKeysends.release(lnClientTransaction.PaymentHash)
 		if err != nil {
 			svc.logger.Error().Err(err).
 				Str("payment_hash", lnClientTransaction.PaymentHash).

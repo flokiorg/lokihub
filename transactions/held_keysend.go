@@ -3,6 +3,8 @@ package transactions
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -34,12 +36,18 @@ var errKeysendRefused = errors.New("the keysend is refused by the circle wallet'
 // is not Active. Every other keysend is settled, as the node would.
 //
 // The settled keysend is then credited by the node's settle event, which runs
-// the same checks again.
+// the same checks again. Between the settle and that credit its amount is
+// reserved against the wallet's room and the circle's ceiling, so a second
+// keysend checked meanwhile cannot also pass and then be left with the host
+// (R2-F2).
 func (svc *transactionsService) resolveHeldKeysend(ctx context.Context, held *lnclient.Transaction, lnClient lnclient.LNClient) {
 	log := svc.logger.With().Str("payment_hash", held.PaymentHash).Logger()
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
 		return checkHeldKeysend(tx, svc, held)
 	})
+	if err != nil || held.Preimage == "" {
+		svc.heldKeysends.release(held.PaymentHash)
+	}
 	switch {
 	case errors.Is(err, errKeysendRefused):
 		if cancelErr := lnClient.CancelHoldInvoice(ctx, held.PaymentHash); cancelErr != nil {
@@ -53,6 +61,7 @@ func (svc *transactionsService) resolveHeldKeysend(ctx context.Context, held *ln
 		log.Error().Msg("A held keysend has no preimage; the node fails it when its hold time ends")
 	default:
 		if settleErr := lnClient.SettleHoldInvoice(ctx, held.Preimage); settleErr != nil {
+			svc.heldKeysends.release(held.PaymentHash)
 			log.Error().Err(settleErr).Msg("Failed to settle a held keysend")
 		}
 	}
@@ -70,16 +79,98 @@ func checkHeldKeysend(tx *gorm.DB, svc *transactionsService, held *lnclient.Tran
 	if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
 		return err
 	}
-	amount := held.AmountPaid
-	if amount <= 0 {
-		amount = held.Amount
+	amount := uint64(max(held.AmountPaid, 0)) //nolint:gosec // non-negative
+	if amount == 0 {
+		amount = uint64(max(held.Amount, 0)) //nolint:gosec // non-negative
 	}
-	if err := checkCircleKeysendCredit(tx, recipient, nil, false, uint64(max(amount, 0))); err != nil { //nolint:gosec // non-negative
+	hubID := *recipient.ParentAppID
+	// Keysends settled but not yet credited count as received.
+	forWallet, forHub := svc.heldKeysends.reserved(recipient.ID, hubID, held.PaymentHash)
+	refused := func(err error) error {
 		var refusal *circlemoney.Refusal
 		if errors.As(err, &refusal) {
 			return errKeysendRefused
 		}
 		return err
 	}
+	if err := checkCircleKeysendCredit(tx, recipient, nil, false, amount+forWallet); err != nil {
+		return refused(err)
+	}
+	if forHub > forWallet {
+		cfg, err := circlemoney.HubConfig(tx, hubID)
+		if err != nil {
+			return err
+		}
+		if err := circlemoney.CheckHoldings(tx, hubID, cfg, amount+forHub, time.Now()); err != nil {
+			return refused(err)
+		}
+	}
+	// Reserved under the Hub's lock, before it is released.
+	svc.heldKeysends.reserve(held.PaymentHash, recipient.ID, hubID, amount)
 	return nil
+}
+
+// heldKeysendTTL bounds a reservation whose credit never arrives (the settle
+// event lost): the node's own settle has happened or failed by then.
+const heldKeysendTTL = 10 * time.Minute
+
+// keysendReservations are held keysends to Circle Wallets that passed their
+// checks and are being settled, by payment hash, until the node's settle event
+// credits them.
+type keysendReservations struct {
+	mu   sync.Mutex
+	byID map[string]keysendReservation
+}
+
+type keysendReservation struct {
+	wallet, hub uint
+	amount      uint64
+	at          time.Time
+}
+
+func newKeysendReservations() *keysendReservations {
+	return &keysendReservations{byID: map[string]keysendReservation{}}
+}
+
+func (r *keysendReservations) reserve(hash string, wallet, hub uint, amount uint64) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[hash] = keysendReservation{wallet: wallet, hub: hub, amount: amount, at: time.Now()}
+}
+
+func (r *keysendReservations) release(hash string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byID, hash)
+}
+
+// reserved sums the live reservations for wallet and for its circle, other than
+// hash's own.
+func (r *keysendReservations) reserved(wallet, hub uint, hash string) (forWallet, forHub uint64) {
+	if r == nil {
+		return 0, 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	for h, res := range r.byID {
+		if now.Sub(res.at) > heldKeysendTTL {
+			delete(r.byID, h)
+			continue
+		}
+		if h == hash || res.hub != hub {
+			continue
+		}
+		forHub += res.amount
+		if res.wallet == wallet {
+			forWallet += res.amount
+		}
+	}
+	return forWallet, forHub
 }
