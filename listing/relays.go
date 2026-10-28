@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -62,6 +64,28 @@ func (s *Service) SetListingRelays(ctx context.Context, relays []string) error {
 
 func splitRelays(v string) []string {
 	return cleanRelays(strings.Split(v, ","))
+}
+
+// maxOperatorRelays bounds the write relays taken from an operator's list.
+const maxOperatorRelays = 8
+
+// publicRelay: a wss:// URL whose host is a name or a public address, never
+// localhost, a loopback, private, link-local or unspecified address.
+func publicRelay(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "wss" || u.User != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
+		strings.HasSuffix(host, ".internal") || !strings.Contains(host, ".") && net.ParseIP(host) == nil {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+			ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast())
+	}
+	return true
 }
 
 func cleanRelays(in []string) []string {
@@ -165,9 +189,17 @@ func (s *Service) writeRelaysOf(ctx context.Context, pubkey string, relays []str
 		if len(t) >= 3 && t[2] != "write" {
 			continue
 		}
+		// A third party's list: only public wss relays, and a few (R2-L5).
+		if !publicRelay(t[1]) {
+			continue
+		}
 		out = append(out, t[1])
 	}
-	return cleanRelays(out)
+	out = cleanRelays(out)
+	if len(out) > maxOperatorRelays {
+		out = out[:maxOperatorRelays]
+	}
+	return out
 }
 
 func accepted(answers map[string]error) int {
