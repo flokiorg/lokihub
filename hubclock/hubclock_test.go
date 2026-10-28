@@ -12,7 +12,13 @@ func TestNowRunsAheadByTheOffset(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), Now(), time.Second)
 	assert.Zero(t, Offset())
 
+	m := Moved()
 	setOffset(3600)
+	select {
+	case <-m:
+	default:
+		t.Fatal("moving the clock did not signal")
+	}
 	assert.EqualValues(t, 3600, Offset())
 	assert.WithinDuration(t, time.Now().Add(time.Hour), Now(), time.Second)
 	at := Now()

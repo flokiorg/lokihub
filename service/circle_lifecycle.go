@@ -54,6 +54,8 @@ func StartCircleLifecycleService(ctx context.Context, gormDB *gorm.DB, transacti
 				return
 			case <-ticker.C:
 				RunCircleRotations(gormDB, eventPublisher, hubclock.Now())
+			case <-hubclock.Moved():
+				RunCircleRotations(gormDB, eventPublisher, hubclock.Now())
 			}
 		}
 	}()
@@ -65,6 +67,8 @@ func StartCircleLifecycleService(ctx context.Context, gormDB *gorm.DB, transacti
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, hubclock.Now())
+			case <-hubclock.Moved():
 				RunCircleLifecycle(ctx, gormDB, transactionsSvc, getLNClient(), eventPublisher, hubclock.Now())
 			}
 		}
