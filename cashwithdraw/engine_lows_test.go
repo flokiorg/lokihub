@@ -65,9 +65,11 @@ func TestR2_ChildPackageRetried(t *testing.T) {
 	w.chain.Reorg(1, txid)
 	w.pass(t) // republished, broadcast again
 
+	// The child is refused as a package and on its own (the fallback for a
+	// node without package relay) until the hook is cleared.
 	refused := false
 	w.chain.PublishHook = func(id string) error {
-		if id != txid && !refused {
+		if id != txid {
 			refused = true
 			return lnclient.ErrPublishFeeTooLow
 		}
