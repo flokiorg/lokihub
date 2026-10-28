@@ -387,7 +387,7 @@ func (e *Engine) invalidateGone(tip int64) error {
 		}
 	}
 	var vs []db.CashWithdrawVersion
-	if err := e.S.DB.Where("state IN ?", []string{db.CashVersionSigned, db.CashVersionBroadcast, db.CashVersionReplaced, db.CashVersionAboutToSign}).
+	if err := e.S.DB.Where("state IN ?", []string{db.CashVersionSigned, db.CashVersionBroadcast, db.CashVersionReplaced, db.CashVersionAboutToSign, db.CashVersionMismatch}).
 		Find(&vs).Error; err != nil {
 		return err
 	}

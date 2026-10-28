@@ -170,7 +170,8 @@ func (e *Engine) invalidate(ctx context.Context, p lnclient.OnchainPayer, tip in
 	}
 	for i := len(vs) - 1; i >= 0; i-- {
 		v := &vs[i]
-		if v.Kind != db.CashVersionInvalidation || v.State == db.CashVersionInvalid || v.State == db.CashVersionConflicted || v.State == db.CashVersionReplaced {
+		if v.Kind != db.CashVersionInvalidation || v.State == db.CashVersionInvalid || v.State == db.CashVersionConflicted ||
+			v.State == db.CashVersionReplaced || v.State == db.CashVersionMismatch {
 			continue
 		}
 		covers := true
