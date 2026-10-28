@@ -14,11 +14,25 @@
 package hubclock
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
-var offsetSecs atomic.Int64
+var (
+	offsetSecs atomic.Int64
+
+	movedMu sync.Mutex
+	moved   = make(chan struct{})
+)
+
+// Moved is closed when the clock is next moved, so a periodic job can run at
+// once rather than at its next tick. Read it afresh for every wait.
+func Moved() <-chan struct{} {
+	movedMu.Lock()
+	defer movedMu.Unlock()
+	return moved
+}
 
 // Now is the Hub's clock: the wall clock plus the test offset.
 func Now() time.Time {

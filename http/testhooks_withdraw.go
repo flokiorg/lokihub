@@ -11,11 +11,13 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/flokiorg/lokihub/cashwithdraw"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/logger"
 )
 
-// registerWithdrawTestHooks mounts the payout engine's holds and the
-// withdraw-scoped and listing clocks under /api/test, behind the full-access admin token,
+// registerWithdrawTestHooks mounts the payout engine's holds, the Hub's clocks
+// (scope "all", "withdraw" or "listing") and the e2e hooks (faults, cash limits,
+// archive drop) under /api/test, behind the full-access admin token,
 // in a testhooks build with LOKIHUB_TEST_HOOKS=1 beside a regtest node only
 // (plan WP-20 item 0h, G1).
 func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
@@ -105,6 +107,15 @@ func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
 			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: err.Error()})
 		}
 		switch req.Scope {
+		case "all":
+			// Every clock the Hub's protocol state reads (hubclock): expiry,
+			// order windows, lookups, retention, joins, rotations, payouts and
+			// listings. The periodic jobs run at once.
+			hubclock.SetOffset(req.OffsetSecs)
+			if e := engine(); e != nil {
+				e.Signal()
+			}
+			return c.JSON(http.StatusOK, map[string]any{"offset_secs": req.OffsetSecs, "scope": req.Scope})
 		case "listing":
 			l, ok := httpSvc.svc.(interface{ SetListingClockOffset(int64) })
 			if !ok {
@@ -114,7 +125,7 @@ func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
 			return c.JSON(http.StatusOK, map[string]any{"offset_secs": req.OffsetSecs, "scope": req.Scope})
 		case "withdraw":
 		default:
-			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: `scope must be "withdraw" or "listing"`})
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: `scope must be "all", "withdraw" or "listing"`})
 		}
 		e := engine()
 		if e == nil {
@@ -124,6 +135,7 @@ func (httpSvc *HttpService) registerWithdrawTestHooks(full *echo.Group) {
 		e.Signal()
 		return c.JSON(http.StatusOK, map[string]any{"offset_secs": req.OffsetSecs, "scope": req.Scope})
 	})
+	httpSvc.registerE2ETestHooks(g)
 }
 
 // withdrawHooksRegtestOnly refuses every withdraw hook unless this backend's

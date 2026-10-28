@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -67,6 +68,9 @@ func (svc *service) startOrderJobs(ctx context.Context, pool *nostr.SimplePool) 
 				e.ScanChain(ctx)
 				e.RetryMints(ctx)
 			case <-retention.C:
+				e.RunRetention()
+			case <-hubclock.Moved():
+				e.RunPayBy(ctx)
 				e.RunRetention()
 			}
 		}

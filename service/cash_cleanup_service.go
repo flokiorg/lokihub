@@ -81,6 +81,14 @@ func StartCashCleanupService(ctx context.Context, gormDB *gorm.DB, transactionsS
 			select {
 			case <-ctx.Done():
 				return
+			case <-hubclock.Moved():
+				// The clock was moved (a regtest test hook): expiry and
+				// retention are due now.
+				if lnClient := getLNClient(); lnClient != nil {
+					runCashCleanup(ctx, gormDB, transactionsSvc, lnClient, eventPublisher)
+					pruneCashRequests(gormDB)
+					pruneCircleJoinRecords(gormDB, hubclock.Now())
+				}
 			case <-ticker.C:
 				lnClient := getLNClient()
 				if lnClient == nil {
