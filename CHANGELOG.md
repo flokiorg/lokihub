@@ -492,6 +492,9 @@ audits of both.
 - Refuses a `cash_withdraw` whose quote expired or whose bill expired while it
   waited for its locks: the commit now reads the chain tip and the bill again
   under them.
+- Stops the expiry sweep from reclaiming a bill whose slice a `cash_redeem`
+  claimed but has not started paying yet. The redemption won the slice, and
+  its payment would have failed with the funds already back at the Hub.
 - Publishes a payout's CPFP child on its own when the node refuses it as a
   package. lokid has no package relay, so the child of a reorganised payout
   was refused every pass; now its parent is republished and the child sent
