@@ -82,8 +82,6 @@ type Engine struct {
 	S       *Service
 	Hooks   *EngineHooks
 	Notices NoticeSender
-	// Rand draws notice delays; nil is crypto/rand.
-	Rand io.Reader
 
 	ready    atomic.Bool
 	floorSat atomic.Int64
@@ -120,13 +118,6 @@ func (e *Engine) before(stage string) error {
 }
 
 func (e *Engine) held(f func(h *EngineHooks) bool) bool { return e.Hooks != nil && f(e.Hooks) }
-
-func (e *Engine) rand() io.Reader {
-	if e.Rand != nil {
-		return e.Rand
-	}
-	return rand.Reader
-}
 
 // --- Funds ---
 

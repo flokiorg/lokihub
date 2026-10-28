@@ -129,8 +129,7 @@ func TestHandleCashTransferEvent_PartialSplit_LegacyClientSilentlyStrandsRemaind
 	// The legacy client's only lead is the connection it already holds
 	// (wallet/currentPubkey) -- exactly what the OLD contract would have kept
 	// serving the remainder on. Acting on that belief now fails, but the
-	// failure message must carry a breadcrumb toward where the value went
-	// (noSliceRegisteredMessage, cash_transfer_controller.go).
+	// failure message must carry a breadcrumb toward where the value went.
 	retryProof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, newPubkey, "", 3000, nil, time.Now())
 	retry := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
 		IdentityType:  db.CashIdentityPubkey,

@@ -327,44 +327,6 @@ func (api *api) LSPS5RemoveWebhook(ctx context.Context, req *LSPS5RemoveWebhookR
 	return map[string]string{"requestId": reqID}, nil
 }
 
-// Helper to parse host:port
-func parseHostPort(hostPort string) (string, uint16, error) {
-	parts := strings.Split(hostPort, ":")
-	if len(parts) != 2 {
-		return "", 0, fmt.Errorf("invalid host:port format: %s", hostPort)
-	}
-	port, err := strconv.ParseUint(parts[1], 10, 16)
-	if err != nil {
-		return "", 0, fmt.Errorf("invalid port number: %w", err)
-	}
-	return parts[0], uint16(port), nil
-}
-
-// connectLSP attempts to connect to the LSP peer
-func (api *api) connectLSP(ctx context.Context, pubkey string, host string) error {
-	address, port, err := parseHostPort(host)
-	if err != nil {
-		logger.Logger.Error().Err(err).Str("host", host).Msg("Failed to parse host:port for LSP connection")
-		return err
-	}
-
-	req := &ConnectPeerRequest{
-		Pubkey:  pubkey,
-		Address: address,
-		Port:    port,
-	}
-
-	if err := api.ConnectPeer(ctx, req); err != nil {
-		if strings.Contains(err.Error(), "already connected") {
-			logger.Logger.Info().Str("pubkey", pubkey).Msg("Peer already connected, ignoring error")
-			return nil
-		}
-		logger.Logger.Error().Err(err).Str("pubkey", pubkey).Msg("Failed to connect to LSP peer")
-		return err
-	}
-	return nil
-}
-
 // disconnectLSP disconnects the LSP peer
 func (api *api) disconnectLSP(ctx context.Context, pubkey string) error {
 	if err := api.DisconnectPeer(ctx, pubkey); err != nil {

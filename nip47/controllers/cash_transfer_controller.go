@@ -158,31 +158,6 @@ type cashTransferResponse struct {
 // redeem the transferred slice even though identity_value (the connection_key
 // string itself) never changed. Always "" for pubkey/cash-mode targets, which
 // have no ia_pubkey concept, so their hash is unaffected by this field.
-// noSliceRegisteredMessage is the NOT_FOUND message for a claim lookup that
-// found no UNCLAIMED slice for (walletAppID, identityType, identityValue) —
-// shared by cash_transfer and cash_redeem. Best-effort enriches the generic
-// message with a breadcrumb when the slice DOES exist but was already split
-// off into a new dedicated wallet: exactly the situation a client built
-// against the pre-two-wallet-split contract hits on its natural retry for a
-// "remainder" it believes it still holds on this connection.
-// This doesn't fix that client's underlying assumption, but turns a silent
-// dead end into an actionable one. Diagnostic-only: any failure in the lookup
-// itself silently falls back to the generic message rather than affecting
-// the response.
-func (controller *nip47Controller) noSliceRegisteredMessage(walletAppID uint, identityType, identityValue string) string {
-	const generic = "no slice registered for this identity"
-	var priorClaim db.CashWalletClaim
-	err := controller.db.Where(
-		"wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NOT NULL AND spun_off_to_wallet_app_id IS NOT NULL",
-		walletAppID, identityType, identityValue,
-	).First(&priorClaim).Error
-	if err != nil {
-		return generic
-	}
-	return generic + " — its value was already split off into a new dedicated wallet by an earlier call; " +
-		"check cash_status or that earlier call's own response for the new connection, this one no longer holds it"
-}
-
 func newIdentityHash(identityType, identityValue, iaPubkey string) string {
 	sum := sha256.Sum256([]byte(identityType + ":" + identityValue + ":" + iaPubkey))
 	return hex.EncodeToString(sum[:])

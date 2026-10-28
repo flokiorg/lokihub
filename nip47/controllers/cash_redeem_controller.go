@@ -56,14 +56,6 @@ const (
 	// genuinely NIP-IC's own kind, not NIP-CASH's, so it borrows nipIC's name
 	// for it directly rather than redeclaring the number.
 	nostrKindIAAttestation = nipIC.KindAttestation
-
-	// cashRedeemIdentityFreshnessWindow bounds how old a claim proof's own
-	// timestamp may be — the future side is deliberately tighter (hardcoded
-	// 1 minute below, not this constant): a proof timestamped in the past is
-	// ordinary clock skew/latency, but one timestamped in the future has no
-	// legitimate explanation, so it gets far less tolerance. Defense-in-depth
-	// on top of the invoice/wallet binding above — not the primary protection.
-	cashRedeemIdentityFreshnessWindow = 5 * time.Minute
 )
 
 // cashRedeemForbiddenParams are fields a caller may never set on cash_redeem:

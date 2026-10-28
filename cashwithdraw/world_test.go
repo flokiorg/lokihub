@@ -122,7 +122,6 @@ type fakeFunds struct {
 	notReady  bool
 	atBound   bool
 	noCoins   bool
-	setAside  []uint
 	signalled int
 }
 

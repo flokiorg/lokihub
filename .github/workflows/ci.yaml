@@ -130,8 +130,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # The nonce-set throughput demonstrations skip themselves unless
-      # LOKIHUB_PERF is set: a shared runner is too slow to show them.
       - name: Test (postgres)
         run: go test -count=1 ./...
 
