@@ -491,6 +491,11 @@ audits of both.
   is signed by a key other than its claim proof's signer: NIP-CASH §Item Proofs
   treats such a proof as one that does not verify. A signer holding no slice
   whose claim proof is its own still gets `NOT_FOUND`.
+- Refuses a tampered `cash_withdraw` quote (its content changed, its id and
+  signature kept) at step 3 with `RESTRICTED`/`quote_invalid`, as NIP-CASH
+  orders it: the claim proof's `q` now binds the quote's id as sent, and the
+  quote's own check finds that the content no longer hashes to it. It was
+  refused `UNAUTHORIZED` at step 2.
 - Takes a circle join at any `max_amount`. A join was refused
   `LIMIT_EXCEEDED` under 11,000 mloki (the fee reserve plus 1 loki), a floor
   NIP-CW step 6 does not allow and `get_info` never advertised. The cap is
