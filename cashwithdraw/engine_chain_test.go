@@ -431,3 +431,46 @@ func TestEngine_FailedInvalidationDoesNotFailThePass(t *testing.T) {
 	w.pass(t)
 	require.Len(t, w.versions(t), 2, "the invalidation, built on a later pass")
 }
+
+// noPackageRelay is a node without package relay (lokid): every package is
+// refused, single transactions relay as usual.
+type noPackageRelay struct{ *fakechain.Chain }
+
+func (noPackageRelay) SubmitPackage(context.Context, []byte, []byte) error {
+	return fmt.Errorf("-32601: method not found: submitpackage")
+}
+
+// A node that refuses the child package gets the child on its own, after its
+// parent (plain CPFP): the child is broadcast and the payout confirms.
+func TestEngine_ChildWithoutPackageRelay(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	wd := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	txid := *w.payout(t, wd.ID).Txid
+	w.chain.Mine(1)
+	w.pass(t)
+	w.chain.Reorg(1, txid)
+	w.pass(t)
+	require.Equal(t, db.CashWithdrawBroadcast, w.payout(t, wd.ID).State)
+
+	w.node.payer = noPackageRelay{w.chain}
+	w.chain.Withhold(txid, true)
+	w.chain.Mine(7)
+	w.pass(t)
+	var child *db.CashWithdrawVersion
+	for _, v := range w.versions(t) {
+		if v.Kind == db.CashVersionChild {
+			child = &v
+		}
+	}
+	require.NotNil(t, child, "a child is built")
+	assert.Equal(t, db.CashVersionBroadcast, child.State, "published on its own")
+	assert.True(t, w.chain.InMempool(*child.Txid))
+
+	w.chain.Withhold(txid, false)
+	w.chain.Mine(7)
+	w.pass(t)
+	got := w.payout(t, wd.ID)
+	assert.Equal(t, db.CashWithdrawFinal, got.State)
+	assert.Equal(t, txid, *got.Txid)
+}

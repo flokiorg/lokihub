@@ -327,14 +327,28 @@ func (e *Engine) child(ctx context.Context, p lnclient.OnchainPayer, rates Rates
 	return e.submitChild(ctx, p, parent, v)
 }
 
-// submitChild submits a signed child with its parent as a package; a refusal
-// is retried by the next pass.
+// submitChild submits a signed child with its parent as a package. A node
+// without package relay (lokid has no submitpackage) refuses the package: the
+// child is then published on its own, after its parent (republished
+// identical, "already have" when still relayed). That is plain CPFP, which
+// relays whenever the parent meets the node's minimum relay fee on its own;
+// only a parent below it needs the package. A refusal of both is retried by
+// the next pass, while the broadcast step keeps republishing the parent.
 func (e *Engine) submitChild(ctx context.Context, p lnclient.OnchainPayer, parent, v *db.CashWithdrawVersion) error {
 	parentRaw, _ := hex.DecodeString(*parent.RawTx)
 	childRaw, _ := hex.DecodeString(*v.RawTx)
 	if err := p.SubmitPackage(ctx, parentRaw, childRaw); err != nil {
-		logger.Logger.Warn().Err(err).Msg("Submitting a payout's child package failed; retried next pass")
-		return nil
+		perr := p.PublishTx(ctx, parentRaw)
+		if perr == nil {
+			perr = p.PublishTx(ctx, childRaw)
+		}
+		if perr != nil {
+			logger.Logger.Warn().Err(err).AnErr("publish_error", perr).
+				Msg("Submitting a payout's child failed, as a package and on its own; retried next pass")
+			return nil
+		}
+		logger.Logger.Info().Err(err).Uint("batch_id", v.BatchID).
+			Msg("The node refused a payout's child package; the child was published on its own after its parent")
 	}
 	e.Bumps.Add(1)
 	now := e.S.now().Unix()
