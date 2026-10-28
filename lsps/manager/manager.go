@@ -534,6 +534,10 @@ func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error 
 		// §Privacy Considerations).
 		return fmt.Errorf("LSP %s is not a trusted LSP", pubkey)
 	}
+	if !connectable(targetLSP.Usable, targetLSP.Status) {
+		// Never through an older announcement's address.
+		return fmt.Errorf("LSP %s has no usable open announcement", pubkey)
+	}
 
 	host := targetLSP.Host
 	if host == "" {
@@ -1049,7 +1053,9 @@ func (m *LiquidityManager) handleChannelAcceptRequest(
 	requestPubkey := strings.ToLower(req.NodePubkey)
 	whitelisted := false
 	for _, lsp := range activeLSPs {
-		if lsp.Trusted && strings.ToLower(lsp.Pubkey) == requestPubkey {
+		// Zero-conf only while the trusted LSP's newest announcement is usable
+		// and not closed (NIP-LSP §Client Behavior).
+		if lsp.Trusted && connectable(lsp.Usable, lsp.Status) && strings.ToLower(lsp.Pubkey) == requestPubkey {
 			whitelisted = true
 			break
 		}
