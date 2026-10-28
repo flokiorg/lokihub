@@ -66,10 +66,10 @@ func (NostrRelays) Fetch(ctx context.Context, urls []string, f nip01.Subscriptio
 	seen := map[string]bool{}
 	var out []*nip01.Event
 	for ie := range pool.FetchMany(cctx, urls, filter) {
-		if ie.Event == nil || seen[ie.Event.ID] {
+		if ie.Event == nil || seen[ie.ID] {
 			continue
 		}
-		seen[ie.Event.ID] = true
+		seen[ie.ID] = true
 		ev := fromGoNostr(ie.Event)
 		if ev.Verify() != nil {
 			continue

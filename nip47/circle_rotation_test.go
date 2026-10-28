@@ -110,7 +110,7 @@ func TestMemberRequest_ChecksInOrder(t *testing.T) {
 	var proof db.CircleWalletIdentityProof
 	require.NoError(t, r.svc.DB.Where("event_id = ?", stranger.ID).First(&proof).Error)
 	assert.Equal(t, db.CircleProofMember, proof.Kind)
-	assert.Equal(t, int64(stranger.CreatedAt)+86460, proof.RetainUntil)
+	assert.Equal(t, int64(stranger.CreatedAt)+86460, proof.RetainUntil) //nolint:gosec // a unix time
 }
 
 // A wallet issued without a rotation delay cannot be rotated.

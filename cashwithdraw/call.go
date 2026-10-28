@@ -255,7 +255,7 @@ func (s *Service) Withdraw(ctx context.Context, bill *db.App, c Caller, meta Cal
 		d := verdict.Signer
 		delivery = &d
 		proofID = verdict.RecomputedID
-		proofCreatedAt = int64(eventCreatedAt(req.IdentityEvent))
+		proofCreatedAt = int64(eventCreatedAt(req.IdentityEvent)) //nolint:gosec // a unix time
 	}
 	if markUsed == nil {
 		markUsed = cashrequest.Store{DB: s.DB, Now: s.now}.MarkUsed

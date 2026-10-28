@@ -33,7 +33,7 @@ func joinedWallet(t *testing.T, svc *tests.TestService, hub *db.App, requesterKe
 	return &wallet
 }
 
-func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requesterKey string, maxAmountMloki uint64, expirySecs int) *models.Response {
+func joinWithExpiry(t *testing.T, svc *tests.TestService, hub *db.App, requesterKey string, maxAmountMloki uint64, expirySecs uint64) *models.Response {
 	t.Helper()
 	r := &models.Request{}
 	require.NoError(t, json.Unmarshal([]byte(makeCircleWalletRequest(t, requesterKey, *hub.WalletPubkey, maxAmountMloki, expirySecs)), r))

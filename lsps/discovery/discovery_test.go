@@ -159,7 +159,7 @@ func TestU26_1_KLSPThroughDiscovery(t *testing.T) {
 			f.fetch.evs = []*nip01.Event{&ev}
 			require.NoError(t, f.s.Discover(context.Background()))
 			row := f.row(t, ev.PubKey)
-			assert.Equal(t, ev.CreatedAt, uint64(row.NewestSeenCreatedAt))
+			assert.EqualValues(t, ev.CreatedAt, row.NewestSeenCreatedAt)
 			if e.Step == 0 {
 				assert.True(t, row.Usable, row.InvalidReason)
 				assert.Equal(t, ev.ID, row.LastEventID)
@@ -212,7 +212,7 @@ func TestU26_3_NewestSeen(t *testing.T) {
 	require.NoError(t, f.s.Discover(context.Background()))
 	row := f.row(t, kLSPKey)
 	assert.False(t, row.Usable, "no fallback to the older valid one")
-	assert.Equal(t, int64(bad.CreatedAt), row.NewestSeenCreatedAt)
+	assert.EqualValues(t, bad.CreatedAt, row.NewestSeenCreatedAt)
 
 	// Offered again alone, the older one stays refused.
 	f.fetch.evs = []*nip01.Event{good}
@@ -309,7 +309,7 @@ func TestU26_14_SanitizedText(t *testing.T) {
 	ev := f.v.event("K-LSP-1").Copy()
 	for _, tg := range ev.Tags {
 		if tg[0] == "title" {
-			tg[1] = "Alice​'s ‮Liquidity with a very long title that goes past forty"
+			tg[1] = "Alice\u200b's \u202eLiquidity with a very long title that goes past forty"
 		}
 	}
 	require.NoError(t, ev.Sign("0000000000000000000000000000000000000000000000000000000000000001"))
@@ -317,8 +317,8 @@ func TestU26_14_SanitizedText(t *testing.T) {
 	require.NoError(t, f.s.Discover(context.Background()))
 	row := f.row(t, kLSPKey)
 	require.True(t, row.Usable, row.InvalidReason)
-	assert.NotContains(t, row.Name, "​")
-	assert.NotContains(t, row.Name, "‮")
+	assert.NotContains(t, row.Name, "\u200b")
+	assert.NotContains(t, row.Name, "\u202e")
 	assert.LessOrEqual(t, len([]rune(row.Name)), niplsp.MaxTitle)
 }
 

@@ -242,7 +242,7 @@ func address(t *testing.T, version, n int) string {
 	t.Helper()
 	prog := make([]byte, n)
 	for i := range prog {
-		prog[i] = byte(i + 7*version + n)
+		prog[i] = byte(i + 7*version + n) //nolint:gosec // filler bytes, wrapping is fine
 	}
 	var a chainutil.Address
 	var err error
@@ -365,7 +365,7 @@ func freshAddress(t *testing.T) string {
 	n := addrSeq.n
 	addrSeq.Unlock()
 	prog := make([]byte, 20)
-	prog[0], prog[1], prog[2] = byte(n>>16), byte(n>>8), byte(n)
+	prog[0], prog[1], prog[2] = byte(n>>16), byte(n>>8), byte(n) //nolint:gosec // the low three bytes of a counter, truncated on purpose
 	prog[19] = 0x5a
 	a, err := chainutil.NewAddressWitnessPubKeyHash(prog, &chaincfg.RegressionNetParams)
 	require.NoError(t, err)

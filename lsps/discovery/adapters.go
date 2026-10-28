@@ -27,16 +27,16 @@ func (NostrFetcher) Fetch(ctx context.Context, relays []string, f nip01.Subscrip
 	seen := map[string]bool{}
 	var out []*nip01.Event
 	for ie := range pool.FetchMany(cctx, relays, filter) {
-		if ie.Event == nil || seen[ie.Event.ID] {
+		if ie.Event == nil || seen[ie.ID] {
 			continue
 		}
-		seen[ie.Event.ID] = true
-		tags := make([][]string, 0, len(ie.Event.Tags))
-		for _, t := range ie.Event.Tags {
+		seen[ie.ID] = true
+		tags := make([][]string, 0, len(ie.Tags))
+		for _, t := range ie.Tags {
 			tags = append(tags, []string(t))
 		}
-		out = append(out, &nip01.Event{ID: ie.Event.ID, PubKey: ie.Event.PubKey, CreatedAt: uint64(ie.Event.CreatedAt), //nolint:gosec // a unix time
-			Kind: ie.Event.Kind, Tags: tags, Content: ie.Event.Content, Sig: ie.Event.Sig})
+		out = append(out, &nip01.Event{ID: ie.ID, PubKey: ie.PubKey, CreatedAt: uint64(ie.CreatedAt), //nolint:gosec // a unix time
+			Kind: ie.Kind, Tags: tags, Content: ie.Content, Sig: ie.Sig})
 	}
 	return out, nil
 }

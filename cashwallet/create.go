@@ -492,12 +492,7 @@ func Commit(ctx context.Context, deps Deps, resolved *Resolved, record *db.CashR
 
 	recipientResults := make([]RecipientResult, len(resolved.Recipients))
 	for i, r := range resolved.Recipients {
-		recipientResults[i] = RecipientResult{
-			IdentityType:  r.IdentityType,
-			IdentityValue: r.IdentityValue,
-			IAPubkey:      r.IAPubkey,
-			AmountMloki:   r.AmountMloki,
-		}
+		recipientResults[i] = RecipientResult(r)
 	}
 
 	logger.Logger.Info().

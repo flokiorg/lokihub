@@ -129,14 +129,14 @@ func testConnectionPubkey(t testing.TB, requesterPubkey string) string {
 // createCircleWalletParams (rather than a hand-built string template) so the
 // embedded identity_event JSON is escaped correctly — mirrors
 // handleClaimFundsFor's content-map + json.Marshal pattern.
-func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey string, maxAmountMloki uint64, expirationSecs int) string {
+func makeCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey string, maxAmountMloki uint64, expirationSecs uint64) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           uint64(expirationSecs),
+		Expiry:           expirationSecs,
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}
 	return joinRequestJSON(t, params)
@@ -495,14 +495,14 @@ func TestHandleCreateCircleWalletEvent_NonRoundMloki_CapRoundsDownSafely(t *test
 
 // makeCircleWalletRequestWithRenewal is like makeCircleWalletRequest but also
 // sets budget_renewal — omit it (pass "") to test the caller-omitted default.
-func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubWalletPubkey string, maxAmountMloki uint64, expirationSecs int, budgetRenewal string) string {
+func makeCircleWalletRequestWithRenewal(t *testing.T, requesterPrivkey, hubWalletPubkey string, maxAmountMloki uint64, expirationSecs uint64, budgetRenewal string) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	params := nipcw.CreateCircleWalletRequest{
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           uint64(expirationSecs),
+		Expiry:           expirationSecs,
 		BudgetRenewal:    budgetRenewal,
 		IdentityEvent:    mustMarshal(t, buildCircleWalletIdentityEvent(t, requesterPrivkey, hubWalletPubkey)),
 	}

@@ -55,7 +55,7 @@ func TestU_24_9_Coins(t *testing.T) {
 	w.chain.Reserve = 10_000
 	w.pass(t)
 
-	w.svc.Cfg.GetEnv().WithdrawEnv.CashWithdrawLeaseSecs = 7*86400 + 3600
+	w.svc.Cfg.GetEnv().CashWithdrawLeaseSecs = 7*86400 + 3600
 	wd := w.commitTo(t, 21_000_000)
 	var assigned []db.CashWithdrawCoin
 	require.NoError(t, w.svc.DB.Where("withdrawal_id = ?", wd.ID).Find(&assigned).Error)
@@ -183,8 +183,8 @@ func TestU_24_4_Invariants(t *testing.T) {
 	withB := append(append([]vout(nil), outs[:len(outs)-1]...), vout{Script: b.OutputScript, Value: b.PayoutMillis / 1000, WithdrawalID: &bid}, change)
 	assert.ErrorIs(t, ok(spec, ins, withB), errInvariant, "pays another batch's payout")
 
-	w.svc.Cfg.GetEnv().WithdrawEnv.CashWithdrawMaxOutputs = 1
-	defer func() { w.svc.Cfg.GetEnv().WithdrawEnv.CashWithdrawMaxOutputs = 0 }()
+	w.svc.Cfg.GetEnv().CashWithdrawMaxOutputs = 1
+	defer func() { w.svc.Cfg.GetEnv().CashWithdrawMaxOutputs = 0 }()
 	require.NoError(t, w.svc.DB.Model(&db.CashWithdrawal{}).Where("id = ?", b.ID).Update("batch_id", batch).Error)
 	assert.ErrorIs(t, ok(spec, ins, withB), errInvariant, "over the output cap")
 	assert.Positive(t, w.eng.InvariantFailures.Load())

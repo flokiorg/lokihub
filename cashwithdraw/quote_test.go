@@ -50,11 +50,11 @@ func TestU_23_5_QuoteFieldsAndNoWrites(t *testing.T) {
 func TestU_23_4_QuoteFee(t *testing.T) {
 	w := newWorld(t)
 	bill, hs := w.mintPubkey(t, 21_000_000)
-	for _, tc := range []struct{ v, n int }{{0, 20}, {0, 32}, {1, 32}} {
-		addr := address(t, tc.v, tc.n)
+	for _, tc := range []struct{ v, n uint8 }{{0, 20}, {0, 32}, {1, 32}} {
+		addr := address(t, int(tc.v), int(tc.n))
 		res, err := w.quote(t, bill, hs[0], map[string]any{"address": addr})
 		require.NoError(t, err)
-		st := nipcash.ScriptType{Version: uint8(tc.v), ProgramLen: uint8(tc.n)}
+		st := nipcash.ScriptType{Version: tc.v, ProgramLen: tc.n}
 		r := RatesFrom(w.payer.est)
 		network := NetworkFee(r, st)
 		hub, fee, payout, err := nipcash.WithdrawFee(21_000_000, network, termsFeeBase, termsFeePpm, 0)
@@ -67,8 +67,8 @@ func TestU_23_4_QuoteFee(t *testing.T) {
 	}
 	// 31 vs 43 vbytes of output.
 	r := RatesFrom(w.payer.est)
-	assert.Equal(t, uint64(1000*r.SatPerVB*(31+110)), NetworkFee(r, nipcash.ScriptType{Version: 0, ProgramLen: 20}))
-	assert.Equal(t, uint64(1000*r.SatPerVB*(43+110)), NetworkFee(r, nipcash.ScriptType{Version: 1, ProgramLen: 32}))
+	assert.EqualValues(t, 1000*r.SatPerVB*(31+110), NetworkFee(r, nipcash.ScriptType{Version: 0, ProgramLen: 20}))
+	assert.EqualValues(t, 1000*r.SatPerVB*(43+110), NetworkFee(r, nipcash.ScriptType{Version: 1, ProgramLen: 32}))
 	// Floored at min relay + 1 unit/vB.
 	low := RatesFrom(lnclient.FeeEstimate{SatPerKw: 1, MinRelaySatPerKw: 250})
 	assert.Equal(t, int64(2), low.SatPerVB)

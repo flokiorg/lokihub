@@ -4,7 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -22,17 +22,19 @@ import (
 
 // U-1.R2a: the package converts no data. Its only Migrate* function is Migrate.
 func TestU_1_R2a_NoConversionMigrations(t *testing.T) {
-	pkgs, err := parser.ParseDir(token.NewFileSet(), ".", func(fi fs.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
+	paths, err := filepath.Glob("*.go")
 	require.NoError(t, err)
+	fset := token.NewFileSet()
 	var found []string
-	for _, pkg := range pkgs {
-		for _, f := range pkg.Files {
-			for _, d := range f.Decls {
-				if fn, ok := d.(*ast.FuncDecl); ok && strings.HasPrefix(fn.Name.Name, "Migrate") {
-					found = append(found, fn.Name.Name)
-				}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		require.NoError(t, err)
+		for _, d := range f.Decls {
+			if fn, ok := d.(*ast.FuncDecl); ok && strings.HasPrefix(fn.Name.Name, "Migrate") {
+				found = append(found, fn.Name.Name)
 			}
 		}
 	}
@@ -75,7 +77,7 @@ func actualForeignKeys(t *testing.T, gormDB *gorm.DB) []foreignKey {
 		var rows []struct {
 			Column, RefTable, OnDelete string
 		}
-		if gormDB.Dialector.Name() == "postgres" {
+		if gormDB.Name() == "postgres" {
 			err = gormDB.Raw(`
 				SELECT kcu.column_name AS "column", ccu.table_name AS ref_table, rc.delete_rule AS on_delete
 				FROM information_schema.table_constraints tc

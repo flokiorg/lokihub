@@ -132,7 +132,7 @@ func mustPubkeyForTest(t *testing.T, privkey string) string {
 // loop, so the single-use replay guard never fires and only the behavior
 // actually under test (e.g. the one-active-wallet-per-identity cap) governs
 // the outcome.
-func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey, disambiguator string, maxAmountMloki uint64, expirationSecs int) string {
+func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey, disambiguator string, maxAmountMloki uint64, expirationSecs uint64) string {
 	t.Helper()
 	requesterPubkey, _ := nostr.GetPublicKey(requesterPrivkey)
 	identityEvent := &nostr.Event{
@@ -147,7 +147,7 @@ func distinctCircleWalletRequest(t *testing.T, requesterPrivkey, hubWalletPubkey
 		Pubkey:           requesterPubkey,
 		ConnectionPubkey: testConnectionPubkey(t, requesterPubkey),
 		MaxAmount:        maxAmountMloki,
-		Expiry:           uint64(expirationSecs),
+		Expiry:           expirationSecs,
 		IdentityEvent:    mustMarshal(t, identityEvent),
 	}
 	return joinRequestJSON(t, params)
