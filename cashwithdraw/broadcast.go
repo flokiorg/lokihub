@@ -191,65 +191,76 @@ func (e *Engine) bumpStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 		return err
 	}
 	for _, b := range bs {
-		vs, err := e.batchVersions(e.S.DB, b.ID)
-		if err != nil {
-			return err
-		}
-		for i := range vs {
-			v := &vs[i]
-			if v.ConfirmedOnce && v.State == db.CashVersionBroadcast && v.ConfirmHeight != nil &&
-				(v.FeeRefused || tip-*v.ConfirmHeight >= int64(e.env().BumpAfterBlocks())) && !hasChild(vs, v.ID) {
-				if err := e.child(ctx, p, rates, v); err != nil {
-					return err
-				}
+		// A bump that fails is the batch's own: it is retried next pass, and
+		// it must not stop the steps that follow, nor the other batches'
+		// payouts (a child whose parent left the mempool cannot be funded).
+		if err := e.bumpBatch(ctx, p, tip, rates, b); err != nil {
+			if errors.Is(err, ErrEngineStopped) {
+				return err
 			}
-			// A child whose package was refused is submitted again (R2-P-L1).
-			if v.Kind == db.CashVersionChild && v.State == db.CashVersionSigned && v.RawTx != nil && v.ParentID != nil {
-				for j := range vs {
-					if parent := &vs[j]; parent.ID == *v.ParentID && parent.State == db.CashVersionBroadcast && parent.RawTx != nil {
-						if err := e.submitChild(ctx, p, parent, v); err != nil {
-							return err
-						}
+			logger.Logger.Warn().Err(err).Uint("batch_id", b.ID).Msg("Bumping a payout batch failed; retried next pass")
+		}
+	}
+	return nil
+}
+
+// bumpBatch is bumpStep for one batch.
+func (e *Engine) bumpBatch(ctx context.Context, p lnclient.OnchainPayer, tip int64, rates Rates, b db.CashWithdrawBatch) error {
+	vs, err := e.batchVersions(e.S.DB, b.ID)
+	if err != nil {
+		return err
+	}
+	for i := range vs {
+		v := &vs[i]
+		if v.ConfirmedOnce && v.State == db.CashVersionBroadcast && v.ConfirmHeight != nil &&
+			(v.FeeRefused || tip-*v.ConfirmHeight >= int64(e.env().BumpAfterBlocks())) && !hasChild(vs, v.ID) {
+			if err := e.child(ctx, p, rates, v); err != nil {
+				return err
+			}
+		}
+		// A child whose package was refused is submitted again (R2-P-L1).
+		if v.Kind == db.CashVersionChild && v.State == db.CashVersionSigned && v.RawTx != nil && v.ParentID != nil {
+			for j := range vs {
+				if parent := &vs[j]; parent.ID == *v.ParentID && parent.State == db.CashVersionBroadcast && parent.RawTx != nil {
+					if err := e.submitChild(ctx, p, parent, v); err != nil {
+						return err
 					}
 				}
 			}
 		}
-		cur := current(vs)
-		if cur == nil || cur.ConfirmedOnce || cur.State != db.CashVersionBroadcast && !cur.FeeRefused {
-			continue
-		}
-		stale := cur.BroadcastHeight != nil && tip-*cur.BroadcastHeight >= int64(e.env().BumpAfterBlocks())
-		low := cur.FeeRateSatKvb != nil && *cur.FeeRateSatKvb < rates.SatPerVB*1000/2
-		if !cur.FeeRefused && !stale && !low {
-			continue
-		}
-		ws, err := e.batchPayouts(e.S.DB, b.ID)
-		if err != nil {
-			return err
-		}
-		spec := versionSpec{batchID: b.ID, kind: cur.Kind, prev: cur, hubIDs: hubIDsOf(ws), excluded: map[uint]bool{}}
-		for _, set := range possiblySigned(vs) {
-			spec.inputs = append(spec.inputs, set...)
-		}
-		paid := map[uint]bool{}
-		for _, o := range outputsOf(cur) {
-			if o.WithdrawalID != nil {
-				paid[*o.WithdrawalID] = true
-			}
-		}
-		for _, w := range ws {
-			if paid[w.ID] {
-				spec.payouts = append(spec.payouts, w)
-			} else if cur.Kind == db.CashVersionInvalidation {
-				spec.excluded[w.ID] = true
-			}
-		}
-		e.Bumps.Add(1)
-		if err := e.buildAndSign(ctx, p, tip, rates, spec); err != nil {
-			return err
+	}
+	cur := current(vs)
+	if cur == nil || cur.ConfirmedOnce || cur.State != db.CashVersionBroadcast && !cur.FeeRefused {
+		return nil
+	}
+	stale := cur.BroadcastHeight != nil && tip-*cur.BroadcastHeight >= int64(e.env().BumpAfterBlocks())
+	low := cur.FeeRateSatKvb != nil && *cur.FeeRateSatKvb < rates.SatPerVB*1000/2
+	if !cur.FeeRefused && !stale && !low {
+		return nil
+	}
+	ws, err := e.batchPayouts(e.S.DB, b.ID)
+	if err != nil {
+		return err
+	}
+	spec := versionSpec{batchID: b.ID, kind: cur.Kind, prev: cur, hubIDs: hubIDsOf(ws), excluded: map[uint]bool{}}
+	for _, set := range possiblySigned(vs) {
+		spec.inputs = append(spec.inputs, set...)
+	}
+	paid := map[uint]bool{}
+	for _, o := range outputsOf(cur) {
+		if o.WithdrawalID != nil {
+			paid[*o.WithdrawalID] = true
 		}
 	}
-	return nil
+	for _, w := range ws {
+		if paid[w.ID] {
+			spec.payouts = append(spec.payouts, w)
+		} else if cur.Kind == db.CashVersionInvalidation {
+			spec.excluded[w.ID] = true
+		}
+	}
+	e.Bumps.Add(1)
+	return e.buildAndSign(ctx, p, tip, rates, spec)
 }
 
 func hasChild(vs []db.CashWithdrawVersion, parent uint) bool {
