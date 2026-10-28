@@ -17,7 +17,8 @@ import (
 
 // TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary: once a cash
 // wallet's ExpiresAt has passed, and before service.runCashCleanup's sweep deletes
-// it, every bill method is refused with RESTRICTED (NIP-CASH has no EXPIRED code) and a message in the recipient's
+// it, every spending bill method is refused with RESTRICTED (NIP-CASH has no EXPIRED
+// code; cash_status still answers, with the expires_at that passed) and a message in the recipient's
 // own terms — "cash wallet", "redemption deadline", the deadline itself — rather
 // than the generic "This app has expired" every other app kind gets.
 //
@@ -48,7 +49,6 @@ func TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary(t *testing.T
 		constants.NIP47MethodCashRedeem,
 		constants.NIP47MethodCashTransfer,
 		constants.NIP47MethodCashConsolidate,
-		constants.NIP47MethodCashStatus,
 	} {
 		t.Run(method, func(t *testing.T) {
 			nonce := tests.RandomHex32()
@@ -72,4 +72,15 @@ func TestAuditUX_ExpiredCashWallet_ErrorMessageSpeaksCashVocabulary(t *testing.T
 			assert.NotEqual(t, "This app has expired", res.Error.Message)
 		})
 	}
+
+	// cash_status is answered with the roster (its expires_at, on a live
+	// bill, is the wallet's own deadline; this fixture expires the scope only).
+	nonce := tests.RandomHex32()
+	notAfter := time.Now().Add(time.Minute).Unix()
+	item := buildItem(t, "s", walletPubkey, constants.NIP47MethodCashStatus, `{}`, recipientPriv, connPriv, hubXOnly, nonce, notAfter)
+	res, served := nip47svc.ServePrivateItem(context.TODO(), svc.LNClient, item,
+		PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
+	require.True(t, served)
+	require.Nil(t, res.Error, "%+v", res.Error)
+	assert.Contains(t, string(res.Result), `"recipients"`)
 }
