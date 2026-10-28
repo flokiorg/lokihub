@@ -210,6 +210,11 @@ func (e *Engine) restateTx(tx *gorm.DB, orderID uint) (*db.CashOrder, error) {
 		return nil, err
 	}
 	state := string(nipCO.OrderStateAt(facts, e.now().Unix()))
+	// closed is final (NIP-CO §Order State): a later payment still mints, and
+	// nothing turns it back.
+	if order.State == db.CashOrderClosed {
+		state = db.CashOrderClosed
+	}
 	reserved := order.ReservedMillis
 	if state == db.CashOrderMinted || state == db.CashOrderExpired || state == db.CashOrderClosed {
 		reserved = 0
@@ -244,6 +249,10 @@ func orderFactsTx(tx *gorm.DB, order *db.CashOrder) (nipCO.OrderFacts, error) {
 			f.Seen = true
 			f.Minted++
 		case db.CashOrderPaymentKept:
+			f.Seen = true
+		case db.CashOrderPaymentDropped:
+			// Gone from the mempool and the chain, but it was seen: an
+			// on-chain order that saw it by pay_by is kept (NIP-CO §On-chain).
 			f.Seen = true
 		}
 	}
@@ -314,7 +323,14 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 		if err := json.Unmarshal([]byte(order.TermsJSON), &terms); err != nil {
 			return err
 		}
-		value := uint64(max(p.ValueMillis, 0))                                           //nolint:gosec // non-negative
+		value := uint64(max(p.ValueMillis, 0)) //nolint:gosec // non-negative
+		// An on-chain payment is minted only at its tier's confirmations, read
+		// again here: a reorganisation since it was confirmed leaves it unminted
+		// (NIP-CO §On-chain).
+		if strings.HasPrefix(p.PaymentKey, "oc:") && p.Confirmations < requiredConfirmations(&order, value) {
+			return tx.Model(&db.CashOrderPayment{}).Where("id = ? AND state = ?", p.ID, db.CashOrderPaymentConfirmed).
+				Update("state", db.CashOrderPaymentSeen).Error
+		}
 		amounts := nipCO.MintSplit(value, uint64(order.FeeMillis), terms.Kind.MaxMillis) //nolint:gosec // non-negative
 		if value > 0 {
 			credit := ledger.ExternalCredit{AppID: hub.ID, Amount: value, Purpose: "cash order", Key: p.PaymentKey,
@@ -571,6 +587,18 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 	if err != nil || inv == nil || inv.Preimage == "" {
 		return "", true, fmt.Errorf("could not read the order invoice: %w", err)
 	}
+	if order.State != db.CashOrderOpen || e.now().Unix() > order.PayBy {
+		return "", true, ErrOrderNotPayable
+	}
+	// The node invoice is cancelled before the payment is recorded: an external
+	// payment can then no longer settle it as well, which would be neither
+	// minted nor credited. One that already did makes the cancel fail, and this
+	// payer is refused.
+	if err := ln.CancelHoldInvoice(ctx, paymentHash); err != nil {
+		logger.Logger.Warn().Err(err).Uint("order_id", order.ID).
+			Msg("Could not cancel an order invoice before taking a payment of it on this node; refusing that payment")
+		return "", true, ErrOrderNotPayable
+	}
 	var changed *db.CashOrder
 	err = e.DB.Transaction(func(tx *gorm.DB) error {
 		if err := db.LockNamespace(tx, db.LockNsOrder, int32(order.HubAppID)); err != nil { //nolint:gosec // app ids are small
@@ -599,10 +627,6 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 		return "", true, err
 	}
 	e.notify(changed)
-	if err := ln.CancelHoldInvoice(ctx, paymentHash); err != nil {
-		logger.Logger.Error().Err(err).Uint("order_id", order.ID).
-			Msg("Failed to cancel an order invoice paid on this node; a second payment of it would be kept by the Hub")
-	}
 	e.mintPending(ctx, order.ID)
 	return inv.Preimage, true, nil
 }

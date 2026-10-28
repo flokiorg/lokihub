@@ -408,7 +408,7 @@ func (controller *nip47Controller) HandleCashTransferEvent(ctx context.Context, 
 		if remainder > 0 {
 			newBills = 2
 		}
-		if code, message := controller.spinOffLimitRefusal(app, newBills); code != "" {
+		if code, message := controller.spinOffLimitRefusal(app, newBills, true); code != "" {
 			refuse(code, message)
 			return
 		}
@@ -558,7 +558,9 @@ func eventCreatedAt(raw string) int64 {
 // transferSpinsOff decides a transfer's outcome (NIP-CASH §Which outcome a
 // request produces): a partial split always spins off. A full transfer to a
 // pubkey or connection_key is in place, unless that identity already holds
-// another unclaimed slice on this wallet. A full transfer to cash is in place
+// another unclaimed slice on this wallet. A slice of its whose payout is still in
+// flight counts as held: a failed payout releases it, and the wallet would then
+// hold two live slices for one identity. A full transfer to cash is in place
 // only on a wallet that has, and has always had, exactly one recipient.
 func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashWalletClaim, full bool, newType, newValue string) (bool, error) {
 	if !full {
@@ -567,8 +569,9 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 	if newType != db.CashIdentityCash {
 		var held int64
 		err := controller.db.Model(&db.CashWalletClaim{}).
-			Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND id <> ?",
+			Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ? AND id <> ?",
 				app.ID, newType, newValue, claim.ID).
+			Where("claimed_at IS NULL OR (payment_hash <> '' AND preimage = '')").
 			Count(&held).Error
 		return held > 0, err
 	}
@@ -592,14 +595,12 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 }
 
 // spinOffLimitRefusal bounds spin-offs (NIP-CASH §Security Considerations for
-// Cash-Mode Slices): per bill lineage per hour (RATE_LIMITED), then the live bills
-// under the Cash Hub (QUOTA_EXCEEDED). "" when the spin-off may proceed.
-func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int) (string, string) {
+// Cash-Mode Slices): the live bills under the Cash Hub (QUOTA_EXCEEDED), then,
+// when lineage is set, per bill lineage per hour (RATE_LIMITED). The cap is read
+// first, so a call it refuses spends none of the lineage's allowance. "" when
+// the spin-off may proceed.
+func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (string, string) {
 	env := controller.cfg.GetEnv()
-	if controller.lineageLimiter != nil &&
-		!controller.lineageLimiter.Allow(strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10), env.CashLineageSpinOffsPerHour) {
-		return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
-	}
 	if limit := env.CashMaxLiveBillsPerHub; limit > 0 && app.ParentAppID != nil {
 		var live int64
 		if err := controller.db.Model(&db.App{}).
@@ -610,6 +611,10 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 		if live+int64(newBills) > int64(limit) {
 			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit)
 		}
+	}
+	if lineage && controller.lineageLimiter != nil &&
+		!controller.lineageLimiter.Allow(strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10), env.CashLineageSpinOffsPerHour) {
+		return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
 	}
 	return "", ""
 }

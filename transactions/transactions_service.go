@@ -466,6 +466,10 @@ func (svc *transactionsService) SendPaymentSync(payReq string, amountMloki *uint
 			if err := lockCircleParties(tx, payer); err != nil {
 				return err
 			}
+			// Read again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
 		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
 				return fmt.Errorf("acquire payment lock: %w", err)
@@ -745,6 +749,15 @@ func (svc *transactionsService) SendKeysend(amount uint64, destination string, c
 		if circlePayer || circlemoney.IsCircleWallet(recipient) {
 			if err := lockCircleParties(tx, payer, recipient); err != nil {
 				return err
+			}
+			// Read both again under the lock: a state change in between must count.
+			if payer, err = loadApp(tx, appId); err != nil {
+				return err
+			}
+			if recipient != nil {
+				if recipient, err = loadApp(tx, &recipient.ID); err != nil {
+					return err
+				}
 			}
 		} else if tx.Name() == "postgres" && appId != nil {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock($1)", int64(*appId)).Error; err != nil { //nolint:gosec // app IDs are small auto-increment DB primary keys
@@ -1431,6 +1444,16 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			svc.logger.Error().Interface("event", event).Msg("Failed to cast event properties for hold invoice accepted")
 			return
 		}
+		// A keysend has no payment request and no row of ours: the node holds
+		// it for lokihub to settle or fail (flnd keysend-hold-time).
+		if lnClientTransaction.Invoice == "" && !svc.hasIncomingRow(lnClientTransaction.PaymentHash) {
+			if svc.lnClientProvider != nil {
+				if lnClient := svc.lnClientProvider(); lnClient != nil {
+					svc.resolveHeldKeysend(ctx, lnClientTransaction, lnClient)
+				}
+			}
+			return
+		}
 		if lnClientTransaction.SettleDeadline == nil {
 			svc.logger.Error().Interface("event", event).Msg("Transaction has no settle deadline")
 			return
@@ -1548,7 +1571,11 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 	}
 }
 
-func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, settleDeadline uint32, selfPayment bool) {
+// markHoldInvoiceAccepted moves a hold invoice's PENDING incoming row to
+// ACCEPTED, and reports whether this call moved it. A row another payment
+// already accepted is left alone and reported false: a same-node payer must not
+// take that payment's outcome for its own.
+func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, settleDeadline uint32, selfPayment bool) bool {
 	svc.logger.Info().
 		Str("payment_hash", paymentHash).
 		Bool("self_payment", selfPayment).
@@ -1569,18 +1596,25 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 			return result.Error
 		}
 
-		err := tx.Model(&dbTransaction).UpdateColumns(map[string]interface{}{
-			"state":           constants.TRANSACTION_STATE_ACCEPTED,
-			"self_payment":    selfPayment,
-			"settle_deadline": settleDeadline,
-		}).Error
-		if err != nil {
-			svc.logger.Error().Err(err).
+		res := tx.Model(&db.Transaction{}).Where("id = ? AND state = ?", dbTransaction.ID, constants.TRANSACTION_STATE_PENDING).
+			UpdateColumns(map[string]interface{}{
+				"state":           constants.TRANSACTION_STATE_ACCEPTED,
+				"self_payment":    selfPayment,
+				"settle_deadline": settleDeadline,
+			})
+		if res.Error != nil {
+			svc.logger.Error().Err(res.Error).
 				Str("payment_hash", paymentHash).
 				Uint("dbTxID", dbTransaction.ID).
 				Msg("Failed to update hold invoice state to accepted in DB")
-			return err
+			return res.Error
 		}
+		if res.RowsAffected != 1 {
+			return errHoldAlreadyAccepted
+		}
+		dbTransaction.State = constants.TRANSACTION_STATE_ACCEPTED
+		dbTransaction.SelfPayment = selfPayment
+		dbTransaction.SettleDeadline = &settleDeadline
 
 		svc.logger.Info().
 			Str("payment_hash", paymentHash).
@@ -1593,13 +1627,19 @@ func (svc *transactionsService) markHoldInvoiceAccepted(paymentHash string, sett
 		svc.logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
 			Msg("Failed DB transaction for hold invoice accepted event")
-	} else if publishHoldAccepted(svc.db, &dbTransaction) {
+		return false
+	}
+	if publishHoldAccepted(svc.db, &dbTransaction) {
 		svc.eventPublisher.Publish(&events.Event{
 			Event:      "nwc_hold_invoice_accepted",
 			Properties: &dbTransaction,
 		})
 	}
+	return true
 }
+
+// errHoldAlreadyAccepted: another payment accepted the hold invoice first.
+var errHoldAlreadyAccepted = errors.New("the hold invoice was already accepted by another payment")
 
 // IsSelfPayment reports whether paymentRequest resolves to a payment that
 // never actually needs to leave this node's own Lightning liquidity — the
@@ -1738,7 +1778,9 @@ func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnC
 
 	fakeSettleDeadline := clientInfo.BlockHeight + 24
 
-	svc.markHoldInvoiceAccepted(paymentHash, fakeSettleDeadline, true)
+	if !svc.markHoldInvoiceAccepted(paymentHash, fakeSettleDeadline, true) {
+		return nil, errors.New("this invoice is already being paid by another payment")
+	}
 
 	select {
 	case settledTransaction := <-settledChannel:
@@ -2093,8 +2135,10 @@ func (svc *transactionsService) getAppIdFromCustomRecords(customRecords []lnclie
 		return nil
 	}
 	if err := checkCircleKeysendCredit(tx, recipient, nil, false, amountMloki); err != nil {
-		svc.logger.Warn().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
-			Msg("Keysend refused by the circle wallet's checks, leaving it with the node")
+		// Only a node that settles keysends itself gets here: a held one is
+		// failed by resolveHeldKeysend.
+		svc.logger.Error().Err(err).Uint("app_id", *appID).Uint64("amount", amountMloki).
+			Msg("The node settled a keysend the circle wallet's checks refuse; it stays with the node. Run flnd with keysend-hold-time so lokihub can fail such a keysend")
 		return nil
 	}
 	return appID

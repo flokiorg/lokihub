@@ -372,8 +372,14 @@ func (controller *nip47Controller) finishRedeem(app *db.App, claim *db.CashWalle
 		if late {
 			cooldown = controller.appsService.LateFailureCooldown(time.Now())
 		}
-		if _, relErr := controller.appsService.ReleaseRedeemClaim(app.ID, paymentHash, cooldown); relErr != nil {
-			logger.Logger.Error().Err(relErr).Uint("app_id", app.ID).Msg("Failed to release a slice after its cash_redeem payment failed")
+		released, relErr := controller.appsService.ReleaseRedeemClaim(app.ID, paymentHash, cooldown)
+		if relErr != nil || !released {
+			// The ledger did not record the failure (it still shows the payment
+			// pending), or the release itself failed: the slice stays claimed
+			// until the payment's own events or the orphan sweep resolve it.
+			logger.Logger.Error().Err(relErr).AnErr("payment_error", err).Uint("app_id", app.ID).Str("payment_hash", paymentHash).
+				Msg("cash_redeem payment failed but its slice could not be released yet")
+			return constants.ERROR_INTERNAL, "the payment failed, but this slice stays claimed until the failure is recorded", nil
 		}
 		logger.Logger.Warn().Err(err).Uint("app_id", app.ID).Str("payment_hash", paymentHash).Bool("late", late).
 			Msg("cash_redeem payment failed; slice claimable again")

@@ -274,6 +274,13 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 					}
 				}
 
+				// A keysend the node holds (flnd's keysend-hold-time) is
+				// followed until it is accepted, so lokihub can settle or fail
+				// it at the final hop (NIP-CW §Own Funds and Caps).
+				if invoice.State == lnrpc.Invoice_OPEN && invoice.IsKeysend {
+					go svc.subscribeSingleInvoice(invoice.RHash)
+					continue
+				}
 				if invoice.State != lnrpc.Invoice_SETTLED {
 					continue
 				}
@@ -381,7 +388,8 @@ func (svc *FLNDService) subscribeOpenHoldInvoices(ctx context.Context) {
 	}
 
 	for _, invoice := range listInvoicesResponse.Invoices {
-		if invoice.State == lnrpc.Invoice_OPEN {
+		// A keysend held while lokihub was down is decided now.
+		if invoice.State == lnrpc.Invoice_OPEN || (invoice.State == lnrpc.Invoice_ACCEPTED && invoice.IsKeysend) {
 			paymentHashHex := hex.EncodeToString(invoice.RHash)
 			logger.Logger.Debug().
 				Str("payment_hash", paymentHashHex).
@@ -719,6 +727,11 @@ func (svc *FLNDService) LookupPayment(ctx context.Context, paymentHash string) (
 	return &lnclient.PaymentLookup{Status: lnclient.PaymentStatusInFlight}, nil
 }
 
+// getPaymentResult reads a payment's update stream until the payment is final:
+// SUCCEEDED or FAILED. Every other status (INITIATED, which a node run with
+// routerrpc.usestatusinitiated sends first, IN_FLIGHT, UNKNOWN) means the HTLCs
+// may still be out, so it is never taken as an outcome. A stream that ends
+// before a final status returns its error, and the caller then asks the node.
 func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Client) (*lnrpc.Payment, error) {
 	for {
 		payment, err := stream.Recv()
@@ -726,7 +739,8 @@ func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Cl
 			return nil, err
 		}
 
-		if payment.Status != lnrpc.Payment_IN_FLIGHT {
+		switch payment.Status {
+		case lnrpc.Payment_SUCCEEDED, lnrpc.Payment_FAILED:
 			return payment, nil
 		}
 	}

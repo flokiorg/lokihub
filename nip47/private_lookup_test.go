@@ -12,9 +12,11 @@ import (
 	"github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -179,4 +181,29 @@ func TestCashLookup_ParamsAndTargets(t *testing.T) {
 			Item("l", strings.Repeat("ef", 32), f.connPriv, b)
 	})
 	assert.False(t, served)
+}
+
+// A cash secret opens a lookup on a bill the Hub has destroyed: the archive
+// keeps the slice's commitment.
+func TestCashLookup_SecretMatchesADestroyedBill(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	nip47svc := NewNip47Service(svc.DB, svc.Cfg, svc.Keys, svc.EventPublisher, nil)
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	secret := strings.Repeat("44", 32)
+	commitment, err := nipcash.CashCommitment(secret)
+	require.NoError(t, err)
+	walletPubkey, _, walletID := auditBBill(t, svc, hub.ID, []db.CashWalletClaim{
+		{IdentityType: db.CashIdentityCash, IdentityValue: commitment, AmountMloki: 1000},
+	})
+	require.True(t, nip47svc.lookupSecretMatches(walletPubkey, secret), "a live bill")
+
+	var bill db.App
+	require.NoError(t, svc.DB.First(&bill, walletID).Error)
+	require.NoError(t, svc.DB.Transaction(func(tx *gorm.DB) error {
+		return archive.ArchiveAndDeleteCashBillTx(tx, &bill, db.CashBillOutcomeDeleted, 0, time.Now())
+	}))
+	assert.True(t, nip47svc.lookupSecretMatches(walletPubkey, secret), "a destroyed bill")
+	assert.False(t, nip47svc.lookupSecretMatches(walletPubkey, strings.Repeat("55", 32)))
 }

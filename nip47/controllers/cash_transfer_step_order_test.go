@@ -139,6 +139,55 @@ func TestCashTransfer_FullToAnIdentityAlreadyHereSpinsOff(t *testing.T) {
 	assert.Nil(t, kept.ClaimedAt, "the identity's own slice here is untouched")
 }
 
+// A full transfer to an identity that once held a slice on this wallet, now
+// redeemed, is in place (NIP-CASH §Which outcome a request produces: unconditional
+// on the wallet's recipient history). Its old claimed row is history and must not
+// block the reassignment.
+func TestCashTransfer_FullToAnIdentityThatOnceHeldASliceIsInPlace(t *testing.T) {
+	f := newTransferFixture(t, 5_000)
+	other, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	claimed := time.Now().Add(-time.Minute)
+	require.NoError(t, f.svc.DB.Create(&db.CashWalletClaim{WalletAppID: f.wallet.ID, IdentityType: db.CashIdentityPubkey,
+		IdentityValue: other, AmountMloki: 1_000, ClaimedAt: &claimed, PaymentHash: tests.RandomHex32(), Preimage: tests.RandomHex32(),
+		EndedAs: db.CashSliceStatusRedeemed}).Error)
+
+	p := f.params(t, other, 5_000, false, testRequestID())
+	resp := transferWithCall(t, f.svc, f.wallet, p, testPrivateCall(p.IdentityEvent))
+	require.Nil(t, resp.Error, "%+v", resp.Error)
+	result := resp.Result.(cashTransferResponse)
+	assert.Empty(t, result.NewWalletPubkey, "in place, not a spin-off")
+
+	var rows []db.CashWalletClaim
+	require.NoError(t, f.svc.DB.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
+		f.wallet.ID, db.CashIdentityPubkey, other).Order("id").Find(&rows).Error)
+	require.Len(t, rows, 2)
+	live := 0
+	for _, r := range rows {
+		if r.ClaimedAt == nil {
+			live++
+			assert.EqualValues(t, 5_000, r.AmountMloki, "the reassigned slice")
+		}
+	}
+	assert.Equal(t, 1, live)
+}
+
+// A slice of the new identity whose payout is still in flight comes back if the
+// payout fails, so a full transfer to it spins off rather than leave two live
+// slices for one identity on the wallet.
+func TestCashTransfer_FullToAnIdentityWithAPayoutInFlightSpinsOff(t *testing.T) {
+	f := newTransferFixture(t, 5_000)
+	other, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	claimed := time.Now().Add(-time.Minute)
+	require.NoError(t, f.svc.DB.Create(&db.CashWalletClaim{WalletAppID: f.wallet.ID, IdentityType: db.CashIdentityPubkey,
+		IdentityValue: other, AmountMloki: 1_000, ClaimedAt: &claimed, PaymentHash: tests.RandomHex32(),
+		EndedAs: db.CashSliceStatusRedeemed}).Error)
+
+	p := f.params(t, other, 5_000, false, testRequestID())
+	resp := transferWithCall(t, f.svc, f.wallet, p, testPrivateCall(p.IdentityEvent))
+	require.Nil(t, resp.Error, "%+v", resp.Error)
+	assert.NotEmpty(t, resp.Result.(cashTransferResponse).NewWalletPubkey, "a spin-off into one new wallet")
+}
+
 // A cash slice's partial split needs a fresh remainder_commitment: missing or
 // equal to the source's is BAD_REQUEST.
 func TestCashTransfer_CashPartialSplitRemainderCommitment(t *testing.T) {

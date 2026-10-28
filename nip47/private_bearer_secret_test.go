@@ -81,10 +81,16 @@ func TestU_9_R3a_WrongCashSecretIsUnauthorized(t *testing.T) {
 		claim  db.CashWalletClaim
 		method string
 		params string
+		want   string
 	}{
-		{"cash_redeem", cashClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"` + wrongSecret + `","invoice":"lnfc1"}`},
-		{"cash_transfer", cashClaim, constants.NIP47MethodCashTransfer, `{"cash_secret":"` + wrongSecret + `","request_id":"` + strings.Repeat("ab", 16) + `","new_identity":{"identity_type":"cash","identity_value":"` + newCommit + `"}}`},
-		{"identity_bound_bill", pubkeyClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"` + wrongSecret + `","invoice":"lnfc1"}`},
+		{"cash_redeem", cashClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"` + wrongSecret + `","invoice":"lnfc1"}`, ""},
+		{"cash_transfer", cashClaim, constants.NIP47MethodCashTransfer, `{"cash_secret":"` + wrongSecret + `","request_id":"` + strings.Repeat("ab", 16) + `","new_identity":{"identity_type":"cash","identity_value":"` + newCommit + `"}}`, ""},
+		{"identity_bound_bill", pubkeyClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"` + wrongSecret + `","invoice":"lnfc1"}`, ""},
+		// A secret in any other form is BAD_REQUEST on a cash-mode bill (NIP-CASH
+		// §Cash-Mode Slices); an identity-bound bill still answers UNAUTHORIZED.
+		{"malformed_on_cash_bill", cashClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"` + strings.ToUpper(realSecret[:62]) + `AB","invoice":"lnfc1"}`, constants.ERROR_BAD_REQUEST},
+		{"short_on_cash_bill", cashClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"1111","invoice":"lnfc1"}`, constants.ERROR_BAD_REQUEST},
+		{"malformed_on_identity_bound_bill", pubkeyClaim, constants.NIP47MethodCashRedeem, `{"cash_secret":"1111","invoice":"lnfc1"}`, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,7 +118,11 @@ func TestU_9_R3a_WrongCashSecretIsUnauthorized(t *testing.T) {
 				PrivateItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter})
 			require.True(t, served)
 			require.NotNil(t, res.Error, "a wrong cash_secret must not be served: %s", string(res.Result))
-			require.Equal(t, constants.ERROR_UNAUTHORIZED, res.Error.Code)
+			want := tc.want
+			if want == "" {
+				want = constants.ERROR_UNAUTHORIZED
+			}
+			require.Equal(t, want, res.Error.Code)
 			require.Nil(t, res.Result)
 
 			var claim db.CashWalletClaim

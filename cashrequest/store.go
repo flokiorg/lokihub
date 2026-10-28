@@ -136,12 +136,6 @@ func (s Store) IsProofConsumed(eventID string) (bool, error) {
 	return n > 0, err
 }
 
-// ReleaseProof forgets a consumed proof whose call did not happen, so the caller's
-// legitimate retry is not refused.
-func (s Store) ReleaseProof(eventID string) error {
-	return s.DB.Where("event_id = ?", eventID).Delete(&db.CashConsumedProof{}).Error
-}
-
 // lockRecordsOf locks every record naming walletAppID, in tx.
 func lockRecordsOf(tx *gorm.DB, walletAppID uint) ([]db.CashRequestRecord, error) {
 	var recs []db.CashRequestRecord

@@ -174,8 +174,38 @@ func TestU_3_7_HorizonNeverDecreases(t *testing.T) {
 	assert.EqualValues(t, 600, svc.Cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
 }
 
-// U-3.8: consumed claim proofs are single-use, releasable for a call that did not
-// happen, and pruned an hour after their created_at.
+// Raising H after a record's drop time was set keeps the record until
+// deadline + the new H: a lookup in between decides with the new H, and must not
+// answer unknown for a call that committed.
+func TestRaisingTheHorizonDelaysRecordDrops(t *testing.T) {
+	svc, s, now := newStore(t)
+	_, err := cashrequest.RaiseHorizon(svc.DB, 300, *now)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Transaction(func(tx *gorm.DB) error {
+		return s.CommitTx(tx, record(rid(1), now.Unix()+30), nil)
+	}))
+	got, err := s.Get(rid(1))
+	require.NoError(t, err)
+	require.Equal(t, now.Unix()+30+300+1, *got.DropAfter)
+
+	_, err = cashrequest.RaiseHorizon(svc.DB, 900, *now)
+	require.NoError(t, err)
+	got, err = s.Get(rid(1))
+	require.NoError(t, err)
+	assert.Equal(t, now.Unix()+30+900+1, *got.DropAfter)
+
+	// Past the old drop time, before the new one: still there.
+	*now = now.Add(30*time.Second + 301*time.Second)
+	_, err = s.PruneRecords(100)
+	require.NoError(t, err)
+	got, err = s.Get(rid(1))
+	require.NoError(t, err)
+	assert.NotNil(t, got)
+}
+
+// U-3.8: consumed claim proofs are single-use, and pruned an hour after their
+// created_at. A redeem that did not happen releases its proof with its claim, in
+// one transaction (apps.ReleaseRedeemClaim); nothing releases one on its own.
 func TestU_3_8_ConsumedProofs(t *testing.T) {
 	svc, s, now := newStore(t)
 	ev := strings.Repeat("ab", 32)
@@ -187,8 +217,6 @@ func TestU_3_8_ConsumedProofs(t *testing.T) {
 	used, err = s.IsProofConsumed(ev)
 	require.NoError(t, err)
 	assert.True(t, used)
-	require.NoError(t, s.ReleaseProof(ev))
-	require.NoError(t, s.ConsumeProofTx(svc.DB, ev, now.Unix(), "cash_transfer"))
 
 	later := cashrequest.Store{DB: svc.DB, Now: func() time.Time { return now.Add(cashrequest.ProofRetentionSecs * time.Second) }}
 	n, err := later.PruneProofs()

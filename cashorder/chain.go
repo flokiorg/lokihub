@@ -107,13 +107,22 @@ func (e *Engine) observeOutput(ctx context.Context, addr db.CashOrderAddress, o 
 		}
 	} else if p.OrderID != nil {
 		var o db.CashOrder
-		if err := e.DB.First(&o, *p.OrderID).Error; err == nil {
+		if err := e.DB.Limit(1).Find(&o, *p.OrderID).Error; err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to read an order payment's order")
+			return
+		}
+		if o.ID != 0 {
 			order = &o
 		}
 	}
 
 	conf := int(o.Confirmations)
 	updates := map[string]interface{}{"confirmations": conf, "missed_scans": 0}
+	if p.OrderID != nil && order == nil {
+		// Its order is gone: the payment is unbound, and kept by the Hub.
+		updates["order_id"] = nil
+		p.OrderID = nil
+	}
 	if o.BlockHeight > 0 {
 		updates["block_height"] = int(o.BlockHeight)
 	}
@@ -133,6 +142,11 @@ func (e *Engine) observeOutput(ctx context.Context, addr db.CashOrderAddress, o 
 		} else if order != nil && conf >= requiredConfirmations(order, uint64(value)) { //nolint:gosec // positive
 			updates["state"] = db.CashOrderPaymentConfirmed
 		}
+	}
+	// A confirmed payment not minted yet that a reorganisation left below its
+	// tier goes back to seen: it is never minted short of its confirmations.
+	if p.State == db.CashOrderPaymentConfirmed && order != nil && conf < requiredConfirmations(order, uint64(value)) { //nolint:gosec // positive
+		updates["state"] = db.CashOrderPaymentSeen
 	}
 	changed := false
 	err := e.DB.Transaction(func(tx *gorm.DB) error {

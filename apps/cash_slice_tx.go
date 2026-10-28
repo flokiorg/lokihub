@@ -15,6 +15,11 @@ import (
 // twice).
 var ErrSliceClaimed = errors.New("this slice was already claimed by another call")
 
+// ErrIdentityHoldsSlice: an in-place transfer's new identity already holds a
+// live slice on the wallet, committed by a concurrent call after this one
+// decided its outcome. The commit rolls back (RESTRICTED).
+var ErrIdentityHoldsSlice = errors.New("the new identity already holds a slice on this wallet")
+
 // SliceRef names one slice exactly as a call read and authorized it: the row,
 // the identity it was registered to and its version (TransferCount, which every
 // in-place transfer advances).
@@ -72,6 +77,9 @@ func ReassignCashSliceIdentityTx(tx *gorm.DB, ref SliceRef, newIdentityType, new
 			"transfer_count": ref.TransferCount + 1,
 		})
 	if result.Error != nil {
+		if db.IsDuplicateKeyError(result.Error) {
+			return ErrIdentityHoldsSlice
+		}
 		return result.Error
 	}
 	if result.RowsAffected != 1 {

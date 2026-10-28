@@ -232,6 +232,10 @@ func (svc *nip47Service) servePrivateItem(
 		case !item.HasProof() && !billIsCashMode:
 			// A proofless item on a slice that is not cash-mode by the hub's records.
 			return refuse(constants.ERROR_UNAUTHORIZED, "this bill is identity-bound and the item carries no slice proof")
+		case !item.HasProof() && itemCashSecretMalformed(item):
+			// A cash secret in any form but 64 lowercase hex is BAD_REQUEST
+			// (NIP-CASH §Cash-Mode Slices).
+			return refuse(constants.ERROR_BAD_REQUEST, "cash_secret must be 64 lowercase hex characters")
 		case !item.HasProof():
 			// A cash secret that does not verify is UNAUTHORIZED (NIP-CASH §Errors,
 			// §Bearer Items), never NOT_FOUND.
@@ -391,12 +395,6 @@ func (svc *nip47Service) servePrivateItem(
 // cash_status and the value methods are answered (I4), each under its own
 // result_type: the tombstone is a result, never an error.
 func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding PrivateItemBinding, signer string, tombstone db.SpentBillTombstone, ok bool) (transport.Result, bool) {
-	// I4: cash_status and the value methods, the withdrawal methods included,
-	// are answered with the tombstone.
-	if !nipcash.AnswersWithTombstone(item.Method) {
-		return transport.Result{}, false
-	}
-
 	// Gate 2, using db.RetentionWindowOpen rather than a local comparison so this
 	// path and the relay gate agree exactly at the boundary — they did not when each
 	// wrote the comparison itself.
@@ -409,6 +407,18 @@ func (svc *nip47Service) tryPrivateSpentBill(item transport.Item, binding Privat
 	// Gate 3, against the pubkey stored at archive time: deriving it here cost
 	// enough to tell a recently destroyed bill from one never served.
 	if tombstone.ConnectionPubkey == "" || !billProofHolder(signer, tombstone.ConnectionPubkey) {
+		return transport.Result{}, false
+	}
+
+	// I4: cash_status and the value methods, the withdrawal methods included,
+	// are answered with the tombstone.
+	// I5: a method this transport does not serve is NOT_IMPLEMENTED; any other
+	// method has nothing to act on and is omitted.
+	if !nipcash.AnswersWithTombstone(item.Method) {
+		if !IsPrivateServableMethod(item.Method) {
+			return transport.Result{ID: item.ID, ResultType: item.Method, Error: &transport.ResultError{
+				Code: constants.ERROR_NOT_IMPLEMENTED, Message: item.Method + " is not served on this transport"}}, true
+		}
 		return transport.Result{}, false
 	}
 
@@ -564,11 +574,23 @@ func billProofHolder(signer, wantPubkey string) bool {
 
 // cashSecretMatchesBill reports whether a proofless item's cash_secret is the secret
 // behind one of claims' cash-mode slices, claimed or not: only its SHA-256 is stored.
+// itemCashSecretMalformed reports whether item's params carry a cash_secret that
+// is not 64 lowercase hex characters.
+func itemCashSecretMalformed(item transport.Item) bool {
+	var params struct {
+		CashSecret *string `json:"cash_secret"`
+	}
+	if err := json.Unmarshal(item.Params, &params); err != nil || params.CashSecret == nil {
+		return false
+	}
+	return !nipcash.ValidCashSecret(*params.CashSecret)
+}
+
 func cashSecretMatchesBill(item transport.Item, claims []db.CashWalletClaim) bool {
 	var params struct {
 		CashSecret string `json:"cash_secret"`
 	}
-	if err := json.Unmarshal(item.Params, &params); err != nil {
+	if err := json.Unmarshal(item.Params, &params); err != nil || !nipcash.ValidCashSecret(params.CashSecret) {
 		return false
 	}
 	secret, err := hex.DecodeString(params.CashSecret)

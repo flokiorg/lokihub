@@ -41,6 +41,9 @@ type intakeFixture struct {
 
 func newIntakeFixture(t *testing.T) *intakeFixture {
 	f := &intakeFixture{orderFixture: newOrderFixture(t), clock: time.Now()}
+	// The node stamps order invoices with the engine's clock, so pay_by moves
+	// with it.
+	f.invoiceNow = func() time.Time { return f.clock }
 	f.chain = &chainLN{MockLn: f.ln}
 	f.engine = &cashorder.Engine{DB: f.svc.DB, Keys: f.svc.Keys, Apps: f.svc.AppsService,
 		Transactions: transactions.NewTransactionsService(f.svc.DB, f.svc.EventPublisher),
@@ -262,6 +265,82 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	f.chain.outputs = []lnclient.OnchainOutput{out, later, {TxID: tests.RandomHex32(), Address: "fcrt1qburnt", AmountLoki: 7, Confirmations: 1}}
 	f.engine.ScanChain(context.TODO())
 	assert.Equal(t, hubBefore+7000, queries.GetIsolatedBalance(f.svc.DB, f.hub.ID))
+}
+
+// A payment seen before pay_by that then drops out of the wallet list (an RBF,
+// a double spend, a partial scan) still counts as seen: at pay_by the order is
+// closed, not expired, it is kept, and a later payment to its address mints
+// (NIP-CO §On-chain). closed stays closed.
+func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
+	f := newIntakeFixture(t)
+	res, buyer, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	placed := orderOf(t, res)
+	ghost := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43}
+	f.chain.outputs = []lnclient.OnchainOutput{ghost}
+	f.engine.ScanChain(context.TODO())
+	f.chain.outputs = nil
+	f.engine.ScanChain(context.TODO())
+	f.engine.ScanChain(context.TODO())
+	var dropped db.CashOrderPayment
+	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+ghost.TxID+":0").First(&dropped).Error)
+	require.Equal(t, db.CashOrderPaymentDropped, dropped.State)
+
+	f.clock = f.clock.Add(86401 * time.Second)
+	f.engine.RunPayBy(context.TODO())
+	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "a payment was seen by pay_by")
+	f.engine.RunRetention()
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "closed is final, and the order is kept")
+
+	later := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 100, Confirmations: 1}
+	f.chain.outputs = []lnclient.OnchainOutput{later}
+	f.engine.ScanChain(context.TODO())
+	got := f.lookupOrder(t, buyer, p)
+	require.Len(t, got.Bills, 1, "a later payment to the address mints")
+	assert.Equal(t, nipCO.OrderClosed, got.State)
+}
+
+// A confirmed on-chain payment whose first mint failed, and which a
+// reorganisation then takes back below its tier, is not minted by the retry: it
+// goes back to seen until it has its confirmations again (NIP-CO §On-chain).
+func TestOrderIntake_OnchainReorgedBeforeMintIsNotMinted(t *testing.T) {
+	f := newIntakeFixture(t)
+	res, _, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
+	placed := orderOf(t, res)
+	key := f.ln.SigningKey
+	f.ln.SigningKey = nil
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43, Confirmations: 1}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	payment := func() db.CashOrderPayment {
+		var pay db.CashOrderPayment
+		require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+out.TxID+":0").First(&pay).Error)
+		return pay
+	}
+	require.Equal(t, db.CashOrderPaymentConfirmed, payment().State, "confirmed, its mint failed")
+
+	// The retry finds the payment's confirmations gone, before any scan sees it.
+	require.NoError(t, f.svc.DB.Model(&db.CashOrderPayment{}).Where("id = ?", payment().ID).Update("confirmations", 0).Error)
+	f.ln.SigningKey = key
+	f.clock = f.clock.Add(time.Hour)
+	f.engine.RetryMints(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentSeen, payment().State, "not minted at 0 confirmations")
+	assert.Equal(t, db.CashOrderPaid, f.orderRow(t, p.RequestID).State)
+
+	// The scan also demotes a confirmed payment it sees below its tier.
+	require.NoError(t, f.svc.DB.Model(&db.CashOrderPayment{}).Where("id = ?", payment().ID).Update("state", db.CashOrderPaymentConfirmed).Error)
+	out.Confirmations = 0
+	f.ln.SigningKey = nil
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentSeen, payment().State)
+
+	// Back at its tier, it mints.
+	f.ln.SigningKey = key
+	out.Confirmations = 1
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	f.engine.ScanChain(context.TODO())
+	assert.Equal(t, db.CashOrderPaymentMinted, payment().State)
 }
 
 // U-22.6: an unpaid on-chain order expires at pay_by and is deleted at

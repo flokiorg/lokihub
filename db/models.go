@@ -244,19 +244,22 @@ const (
 // ExpiresAt (a property of the App itself, not duplicated here). cash_redeem
 // atomically flips ClaimedAt (guarded by "WHERE claimed_at IS NULL") to pay
 // out a slice exactly once. (wallet_app_id, identity_type, identity_value)
-// is unique: one slice per identity per wallet.
+// is unique among UNCLAIMED rows only (the partial index
+// idx_cash_claim_wallet_identity_live): one live slice per identity per wallet.
+// A claimed row stays as history, and the same identity may later receive a
+// slice on the wallet in place (NIP-CASH §Which outcome a request produces).
 type CashWalletClaim struct {
 	ID          uint `gorm:"primaryKey"`
-	WalletAppID uint `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:1"`
+	WalletAppID uint `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:1"`
 	App         App  `gorm:"foreignKey:WalletAppID;constraint:OnDelete:CASCADE"`
 	// IdentityType is "pubkey" | "connection_key" | "cash".
-	IdentityType string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:2"`
+	IdentityType string `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:2"`
 	// IdentityValue is 64-char hex. For pubkey/connection_key slices this is
 	// the identity itself (public, proof-gated at claim time). For a cash-mode
 	// slice it is instead a one-way SHA-256 commitment of the slice's
 	// secret — the raw secret is never persisted, only ever returned once,
 	// in the mint_cash/cash_transfer response that generated it.
-	IdentityValue string `gorm:"not null;uniqueIndex:idx_cash_claim_wallet_identity,priority:3"`
+	IdentityValue string `gorm:"not null;index:idx_cash_claim_wallet_identity_all,priority:3"`
 	// IAPubkey is set only for connection_key-mode slices — the Identity
 	// Authority that must attest the claimant's identity at claim time.
 	// Indexed so ListIdentityAuthorities' unredeemed-slice-count query (grouped

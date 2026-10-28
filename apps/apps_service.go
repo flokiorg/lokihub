@@ -216,6 +216,10 @@ type AppsService interface {
 	// ReleaseRedeemClaim reopens a slice whose redeem payment did not happen or
 	// definitely failed, forgetting its consumed proof in the same transaction.
 	ReleaseRedeemClaim(walletAppID uint, paymentHash string, cooldownUntil *time.Time) (released bool, err error)
+	// ResolveOrphanRedeemClaims settles or releases claimed slices whose redeem
+	// payout has no preimage and no pending ledger row, asking lookup when the
+	// ledger cannot tell. Returns the bills a settlement was recorded on.
+	ResolveOrphanRedeemClaims(claimedBefore time.Time, lookup PayoutLookup) ([]uint, error)
 	// LateFailureCooldown is when a slice whose payout failed after its redeem
 	// answered may be redeemed again; nil when the cool-down is off.
 	LateFailureCooldown(now time.Time) *time.Time
