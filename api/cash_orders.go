@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
-	"time"
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/constants"
@@ -47,7 +47,7 @@ func (api *api) RetireOrderConnection(hub *db.App, connAppID uint) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	if err := cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, time.Now()); err != nil {
+	if err := cashorder.RetireConnection(api.orderDeps(), hub.ID, connAppID, hubclock.Now()); err != nil {
 		return err
 	}
 	// The retirement is committed, so get_info answers "cash_order": {} from
@@ -74,5 +74,5 @@ func (api *api) PutOrderTerms(hub *db.App, s cashorder.Settings) error {
 	if err := requireCashHub(hub); err != nil {
 		return err
 	}
-	return cashorder.PutSettings(api.db, hub.ID, s, time.Now())
+	return cashorder.PutSettings(api.db, hub.ID, s, hubclock.Now())
 }

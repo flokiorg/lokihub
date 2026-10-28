@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"math"
 	"time"
 
@@ -168,7 +169,7 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 
 	// Step 3: each source's state.
 	hubID := sources[0].bill.ParentAppID
-	now := time.Now()
+	now := hubclock.Now()
 	for i, s := range sources {
 		switch {
 		case s.claim.ClaimedAt != nil:

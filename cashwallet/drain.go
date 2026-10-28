@@ -2,7 +2,7 @@ package cashwallet
 
 import (
 	"errors"
-	"time"
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"gorm.io/gorm"
 
@@ -39,7 +39,7 @@ func AutoDeleteDrained(gormDB *gorm.DB, eventPublisher events.EventPublisher, wa
 			IsolatedBalance:    queries.GetIsolatedBalance,
 			HasPendingIncoming: queries.HasPendingIncoming,
 			HasPendingOutgoing: queries.HasPendingOutgoing,
-		}, time.Now())
+		}, hubclock.Now())
 	})
 	if errors.Is(err, archive.ErrBillNotDrained) {
 		return false, nil

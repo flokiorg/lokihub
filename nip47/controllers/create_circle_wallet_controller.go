@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -228,7 +229,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	}
 	var expiresAt *time.Time
 	if expirySecs > 0 {
-		at := time.Now().Add(time.Duration(expirySecs) * time.Second)
+		at := hubclock.Now().Add(time.Duration(expirySecs) * time.Second)
 		expiresAt = &at
 	}
 
@@ -292,7 +293,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// The circle's holdings must be below its holdings ceiling (NIP-CW
 		// §Processing Algorithm step 9): a new wallet starts empty, so the
 		// check is the circle's room, not the requested caps.
-		holdings, err := circlemoney.Holdings(tx, app.ID, time.Now())
+		holdings, err := circlemoney.Holdings(tx, app.ID, hubclock.Now())
 		if err != nil {
 			return fmt.Errorf("holdings check failed: %w", err)
 		}
@@ -383,7 +384,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		encryptedDetails = encrypted
 
 		// The join may not commit once its proof has left its freshness window.
-		if time.Now().Unix() > proofCreatedAt+nipcw.JoinFreshness {
+		if hubclock.Now().Unix() > proofCreatedAt+nipcw.JoinFreshness {
 			return errJoinPastDeadline
 		}
 
@@ -483,7 +484,7 @@ func (controller *nip47Controller) expireDueMembership(hubID uint, member string
 		if err := tx.Where("id = ?", membership.WalletAppID).Limit(1).Find(&wallet).Error; err != nil || wallet.ID == 0 {
 			return err
 		}
-		now := time.Now()
+		now := hubclock.Now()
 		if circlelife.EffectiveState(&wallet, now) != circlelife.StateExpired || circlelife.State(&wallet) == circlelife.StateExpired {
 			return nil
 		}

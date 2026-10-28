@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"strings"
 	"sync"
 	"time"
@@ -62,7 +63,7 @@ func (e *Engine) now() time.Time {
 	if e.Now != nil {
 		return e.Now()
 	}
-	return time.Now()
+	return hubclock.Now()
 }
 
 func (e *Engine) horizon() int64 {

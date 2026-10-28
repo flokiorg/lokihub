@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,7 +99,7 @@ func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now()
+	return hubclock.Now()
 }
 
 // cancelNow is the withdraw-scoped clock: the clock CancelDue,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"slices"
 	"strings"
 	"time"
@@ -623,7 +624,7 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 		// A Cash Hub also stays while a request record naming it is retained
 		// (Q23, XQ-22(1)): a lookup may still need it.
 		if app.Kind == db.AppKindCashHub {
-			check, err := CashHubDeleteCheckTx(tx, app.ID, time.Now())
+			check, err := CashHubDeleteCheckTx(tx, app.ID, hubclock.Now())
 			if err != nil {
 				return err
 			}

@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"time"
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/circlemoney"
@@ -245,7 +245,7 @@ func (controller *nip47Controller) circleWalletTerms(app *db.App, identity strin
 	if err != nil {
 		return nil, err
 	}
-	available, err := circlemoney.Available(controller.db, app.ID, providerConfig, time.Now())
+	available, err := circlemoney.Available(controller.db, app.ID, providerConfig, hubclock.Now())
 	if err != nil {
 		return nil, err
 	}

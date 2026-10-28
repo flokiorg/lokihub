@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"github.com/flokiorg/lokihub/hubclock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -152,7 +153,7 @@ func (svc *nip47Service) maybeServeWithdrawCancel(item transport.Item, binding P
 		logger.Logger.Error().Err(err).Msg("Failed to apply a cancel request")
 		return refuse(constants.ERROR_INTERNAL, "the hub could not apply this cancel request, please retry")
 	}
-	body, err := svc.payoutResult(w, rec, time.Now())
+	body, err := svc.payoutResult(w, rec, hubclock.Now())
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to build a payout view")
 		return refuse(constants.ERROR_INTERNAL, "the hub could not read this payout")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -80,7 +81,7 @@ func (svc *nip47Service) lookupTargetKeys(target string) ([]string, error) {
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if tomb, ok := db.SpentBillTombstoneFor(svc.db, target); ok && db.RetentionWindowOpen(tomb.RetainedUntil, time.Now()) {
+	if tomb, ok := db.SpentBillTombstoneFor(svc.db, target); ok && db.RetentionWindowOpen(tomb.RetainedUntil, hubclock.Now()) {
 		return []string{tomb.ConnectionPubkey}, nil
 	}
 	return nil, nil
@@ -182,7 +183,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 				return refuse(constants.ERROR_UNAUTHORIZED, "this lookup does not match the call's record")
 			}
 		}
-		result, err := svc.rebuildResult(rec, time.Now())
+		result, err := svc.rebuildResult(rec, hubclock.Now())
 		if err != nil {
 			logger.Logger.Error().Err(err).Str("request_id", rec.RequestID).Msg("Failed to rebuild a call's result")
 			return refuse(constants.ERROR_INTERNAL, "the hub could not rebuild this call's result")
@@ -203,7 +204,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 	}
 	// The H in force: the configured one, raised at start, never below the stored.
 	h = max(h, svc.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
-	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: time.Now().Unix(), Deadline: params.Deadline, Horizon: h})
+	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: hubclock.Now().Unix(), Deadline: params.Deadline, Horizon: h})
 	return answer(nipcash.CashLookupResult{Status: decision.Status, RetryAfter: decision.RetryAfter})
 }
 
@@ -471,7 +472,7 @@ func (svc *nip47Service) serveJoinLookup(item transport.Item, params nipcash.Cas
 	// No join to this key: the rotation that installed it, or will, answers
 	// (NIP-CW §Recovering a Lost Connection), read from its row and the clock
 	// alone; the lookup writes nothing.
-	now := time.Now()
+	now := hubclock.Now()
 	outcome, rotation, err := circlelife.LookupRotation(svc.db, signer, params.ConnectionPubkey, now)
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to read a rotation")

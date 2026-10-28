@@ -6,6 +6,7 @@ package cashrequest
 import (
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/hubclock"
 	"time"
 
 	"github.com/ohstr/nmilat/nipcash"
@@ -31,11 +32,11 @@ type Store struct {
 }
 
 // New is a Store on gormDB with the real clock.
-func New(gormDB *gorm.DB) Store { return Store{DB: gormDB, Now: time.Now} }
+func New(gormDB *gorm.DB) Store { return Store{DB: gormDB, Now: hubclock.Now} }
 
 func (s Store) now() time.Time {
 	if s.Now == nil {
-		return time.Now()
+		return hubclock.Now()
 	}
 	return s.Now()
 }
@@ -71,7 +72,8 @@ func (s Store) MarkUsed(id, method string) error {
 // may be dropped once deadline + H has passed.
 func (s Store) CommitTx(tx *gorm.DB, rec *db.CashRequestRecord, bills []db.CashRequestRecordBill) error {
 	now := s.now().Unix()
-	if !nipcash.CommitAllowed(rec.Deadline, now) {
+	// The deadline is the client's, so it is judged on the wall clock.
+	if !nipcash.CommitAllowed(rec.Deadline, hubclock.Wall(time.Unix(now, 0)).Unix()) {
 		return ErrDeadlinePassed
 	}
 	rec.CommittedAt = now
