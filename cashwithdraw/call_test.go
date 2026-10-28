@@ -192,6 +192,22 @@ func TestU_23_10_PayoutChecks(t *testing.T) {
 		require.NoError(t, err)
 		check(t, request(t, bill, cred, fq, newRID(), nil), constants.ERROR_RESTRICTED, nipcash.DetailQuoteInvalid)
 	})
+	t.Run("tampered, its id and signature kept", func(t *testing.T) {
+		// The claim proof binds the id as sent (conformance CT-WD-07): the
+		// content no longer hashes to it, so step 3 refuses it, not step 2.
+		q := w.mustQuote(t, bill, hs[0], addr)
+		tampered := *q.Event
+		tampered.Tags = append([][]string(nil), tampered.Tags...)
+		for i, tag := range tampered.Tags {
+			if tag[0] == "payout_millis" {
+				tampered.Tags[i] = []string{"payout_millis", "1000"}
+			}
+		}
+		tq, err := nipcash.ParseWithdrawQuote(mustJSON(t, &tampered))
+		require.NoError(t, err)
+		require.Equal(t, q.ID, tq.ID)
+		check(t, request(t, bill, cred, tq, newRID(), nil), constants.ERROR_RESTRICTED, nipcash.DetailQuoteInvalid)
+	})
 	t.Run("for another slice", func(t *testing.T) {
 		q := w.mustQuote(t, bill, hs[1], addr)
 		// hs[0] signs a claim on its own slice with hs[1]'s quote.

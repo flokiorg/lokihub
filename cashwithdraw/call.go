@@ -227,7 +227,10 @@ func (s *Service) Withdraw(ctx context.Context, bill *db.App, c Caller, meta Cal
 	} else {
 		store := cashrequest.Store{DB: s.DB, Now: s.now}
 		verdict, vErr := nipcash.VerifyClaimProof(req.IdentityEvent, nipcash.ClaimExpectation{
-			Binding:     nipcash.ClaimBinding{Method: nipcash.MethodCashWithdraw, Wallet: wallet, QuoteID: quoteID},
+			// q binds the quote's id as the caller sent it. A quote whose id
+			// or signature does not verify fails at step 3 (quote_invalid,
+			// QuoteForSlice), not here: the proof still binds that one quote.
+			Binding:     nipcash.ClaimBinding{Method: nipcash.MethodCashWithdraw, Wallet: wallet, QuoteID: quote.ID},
 			SliceType:   claim.IdentityType,
 			SliceValue:  claim.IdentityValue,
 			SliceIA:     claim.IAPubkey,
