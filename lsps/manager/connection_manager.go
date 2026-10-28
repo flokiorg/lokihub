@@ -58,8 +58,10 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 	// Filter for active LSPs
 	var activeLSPs []struct{ Pubkey, Host string }
 	for _, lsp := range lsps {
-		// Only trusted LSPs, resolved and announced with an address.
-		if lsp.Trusted && lsp.Pubkey != "" && lsp.Host != "" {
+		// Only trusted LSPs, resolved and announced with an address, whose
+		// newest announcement is usable and not closed: never through an
+		// older announcement's address (NIP-LSP §Client Behavior).
+		if lsp.Trusted && connectable(lsp.Usable, lsp.Status) && lsp.Pubkey != "" && lsp.Host != "" {
 			activeLSPs = append(activeLSPs, struct{ Pubkey, Host string }{lsp.Pubkey, lsp.Host})
 		}
 	}
@@ -108,4 +110,9 @@ func (cm *ConnectionManager) maintainConnections(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// connectable: an LSP's newest announcement is usable and not closed.
+func connectable(usable bool, status string) bool {
+	return usable && status != "closed"
 }
