@@ -186,7 +186,16 @@ func (api *api) RegenerateCashHubConnection(ctx context.Context, hubAppID uint) 
 		if cur.HubGroupPubkey == nil || *cur.HubGroupPubkey == "" {
 			updates["hub_group_pubkey"] = cur.AppPubkey
 		}
-		return tx.Model(&db.App{}).Where("id = ? AND app_pubkey = ?", cur.ID, cur.AppPubkey).Updates(updates).Error
+		res := tx.Model(&db.App{}).Where("id = ? AND app_pubkey = ?", cur.ID, cur.AppPubkey).Updates(updates)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			// A concurrent regenerate changed the key first: this token's key
+			// was never stored (R2-L4).
+			return fmt.Errorf("%w: the connection was regenerated concurrently; retry", listing.ErrRefused)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
