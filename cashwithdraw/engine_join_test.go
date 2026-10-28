@@ -111,3 +111,28 @@ func TestR2_JoinedPayoutCancelledAfterEarlierVersionConfirms(t *testing.T) {
 	require.Len(t, w.versions(t), 2)
 	require.Equal(t, base, w.conserved(t))
 }
+
+// R2-P-M1: a version whose signature failed stays about to sign only until the
+// next pass, which signs it from its stored PSBT and broadcasts it; no restart
+// is needed, and no second version is built for its payout.
+func TestR2_FailedSignatureRetriedNextPass(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	wd := w.commitTo(t, 21_000_000)
+	w.chain.FailFinalize = 1
+	w.advance(time.Duration(w.s.env().BatchWindowSecs()+1) * time.Second)
+	require.Error(t, w.eng.Pass(context.TODO()), "the pass reports the failed signature")
+	vs := w.versions(t)
+	require.Len(t, vs, 1)
+	require.Equal(t, db.CashVersionAboutToSign, vs[0].State)
+	require.Nil(t, vs[0].RawTx)
+	require.Equal(t, db.CashWithdrawQueued, w.payout(t, wd.ID).State)
+
+	w.pass(t)
+	vs = w.versions(t)
+	require.Len(t, vs, 1, "the recorded version is signed again, not replaced")
+	require.NotNil(t, vs[0].RawTx)
+	got := w.payout(t, wd.ID)
+	require.Equal(t, db.CashWithdrawBroadcast, got.State)
+	require.Equal(t, *vs[0].Txid, *got.Txid)
+	require.True(t, w.chain.InMempool(*got.Txid))
+}

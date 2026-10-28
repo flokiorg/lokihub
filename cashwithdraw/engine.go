@@ -449,6 +449,9 @@ func (e *Engine) Pass(ctx context.Context) error {
 	if err := e.invalidateGone(best.Height); err != nil {
 		return err
 	}
+	if err := e.signPending(ctx, p); err != nil {
+		return err
+	}
 	rates, err := e.S.Rates(ctx)
 	if err != nil {
 		return err
