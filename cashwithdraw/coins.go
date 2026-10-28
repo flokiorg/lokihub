@@ -136,7 +136,9 @@ func (e *Engine) coinStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 		if err := e.S.DB.Where("id = ?", a.WithdrawalID).Limit(1).Find(&w).Error; err != nil {
 			return err
 		}
-		if w.ID == 0 || w.Signed {
+		// A signed payout keeps its coins; one released from its batch
+		// (signed, in no batch) is paid afresh and may take new ones.
+		if w.ID == 0 || w.BatchID != nil {
 			continue
 		}
 		if err := e.S.DB.Transaction(func(tx *gorm.DB) error {
