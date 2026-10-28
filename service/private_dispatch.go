@@ -4,6 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/flokiorg/lokihub/constants"
+	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/testknobs"
+	"github.com/ohstr/nmilat/nipcash"
 	"math/big"
 	"time"
 
@@ -44,12 +49,25 @@ func (svc *service) dispatchEnvelope(
 		AuthFailures: new(int),
 	}
 
+	// Regtest test hooks only (testknobs is inert in other builds): an envelope
+	// dropped before any commit, its nonce released as if never served.
+	if testknobs.DropBeforeCommit() {
+		if err := svc.db.Where("nonce = ?", envelope.Nonce).Delete(&db.PrivateServedNonce{}).Error; err != nil {
+			logger.Logger.Warn().Err(err).Msg("Test fault: could not release a dropped envelope's nonce")
+		}
+		return
+	}
+
 	// Items Decode dropped as malformed are omitted too: each item stands on its own,
 	// so the rest of the envelope is still served.
 	pt.omittedItems.Add(int64(len(envelope.Rejected)))
 
 	results := make([]transport.Result, 0, len(envelope.Items))
 	for _, item := range envelope.Items {
+		if stalled, ok := stallCommitFault(ctx, item, envelope.NotAfter); ok {
+			results = append(results, stalled)
+			continue
+		}
 		result, served := svc.nip47Service.ServePrivateItem(ctx, lnClient, item, binding)
 		if !served {
 			// Omitted, which is the protocol's answer for an item this hub cannot serve.
@@ -61,6 +79,10 @@ func (svc *service) dispatchEnvelope(
 		results = append(results, result)
 	}
 
+	if testknobs.DropReply() {
+		logger.Logger.Warn().Int("results", len(results)).Msg("Test fault: served a private envelope and dropped its reply")
+		return
+	}
 	if err := svc.publishPrivateReply(ctx, pool, envelope, conversationKey, arrivedOn, results); err != nil {
 		// Error level because by now the items have RUN. For cash_redeem that means money
 		// moved and the caller is about to see silence, which is the one outcome chunked
@@ -70,6 +92,29 @@ func (svc *service) dispatchEnvelope(
 			Int("results", len(results)).
 			Msg("Served a private envelope but could not deliver its reply")
 	}
+}
+
+// readOnlyMethods commit nothing, so a stalled commit does not hold them.
+var readOnlyMethods = map[string]bool{
+	nipcash.MethodCashStatus: true, nipcash.MethodCashLookup: true, nipcash.MethodCashWithdrawQuote: true,
+}
+
+// stallCommitFault holds an item that would commit while the stall_commit test
+// fault is on (testknobs, regtest test hooks only). Once released, an item
+// past its envelope's not_after on the Hub's clock is refused BAD_REQUEST with
+// nothing committed (NIP-CASH §Deadlines); ok false lets it be served.
+func stallCommitFault(ctx context.Context, item transport.Item, notAfter int64) (transport.Result, bool) {
+	if readOnlyMethods[item.Method] || !testknobs.StallCommit() {
+		return transport.Result{}, false
+	}
+	if err := testknobs.WaitCommit(ctx); err != nil {
+		return transport.Result{}, false
+	}
+	if nipcash.CommitAllowed(notAfter, hubclock.Now().Unix()) {
+		return transport.Result{}, false
+	}
+	return transport.Result{ID: item.ID, ResultType: item.Method, Error: &transport.ResultError{
+		Code: constants.ERROR_BAD_REQUEST, Message: "the call reached its commit past its deadline"}}, true
 }
 
 // publishPrivateReply encrypts and publishes the reply, splitting across events when one

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/testknobs"
 	"strconv"
 	"time"
 
@@ -602,7 +603,12 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 // the spin-off may proceed.
 func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int, lineage bool) (string, string) {
 	env := controller.cfg.GetEnv()
-	if limit := env.CashMaxLiveBillsPerHub; limit > 0 && app.ParentAppID != nil {
+	limit := env.CashMaxLiveBillsPerHub
+	// A regtest test hook may override either limit (testknobs; inert otherwise).
+	if v, ok := testknobs.LiveWalletCap(); ok {
+		limit = v
+	}
+	if limit > 0 && app.ParentAppID != nil {
 		var live int64
 		if err := controller.db.Model(&db.App{}).
 			Where("parent_app_id = ? AND kind = ?", *app.ParentAppID, db.AppKindCashWallet).Count(&live).Error; err != nil {
@@ -613,9 +619,15 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit)
 		}
 	}
-	if lineage && controller.lineageLimiter != nil &&
-		!controller.lineageLimiter.Allow(strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10), env.CashLineageSpinOffsPerHour) {
-		return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
+	if lineage {
+		root := strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10)
+		if testknobs.SpinOffRateSet() {
+			if !testknobs.AllowSpinOff(root, time.Now()) {
+				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills; retry later"
+			}
+		} else if controller.lineageLimiter != nil && !controller.lineageLimiter.Allow(root, env.CashLineageSpinOffsPerHour) {
+			return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later"
+		}
 	}
 	return "", ""
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/flokiorg/lokihub/testknobs"
 	"math"
 	"slices"
 	"sort"
@@ -498,6 +499,14 @@ func (svc *FLNDService) SendPaymentSync(payReq string, amount *uint64, feeLimitM
 	if amount != nil {
 		paymentAmountMloki = *amount
 	}
+	// Regtest test hooks only (testknobs is inert in other builds): a payment
+	// held in flight until cleared, or the next route over its fee bound.
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
+	if testknobs.TakeRouteOverBound() {
+		return nil, errors.New(lnrpc.PaymentFailureReason_FAILURE_REASON_NO_ROUTE.String())
+	}
 	// feeLimitMloki, when supplied, is the fee the caller already WITHHELD from the
 	// payment and is therefore willing to spend delivering it. Honouring it is what
 	// keeps payout + fee inside the amount being paid, so the node never covers a
@@ -562,6 +571,9 @@ func (svc *FLNDService) SendKeysend(amount uint64, destination string, custom_re
 // SendKeysendWithFeeLimit is SendKeysend with the routing fee capped at
 // feeLimitMloki: a Circle Wallet's keysend never pays more than its reserve.
 func (svc *FLNDService) SendKeysendWithFeeLimit(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string, feeLimitMloki uint64) (*lnclient.PayKeysendResponse, error) {
+	if err := testknobs.WaitPayments(svc.ctx); err != nil {
+		return nil, err
+	}
 	destBytes, err := hex.DecodeString(destination)
 	if err != nil {
 		logger.Logger.Error().Err(err).
@@ -1656,7 +1668,13 @@ func (svc *FLNDService) BroadcastTransaction(ctx context.Context, txHex string) 
 	return nil
 }
 
+// errSignerBroken is the node signer failing on purpose (a regtest test hook).
+var errSignerBroken = errors.New("the node signer is broken (test fault)")
+
 func (svc *FLNDService) SignMessage(ctx context.Context, message string) (string, error) {
+	if testknobs.SignerBroken() {
+		return "", errSignerBroken
+	}
 	resp, err := svc.client.SignMessage(ctx, &lnrpc.SignMessageRequest{Msg: []byte(message)})
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to sign message")
@@ -1879,6 +1897,9 @@ func (svc *FLNDService) GetSupportedNIP47NotificationTypes() []string {
 // transport.AnnouncementSigningPayload for why msg is the event's serialization
 // rather than its id.
 func (svc *FLNDService) SignSchnorrNodeKey(ctx context.Context, msg []byte) ([]byte, error) {
+	if testknobs.SignerBroken() {
+		return nil, errSignerBroken
+	}
 	return svc.client.SignSchnorrNodeKey(ctx, msg)
 }
 
