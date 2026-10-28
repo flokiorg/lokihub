@@ -319,8 +319,12 @@ func TestOrderIntake_OnchainReorgedBeforeMintIsNotMinted(t *testing.T) {
 	}
 	require.Equal(t, db.CashOrderPaymentConfirmed, payment().State, "confirmed, its mint failed")
 
-	// The retry finds the payment's confirmations gone, before any scan sees it.
-	require.NoError(t, f.svc.DB.Model(&db.CashOrderPayment{}).Where("id = ?", payment().ID).Update("confirmations", 0).Error)
+	// The retry reads the chain again (R2-F3): the reorganisation took the
+	// output's confirmations, though no scan has seen it and the stored count
+	// is still 1.
+	out.Confirmations = 0
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	require.Equal(t, 1, payment().Confirmations)
 	f.ln.SigningKey = key
 	f.clock = f.clock.Add(time.Hour)
 	f.engine.RetryMints(context.TODO())
