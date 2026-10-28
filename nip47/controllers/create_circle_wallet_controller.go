@@ -29,6 +29,10 @@ const circleRateLimitPerHour = 3
 // the holdings ceiling.
 var errCircleQuotaExceeded = errors.New("the circle's holdings have reached its ceiling")
 
+// errCircleNotAccepting rolls a join back whose Hub closed to joins, or was torn
+// down, before its commit.
+var errCircleNotAccepting = errors.New("the circle is not accepting new members")
+
 // errJoinPastDeadline rolls a join back that reached its commit after its
 // proof's freshness window (NIP-CW §Processing Algorithm, step 9).
 var errJoinPastDeadline = errors.New("join reached commit after its deadline")
@@ -262,6 +266,18 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		if err := db.LockApp(tx, app.ID); err != nil {
 			return fmt.Errorf("acquire circle lock: %w", err)
 		}
+		// The Hub may have closed to joins, or been torn down, while this join
+		// ran its slower steps: re-read under the lock teardown takes too.
+		hubNow, err := circlemoney.HubConfig(tx, app.ID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errCircleNotAccepting
+		}
+		if err != nil {
+			return err
+		}
+		if (hubNow.AcceptingJoins != nil && !*hubNow.AcceptingJoins) || hubNow.TeardownRequestedAt != nil {
+			return errCircleNotAccepting
+		}
 		// The connection key is checked and claimed as one atomic step with
 		// every rotation's acceptance (NIP-CW §Recovering a Lost Connection).
 		if err := db.LockNamespace(tx, db.LockNsConnKey, 0); err != nil {
@@ -376,6 +392,9 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 	})
 
 	switch {
+	case errors.Is(err, errCircleNotAccepting):
+		refuse(constants.ERROR_RESTRICTED, "this circle is not accepting new members")
+		return
 	case errors.Is(err, errCircleQuotaExceeded):
 		refuse(nipcw.ErrInsufficientCapacity, "the circle's holdings have reached its ceiling")
 		return

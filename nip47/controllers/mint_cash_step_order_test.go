@@ -220,11 +220,13 @@ func TestMintCash_StepOrder(t *testing.T) {
 			hubFunds: 1, wantCode: constants.ERROR_RESTRICTED, wantMsg: "max_exp_secs", wantMarked: true,
 		},
 		{
-			name: "an expiry past the representational bound is BAD_REQUEST",
+			// BAD_REQUEST is for the bound under a "never" ceiling only (NIP-CASH
+			// §Minting Cash); a finite ceiling refuses it like any longer expiry.
+			name: "under a finite ceiling an expiry past the representational bound is RESTRICTED",
 			params: func(f mintFixtures) map[string]any {
 				return map[string]any{"request_id": f.requestID, "recipients": goodRecipients(f), "expiry": constants.MAX_EXPIRY_SECS + 1}
 			},
-			hubFunds: 1, wantCode: constants.ERROR_BAD_REQUEST, wantMsg: "expiry", wantMarked: true,
+			hubFunds: 1, wantCode: constants.ERROR_RESTRICTED, wantMsg: "max_exp_secs", wantMarked: true,
 		},
 		{
 			name: "low balance beats an exhausted rate limit, which is not charged",

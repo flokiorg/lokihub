@@ -260,6 +260,14 @@ audits of both.
   `make_hold_invoice` is refused `RESTRICTED`. A same-node keysend over the
   receiving Circle Wallet's room or its circle's ceiling is refused before it
   is sent.
+- A Lightning keysend to a Circle Wallet that is not Active, or over its
+  receive room or its circle's holdings ceiling, is failed at the final hop
+  instead of staying with the node. This needs flnd run with
+  `keysend-hold-time` (for example `30s`) wherever it accepts keysends: lokihub
+  then settles every held keysend that passes and cancels the rest; a node
+  that settles keysends itself is logged as misconfigured whenever it settles
+  one the checks refuse. The admin invoice endpoint gives a Circle Wallet the
+  same Hub-settled invoice as its `make_invoice`.
 - Resolves a private item whose target several connections share to the
   Circle Wallet Hub's row, and checks a circle's bill proof against every live
   connection of the Hub (nmilat's `VerifyBillProofAny` rule) for joins and join
@@ -455,6 +463,9 @@ audits of both.
 
 ### Fixed
 
+- Reads a payment's update stream until it succeeds or fails. A node run with
+  `routerrpc.usestatusinitiated` sends `INITIATED` first, which was taken as a
+  failure while the payment's HTLCs were still out.
 - Refuses a private-transport item whose `cash_secret` does not verify with
   `UNAUTHORIZED` instead of `NOT_FOUND`, as NIP-CASH requires.
 - Fixes a Circle Wallet spend-cap bypass where a member could disable their

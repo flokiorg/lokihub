@@ -17,6 +17,7 @@ import (
 	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/decodepay"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/nip47/cipher"
 	"github.com/flokiorg/lokihub/nip47/models"
@@ -32,6 +33,11 @@ type orderFixture struct {
 	connApp  *db.App
 	secret   string
 	hubXOnly string
+	// invoiceSkew is how far ahead of the Hub's clock the node stamps an order
+	// invoice.
+	invoiceSkew time.Duration
+	// invoiceNow is the node's clock for an order invoice; nil is time.Now.
+	invoiceNow func() time.Time
 }
 
 func u64(v uint64) *uint64 { return &v }
@@ -94,7 +100,12 @@ func (f *orderFixture) order(t *testing.T, payment string, amount uint64, mutate
 		mutate(&p)
 	}
 	if payment == nipCO.PaymentLightning {
-		f.ln.MakeInvoiceQueue = append(f.ln.MakeInvoiceQueue, &lnclient.Transaction{PaymentHash: tests.RandomHex32(), Invoice: "lnbcrt1order" + tests.RandomHex32()[:8]})
+		stamp := time.Now()
+		if f.invoiceNow != nil {
+			stamp = f.invoiceNow()
+		}
+		invoice, hash := tests.SignedInvoice(1, stamp.Add(f.invoiceSkew), time.Hour)
+		f.ln.MakeInvoiceQueue = append(f.ln.MakeInvoiceQueue, &lnclient.Transaction{PaymentHash: hash, Invoice: invoice})
 	} else {
 		f.ln.OnchainAddresses = append(f.ln.OnchainAddresses, "fcrt1q"+tests.RandomHex32()[:38])
 	}
@@ -118,6 +129,9 @@ func orderOf(t *testing.T, res transport.Result) nipCO.Order {
 // the order, its reservation and its record are written; no ledger row.
 func TestCashOrder_LightningPlaced(t *testing.T) {
 	f := newOrderFixture(t)
+	// The node stamps the invoice with its own clock, a little after the Hub
+	// read its own: pay_by must still be the invoice's expiry.
+	f.invoiceSkew = 3 * time.Second
 	var txBefore int64
 	require.NoError(t, f.svc.DB.Model(&db.Transaction{}).Count(&txBefore).Error)
 
@@ -131,6 +145,10 @@ func TestCashOrder_LightningPlaced(t *testing.T) {
 	assert.Empty(t, o.Address)
 	assert.NotNil(t, o.Bills)
 	assert.InDelta(t, time.Now().Unix()+3600, o.PayBy, 5)
+	// The invoice expires at pay_by exactly (NIP-CO §Lightning).
+	inv, err := decodepay.Decode(o.Invoice)
+	require.NoError(t, err)
+	assert.Equal(t, inv.CreatedAt+inv.Expiry, int64(o.PayBy))
 	assert.Equal(t, int64(22_021), f.ln.MakeInvoiceAmounts()[len(f.ln.MakeInvoiceAmounts())-1], "never amountless")
 
 	var row db.CashOrder

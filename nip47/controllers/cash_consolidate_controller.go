@@ -241,7 +241,9 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 			earliest = e
 		}
 	}
-	if code, message := controller.spinOffLimitRefusal(sources[0].bill, 1); code == constants.ERROR_QUOTA_EXCEEDED || code == constants.ERROR_INTERNAL {
+	// A merge is bounded by the live-bill cap only: it ends more bills than it
+	// makes, so it spends no lineage's spin-off allowance.
+	if code, message := controller.spinOffLimitRefusal(sources[0].bill, 1, false); code != "" {
 		refuse(code, message)
 		return
 	}
@@ -432,8 +434,10 @@ func (controller *nip47Controller) authorizeConsolidateSources(params *nipcash.C
 		claim := &db.CashWalletClaim{}
 		if bill != nil {
 			// The slice this identity holds, claimed or not: its state is step 3's.
+			// Its live slice comes first; a claimed one is history it may also have.
 			if err := controller.db.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
-				bill.ID, src.IdentityType, src.IdentityValue).Order("id DESC").Limit(1).Find(claim).Error; err != nil {
+				bill.ID, src.IdentityType, src.IdentityValue).
+				Order("CASE WHEN claimed_at IS NULL THEN 0 ELSE 1 END").Order("id DESC").Limit(1).Find(claim).Error; err != nil {
 				claim = &db.CashWalletClaim{}
 			}
 		}

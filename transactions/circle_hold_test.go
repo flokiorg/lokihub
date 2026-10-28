@@ -119,6 +119,26 @@ func TestCircleInvoice_SameNodePaymentSettledAtOnce(t *testing.T) {
 	assert.Empty(t, svc.LNClient.(*tests.MockLn).SettleHoldPreimages(), "no node involved")
 }
 
+// Two payers of one circle invoice: the second read the row PENDING, but the
+// first accepted (and here settled) it before the second's accept. The second
+// must fail rather than take the first's settlement as its own, or it would be
+// debited with no wallet credited.
+func TestCircleInvoice_SecondSameNodePayerFails(t *testing.T) {
+	svc, ts, wallet := holdCircle(t)
+	ts.SetLNClientProvider(func() lnclient.LNClient { return svc.LNClient })
+	invoice, err := ts.MakeCircleInvoice(context.TODO(), wallet, 50_000, "", "", 3600, nil, svc.LNClient, nil)
+	require.NoError(t, err)
+	stale := rowState(t, svc, invoice.ID)
+	require.Equal(t, constants.TRANSACTION_STATE_PENDING, stale.State)
+
+	acceptExternally(t, ts, invoice.PaymentHash, 50_000)
+	require.Equal(t, constants.TRANSACTION_STATE_SETTLED, rowState(t, svc, invoice.ID).State)
+
+	_, err = ts.interceptSelfCircleHold(&stale, svc.LNClient)
+	require.Error(t, err)
+	assert.Equal(t, int64(50_000), queries.GetIsolatedBalance(svc.DB, wallet.ID), "credited once")
+}
+
 // The receive room and the open-invoice cap bound invoices (QUOTA_EXCEEDED,
 // RATE_LIMITED), and the holdings ceiling (INSUFFICIENT_CAPACITY).
 func TestMakeCircleInvoice_Refusals(t *testing.T) {
@@ -162,5 +182,23 @@ func TestCircleInvoice_NotActive(t *testing.T) {
 
 	acceptExternally(t, ts, invoice.PaymentHash, 10_000)
 	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, rowState(t, svc, invoice.ID).State)
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID))
+}
+
+// The sweep of accepted payments (as after a restart) checks the amount the
+// node holds like a live accept does: an over-payment is cancelled, never
+// settled with the excess left to the host.
+func TestCircleInvoice_SweepCancelsAnOverPayment(t *testing.T) {
+	svc, ts, wallet := holdCircle(t)
+	invoice, err := ts.MakeCircleInvoice(context.TODO(), wallet, 100_000, "", "", 3600, nil, svc.LNClient, nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&db.Transaction{}).Where("id = ?", invoice.ID).
+		Update("state", constants.TRANSACTION_STATE_ACCEPTED).Error)
+	mock := svc.LNClient.(*tests.MockLn)
+	mock.MockTransaction = &lnclient.Transaction{PaymentHash: invoice.PaymentHash, Amount: 100_000, AmountPaid: 150_000}
+
+	ts.ResolveAcceptedCircleHolds(context.TODO(), svc.LNClient)
+	assert.Equal(t, constants.TRANSACTION_STATE_FAILED, rowState(t, svc, invoice.ID).State)
+	assert.Empty(t, mock.SettleHoldPreimages())
 	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, wallet.ID))
 }

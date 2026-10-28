@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/appversion"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -129,6 +130,7 @@ func (svc *service) startNostr(ctx context.Context) error {
 	svc.nip47Service.StartNip47InfoPublisher(ctx, pool, svc.lnClient)
 	StartCashCleanupService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher,
 		time.Duration(svc.cfg.GetEnv().CashSplitLinkRetentionDays)*24*time.Hour)
+	StartOrphanRedeemSweep(ctx, svc.db, apps.NewAppsService(svc.db, svc.eventPublisher, svc.keys, svc.cfg), svc.GetLNClient, svc.eventPublisher)
 	StartCircleLifecycleService(ctx, svc.db, svc.transactionsService, svc.GetLNClient, svc.eventPublisher)
 	svc.startOrderJobs(ctx, pool)
 	StartNostrSocialCacheRefresher(ctx, svc.db, svc.socialCache, pool)
