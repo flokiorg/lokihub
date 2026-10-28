@@ -270,6 +270,8 @@ func (pt *privateTransport) unwrap(event *nostr.Event, limits transport.Limits, 
 			return nil, conversationKey, fmt.Errorf("envelope nonce %s… already served or not recorded", verdict.Envelope.Nonce[:8])
 		}
 		return nil, conversationKey, &envelopeRefusal{code: verdict.Code, header: verdict.Envelope, reason: verdict.Reason}
+	default:
+		// ServeRun: served below.
 	}
 	envelope := verdict.Envelope
 	if !pt.nonces.MarkServed(envelope.Nonce, envelope.NotAfter) {

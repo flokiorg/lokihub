@@ -120,6 +120,8 @@ func ApplyMemberRequest(gormDB *gorm.DB, hub *db.App, cfg *db.CircleHubConfig, e
 			result.Notices = append(result.Notices, Notice{WalletAppID: wallet.ID, Type: NoticeWalletFrozen, Notification: map[string]interface{}{}})
 		}
 		return result, nil
+	default:
+		// ActionRotate is handled below.
 	}
 
 	if err := mr.CheckConnection(); err != nil {

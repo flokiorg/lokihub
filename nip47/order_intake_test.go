@@ -211,11 +211,11 @@ func TestOrderIntake_LightningExpiresAndIsDropped(t *testing.T) {
 	f.ln.MockTransaction = &lnclient.Transaction{}
 	res, _, p := f.order(t, nipCO.PaymentLightning, 21_000, nil)
 	orderOf(t, res)
-	o := f.orderRow(t, p.RequestID)
+	f.orderRow(t, p.RequestID)
 
 	f.pastPayBy(t, p.RequestID)
 	f.engine.RunPayBy(context.TODO())
-	o = f.orderRow(t, p.RequestID)
+	o := f.orderRow(t, p.RequestID)
 	assert.Equal(t, db.CashOrderExpired, o.State)
 	assert.Zero(t, o.ReservedMillis)
 	assert.Contains(t, f.ln.CancelledInvoices, *o.PaymentHash)
@@ -241,12 +241,12 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Vout: 1, Address: placed.Address, AmountLoki: 43}
 
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	assert.Equal(t, db.CashOrderPaid, f.orderRow(t, p.RequestID).State, "seen in the mempool")
 
 	out.Confirmations = 1
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	o := f.orderRow(t, p.RequestID)
 	assert.Equal(t, db.CashOrderMinted, o.State)
 	got := f.lookupOrder(t, buyer, p)
@@ -267,7 +267,7 @@ func TestOrderIntake_Onchain(t *testing.T) {
 
 	later := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 100, Confirmations: 1}
 	f.chain.outputs = []lnclient.OnchainOutput{out, later}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	got = f.lookupOrder(t, buyer, p)
 	require.Len(t, got.Bills, 2, "a closed order still mints")
 	assert.EqualValues(t, 100_000-22_000, got.Bills[1].AmountMillis)
@@ -278,10 +278,10 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	second := orderOf(t, res)
 	ghost := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: second.Address, AmountLoki: 43}
 	f.chain.outputs = []lnclient.OnchainOutput{out, later, ghost}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	f.chain.outputs = []lnclient.OnchainOutput{out, later}
-	f.engine.ScanChain(context.TODO())
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	var dropped db.CashOrderPayment
 	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+ghost.TxID+":0").First(&dropped).Error)
 	assert.Equal(t, db.CashOrderPaymentDropped, dropped.State)
@@ -291,7 +291,7 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	require.NoError(t, f.svc.DB.Create(&db.CashOrderAddress{Address: "fcrt1qburnt", HubAppID: f.hub.ID, IssuedAt: 1, Burnt: true}).Error)
 	hubBefore := queries.GetIsolatedBalance(f.svc.DB, f.hub.ID)
 	f.chain.outputs = []lnclient.OnchainOutput{out, later, {TxID: tests.RandomHex32(), Address: "fcrt1qburnt", AmountLoki: 7, Confirmations: 1}}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	assert.Equal(t, hubBefore+7000, queries.GetIsolatedBalance(f.svc.DB, f.hub.ID))
 }
 
@@ -305,10 +305,10 @@ func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
 	placed := orderOf(t, res)
 	ghost := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43}
 	f.chain.outputs = []lnclient.OnchainOutput{ghost}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	f.chain.outputs = nil
-	f.engine.ScanChain(context.TODO())
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	var dropped db.CashOrderPayment
 	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+ghost.TxID+":0").First(&dropped).Error)
 	require.Equal(t, db.CashOrderPaymentDropped, dropped.State)
@@ -317,12 +317,12 @@ func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "a payment was seen by pay_by")
 	f.engine.RunRetention()
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "closed is final, and the order is kept")
 
 	later := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 100, Confirmations: 1}
 	f.chain.outputs = []lnclient.OnchainOutput{later}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	got := f.lookupOrder(t, buyer, p)
 	require.Len(t, got.Bills, 1, "a later payment to the address mints")
 	assert.Equal(t, nipCO.OrderClosed, got.State)
@@ -339,7 +339,7 @@ func TestOrderIntake_OnchainReorgedBeforeMintIsNotMinted(t *testing.T) {
 	f.ln.SigningKey = nil
 	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43, Confirmations: 1}
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	payment := func() db.CashOrderPayment {
 		var pay db.CashOrderPayment
 		require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+out.TxID+":0").First(&pay).Error)
@@ -364,14 +364,14 @@ func TestOrderIntake_OnchainReorgedBeforeMintIsNotMinted(t *testing.T) {
 	out.Confirmations = 0
 	f.ln.SigningKey = nil
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	assert.Equal(t, db.CashOrderPaymentSeen, payment().State)
 
 	// Back at its tier, it mints.
 	f.ln.SigningKey = key
 	out.Confirmations = 1
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	assert.Equal(t, db.CashOrderPaymentMinted, payment().State)
 }
 
@@ -393,7 +393,7 @@ func TestOrderIntake_OnchainUnpaidDeleted(t *testing.T) {
 	assert.True(t, addr.Burnt)
 
 	f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: placed.Address, AmountLoki: 43, Confirmations: 3}}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	var kept db.CashOrderPayment
 	require.NoError(t, f.svc.DB.First(&kept).Error)
 	assert.Equal(t, db.CashOrderPaymentKept, kept.State)
@@ -422,14 +422,14 @@ func TestOrderIntake_SameNodePayment(t *testing.T) {
 	o := f.orderRow(t, p.RequestID)
 	f.ln.MockTransaction = &lnclient.Transaction{PaymentHash: *o.PaymentHash, Preimage: tests.RandomHex32()}
 
-	preimage, handled, err := f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis))
+	preimage, handled, err := f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis)) //nolint:gosec // an order amount, never negative
 	require.NoError(t, err)
 	require.True(t, handled)
 	assert.Equal(t, f.ln.MockTransaction.Preimage, preimage)
 	assert.Contains(t, f.ln.CancelledInvoices, *o.PaymentHash)
 	assert.Equal(t, db.CashOrderMinted, f.orderRow(t, p.RequestID).State)
 
-	_, handled, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis))
+	_, handled, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis)) //nolint:gosec // an order amount, never negative
 	assert.True(t, handled)
 	assert.ErrorIs(t, err, cashorder.ErrOrderNotPayable)
 
@@ -441,7 +441,7 @@ func TestOrderIntake_SameNodePayment(t *testing.T) {
 	o = f.orderRow(t, p.RequestID)
 	f.ln.MockTransaction = &lnclient.Transaction{PaymentHash: *o.PaymentHash, Preimage: tests.RandomHex32()}
 	f.pastPayBy(t, p.RequestID)
-	_, _, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis))
+	_, _, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis)) //nolint:gosec // an order amount, never negative
 	assert.ErrorIs(t, err, cashorder.ErrOrderNotPayable, "past pay_by nothing is debited")
 }
 
@@ -482,7 +482,7 @@ func TestOrderIntake_OnchainSeenBeforePayByScannedAfter(t *testing.T) {
 
 	out.Confirmations = 1
 	f.chain.outputs = []lnclient.OnchainOutput{out}
-	f.engine.ScanChain(context.TODO())
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
 	got := f.lookupOrder(t, buyer, p)
 	require.Len(t, got.Bills, 1, "the payment mints for its order")
 }

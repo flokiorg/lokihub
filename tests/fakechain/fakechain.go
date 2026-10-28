@@ -705,18 +705,20 @@ func (c *Chain) SubscribeBlocks(ctx context.Context) (<-chan lnclient.BlockEpoch
 // spending outpoint (the node's own spend, a sweep): every mempool transaction
 // spending it is dropped. It returns the txid.
 func (c *Chain) SpendOutside(outpoint string) string {
+	h, idx := outpoint[:64], outpoint[65:]
+	var n uint32
+	if _, err := fmt.Sscan(idx, &n); err != nil {
+		panic(fmt.Sprintf("fakechain: bad outpoint %q: %v", outpoint, err))
+	}
 	c.mu.Lock()
 	txo := c.outputs[outpoint]
 	c.seq++
 	tx := wire.NewMsgTx(2)
-	h, idx := outpoint[:64], outpoint[65:]
 	var hash [32]byte
 	b, _ := hex.DecodeString(h)
 	for i := range b {
 		hash[i] = b[len(b)-1-i]
 	}
-	var n uint32
-	fmt.Sscan(idx, &n)
 	tx.AddTxIn(&wire.TxIn{PreviousOutPoint: wire.OutPoint{Hash: hash, Index: n}})
 	sum := sha256.Sum256([]byte(fmt.Sprintf("outside-spend-%d", c.seq)))
 	tx.AddTxOut(wire.NewTxOut(max(txo.Value-1000, 1), append([]byte{0x00, 0x14}, sum[:20]...)))

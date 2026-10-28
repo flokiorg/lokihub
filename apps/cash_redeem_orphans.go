@@ -134,6 +134,8 @@ func (svc *appsService) ResolveOrphanRedeemClaims(claimedBefore time.Time, looku
 					return settledOn, err
 				}
 				log.Error().Msg("A cash_redeem payout was paid with no ledger row; the slice is recorded redeemed, the bill's balance needs operator attention")
+			default:
+				// PayoutUnknown: left for a later pass.
 			}
 		}
 	}
