@@ -127,6 +127,17 @@ func (e *Engine) onConfirmed(v *db.CashWithdrawVersion, wt lnclient.WalletTx) (d
 				Update("state", db.CashVersionConflicted).Error; err != nil {
 				return err
 			}
+			// A child spends its parent's change: once another version of
+			// the batch confirms, a child of any parent but v conflicts too
+			// (its input is an output of a conflicted transaction).
+			if v.Kind != db.CashVersionChild {
+				if err := tx.Model(&db.CashWithdrawVersion{}).
+					Where("batch_id = ? AND kind = ? AND (parent_id IS NULL OR parent_id <> ?) AND state IN ?", v.BatchID, db.CashVersionChild, v.ID,
+						[]string{db.CashVersionAboutToSign, db.CashVersionSigned, db.CashVersionBroadcast, db.CashVersionReplaced, db.CashVersionConfirmed}).
+					Update("state", db.CashVersionConflicted).Error; err != nil {
+					return err
+				}
+			}
 		}
 		paid := map[uint]int{}
 		for i, o := range outputsOf(v) {

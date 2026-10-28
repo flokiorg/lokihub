@@ -289,3 +289,50 @@ func (w *engineWorld) leaseID(t *testing.T) [32]byte {
 	require.NoError(t, err)
 	return id
 }
+
+// A child of a reorganised version conflicts once another version of the
+// batch (here the cancel's invalidation) confirms, and the parent's change it
+// spends, which no longer exists, is not leased again.
+func TestChildOfAConflictedParent(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	wd := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	txid := *w.payout(t, wd.ID).Txid
+	w.chain.Mine(1)
+	w.pass(t)
+	w.chain.Reorg(1, txid)
+	w.pass(t)
+	w.chain.Withhold(txid, true)
+	w.chain.Mine(7)
+	w.pass(t)
+	var child *db.CashWithdrawVersion
+	for _, v := range w.versions(t) {
+		if v.Kind == db.CashVersionChild {
+			child = &v
+		}
+	}
+	require.NotNil(t, child, "a child is built")
+	w.chain.Withhold(*child.Txid, true)
+
+	w.mu.Lock()
+	w.now = time.Unix(w.payout(t, wd.ID).SentBy+604800, 0)
+	w.mu.Unlock()
+	_, err := w.s.CancelRequest(w.payout(t, wd.ID))
+	require.NoError(t, err)
+	for range 4 {
+		w.pass(t)
+		w.chain.Mine(3)
+	}
+	w.pass(t)
+	require.Equal(t, db.CashWithdrawCancelled, w.payout(t, wd.ID).State)
+	for _, v := range w.versions(t) {
+		if v.ID == child.ID {
+			assert.Equal(t, db.CashVersionConflicted, v.State, "the child conflicts with the confirmed invalidation")
+		}
+	}
+	w.newEngine()
+	require.NoError(t, w.eng.Reconcile(context.TODO()))
+	w.advance(30 * 24 * time.Hour)
+	w.pass(t)
+	assert.Zero(t, w.eng.LeaseFailures.Load(), "no lease of the conflicted parent's change")
+}
