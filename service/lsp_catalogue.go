@@ -38,6 +38,17 @@ func (svc *service) startLSPCatalogue(ctx context.Context, lspManager *manager.L
 		},
 		Live: discovery.ManagerLSPS{LN: ln, LM: func() *manager.LiquidityManager { return svc.liquidityManager }},
 	})
+	// Each purchase runs the live check first (NIP-LSP §Client Behavior).
+	if lm := svc.liquidityManager; lm != nil {
+		catalogue := svc.lspCatalogue
+		lm.SetLiveChecker(func(ctx context.Context, key string) (*manager.LiveCheck, error) {
+			res, err := catalogue.LiveCheck(ctx, key)
+			if err != nil {
+				return nil, err
+			}
+			return &manager.LiveCheck{Usable: res.Usable, Worse: res.Worse, Error: res.Error}, nil
+		})
+	}
 	svc.shutdownGroup.Go(func() error {
 		svc.lspCatalogue.Run(ctx)
 		return nil
