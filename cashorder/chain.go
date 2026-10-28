@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"gorm.io/gorm"
@@ -24,17 +26,18 @@ import (
 // bill standing at the Hub's loss. An output to an address with no live order
 // (burnt, its order deleted unpaid, or first paid after pay_by with nothing
 // seen) is kept by the Hub: credited to it as income once confirmed, or to no
-// app when the Hub is gone.
-func (e *Engine) ScanChain(ctx context.Context) {
+// app when the Hub is gone. An error means the wallet could not be read: no
+// on-chain window may be ended on it.
+func (e *Engine) ScanChain(ctx context.Context) error {
 	ln := e.LN()
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok || ln == nil {
-		return
+		return errNoChain
 	}
 	outputs, err := lister.ListOnchainOutputs(ctx)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Could not list on-chain outputs for order intake")
-		return
+		return fmt.Errorf("list on-chain outputs: %w", err)
 	}
 	byAddress := map[string][]lnclient.OnchainOutput{}
 	for _, o := range outputs {
@@ -50,7 +53,7 @@ func (e *Engine) ScanChain(ctx context.Context) {
 		var part []db.CashOrderAddress
 		if err := e.DB.Where("address IN ?", addrs[start:end]).Find(&part).Error; err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to read order addresses")
-			return
+			return fmt.Errorf("read order addresses: %w", err)
 		}
 		known = append(known, part...)
 	}
@@ -71,7 +74,11 @@ func (e *Engine) ScanChain(ctx context.Context) {
 			e.mintPending(ctx, id)
 		}
 	}
+	return nil
 }
+
+// errNoChain: the node is not started or cannot list its wallet's outputs.
+var errNoChain = errors.New("no node wallet to scan")
 
 // observeOutput records or advances the payment of one output to an order
 // address.
@@ -87,11 +94,11 @@ func (e *Engine) observeOutput(ctx context.Context, addr db.CashOrderAddress, o 
 	}
 	var order *db.CashOrder
 	if p.ID == 0 {
-		order = e.liveOrderFor(addr, o.SeenAt)
+		order = e.liveOrderFor(addr, o)
 		hub := addr.HubAppID
 		address := addr.Address
 		p = db.CashOrderPayment{PaymentKey: key, HubAppID: &hub, Address: &address, ValueMillis: value,
-			SeenAt: e.now().Unix(), Confirmations: int(o.Confirmations), State: db.CashOrderPaymentSeen}
+			SeenAt: firstSeen(o.SeenAt, e.now().Unix()), Confirmations: int(o.Confirmations), State: db.CashOrderPaymentSeen}
 		if order != nil {
 			p.OrderID = &order.ID
 		} else {
@@ -190,10 +197,12 @@ func requiredConfirmations(order *db.CashOrder, value uint64) int {
 
 // liveOrderFor is the order a new output to addr pays: the address's order,
 // unless it is gone or expired (nothing seen by pay_by); nil means the Hub keeps
-// the payment. seenAt is when the node's wallet first saw the output's
+// the payment. out.SeenAt is when the node's wallet first saw the output's
 // transaction (0 unknown): an output in the mempool by pay_by pays its order
-// even when the scan that finds it runs after pay_by.
-func (e *Engine) liveOrderFor(addr db.CashOrderAddress, seenAt int64) *db.CashOrder {
+// even when the scan that finds it runs after pay_by. So does one in a block at
+// or below the tip read when pay_by passed, whatever SeenAt says (a rescan
+// reports 0 or the block time).
+func (e *Engine) liveOrderFor(addr db.CashOrderAddress, out lnclient.OnchainOutput) *db.CashOrder {
 	if addr.OrderID == nil || addr.Burnt {
 		return nil
 	}
@@ -203,14 +212,23 @@ func (e *Engine) liveOrderFor(addr db.CashOrderAddress, seenAt int64) *db.CashOr
 	}
 	// Nothing seen by pay_by: the order expired (whether or not the pay_by job
 	// has stated it yet), and a first payment after it is kept.
-	seen := e.now().Unix()
-	if seenAt > 0 && seenAt < seen {
-		seen = seenAt
+	if o.State == db.CashOrderExpired {
+		return nil
 	}
-	if o.State == db.CashOrderExpired || (o.State == db.CashOrderOpen && seen > o.PayBy) {
+	inBlockByPayBy := out.BlockHeight > 0 && o.PayByHeight != nil && int64(out.BlockHeight) <= *o.PayByHeight
+	if o.State == db.CashOrderOpen && firstSeen(out.SeenAt, e.now().Unix()) > o.PayBy && !inBlockByPayBy {
 		return nil
 	}
 	return &o
+}
+
+// firstSeen is the node's first-seen time of a transaction when it reports
+// one earlier than now, else now.
+func firstSeen(nodeSeenAt, now int64) int64 {
+	if nodeSeenAt > 0 && nodeSeenAt < now {
+		return nodeSeenAt
+	}
+	return now
 }
 
 // keepTx credits a confirmed unbound payment to its Hub as income, or to no

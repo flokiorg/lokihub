@@ -542,7 +542,8 @@ func (e *Engine) SweepLightning(ctx context.Context) {
 // §Order State): an unpaid Lightning order's invoice is cancelled first and
 // the order expires only once the node shows it cancelled with nothing settled
 // or accepted; an on-chain order is closed when a payment was seen, else it
-// expires.
+// expires. An on-chain window is ended only after a good chain scan: while the
+// wallet cannot be read, those orders stay open and are retried next run.
 func (e *Engine) RunPayBy(ctx context.Context) {
 	now := e.now().Unix()
 	var orders []db.CashOrder
@@ -551,14 +552,22 @@ func (e *Engine) RunPayBy(ctx context.Context) {
 		logger.Logger.Error().Err(err).Msg("Failed to list orders past pay_by")
 		return
 	}
+	scanned := true
 	if hasOnchain(orders) {
 		// An output already in the mempool at pay_by keeps its order: scan
 		// before ending any on-chain window.
-		e.ScanChain(ctx)
+		e.notePayByHeight(ctx, orders)
+		if err := e.ScanChain(ctx); err != nil {
+			scanned = false
+			e.logHeldOpen(err, orders, now)
+		}
 	}
 	ln := e.LN()
 	for _, o := range orders {
 		if o.Payment == nipCO.PaymentOnchain {
+			if !scanned {
+				continue
+			}
 			if err := e.DB.First(&o, o.ID).Error; err != nil {
 				continue
 			}
@@ -576,17 +585,68 @@ func hasOnchain(orders []db.CashOrder) bool {
 	return false
 }
 
+// payByHeightSlack bounds how long after pay_by the tip may be read for
+// PayByHeight: a later read could count blocks mined after pay_by as in time.
+const payByHeightSlack = 60
+
+// notePayByHeight records the chain tip on each on-chain order just past
+// pay_by that has none yet, read before the scan that ends its window. Best
+// effort: with no tip read, an output the node reports no first-seen time for
+// is judged by the time it is found.
+func (e *Engine) notePayByHeight(ctx context.Context, orders []db.CashOrder) {
+	now := e.now().Unix()
+	var ids []uint
+	for _, o := range orders {
+		if o.Payment == nipCO.PaymentOnchain && o.State == db.CashOrderOpen && o.PayByHeight == nil && now-o.PayBy <= payByHeightSlack {
+			ids = append(ids, o.ID)
+		}
+	}
+	ln := e.LN()
+	if len(ids) == 0 || ln == nil {
+		return
+	}
+	info, err := ln.GetInfo(ctx)
+	if err != nil || info == nil || info.BlockHeight == 0 {
+		return
+	}
+	if err := e.DB.Model(&db.CashOrder{}).Where("id IN ? AND pay_by_height IS NULL", ids).
+		Update("pay_by_height", int64(info.BlockHeight)).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to record the chain tip at pay_by")
+	}
+}
+
+// logHeldOpen reports the on-chain orders a failed scan keeps open past
+// pay_by. They are never expired on missing data, so this stays an error
+// until the wallet can be read again.
+func (e *Engine) logHeldOpen(err error, orders []db.CashOrder, now int64) {
+	count, oldest := 0, now
+	for _, o := range orders {
+		if o.Payment == nipCO.PaymentOnchain {
+			count++
+			oldest = min(oldest, o.PayBy)
+		}
+	}
+	logger.Logger.Error().Err(err).Int("orders", count).Int64("oldest_past_pay_by_seconds", now-oldest).
+		Msg("cash_order_scan_failed_total: on-chain orders past pay_by stay open until the chain can be scanned")
+}
+
 // EndWindowIfDue is RunPayBy for one order, for a read of it: an order past
 // its pay_by is read in the state NIP-CO gives it then (a Lightning order
-// unpaid at pay_by is expired), not in the one the last job run left.
+// unpaid at pay_by is expired), not in the one the last job run left. An
+// on-chain order is left open when the chain cannot be scanned.
 func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) {
 	var o db.CashOrder
-	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, e.now().Unix(),
+	now := e.now().Unix()
+	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, now,
 		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil || o.ID == 0 {
 		return
 	}
 	if o.Payment == nipCO.PaymentOnchain {
-		e.ScanChain(ctx)
+		e.notePayByHeight(ctx, []db.CashOrder{o})
+		if err := e.ScanChain(ctx); err != nil {
+			e.logHeldOpen(err, []db.CashOrder{o}, now)
+			return
+		}
 		if err := e.DB.First(&o, o.ID).Error; err != nil {
 			return
 		}

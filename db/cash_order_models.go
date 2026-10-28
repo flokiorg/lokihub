@@ -59,15 +59,18 @@ type CashOrder struct {
 	FeeMillis       int64   `gorm:"not null"`
 	PayMillis       int64   `gorm:"not null"`
 	Confirmations   *int
-	PayBy           int64   `gorm:"not null;index"`
-	Deadline        int64   `gorm:"not null"`
-	PaymentHash     *string `gorm:"size:64;uniqueIndex"`
-	Invoice         *string `gorm:"type:text"`
-	Address         *string `gorm:"size:100;uniqueIndex"`
-	State           string  `gorm:"size:8;not null;index:idx_cash_orders_hub_payment_state,priority:3"`
-	ReservedMillis  int64   `gorm:"not null"`
-	CreatedAt       int64   `gorm:"not null"`
-	StateAt         int64   `gorm:"not null"`
+	PayBy           int64 `gorm:"not null;index"`
+	// PayByHeight is the chain tip read when an on-chain order's pay_by
+	// passed: an output in a block at or below it was paid in time.
+	PayByHeight    *int64
+	Deadline       int64   `gorm:"not null"`
+	PaymentHash    *string `gorm:"size:64;uniqueIndex"`
+	Invoice        *string `gorm:"type:text"`
+	Address        *string `gorm:"size:100;uniqueIndex"`
+	State          string  `gorm:"size:8;not null;index:idx_cash_orders_hub_payment_state,priority:3"`
+	ReservedMillis int64   `gorm:"not null"`
+	CreatedAt      int64   `gorm:"not null"`
+	StateAt        int64   `gorm:"not null"`
 }
 
 // CashOrderAddress is an address handed to an order, recorded before it is given
