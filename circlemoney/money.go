@@ -117,15 +117,19 @@ func HubConfig(tx *gorm.DB, hubID uint) (*db.CircleHubConfig, error) {
 }
 
 // Caps are a wallet's send cap (max_amount) and receive cap (max_receive) and
-// its renewal, in mloki.
+// its renewal, in mloki. NoSendCap is a wallet without a send cap at all (one
+// not made by a join, whose permission says 0); otherwise MaxAmount is the cap,
+// 0 included.
 type Caps struct {
 	MaxAmount  int64
+	NoSendCap  bool
 	MaxReceive int64
 	Renewal    string
 }
 
-// WalletCaps reads a wallet's caps: max_amount from its pay_invoice permission
-// (whole loki), max_receive from the wallet.
+// WalletCaps reads a wallet's caps: max_amount from the wallet's exact cap
+// (CircleMaxAmountMloki), else from its pay_invoice permission (whole loki, 0
+// meaning none); max_receive from the wallet.
 func WalletCaps(tx *gorm.DB, wallet *db.App) (Caps, error) {
 	var perm db.AppPermission
 	err := tx.Where("app_id = ? AND scope = ?", wallet.ID, constants.PAY_INVOICE_SCOPE).Limit(1).Find(&perm).Error
@@ -133,6 +137,11 @@ func WalletCaps(tx *gorm.DB, wallet *db.App) (Caps, error) {
 		return Caps{}, err
 	}
 	caps := Caps{MaxAmount: int64(perm.MaxAmountLoki) * 1000, Renewal: perm.BudgetRenewal}
+	if wallet.CircleMaxAmountMloki != nil {
+		caps.MaxAmount = max(*wallet.CircleMaxAmountMloki, 0)
+	} else {
+		caps.NoSendCap = caps.MaxAmount <= 0
+	}
 	if caps.Renewal == "" {
 		caps.Renewal = constants.BUDGET_RENEWAL_NEVER
 	}

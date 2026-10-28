@@ -89,7 +89,7 @@ func CheckSend(tx *gorm.DB, in SendInput, limiter *Limiter) (SendQuote, error) {
 		}
 		q.CountsSend, q.PeriodStart = true, start.Unix()
 		used := SendUsage(tx, wallet.ID, q.PeriodStart)
-		if caps.MaxAmount > 0 && satAdd(used, int64(q.FullCost)) > caps.MaxAmount {
+		if !caps.NoSendCap && satAdd(used, int64(q.FullCost)) > caps.MaxAmount {
 			return SendQuote{}, refuse(constants.ERROR_QUOTA_EXCEEDED, "the payment would pass the wallet's send cap for this period")
 		}
 	}

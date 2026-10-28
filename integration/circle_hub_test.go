@@ -31,8 +31,8 @@ const numGeneratedUnauthorizedIdentities = 5
 const hubPerWalletMaxMloki = 1_000_000
 
 // circleHappyPathAmountMloki is the max_amount a test member joins with: twice
-// the smallest cap a join accepts (fee reserve + 1 loki), so it clears the
-// floor with room for a payment.
+// the fee reserve plus 1 loki, so the wallet can pay outside the node with
+// room to spare.
 const circleHappyPathAmountMloki = 2 * constants.MIN_CIRCLE_WALLET_MAX_MLOKI
 
 func TestCircleHubs(t *testing.T) {
@@ -94,27 +94,8 @@ func testCircleHub(t *testing.T, cfg *Config, policy string) {
 		requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
 	})
 
-	// Any max_amount below 1000 mloki (one whole loki) used
-	// to floor to a stored budget cap of exactly 0, which the payment layer
-	// treats as "no cap at all" - a silent, complete bypass of the member's
-	// own quoted spend cap. Every value in [0, 999] mloki must now be
-	// rejected outright, before a wallet is ever created.
-	t.Run("CreateWallet_SubLokiMaxAmount_Rejected", func(t *testing.T) {
-		for _, maxAmount := range []uint64{0, 1, 500, 999} {
-			t.Run(fmt.Sprintf("max_amount_%d", maxAmount), func(t *testing.T) {
-				identityEvent := distinctCircleWalletIdentityEvent(t, member0Priv, hubClient.WalletPubkey(),
-					fmt.Sprintf("SubLokiMaxAmount%d", maxAmount))
-				var result CreateCircleWalletResult
-				err := hubClient.Call(ctxT(t), constants.NIP47MethodCreateCircleWallet, CreateCircleWalletParams{
-					Pubkey:        member0Pub,
-					MaxAmount:     maxAmount,
-					Expiry:        happyPathExpirySecs,
-					IdentityEvent: eventJSON(t, identityEvent),
-				}, &result)
-				requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
-			})
-		}
-	})
+	// A max_amount under 1 loki is accepted as a cap of 0, never "no cap"
+	// (TestCircleFollowups_JoinSmallCap): member0 must stay free to join below.
 
 	t.Run("CreateWallet_BudgetRenewalTighterThanFloor", func(t *testing.T) {
 		// "daily" is the tightest possible rank, so it is rejected against

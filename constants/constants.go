@@ -247,9 +247,10 @@ const PRIVATE_TRANSPORT_KEY_INDEX = 0
 // Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
 const CIRCLE_MEMBERSHIP_STALENESS_SECS = 600
 
-// MIN_CIRCLE_WALLET_MAX_MLOKI is the smallest cap a Circle Wallet may have:
-// the fee reserve plus 1 loki. Any less, and the reserve alone exceeds the cap,
-// so the wallet could never pay outside this node.
+// MIN_CIRCLE_WALLET_MAX_MLOKI is the fee reserve plus 1 loki: the smallest send
+// cap under which a Circle Wallet can pay outside this node. It bounds the
+// operator's per-wallet ceiling only; a join takes any max_amount (NIP-CW step
+// 6 has no floor), and a smaller cap is a wallet that pays only on this node.
 const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
 
 // MAX_EXPIRY_SECS is the upper bound accepted for any config or request field

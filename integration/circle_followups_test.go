@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -70,24 +69,28 @@ func joinWithCap(t *testing.T, hub CircleHubConfig, memberPriv string, maxAmount
 	return mustConnectCircleWallet(t, CircleWalletConnection(details, memberPub)), nil
 }
 
-// A cap the 10-loki fee reserve would swallow is refused; the floor itself
-// is accepted.
-func TestCircleFollowups_JoinCapFloor(t *testing.T) {
+// A join has no floor on max_amount (NIP-CW step 6 checks ceilings only, and
+// get_info advertises none): a cap under 1 loki is accepted and resolved to a
+// cap of 0, never "no cap"; one under the fee reserve plus 1 loki is accepted,
+// rounded down to whole loki.
+func TestCircleFollowups_JoinSmallCap(t *testing.T) {
 	cfg := requireConfig(t)
 	for _, policy := range []string{circlePolicyAllowlist, circlePolicyFollowSet} {
 		t.Run(policy, func(t *testing.T) {
-			member := newTestPrivkey(t)
-			hub, _, _ := createEphemeralCircleHub(t, cfg, "followups-cap-floor-"+policy, policy, []string{member},
+			zero, small := newTestPrivkey(t), newTestPrivkey(t)
+			hub, _, _ := createEphemeralCircleHub(t, cfg, "followups-small-cap-"+policy, policy, []string{zero, small},
 				ephemeralCircleHubOpts{FundLoki: 1_000})
 
-			_, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI-1)
-			requireNWCErrorCode(t, err, nipcw.ErrLimitExceeded)
-
-			child, err := joinWithCap(t, hub, member, constants.MIN_CIRCLE_WALLET_MAX_MLOKI)
-			require.NoError(t, err)
-			var budget GetBudgetResult
-			require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))
-			assert.EqualValues(t, constants.MIN_CIRCLE_WALLET_MAX_MLOKI, budget.TotalBudget)
+			for _, tc := range []struct {
+				member         string
+				asked, applied uint64
+			}{{zero, 999, 0}, {small, constants.MIN_CIRCLE_WALLET_MAX_MLOKI - 1, constants.MIN_CIRCLE_WALLET_MAX_MLOKI - 1_000}} {
+				child, err := joinWithCap(t, hub, tc.member, tc.asked)
+				require.NoError(t, err, "max_amount %d", tc.asked)
+				var budget GetBudgetResult
+				require.NoError(t, child.Call(ctxT(t), "get_budget", struct{}{}, &budget))
+				assert.EqualValues(t, tc.applied, budget.TotalBudget, "max_amount %d", tc.asked)
+			}
 		})
 	}
 }

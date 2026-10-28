@@ -486,6 +486,12 @@ audits of both.
   after it, which relays whenever the parent meets the minimum relay fee by
   itself. A parent below that fee still needs package relay: both are retried
   each pass while the parent keeps being republished.
+- Takes a circle join at any `max_amount`. A join was refused
+  `LIMIT_EXCEEDED` under 11,000 mloki (the fee reserve plus 1 loki), a floor
+  NIP-CW step 6 does not allow and `get_info` never advertised. The cap is
+  rounded down to whole loki, reported as applied, and stored exactly on the
+  wallet, so a request under 1 loki is a send cap of 0, never "no cap"; a cap
+  under the fee reserve makes a wallet that pays only on this node.
 - Reads a payment's update stream until it succeeds or fails. A node run with
   `routerrpc.usestatusinitiated` sends `INITIATED` first, which was taken as a
   failure while the payment's HTLCs were still out.
