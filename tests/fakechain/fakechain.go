@@ -25,6 +25,9 @@ import (
 // IncrementalSatPerVB is the incremental relay rate a replacement adds.
 const IncrementalSatPerVB = 1
 
+// ErrUnknownOutput is the wallet's refusal to lease an output it does not hold.
+var ErrUnknownOutput = errors.New("unknown output")
+
 type block struct {
 	hash  string
 	txids []string
@@ -408,9 +411,18 @@ func (c *Chain) ListUnspent(_ context.Context, minConfs int32, account string) (
 	return out, nil
 }
 
+// LeaseOutput leases a wallet output. Like the node's wallet, it refuses an
+// output it does not know or one a mined transaction spent ("unknown
+// output"); one spent only in the mempool is still leasable.
 func (c *Chain) LeaseOutput(_ context.Context, id [32]byte, outpoint string, secs int64) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if _, known := c.outputs[outpoint]; !known {
+		return 0, ErrUnknownOutput
+	}
+	if spender, spent := c.spentLocked()[outpoint]; spent && c.confHeightLocked(spender) > 0 {
+		return 0, ErrUnknownOutput
+	}
 	now := c.now().Unix()
 	if l, ok := c.leases[outpoint]; ok && l.expiry > now && l.id != id {
 		return 0, errors.New("fakechain: output leased under another id")
