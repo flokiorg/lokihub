@@ -47,7 +47,6 @@ func SetFaults(f Faults, reset bool) map[string]bool {
 	}
 }
 
-
 // Limits overrides the cash limits; a nil field is left as it is.
 type Limits struct {
 	// LiveWalletCap caps a Cash Hub's live bills; 0 lifts the cap.
@@ -92,4 +91,17 @@ func SetLimits(l Limits, reset bool) map[string]any {
 		out["per_secs"] = int64(spinOffPer / time.Second)
 	}
 	return out
+}
+
+// set turns the gate on or off; turning it off releases its waiters.
+func (g *gate) set(on bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	switch {
+	case on && !g.on:
+		g.off = make(chan struct{})
+	case !on && g.on:
+		close(g.off)
+	}
+	g.on = on
 }
