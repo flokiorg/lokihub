@@ -2,6 +2,7 @@ package nip47
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/flokiorg/lokihub/apps"
@@ -45,6 +46,8 @@ type nip47Service struct {
 	privateIdentity        func() string
 	// withdraw serves on-chain withdrawals (private_withdraw.go); nil offers none.
 	withdraw *cashwithdraw.Service
+	// orderPayBy ends a read order's payment window when its pay_by passed.
+	orderPayBy atomic.Pointer[func(ctx context.Context, orderID uint)]
 }
 
 type Nip47Service interface {
@@ -68,6 +71,9 @@ type Nip47Service interface {
 	// (a same-node payment) to the order intake, as the node's settlements are.
 	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
 		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
+	// SetOrderPayBy lets a read of an order past its pay_by end its payment
+	// window first.
+	SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint))
 }
 
 func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
@@ -182,6 +188,11 @@ func (svc *nip47Service) runNip47InfoPublisherWorker(ctx context.Context, pool *
 
 // SetOrderIntake implements Nip47Service: its payments go through its own
 // transactions service, which must know the order intake too.
+// SetOrderPayBy implements Nip47Service.
+func (svc *nip47Service) SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint)) {
+	svc.orderPayBy.Store(&endWindowIfDue)
+}
+
 func (svc *nip47Service) SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
 	selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error)) {
 	svc.transactionsService.SetOrderIntake(intake, selfPay)

@@ -553,26 +553,43 @@ func (e *Engine) RunPayBy(ctx context.Context) {
 	}
 	ln := e.LN()
 	for _, o := range orders {
-		if o.Payment == nipCO.PaymentLightning && o.State == db.CashOrderOpen && o.PaymentHash != nil {
-			if ln == nil {
-				continue
-			}
-			cancelErr := ln.CancelHoldInvoice(ctx, *o.PaymentHash)
-			inv, err := ln.LookupInvoice(ctx, *o.PaymentHash)
-			if err == nil && inv != nil && inv.SettledAt != nil {
-				e.IntakeLightning(ctx, inv)
-				continue
-			}
-			state := ""
-			if err == nil && inv != nil && inv.Metadata != nil {
-				state, _ = inv.Metadata[lnclient.InvoiceStateKey].(string)
-			}
-			if state == "ACCEPTED" || state == "SETTLED" || (cancelErr != nil && state != "CANCELED") {
-				continue // left for the next run
-			}
-		}
-		e.restate(o.ID)
+		e.endWindow(ctx, ln, o)
 	}
+}
+
+// EndWindowIfDue is RunPayBy for one order, for a read of it: an order past
+// its pay_by is read in the state NIP-CO gives it then (a Lightning order
+// unpaid at pay_by is expired), not in the one the last job run left.
+func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) {
+	var o db.CashOrder
+	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, e.now().Unix(),
+		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil || o.ID == 0 {
+		return
+	}
+	e.endWindow(ctx, e.LN(), o)
+}
+
+// endWindow ends o's payment window, its pay_by passed.
+func (e *Engine) endWindow(ctx context.Context, ln lnclient.LNClient, o db.CashOrder) {
+	if o.Payment == nipCO.PaymentLightning && o.State == db.CashOrderOpen && o.PaymentHash != nil {
+		if ln == nil {
+			return
+		}
+		cancelErr := ln.CancelHoldInvoice(ctx, *o.PaymentHash)
+		inv, err := ln.LookupInvoice(ctx, *o.PaymentHash)
+		if err == nil && inv != nil && inv.SettledAt != nil {
+			e.IntakeLightning(ctx, inv)
+			return
+		}
+		state := ""
+		if err == nil && inv != nil && inv.Metadata != nil {
+			state, _ = inv.Metadata[lnclient.InvoiceStateKey].(string)
+		}
+		if state == "ACCEPTED" || state == "SETTLED" || (cancelErr != nil && state != "CANCELED") {
+			return // left for the next run
+		}
+	}
+	e.restate(o.ID)
 }
 
 func (e *Engine) restate(orderID uint) {
