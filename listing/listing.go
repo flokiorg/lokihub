@@ -91,6 +91,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*View, error) 
 		if err != nil {
 			return nil, refused("the circle has no configuration")
 		}
+		// Only a circle taking members is listed open (R2-L2).
+		if cfg.TeardownRequestedAt != nil {
+			return nil, refused("the circle is being torn down")
+		}
+		if cfg.AcceptingJoins != nil && !*cfg.AcceptingJoins {
+			return nil, refused("the circle is not accepting joins")
+		}
 		isCF = cfg.CircleIdentity.Policy == db.CirclePolicyFollowSet
 		typ = db.ListingTypeCircleWallet
 	default:
@@ -677,7 +684,14 @@ func (s *Service) close(ctx context.Context, id uint) error {
 			}).Error
 		}
 	}
-	return s.publishClosed(ctx, row, createdAt)
+	if err := s.publishClosed(ctx, row, createdAt); err != nil {
+		// Still listed: the scheduler retries the close at once, not when the
+		// row next falls due (R2-L1).
+		_ = s.d.DB.Model(&db.OfferListing{}).Where("id = ? AND phase = ?", row.ID, db.ListingPhaseListed).
+			Update("due_at", now).Error
+		return err
+	}
+	return nil
 }
 
 // publishClosed signs and sends the closed version of row at createdAt.
