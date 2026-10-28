@@ -295,14 +295,10 @@ func (s *Service) Withdraw(ctx context.Context, bill *db.App, c Caller, meta Cal
 		return nil, err
 	}
 
-	// W6: the commit. The tip is read again just before it opens.
-	tip, err := s.tipNow(ctx)
-	if err != nil {
-		return nil, err
-	}
+	// W6: the commit, which reads the tip again under its locks.
 	w, err := s.commitWithdraw(ctx, commitInput{
 		bill: bill, hubID: hubID, claim: claim, req: req, quote: quote, quoteID: quoteID, meta: meta, pf: pf,
-		tip: tip, amount: amount, authorizerKind: authorizerKind, authorizer: authorizer, delivery: delivery,
+		amount: amount, authorizerKind: authorizerKind, authorizer: authorizer, delivery: delivery,
 		proofID: proofID, proofCreatedAt: proofCreatedAt,
 	})
 	if err != nil {
@@ -440,9 +436,20 @@ func (s *Service) commitWithdraw(ctx context.Context, in commitInput) (*db.CashW
 		if !nipcash.CommitAllowed(in.meta.Deadline, hubclock.Wall(now).Unix()) {
 			return errDeadline
 		}
-		if !nipcash.QuoteValidAt(in.quote.HoldsUntil, in.tip) {
+		// The tip and the bill are read again under the locks: the reads
+		// before them may be stale by the time the commit holds them.
+		tip, err := s.tipNow(ctx)
+		if err != nil {
+			return err
+		}
+		if !nipcash.QuoteValidAt(in.quote.HoldsUntil, tip) {
 			return &nipcash.WithdrawError{Code: nipcash.ErrCodeRestricted, Detail: nipcash.DetailQuoteExpired, Row: 2, Reason: "quote expired"}
 		}
+		var bill db.App
+		if err := tx.First(&bill, in.bill.ID).Error; err != nil {
+			return err
+		}
+		in.bill = &bill
 		if !nipcash.SliceLive(now.Unix(), billExpiry(in.bill)) {
 			return refuse(nipcash.ErrCodeRestricted, "this cash wallet is past its redemption deadline")
 		}

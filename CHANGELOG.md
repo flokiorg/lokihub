@@ -489,6 +489,9 @@ audits of both.
   scanned, instead of expiring it and keeping a payment seen in time. The next
   good scan judges each output by the node's first-seen time, or by the chain
   tip read at `pay_by`; failed scans are logged as errors.
+- Refuses a `cash_withdraw` whose quote expired or whose bill expired while it
+  waited for its locks: the commit now reads the chain tip and the bill again
+  under them.
 - Publishes a payout's CPFP child on its own when the node refuses it as a
   package. lokid has no package relay, so the child of a reorganised payout
   was refused every pass; now its parent is republished and the child sent
