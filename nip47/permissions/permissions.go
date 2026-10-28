@@ -62,8 +62,10 @@ func (svc *permissionsService) HasPermission(app *db.App, scope string) (result 
 		// deadline that passed, rather than NIP-47 connection-management
 		// jargon that names no mechanism they can act on. Every other app
 		// kind keeps the original generic message.
+		// The code is RESTRICTED: NIP-CASH refuses a slice past its expiry with
+		// it and has no EXPIRED code.
 		if app.Kind == db.AppKindCashWallet {
-			return false, constants.ERROR_EXPIRED, fmt.Sprintf(
+			return false, constants.ERROR_RESTRICTED, fmt.Sprintf(
 				"this cash wallet's redemption deadline (%s) has passed; contact the wallet operator",
 				expiresAt.UTC().Format(time.RFC3339))
 		}
