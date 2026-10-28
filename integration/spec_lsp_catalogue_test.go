@@ -186,18 +186,25 @@ func TestSpecLSP_I84_ClosedHides(t *testing.T) {
 	if !flspdAdmin(t, admin, "announce/unlist") {
 		t.Skip("no hook to unlist flspd (POST /api/test/flspd/announce/unlist, or FLSPD_ADMIN_URL)")
 	}
-	t.Cleanup(func() { flspdAdmin(t, admin, "announce/resume") })
-	require.Eventually(t, func() bool {
+	status := func() string {
 		_ = admin.doBody(http.MethodPost, "/api/lsps", map[string]any{"pubkey": l.NodeKey}, nil)
 		var all []adminLSP
 		if admin.do(http.MethodGet, "/api/lsps", &all) != nil {
-			return false
+			return ""
 		}
 		for _, x := range all {
 			if x.NodeKey == l.NodeKey {
-				return x.Status == "closed"
+				return x.Status
 			}
 		}
-		return false
-	}, 60*time.Second, 2*time.Second)
+		return ""
+	}
+	// Listed again afterwards, and the catalogue reads it, so a later run
+	// finds the LSP open.
+	t.Cleanup(func() {
+		if flspdAdmin(t, admin, "announce/resume") {
+			assert.Eventually(t, func() bool { return status() == "open" }, 60*time.Second, 2*time.Second)
+		}
+	})
+	require.Eventually(t, func() bool { return status() == "closed" }, 60*time.Second, 2*time.Second)
 }
