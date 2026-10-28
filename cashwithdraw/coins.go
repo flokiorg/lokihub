@@ -3,6 +3,7 @@ package cashwithdraw
 import (
 	"context"
 	"encoding/hex"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -193,12 +194,22 @@ func (e *Engine) leaseCoins(ctx context.Context, p lnclient.OnchainPayer, id [32
 	if err != nil {
 		return err
 	}
+	gone, err := e.outputsGone()
+	if err != nil {
+		return err
+	}
 	for _, c := range coins {
 		// A coin a confirmed version of ours spent is spent on chain: the
 		// wallet no longer holds it ("unknown output"), and nothing else can
 		// take it. It stays in its version until the batch settles (or a
 		// reorganisation unconfirms the version, when it is leased again).
 		if c.State == db.CashCoinInVersion && mined[c.Outpoint] {
+			continue
+		}
+		// The change of one of our versions that conflicted, was replaced
+		// or is invalid does not exist (a child's input, once its parent
+		// lost to another version): there is nothing to lease.
+		if txid, _, ok := strings.Cut(c.Outpoint, ":"); ok && gone[txid] {
 			continue
 		}
 		exp, err := p.LeaseOutput(ctx, id, c.Outpoint, e.env().LeaseSecs())
@@ -225,6 +236,21 @@ func (e *Engine) minedInputs() (map[string]bool, error) {
 		for _, in := range inputsOf(&vs[i]) {
 			out[in] = true
 		}
+	}
+	return out, nil
+}
+
+// outputsGone is the txid of every version of ours whose outputs do not
+// exist: conflicted, replaced or invalid.
+func (e *Engine) outputsGone() (map[string]bool, error) {
+	var txids []string
+	if err := e.S.DB.Model(&db.CashWithdrawVersion{}).Where("txid IS NOT NULL AND state IN ?",
+		[]string{db.CashVersionConflicted, db.CashVersionReplaced, db.CashVersionInvalid}).Pluck("txid", &txids).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(txids))
+	for _, id := range txids {
+		out[id] = true
 	}
 	return out, nil
 }

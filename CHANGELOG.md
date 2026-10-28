@@ -480,6 +480,11 @@ audits of both.
   output": at each restart's reconcile, which re-leases every coin, and on
   every pass once their leases came due (a clock jump makes them due at
   once). A reorganisation that unconfirms the version has them leased again.
+- Marks a CPFP child conflicted once another version of its batch confirms
+  (its parent, a reorganised version, lost): it stayed broadcast forever, and
+  the parent's change it spends, which no longer exists, was leased every pass
+  ("unknown output"). The change of a conflicted, replaced or invalid version
+  is no longer leased.
 - Publishes a payout's CPFP child on its own when the node refuses it as a
   package. lokid has no package relay, so the child of a reorganised payout
   was refused every pass; now its parent is republished and the child sent
