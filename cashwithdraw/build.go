@@ -411,7 +411,7 @@ func (e *Engine) finalizeAndStore(ctx context.Context, p lnclient.OnchainPayer, 
 	if !matchesRecord(&mtx, v) {
 		e.InvariantFailures.Add(1)
 		logger.Logger.Error().Uint("version_id", v.ID).Msg("A signed version differs from its record; kept as possibly signed, never broadcast")
-		return e.S.DB.Model(&db.CashWithdrawVersion{}).Where("id = ?", v.ID).Update("state", db.CashVersionInvalid).Error
+		return e.S.DB.Model(&db.CashWithdrawVersion{}).Where("id = ?", v.ID).Update("state", db.CashVersionMismatch).Error
 	}
 	values, err := e.coinValues(e.S.DB, inputsOf(v))
 	if err != nil {
@@ -470,10 +470,13 @@ func matchesRecord(tx *wire.MsgTx, v *db.CashWithdrawVersion) bool {
 // buildStep is step 4 with 5: queued payouts in no version are batched once
 // the batch window closes (oldest + window, or earliest sent_by − 1800): into
 // the newest batch whose last version is unconfirmed, never confirmed, and has
-// room (by replacement), else a new batch on their own set-aside coins.
+// room (by replacement), else a new batch on their own set-aside coins. A
+// broadcast payout in no batch is one released from a batch whose confirmed
+// version does not pay it (releaseFromBatchTx): it is paid again the same way.
 func (e *Engine) buildStep(ctx context.Context, p lnclient.OnchainPayer, tip int64, rates Rates) error {
 	var ws []db.CashWithdrawal
-	if err := e.S.DB.Where("state = ? AND batch_id IS NULL AND cancel_reason IS NULL", db.CashWithdrawQueued).
+	if err := e.S.DB.Where("state IN ? AND batch_id IS NULL AND cancel_reason IS NULL",
+		[]string{db.CashWithdrawQueued, db.CashWithdrawBroadcast}).
 		Order("id").Find(&ws).Error; err != nil {
 		return err
 	}

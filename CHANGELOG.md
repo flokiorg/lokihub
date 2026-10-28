@@ -144,8 +144,13 @@ audits of both.
   in the node's own graph; the user ticks the LSPs they trust, and trusting
   runs a live check of the LSP's LSPS answers against its announcement. Only
   trusted LSPs are contacted; a paused one sells nothing new and a closed one
-  disappears. An LSP can be added by its node key. The regtest dev stack
-  runs flspd as the test LSP (compose profile `lsp`).
+  disappears. Every purchase (an LSPS1 order, an LSPS2 buy, automatic JIT)
+  runs the live check first and is refused when an announced protocol is
+  missing; automatic JIT also skips an LSP whose last check failed and refuses
+  live terms worse than announced. An LSP whose newest announcement fails a
+  check, expires or closes is not reconnected and gets no zero-conf channels,
+  though it stays trusted. An LSP can be added by its node key. The regtest
+  dev stack runs flspd as the test LSP (compose profile `lsp`).
 - Keeps a record of every circle join and serves the NIP-CW join lookup:
   `cash_lookup` by `connection_pubkey` at a Circle Wallet Hub answers the
   joiner (its item proof required, `UNAUTHORIZED` otherwise) with the join's

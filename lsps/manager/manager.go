@@ -44,6 +44,9 @@ type LiquidityManager struct {
 
 	// cache for dynamic nostr pubkeys (LSP Pubkey -> Nostr Pubkey)
 	nostrPubkeys map[string]string
+
+	// liveChecker runs NIP-LSP's live check before each purchase.
+	liveChecker LiveChecker
 }
 
 type PendingOrder struct {
@@ -534,6 +537,10 @@ func (m *LiquidityManager) ConnectLSP(ctx context.Context, pubkey string) error 
 		// §Privacy Considerations).
 		return fmt.Errorf("LSP %s is not a trusted LSP", pubkey)
 	}
+	if !connectable(targetLSP.Usable, targetLSP.Status) {
+		// Never through an older announcement's address.
+		return fmt.Errorf("LSP %s has no usable open announcement", pubkey)
+	}
 
 	host := targetLSP.Host
 	if host == "" {
@@ -692,12 +699,33 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 		Uint64("inbound_mloki", inboundCapacityMloki).
 		Msg("Insufficient inbound liquidity, attempting JIT channel buy")
 
-	// 2. Get Active LSP
+	// 2. Get Active LSP: the first trusted LSP selling now whose stored live
+	// check did not find it unusable, and whose live check, run now, passes
+	// (NIP-LSP §Client Behavior: before each purchase).
 	lsps, err := m.GetSellingLSPs()
 	if err != nil || len(lsps) == 0 {
 		return nil, fmt.Errorf("no trusted LSP to buy liquidity from: choose one in Settings")
 	}
-	activeLSP := lsps[0] // the first trusted LSP selling now
+	var activeLSP *SettingsLSP
+	var lastRefusal error
+	for i := range lsps {
+		if row, err := m.cfg.LSPManager.GetLSP(lsps[i].Pubkey); err != nil || !storedCheckUsable(row) {
+			continue
+		}
+		if err := m.CheckPurchase(ctx, lsps[i].Pubkey, true); err != nil {
+			lastRefusal = err
+			logger.Logger.Warn().Err(err).Str("lsp", lsps[i].Pubkey).Msg("Not buying JIT liquidity from this LSP")
+			continue
+		}
+		activeLSP = &lsps[i]
+		break
+	}
+	if activeLSP == nil {
+		if lastRefusal != nil {
+			return nil, lastRefusal
+		}
+		return nil, fmt.Errorf("%w: every trusted LSP's last live check found it unusable", ErrLSPNotUsable)
+	}
 
 	// 3. Helper to perform the Buy flow
 	performBuy := func() (*JitChannelHints, error) {
@@ -761,6 +789,9 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 
 // BuyLiquidity buys inbound liquidity from a specific LSP with robust error handling (retries on stale params).
 func (m *LiquidityManager) BuyLiquidity(ctx context.Context, lspPubkey string, amountMloki uint64, manualParams *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
+	if err := m.CheckPurchase(ctx, lspPubkey, manualParams == nil); err != nil {
+		return nil, err
+	}
 	// Helper to perform the Buy flow
 	performBuy := func(params *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
 		var selectedParams lsps2.OpeningFeeParams
@@ -929,6 +960,9 @@ func (m *LiquidityManager) GetLSPS1InfoList(ctx context.Context, pubkey string) 
 }
 
 func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, orderParams lsps1.OrderParams, refundAddr *string) (*lsps1.OrderCreatedEvent, error) {
+	if err := m.CheckPurchase(ctx, pubkey, false); err != nil {
+		return nil, err
+	}
 	reqID, err := m.lsps1Client.CreateOrder(ctx, pubkey, orderParams, refundAddr)
 	if err != nil {
 		return nil, err
@@ -1049,7 +1083,9 @@ func (m *LiquidityManager) handleChannelAcceptRequest(
 	requestPubkey := strings.ToLower(req.NodePubkey)
 	whitelisted := false
 	for _, lsp := range activeLSPs {
-		if lsp.Trusted && strings.ToLower(lsp.Pubkey) == requestPubkey {
+		// Zero-conf only while the trusted LSP's newest announcement is usable
+		// and not closed (NIP-LSP §Client Behavior).
+		if lsp.Trusted && connectable(lsp.Usable, lsp.Status) && strings.ToLower(lsp.Pubkey) == requestPubkey {
 			whitelisted = true
 			break
 		}

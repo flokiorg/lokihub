@@ -473,67 +473,6 @@ func TestClaimCashSlice_ConcurrentRace_ExactlyOneWinner(t *testing.T) {
 	assert.Equal(t, goroutines-1, failures)
 }
 
-// --- UnclaimCashSlice ---
-
-func TestUnclaimCashSlice_MakesSliceClaimableAgain(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 1000},
-	}))
-	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-
-	require.NoError(t, svc.AppsService.UnclaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey))
-
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim, "slice must be claimable again after a rollback")
-
-	// Re-claiming must succeed too, not just the lookup.
-	amount, err := svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	assert.Equal(t, int64(1000), amount)
-}
-
-// TestUnclaimCashSlice_RollsBackSpinOffClaim verifies
-// UnclaimCashSlice — reused as-is for a FULL split's rollback (see
-// SplitCashSliceAmount's doc comment) — correctly restores a
-// split-claimed slice to ordinary unclaimed status, including when
-// SpunOffToWalletAppID was never set (the rollback-before-funding-succeeded
-// case cash_transfer_controller.go actually exercises).
-func TestUnclaimCashSlice_RollsBackSpinOffClaim(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-
-	require.NoError(t, svc.AppsService.UnclaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey))
-
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim, "slice must be claimable again after rollback")
-	assert.Nil(t, claim.SpunOffToWalletAppID)
-
-	// Re-claiming (this time for real) must also work.
-	amount2, err := svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000), amount2)
-}
-
 // --- DeleteCashClaim ---
 
 func TestDeleteCashClaim_Unclaimed(t *testing.T) {
@@ -835,56 +774,6 @@ func TestSetCashWalletSplitSource_NoOpIfAlreadySet(t *testing.T) {
 }
 
 // --- UndoCashSliceSplit ---
-
-// --- SetCashSliceSplitTarget ---
-
-func TestSetCashSliceSplitTarget_Success(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	newWallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-	_, err = svc.AppsService.ClaimCashSlice(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-
-	require.NoError(t, svc.AppsService.SetCashSliceSplitTarget(wallet.ID, db.CashIdentityPubkey, pubkey, newWallet.ID))
-
-	var claim db.CashWalletClaim
-	require.NoError(t, svc.DB.Where("wallet_app_id = ? AND identity_type = ? AND identity_value = ?",
-		wallet.ID, db.CashIdentityPubkey, pubkey).First(&claim).Error)
-	require.NotNil(t, claim.SpunOffToWalletAppID)
-	assert.Equal(t, newWallet.ID, *claim.SpunOffToWalletAppID)
-}
-
-// TestSetCashSliceSplitTarget_NoOpWhenNotClaimed verifies the guard is
-// real: calling it against a slice that was never claimed for spin-off must
-// not tag an otherwise-ordinary unclaimed slice as spun off.
-func TestSetCashSliceSplitTarget_NoOpWhenNotClaimed(t *testing.T) {
-	svc, err := tests.CreateTestService(t)
-	require.NoError(t, err)
-	defer svc.Remove()
-
-	hub := newCashHub(t, svc, 10_000, 3600)
-	wallet := newCashWallet(t, svc, hub)
-	newWallet := newCashWallet(t, svc, hub)
-	pubkey := randomHex32()
-	require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
-		{IdentityType: db.CashIdentityPubkey, IdentityValue: pubkey, AmountMloki: 5000},
-	}))
-
-	require.NoError(t, svc.AppsService.SetCashSliceSplitTarget(wallet.ID, db.CashIdentityPubkey, pubkey, newWallet.ID))
-
-	claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, pubkey)
-	require.NoError(t, err)
-	require.NotNil(t, claim, "an untouched slice must still be a normal unclaimed slice")
-	assert.Nil(t, claim.SpunOffToWalletAppID)
-}
 
 // Q23: a Cash Hub stays while a request record naming it is retained, and the
 // delete check reports each blocker with the earliest time.

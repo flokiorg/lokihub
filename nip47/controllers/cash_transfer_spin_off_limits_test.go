@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -80,6 +81,46 @@ func TestCashTransfer_LineageLimiter(t *testing.T) {
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, second.Error.Code)
 	assert.True(t, isUsed(t, svc, p.RequestID))
 	assert.Nil(t, cashWalletClaimByIdentity(t, svc, bill.ID, db.CashIdentityPubkey, bobPub).ClaimedAt)
+}
+
+// R2-F4: a spin-off whose commit fails gives its lineage's allowance back, so
+// with a limit of 1 the retry still goes through; the next one is limited.
+func TestCashTransfer_LineageAllowanceSpentOnlyOnCommit(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fund")
+	alice, bob := nostr.GeneratePrivateKey(), nostr.GeneratePrivateKey()
+	alicePub, _ := nostr.GetPublicKey(alice)
+	bobPub, _ := nostr.GetPublicKey(bob)
+	controller := NewTestNip47Controller(svc).WithLineageLimiter(NewRateLimiter())
+	res, err := cashwallet.Create(context.TODO(), controller.cashDeps(), cashwallet.Params{HubApp: hub, ExpirySecs: 1800,
+		Recipients: []cashwallet.RecipientInput{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: alicePub, AmountMloki: 5_000},
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: bobPub, AmountMloki: 5_000},
+		}})
+	require.NoError(t, err)
+	bill := res.WalletApp
+	svc.Cfg.GetEnv().CashLineageSpinOffsPerHour = 1
+
+	controller.cashHooks = &cashwallet.TestHooks{Before: func(stage string) error {
+		if stage == cashwallet.StageAfterTransfer+"(0)" {
+			return errors.New("injected: funding failed")
+		}
+		return nil
+	}}
+	failed := transferWith(t, controller, bill, partialSplitParams(t, bill, alice, 2_000))
+	require.NotNil(t, failed.Error, "the commit fails")
+	assert.NotEqual(t, constants.ERROR_RATE_LIMITED, failed.Error.Code)
+
+	controller.cashHooks = nil
+	retry := transferWith(t, controller, bill, partialSplitParams(t, bill, alice, 2_000))
+	require.Nil(t, retry.Error, "the failed call spent no allowance")
+
+	limited := transferWith(t, controller, bill, partialSplitParams(t, bill, bob, 2_000))
+	require.NotNil(t, limited.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, limited.Error.Code)
 }
 
 // H-CASH-305: a spin-off that would take the Cash Hub past its live-bill cap is

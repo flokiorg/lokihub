@@ -121,6 +121,31 @@ func onchainKey(txid string, vout uint32) string {
 	return fmt.Sprintf("oc:%s:%d", txid, vout)
 }
 
+// chainConfirmations reads an on-chain payment's confirmations from the node:
+// 0 when its output is no longer in the wallet's view. ok is false for a
+// payment that is not on-chain, or when the node cannot be asked.
+func (e *Engine) chainConfirmations(ctx context.Context, ln lnclient.LNClient, paymentID uint) (int, bool) {
+	var p db.CashOrderPayment
+	if err := e.DB.Select("payment_key").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
+		return 0, false
+	}
+	lister, ok := ln.(lnclient.OnchainOutputLister)
+	if !ok {
+		return 0, false
+	}
+	outputs, err := lister.ListOnchainOutputs(ctx)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Could not read an order payment's confirmations; its mint waits")
+		return 0, true
+	}
+	for _, o := range outputs {
+		if onchainKey(o.TxID, o.Vout) == p.PaymentKey {
+			return int(o.Confirmations), true
+		}
+	}
+	return 0, true
+}
+
 // --- Lightning intake ---
 
 // IntakeLightning takes a settled invoice in: when its payment hash names an
@@ -293,6 +318,10 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 		return e.mintFailed(paymentID, errors.New("the node is not started"))
 	}
 	deps := e.walletDeps(ln)
+	// An on-chain payment's confirmations are read from the chain now, not
+	// taken from the last scan: a reorganisation since then is seen (NIP-CO
+	// §On-chain). The node is asked outside the transaction.
+	fresh, freshOK := e.chainConfirmations(ctx, ln, paymentID)
 	var minted []cashwallet.MintedBill
 	var changed *db.CashOrder
 	err := e.DB.Transaction(func(tx *gorm.DB) error {
@@ -328,9 +357,15 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 		// An on-chain payment is minted only at its tier's confirmations, read
 		// again here: a reorganisation since it was confirmed leaves it unminted
 		// (NIP-CO §On-chain).
-		if strings.HasPrefix(p.PaymentKey, "oc:") && p.Confirmations < requiredConfirmations(&order, value) {
-			return tx.Model(&db.CashOrderPayment{}).Where("id = ? AND state = ?", p.ID, db.CashOrderPaymentConfirmed).
-				Update("state", db.CashOrderPaymentSeen).Error
+		if strings.HasPrefix(p.PaymentKey, "oc:") {
+			confs := p.Confirmations
+			if freshOK {
+				confs = fresh
+			}
+			if confs < requiredConfirmations(&order, value) {
+				return tx.Model(&db.CashOrderPayment{}).Where("id = ? AND state = ?", p.ID, db.CashOrderPaymentConfirmed).
+					Updates(map[string]interface{}{"state": db.CashOrderPaymentSeen, "confirmations": confs}).Error
+			}
 		}
 		amounts := nipCO.MintSplit(value, uint64(order.FeeMillis), terms.Kind.MaxMillis) //nolint:gosec // non-negative
 		if value > 0 {

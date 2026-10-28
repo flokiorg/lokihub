@@ -137,6 +137,17 @@ func (s *Service) Discover(ctx context.Context) error {
 	if len(evs) > MaxAnnouncements {
 		evs = evs[:MaxAnnouncements]
 	}
+	// Trusted LSPs are read by author too, so announcement spam cannot crowd
+	// out a trusted LSP's newer event (a closed status, new terms) (R2-S3).
+	var trusted []string
+	_ = s.d.DB.Model(&persist.LSP{}).Where("trusted = ?", true).Pluck("node_key", &trusted).Error
+	if len(trusted) > 0 {
+		own, err := s.d.Fetcher.Fetch(ctx, relays, nip01.SubscriptionFilter{Kinds: []int{niplsp.Kind}, Authors: trusted, Limit: 10 * len(trusted)})
+		if err != nil {
+			return err
+		}
+		evs = append(evs, own...)
+	}
 	if err := s.Ingest(ctx, evs); err != nil {
 		return err
 	}

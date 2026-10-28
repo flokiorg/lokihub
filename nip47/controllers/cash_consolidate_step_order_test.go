@@ -183,9 +183,16 @@ func TestConsolidate_Record(t *testing.T) {
 	}
 }
 
-// The live-bill cap bounds a consolidate too (QUOTA_EXCEEDED).
+// The live-bill cap bounds a consolidate that adds a bill (QUOTA_EXCEEDED):
+// one whose sources' bills all keep other live slices.
 func TestConsolidate_LiveBillCap(t *testing.T) {
 	f := newConsolidateFixture(t)
+	for _, bill := range []*db.App{f.s1, f.s2} {
+		other, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+		require.NoError(t, f.svc.AppsService.CreateCashWalletClaims(bill.ID, []db.CashWalletClaim{
+			{IdentityType: db.CashIdentityPubkey, IdentityValue: other, AmountMloki: 1},
+		}))
+	}
 	var live int64
 	require.NoError(t, f.svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", f.hub.ID, db.AppKindCashWallet).Count(&live).Error)
 	f.svc.Cfg.GetEnv().CashMaxLiveBillsPerHub = int(live)
@@ -194,4 +201,15 @@ func TestConsolidate_LiveBillCap(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, resp.Error.Code)
 	assert.Nil(t, cashWalletClaimByIdentity(t, f.svc, f.s1.ID, db.CashIdentityPubkey, f.ownerPub).ClaimedAt)
+}
+
+// R2-F4: a consolidate that drains its source bills lowers the live-bill count,
+// so it passes at the cap.
+func TestConsolidate_AtLiveBillCapWhenItEndsBills(t *testing.T) {
+	f := newConsolidateFixture(t)
+	var live int64
+	require.NoError(t, f.svc.DB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", f.hub.ID, db.AppKindCashWallet).Count(&live).Error)
+	f.svc.Cfg.GetEnv().CashMaxLiveBillsPerHub = int(live)
+	resp := handleCashConsolidateFor(t, f.svc, NewTestNip47Controller(f.svc), f.s1, f.params(t))
+	require.Nil(t, resp.Error, "two bills end, one is made")
 }
