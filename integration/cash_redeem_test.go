@@ -677,6 +677,6 @@ func testClaimFunds(t *testing.T, cfg *Config, hub CashHubConfig) {
 			IdentityValue: beneficiaryPub,
 			IdentityEvent: eventJSON(t, proof),
 		}, &result)
-		requireNWCErrorCode(t, err, constants.ERROR_EXPIRED)
+		requireNWCErrorCode(t, err, constants.ERROR_RESTRICTED)
 	})
 }
