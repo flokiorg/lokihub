@@ -39,6 +39,14 @@ type intakeFixture struct {
 	clock  time.Time
 }
 
+// pastPayBy moves the fixture clock one second past the order's pay_by. The
+// node stamps pay_by when the order is placed, a little after the fixture's
+// clock started, so a fixed jump from the start can fall short of it.
+func (f *intakeFixture) pastPayBy(t *testing.T, requestID string) {
+	t.Helper()
+	f.clock = time.Unix(f.orderRow(t, requestID).PayBy+1, 0)
+}
+
 func newIntakeFixture(t *testing.T) *intakeFixture {
 	f := &intakeFixture{orderFixture: newOrderFixture(t), clock: time.Now()}
 	// The node stamps order invoices with the engine's clock, so pay_by moves
@@ -185,7 +193,7 @@ func TestOrderIntake_LightningExpiresAndIsDropped(t *testing.T) {
 	orderOf(t, res)
 	o := f.orderRow(t, p.RequestID)
 
-	f.clock = f.clock.Add(3601 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	f.engine.RunPayBy(context.TODO())
 	o = f.orderRow(t, p.RequestID)
 	assert.Equal(t, db.CashOrderExpired, o.State)
@@ -233,7 +241,7 @@ func TestOrderIntake_Onchain(t *testing.T) {
 	require.NotNil(t, minted.UnfinalPaymentIDs)
 	assert.Equal(t, fmt.Sprintf("[%d]", pay.ID), *minted.UnfinalPaymentIDs)
 
-	f.clock = f.clock.Add(86401 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State)
 
@@ -285,7 +293,7 @@ func TestOrderIntake_OnchainSeenThenDroppedStaysClosed(t *testing.T) {
 	require.NoError(t, f.svc.DB.Where("payment_key = ?", "oc:"+ghost.TxID+":0").First(&dropped).Error)
 	require.Equal(t, db.CashOrderPaymentDropped, dropped.State)
 
-	f.clock = f.clock.Add(86401 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "a payment was seen by pay_by")
 	f.engine.RunRetention()
@@ -353,7 +361,7 @@ func TestOrderIntake_OnchainUnpaidDeleted(t *testing.T) {
 	f := newIntakeFixture(t)
 	res, _, p := f.order(t, nipCO.PaymentOnchain, 21_000, nil)
 	placed := orderOf(t, res)
-	f.clock = f.clock.Add(86401 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
 	f.engine.RunRetention()
@@ -412,7 +420,7 @@ func TestOrderIntake_SameNodePayment(t *testing.T) {
 	orderOf(t, res)
 	o = f.orderRow(t, p.RequestID)
 	f.ln.MockTransaction = &lnclient.Transaction{PaymentHash: *o.PaymentHash, Preimage: tests.RandomHex32()}
-	f.clock = f.clock.Add(3601 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	_, _, err = f.engine.SelfPayLightning(context.TODO(), *o.PaymentHash, uint64(o.PayMillis))
 	assert.ErrorIs(t, err, cashorder.ErrOrderNotPayable, "past pay_by nothing is debited")
 }
@@ -428,7 +436,7 @@ func TestOrderIntake_ReadPastPayByExpiresTheOrder(t *testing.T) {
 	orderOf(t, res)
 	assert.Equal(t, nipCO.OrderOpen, f.lookupOrder(t, buyer, p).State)
 
-	f.clock = f.clock.Add(3601 * time.Second)
+	f.pastPayBy(t, p.RequestID)
 	got := f.lookupOrder(t, buyer, p)
 	assert.Equal(t, nipCO.OrderExpired, got.State, "no RunPayBy ran: the read ended the window")
 	o := f.orderRow(t, p.RequestID)
@@ -448,7 +456,7 @@ func TestOrderIntake_OnchainSeenBeforePayByScannedAfter(t *testing.T) {
 		SeenAt: f.clock.Unix()}
 	f.chain.outputs = []lnclient.OnchainOutput{out}
 
-	f.clock = f.clock.Add(86401 * time.Second) // past pay_by, no scan yet
+	f.pastPayBy(t, p.RequestID) // past pay_by, no scan yet
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderClosed, f.orderRow(t, p.RequestID).State, "seen by pay_by: closed, not expired")
 
