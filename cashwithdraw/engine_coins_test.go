@@ -245,3 +245,47 @@ func TestR2_ForeignLeaseEnds(t *testing.T) {
 	require.NoError(t, w.svc.DB.Model(&db.CashWithdrawCoin{}).Where("state = ?", db.CashCoinAvailable).Count(&avail).Error)
 	assert.Equal(t, int64(3), avail, "four coins, one set aside")
 }
+
+// A coin a confirmed, not yet final version spent is not leased again: the
+// wallet no longer holds it ("unknown output"). Not at a restart's reconcile
+// (which re-leases every coin) nor when its lease comes due after a clock
+// jump; a reorganisation that unconfirms the version has it leased again.
+func TestLeaseSkipsCoinsSpentOnChain(t *testing.T) {
+	w := newEngineWorld(t, 6)
+	wd := w.commitTo(t, 21_000_000)
+	w.passAfterWindow(t)
+	v := w.versions(t)[0]
+	require.NotNil(t, v.Txid)
+	w.chain.Mine(1)
+	w.pass(t)
+	require.Equal(t, db.CashVersionConfirmed, w.versions(t)[0].State)
+	for _, in := range inputsOf(&v) {
+		require.Equal(t, db.CashCoinInVersion, w.coin(t, in).State)
+	}
+
+	w.newEngine()
+	require.NoError(t, w.eng.Reconcile(context.TODO()))
+	assert.Zero(t, w.eng.LeaseFailures.Load(), "a restart leases no coin spent on chain")
+	w.advance(30 * 24 * time.Hour)
+	w.pass(t)
+	assert.Zero(t, w.eng.LeaseFailures.Load(), "nor a pass with every lease due")
+
+	w.chain.Reorg(1)
+	w.pass(t)
+	require.Equal(t, db.CashVersionBroadcast, w.versions(t)[0].State)
+	assert.Zero(t, w.eng.LeaseFailures.Load())
+	for _, in := range inputsOf(&v) {
+		assert.Positive(t, w.chain.LeaseOf(w.leaseID(t), in), "leased again once unconfirmed")
+	}
+	w.chain.Mine(6)
+	w.pass(t)
+	assert.Equal(t, db.CashWithdrawFinal, w.payout(t, wd.ID).State)
+	assert.Zero(t, w.eng.LeaseFailures.Load())
+}
+
+func (w *engineWorld) leaseID(t *testing.T) [32]byte {
+	t.Helper()
+	id, err := w.eng.lease()
+	require.NoError(t, err)
+	return id
+}

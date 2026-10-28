@@ -189,9 +189,21 @@ func (e *Engine) leaseCoins(ctx context.Context, p lnclient.OnchainPayer, id [32
 	if err := q.Find(&coins).Error; err != nil {
 		return err
 	}
+	mined, err := e.minedInputs()
+	if err != nil {
+		return err
+	}
 	for _, c := range coins {
+		// A coin a confirmed version of ours spent is spent on chain: the
+		// wallet no longer holds it ("unknown output"), and nothing else can
+		// take it. It stays in its version until the batch settles (or a
+		// reorganisation unconfirms the version, when it is leased again).
+		if c.State == db.CashCoinInVersion && mined[c.Outpoint] {
+			continue
+		}
 		exp, err := p.LeaseOutput(ctx, id, c.Outpoint, e.env().LeaseSecs())
 		if err != nil {
+			e.LeaseFailures.Add(1)
 			logger.Logger.Warn().Err(err).Str("outpoint", c.Outpoint).Msg("Could not lease a set-aside coin; retried next pass")
 			continue
 		}
@@ -200,6 +212,21 @@ func (e *Engine) leaseCoins(ctx context.Context, p lnclient.OnchainPayer, id [32
 		}
 	}
 	return nil
+}
+
+// minedInputs is every input of one of our versions now confirmed or final.
+func (e *Engine) minedInputs() (map[string]bool, error) {
+	var vs []db.CashWithdrawVersion
+	if err := e.S.DB.Where("state IN ?", []string{db.CashVersionConfirmed, db.CashVersionFinal}).Select("inputs").Find(&vs).Error; err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for i := range vs {
+		for _, in := range inputsOf(&vs[i]) {
+			out[in] = true
+		}
+	}
+	return out, nil
 }
 
 // spentByOurVersion reports an outpoint an input of one of our versions.

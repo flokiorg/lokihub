@@ -87,7 +87,7 @@ type Engine struct {
 	leaseID *[32]byte
 
 	// Metrics, read by the status endpoint and the tests.
-	Bumps, Reorgs, Invalidations, Vanished, InvariantFailures atomic.Int64
+	Bumps, Reorgs, Invalidations, Vanished, InvariantFailures, LeaseFailures atomic.Int64
 }
 
 // NewEngine is the payout engine of s; it becomes s's Funds.

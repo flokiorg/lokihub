@@ -475,6 +475,11 @@ audits of both.
   was not leased; the input is now read from its parent transaction in the
   wallet, only when the wallet marks that output its own, then leased and
   signed as before.
+- Stops re-leasing the coins a confirmed, not yet final payout version spent.
+  The wallet no longer holds them, so every lease was refused "unknown
+  output": at each restart's reconcile, which re-leases every coin, and on
+  every pass once their leases came due (a clock jump makes them due at
+  once). A reorganisation that unconfirms the version has them leased again.
 - Publishes a payout's CPFP child on its own when the node refuses it as a
   package. lokid has no package relay, so the child of a reorganised payout
   was refused every pass; now its parent is republished and the child sent
