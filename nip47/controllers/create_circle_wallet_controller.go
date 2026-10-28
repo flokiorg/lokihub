@@ -323,7 +323,7 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		// its receive cap is the one it asked for.
 		// Its budget periods count from its creation (NIP-CW §Budget Renewal Floor).
 		// It starts Active, with the Hub's dust threshold fixed for its life.
-		maxReceive := int64(params.MaxReceive) //nolint:gosec // bounded by the Hub's ceiling above
+		maxReceive := int64(params.MaxReceive)                  //nolint:gosec // bounded by the Hub's ceiling above
 		maxAmount := int64(resolvedMaxAmount(params.MaxAmount)) //nolint:gosec // at most the request, a JSON integer up to 2^63-1
 		if err := tx.Model(&db.App{}).Where("id = ?", createdApp.ID).Updates(map[string]interface{}{
 			"circle_fees_ppm":             providerConfig.FeesPpm,
