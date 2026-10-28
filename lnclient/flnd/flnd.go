@@ -754,6 +754,8 @@ func (svc *FLNDService) getPaymentResult(stream routerrpc.Router_SendPaymentV2Cl
 		switch payment.Status {
 		case lnrpc.Payment_SUCCEEDED, lnrpc.Payment_FAILED:
 			return payment, nil
+		default:
+			// Not final yet: read the next update.
 		}
 	}
 }

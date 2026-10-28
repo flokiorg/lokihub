@@ -80,6 +80,8 @@ func (e *Engine) cancelStep(ctx context.Context, p lnclient.OnchainPayer, tip in
 				}
 				w.CancelReason = &reason
 			}
+		default:
+			// CancelNotDue: only an already-recorded cancel reason is acted on below.
 		}
 		if w.CancelReason != nil && *w.CancelReason != db.CashWithdrawCancelNoRecord && w.BatchID == nil && w.Signed {
 			// Released from a batch whose final version does not pay it, and

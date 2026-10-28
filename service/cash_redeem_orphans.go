@@ -53,6 +53,8 @@ func ResolveOrphanRedeems(ctx context.Context, gormDB *gorm.DB, appsService apps
 				return apps.PayoutSucceeded, res.Preimage, res.FeeMloki
 			case lnclient.PaymentStatusFailed:
 				return apps.PayoutFailed, "", 0
+			default:
+				// In flight: not an outcome yet.
 			}
 			return apps.PayoutUnknown, "", 0
 		}
