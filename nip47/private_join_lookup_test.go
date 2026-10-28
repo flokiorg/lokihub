@@ -75,3 +75,37 @@ func lookupAs(t *testing.T, h *joinHub, connectionPubkey, signer string, deadlin
 	require.NoError(t, json.Unmarshal(r.Result, &out))
 	return &out, nil
 }
+
+// NIP-CW §Lost Join Reply: once a join's wallet is deleted and its deadline
+// plus 6 minutes has passed, the Hub may drop the record and a lookup answers
+// expired. A record the sweep has not reached yet is answered the same way;
+// while the wallet lives, the record is kept and answered done.
+func TestJoinLookup_DroppableRecordAnswersExpired(t *testing.T) {
+	member := nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+
+	params := joinParams(t, member, *h.app.WalletPubkey, 20_000)
+	res, served := h.serve(t, "j", params, member, strings.Repeat("0d", 32))
+	require.True(t, served)
+	require.Nil(t, res.Error, "%+v", res.Error)
+	var req struct {
+		ConnectionPubkey string `json:"connection_pubkey"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(params), &req))
+
+	old := time.Now().Add(-10 * time.Minute).Unix()
+	require.NoError(t, h.ts.DB.Model(&db.CircleJoinRecord{}).Where("connection_pubkey = ?", req.ConnectionPubkey).
+		Update("deadline", old).Error)
+	live, code := lookupAs(t, h, req.ConnectionPubkey, member, old, constants.NIP47MethodCashLookup)
+	require.Nil(t, code)
+	assert.Equal(t, nipcash.LookupDone, live.Status, "the wallet still exists: the record is kept")
+
+	var rec db.CircleJoinRecord
+	require.NoError(t, h.ts.DB.Where("connection_pubkey = ?", req.ConnectionPubkey).First(&rec).Error)
+	require.NoError(t, h.ts.DB.Model(&db.CircleJoinRecord{}).Where("id = ?", rec.ID).
+		Update("wallet_app_id", rec.WalletAppID+100_000).Error, "the wallet is gone")
+	gone, code := lookupAs(t, h, req.ConnectionPubkey, member, old, constants.NIP47MethodCashLookup)
+	require.Nil(t, code)
+	assert.Equal(t, nipcash.LookupExpired, gone.Status)
+}
