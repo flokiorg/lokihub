@@ -203,6 +203,16 @@ func (e *Engine) bumpStep(ctx context.Context, p lnclient.OnchainPayer, tip int6
 					return err
 				}
 			}
+			// A child whose package was refused is submitted again (R2-P-L1).
+			if v.Kind == db.CashVersionChild && v.State == db.CashVersionSigned && v.RawTx != nil && v.ParentID != nil {
+				for j := range vs {
+					if parent := &vs[j]; parent.ID == *v.ParentID && parent.State == db.CashVersionBroadcast && parent.RawTx != nil {
+						if err := e.submitChild(ctx, p, parent, v); err != nil {
+							return err
+						}
+					}
+				}
+			}
 		}
 		cur := current(vs)
 		if cur == nil || cur.ConfirmedOnce || cur.State != db.CashVersionBroadcast && !cur.FeeRefused {
@@ -303,6 +313,12 @@ func (e *Engine) child(ctx context.Context, p lnclient.OnchainPayer, rates Rates
 	if v.State != db.CashVersionSigned {
 		return nil
 	}
+	return e.submitChild(ctx, p, parent, v)
+}
+
+// submitChild submits a signed child with its parent as a package; a refusal
+// is retried by the next pass.
+func (e *Engine) submitChild(ctx context.Context, p lnclient.OnchainPayer, parent, v *db.CashWithdrawVersion) error {
 	parentRaw, _ := hex.DecodeString(*parent.RawTx)
 	childRaw, _ := hex.DecodeString(*v.RawTx)
 	if err := p.SubmitPackage(ctx, parentRaw, childRaw); err != nil {
