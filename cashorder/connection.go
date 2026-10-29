@@ -181,5 +181,5 @@ func invalidateInfo(gormDB *gorm.DB, where string, args ...any) {
 	if err := gormDB.Model(&db.App{}).Where("id IN ?", ids).Pluck("app_pubkey", &keys).Error; err != nil {
 		return
 	}
-	getinfocache.Invalidate(keys...)
+	getinfocache.Orders.Invalidate(keys...)
 }

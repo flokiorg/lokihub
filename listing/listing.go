@@ -298,12 +298,17 @@ func (s *Service) CloseCircle(ctx context.Context, hubAppID uint) error {
 
 func (s *Service) closeWhere(ctx context.Context, where string, args ...any) error {
 	var rows []db.OfferListing
-	if err := s.d.DB.Where(where, args...).Where("phase = ?", db.ListingPhaseListed).Find(&rows).Error; err != nil {
+	if err := s.d.DB.Where(where, args...).Find(&rows).Error; err != nil {
 		return err
 	}
 	var errs []error
 	for _, r := range rows {
+		// Every connection the offer names answers the change at once,
+		// whatever its listing's phase; only a listed one is closed.
 		s.d.InvalidateGetInfo(r.ConnAppID)
+		if r.Phase != db.ListingPhaseListed {
+			continue
+		}
 		if err := s.close(ctx, r.ID); err != nil {
 			errs = append(errs, err)
 		}

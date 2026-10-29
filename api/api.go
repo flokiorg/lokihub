@@ -38,6 +38,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
@@ -3161,6 +3162,7 @@ func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
 	if err := api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error; err != nil {
 		return err
 	}
+	api.invalidateCircleConnInfo(app.ID)
 	if accepting {
 		return nil
 	}
@@ -3332,8 +3334,21 @@ func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
 	}
 	// Closing set accepting false: the circle's listing is closed in order
 	// (WP-16 item 9, WP-25 item 8).
+	api.invalidateCircleConnInfo(app.ID)
 	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
 	return result, nil
+}
+
+// invalidateCircleConnInfo drops the cached get_info of every listed connection
+// of a circle hub, after a committed change of its accepting, so none answers
+// the old value.
+func (api *api) invalidateCircleConnInfo(hubID uint) {
+	var ids []uint
+	if err := api.db.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", hubID, db.AppKindCircleHubConn).Pluck("id", &ids).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to list a circle's listed connections; their get_info may stay cached for its TTL")
+		return
+	}
+	getinfocache.Listed.Invalidate(ids...)
 }
 
 // closeListings runs a listing retirement after the commit that ended an offer;

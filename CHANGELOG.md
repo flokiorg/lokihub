@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Never stores a cached `get_info` computed before an Order connection's
+  retirement or new terms, or a circle's close, committed: such a result could
+  be stored after the invalidation and served stale for up to 5 s. A listed
+  circle connection's cached `get_info` is now also dropped when the circle
+  opens to new members again, and when any of its listings closes.
 - Bounds an operator's own on-chain spend or channel open by what the
   wallet's coin selection may spend (confirmed coins under no lease), less the
   floor and what payouts still need from those coins. The guard counted every
