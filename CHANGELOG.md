@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Refuses to start beside a node on another chain than `NETWORK` names, and
+  refuses an unknown `NETWORK` value, listing the accepted ones. A
+  `NETWORK=regtest` on a mainnet node used regtest swap keys and addresses.
 - Publishes the dev stack's ports (relay, flnd RPC, Caddy) on the loopback
   only, unless `DEV_BIND` says otherwise; they were open on every interface of
   the host.
