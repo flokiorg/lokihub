@@ -1024,6 +1024,10 @@ type Transaction struct {
 	Description        string
 	DescriptionHash    string
 	Preimage           *string
+	// HoldPreimageSealed is the preimage of a hold invoice the Hub settles
+	// itself (a circle wallet's), sealed at rest (atrest) until it settles,
+	// when Preimage takes it; Preimage stays nil until then.
+	HoldPreimageSealed *string
 	CreatedAt          time.Time
 	ExpiresAt          *time.Time
 	UpdatedAt          time.Time

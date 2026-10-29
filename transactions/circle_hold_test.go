@@ -60,7 +60,7 @@ func TestCircleInvoice_HubSettlesAnAcceptedPayment(t *testing.T) {
 	invoice, err := ts.MakeCircleInvoice(context.TODO(), wallet, 200_000, "dinner", "", 3600, nil, svc.LNClient, nil)
 	require.NoError(t, err)
 	assert.True(t, invoice.Hold)
-	require.NotNil(t, invoice.Preimage)
+	preimage := sealedPreimage(t, svc, invoice.ID)
 	calls := svc.LNClient.(*tests.MockLn).MakeHoldInvoiceCalls()
 	require.Len(t, calls, 1)
 	assert.Equal(t, invoice.PaymentHash, calls[0].PaymentHash, "the Hub's own hash")
@@ -68,7 +68,7 @@ func TestCircleInvoice_HubSettlesAnAcceptedPayment(t *testing.T) {
 	acceptExternally(t, ts, invoice.PaymentHash, 200_000)
 	settled := rowState(t, svc, invoice.ID)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, settled.State)
-	assert.Contains(t, svc.LNClient.(*tests.MockLn).SettleHoldPreimages(), *invoice.Preimage)
+	assert.Contains(t, svc.LNClient.(*tests.MockLn).SettleHoldPreimages(), preimage)
 	assert.Equal(t, circlemoney.KindLightning, settled.PaymentKind)
 	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, wallet.ID))
 
@@ -110,9 +110,10 @@ func TestCircleInvoice_SameNodePaymentSettledAtOnce(t *testing.T) {
 	require.NoError(t, svc.DB.Create(&db.Transaction{AppId: &payer.ID, Type: constants.TRANSACTION_TYPE_OUTGOING,
 		State: constants.TRANSACTION_STATE_PENDING, AmountMloki: 50_000, PaymentHash: invoice.PaymentHash, SelfPayment: true}).Error)
 
+	preimage := sealedPreimage(t, svc, invoice.ID)
 	resp, err := ts.interceptSelfPayment(invoice.PaymentHash, 50_000, svc.LNClient)
 	require.NoError(t, err)
-	assert.Equal(t, *invoice.Preimage, resp.Preimage)
+	assert.Equal(t, preimage, resp.Preimage)
 	settled := rowState(t, svc, invoice.ID)
 	assert.Equal(t, constants.TRANSACTION_STATE_SETTLED, settled.State)
 	assert.Equal(t, circlemoney.KindNode, settled.PaymentKind)

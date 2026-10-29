@@ -2211,7 +2211,7 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 
 	if err != nil {
 		svc.logger.Error().Err(err).
-			Str("preimage", preimage).
+			Str("payment_hash", paymentHash).
 			Msg("Failed to settle hold invoice via FLN client")
 		// Don't mark DB as failed here, as the settle might succeed later or might have already succeeded.
 		return nil, err
@@ -2227,7 +2227,6 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 	if err != nil {
 		svc.logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
-			Str("preimage", preimage).
 			Msg("Failed DB transaction while settling hold invoice")
 		return nil, err
 	}
@@ -2354,12 +2353,14 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 
 	now := time.Now()
 	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
-		"State":           constants.TRANSACTION_STATE_SETTLED,
-		"Preimage":        &preimage,
-		"FeeMloki":        fee,
-		"FeeReserveMloki": 0,
-		"SettledAt":       &now,
-		"SelfPayment":     selfPayment,
+		"State":    constants.TRANSACTION_STATE_SETTLED,
+		"Preimage": &preimage,
+		// A settled preimage is the payer's proof, no longer a secret.
+		"HoldPreimageSealed": nil,
+		"FeeMloki":           fee,
+		"FeeReserveMloki":    0,
+		"SettledAt":          &now,
+		"SelfPayment":        selfPayment,
 	}).Error
 	if err != nil {
 		svc.logger.Error().Err(err).

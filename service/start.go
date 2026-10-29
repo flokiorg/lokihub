@@ -13,6 +13,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/swaps"
+	"github.com/flokiorg/lokihub/transactions"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -436,6 +437,13 @@ func (svc *service) StartApp(encryptionKey string) error {
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to init nostr keys")
 		return err
+	}
+	// The at-rest key is loaded now: seal any hold preimage stored plain.
+	if n, err := transactions.SealHoldPreimages(svc.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to seal stored hold invoice preimages")
+		return err
+	} else if n > 0 {
+		logger.Logger.Info().Int("count", n).Msg("Sealed stored hold invoice preimages at rest")
 	}
 
 	ctx, cancelFn := context.WithCancel(svc.ctx)
