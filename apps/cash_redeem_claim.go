@@ -32,6 +32,10 @@ type RedeemClaim struct {
 	ProofCreatedAt int64
 	InflightPerHub int
 	InflightNode   int
+	// Payee is the node the payout pays, "" for a same-node payout; at most
+	// InflightPerPayee of a Hub's payouts in flight pay one payee.
+	Payee            string
+	InflightPerPayee int
 }
 
 // inFlightRedeems counts claimed slices whose payout has started and recorded no
@@ -77,6 +81,17 @@ func (svc *appsService) ClaimSliceForRedeem(c RedeemClaim, now time.Time) error 
 				return ErrRedeemInflight
 			}
 		}
+		if c.InflightPerPayee > 0 && c.Payee != "" {
+			var n int64
+			if err := inFlightRedeems(tx).
+				Joins("JOIN apps ON apps.id = cash_wallet_claims.wallet_app_id").
+				Where("apps.parent_app_id = ? AND cash_wallet_claims.redeem_payee = ?", c.HubAppID, c.Payee).Count(&n).Error; err != nil {
+				return err
+			}
+			if n >= int64(c.InflightPerPayee) {
+				return ErrRedeemInflight
+			}
+		}
 		result := tx.Model(&db.CashWalletClaim{}).
 			Where("id = ? AND identity_type = ? AND identity_value = ? AND claimed_at IS NULL AND transfer_count = ?",
 				c.Slice.ClaimID, c.Slice.IdentityType, c.Slice.IdentityValue, c.Slice.TransferCount).
@@ -84,6 +99,7 @@ func (svc *appsService) ClaimSliceForRedeem(c RedeemClaim, now time.Time) error 
 				"claimed_at":      now,
 				"payment_hash":    c.PaymentHash,
 				"redeem_proof_id": c.ProofID,
+				"redeem_payee":    c.Payee,
 				"ended_as":        db.CashSliceStatusRedeemed,
 			})
 		if result.Error != nil {
@@ -152,7 +168,7 @@ func releaseRedeemClaimTx(tx *gorm.DB, walletAppID uint, paymentHash string, coo
 	if err != nil {
 		return false, err
 	}
-	updates := map[string]interface{}{"claimed_at": nil, "payment_hash": "", "redeem_proof_id": "", "ended_as": ""}
+	updates := map[string]interface{}{"claimed_at": nil, "payment_hash": "", "redeem_proof_id": "", "redeem_payee": "", "ended_as": ""}
 	if cooldownUntil != nil {
 		updates["redeem_cooldown_until"] = *cooldownUntil
 	}
