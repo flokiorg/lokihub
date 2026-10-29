@@ -145,6 +145,41 @@
     "networkFeeNote": "网络费由节点按每种地址类型实时估算并计入报价。",
     "save": "保存",
     "saved": "链上提现条款已保存",
-    "saveFailed": "无法保存链上提现条款"
+    "saveFailed": "无法保存链上提现条款",
+    "payouts": {
+      "title": "链上支付",
+      "description": "此 Cash Hub 的链上提现，最新在前。运营者的操作不会改变支付；只有票据持有人可以请求取消。",
+      "amount": "金额",
+      "fee": "费用",
+      "hubFee": "Hub 费用",
+      "networkFee": "网络费",
+      "payout": "支付额",
+      "sentBy": "发送期限",
+      "signed": "已签名",
+      "unsigned": "尚未签名",
+      "depth": "深度",
+      "remintedBill": "重铸的票据",
+      "detailTitle": "支付",
+      "address": "地址",
+      "requestId": "请求 ID",
+      "committed": "已提交",
+      "versions": "版本",
+      "noVersions": "尚无交易。",
+      "inputs_one": "{{count}} 个输入",
+      "inputs_other": "{{count}} 个输入",
+      "broadcast": "广播 首次 / 最近",
+      "facts": "归档记录",
+      "state": {
+        "queued": "排队中",
+        "broadcast": "已广播",
+        "confirmed": "已确认",
+        "final": "最终",
+        "cancelled": "已取消"
+      },
+      "cancel": {
+        "requested": "持有人已请求取消",
+        "cancelled": "已取消（{{reason}}）"
+      }
+    }
   }
 }

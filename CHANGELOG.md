@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Lists a Cash Hub's on-chain payouts (state, address, amount, payout, fee,
+  `sent_by`, signed, txid:vout, depth / `final_depth`, cancellation, re-minted
+  bill link) with a detail view of every version and archive fact
+  (`GET /api/cash-hubs/:id/payouts/:payout`, also in the desktop app), and
+  marks ordered and re-minted bills, whose remove and delete actions are
+  disabled (`ordered` / `reminted` on the cash-wallet listings).
 - Adds the on-chain withdrawal operator screens: an "On-chain withdrawals"
   node switch under Settings → Advanced with the payout engine's status, and
   a per-Cash Hub card for its enable, `withdraw_fee_base`, `withdraw_fee_ppm`

@@ -145,6 +145,41 @@
     "networkFeeNote": "ネットワーク手数料はアドレスタイプごとにノードがその場で見積もり、見積もりに加算します。",
     "save": "保存",
     "saved": "オンチェーン出金の条件を保存しました",
-    "saveFailed": "オンチェーン出金の条件を保存できませんでした"
+    "saveFailed": "オンチェーン出金の条件を保存できませんでした",
+    "payouts": {
+      "title": "オンチェーン支払い",
+      "description": "この Cash Hub のオンチェーン出金(新しい順)。オペレーターの操作で支払いは変わりません。キャンセルを求められるのは紙幣の保有者だけです。",
+      "amount": "金額",
+      "fee": "手数料",
+      "hubFee": "Hub 手数料",
+      "networkFee": "ネットワーク手数料",
+      "payout": "支払額",
+      "sentBy": "送信期限",
+      "signed": "署名済み",
+      "unsigned": "未署名",
+      "depth": "深度",
+      "remintedBill": "再発行された紙幣",
+      "detailTitle": "支払い",
+      "address": "アドレス",
+      "requestId": "リクエスト ID",
+      "committed": "確定",
+      "versions": "バージョン",
+      "noVersions": "まだトランザクションはありません。",
+      "inputs_one": "入力 {{count}} 件",
+      "inputs_other": "入力 {{count}} 件",
+      "broadcast": "ブロードキャスト 初回 / 最終",
+      "facts": "アーカイブ記録",
+      "state": {
+        "queued": "待機中",
+        "broadcast": "ブロードキャスト済み",
+        "confirmed": "承認済み",
+        "final": "確定",
+        "cancelled": "キャンセル済み"
+      },
+      "cancel": {
+        "requested": "保有者がキャンセルを要求",
+        "cancelled": "キャンセル済み ({{reason}})"
+      }
+    }
   }
 }

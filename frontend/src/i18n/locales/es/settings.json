@@ -145,6 +145,41 @@
     "networkFeeNote": "El nodo estima en vivo la comisión de red para cada tipo de dirección y la suma a la cotización.",
     "save": "Guardar",
     "saved": "Condiciones de retiro on-chain guardadas",
-    "saveFailed": "No se pudieron guardar las condiciones de retiro on-chain"
+    "saveFailed": "No se pudieron guardar las condiciones de retiro on-chain",
+    "payouts": {
+      "title": "Pagos on-chain",
+      "description": "Los retiros on-chain de este Cash Hub, los más recientes primero. Ninguna acción del operador cambia un pago; solo el titular del billete puede pedir cancelarlo.",
+      "amount": "Importe",
+      "fee": "Comisión",
+      "hubFee": "Comisión del Hub",
+      "networkFee": "comisión de red",
+      "payout": "Pago",
+      "sentBy": "Enviar antes de",
+      "signed": "firmado",
+      "unsigned": "aún sin firmar",
+      "depth": "Profundidad",
+      "remintedBill": "Billete re-acuñado",
+      "detailTitle": "Pago",
+      "address": "Dirección",
+      "requestId": "Id de solicitud",
+      "committed": "Comprometido",
+      "versions": "Versiones",
+      "noVersions": "Aún no hay transacción.",
+      "inputs_one": "{{count}} entrada",
+      "inputs_other": "{{count}} entradas",
+      "broadcast": "Difusión primera / última",
+      "facts": "Hechos del archivo",
+      "state": {
+        "queued": "en cola",
+        "broadcast": "difundido",
+        "confirmed": "confirmado",
+        "final": "final",
+        "cancelled": "cancelado"
+      },
+      "cancel": {
+        "requested": "cancelación pedida por el titular",
+        "cancelled": "cancelado ({{reason}})"
+      }
+    }
   }
 }

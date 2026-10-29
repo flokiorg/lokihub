@@ -661,6 +661,11 @@ type CashWalletClaimResponse struct {
 	// UI that exists to account for it.
 	SettledAt      *int64 `json:"settled_at,omitempty"`
 	RedeemFeeMloki int64  `json:"redeem_fee_mloki,omitempty"`
+	// Ordered and Reminted: a slice minted for an order, or re-minted by a
+	// cancelled on-chain withdrawal; its owner can neither remove it nor delete
+	// its bill (NIP-CASH §Data Model).
+	Ordered  bool `json:"ordered,omitempty"`
+	Reminted bool `json:"reminted,omitempty"`
 }
 
 // CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has

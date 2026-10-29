@@ -145,6 +145,41 @@
     "networkFeeNote": "네트워크 수수료는 주소 유형마다 노드가 실시간으로 추정해 견적에 더합니다.",
     "save": "저장",
     "saved": "온체인 출금 조건을 저장했습니다",
-    "saveFailed": "온체인 출금 조건을 저장할 수 없습니다"
+    "saveFailed": "온체인 출금 조건을 저장할 수 없습니다",
+    "payouts": {
+      "title": "온체인 지급",
+      "description": "이 Cash Hub의 온체인 출금(최신순). 운영자 작업으로 지급이 바뀌지 않으며, 취소는 지폐 보유자만 요청할 수 있습니다.",
+      "amount": "금액",
+      "fee": "수수료",
+      "hubFee": "Hub 수수료",
+      "networkFee": "네트워크 수수료",
+      "payout": "지급액",
+      "sentBy": "전송 기한",
+      "signed": "서명됨",
+      "unsigned": "아직 서명 안 됨",
+      "depth": "깊이",
+      "remintedBill": "재발행된 지폐",
+      "detailTitle": "지급",
+      "address": "주소",
+      "requestId": "요청 ID",
+      "committed": "확정",
+      "versions": "버전",
+      "noVersions": "아직 트랜잭션이 없습니다.",
+      "inputs_one": "입력 {{count}}개",
+      "inputs_other": "입력 {{count}}개",
+      "broadcast": "전파 처음 / 마지막",
+      "facts": "보관 기록",
+      "state": {
+        "queued": "대기",
+        "broadcast": "전파됨",
+        "confirmed": "확인됨",
+        "final": "최종",
+        "cancelled": "취소됨"
+      },
+      "cancel": {
+        "requested": "보유자가 취소 요청",
+        "cancelled": "취소됨 ({{reason}})"
+      }
+    }
   }
 }

@@ -17,6 +17,7 @@ type WithdrawAPI interface {
 	CashWithdrawNode() (*CashWithdrawNodeState, error)
 	SetCashWithdrawNodeEnabled(on bool) error
 	ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, error)
+	GetCashHubPayout(hubAppID, payoutID uint) (*cashwithdraw.PayoutDetail, error)
 	CashWithdrawStatus() (*cashwithdraw.EngineStatus, error)
 }
 
@@ -84,6 +85,15 @@ func (api *api) ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, err
 		return nil, err
 	}
 	return w.ListPayouts(hubAppID, 500)
+}
+
+// GetCashHubPayout is one payout with its versions and archive facts.
+func (api *api) GetCashHubPayout(hubAppID, payoutID uint) (*cashwithdraw.PayoutDetail, error) {
+	w, err := api.withdrawService()
+	if err != nil {
+		return nil, err
+	}
+	return w.GetPayout(hubAppID, payoutID)
 }
 
 // CashWithdrawStatus is the payout engine's health.
