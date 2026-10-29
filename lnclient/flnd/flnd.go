@@ -1098,6 +1098,12 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 	_, err = svc.client.CancelInvoice(ctx, &invoicesrpc.CancelInvoiceMsg{
 		PaymentHash: paymentHashBytes,
 	})
+	if err != nil && cancelledAlready(err) {
+		return nil
+	}
+	if err != nil && invoiceUnknown(err) {
+		return fmt.Errorf("%w: %v", lnclient.ErrInvoiceNotFound, err)
+	}
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
@@ -2301,4 +2307,14 @@ func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.Onch
 		}
 		offset += uint32(len(resp.Transactions)) //nolint:gosec // at most limit
 	}
+}
+
+// invoiceUnknown reports a node answer that it holds no invoice for the hash.
+func invoiceUnknown(err error) bool {
+	return status.Code(err) == codes.NotFound || strings.Contains(err.Error(), "unable to locate invoice")
+}
+
+// cancelledAlready reports a cancel of an invoice the node already cancelled.
+func cancelledAlready(err error) bool {
+	return strings.Contains(err.Error(), "invoice already canceled")
 }

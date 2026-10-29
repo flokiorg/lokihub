@@ -91,6 +91,9 @@ type TransactionsService interface {
 	// intake (NIP-CO §Lightning) instead of app crediting.
 	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
 		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
+	// CancelHoldInvoicesAtNode cancels hold invoices at the node whose rows are
+	// already failed, best effort.
+	CancelHoldInvoicesAtNode(ctx context.Context, paymentHashes []string, lnClient lnclient.LNClient)
 	// CancelOpenCircleInvoices cancels a Circle Wallet's open invoices.
 	CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error
 }
@@ -1463,7 +1466,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			svc.logger.Error().Interface("event", event).Msg("Transaction has no settle deadline")
 			return
 		}
-		svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false)
+		if !svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false) {
+			svc.cancelHeldForFailedRow(ctx, lnClientTransaction.PaymentHash)
+		}
 		// A Circle Wallet's invoice is the Hub's to settle, after re-checking
 		// the payment (NIP-CW §Own Funds and Caps).
 		if svc.lnClientProvider != nil {
