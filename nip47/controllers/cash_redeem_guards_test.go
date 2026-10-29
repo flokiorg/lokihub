@@ -65,9 +65,14 @@ func TestCashRedeem_ExpiredBillIsRestricted(t *testing.T) {
 		{"a second past expires_at", -time.Second, true},
 		{"a minute past expires_at", -time.Minute, true},
 		{"expires_at a few seconds ahead", 3 * time.Second, false},
+		{"expires_at is the current second", 0, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newRedeemFixture(t)
+			// Start early in a second, so the redeem runs inside it.
+			for n := time.Now().Nanosecond(); n < 50e6 || n > 600e6; n = time.Now().Nanosecond() {
+				time.Sleep(10 * time.Millisecond)
+			}
 			at := time.Now().Add(c.offset).Truncate(time.Second)
 			require.NoError(t, f.svc.DB.Model(&db.App{}).Where("id = ?", f.wallet.ID).Update("expires_at", at).Error)
 			f.wallet.ExpiresAt = &at

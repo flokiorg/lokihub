@@ -388,3 +388,31 @@ func TestGetPermittedMethods_CashWalletDoesNotAdvertiseGetBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, permissionsSvc.GetPermittedMethods(standard, svc.LNClient), models.GET_BUDGET_METHOD)
 }
+
+// NIP-CASH §Lifecycle and Deletion (CASH-446): a bill is live during its whole
+// expires_at second, and refused from the next one.
+func TestHasPermission_BillLiveDuringItsExpirySecond(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	permissionsSvc := NewPermissionsService(svc.DB, svc.EventPublisher)
+	bill := func(at time.Time) *db.App {
+		app, _, err := svc.AppsService.CreateApp("bill", "", 0, constants.BUDGET_RENEWAL_NEVER, &at,
+			[]string{constants.CASH_REDEEM_SCOPE}, db.AppKindCashWallet, nil, "", nil)
+		require.NoError(t, err)
+		return app
+	}
+	// Start early in a second, so the calls below stay inside it.
+	for n := time.Now().Nanosecond(); n < 50e6 || n > 700e6; n = time.Now().Nanosecond() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	current := time.Unix(time.Now().Unix(), 0)
+	live, previous := bill(current), bill(current.Add(-time.Second))
+
+	ok, code, msg := permissionsSvc.HasPermission(live, constants.CASH_REDEEM_SCOPE)
+	assert.True(t, ok, "refused inside its expires_at second: %s %s", code, msg)
+	ok, code, _ = permissionsSvc.HasPermission(previous, constants.CASH_REDEEM_SCOPE)
+	assert.False(t, ok, "live a second past its expires_at")
+	assert.Equal(t, constants.ERROR_RESTRICTED, code)
+	require.Equal(t, current.Unix(), time.Now().Unix(), "the checks ran inside one second")
+}

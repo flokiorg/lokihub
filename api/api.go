@@ -36,9 +36,10 @@ import (
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
-	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
@@ -3371,7 +3372,7 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 		Offset: offset,
 		// One clock reading for both the counts and the page, so a slice
 		// cannot expire between them and be counted in one but not the other.
-		Now: time.Now(),
+		Now: db.CashExpiryCutoff(hubclock.Now()),
 	})
 	if err != nil {
 		return nil, 0, CashWalletClaimCounts{}, err
@@ -3682,7 +3683,7 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			r.Status = db.CashSliceStatusSplit
 		case c.ClaimedAt != nil:
 			r.Status = db.CashSliceStatusRedeemed
-		case app.ExpiresAt != nil && app.ExpiresAt.Before(time.Now()):
+		case db.ExpiredAt(app.ExpiresAt, hubclock.Now()):
 			r.Status = db.CashSliceStatusExpired
 		default:
 			r.Status = db.CashSliceStatusUnclaimed

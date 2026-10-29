@@ -323,7 +323,8 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	var expiresAt *time.Time
 	if hubConfig.MaxExpSecs == 0 {
 		if params.ExpirySecs > 0 {
-			t := hubclock.Now().Add(time.Duration(params.ExpirySecs) * time.Second)
+			// Whole seconds, as the bill announces it.
+			t := hubclock.Now().Add(time.Duration(params.ExpirySecs) * time.Second).Truncate(time.Second)
 			expiresAt = &t
 		}
 	} else {
@@ -333,7 +334,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		} else if expirySecs > hubConfig.MaxExpSecs {
 			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", ErrRestricted, params.ExpirySecs, hubConfig.MaxExpSecs)
 		}
-		t := hubclock.Now().Add(time.Duration(expirySecs) * time.Second)
+		t := hubclock.Now().Add(time.Duration(expirySecs) * time.Second).Truncate(time.Second)
 		expiresAt = &t
 	}
 

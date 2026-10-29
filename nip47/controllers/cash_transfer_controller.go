@@ -472,7 +472,7 @@ func (controller *nip47Controller) locateSlice(app *db.App, isCash bool, identit
 			}
 		}
 		return nil, constants.ERROR_RESTRICTED, message
-	case app.ExpiresAt != nil && hubclock.Now().After(*app.ExpiresAt):
+	case db.ExpiredAt(app.ExpiresAt, hubclock.Now()):
 		return nil, constants.ERROR_RESTRICTED, "this cash wallet is past its redemption deadline"
 	}
 	return live, "", ""
