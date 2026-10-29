@@ -9,6 +9,10 @@ audits of both.
 
 ### Added
 
+- Asks again in the desktop app too when an LSP purchase is refused for
+  terms worse than announced: the refusal carries the same body as the HTTP
+  409 (message, announced and live terms), so the terms-changed dialog opens
+  and the user can accept there.
 - Lists a Cash Hub's on-chain payouts (state, address, amount, payout, fee,
   `sent_by`, signed, txid:vout, depth / `final_depth`, cancellation, re-minted
   bill link) with a detail view of every version and archive fact

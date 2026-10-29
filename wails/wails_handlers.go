@@ -23,6 +23,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/manager"
 )
 
 type authTokenResponse struct {
@@ -37,6 +38,16 @@ type jwtCustomClaims struct {
 type WailsRequestRouterResponse struct {
 	Body  interface{} `json:"body"`
 	Error string      `json:"error"`
+}
+
+// purchaseError answers a refused LSP purchase. One refused for terms worse
+// than announced carries, as its body, the HTTP 409 body (message and both
+// sets of terms), so the desktop app can ask again as the web one does.
+func purchaseError(err error) WailsRequestRouterResponse {
+	if refusal, ok := manager.TermsRefusalOf(err); ok {
+		return WailsRequestRouterResponse{Body: refusal, Error: err.Error()}
+	}
+	return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 }
 
 // getAppOrErrorResponse parses idStr and looks up the app, returning a
@@ -1278,7 +1289,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			resp, err := app.api.LSPS1CreateOrder(ctx, req)
 			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+				return purchaseError(err)
 			}
 			return WailsRequestRouterResponse{Body: resp, Error: ""}
 		case "GET":
@@ -1336,7 +1347,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		resp, err := app.api.LSPS2Buy(ctx, req)
 		if err != nil {
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			return purchaseError(err)
 		}
 		return WailsRequestRouterResponse{Body: resp, Error: ""}
 

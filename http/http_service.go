@@ -1808,8 +1808,8 @@ func (httpSvc *HttpService) buyLSPS2LiquidityHandler(c echo.Context) error {
 
 // Helper to check for timeouts
 func handleErrorWithTimeout(c echo.Context, err error) error {
-	if tw := (*manager.TermsWorseError)(nil); errors.As(err, &tw) {
-		return c.JSON(http.StatusConflict, TermsErrorResponse{Message: err.Error(), Terms: tw.Terms})
+	if refusal, ok := manager.TermsRefusalOf(err); ok {
+		return c.JSON(http.StatusConflict, refusal)
 	}
 	if strings.Contains(strings.ToLower(err.Error()), "time out") || errors.Is(err, context.DeadlineExceeded) {
 		return c.JSON(http.StatusGatewayTimeout, ErrorResponse{Message: "Request timed out, please retry"})

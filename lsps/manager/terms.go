@@ -57,6 +57,23 @@ func (e *TermsWorseError) Error() string {
 
 func (e *TermsWorseError) Is(target error) bool { return target == ErrTermsWorse }
 
+// TermsRefusal is how both transports answer a purchase refused for terms
+// worse than announced: the message and both sets of terms, so the user can be
+// asked again (HTTP 409 body; the desktop app's error body).
+type TermsRefusal struct {
+	Message string `json:"message"`
+	Terms   Terms  `json:"terms"`
+}
+
+// TermsRefusalOf is err's TermsRefusal when err is a *TermsWorseError.
+func TermsRefusalOf(err error) (*TermsRefusal, bool) {
+	var tw *TermsWorseError
+	if !errors.As(err, &tw) {
+		return nil, false
+	}
+	return &TermsRefusal{Message: err.Error(), Terms: tw.Terms}, true
+}
+
 func orNone(v string) string {
 	if v == "" {
 		return "none"
