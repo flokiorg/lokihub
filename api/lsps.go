@@ -87,8 +87,11 @@ func (api *api) LSPS1GetInfo(ctx context.Context, req *LSPS1GetInfoRequest) (int
 	if len(options) == 0 {
 		return nil, fmt.Errorf("no options provided by LSP")
 	}
-
-	return options[0], nil
+	terms, err := lm.LSPS1Terms(req.LSPPubkey, options[0])
+	if err != nil {
+		return nil, err
+	}
+	return &LSPS1GetInfoResponse{Options: options[0], Terms: terms}, nil
 }
 
 // LSPS1CreateOrder creates a channel order
@@ -108,7 +111,7 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 
 	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
 
-	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress)
+	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress, req.AcceptedTerms)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Interface("params", orderParams).Msg("LSPS1 CreateOrder failed")
 		return nil, err
@@ -215,8 +218,12 @@ func (api *api) LSPS2GetInfo(ctx context.Context, req *LSPS2GetInfoRequest) (int
 		return nil, fmt.Errorf("no fee parameters provided by LSP")
 	}
 
-	// Return the first fee parameter set as a flat object
-	return fees[0], nil
+	// The first fee row, the one bought, with announced vs live terms.
+	terms, err := lm.LSPS2Terms(req.LSPPubkey, fees[0])
+	if err != nil {
+		return nil, err
+	}
+	return &LSPS2GetInfoResponse{OpeningFeeParams: fees[0], Terms: terms}, nil
 }
 
 // LSPS2Buy buys a JIT channel
@@ -233,7 +240,7 @@ func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyRe
 	}
 
 	// Use the new robust BuyLiquidity method which handles retries
-	hints, err := api.svc.GetLiquidityManager().BuyLiquidity(ctx, req.LSPPubkey, *req.PaymentSizeMloki, &req.OpeningFeeParams)
+	hints, err := api.svc.GetLiquidityManager().BuyLiquidity(ctx, req.LSPPubkey, *req.PaymentSizeMloki, &req.OpeningFeeParams, req.AcceptedTerms)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Uint64("amount", *req.PaymentSizeMloki).Msg("LSPS2 BuyLiquidity failed")
 		return nil, err

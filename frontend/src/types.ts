@@ -131,6 +131,28 @@ export interface ErrorResponse {
   // Set only by the startup-error handler (see STARTUP_ERROR_CODE).
   code?: string;
   version?: string;
+  // Set on a purchase refused (409) for live terms worse than announced.
+  terms?: LSPTerms;
+}
+
+// One live LSPS value compared with the LSP's announcement (NIP-LSP live
+// check): lsps1 options by name, the LSPS2 fee row as lsps2_fee[0].<field>.
+export interface LSPTermField {
+  field: string;
+  announced: string;
+  live: string;
+  verdict: "same" | "worse" | "better";
+}
+
+export interface LSPTerms {
+  worse: boolean;
+  fields: LSPTermField[];
+}
+
+// A live value worse than announced that the user saw and accepted.
+export interface LSPAcceptedTerm {
+  field: string;
+  live: string;
 }
 
 export interface App {
@@ -893,7 +915,7 @@ export type OnchainTransaction = {
   txId: string;
 };
 
-export type LSPS1GetInfoResponse = LSPS1Option;
+export type LSPS1GetInfoResponse = LSPS1Option & { terms?: LSPTerms };
 
 export type LSPS1Option = {
   min_required_channel_confirmations: number;
@@ -925,6 +947,7 @@ export type LSPS1CreateOrderRequest = {
   refund_onchain_address?: string;
   announce_channel?: boolean;
   opening_fee_params?: LSPS1OpeningFeeParams;
+  accepted_terms?: LSPAcceptedTerm[];
 };
 
 export type LSPS1CreateOrderResponse = {
@@ -1019,12 +1042,15 @@ export interface LSPS2OpeningFeeParams {
   promise: string;
 }
 
-export type LSPS2GetInfoResponse = LSPS2OpeningFeeParams;
+export type LSPS2GetInfoResponse = LSPS2OpeningFeeParams & {
+  terms?: LSPTerms;
+};
 
 export interface LSPS2BuyRequest {
   lspPubkey: string;
   paymentSizeMloki?: number;
   openingFeeParams?: LSPS2OpeningFeeParams;
+  acceptedTerms?: LSPAcceptedTerm[];
 }
 
 export interface LSPS2BuyResponse {
@@ -1094,6 +1120,10 @@ export interface CashWalletClaim {
   // Proof of payment for a redeemed slice, carried into the archive because
   // the transaction row it came from is deleted with the bill.
   payment_hash?: string;
+  // A slice minted for an order, or re-minted by a cancelled on-chain
+  // withdrawal: the owner can neither remove it nor delete its bill.
+  ordered?: boolean;
+  reminted?: boolean;
 }
 
 // How a cash slice ended. "unclaimed" is the only live-only value; the rest

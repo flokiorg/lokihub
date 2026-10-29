@@ -511,5 +511,9 @@
     "othersBar_few": "+{{count}} ещё",
     "othersBar_many": "+{{count}} ещё",
     "othersBar_other": "+{{count}} ещё"
+  },
+  "cashLock": {
+    "ordered": "заказная: не истекает, нельзя удалить",
+    "reminted": "перевыпущена: нельзя удалить"
   }
 }

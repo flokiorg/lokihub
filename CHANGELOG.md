@@ -9,6 +9,28 @@ audits of both.
 
 ### Added
 
+- Asks again in the desktop app too when an LSP purchase is refused for
+  terms worse than announced: the refusal carries the same body as the HTTP
+  409 (message, announced and live terms), so the terms-changed dialog opens
+  and the user can accept there.
+- Lists a Cash Hub's on-chain payouts (state, address, amount, payout, fee,
+  `sent_by`, signed, txid:vout, depth / `final_depth`, cancellation, re-minted
+  bill link) with a detail view of every version and archive fact
+  (`GET /api/cash-hubs/:id/payouts/:payout`, also in the desktop app), and
+  marks ordered and re-minted bills, whose remove and delete actions are
+  disabled (`ordered` / `reminted` on the cash-wallet listings).
+- Adds the on-chain withdrawal operator screens: an "On-chain withdrawals"
+  node switch under Settings → Advanced with the payout engine's status, and
+  a per-Cash Hub card for its enable, `withdraw_fee_base`, `withdraw_fee_ppm`
+  and optional minimum and maximum, with the script types paid and
+  `final_depth` shown read-only. `GET /api/cash-withdraw/node` reads the
+  switch, and the desktop app serves every on-chain withdrawal route.
+- Shows an LSP's announced and live terms side by side on the JIT receive
+  and channel order screens when the live ones are worse, and asks again
+  before buying (`terms` on `GET /api/lsps2/info` and `/api/lsps1/info`; the
+  purchase sends the worse values accepted as `acceptedTerms` /
+  `accepted_terms`, and a purchase whose terms turned worse meanwhile is
+  refused with 409 and both).
 - Takes order payments in and mints them (NIP-CO §Paying and Minting). A
   settled order invoice, or a payment of one by a wallet on this node, is
   recorded once by its payment hash and minted in one commit: the Hub is
@@ -468,6 +490,25 @@ audits of both.
 
 ### Fixed
 
+- Ignores an LSP announcement dated more than 15 minutes ahead (NIP-LSP step
+  4): it is not seen, undoes such a newest-seen mark kept earlier, and ranks a
+  future-dated row last when the catalogue is pruned. One far-future event
+  locked out the node's later announcements, `closed` included, and
+  future-dated spam crowded real LSPs out of the catalogue.
+- Keeps an LSP's announcement usable through its expiration second, as NIP-40
+  asks, and refuses LSPS messages to an LSP whose announcement expired since
+  the catalogue's last refresh. The sweep dropped it a second early, and
+  purchases went ahead until the next refresh.
+- Buys JIT liquidity only at terms compared with the LSP's announcement: an
+  automatic purchase fetches the fee menu at buy time (and again on a stale
+  retry) and refuses it when worse for the buyer, a manual one compares the
+  exact fee row bought and refuses a worse one, and both refuse a payment
+  outside the row's size bounds or one the fee would take whole. The buy
+  re-fetched the menu and bought its first row unseen, so an LSP could pass
+  the live check and sell at a higher fee.
+- Fails an LSP's live check when its announced LSPS1 or LSPS2 `get_info`
+  errors or cannot be read. Such a check passed as terms equal to the
+  announced ones, so a purchase went ahead with no live terms compared.
 - Records a private item's request event only while its target bill still
   exists, under a lock the bill's delete waits on. A bill deleted by a sibling
   item's split in the same envelope logged a `FOREIGN KEY constraint failed`

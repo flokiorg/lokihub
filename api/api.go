@@ -3421,6 +3421,8 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			SpunOffToWalletAppID: row.SpunOffToWalletAppID,
 			PaymentHash:          row.PaymentHash,
 			RedeemFeeMloki:       row.RedeemFeeMloki,
+			Ordered:              row.Ordered,
+			Reminted:             row.Reminted,
 		}
 		if row.Archived {
 			// An archived bill's own token, as it was issued. The live
@@ -3666,6 +3668,8 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			SpunOffToWalletAppID: c.SpunOffToWalletAppID,
 			PaymentHash:          c.PaymentHash,
 			RedeemFeeMloki:       c.RedeemFeeMloki,
+			Ordered:              c.Ordered,
+			Reminted:             c.Reminted,
 		}
 		if c.SettledAt != nil {
 			settledAt := c.SettledAt.Unix()

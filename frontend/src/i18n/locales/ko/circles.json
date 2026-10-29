@@ -453,5 +453,9 @@
     "perHubHint": "어느 허브가 부채를 지고 있는지, 그리고 그에 대해 무엇을 보유하고 있는지.",
     "othersBar_one": "기타 {{count}}개",
     "othersBar_other": "기타 {{count}}개"
+  },
+  "cashLock": {
+    "ordered": "주문분: 만료 없음, 제거 불가",
+    "reminted": "재발행: 제거 불가"
   }
 }

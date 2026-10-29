@@ -1,4 +1,5 @@
 import { WailsRequestRouter } from "wailsjs/go/wails/WailsApp";
+import { errorBody } from "src/lib/errorBody";
 import { ErrorResponse } from "src/types";
 
 // Mirrors StartupErrorCode in wails/startup_error.go.
@@ -82,7 +83,14 @@ export const request = async <T>(
 
     console.info("Wails request", ...args, res);
     if (res.error) {
-      throw new Error(res.error);
+      // A refusal may carry the HTTP error body, such as an LSP purchase's
+      // announced and live terms, so the screens can act on it alike.
+      throw new AppError(
+        res.error,
+        undefined,
+        args[0].toString(),
+        errorBody(res.body)
+      );
     }
 
     return res.body;

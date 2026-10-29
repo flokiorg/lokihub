@@ -59,6 +59,8 @@ import { DisconnectCircleHub } from "src/components/connections/DisconnectCircle
 import { DisconnectCashHub } from "src/components/connections/DisconnectCashHub";
 import { DurationInput } from "src/components/DurationInput";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
+import { CashHubWithdrawCard } from "src/components/withdraw/CashHubWithdrawCard";
+import { CashHubPayoutsCard } from "src/components/withdraw/CashHubPayoutsCard";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import { useAppStore } from "src/hooks/useAppStore";
 import Loading from "src/components/Loading";
@@ -983,6 +985,10 @@ function AppInternal({ app, refetchApp, capabilities }: AppInternalProps) {
                   </CardContent>
                 </Card>
               )}
+              {app.kind === "cash_hub" && (
+                <CashHubWithdrawCard hubId={app.id} />
+              )}
+              {app.kind === "cash_hub" && <CashHubPayoutsCard hubId={app.id} />}
               <AppTransactionList appId={app.id} />
             </>
           )}

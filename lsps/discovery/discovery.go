@@ -34,6 +34,11 @@ import (
 // XQ-49).
 const MaxAnnouncements = 200
 
+// MaxFutureSecs is how far ahead of this node's clock an announcement's
+// created_at may lie (NIP-LSP §Client Behavior step 4): one dated further
+// ahead is ignored and does not count as seen.
+const MaxFutureSecs = 15 * 60
+
 // RefreshInterval is how often the catalogue is re-read from relays.
 const RefreshInterval = 30 * time.Minute
 
@@ -199,6 +204,10 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 		return err
 	}
 	seen := niplsp.NewSeen(opts)
+	now := s.d.Now().Unix()
+	if err := s.dropFutureMarks(now); err != nil {
+		return err
+	}
 	var rows []persist.LSP
 	if err := s.d.DB.Find(&rows).Error; err != nil {
 		return err
@@ -228,13 +237,15 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 		if ev == nil || ev.Kind != niplsp.Kind {
 			continue
 		}
+		if int64(ev.CreatedAt) > now+MaxFutureSecs { //nolint:gosec // event timestamps are seconds
+			continue // not seen: it would hide the node's later announcements
+		}
 		if _, err := seen.Offer(ev); errors.Is(err, niplsp.ErrNotNewer) {
 			continue
 		}
 		touched[ev.PubKey] = true
 	}
 	marks := seen.Marks()
-	now := s.d.Now().Unix()
 	for key := range touched {
 		mark, ok := marks[key]
 		if !ok {
@@ -257,12 +268,35 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 			return err
 		}
 	}
-	// An announcement that expired since is no longer usable.
-	if err := s.d.DB.Model(&persist.LSP{}).Where("usable = ? AND expires_at > 0 AND expires_at <= ?", true, now).
+	// An announcement that expired since is no longer usable; it is still
+	// usable at its expiration second (NIP-40, step 4).
+	if err := s.d.DB.Model(&persist.LSP{}).Where("usable = ? AND expires_at > 0 AND expires_at < ?", true, now).
 		Updates(map[string]any{"usable": false, "invalid_reason": "the announcement expired"}).Error; err != nil {
 		return err
 	}
 	return s.prune()
+}
+
+// dropFutureMarks undoes newest-seen marks dated more than MaxFutureSecs
+// ahead, kept before they were ignored: a row's mark falls back to its usable
+// announcement, or to none when that one is future-dated too and no longer
+// usable, and a pruned node's mark is dropped.
+func (s *Service) dropFutureMarks(now int64) error {
+	limit := now + MaxFutureSecs
+	return s.d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&persist.LSP{}).Where("announced_at > ?", limit).Updates(map[string]any{
+			"usable": false, "invalid_reason": "the announcement is dated more than 15 minutes ahead",
+			"announced_at": 0, "last_event_id": "", "last_event_json": "",
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&persist.LSP{}).Where("newest_seen_created_at > ?", limit).Updates(map[string]any{
+			"newest_seen_created_at": gorm.Expr("announced_at"), "newest_seen_id": gorm.Expr("last_event_id"),
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Where("created_at > ?", limit).Delete(&persist.LSPSeenMark{}).Error
+	})
 }
 
 // MaxSeenMarks bounds the newest-seen marks kept for pruned nodes, the newest
@@ -276,7 +310,11 @@ const MaxSeenMarks = 20 * MaxAnnouncements
 func (s *Service) prune() error {
 	return s.d.DB.Transaction(func(tx *gorm.DB) error {
 		var keep []string
-		if err := tx.Model(&persist.LSP{}).Where("trusted = ?", false).Order("announced_at DESC, node_key").
+		if err := tx.Model(&persist.LSP{}).Where("trusted = ?", false).Order(clause.OrderBy{Expression: clause.Expr{
+			// A future-dated row ranks last, so it cannot crowd out the others.
+			SQL: "CASE WHEN announced_at > ? THEN 0 ELSE announced_at END DESC, node_key", Vars: []any{s.d.Now().Unix() + MaxFutureSecs},
+			WithoutParentheses: true,
+		}}).
 			Limit(MaxAnnouncements).Pluck("node_key", &keep).Error; err != nil {
 			return err
 		}

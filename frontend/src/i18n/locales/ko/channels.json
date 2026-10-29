@@ -163,5 +163,20 @@
     "addCustomRelay": "사용자 지정 릴레이 추가",
     "alreadyAdded": "이 릴레이는 이미 추가되어 있습니다",
     "add": "추가"
+  },
+  "lspTerms": {
+    "title": "LSP 조건이 변경되었습니다",
+    "description": "LSP의 현재 조건이 공지된 조건보다 불리합니다. 구매 전에 비교하세요.",
+    "value": "조건",
+    "announced": "공지",
+    "live": "현재",
+    "verdict": {
+      "worse": "불리",
+      "better": "유리",
+      "same": "동일"
+    },
+    "cancel": "구매 안 함",
+    "confirm": "현재 조건으로 구매",
+    "changed": "확인한 뒤 LSP 조건이 변경되었습니다. 검토 후 다시 시도하세요."
   }
 }
