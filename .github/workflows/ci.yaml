@@ -85,6 +85,12 @@ jobs:
       - name: Test (race)
         run: go test -race -count=1 -timeout 20m ./...
 
+      # The regtest test hooks build only with the testhooks tag, so the tests
+      # that check every hook refuses without the admin token or off regtest
+      # never ran in the race step above.
+      - name: Test (testhooks build)
+        run: go test -tags testhooks -count=1 ./http/ ./service/ ./testknobs/
+
       # The connection-drop resubscription test skips under -race: a server-side
       # drop trips go-nostr's own data race on Relay.Connection (still in the
       # latest release). Without this step CI never runs it at all. -v so the log
