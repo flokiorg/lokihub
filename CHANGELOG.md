@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Bounds a Circle Wallet Hub's dust threshold by `CIRCLE_MAX_DUST_MLOKI`
+  (default 10,000 mloki, the default routing-fee reserve floor), on creation
+  and on update. A host could otherwise set a threshold above any balance and
+  keep every deleted wallet's funds as dust.
 - Refuses a frozen Circle Wallet's payment under the payment's lock, so a
   freeze committed while a request was past its gate still stops it.
 - Refuses every request by a frozen Circle Wallet's key with `FROZEN`, a

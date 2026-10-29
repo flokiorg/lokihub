@@ -89,6 +89,11 @@ type AppConfig struct {
 	// CircleWalletRateLimitPerHour caps create_circle_wallet calls per calling
 	// app pubkey. 0 disables the limit entirely.
 	CircleWalletRateLimitPerHour int `envconfig:"CIRCLE_WALLET_RATE_LIMIT_PER_HOUR" default:"3"`
+	// CircleMaxDustMloki bounds the dust threshold a Circle Wallet Hub may set:
+	// the most it may keep from a wallet it deletes. The default is the
+	// default routing-fee reserve floor (10 loki), a balance too small to pay
+	// out over Lightning. NIP-CW sets no bound.
+	CircleMaxDustMloki int64 `envconfig:"CIRCLE_MAX_DUST_MLOKI" default:"10000"`
 	// CashSplitLinkRetentionDays is how long an archived cash slice keeps the
 	// link to the bill its value moved into (a split or a consolidation). A
 	// consolidation's links say which bills shared a holder, and NIP-CASH says a

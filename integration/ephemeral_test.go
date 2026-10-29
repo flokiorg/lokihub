@@ -197,7 +197,8 @@ func createEphemeralCircleHub(t *testing.T, cfg *Config, name, policy string, au
 // ephemeralCircleGraceSecs and ephemeralCircleDustMloki are every ephemeral
 // circle hub's grace and dust threshold: long enough that a test sees the
 // state it set, short and large enough that the lifecycle job deletes a torn-
-// down hub's wallets, and then the hub, soon after the test.
+// down hub's wallets, and then the hub, soon after the test. The stack must
+// allow that threshold: CIRCLE_MAX_DUST_MLOKI at least ephemeralCircleDustMloki.
 const (
 	ephemeralCircleGraceSecs = 30
 	ephemeralCircleDustMloki = 100_000_000

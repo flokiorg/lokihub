@@ -55,6 +55,11 @@ carries an `expiration` tag as its deadline.
    identities' follow list to it - see that file and
    `cmd/seedrelay/main.go`.
 
+5. **`CIRCLE_MAX_DUST_MLOKI=100000000`** (or more) in the instance's
+   environment. Ephemeral circles clean up after themselves through a
+   100,000,000-mloki dust threshold (`ephemeralCircleDustMloki`), which the
+   default bound (10,000) refuses.
+
 ## Running
 
 ```sh
