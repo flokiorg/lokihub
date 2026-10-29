@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohstr/nmilat/nipcw"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -81,4 +82,27 @@ func TestCircleSpendRace_SendCapNeverPassed(t *testing.T) {
 	used := circlemoney.SendUsage(svc.DB, wallet.ID, start.Unix())
 	assert.Positive(t, used)
 	assert.LessOrEqual(t, used, int64(40_000))
+}
+
+// NIP-CW §Recovering a Lost Connection: a freeze that lands after a request
+// passed the gate still refuses its payment, checked under the payment's lock.
+func TestCircleSend_FrozenUnderTheLockRefused(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := newCircleHub(t, svc, 0)
+	wallet := newCircleWallet(t, svc, hub, 0, constants.BUDGET_RENEWAL_NEVER)
+	tests.FundApp(svc, wallet.ID, 100_000, tests.RandomHex32())
+	ts := NewTransactionsService(svc.DB, svc.EventPublisher)
+
+	require.NoError(t, svc.DB.Model(wallet).Update("circle_frozen", true).Error)
+	_, err = ts.SendKeysend(10_000, "02"+tests.RandomHex32(), nil, "", svc.LNClient, &wallet.ID, nil)
+	r, isRefusal := circlemoney.AsRefusal(err)
+	require.True(t, isRefusal, "%v", err)
+	assert.Equal(t, nipcw.ErrFrozen, r.Code)
+	assert.Equal(t, int64(100_000), queries.GetIsolatedBalance(svc.DB, wallet.ID), "nothing left the wallet")
+
+	require.NoError(t, svc.DB.Model(wallet).Update("circle_frozen", false).Error)
+	_, err = ts.SendKeysend(10_000, "02"+tests.RandomHex32(), nil, "", svc.LNClient, &wallet.ID, nil)
+	require.NoError(t, err, "unfrozen, it pays")
 }
