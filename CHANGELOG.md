@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Resumes the node's invoice stream after a reconnect from the last
+  `add_index` and `settle_index` it delivered, so an order invoice settled
+  while the stream was down is minted at once rather than at `pay_by`.
 - Refuses `cash_lookup` of an order past its `pay_by` with a retryable
   `INTERNAL` while its window cannot be ended (the chain or its invoice cannot
   be read, or the invoice not cancelled), instead of answering `open`. A client
