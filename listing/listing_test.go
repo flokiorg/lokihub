@@ -618,7 +618,7 @@ func TestCloseCircle_InvalidatesEveryListingsConnection(t *testing.T) {
 	listed, err := f.s.load(v.ID)
 	require.NoError(t, err)
 	closing := *listed
-	closing.ID, closing.ConnAppID, closing.Phase, closing.D = 0, 987654, db.ListingPhaseClosing, listed.D+"-old"
+	closing.ID, closing.ConnAppID, closing.Phase, closing.D = 0, 987654, db.ListingPhaseClosing, listed.D[:len(listed.D)-4]+"-old" // d fits its 64 characters
 	require.NoError(t, f.svc.DB.Create(&closing).Error)
 
 	f.inval = nil
