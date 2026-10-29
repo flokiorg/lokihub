@@ -468,6 +468,8 @@ audits of both.
 
 ### Fixed
 
+- Refuses a frozen Circle Wallet's payment under the payment's lock, so a
+  freeze committed while a request was past its gate still stops it.
 - Refuses every request by a frozen Circle Wallet's key with `FROZEN`, a
   private-only method's included, and lets any other request by the current
   key cancel a pending rotation before a method is refused; both came after
