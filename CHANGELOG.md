@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Refuses every request by a frozen Circle Wallet's key with `FROZEN`, a
+  private-only method's included, and lets any other request by the current
+  key cancel a pending rotation before a method is refused; both came after
+  the `NOT_IMPLEMENTED` refusal of private-only methods.
 - Refuses `delete_circle_wallet`, and the lifecycle's deletion, while a
   same-node keysend to the wallet is still to be credited or a held keysend
   the node settled is not yet credited; the held keysend's reservation is now
