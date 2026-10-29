@@ -26,6 +26,9 @@ const Chain = "flokicoin"
 // compact recoverable signature nipcash expects.
 func Signer(ctx context.Context, ln lnclient.LNClient) nipcash.MintSigner {
 	return func(payload string) ([]byte, error) {
+		if err := Guard.Allow(ctx); err != nil {
+			return nil, err
+		}
 		sctx, cancel := context.WithTimeout(ctx, Timeout)
 		defer cancel()
 		zsig, err := ln.SignMessage(sctx, payload)

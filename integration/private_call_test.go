@@ -145,8 +145,8 @@ func privateTargetCall(t *testing.T, ctx context.Context, target privateTarget, 
 	}
 
 	env := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter,
-		Nonce: nonce, ReplyTo: replyTo, Items: []transport.Item{item},
+		NotAfter: notAfter,
+		Nonce:    nonce, ReplyTo: replyTo, Items: []transport.Item{item},
 	}
 	plaintext, err := env.Encode(limits)
 	if err != nil {

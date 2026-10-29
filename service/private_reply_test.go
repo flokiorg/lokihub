@@ -63,3 +63,32 @@ func TestPublishPrivateReply_ClientFindsAndOpensIt(t *testing.T) {
 	_, err = nip44.Decrypt(reply.Content, conversationKey)
 	assert.Error(t, err, "the bare conversation key must not open the reply")
 }
+
+// NIP-CASH §The Reply Key (CASH-285): each kind-23191 reply is signed with a
+// fresh key used once, never the node key.
+func TestPublishPrivateReply_EachReplyIsSignedByAFreshKey(t *testing.T) {
+	ts, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer ts.Remove()
+	relay := newScriptedRelay(t)
+	require.NoError(t, ts.Cfg.SetUpdate("Relay", relay.url, ""))
+	svc := &service{cfg: ts.Cfg, keys: ts.Keys}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool := nostr.NewSimplePool(ctx)
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		var ck [32]byte
+		_, _ = rand.Read(ck[:])
+		env := &transport.Envelope{Nonce: tests.RandomHex32(), ReplyTo: tests.RandomHex32()}
+		require.NoError(t, svc.publishPrivateReply(ctx, pool, env, ck, relay.url, nil))
+		select {
+		case ev := <-relay.published:
+			require.False(t, seen[ev.PubKey], "a reply author key was used twice")
+			require.NotEqual(t, ts.Keys.GetNostrPublicKey(), ev.PubKey)
+			seen[ev.PubKey] = true
+		case <-time.After(5 * time.Second):
+			t.Fatal("no reply was published")
+		}
+	}
+}

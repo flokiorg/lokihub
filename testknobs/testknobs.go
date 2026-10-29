@@ -47,6 +47,8 @@ func (g *gate) wait(ctx context.Context) error {
 var (
 	stallCommit      gate
 	holdPayments     gate
+	holdSelfPayments gate
+	failChainScan    atomic.Bool
 	breakSigner      atomic.Bool
 	dropReply        atomic.Bool
 	dropBeforeCommit atomic.Bool
@@ -64,6 +66,14 @@ func HoldPayments() bool { return holdPayments.isOn() }
 
 // WaitPayments blocks while outgoing payments are held.
 func WaitPayments(ctx context.Context) error { return holdPayments.wait(ctx) }
+
+// WaitSelfPayments blocks a same-node payment's credit before it settles while
+// FaultHoldSelfPayments is on.
+func WaitSelfPayments(ctx context.Context) error { return holdSelfPayments.wait(ctx) }
+
+// ChainScanFails reports whether the order intake's chain scan is to fail
+// (FaultFailChainScan).
+func ChainScanFails() bool { return failChainScan.Load() }
 
 // SignerBroken reports whether the node signer is to fail (FaultBreakSigner).
 func SignerBroken() bool { return breakSigner.Load() }
@@ -130,4 +140,14 @@ func AllowSpinOff(lineage string, now time.Time) bool {
 	}
 	w.n++
 	return true
+}
+
+// RefundSpinOff gives back one spin-off AllowSpinOff charged to lineage in the
+// current window: a spin-off whose commit did not happen.
+func RefundSpinOff(lineage string, now time.Time) {
+	limitsMu.Lock()
+	defer limitsMu.Unlock()
+	if w := spinOffCount[lineage]; w != nil && w.n > 0 && now.Before(w.resetAt) {
+		w.n--
+	}
 }

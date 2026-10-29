@@ -2,6 +2,7 @@ package cashwithdraw
 
 import (
 	"context"
+	"errors"
 	"encoding/hex"
 	"strings"
 
@@ -272,8 +273,10 @@ func (e *Engine) spentByOurVersion(outpoint string) (bool, error) {
 }
 
 // SpendCheck is what an operator's own on-chain spend may take (the
-// RedeemOnchainFunds guard): at most the confirmed balance less the floor and
-// everything set aside, and no send-all while anything is set aside.
+// RedeemOnchainFunds guard): what the wallet's coin selection may spend (its
+// confirmed coins under no lease, ours or another's) less the floor and what
+// the payouts still need from those coins, and no send-all while anything is
+// set aside.
 func (e *Engine) SpendCheck(ctx context.Context, amountSat uint64, sendAll bool) error {
 	var aside int64
 	if err := e.S.DB.Model(&db.CashWithdrawSetAside{}).Select("COALESCE(SUM(amount_sat), 0)").Scan(&aside).Error; err != nil {
@@ -282,14 +285,52 @@ func (e *Engine) SpendCheck(ctx context.Context, amountSat uint64, sendAll bool)
 	if sendAll && aside > 0 {
 		return ErrSpendSetAside
 	}
-	snap, err := e.Snapshot(ctx)
+	p := e.S.payer()
+	if p == nil {
+		return errors.New("no on-chain capability")
+	}
+	spendable, err := p.SpendableBalance(ctx)
 	if err != nil {
 		return err
 	}
-	if int64(amountSat) > snap.ConfirmedSat-e.floorSat.Load()-aside { //nolint:gosec // bounded
+	owed, err := e.owedFromUnleasedCoins()
+	if err != nil {
+		return err
+	}
+	if int64(amountSat) > spendable-e.floorSat.Load()-owed { //nolint:gosec // bounded
 		return ErrSpendSetAside
 	}
 	return nil
+}
+
+// owedFromUnleasedCoins is what set-asides need from coins the wallet would let
+// an operator spend: each set-aside's shortfall past the coins it holds (set
+// aside or in one of its versions), plus its set-aside coins under no lease of
+// ours yet. Coins a broadcast version already spends, and coins leased to us,
+// are out of the operator's reach and owe nothing.
+func (e *Engine) owedFromUnleasedCoins() (int64, error) {
+	var asides []db.CashWithdrawSetAside
+	if err := e.S.DB.Find(&asides).Error; err != nil {
+		return 0, err
+	}
+	now := e.S.now().Unix()
+	var owed int64
+	for _, a := range asides {
+		var coins []db.CashWithdrawCoin
+		if err := e.S.DB.Where("withdrawal_id = ? AND state IN ?", a.WithdrawalID,
+			[]string{db.CashCoinSetAside, db.CashCoinInVersion}).Find(&coins).Error; err != nil {
+			return 0, err
+		}
+		var held int64
+		for _, c := range coins {
+			held += c.ValueSat
+			if c.State == db.CashCoinSetAside && (c.LeasedUntil == nil || *c.LeasedUntil <= now) {
+				owed += c.ValueSat
+			}
+		}
+		owed += max(a.AmountSat-held, 0)
+	}
+	return owed, nil
 }
 
 // SpendChecker is a payout engine that guards the operator's own spends.

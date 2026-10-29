@@ -71,6 +71,10 @@ type CashClaimRow struct {
 	// RetainedUntil is set only for an archived bill: until then its token still
 	// gets a "spent" answer to cash_status, so it is still a credential.
 	RetainedUntil *time.Time
+	// Ordered and Reminted mark a live slice its owner can neither remove nor
+	// delete the bill of (NIP-CASH §Data Model); false on an archived row.
+	Ordered  bool
+	Reminted bool
 }
 
 // cashClaimUnionSQL is the merged row source: live claims and archived slices
@@ -117,7 +121,9 @@ SELECT
   c.redeem_fee_mloki AS redeem_fee_mloki,
   c.routing_fee_mloki AS routing_fee_mloki,
   c.settled_at AS settled_at,
-  NULL AS retained_until
+  NULL AS retained_until,
+  c.ordered AS ordered,
+  c.reminted AS reminted
 FROM cash_wallet_claims c
 JOIN apps a ON a.id = c.wallet_app_id
 WHERE a.parent_app_id = ? AND a.parent_kind = 'cash' AND a.kind = 'cash_wallet'
@@ -133,7 +139,7 @@ SELECT
   COALESCE(b.cash_token, ''),
   s.outcome,
   s.payment_hash, s.preimage, s.redeem_fee_mloki, s.routing_fee_mloki, s.settled_at,
-  b.retained_until
+  b.retained_until, FALSE, FALSE
 FROM cash_bill_slice_archives s
 LEFT JOIN cash_bill_archives b
        ON b.wallet_app_id = s.wallet_app_id AND b.hub_app_id = s.hub_app_id

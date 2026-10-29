@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/flokiorg/lokihub/decodepay"
+	"strings"
 	"testing"
 	"time"
 
@@ -164,6 +166,39 @@ func TestCashRedeem_InflightBoundRefusesBeforeClaiming(t *testing.T) {
 	f.svc.Cfg.GetEnv().CashRedeemInflightPerHub = 2
 	ok := handleClaimFundsFor(t, f.svc, NewTestNip47Controller(f.svc), f.wallet, f.params(t))
 	require.Nil(t, ok.Error, "%+v", ok.Error)
+}
+
+// LR-L4: one paying node takes at most CASH_REDEEM_INFLIGHT_PER_PAYEE of a
+// Hub's payouts in flight; a payout to another node still fits.
+func TestCashRedeem_PerPayeeInflightBound(t *testing.T) {
+	inv, err := decodepay.Decode(tests.MockZeroAmountInvoice)
+	require.NoError(t, err)
+	require.NotEmpty(t, inv.Payee)
+	for _, c := range []struct {
+		name, inFlightPayee string
+		refused             bool
+	}{{"same payee", strings.ToLower(inv.Payee), true}, {"other payee", "02" + tests.RandomHex32(), false}} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newRedeemFixture(t)
+			f.svc.Cfg.GetEnv().CashRedeemInflightPerPayee = 1
+			other := newFundedCashWallet(t, f.svc, f.hub, 500)
+			require.NoError(t, f.svc.AppsService.CreateCashWalletClaims(other.ID, []db.CashWalletClaim{
+				{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 500},
+			}))
+			require.NoError(t, f.svc.DB.Model(&db.CashWalletClaim{}).Where("wallet_app_id = ?", other.ID).
+				Updates(map[string]interface{}{"claimed_at": time.Now(), "payment_hash": tests.RandomHex32(), "redeem_payee": c.inFlightPayee}).Error)
+
+			resp := handleClaimFundsFor(t, f.svc, NewTestNip47Controller(f.svc), f.wallet, f.params(t))
+			if c.refused {
+				require.NotNil(t, resp.Error)
+				assert.Equal(t, constants.ERROR_RATE_LIMITED, resp.Error.Code)
+				assert.Nil(t, f.slice(t).ClaimedAt)
+				return
+			}
+			require.Nil(t, resp.Error, "%+v", resp.Error)
+			assert.Equal(t, strings.ToLower(inv.Payee), f.slice(t).RedeemPayee)
+		})
+	}
 }
 
 // The invoice policy: an expiry or final CLTV delta over the Hub's limit is

@@ -102,9 +102,11 @@ func TestMemberRequest_ChecksInOrder(t *testing.T) {
 	another, _ := nipcw.NewConnectionKey()
 	assert.Equal(t, nipcw.ErrRotationPending, r.submit(t, r.request(t, r.memberPriv, nipcw.ActionRotate, another.Pubkey()), now).Code)
 
-	// 1: a Hub that stopped serving rotation refuses everything first.
+	// 1: a Hub that serves no rotation, with no wallet issued with a delay,
+	// refuses everything first.
 	r.cfg.RotationEnabled = false
-	assert.Equal(t, nipcw.ErrNotImplemented, r.submit(t, r.request(t, r.memberPriv, nipcw.ActionUnfreeze, ""), now).Code)
+	require.NoError(t, r.svc.DB.Model(&db.App{}).Where("id = ?", r.w.app.ID).Update("circle_rotation_delay_secs", nil).Error)
+	assert.Equal(t, nipcw.ErrNotImplemented, r.submit(t, unknown, now).Code, "before the wallet is even looked up")
 
 	// U-18.8: member request ids are kept for 24 hours and a minute.
 	var proof db.CircleWalletIdentityProof
@@ -289,4 +291,32 @@ func decryptDetails(t *testing.T, memberPriv, hubPub, encrypted string) nipcw.Ci
 	var d nipcw.CircleWalletDetails
 	require.NoError(t, json.Unmarshal([]byte(plain), &d))
 	return d
+}
+
+// NIP-CW §Recovering a Lost Connection: each wallet's delay is fixed for its
+// life, so a Hub that stops offering rotation still serves the member requests
+// of the wallets it issued with one; a wallet issued after has none and is
+// refused at step 6.
+func TestMemberRequest_RotationTurnedOffKeepsIssuedWalletsRecoverable(t *testing.T) {
+	r := newRotationCircle(t)
+	require.NoError(t, r.svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", r.hub.ID).Update("rotation_enabled", false).Error)
+	cfg, err := r.svc.AppsService.GetCircleHubConfig(r.hub.ID)
+	require.NoError(t, err)
+	r.cfg = cfg
+
+	newKey, _ := nipcw.NewConnectionKey()
+	res := r.submit(t, r.request(t, r.memberPriv, nipcw.ActionRotate, newKey.Pubkey()), time.Now())
+	require.Empty(t, res.Code, res.Message)
+	assert.Equal(t, int64(100), *r.wallet(t).CircleRotationDelaySecs, "the delay it was issued with")
+
+	late := nostr.GeneratePrivateKey()
+	latePub, _ := nostr.GetPublicKey(late)
+	r.add(latePub)
+	lateWallet := r.join(late)
+	var stored db.App
+	require.NoError(t, r.svc.DB.First(&stored, lateWallet.app.ID).Error)
+	assert.Nil(t, stored.CircleRotationDelaySecs, "issued after: no delay")
+	ev, err := nipcw.NewMemberRequest(late, *r.hub.WalletPubkey, nipcw.ActionFreeze, lateWallet.walletPubkey, "")
+	require.NoError(t, err)
+	assert.Equal(t, nipcw.ErrNotImplemented, r.submit(t, ev, time.Now()).Code)
 }

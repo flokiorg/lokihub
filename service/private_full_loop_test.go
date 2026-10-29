@@ -111,7 +111,7 @@ func TestFullLoop_SDKBuildsRealHubServesSDKReads(t *testing.T) {
 
 	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
 	envelope := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 	}
 	for i := 0; i < bills; i++ {
 		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i], connPrivs[i],
@@ -221,7 +221,7 @@ func TestFullLoop_OmittedBillIsAbsentFromTheReply(t *testing.T) {
 
 	limits := svc.Cfg.PrivateEnvelopeLimits()
 	envelope := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 		Items: []transport.Item{realItem, ghostItem},
 	}
 
@@ -339,7 +339,7 @@ func TestFullLoop_ScopeIsHonouredPerItem(t *testing.T) {
 
 	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
 	envelope := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 	}
 
 	// Absent scope: the private transport's default, which must be "mine".

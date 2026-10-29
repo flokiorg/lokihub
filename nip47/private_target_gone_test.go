@@ -9,6 +9,7 @@ import (
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -45,6 +46,14 @@ func TestServePrivateItem_TargetDeletedMidServeGetsTombstone(t *testing.T) {
 		require.NoError(t, svc.DB.Delete(&db.App{}, bill.ID).Error)
 	}
 	t.Cleanup(func() { beforeRecordPrivateItem = nil })
+	// The request-event insert never runs into the deleted app's foreign key.
+	var insertErrs []error
+	require.NoError(t, svc.DB.Callback().Create().After("gorm:create").Register("test:request_event_errors", func(tx *gorm.DB) {
+		if tx.Statement.Table == "request_events" && tx.Error != nil {
+			insertErrs = append(insertErrs, tx.Error)
+		}
+	}))
+	t.Cleanup(func() { _ = svc.DB.Callback().Create().Remove("test:request_event_errors") })
 
 	hubXOnly := strings.Repeat("ab", 32)
 	nonce := strings.Repeat("cd", 32)
@@ -59,4 +68,5 @@ func TestServePrivateItem_TargetDeletedMidServeGetsTombstone(t *testing.T) {
 	status, ok := nipcash.ParseTombstone(result.Result)
 	require.True(t, ok, "answered with the tombstone: %s", result.Result)
 	assert.Equal(t, nipcash.StatusSpent, status.Status)
+	assert.Empty(t, insertErrs, "no foreign-key failure on the request event")
 }

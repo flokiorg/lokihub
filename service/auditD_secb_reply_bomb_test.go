@@ -154,7 +154,6 @@ func TestAuditDSecB_ClientChosenItemIdIsEchoedWithNoLengthCap(t *testing.T) {
 
 	longID := strings.Repeat("z", 48*1024)
 	env := transport.Envelope{
-		Version:  transport.EnvelopeVersion,
 		NotAfter: time.Now().Add(time.Minute).Unix(),
 		Nonce:    strings.Repeat("ab", 32),
 		ReplyTo:  strings.Repeat("cd", 32),

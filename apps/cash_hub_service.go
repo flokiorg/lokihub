@@ -10,7 +10,6 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/events"
-	"github.com/flokiorg/lokihub/logger"
 	"github.com/ohstr/nmilat/nipCO"
 	"gorm.io/gorm"
 )
@@ -450,67 +449,56 @@ func (svc *appsService) DeleteCashBill(app *db.App, outcome string) error {
 	return nil
 }
 
+// CashSweepTx moves amountMillis from a bill to its Hub inside tx, as ledger
+// rows (callers pass ledger.InternalTransferTx, which apps cannot import).
+type CashSweepTx func(tx *gorm.DB, fromAppID, toAppID uint, amountMillis uint64) error
+
 // DeleteCashClaim removes an unclaimed slice and, through sweep, returns its
-// amount to the Cash Hub — as one step from the recipient's side (NIP-CASH
-// §Removing a Recipient): the slice is claimed first, so no redemption can
-// race the sweep; if sweep fails it is released untouched; only once sweep
-// succeeds is it deleted and archived as "reclaimed". A nil sweep removes
-// without moving funds.
-//
-// The claim is conditioned on "AND claimed_at IS NULL", the same guard
-// ClaimCashSlice uses, so a slice claimed concurrently by a payout is never
-// removed out from under it, and its amount never swept back twice.
-func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint, sweep func(claim *db.CashWalletClaim) error) (*db.CashWalletClaim, error) {
+// amount to the Cash Hub, in one transaction (NIP-CASH §Removing a Recipient:
+// swept back "in the same atomic step that removes it"): the first-wins claim
+// (claimed_at IS NULL, the guard every redeem and transfer takes), the sweep,
+// the delete and the "reclaimed" archive commit together or not at all, so a
+// crash leaves the slice exactly as it was. A nil sweep removes without moving
+// funds.
+func (svc *appsService) DeleteCashClaim(walletAppID uint, claimID uint, sweep CashSweepTx) (*db.CashWalletClaim, error) {
 	var claim db.CashWalletClaim
-	if err := svc.db.Where("id = ? AND wallet_app_id = ?", claimID, walletAppID).First(&claim).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("%w: claim not found", constants.ErrInvalidParams)
-		}
-		return nil, err
-	}
-	if claim.ClaimedAt != nil {
-		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
-	}
-
-	var wallet db.App
-	if err := svc.db.First(&wallet, walletAppID).Error; err != nil {
-		return nil, fmt.Errorf("failed to read cash bill %d: %w", walletAppID, err)
-	}
-
-	// Archive the slice in the same transaction that destroys it. The bill
-	// itself lives on, so the bill-death archive would never see this
-	// recipient — without this they would vanish with no record that they were
-	// ever owed anything, which is exactly the gap an operator later needs
-	// explained. "reclaimed", not "expired": their window had not passed, they
-	// were cut off.
-	held := svc.db.Model(&db.CashWalletClaim{}).
-		Where("id = ? AND claimed_at IS NULL", claim.ID).
-		Update("claimed_at", time.Now())
-	if held.Error != nil {
-		return nil, held.Error
-	}
-	if held.RowsAffected == 0 {
-		// Lost a race against a concurrent claim between the read above and this update.
-		return nil, fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
-	}
-
-	if sweep != nil {
-		if err := sweep(&claim); err != nil {
-			if releaseErr := svc.db.Model(&db.CashWalletClaim{}).Where("id = ?", claim.ID).
-				Update("claimed_at", nil).Error; releaseErr != nil {
-				logger.Logger.Error().Err(releaseErr).Uint("claim_id", claim.ID).
-					Msg("Failed to release a slice after its removal sweep failed; it stays claimed")
-			}
-			return nil, err
-		}
-	}
-
-	if err := svc.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ? AND claimed_at IS NOT NULL", claim.ID).Delete(&db.CashWalletClaim{}).Error; err != nil {
+	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		if err := db.LockApp(tx, walletAppID); err != nil {
 			return err
 		}
+		if err := tx.Where("id = ? AND wallet_app_id = ?", claimID, walletAppID).First(&claim).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: claim not found", constants.ErrInvalidParams)
+			}
+			return err
+		}
+		var wallet db.App
+		if err := tx.First(&wallet, walletAppID).Error; err != nil {
+			return fmt.Errorf("failed to read cash bill %d: %w", walletAppID, err)
+		}
+		held := tx.Model(&db.CashWalletClaim{}).
+			Where("id = ? AND claimed_at IS NULL", claim.ID).
+			Update("claimed_at", time.Now())
+		if held.Error != nil {
+			return held.Error
+		}
+		if held.RowsAffected == 0 {
+			return fmt.Errorf("%w: slice has already been claimed", constants.ErrInvalidParams)
+		}
+		if sweep != nil && claim.AmountMloki > 0 && wallet.ParentAppID != nil {
+			if err := sweep(tx, walletAppID, *wallet.ParentAppID, uint64(claim.AmountMloki)); err != nil { //nolint:gosec // positive, checked above
+				return fmt.Errorf("failed to sweep the removed slice back to the hub: %w", err)
+			}
+		}
+		if err := tx.Delete(&db.CashWalletClaim{}, claim.ID).Error; err != nil {
+			return err
+		}
+		// Archived in the same transaction: the bill lives on, so its own
+		// archive would never see this recipient. "reclaimed", not "expired":
+		// their window had not passed, they were cut off.
 		return archive.ArchiveCashSliceTx(tx, &wallet, claim, db.CashSliceStatusReclaimed, time.Now())
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &claim, nil

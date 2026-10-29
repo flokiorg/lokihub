@@ -104,7 +104,7 @@ export function DisconnectApp({
           <AlertDialogCancel onClick={onClose}>
             {t("disconnectApp.cancel")}
           </AlertDialogCancel>
-          <AlertDialogAction onClick={deleteApp} disabled={isDeleting}>
+          <AlertDialogAction onClick={() => deleteApp()} disabled={isDeleting}>
             {t("disconnectApp.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>

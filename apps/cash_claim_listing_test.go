@@ -198,3 +198,34 @@ func TestListCashWalletClaims_ExpiryIsDerivedFromTheCallersClock(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, db.CashSliceStatusExpired, rows[0].Status)
 }
+
+// The listing marks an ordered and a re-minted live slice, so the owner's
+// screens can show why they cannot be removed; other live slices and every
+// archived row carry neither mark.
+func TestListCashWalletClaims_MarksOrderedAndRemintedSlices(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	hub, bill := seedMergedHub(t, svc)
+	var live []db.CashWalletClaim
+	require.NoError(t, svc.DB.Where("wallet_app_id = ?", bill.ID).Order("id").Find(&live).Error)
+	require.NoError(t, svc.DB.Model(&live[0]).Update("reminted", true).Error)
+	require.NoError(t, svc.DB.Model(&live[1]).Update("ordered", true).Error)
+
+	rows, _, _, err := svc.AppsService.ListCashWalletClaims(apps.CashClaimFilter{HubID: hub.ID, Now: time.Now()})
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+	for _, r := range rows {
+		switch {
+		case r.Archived:
+			assert.False(t, r.Ordered || r.Reminted, "archived row")
+		case r.ID == live[0].ID:
+			assert.True(t, r.Reminted)
+			assert.False(t, r.Ordered)
+		case r.ID == live[1].ID:
+			assert.True(t, r.Ordered)
+			assert.False(t, r.Reminted)
+		}
+	}
+}

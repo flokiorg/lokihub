@@ -4,7 +4,8 @@
   "sections": {
     "appearance": "Apariencia",
     "unitsAndCurrency": "Unidades y moneda",
-    "language": "Idioma"
+    "language": "Idioma",
+    "advanced": "Avanzado"
   },
   "appearance": {
     "theme": "Tema",
@@ -96,5 +97,89 @@
     "refundTo": "Reembolsar a",
     "onchainAddress": "Dirección On-chain",
     "cancel": "Cancelar"
+  },
+  "withdraw": {
+    "switch": "Retiros on-chain",
+    "switchDescription": "Permite que los Cash Hubs de este nodo paguen billetes a direcciones on-chain (cash_withdraw). Cada Cash Hub también los activa para sí mismo.",
+    "notCapable": "El backend de este nodo no puede pagar retiros on-chain.",
+    "turnedOn": "Retiros on-chain activados",
+    "turnedOff": "Retiros on-chain desactivados",
+    "switchFailed": "No se pudieron cambiar los retiros on-chain",
+    "ready": "Motor de pagos listo",
+    "notReady": "El motor de pagos aún no está listo",
+    "status": {
+      "eligible": "Monedas elegibles",
+      "setAside": "Reservado",
+      "floor": "Mínimo",
+      "unconfirmed": "Sin confirmar",
+      "oldestUnbroadcast": "Más antiguo sin difundir",
+      "payouts": "Pagos",
+      "bumps": "Aumentos de comisión",
+      "reorgs": "Reorganizaciones",
+      "invalidations": "Invalidaciones",
+      "coinsVanished": "Monedas desaparecidas",
+      "invariantFailures": "Fallos de invariantes"
+    },
+    "hubTitle": "Retiros on-chain",
+    "offered": "Ofrecidos ahora a los billetes de este Cash Hub",
+    "notOffered": "No ofrecidos a los billetes de este Cash Hub",
+    "hubEnable": "Ofrecer retiros on-chain",
+    "blocked": {
+      "nodeOff": "Activa primero los retiros on-chain del nodo en Ajustes.",
+      "notCapable": "El backend de este nodo no puede pagar retiros on-chain."
+    },
+    "feeBase": "Comisión base de retiro (loki)",
+    "feePpm": "Comisión de retiro (ppm)",
+    "min": "Mínimo (loki)",
+    "max": "Máximo (loki)",
+    "none": "ninguno",
+    "errors": {
+      "feeBase": "La comisión base es un importe en loki con tres decimales como máximo.",
+      "feePpm": "La tasa es un número entero de 0 a {{max}} ppm.",
+      "min": "El mínimo es un importe en loki con tres decimales como máximo.",
+      "max": "El máximo es un importe en loki con tres decimales como máximo.",
+      "minAboveMax": "El mínimo supera el máximo."
+    },
+    "scriptTypes": "Tipos de script pagados",
+    "finalDepth": "Profundidad final (confirmaciones)",
+    "networkFeeNote": "El nodo estima en vivo la comisión de red para cada tipo de dirección y la suma a la cotización.",
+    "save": "Guardar",
+    "saved": "Condiciones de retiro on-chain guardadas",
+    "saveFailed": "No se pudieron guardar las condiciones de retiro on-chain",
+    "payouts": {
+      "title": "Pagos on-chain",
+      "description": "Los retiros on-chain de este Cash Hub, los más recientes primero. Ninguna acción del operador cambia un pago; solo el titular del billete puede pedir cancelarlo.",
+      "amount": "Importe",
+      "fee": "Comisión",
+      "hubFee": "Comisión del Hub",
+      "networkFee": "comisión de red",
+      "payout": "Pago",
+      "sentBy": "Enviar antes de",
+      "signed": "firmado",
+      "unsigned": "aún sin firmar",
+      "depth": "Profundidad",
+      "remintedBill": "Billete re-acuñado",
+      "detailTitle": "Pago",
+      "address": "Dirección",
+      "requestId": "Id de solicitud",
+      "committed": "Comprometido",
+      "versions": "Versiones",
+      "noVersions": "Aún no hay transacción.",
+      "inputs_one": "{{count}} entrada",
+      "inputs_other": "{{count}} entradas",
+      "broadcast": "Difusión primera / última",
+      "facts": "Hechos del archivo",
+      "state": {
+        "queued": "en cola",
+        "broadcast": "difundido",
+        "confirmed": "confirmado",
+        "final": "final",
+        "cancelled": "cancelado"
+      },
+      "cancel": {
+        "requested": "cancelación pedida por el titular",
+        "cancelled": "cancelado ({{reason}})"
+      }
+    }
   }
 }

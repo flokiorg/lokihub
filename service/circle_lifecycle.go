@@ -95,6 +95,7 @@ func RunCircleLifecycle(ctx context.Context, gormDB *gorm.DB, transactionsSvc tr
 		logger.Logger.Error().Err(err).Msg("Circle lifecycle: failed to list circle wallets")
 		return result
 	}
+	openWallets := walletsWithOpenInvoices(gormDB)
 	for i := range wallets {
 		w := &wallets[i]
 		stored := circlelife.State(w)
@@ -111,20 +112,24 @@ func RunCircleLifecycle(ctx context.Context, gormDB *gorm.DB, transactionsSvc tr
 		if circlelife.IsActive(w, now) {
 			continue
 		}
-		if lnClient != nil {
+		// A node failure here does not hold the deletion back: the delete fails
+		// the open rows itself and cancels their invoices after commit.
+		if lnClient != nil && (openWallets == nil || openWallets[w.ID]) {
 			if err := transactionsSvc.CancelOpenCircleInvoices(ctx, w.ID, lnClient); err != nil {
-				logger.Logger.Error().Err(err).Uint("app_id", w.ID).Msg("Circle lifecycle: failed to cancel a wallet's open invoices; retrying next run")
-				continue
+				logger.Logger.Warn().Err(err).Uint("app_id", w.ID).Msg("Circle lifecycle: failed to cancel a wallet's open invoices; retrying next run")
 			}
 		}
 		state := circlelife.State(w)
 		if (state == circlelife.StateExpired || state == circlelife.StateClosing) && w.CircleGraceEndsAt != nil && now.Unix() >= *w.CircleGraceEndsAt {
+			var openHolds []string
 			err := gormDB.Transaction(func(tx *gorm.DB) error {
 				var current db.App
 				if err := tx.Where("id = ?", w.ID).First(&current).Error; err != nil {
 					return err
 				}
-				return circlewallet.DeleteWallet(tx, &current, now)
+				var err error
+				openHolds, err = circlewallet.DeleteWallet(tx, &current, now)
+				return err
 			})
 			switch {
 			case errors.Is(err, circlewallet.ErrNotDeletable):
@@ -134,6 +139,7 @@ func RunCircleLifecycle(ctx context.Context, gormDB *gorm.DB, transactionsSvc tr
 				logger.Logger.Error().Err(err).Uint("app_id", w.ID).Msg("Circle lifecycle: failed to delete a wallet")
 			default:
 				result.Deleted++
+				transactionsSvc.CancelHoldInvoicesAtNode(ctx, openHolds, lnClient)
 				publishAppDeleted(eventPublisher, w.ID)
 			}
 		}
@@ -143,6 +149,25 @@ func RunCircleLifecycle(ctx context.Context, gormDB *gorm.DB, transactionsSvc tr
 		logger.Logger.Info().Interface("result", result).Msg("Circle lifecycle: run done")
 	}
 	return result
+}
+
+// walletsWithOpenInvoices are the Circle Wallets with an invoice still pending or
+// accepted: the only ones whose invoices the job has anything to cancel. On a
+// read error, nil: every wallet is tried.
+func walletsWithOpenInvoices(gormDB *gorm.DB) map[uint]bool {
+	var ids []uint
+	if err := gormDB.Table("transactions").Joins("JOIN apps ON apps.id = transactions.app_id").
+		Where("apps.kind = ? AND transactions.type = ? AND transactions.state IN ?", db.AppKindCircleWallet,
+			constants.TRANSACTION_TYPE_INCOMING, []string{constants.TRANSACTION_STATE_PENDING, constants.TRANSACTION_STATE_ACCEPTED}).
+		Distinct().Pluck("transactions.app_id", &ids).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Circle lifecycle: failed to list wallets with open invoices")
+		return nil
+	}
+	out := make(map[uint]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out
 }
 
 // transitionWallet applies event to w under its Hub's lock, reporting whether

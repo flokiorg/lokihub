@@ -70,6 +70,10 @@ type FLNDService struct {
 	txCache      []lnclient.OnchainTransaction
 	txCacheMtx   sync.RWMutex
 	txCacheValid bool
+
+	// invoices is how far the invoice stream was read, so a resubscription
+	// resumes there and replays what it missed.
+	invoices invoiceCursor
 }
 
 func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, flndAddress, flndCertHex, flndMacaroonHex string) (result lnclient.LNClient, err error) {
@@ -246,7 +250,7 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			invoiceStream, err := svc.client.SubscribeInvoices(ctx, &lnrpc.InvoiceSubscription{})
+			invoiceStream, err := svc.client.SubscribeInvoices(ctx, svc.invoices.subscription())
 			if err != nil {
 				if ctx.Err() != nil {
 					return
@@ -274,6 +278,8 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 						break invoicesLoop
 					}
 				}
+
+				svc.invoices.seen(invoice)
 
 				// A keysend the node holds (flnd's keysend-hold-time) is
 				// followed until it is accepted, so lokihub can settle or fail
@@ -1098,6 +1104,12 @@ func (svc *FLNDService) CancelHoldInvoice(ctx context.Context, paymentHash strin
 	_, err = svc.client.CancelInvoice(ctx, &invoicesrpc.CancelInvoiceMsg{
 		PaymentHash: paymentHashBytes,
 	})
+	if err != nil && cancelledAlready(err) {
+		return nil
+	}
+	if err != nil && invoiceUnknown(err) {
+		return fmt.Errorf("%w: %v", lnclient.ErrInvoiceNotFound, err)
+	}
 	if err != nil {
 		logger.Logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
@@ -2274,13 +2286,16 @@ func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan ln
 }
 
 // ListOnchainOutputs lists every output to one of the wallet's own addresses,
-// over every wallet transaction, confirmed or in the mempool.
-func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.OnchainOutput, error) {
+// over the wallet transactions confirmed at fromHeight or above and those in
+// the mempool.
+func (svc *FLNDService) ListOnchainOutputs(ctx context.Context, fromHeight int32) ([]lnclient.OnchainOutput, error) {
 	var out []lnclient.OnchainOutput
 	offset := uint32(0)
 	const limit = uint32(1000)
 	for {
-		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{IndexOffset: offset, MaxTransactions: limit})
+		// EndHeight -1 includes the unconfirmed transactions.
+		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{StartHeight: max(fromHeight, 0), EndHeight: -1,
+			IndexOffset: offset, MaxTransactions: limit})
 		if err != nil {
 			return nil, err
 		}
@@ -2301,4 +2316,14 @@ func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.Onch
 		}
 		offset += uint32(len(resp.Transactions)) //nolint:gosec // at most limit
 	}
+}
+
+// invoiceUnknown reports a node answer that it holds no invoice for the hash.
+func invoiceUnknown(err error) bool {
+	return status.Code(err) == codes.NotFound || strings.Contains(err.Error(), "unable to locate invoice")
+}
+
+// cancelledAlready reports a cancel of an invoice the node already cancelled.
+func cancelledAlready(err error) bool {
+	return strings.Contains(err.Error(), "invoice already canceled")
 }

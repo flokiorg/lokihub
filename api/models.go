@@ -12,6 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 )
 
@@ -21,6 +22,7 @@ type API interface {
 	UpdateApp(app *db.App, updateAppRequest *UpdateAppRequest) error
 	Transfer(ctx context.Context, fromAppId *uint, toAppId *uint, amountMloki uint64) error
 	DeleteApp(app *db.App) error
+	DeleteAppWithOptions(app *db.App, opts DeleteAppOptions) error
 	ReplaceCircleAllowlist(app *db.App, pubkeys []string) error
 	RemoveCircleAllowedPubkey(app *db.App, pubkey string) error
 	// RefreshCircleFollowSet re-fetches a follow_set circle's set from relays.
@@ -133,6 +135,9 @@ type API interface {
 	DisableAutoSwap() error
 	SetNodeAlias(ctx context.Context, nodeAlias string) error
 	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
+	// RotatePrivateTransportInbox rotates the private transport's inbox key
+	// (NIP-CASH §The Hub Announcement) and returns the new inbox.
+	RotatePrivateTransportInbox() (*RotateInboxResponse, error)
 	PublishNodeNote(ctx context.Context, request PublishNodeNoteRequest) (*PublishNodeNoteResponse, error)
 	GetCustomNodeCommands() (*CustomNodeCommandsResponse, error)
 	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
@@ -447,8 +452,9 @@ type CreateAppRequest struct {
 	UnlockPassword        string   `json:"unlockPassword"`
 	CashPerWalletMaxMloki int      `json:"cashPerWalletMaxMloki"`
 	CashMaxExpSecs        int      `json:"cashMaxExpSecs"`
-	CashMinTransferMloki  int64    `json:"cashMinTransferMloki"`
-	CashRedeemFeePpm      int      `json:"cashRedeemFeePpm"`
+	// CashMinTransferMloki omitted means DEFAULT_CASH_MIN_TRANSFER_MLOKI; 0 is no floor.
+	CashMinTransferMloki *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm     int    `json:"cashRedeemFeePpm"`
 	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none) — see
 	// db.CashHubConfig.RedeemFeeBaseMloki for why a proportional-only fee cannot
 	// cover a small slice's own routing cost.
@@ -658,6 +664,11 @@ type CashWalletClaimResponse struct {
 	// UI that exists to account for it.
 	SettledAt      *int64 `json:"settled_at,omitempty"`
 	RedeemFeeMloki int64  `json:"redeem_fee_mloki,omitempty"`
+	// Ordered and Reminted: a slice minted for an order, or re-minted by a
+	// cancelled on-chain withdrawal; its owner can neither remove it nor delete
+	// its bill (NIP-CASH §Data Model).
+	Ordered  bool `json:"ordered,omitempty"`
+	Reminted bool `json:"reminted,omitempty"`
 }
 
 // CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has
@@ -1214,6 +1225,14 @@ type SetNodeAliasRequest struct {
 	NodeAlias string `json:"nodeAlias"`
 }
 
+// RotateInboxResponse is the inbox a rotation moved to. AnnounceError is set
+// when the rotation stands but its announcement failed (it is retried by the
+// next start, or another rotation).
+type RotateInboxResponse struct {
+	InboxPubkey   string `json:"inboxPubkey"`
+	AnnounceError string `json:"announceError,omitempty"`
+}
+
 // PublishNodeProfileRequest is the full kind-0 profile to publish for the
 // hub's own node identity — kind 0 is replaceable, so this replaces rather
 // than patches; a caller that wants to keep an existing field must resend it.
@@ -1387,6 +1406,16 @@ type LSPS1CreateOrderRequest struct {
 	RefundOnchainAddress *string                 `json:"refund_onchain_address,omitempty"`
 	AnnounceChannel      bool                    `json:"announce_channel"`
 	OpeningFeeParams     *lsps1.OpeningFeeParams `json:"opening_fee_params,omitempty"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS1GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"accepted_terms,omitempty"`
+}
+
+// LSPS1GetInfoResponse is the LSP's first LSPS1 option set, with its bounds
+// compared with the announced ones (NIP-LSP §Client Behavior, Live check).
+type LSPS1GetInfoResponse struct {
+	lsps1.Options
+	Terms *manager.Terms `json:"terms"`
 }
 
 type LSPS1GetOrderRequest struct {
@@ -1429,6 +1458,16 @@ type LSPS2BuyRequest struct {
 	LSPPubkey        string                `json:"lspPubkey"`
 	PaymentSizeMloki *uint64               `json:"paymentSizeMloki,omitempty"`
 	OpeningFeeParams LSPS2OpeningFeeParams `json:"openingFeeParams"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS2GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"acceptedTerms,omitempty"`
+}
+
+// LSPS2GetInfoResponse is the fee row offered first, compared with the
+// announced one (NIP-LSP §Client Behavior, Live check).
+type LSPS2GetInfoResponse struct {
+	lsps2.OpeningFeeParams
+	Terms *manager.Terms `json:"terms"`
 }
 
 type LSPS2BuyResponse struct {
@@ -1571,4 +1610,11 @@ type GetForwardsResponse struct {
 	OutboundAmountForwardedMloki uint64 `json:"outboundAmountForwardedMloki"`
 	TotalFeeEarnedMloki          uint64 `json:"totalFeeEarnedMloki"`
 	NumForwards                  uint64 `json:"numForwards"`
+}
+
+// DeleteAppOptions carries the owner's confirmations for a delete.
+type DeleteAppOptions struct {
+	// ConfirmWatchEnd confirms that deleting a Cash Hub ends the watch on its
+	// paid on-chain order addresses (delete-check confirmation_required).
+	ConfirmWatchEnd bool `json:"confirmWatchEnd"`
 }

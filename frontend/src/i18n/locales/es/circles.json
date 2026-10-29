@@ -453,5 +453,9 @@
     "perHubHint": "Qué hub carga con la deuda y con qué cuenta para cubrirla.",
     "othersBar_one": "+{{count}} más",
     "othersBar_other": "+{{count}} más"
+  },
+  "cashLock": {
+    "ordered": "pedido: nunca caduca, no se puede quitar",
+    "reminted": "re-acuñado: no se puede quitar"
   }
 }

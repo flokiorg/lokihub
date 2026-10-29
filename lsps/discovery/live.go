@@ -33,7 +33,8 @@ type LiveResult struct {
 	// Addr is the address connected through.
 	Addr  string `json:"addr"`
 	Error string `json:"error,omitempty"`
-	// Usable: every announced protocol is listed by list_protocols.
+	// Usable: every announced protocol is listed by list_protocols, and the
+	// listed LSPS1 and LSPS2 get_info answered with terms that can be read.
 	Usable bool `json:"usable"`
 	// Worse: a live value is worse for the buyer than announced; the user is
 	// asked again before buying.
@@ -119,24 +120,44 @@ func (s *Service) liveCheck(ctx context.Context, row *persist.LSP) *LiveResult {
 		return res
 	}
 	live := niplsp.Live{Protocols: protocols}
+	// An announced, listed protocol whose get_info fails or cannot be read has
+	// no live terms to compare: the check fails rather than pass them unseen.
 	if ann.HasProtocol(niplsp.ProtocolLSPS1) && contains(protocols, niplsp.ProtocolLSPS1) {
-		if raw, err := s.d.Live.LSPS1Info(ctx, res.NodeID); err == nil {
-			if opts, err := niplsp.ParseLSPS1Info(raw); err == nil {
-				live.LSPS1 = opts
-			}
+		opts, err := s.liveLSPS1(ctx, res.NodeID)
+		if err != nil {
+			res.Error = fmt.Sprintf("LSPS1 get_info: %v", err)
+			return res
 		}
+		live.LSPS1 = opts
 	}
 	if ann.HasProtocol(niplsp.ProtocolLSPS2) && contains(protocols, niplsp.ProtocolLSPS2) {
-		if raw, err := s.d.Live.LSPS2Menu(ctx, res.NodeID); err == nil {
-			if menu, err := niplsp.ParseLSPS2Menu(raw); err == nil {
-				live.LSPS2Menu = menu
-			}
+		menu, err := s.liveLSPS2(ctx, res.NodeID)
+		if err != nil {
+			res.Error = fmt.Sprintf("LSPS2 get_info: %v", err)
+			return res
 		}
+		live.LSPS2Menu = menu
 	}
 	diff := niplsp.CheckLive(ann, live)
 	res.Usable, res.Worse = diff.Usable(), diff.Worse()
 	res.MissingProtocol, res.Changed, res.Fields = diff.MissingProtocol, diff.Changed(), diff.Fields
 	return res
+}
+
+func (s *Service) liveLSPS1(ctx context.Context, nodeID string) ([]niplsp.Option, error) {
+	raw, err := s.d.Live.LSPS1Info(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return niplsp.ParseLSPS1Info(raw)
+}
+
+func (s *Service) liveLSPS2(ctx context.Context, nodeID string) ([]niplsp.FeeRow, error) {
+	raw, err := s.d.Live.LSPS2Menu(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return niplsp.ParseLSPS2Menu(raw)
 }
 
 func contains(l []int, v int) bool {

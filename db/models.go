@@ -362,6 +362,10 @@ type CashWalletClaim struct {
 	// is in flight, "" for a cash-mode slice. A payout that definitely fails
 	// releases the claim and forgets this proof in one transaction.
 	RedeemProofID string `gorm:"size:64"`
+	// RedeemPayee is the node the cash_redeem payout of this slice pays, as the
+	// invoice names it; "" for a same-node payout. The per-payee in-flight bound
+	// counts it.
+	RedeemPayee string `gorm:"size:66"`
 	// RedeemCooldownUntil is set when a payout failed only after cash_redeem had
 	// answered: until then another redeem of the slice is RATE_LIMITED.
 	RedeemCooldownUntil *time.Time
@@ -519,6 +523,20 @@ type CircleRotation struct {
 	EndedAt             *int64
 }
 
+// CircleHeldKeysend is a held keysend to a Circle Wallet that passed its
+// checks and is being settled at the node, until its credit is recorded:
+// counted against the wallet's receive room and its circle's holdings ceiling,
+// and as a payment in flight to the wallet (NIP-CW §Own Funds and Caps,
+// §Deleting a Circle Wallet). No foreign key: the reservation is the
+// evidence a deletion must see.
+type CircleHeldKeysend struct {
+	PaymentHash string `gorm:"primaryKey;size:64"`
+	WalletAppID uint   `gorm:"not null;index"`
+	HubAppID    uint   `gorm:"not null;index"`
+	AmountMloki int64  `gorm:"not null"`
+	ReservedAt  int64  `gorm:"not null;index"`
+}
+
 // CircleJoinRecord is a join's record (NIP-CW §Lost Join Reply): what a lookup by
 // (signer, connection_pubkey) answers with. Kept while the wallet exists and at
 // least until the join's deadline plus 6 minutes; no foreign key, since it
@@ -601,14 +619,16 @@ const (
 // needs to rebuild its token (the connection secret is re-derived from
 // WalletAppID; nothing secret is stored).
 type CashRequestRecordBill struct {
-	ID               uint              `gorm:"primaryKey"`
-	RecordID         uint              `gorm:"not null;index"`
-	Record           CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
-	Ordinal          int16             `gorm:"not null"`
-	Role             string            `gorm:"size:12;not null"`
-	WalletAppID      uint              `gorm:"not null;index"` // no FK: the record outlives the bill
-	WalletPubkey     string            `gorm:"size:64;not null"`
-	RelayHints       string            `gorm:"type:text;not null"` // JSON array, exactly as encoded
+	ID       uint              `gorm:"primaryKey"`
+	RecordID uint              `gorm:"not null;index"`
+	Record   CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
+	// Ordinal orders a record's bills; an order payment may mint more than an
+	// int16 holds.
+	Ordinal          int32  `gorm:"not null"`
+	Role             string `gorm:"size:12;not null"`
+	WalletAppID      uint   `gorm:"not null;index"` // no FK: the record outlives the bill
+	WalletPubkey     string `gorm:"size:64;not null"`
+	RelayHints       string `gorm:"type:text;not null"` // JSON array, exactly as encoded
 	IdentityRequired *int16
 	HubGroup         *string `gorm:"size:8"`
 	AmountMillis     int64   `gorm:"not null"`
@@ -1018,6 +1038,10 @@ type Transaction struct {
 	Description        string
 	DescriptionHash    string
 	Preimage           *string
+	// HoldPreimageSealed is the preimage of a hold invoice the Hub settles
+	// itself (a circle wallet's), sealed at rest (atrest) until it settles,
+	// when Preimage takes it; Preimage stays nil until then.
+	HoldPreimageSealed *string
 	CreatedAt          time.Time
 	ExpiresAt          *time.Time
 	UpdatedAt          time.Time

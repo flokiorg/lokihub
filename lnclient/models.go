@@ -155,11 +155,12 @@ type OnchainOutput struct {
 	SeenAt int64
 }
 
-// OnchainOutputLister lists the outputs to the node's own addresses of every
-// wallet transaction, confirmed or not (NIP-CO §On-chain intake). Optional,
-// like TransportSigner: a node without it sells no on-chain orders.
+// OnchainOutputLister lists the outputs to the node's own addresses of the
+// wallet transactions confirmed at fromHeight or above, and of every
+// unconfirmed one; fromHeight 0 lists them all (NIP-CO §On-chain intake).
+// Optional, like TransportSigner: a node without it sells no on-chain orders.
 type OnchainOutputLister interface {
-	ListOnchainOutputs(ctx context.Context) ([]OnchainOutput, error)
+	ListOnchainOutputs(ctx context.Context, fromHeight int32) ([]OnchainOutput, error)
 }
 
 type ChannelAcceptRequest struct {
@@ -361,6 +362,10 @@ var ErrPaymentPending = errors.New("payment outcome unknown, it may still be in 
 
 // default invoice expiry in seconds (1 day)
 const DEFAULT_INVOICE_EXPIRY = 86400
+
+// ErrInvoiceNotFound: the node has no invoice for the payment hash, so there is
+// nothing left to cancel.
+var ErrInvoiceNotFound = errors.New("the node has no such invoice")
 
 type holdInvoiceCanceledError struct {
 }

@@ -43,7 +43,7 @@ func auditDSecBJunkEnvelope(t *testing.T, hubXOnly string, items int) transport.
 	notAfter := time.Now().Add(time.Minute).Unix()
 
 	env := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 	}
 	binding := nipcash.ItemBinding{HubXOnly: hubXOnly, Nonce: nonce, NotAfter: notAfter}
 	for i := 0; i < items; i++ {

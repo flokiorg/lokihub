@@ -53,6 +53,9 @@ type OnchainPayer interface {
 	WalletTx(ctx context.Context, txid string) (WalletTx, error)
 	// ConfirmedBalance is the wallet's confirmed balance, in base units.
 	ConfirmedBalance(ctx context.Context) (int64, error)
+	// SpendableBalance is what the wallet's own coin selection may spend: its
+	// confirmed coins under no lease, in base units.
+	SpendableBalance(ctx context.Context) (int64, error)
 	// BestBlock is the node's chain tip.
 	BestBlock(ctx context.Context) (BlockEpoch, error)
 	// SubscribeBlocks delivers each new tip until ctx ends.

@@ -137,7 +137,7 @@ func TestJitRetryOnExpiredParams(t *testing.T) {
 			go m.ProcessInternalEventsForTest(ctx)
 
 			// Execute
-			hints, err := m.BuyLiquidity(ctx, "lsp_pubkey", 100000, nil)
+			hints, err := m.BuyLiquidity(ctx, "lsp_pubkey", 100000, nil, nil)
 
 			assert.NoError(t, err)
 			if hints != nil {

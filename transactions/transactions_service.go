@@ -24,6 +24,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
@@ -48,8 +49,6 @@ type transactionsService struct {
 	// orderSelfPay takes in a same-node payment of an order's invoice: handled
 	// false when the hash names no order.
 	orderSelfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (preimage string, handled bool, err error)
-	// heldKeysends are held keysends being settled, reserved until credited.
-	heldKeysends *keysendReservations
 }
 
 // InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
@@ -91,6 +90,9 @@ type TransactionsService interface {
 	// intake (NIP-CO §Lightning) instead of app crediting.
 	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
 		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
+	// CancelHoldInvoicesAtNode cancels hold invoices at the node whose rows are
+	// already failed, best effort.
+	CancelHoldInvoicesAtNode(ctx context.Context, paymentHashes []string, lnClient lnclient.LNClient)
 	// CancelOpenCircleInvoices cancels a Circle Wallet's open invoices.
 	CancelOpenCircleInvoices(ctx context.Context, walletID uint, lnClient lnclient.LNClient) error
 }
@@ -239,7 +241,6 @@ func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *
 	return &transactionsService{
 		db:             db,
 		eventPublisher: eventPublisher,
-		heldKeysends:   newKeysendReservations(),
 		logger:         logger.Logger.With().Str("component", "transactions").Logger(),
 	}
 }
@@ -1428,11 +1429,13 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 
 			var txErr error
 			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
-			return txErr
+			if txErr != nil {
+				return txErr
+			}
+			// A held keysend's reservation ends in the commit that records its credit.
+			return tx.Where("payment_hash = ?", lnClientTransaction.PaymentHash).Delete(&db.CircleHeldKeysend{}).Error
 		})
 
-		// A held keysend's reservation ends once its credit is recorded.
-		svc.heldKeysends.release(lnClientTransaction.PaymentHash)
 		if err != nil {
 			svc.logger.Error().Err(err).
 				Str("payment_hash", lnClientTransaction.PaymentHash).
@@ -1463,7 +1466,9 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 			svc.logger.Error().Interface("event", event).Msg("Transaction has no settle deadline")
 			return
 		}
-		svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false)
+		if !svc.markHoldInvoiceAccepted(lnClientTransaction.PaymentHash, *lnClientTransaction.SettleDeadline, false) {
+			svc.cancelHeldForFailedRow(ctx, lnClientTransaction.PaymentHash)
+		}
 		// A Circle Wallet's invoice is the Hub's to settle, after re-checking
 		// the payment (NIP-CW §Own Funds and Caps).
 		if svc.lnClientProvider != nil {
@@ -1744,8 +1749,23 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 		return nil, errors.New("preimage is not set on transaction. Self payments not supported")
 	}
 
+	if err := testknobs.WaitSelfPayments(context.Background()); err != nil {
+		return nil, err
+	}
 	var settledSelfTx *db.Transaction
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		// Under the recipient's locks, as its deletion takes them: a credit the
+		// deletion cancelled meanwhile is not settled, and the payer fails.
+		if err := lockRecipient(tx, incomingTransaction.AppId); err != nil {
+			return err
+		}
+		var current db.Transaction
+		if err := tx.Where("id = ? AND state = ?", incomingTransaction.ID, constants.TRANSACTION_STATE_PENDING).Limit(1).Find(&current).Error; err != nil {
+			return err
+		}
+		if current.ID == 0 {
+			return errSelfPaymentCreditGone
+		}
 		var txErr error
 		settledSelfTx, txErr = svc.markTransactionSettled(tx, &incomingTransaction, *incomingTransaction.Preimage, uint64(0), true)
 		return txErr
@@ -1762,6 +1782,31 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 		Preimage: *incomingTransaction.Preimage,
 		Fee:      0,
 	}, nil
+}
+
+// errSelfPaymentCreditGone fails a same-node payment whose credit was
+// cancelled before it settled (its wallet deleted, or its invoice cancelled).
+var errSelfPaymentCreditGone = errors.New("the payment's recipient no longer takes it")
+
+// lockRecipient takes a payment recipient's locks, its Hub's first for a
+// Circle Wallet.
+func lockRecipient(tx *gorm.DB, appID *uint) error {
+	if appID == nil {
+		return nil
+	}
+	recipient, err := loadApp(tx, appID)
+	if err != nil {
+		return err
+	}
+	if recipient == nil {
+		return nil
+	}
+	if circlemoney.IsCircleWallet(recipient) {
+		if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
+			return err
+		}
+	}
+	return db.LockApp(tx, recipient.ID)
 }
 
 func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
@@ -2206,7 +2251,7 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 
 	if err != nil {
 		svc.logger.Error().Err(err).
-			Str("preimage", preimage).
+			Str("payment_hash", paymentHash).
 			Msg("Failed to settle hold invoice via FLN client")
 		// Don't mark DB as failed here, as the settle might succeed later or might have already succeeded.
 		return nil, err
@@ -2222,7 +2267,6 @@ func (svc *transactionsService) SettleHoldInvoice(ctx context.Context, preimage 
 	if err != nil {
 		svc.logger.Error().Err(err).
 			Str("payment_hash", paymentHash).
-			Str("preimage", preimage).
 			Msg("Failed DB transaction while settling hold invoice")
 		return nil, err
 	}
@@ -2349,12 +2393,14 @@ func (svc *transactionsService) markTransactionSettled(tx *gorm.DB, dbTransactio
 
 	now := time.Now()
 	err := tx.Model(dbTransaction).Updates(map[string]interface{}{
-		"State":           constants.TRANSACTION_STATE_SETTLED,
-		"Preimage":        &preimage,
-		"FeeMloki":        fee,
-		"FeeReserveMloki": 0,
-		"SettledAt":       &now,
-		"SelfPayment":     selfPayment,
+		"State":    constants.TRANSACTION_STATE_SETTLED,
+		"Preimage": &preimage,
+		// A settled preimage is the payer's proof, no longer a secret.
+		"HoldPreimageSealed": nil,
+		"FeeMloki":           fee,
+		"FeeReserveMloki":    0,
+		"SettledAt":          &now,
+		"SelfPayment":        selfPayment,
 	}).Error
 	if err != nil {
 		svc.logger.Error().Err(err).

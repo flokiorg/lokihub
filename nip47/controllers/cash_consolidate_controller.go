@@ -320,9 +320,12 @@ func (controller *nip47Controller) HandleCashConsolidateEvent(ctx context.Contex
 		ExpiresAt:          earliest,
 		Proofs:             proofs,
 		Record:             record,
+		LiveBillCap:        controller.liveBillCap(1 - ending),
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, cashwallet.ErrLiveBillCap):
+			refuse(constants.ERROR_QUOTA_EXCEEDED, commitErrorMessage(err))
 		case errors.Is(err, apps.ErrSliceClaimed):
 			refuse(constants.ERROR_RESTRICTED, "a source slice was already claimed or is no longer available")
 		case errors.Is(err, cashwallet.ErrProofUsed):

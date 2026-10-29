@@ -17,6 +17,13 @@ const (
 	// LockNsOrder serialises a Cash Hub's order placements and payments
 	// against its open-order ceiling (NIP-CO §Limits), keyed by the Hub's id.
 	LockNsOrder int32 = 0x4f52
+	// LockNsRequest serialises a call's record commit with a lookup's final
+	// read of that request_id (NIP-CASH §Lost Replies: "unknown" means never),
+	// keyed by a hash of the request_id.
+	LockNsRequest int32 = 0x5251
+	// LockNsLiveBills serialises a Cash Hub's capped spin-offs and merges
+	// against its live-bill cap, keyed by the Hub's id.
+	LockNsLiveBills int32 = 0x4c42
 )
 
 // LockApp takes the transaction-scoped lock of one app (a Hub or a wallet) on

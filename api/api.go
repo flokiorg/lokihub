@@ -38,13 +38,15 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/getinfocache"
+	"github.com/flokiorg/lokihub/hubclock"
+	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/listing"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lnclient/flnd/wrapper"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/transactions"
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/cashrequest"
@@ -101,6 +103,13 @@ func cashSpentRetentionOrDefault(secs *int) int {
 	return *secs
 }
 
+func cashMinTransferOrDefault(mloki *int64) int64 {
+	if mloki == nil {
+		return constants.DEFAULT_CASH_MIN_TRANSFER_MLOKI
+	}
+	return *mloki
+}
+
 func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error) {
 	if slices.Contains(createAppRequest.Scopes, constants.SUPERUSER_SCOPE) {
 		if !api.cfg.CheckUnlockPassword(createAppRequest.UnlockPassword) {
@@ -146,7 +155,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			db.CashHubConfig{
 				PerWalletMaxMloki:  createAppRequest.CashPerWalletMaxMloki,
 				MaxExpSecs:         createAppRequest.CashMaxExpSecs,
-				MinTransferMloki:   createAppRequest.CashMinTransferMloki,
+				MinTransferMloki:   cashMinTransferOrDefault(createAppRequest.CashMinTransferMloki),
 				RedeemFeePpm:       createAppRequest.CashRedeemFeePpm,
 				RedeemFeeBaseMloki: createAppRequest.CashRedeemFeeBaseMloki,
 				// Omitted means the default, not "disabled": a caller that
@@ -610,6 +619,10 @@ func (api *api) refuseOwnerDeleteOfHeldBill(walletAppID uint) error {
 }
 
 func (api *api) DeleteApp(userApp *db.App) error {
+	return api.DeleteAppWithOptions(userApp, DeleteAppOptions{})
+}
+
+func (api *api) DeleteAppWithOptions(userApp *db.App, opts DeleteAppOptions) error {
 	// cash_wallet/circle_wallet hold a shared balance that must be reclaimed
 	// back to their hub before the row disappears — apps.DeleteApp has no
 	// such logic (it only guards the hub kinds against orphaning children),
@@ -650,7 +663,13 @@ func (api *api) DeleteApp(userApp *db.App) error {
 			return err
 		}
 	}
-	if err := api.appsSvc.DeleteApp(userApp); err != nil {
+	var err error
+	if userApp.Kind == db.AppKindCashHub {
+		err = api.appsSvc.DeleteCashHub(userApp, opts.ConfirmWatchEnd)
+	} else {
+		err = api.appsSvc.DeleteApp(userApp)
+	}
+	if err != nil {
 		return err
 	}
 	for _, id := range orderConns {
@@ -1578,6 +1597,9 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 	if currentAddress != "" {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
+		if errors.Is(err, ErrNoExplorer) {
+			return currentAddress, nil
+		}
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to get current address transactions")
 			return currentAddress, nil
@@ -1654,9 +1676,18 @@ func (api *api) GetBalances(ctx context.Context) (*BalancesResponse, error) {
 	return balances, nil
 }
 
+// ErrNoExplorer: no explorer is configured, so nothing is asked of one.
+var ErrNoExplorer = errors.New("no Flokicoin Explorer is configured")
+
 // TODO: remove dependency on this endpoint
 func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error) {
-	url := api.cfg.GetMempoolApi() + "/api" + endpoint
+	// Only the explorer the operator configured is ever asked: with none, no
+	// address or txid leaves the node, whatever network it is on.
+	base := api.cfg.GetMempoolApi()
+	if base == "" {
+		return nil, ErrNoExplorer
+	}
+	url := base + "/api" + endpoint
 
 	client := http.Client{
 		Timeout: time.Second * 10,
@@ -1991,6 +2022,18 @@ func (api *api) UpdateSettings(updateSettingsRequest *UpdateSettingsRequest) err
 	}
 
 	return nil
+}
+
+func (api *api) RotatePrivateTransportInbox() (*RotateInboxResponse, error) {
+	inbox, err := api.svc.RotatePrivateTransportInbox()
+	if inbox == "" {
+		return nil, err
+	}
+	resp := &RotateInboxResponse{InboxPubkey: inbox}
+	if err != nil {
+		resp.AnnounceError = err.Error()
+	}
+	return resp, nil
 }
 
 func (api *api) PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error {
@@ -2968,7 +3011,7 @@ func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circle
 	for _, pk := range pubkeys {
 		members[pk] = true
 	}
-	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, time.Now())
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, hubclock.Now())
 	*changes = applied
 	return err
 }
@@ -3143,6 +3186,7 @@ func (api *api) SetCircleAccepting(app *db.App, accepting bool) error {
 	if err := api.db.Model(&db.CircleHubConfig{}).Where("app_id = ?", app.ID).Update("accepting_joins", accepting).Error; err != nil {
 		return err
 	}
+	api.invalidateCircleConnInfo(app.ID)
 	if accepting {
 		return nil
 	}
@@ -3314,8 +3358,21 @@ func (api *api) teardownCircleHub(app *db.App) (*DeleteCircleHubResult, error) {
 	}
 	// Closing set accepting false: the circle's listing is closed in order
 	// (WP-16 item 9, WP-25 item 8).
+	api.invalidateCircleConnInfo(app.ID)
 	api.closeListings(func(l *listing.Service) error { return l.CloseCircle(context.Background(), app.ID) })
 	return result, nil
+}
+
+// invalidateCircleConnInfo drops the cached get_info of every listed connection
+// of a circle hub, after a committed change of its accepting, so none answers
+// the old value.
+func (api *api) invalidateCircleConnInfo(hubID uint) {
+	var ids []uint
+	if err := api.db.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", hubID, db.AppKindCircleHubConn).Pluck("id", &ids).Error; err != nil {
+		logger.Logger.Error().Err(err).Uint("app_id", hubID).Msg("Failed to list a circle's listed connections; their get_info may stay cached for its TTL")
+		return
+	}
+	getinfocache.Listed.Invalidate(ids...)
 }
 
 // closeListings runs a listing retirement after the commit that ended an offer;
@@ -3364,7 +3421,7 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 		Offset: offset,
 		// One clock reading for both the counts and the page, so a slice
 		// cannot expire between them and be counted in one but not the other.
-		Now: time.Now(),
+		Now: db.CashExpiryCutoff(hubclock.Now()),
 	})
 	if err != nil {
 		return nil, 0, CashWalletClaimCounts{}, err
@@ -3403,6 +3460,8 @@ func (api *api) ListCashWalletClaims(appID uint, limit uint64, offset uint64, st
 			SpunOffToWalletAppID: row.SpunOffToWalletAppID,
 			PaymentHash:          row.PaymentHash,
 			RedeemFeeMloki:       row.RedeemFeeMloki,
+			Ordered:              row.Ordered,
+			Reminted:             row.Reminted,
 		}
 		if row.Archived {
 			// An archived bill's own token, as it was issued. The live
@@ -3529,35 +3588,8 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		return fmt.Errorf("%w: an ordered or re-minted slice cannot be removed", constants.ErrInvalidParams)
 	}
 
-	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):
-	// if it fails, the slice stays exactly as it was.
-	sweepToHub := func(claim *db.CashWalletClaim) error {
-		if claim.AmountMloki <= 0 || wallet.ParentAppID == nil {
-			return nil
-		}
-		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
-			context.Background(), uint64(claim.AmountMloki), "cash claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
-			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
-			&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create sweep-back invoice: %w", err)
-		}
-		if _, err := api.svc.GetTransactionsService().SendPaymentSync(
-			invoice.PaymentRequest, nil, map[string]interface{}{"internal_transfer": true},
-			api.svc.GetLNClient(), &walletAppID, nil,
-		); err != nil {
-			// Sent but not recorded: the slice's funds are already at the hub. Keeping
-			// the slice would let a retry sweep the same amount again, out of the other
-			// recipients' share of this wallet, so the removal goes ahead.
-			if errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
-				logger.Logger.Error().Err(err).Uint("wallet_app_id", walletAppID).Uint("claim_id", claimID).
-					Msg("Removed claim's sweep was sent but not recorded; treating it as swept, outgoing row left pending for the operator")
-				return nil
-			}
-			return fmt.Errorf("failed to sweep removed claim's balance back to hub: %w", err)
-		}
-		return nil
+	sweepToHub := func(tx *gorm.DB, from, to uint, amountMillis uint64) error {
+		return ledger.InternalTransferTx(tx, from, to, amountMillis, "cash claim removed")
 	}
 	if _, err := api.appsSvc.DeleteCashClaim(walletAppID, claimID, sweepToHub); err != nil {
 		return err
@@ -3675,6 +3707,8 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			SpunOffToWalletAppID: c.SpunOffToWalletAppID,
 			PaymentHash:          c.PaymentHash,
 			RedeemFeeMloki:       c.RedeemFeeMloki,
+			Ordered:              c.Ordered,
+			Reminted:             c.Reminted,
 		}
 		if c.SettledAt != nil {
 			settledAt := c.SettledAt.Unix()
@@ -3702,7 +3736,7 @@ func (api *api) GetCashWalletRecipients(appID uint) ([]CashWalletClaimResponse, 
 			r.Status = db.CashSliceStatusSplit
 		case c.ClaimedAt != nil:
 			r.Status = db.CashSliceStatusRedeemed
-		case app.ExpiresAt != nil && app.ExpiresAt.Before(time.Now()):
+		case db.ExpiredAt(app.ExpiresAt, hubclock.Now()):
 			r.Status = db.CashSliceStatusExpired
 		default:
 			r.Status = db.CashSliceStatusUnclaimed

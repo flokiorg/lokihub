@@ -103,6 +103,10 @@ type AppsService interface {
 	// references the identity; otherwise deletes it (cascading its allowlist).
 	DeleteCircleIdentity(id uint) error
 	DeleteApp(app *db.App) error
+	// DeleteCashHub is DeleteApp for a Cash Hub; confirmWatchEnd is the owner's
+	// confirmation that the delete ends the watch on paid on-chain order
+	// addresses, required while any is watched (ErrWatchEndUnconfirmed).
+	DeleteCashHub(app *db.App, confirmWatchEnd bool) error
 	GetAppByPubkey(pubkey string) *db.App
 	GetAppById(id uint) *db.App
 	SetAppMetadata(appId uint, metadata map[string]interface{}) error
@@ -228,7 +232,7 @@ type AppsService interface {
 	// held; if sweep fails the slice is released untouched. Returns an error if
 	// the claim is not found, belongs to a different wallet, or has already
 	// been claimed.
-	DeleteCashClaim(walletAppID uint, claimID uint, sweep func(claim *db.CashWalletClaim) error) (*db.CashWalletClaim, error)
+	DeleteCashClaim(walletAppID uint, claimID uint, sweep CashSweepTx) (*db.CashWalletClaim, error)
 	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
 	// facts on its slice, found by payment hash; a slice already recorded is
 	// left alone.
@@ -534,14 +538,31 @@ func (svc *appsService) verifyParentHubTx(tx *gorm.DB, parentAppID uint, parentK
 }
 
 func (svc *appsService) DeleteApp(app *db.App) error {
+	return svc.deleteApp(app, false)
+}
+
+func (svc *appsService) DeleteCashHub(app *db.App, confirmWatchEnd bool) error {
+	if app.Kind != db.AppKindCashHub {
+		return fmt.Errorf("%w: app is not a cash_hub", constants.ErrInvalidParams)
+	}
+	return svc.deleteApp(app, confirmWatchEnd)
+}
+
+func (svc *appsService) deleteApp(app *db.App, confirmWatchEnd bool) error {
 	var err error
 	switch app.Kind {
 	case db.AppKindCircleHub, db.AppKindCashHub:
-		err = svc.deleteHubAppTx(app)
+		err = svc.deleteHubAppTx(app, confirmWatchEnd)
 	case db.AppKindCashOrder:
 		// Its orders are still served and minted after it is retired, so an
 		// Order connection goes only with its Hub (NIP-CO §What It Allows).
 		return fmt.Errorf("%w: an order connection cannot be deleted; retire it instead", constants.ErrInvalidParams)
+	case db.AppKindCircleWallet:
+		// A member's balance is never swept (NIP-CW §Lifecycle and Deletion): a
+		// Circle Wallet goes only through circlewallet.DeleteWallet, at most
+		// dust left and nothing in flight.
+		return fmt.Errorf("%w: a circle wallet is deleted only by its member or after its grace period, holding at most dust",
+			constants.ErrInvalidParams)
 	case db.AppKindCashWallet:
 		// A cash bill is hard-deleted the instant it is spent, which is what
 		// makes it indistinguishable from a pubkey this hub never served. That
@@ -577,7 +598,7 @@ func (svc *appsService) DeleteApp(app *db.App) error {
 // sqlite no explicit lock is needed: wrapping the count and the delete in one
 // transaction is sufficient on its own, since sqlite transactions serialize
 // by default (only one writer active at a time).
-func (svc *appsService) deleteHubAppTx(app *db.App) error {
+func (svc *appsService) deleteHubAppTx(app *db.App, confirmWatchEnd bool) error {
 	parentKind, kindLabel, hint := db.ParentKindCircle, "circle_hub", "member wallet(s); use the circle delete endpoint instead"
 	if app.Kind == db.AppKindCashHub {
 		// Same orphan hazard as circle_hub, but for cash_hub: a cash_wallet
@@ -617,6 +638,10 @@ func (svc *appsService) deleteHubAppTx(app *db.App) error {
 			}
 			if check.Blocked() {
 				return fmt.Errorf("%w: %s", constants.ErrInvalidParams, check.Message())
+			}
+			if check.ConfirmationRequired && !confirmWatchEnd {
+				return fmt.Errorf("%w (%d address(es)); a later payment to one becomes no bill, so confirm the delete first",
+					ErrWatchEndUnconfirmed, check.WatchedAddresses)
 			}
 		}
 

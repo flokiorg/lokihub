@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1468,4 +1470,47 @@ func TestHandleCashTransferEvent_SpinOff_FundingFailure_RollsBack(t *testing.T) 
 		NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityCash, IdentityValue: newSecretHash},
 	})
 	require.Nil(t, retryResponse.Error, "a retry after a rolled-back spin-off must succeed")
+}
+
+// NIP-CASH §Transferring and Splitting a Slice, step 2 (CASH-24, CASH-32): a
+// new_identity pubkey in uppercase is refused, since no claim proof could ever
+// match it; the same key in lowercase transfers.
+func TestHandleCashTransferEvent_UppercaseNewIdentityPubkey_Rejected(t *testing.T) {
+	for _, upper := range []bool{true, false} {
+		t.Run(fmt.Sprintf("uppercase=%v", upper), func(t *testing.T) {
+			svc, err := tests.CreateTestService(t)
+			require.NoError(t, err)
+			defer svc.Remove()
+
+			hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+			wallet := newFundedCashWallet(t, svc, hub, 1000)
+			currentPrivkey := nostr.GeneratePrivateKey()
+			currentPubkey, _ := nostr.GetPublicKey(currentPrivkey)
+			require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{
+				{IdentityType: db.CashIdentityPubkey, IdentityValue: currentPubkey, AmountMloki: 1000},
+			}))
+
+			newPubkey, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+			if upper {
+				newPubkey = strings.ToUpper(newPubkey)
+			}
+			proof := buildTransferProofEvent(t, currentPrivkey, *wallet.WalletPubkey, db.CashIdentityPubkey, newPubkey, "", 1000, nil, time.Now())
+			response := handleCashTransferFor(t, svc, NewTestNip47Controller(svc), wallet, cashTransferParams{
+				IdentityType:  db.CashIdentityPubkey,
+				IdentityValue: currentPubkey,
+				IdentityEvent: mustMarshal(t, proof),
+				NewIdentity:   cashTransferNewIdentityParam{IdentityType: db.CashIdentityPubkey, IdentityValue: newPubkey},
+			})
+
+			claim, err := svc.AppsService.GetCashWalletClaim(wallet.ID, db.CashIdentityPubkey, currentPubkey)
+			require.NoError(t, err)
+			if upper {
+				require.NotNil(t, response.Error)
+				assert.Equal(t, constants.ERROR_BAD_REQUEST, response.Error.Code)
+				assert.Nil(t, claim.ClaimedAt, "the slice stays with its holder")
+				return
+			}
+			require.Nil(t, response.Error)
+		})
+	}
 }
