@@ -519,6 +519,20 @@ type CircleRotation struct {
 	EndedAt             *int64
 }
 
+// CircleHeldKeysend is a held keysend to a Circle Wallet that passed its
+// checks and is being settled at the node, until its credit is recorded:
+// counted against the wallet's receive room and its circle's holdings ceiling,
+// and as a payment in flight to the wallet (NIP-CW §Own Funds and Caps,
+// §Deleting a Circle Wallet). No foreign key: the reservation is the
+// evidence a deletion must see.
+type CircleHeldKeysend struct {
+	PaymentHash string `gorm:"primaryKey;size:64"`
+	WalletAppID uint   `gorm:"not null;index"`
+	HubAppID    uint   `gorm:"not null;index"`
+	AmountMloki int64  `gorm:"not null"`
+	ReservedAt  int64  `gorm:"not null;index"`
+}
+
 // CircleJoinRecord is a join's record (NIP-CW §Lost Join Reply): what a lookup by
 // (signer, connection_pubkey) answers with. Kept while the wallet exists and at
 // least until the join's deadline plus 6 minutes; no foreign key, since it

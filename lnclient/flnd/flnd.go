@@ -70,6 +70,10 @@ type FLNDService struct {
 	txCache      []lnclient.OnchainTransaction
 	txCacheMtx   sync.RWMutex
 	txCacheValid bool
+
+	// invoices is how far the invoice stream was read, so a resubscription
+	// resumes there and replays what it missed.
+	invoices invoiceCursor
 }
 
 func NewFLNDService(ctx context.Context, eventPublisher events.EventPublisher, flndAddress, flndCertHex, flndMacaroonHex string) (result lnclient.LNClient, err error) {
@@ -246,7 +250,7 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			invoiceStream, err := svc.client.SubscribeInvoices(ctx, &lnrpc.InvoiceSubscription{})
+			invoiceStream, err := svc.client.SubscribeInvoices(ctx, svc.invoices.subscription())
 			if err != nil {
 				if ctx.Err() != nil {
 					return
@@ -274,6 +278,8 @@ func (svc *FLNDService) subscribeInvoices(ctx context.Context) {
 						break invoicesLoop
 					}
 				}
+
+				svc.invoices.seen(invoice)
 
 				// A keysend the node holds (flnd's keysend-hold-time) is
 				// followed until it is accepted, so lokihub can settle or fail

@@ -66,3 +66,24 @@ func TestLimits_SpinOffWindowAndReset(t *testing.T) {
 	SetLimits(Limits{}, true)
 	assert.False(t, SpinOffRateSet())
 }
+
+func TestFaults_HoldSelfPaymentsAndFailChainScan(t *testing.T) {
+	t.Cleanup(func() { SetFaults(Faults{}, true) })
+	assert.False(t, ChainScanFails())
+	require.NoError(t, WaitSelfPayments(context.Background()), "off: nothing waits")
+
+	got := SetFaults(Faults{HoldSelfPayments: on(), FailChainScan: on()}, false)
+	assert.True(t, got["hold_self_payments"])
+	assert.True(t, got["fail_chain_scan"])
+	assert.True(t, ChainScanFails())
+	released := make(chan error, 1)
+	go func() { released <- WaitSelfPayments(context.Background()) }()
+	select {
+	case <-released:
+		t.Fatal("a held self-payment went through")
+	case <-time.After(50 * time.Millisecond):
+	}
+	SetFaults(Faults{}, true)
+	require.NoError(t, <-released)
+	assert.False(t, ChainScanFails())
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
@@ -184,6 +185,9 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 			}
 		}
 		result, err := svc.rebuildResult(rec, hubclock.Now())
+		if errors.Is(err, cashorder.ErrWindowNotEnded) {
+			return refuse(constants.ERROR_INTERNAL, "this order's payment window could not be ended yet, please retry")
+		}
 		if err != nil {
 			logger.Logger.Error().Err(err).Str("request_id", rec.RequestID).Msg("Failed to rebuild a call's result")
 			return refuse(constants.ERROR_INTERNAL, "the hub could not rebuild this call's result")

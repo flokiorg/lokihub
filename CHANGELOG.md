@@ -524,6 +524,37 @@ audits of both.
 - Refuses a recipient or `new_identity` whose `identity_value` or `ia_pubkey`
   has uppercase hex, in `mint_cash` and `cash_transfer`. Such a slice could
   never be claimed, because claim proofs and attestations carry lowercase keys.
+- Keeps serving member requests for the Circle Wallets a Hub issued with a
+  rotation delay after its host turns rotation off; only a Hub with no such
+  wallet refuses them all with `NOT_IMPLEMENTED`. A member promised recovery
+  in their details lost it when the setting changed.
+- Bounds a Circle Wallet Hub's dust threshold by `CIRCLE_MAX_DUST_MLOKI`
+  (default 10,000 mloki, the default routing-fee reserve floor), on creation
+  and on update. A host could otherwise set a threshold above any balance and
+  keep every deleted wallet's funds as dust.
+- Refuses a frozen Circle Wallet's payment under the payment's lock, so a
+  freeze committed while a request was past its gate still stops it.
+- Refuses every request by a frozen Circle Wallet's key with `FROZEN`, a
+  private-only method's included, and lets any other request by the current
+  key cancel a pending rotation before a method is refused; both came after
+  the `NOT_IMPLEMENTED` refusal of private-only methods.
+- Refuses `delete_circle_wallet`, and the lifecycle's deletion, while a
+  same-node keysend to the wallet is still to be credited or a held keysend
+  the node settled is not yet credited; the held keysend's reservation is now
+  recorded in `circle_held_keysends`, under the Hub lock the deletion takes. A
+  same-node credit cancelled meanwhile now fails its payer instead of being
+  settled to a deleted wallet.
+- Checks a joiner's membership again inside the join's commit, under the lock
+  a membership resolution takes. A member an allowlist edit removed while
+  their join was in flight was issued an Active wallet.
+- Resumes the node's invoice stream after a reconnect from the last
+  `add_index` and `settle_index` it delivered, so an order invoice settled
+  while the stream was down is minted at once rather than at `pay_by`.
+- Refuses `cash_lookup` of an order past its `pay_by` with a retryable
+  `INTERNAL` while its window cannot be ended (the chain or its invoice cannot
+  be read, or the invoice not cancelled), instead of answering `open`. A client
+  reads an open order past `pay_by` as ended unpaid, and stopped reading an
+  order the Hub then minted.
 - Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
   cancel needs) from the inputs its broadcast version already spends. The node
   no longer lists a coin an unmined transaction of its own spends, so a

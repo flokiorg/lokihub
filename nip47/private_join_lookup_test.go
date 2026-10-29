@@ -9,6 +9,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
+	"github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -108,4 +109,28 @@ func TestJoinLookup_DroppableRecordAnswersExpired(t *testing.T) {
 	gone, code := lookupAs(t, h, req.ConnectionPubkey, member, old, constants.NIP47MethodCashLookup)
 	require.Nil(t, code)
 	assert.Equal(t, nipcash.LookupExpired, gone.Status)
+}
+
+// NIP-CW §Lost Join Reply: a join lookup is authorized by the joiner's item
+// proof; one without it is UNAUTHORIZED, never answered by deadline.
+func TestJoinLookup_WithoutItemProofUnauthorized(t *testing.T) {
+	member := nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+	connection, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	lookupParams := fmt.Sprintf(`{"connection_pubkey":%q,"deadline":%d}`, connection, time.Now().Add(time.Minute).Unix())
+	nonce := strings.Repeat("0d", 32)
+	notAfter := time.Now().Add(time.Minute).Unix()
+	item := buildItem(t, "l", *h.app.WalletPubkey, constants.NIP47MethodCashLookup, lookupParams, member, h.connPriv, h.hubXOnly, nonce, notAfter)
+	var unsigned transport.Item
+	item.Proof = unsigned.Proof
+	r, served := h.svc.ServePrivateItem(t.Context(), h.ts.LNClient, item,
+		PrivateItemBinding{HubXOnly: h.hubXOnly, Nonce: nonce, NotAfter: notAfter})
+	require.True(t, served)
+	require.NotNil(t, r.Error)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, r.Error.Code)
+
+	signed, code := lookupAs(t, h, connection, member, time.Now().Add(time.Minute).Unix(), constants.NIP47MethodCashLookup)
+	require.Nil(t, code, "the same lookup with the joiner's proof is answered")
+	assert.Equal(t, nipcash.LookupPending, signed.Status)
 }

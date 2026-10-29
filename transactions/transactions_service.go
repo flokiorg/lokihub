@@ -24,6 +24,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
@@ -48,8 +49,6 @@ type transactionsService struct {
 	// orderSelfPay takes in a same-node payment of an order's invoice: handled
 	// false when the hash names no order.
 	orderSelfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (preimage string, handled bool, err error)
-	// heldKeysends are held keysends being settled, reserved until credited.
-	heldKeysends *keysendReservations
 }
 
 // InternalMakeInvoiceMeta carries trusted caller context to MakeInvoice.
@@ -239,7 +238,6 @@ func NewTransactionsService(db *gorm.DB, eventPublisher events.EventPublisher) *
 	return &transactionsService{
 		db:             db,
 		eventPublisher: eventPublisher,
-		heldKeysends:   newKeysendReservations(),
 		logger:         logger.Logger.With().Str("component", "transactions").Logger(),
 	}
 }
@@ -1428,11 +1426,13 @@ func (svc *transactionsService) ConsumeEvent(ctx context.Context, event *events.
 
 			var txErr error
 			settledIncoming, txErr = svc.markTransactionSettled(tx, &dbTransaction, lnClientTransaction.Preimage, uint64(lnClientTransaction.FeesPaid), false) //nolint:gosec // LN-client-reported fee is always non-negative
-			return txErr
+			if txErr != nil {
+				return txErr
+			}
+			// A held keysend's reservation ends in the commit that records its credit.
+			return tx.Where("payment_hash = ?", lnClientTransaction.PaymentHash).Delete(&db.CircleHeldKeysend{}).Error
 		})
 
-		// A held keysend's reservation ends once its credit is recorded.
-		svc.heldKeysends.release(lnClientTransaction.PaymentHash)
 		if err != nil {
 			svc.logger.Error().Err(err).
 				Str("payment_hash", lnClientTransaction.PaymentHash).
@@ -1744,8 +1744,23 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 		return nil, errors.New("preimage is not set on transaction. Self payments not supported")
 	}
 
+	if err := testknobs.WaitSelfPayments(context.Background()); err != nil {
+		return nil, err
+	}
 	var settledSelfTx *db.Transaction
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
+		// Under the recipient's locks, as its deletion takes them: a credit the
+		// deletion cancelled meanwhile is not settled, and the payer fails.
+		if err := lockRecipient(tx, incomingTransaction.AppId); err != nil {
+			return err
+		}
+		var current db.Transaction
+		if err := tx.Where("id = ? AND state = ?", incomingTransaction.ID, constants.TRANSACTION_STATE_PENDING).Limit(1).Find(&current).Error; err != nil {
+			return err
+		}
+		if current.ID == 0 {
+			return errSelfPaymentCreditGone
+		}
 		var txErr error
 		settledSelfTx, txErr = svc.markTransactionSettled(tx, &incomingTransaction, *incomingTransaction.Preimage, uint64(0), true)
 		return txErr
@@ -1762,6 +1777,31 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 		Preimage: *incomingTransaction.Preimage,
 		Fee:      0,
 	}, nil
+}
+
+// errSelfPaymentCreditGone fails a same-node payment whose credit was
+// cancelled before it settled (its wallet deleted, or its invoice cancelled).
+var errSelfPaymentCreditGone = errors.New("the payment's recipient no longer takes it")
+
+// lockRecipient takes a payment recipient's locks, its Hub's first for a
+// Circle Wallet.
+func lockRecipient(tx *gorm.DB, appID *uint) error {
+	if appID == nil {
+		return nil
+	}
+	recipient, err := loadApp(tx, appID)
+	if err != nil {
+		return err
+	}
+	if recipient == nil {
+		return nil
+	}
+	if circlemoney.IsCircleWallet(recipient) {
+		if err := db.LockApp(tx, *recipient.ParentAppID); err != nil {
+			return err
+		}
+	}
+	return db.LockApp(tx, recipient.ID)
 }
 
 func (svc *transactionsService) interceptSelfHoldPayment(paymentHash string, lnClient lnclient.LNClient) (*lnclient.PayInvoiceResponse, error) {
