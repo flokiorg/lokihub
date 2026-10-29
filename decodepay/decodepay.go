@@ -1,12 +1,46 @@
 package decodepay
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
 	fl "github.com/flokiorg/flndecodepay"
+	"github.com/flokiorg/go-flokicoin/chainutil/bech32"
 )
+
+// ErrRepeatedPaymentHash refuses an invoice with more than one 32-byte payment
+// hash field: readers disagree on which one counts, so a payer could pay a hash
+// other than the one a claim proof binds.
+var ErrRepeatedPaymentHash = errors.New("invoice has more than one payment hash")
+
+const (
+	bolt11TimestampWords = 7
+	bolt11SignatureWords = 104
+	bolt11FieldP         = 1
+	bolt11HashWords      = 52
+)
+
+// paymentHashFields counts the tagged p fields of hash length in bolt11; a field
+// of another length is skipped, as BOLT 11 says. 0 when bolt11 does not parse,
+// which the full decode then reports.
+func paymentHashFields(bolt11 string) int {
+	_, data, err := bech32.DecodeNoLimit(bolt11)
+	if err != nil || len(data) < bolt11TimestampWords+bolt11SignatureWords {
+		return 0
+	}
+	fields := data[bolt11TimestampWords : len(data)-bolt11SignatureWords]
+	n := 0
+	for i := 0; i+3 <= len(fields); {
+		length := int(fields[i+1])*32 + int(fields[i+2])
+		if fields[i] == bolt11FieldP && length == bolt11HashWords {
+			n++
+		}
+		i += 3 + length
+	}
+	return n
+}
 
 // clampIntToUint64 and clampIntToUint32 clamp route hint fields decoded from
 // a bolt11 invoice - genuinely external, potentially adversarial data
@@ -55,6 +89,10 @@ func Decode(bolt11 string) (*Bolt11, error) {
 	bolt11 = strings.ToLower(bolt11)
 	if !strings.HasPrefix(bolt11, "ln") {
 		return nil, fmt.Errorf("invalid flokicoin invoice prefix: %s", bolt11)
+	}
+
+	if paymentHashFields(bolt11) > 1 {
+		return nil, ErrRepeatedPaymentHash
 	}
 
 	// Flokicoin

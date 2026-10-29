@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Refuses a Lightning invoice that carries more than one payment hash, in
+  `cash_redeem` and every other payment path. Decoders disagree on which hash
+  counts, so the hash a claim proof binds could differ from the one paid.
 - Refuses a recipient or `new_identity` whose `identity_value` or `ia_pubkey`
   has uppercase hex, in `mint_cash` and `cash_transfer`. Such a slice could
   never be claimed, because claim proofs and attestations carry lowercase keys.
