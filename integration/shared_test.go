@@ -180,7 +180,7 @@ func rebindConsolidateProofs(t *testing.T, raw json.RawMessage) json.RawMessage 
 }
 
 // buildIAAttestationEvent builds and signs a kind-35522 IA attestation,
-// carrying the platform/evidence tags VerifyClaimAttestationEvent requires
+// carrying the platform/evidence tags the Hub's attestation check requires
 // (matching a real nipIC.NewAttestation-produced event's shape) alongside the
 // usual d/p/expiration bindings. platform/evidence content is fixed and not
 // test-parameterized since no test here needs to vary it.
