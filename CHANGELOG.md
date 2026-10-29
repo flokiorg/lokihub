@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Lists every slice in a `cash_status` answer of scope `all`, including the
+  claimed slice of an identity that was later given another slice in place;
+  that identity's live row comes first, and `mine` still returns that one row.
 - Gives a new Cash Hub a `min_transfer_millis` default of 1000 (one loki) when
   its creator names none, and starts the New Cash Hub form there; an explicit
   0 still means no floor.
