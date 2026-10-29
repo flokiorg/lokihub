@@ -131,7 +131,7 @@ func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transa
 		// (circle_lifecycle.go).
 		err := gormDB.Where(
 			"parent_app_id IS NOT NULL AND kind <> ? AND expires_at < ? AND cleanup_in_progress = ?",
-			db.AppKindCircleWallet, hubclock.Now(), false,
+			db.AppKindCircleWallet, db.CashExpiryCutoff(hubclock.Now()), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")

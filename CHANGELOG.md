@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Keeps a cash bill live through its whole `expires_at` second, as NIP-CASH's
+  inclusive bound asks: the expiry is stored in whole seconds at mint, and
+  calls, the sweep and the operator views compare whole seconds on the hub
+  clock. A call late in that second was refused `RESTRICTED`.
 - Ends a cash bill on an owner delete or the expiry sweep in one transaction:
   its unclaimed slices are taken first-wins, a `cash_redeem` in flight defers
   the delete, and the balance moves to the Cash Hub with the archive. A redeem

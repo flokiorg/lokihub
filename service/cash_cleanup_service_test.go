@@ -266,3 +266,31 @@ func TestRunCashCleanup_AFailureInTheDeleteLeavesTheBillWhole(t *testing.T) {
 	assert.Error(t, svc.DB.First(&found, child.ID).Error, "the retry deletes it")
 	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, parent.ID))
 }
+
+// NIP-CASH §Lifecycle and Deletion (CASH-446): the sweep ends a bill only once
+// its expires_at second has passed, never inside it.
+func TestRunCashCleanup_SweepsOnlyPastTheExpirySecond(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
+	require.NoError(t, err)
+
+	for n := time.Now().Nanosecond(); n < 50e6 || n > 600e6; n = time.Now().Nanosecond() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	current := time.Unix(time.Now().Unix(), 0)
+	previous := current.Add(-time.Second)
+	live := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, &current)
+	ended := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, &previous)
+
+	runCashCleanup(context.TODO(), svc.DB, transactions.NewTransactionsService(svc.DB, svc.EventPublisher), svc.LNClient, svc.EventPublisher)
+	require.Equal(t, current.Unix(), time.Now().Unix(), "the sweep ran inside the expires_at second")
+
+	var n int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", live.ID).Count(&n).Error)
+	assert.EqualValues(t, 1, n, "a bill inside its expires_at second is live")
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", ended.ID).Count(&n).Error)
+	assert.Zero(t, n, "a bill a second past it is swept")
+}
