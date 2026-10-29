@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Answers `cash_lookup` with `unknown` only after any commit of that
+  `request_id` still in flight has finished, under the same lock the commit
+  checks its deadline in. A call whose commit landed just after its deadline
+  could otherwise be reported as never applied.
 - Lists every slice in a `cash_status` answer of scope `all`, including the
   claimed slice of an identity that was later given another slice in place;
   that identity's live row comes first, and `mine` still returns that one row.
