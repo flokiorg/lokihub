@@ -72,3 +72,13 @@ type LSP struct {
 func (LSP) TableName() string {
 	return "lsps"
 }
+
+// LSPSeenMark is the newest announcement seen from a node whose catalogue row
+// was pruned: kept so a relay cannot re-feed an older version of it as new
+// (NIP-LSP §Client Behavior, newest seen; R2-S3). Dropped once no version it
+// covers can still be unexpired.
+type LSPSeenMark struct {
+	NodeKey   string `gorm:"primaryKey"`
+	CreatedAt int64  `gorm:"not null;index"`
+	EventID   string `gorm:"not null"`
+}

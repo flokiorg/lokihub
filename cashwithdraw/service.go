@@ -210,6 +210,9 @@ func (n lnNode) SignEvent(ctx context.Context, ev *nip01.Event) error {
 	if err != nil {
 		return err
 	}
+	if err := nodesign.Guard.Allow(ctx); err != nil {
+		return err
+	}
 	sctx, cancel := context.WithTimeout(ctx, nodesign.Timeout)
 	defer cancel()
 	sig, err := ts.SignSchnorrNodeKey(sctx, payload)

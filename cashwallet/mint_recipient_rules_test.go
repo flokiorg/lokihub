@@ -2,6 +2,7 @@ package cashwallet
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,59 @@ func TestCreate_CashRecipientAlongsideAnotherRejected(t *testing.T) {
 		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
 	})
 	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+// NIP-CASH §Minting Cash: a request with one zero amount_millis beside a
+// positive one is refused whole (CASH-50).
+func TestCreate_ZeroAmountBesideAnotherRecipientRejected(t *testing.T) {
+	err := mintRecipients(t, []RecipientInput{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 0},
+	})
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}
+
+func TestCreate_OneMlokiBesideAnotherRecipientIsMinted(t *testing.T) {
+	err := mintRecipients(t, []RecipientInput{
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1000},
+		{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1},
+	})
+	assert.NoError(t, err)
+}
+
+// NIP-CASH §Minting Cash (CASH-32): identity_value and ia_pubkey are 64
+// lowercase hex; a slice stored under any other case could never be claimed.
+func TestValidateIdentityShape_RequiresLowercaseHex(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	ia := tests.RandomHex32()
+	registerTrustedIA(t, svc, ia)
+	deps := newTestDeps(svc)
+	value := tests.RandomHex32()
+	mixed := value[:63] + "A"
+
+	refused := []struct{ name, typ, value, ia string }{
+		{"pubkey uppercase", db.CashIdentityPubkey, strings.ToUpper(value), ""},
+		{"pubkey one uppercase digit", db.CashIdentityPubkey, mixed, ""},
+		{"pubkey 63 digits", db.CashIdentityPubkey, value[:63], ""},
+		{"pubkey 65 digits", db.CashIdentityPubkey, value + "0", ""},
+		{"connection_key uppercase value", db.CashIdentityConnectionKey, strings.ToUpper(value), ia},
+		{"connection_key uppercase ia_pubkey", db.CashIdentityConnectionKey, value, strings.ToUpper(ia)},
+	}
+	for _, c := range refused {
+		t.Run(c.name, func(t *testing.T) {
+			assert.ErrorIs(t, ValidateIdentityShape(deps, c.typ, c.value, c.ia), constants.ErrInvalidParams)
+		})
+	}
+	assert.NoError(t, ValidateIdentityShape(deps, db.CashIdentityPubkey, value, ""), "lowercase pubkey")
+	assert.NoError(t, ValidateIdentityShape(deps, db.CashIdentityPubkey, strings.Repeat("0", 64), ""), "all-digit value")
+	assert.NoError(t, ValidateIdentityShape(deps, db.CashIdentityPubkey, strings.Repeat("f", 64), ""), "all-f value")
+	assert.NoError(t, ValidateIdentityShape(deps, db.CashIdentityConnectionKey, value, ia), "lowercase connection_key")
+}
+
+func TestCreate_UppercasePubkeyRecipientRejected(t *testing.T) {
+	err := mintRecipients(t, []RecipientInput{{IdentityType: db.CashIdentityPubkey, IdentityValue: strings.ToUpper(tests.RandomHex32()), AmountMloki: 1000}})
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+	assert.NoError(t, mintRecipients(t, []RecipientInput{{IdentityType: db.CashIdentityPubkey, IdentityValue: tests.RandomHex32(), AmountMloki: 1000}}))
 }

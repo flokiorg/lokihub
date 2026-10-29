@@ -289,7 +289,7 @@ type adminCreateAppRequest struct {
 	// also its zero-value default when omitted here).
 	CashPerWalletMaxMloki int   `json:"cashPerWalletMaxMloki,omitempty"`
 	CashMaxExpSecs        int   `json:"cashMaxExpSecs,omitempty"`
-	CashMinTransferMloki  int64 `json:"cashMinTransferMloki,omitempty"`
+	CashMinTransferMloki  int64 `json:"cashMinTransferMloki"`
 	// CashRedeemFeePpm is optional (0 = free - also its zero-value default
 	// when omitted here) - see apps.CreateCashHub, NIP-CASH.md §The Redeem Fee.
 	CashRedeemFeePpm int `json:"cashRedeemFeePpm,omitempty"`

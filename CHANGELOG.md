@@ -468,6 +468,62 @@ audits of both.
 
 ### Fixed
 
+- Records a private item's request event only while its target bill still
+  exists, under a lock the bill's delete waits on. A bill deleted by a sibling
+  item's split in the same envelope logged a `FOREIGN KEY constraint failed`
+  error before the item was answered as a destroyed bill.
+- Keeps the newest-seen mark of an LSP pruned from the catalogue, until every
+  version it covers has expired, so a relay cannot re-feed an older
+  announcement of it as new.
+- Asks the owner to confirm a Cash Hub delete that ends the watch on paid
+  on-chain order addresses, in the delete dialog and on every delete path
+  (`DELETE /api/apps/:id` takes `{"confirmWatchEnd": true}`). The generic
+  delete went ahead unconfirmed.
+- Reports a Cash Hub's listed offers in its delete check (`listed_offers`,
+  `listings_delete_due_at`) and in the delete dialog, as information: the
+  delete closes them and their deletions follow.
+- Keeps a cash bill live through its whole `expires_at` second, as NIP-CASH's
+  inclusive bound asks: the expiry is stored in whole seconds at mint, and
+  calls, the sweep and the operator views compare whole seconds on the hub
+  clock. A call late in that second was refused `RESTRICTED`.
+- Ends a cash bill on an owner delete or the expiry sweep in one transaction:
+  its unclaimed slices are taken first-wins, a `cash_redeem` in flight defers
+  the delete, and the balance moves to the Cash Hub with the archive. A redeem
+  claiming a slice during the old reclaim payment could lose its payout to
+  the Hub.
+- Removes a recipient's slice, sweeps its amount back to the Cash Hub and
+  archives it in one transaction. A crash between the sweep and the removal
+  could leave the slice claimed, impossible to remove again and archived as
+  `redeemed`.
+- Shows `cashhub1`, `circlehub1`, `cashorder1` and `lokicash1` QR codes in
+  uppercase, which fits the QR alphanumeric mode; copying still gives the
+  lowercase string.
+- Reports only NIP-47's four networks: testnet4 is `testnet`, simnet
+  `regtest`, and a node on a network with no NIP-47 name signs no cash.
+- Refuses cash serving when the node identity already signed cash on another
+  network, recorded in `cash_identity_networks` the first time cash serving
+  starts. The private transport stays down and the node signs no bill,
+  connection string, listing or withdraw quote.
+- Drops a private envelope that carries a case variant of `nonce`,
+  `reply_to`, `not_after` or `items`, and bounds a served envelope's
+  `not_after` by `max_request_age` itself. Such an envelope could pass the
+  replay and freshness checks on one value and run with another.
+- Answers `cash_lookup` with `unknown` only after any commit of that
+  `request_id` still in flight has finished, under the same lock the commit
+  checks its deadline in. A call whose commit landed just after its deadline
+  could otherwise be reported as never applied.
+- Lists every slice in a `cash_status` answer of scope `all`, including the
+  claimed slice of an identity that was later given another slice in place;
+  that identity's live row comes first, and `mine` still returns that one row.
+- Gives a new Cash Hub a `min_transfer_millis` default of 1000 (one loki) when
+  its creator names none, and starts the New Cash Hub form there; an explicit
+  0 still means no floor.
+- Refuses a Lightning invoice that carries more than one payment hash, in
+  `cash_redeem` and every other payment path. Decoders disagree on which hash
+  counts, so the hash a claim proof binds could differ from the one paid.
+- Refuses a recipient or `new_identity` whose `identity_value` or `ia_pubkey`
+  has uppercase hex, in `mint_cash` and `cash_transfer`. Such a slice could
+  never be claimed, because claim proofs and attestations carry lowercase keys.
 - Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
   cancel needs) from the inputs its broadcast version already spends. The node
   no longer lists a coin an unmined transaction of its own spends, so a

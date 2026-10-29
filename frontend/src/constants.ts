@@ -64,6 +64,11 @@ export const FLOKICOIN_DISPLAY_FORMAT_AUTO = "auto";
 // answering about a bill it destroyed before falling silent. 0 disables it.
 export const DEFAULT_CASH_SPENT_RETENTION_SECS = 15 * 86400;
 
+// DEFAULT_CASH_MIN_TRANSFER_LOKI mirrors the backend's
+// constants.DEFAULT_CASH_MIN_TRANSFER_MLOKI (1000 mloki): a new Cash Hub's
+// default split floor. 0 stays available as "no floor".
+export const DEFAULT_CASH_MIN_TRANSFER_LOKI = 1;
+
 export const WEEK_SCALE_PRESETS: { label: string; seconds: number }[] = [
   { label: "1 week", seconds: 7 * 86400 },
   { label: "1 month", seconds: 30 * 86400 },

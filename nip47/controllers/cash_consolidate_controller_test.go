@@ -537,7 +537,7 @@ func TestConsolidate_ConnectionKeySource_UntrustedIA_Rejected(t *testing.T) {
 // TestConsolidate_ConnectionKeySource_AttestationForWrongClaimant_Rejected: the
 // attestation is real and IA-trusted, but attests a DIFFERENT pubkey than the
 // one that actually signed this source's identity_event — mirrors
-// verifyClaimAttestationEvent's own "wrong claimant" check, exercised here at
+// the attestation check's own "wrong claimant" check, exercised here at
 // the consolidate call site rather than transfer/redeem's.
 func TestConsolidate_ConnectionKeySource_AttestationForWrongClaimant_Rejected(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
@@ -566,7 +566,7 @@ func TestConsolidate_ConnectionKeySource_AttestationForWrongClaimant_Rejected(t 
 
 	proof1 := buildTransferProofEvent(t, ownerPriv, *s1.WalletPubkey, db.CashIdentityPubkey, newPub, "", 123_000, nil, time.Now())
 	// Attestation vouches for strangerPub, but the identity_event below is
-	// signed by claimantPriv — a mismatch verifyClaimAttestationEvent must
+	// signed by claimantPriv — a mismatch the attestation check must
 	// catch.
 	attestation := buildIAAttestationEvent(t, iaPriv, connectionKey, strangerPub, oneHourFromNow())
 	proof2 := buildTransferProofEvent(t, claimantPriv, *s2.WalletPubkey, db.CashIdentityPubkey, newPub, "", 1_000,

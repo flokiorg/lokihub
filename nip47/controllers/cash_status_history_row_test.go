@@ -5,6 +5,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/ohstr/nmilat/nipcash"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/flokiorg/lokihub/db"
@@ -13,8 +14,8 @@ import (
 
 // R2-F1: after a slice is transferred in place to an identity that once held
 // (and redeemed) a slice of the same bill, that identity has a claimed history
-// row and a live row. cash_status shows it one row, the live one: "mine" is
-// exactly its row and "all" lists it once, so a client's OwnRow reads it.
+// row and a live row. "mine" is exactly its live row; "all" lists every slice,
+// the history row too, with the live row first, so a client's OwnRow reads it.
 func TestCashStatus_InPlaceTransferToFormerHolder(t *testing.T) {
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
@@ -38,7 +39,15 @@ func TestCashStatus_InPlaceTransferToFormerHolder(t *testing.T) {
 		response := callStatus(t, svc, wallet, statusRequest(t, scope), &CashStatusCaller{IdentityValue: y})
 		require.Nil(t, response.Error, "scope %q", scope)
 		result := response.Result.(nipcash.CashStatusResult)
-		require.Len(t, result.Recipients, 1, "scope %q: one row for the identity", scope)
+		if scope == nipcash.ScopeAll {
+			// Every slice, the claimed history row included, the live row first.
+			require.Len(t, result.Recipients, 2, "scope all: every slice ever recorded")
+			assert.False(t, result.Recipients[0].Claimed)
+			assert.True(t, result.Recipients[1].Claimed)
+			assert.Equal(t, uint64(1000), result.Recipients[1].AmountMillis)
+		} else {
+			require.Len(t, result.Recipients, 1, "scope %q: one row for the identity", scope)
+		}
 		row, err := nipcash.OwnRow(result.Recipients, nipcash.BySigning(yPriv), scope)
 		require.NoError(t, err, "scope %q", scope)
 		require.False(t, row.Claimed, "scope %q: the live row", scope)

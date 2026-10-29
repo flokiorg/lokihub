@@ -6,8 +6,10 @@ package cashrequest
 import (
 	"errors"
 	"fmt"
-	"github.com/flokiorg/lokihub/hubclock"
+	"hash/fnv"
 	"time"
+
+	"github.com/flokiorg/lokihub/hubclock"
 
 	"github.com/ohstr/nmilat/nipcash"
 	"gorm.io/gorm"
@@ -70,7 +72,13 @@ func (s Store) MarkUsed(id, method string) error {
 // transaction tx. The call may commit only up to its deadline (ErrDeadlinePassed,
 // which must roll everything back). A record with no bills (an in-place transfer)
 // may be dropped once deadline + H has passed.
+//
+// It takes the request_id's lock (lockRequestTx) for the rest of tx, so a
+// GetSettled waits for this commit and the deadline checks after it.
 func (s Store) CommitTx(tx *gorm.DB, rec *db.CashRequestRecord, bills []db.CashRequestRecordBill) error {
+	if err := lockRequestTx(tx, rec.RequestID); err != nil {
+		return err
+	}
 	now := s.now().Unix()
 	// The deadline is the client's, so it is judged on the wall clock.
 	if !nipcash.CommitAllowed(rec.Deadline, hubclock.Wall(time.Unix(now, 0)).Unix()) {
@@ -111,6 +119,38 @@ func (s Store) Get(id string) (*db.CashRequestRecord, error) {
 		return nil, err
 	}
 	return &rec, nil
+}
+
+// GetSettled is Get read under the request_id's lock, after any commit of id in
+// flight has committed or rolled back. Once the call's deadline has passed, nil
+// here means the call never commits: every commit checks its deadline under
+// this lock, after CommitTx took it.
+func (s Store) GetSettled(id string) (*db.CashRequestRecord, error) {
+	var out *db.CashRequestRecord
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockRequestTx(tx, id); err != nil {
+			return err
+		}
+		var rec db.CashRequestRecord
+		err := tx.Where("request_id = ?", id).First(&rec).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		out = &rec
+		return nil
+	})
+	return out, err
+}
+
+// lockRequestTx takes the request_id's transaction-scoped lock on postgres;
+// sqlite's IMMEDIATE write transaction already holds the single write lock.
+func lockRequestTx(tx *gorm.DB, id string) error {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(id))
+	return db.LockNamespace(tx, db.LockNsRequest, int32(h.Sum32())) //nolint:gosec // a hash folded into the key space
 }
 
 // Bills are the bills a record created, in order.
