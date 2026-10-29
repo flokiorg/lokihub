@@ -52,6 +52,7 @@ func CreateTestServiceWithMnemonic(t *testing.T, mnemonic string, unlockPassword
 		CashRedeemMaxFinalCLTV:            2880,
 		CashRedeemInflightPerHub:          32,
 		CashRedeemInflightNode:            256,
+		CashRedeemInflightPerPayee:        8,
 		CashRedeemLateFailureCooldownSecs: 600,
 		CashRedeemRouteMarginPpm:          2000,
 		CashRedeemRouteMarginMinMillis:    1000,

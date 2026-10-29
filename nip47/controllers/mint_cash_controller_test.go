@@ -581,3 +581,43 @@ func TestHandleMintCashEvent_Cash_RejectsMixedRecipients(t *testing.T) {
 	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)
 	assert.Empty(t, childApps, "a rejected request must leave no partial wallet")
 }
+
+// A mint whose commit fails gives its rate-limit allowance back, so with a limit
+// of 1 a mint after it still goes through; the next one is limited, after its
+// request_id was marked, and says so.
+func TestHandleMintCashEvent_RateLimitSpentOnlyOnCommit(t *testing.T) {
+	ctx := context.TODO()
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+	tests.FundApp(svc, hub.ID, 10_000_000, "fundtxhash")
+	svc.Cfg.GetEnv().CashWalletRateLimitPerHour = 1
+	ln, ok := svc.LNClient.(*tests.MockLn)
+	require.True(t, ok)
+	signingKey := ln.SigningKey
+	controller := NewTestNip47Controller(svc)
+
+	mint := func() *models.Response {
+		pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+		req := &models.Request{}
+		require.NoError(t, json.Unmarshal([]byte(makeCashWalletRequest(pk, 1000, 3600)), req))
+		var resp *models.Response
+		controller.HandleMintCashEvent(ctx, req, 0, hub, func(r *models.Response, _ nostr.Tags) { resp = r }, testMintMeta())
+		require.NotNil(t, resp)
+		return resp
+	}
+
+	ln.SigningKey = nil // the node cannot sign: the commit fails
+	failed := mint()
+	require.NotNil(t, failed.Error)
+	assert.NotEqual(t, constants.ERROR_RATE_LIMITED, failed.Error.Code)
+
+	ln.SigningKey = signingKey
+	require.Nil(t, mint().Error, "the failed mint spent no allowance")
+
+	limited := mint()
+	require.NotNil(t, limited.Error)
+	assert.Equal(t, constants.ERROR_RATE_LIMITED, limited.Error.Code)
+	assert.Contains(t, limited.Error.Message, "request_id stays used")
+}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/hubclock"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -126,14 +127,20 @@ func onchainKey(txid string, vout uint32) string {
 // payment that is not on-chain, or when the node cannot be asked.
 func (e *Engine) chainConfirmations(ctx context.Context, ln lnclient.LNClient, paymentID uint) (int, bool) {
 	var p db.CashOrderPayment
-	if err := e.DB.Select("payment_key").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
+	if err := e.DB.Select("payment_key", "block_height").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
 		return 0, false
 	}
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok {
 		return 0, false
 	}
-	outputs, err := lister.ListOnchainOutputs(ctx)
+	// Only the payment's own block onward: a reorganisation that moved it lower
+	// reads as 0, so its mint waits for the next scan.
+	from := int32(0)
+	if p.BlockHeight != nil {
+		from = int32(*p.BlockHeight) //nolint:gosec // a block height
+	}
+	outputs, err := lister.ListOnchainOutputs(ctx, from)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Could not read an order payment's confirmations; its mint waits")
 		return 0, true
@@ -434,7 +441,11 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 			for i := range minted {
 				rb := minted[i].Record
 				rb.RecordID = rec.ID
-				rb.Ordinal = int16(ordinal) + int16(i) //nolint:gosec // bounded by the split floor
+				ord, err := BillOrdinal(ordinal, i)
+				if err != nil {
+					return err
+				}
+				rb.Ordinal = ord
 				rb.PaidMillis, rb.Outpoint = &paid, outpoint
 				if err := tx.Create(&rb).Error; err != nil {
 					return fmt.Errorf("record an ordered bill: %w", err)
@@ -798,4 +809,14 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 	e.notify(changed)
 	e.mintPending(ctx, order.ID)
 	return inv.Preimage, true, nil
+}
+
+// BillOrdinal is the record ordinal of the i-th bill a payment mints after
+// recorded bills already on the order's record, refused past int32.
+func BillOrdinal(recorded int64, i int) (int32, error) {
+	ord := recorded + int64(i)
+	if recorded < 0 || i < 0 || ord > math.MaxInt32 {
+		return 0, fmt.Errorf("bill ordinal %d+%d is out of range", recorded, i)
+	}
+	return int32(ord), nil
 }

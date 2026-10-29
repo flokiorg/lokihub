@@ -135,6 +135,9 @@ type API interface {
 	DisableAutoSwap() error
 	SetNodeAlias(ctx context.Context, nodeAlias string) error
 	PublishNodeProfile(ctx context.Context, request PublishNodeProfileRequest) error
+	// RotatePrivateTransportInbox rotates the private transport's inbox key
+	// (NIP-CASH §The Hub Announcement) and returns the new inbox.
+	RotatePrivateTransportInbox() (*RotateInboxResponse, error)
 	PublishNodeNote(ctx context.Context, request PublishNodeNoteRequest) (*PublishNodeNoteResponse, error)
 	GetCustomNodeCommands() (*CustomNodeCommandsResponse, error)
 	ExecuteCustomNodeCommand(ctx context.Context, command string) (interface{}, error)
@@ -1220,6 +1223,14 @@ type UpdateSettingsRequest struct {
 
 type SetNodeAliasRequest struct {
 	NodeAlias string `json:"nodeAlias"`
+}
+
+// RotateInboxResponse is the inbox a rotation moved to. AnnounceError is set
+// when the rotation stands but its announcement failed (it is retried by the
+// next start, or another rotation).
+type RotateInboxResponse struct {
+	InboxPubkey   string `json:"inboxPubkey"`
+	AnnounceError string `json:"announceError,omitempty"`
 }
 
 // PublishNodeProfileRequest is the full kind-0 profile to publish for the

@@ -1,6 +1,7 @@
 package cashrequest_test
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -290,4 +291,28 @@ func TestU_3_9_RecordRetentionFollowsItsBills(t *testing.T) {
 	n, err = at(now.Unix() + 100000).PruneRecords(500)
 	require.NoError(t, err)
 	assert.Zero(t, n)
+}
+
+// An order's bills past the 32768th keep their place: a lookup reads them back
+// after the earlier ones, in mint order.
+func TestBills_OrdinalsPastInt16StayInMintOrder(t *testing.T) {
+	svc, s, now := newStore(t)
+	require.NoError(t, svc.DB.Transaction(func(tx *gorm.DB) error {
+		return s.CommitTx(tx, record(rid(9), now.Unix()), nil)
+	}))
+	got, err := s.Get(rid(9))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	for _, ord := range []int32{32768, 0, 32767, math.MaxInt32} {
+		require.NoError(t, svc.DB.Create(&db.CashRequestRecordBill{RecordID: got.ID, Ordinal: ord, Role: db.CashRecordBillOrdered,
+			WalletAppID: uint(ord) + 1, WalletPubkey: strings.Repeat("cc", 32), RelayHints: `["wss://r"]`, //nolint:gosec // test ordinals
+			AmountMillis: 1000, Scheme: 1, Signature: strings.Repeat("dd", 65)}).Error)
+	}
+	stored, err := s.Bills(got.ID)
+	require.NoError(t, err)
+	ords := make([]int32, len(stored))
+	for i, b := range stored {
+		ords[i] = b.Ordinal
+	}
+	assert.Equal(t, []int32{0, 32767, 32768, math.MaxInt32}, ords)
 }

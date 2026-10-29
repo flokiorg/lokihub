@@ -509,6 +509,78 @@ audits of both.
 - Fails an LSP's live check when its announced LSPS1 or LSPS2 `get_info`
   errors or cannot be read. Such a check passed as terms equal to the
   announced ones, so a purchase went ahead with no live terms compared.
+- Asks no explorer at all when none is configured: `/api/mempool` and its
+  Wails route answer empty, and the unused-address check keeps the current
+  address, instead of sending a request to an empty base URL.
+- Refuses to start beside a node on another chain than `NETWORK` names, and
+  refuses an unknown `NETWORK` value, listing the accepted ones. A
+  `NETWORK=regtest` on a mainnet node used regtest swap keys and addresses.
+- Publishes the dev stack's ports (relay, flnd RPC, Caddy) on the loopback
+  only, unless `DEV_BIND` says otherwise; they were open on every interface of
+  the host.
+- Rate-limits `/api/unlock`, `/api/start`, `/api/backup` and `/logout` by the
+  connection's own address. The limiter trusted `X-Forwarded-For` and
+  `X-Real-IP`, so a caller could forge a fresh address on every unlock attempt.
+- Updates echo to 4.16.2, wails to 2.13.0, golang.org/x/net to 0.62.0 and
+  golang.org/x/image to 0.45.0, for the published advisories against the
+  older versions (echo's WebSocket upgrade access bypass among them).
+- Lets the operator rotate the private-transport inbox key
+  (`POST /api/private-transport/rotate-inbox`, and its Wails route): the Hub
+  moves to the next key index, subscribes the new inbox, announces it, and
+  keeps opening requests to the old one for `max_request_age`. The index was a
+  constant, so a leaked inbox key could not be replaced.
+- Seals a circle wallet invoice's preimage at rest until it settles, with a
+  key derived from the node's mnemonic at unlock; an open invoice's preimage
+  is no longer stored plain or logged, and rows written before are sealed at
+  the next unlock.
+- Never stores a cached `get_info` computed before an Order connection's
+  retirement or new terms, or a circle's close, committed: such a result could
+  be stored after the invalidation and served stale for up to 5 s. A listed
+  circle connection's cached `get_info` is now also dropped when the circle
+  opens to new members again, and when any of its listings closes.
+- Bounds an operator's own on-chain spend or channel open by what the
+  wallet's coin selection may spend (confirmed coins under no lease), less the
+  floor and what payouts still need from those coins. The guard counted every
+  leased coin, another user's included, as spendable, and subtracted the
+  set-aside of payouts whose coins were already spent.
+- Reads the node's wallet for on-chain order payments from a stored floor 100
+  blocks below the tip (and the mempool) instead of its whole history every
+  30 s, and stops checking a minted payment deeper than that, counting its
+  confirmations from its height. A mint's confirmation check reads from the
+  payment's own block.
+- Issues a circle wallet's hold invoice outside the database transaction:
+  the invoice's row is reserved under the Hub's lock (it counts against every
+  cap at once) and completed once the node answers, so a slow node no longer
+  stalls every write. An invoice whose wallet stopped receiving meanwhile is
+  cancelled at the node before it is handed out.
+- Cancels at the node, after the delete commits, every hold invoice a circle
+  wallet delete fails, and releases at once a payment the node holds for an
+  invoice already failed. An invoice issued between the delete's cancel and
+  its commit stayed payable, its HTLC held to its CLTV.
+- Lets the circle lifecycle job delete a closing wallet even when the node
+  refuses to cancel its open invoices, and asks the node only about wallets
+  with an open invoice; an invoice the node does not know is taken as
+  cancelled. One persistent node error blocked the wallet's deletion and
+  logged an error every minute.
+- Bounds a Cash Hub's `cash_redeem` payouts in flight to any one paying node
+  (`CASH_REDEEM_INFLIGHT_PER_PAYEE`, default 8; same-node payouts are not
+  counted). One holder of many slices paying its own hold invoices could take
+  all 32 of the Hub's slots and block every other redeem.
+- Spends `mint_cash`'s hourly allowance only on a mint that commits, as the
+  lineage spin-off allowance already was (also under the regtest rate
+  override). A refusal made after a call's `request_id` was marked used now
+  says the id stays used, so a retry needs another.
+- Counts a Cash Hub's live bills again inside a spin-off's or merge's commit,
+  under a per-Hub lock, so concurrent calls on different bills can no longer
+  pass `CASH_MAX_LIVE_BILLS_PER_HUB` together; the refusal stays
+  `QUOTA_EXCEEDED`.
+- Records an order payment's bills past the 32768th in mint order. The
+  record ordinal was 16 bits and wrapped, so `cash_lookup` of a very large
+  over-payment returned its bills out of order.
+- Bounds how long a cash commit holds the database write lock while the node
+  signs its bills: all of a commit's signatures share one budget of 3 s plus
+  25 ms a bill, and the node identity is read once per commit. A slow node
+  could hold the lock for up to 3 s per bill.
 - Records a private item's request event only while its target bill still
   exists, under a lock the bill's delete waits on. A bill deleted by a sibling
   item's split in the same envelope logged a `FOREIGN KEY constraint failed`

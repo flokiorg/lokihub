@@ -13,6 +13,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/atrest"
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
@@ -174,12 +175,38 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 	if err != nil {
 		return nil, err
 	}
-	preimage := hex.EncodeToString(preimageBytes)
 	sum := sha256.Sum256(preimageBytes)
 	paymentHash := hex.EncodeToString(sum[:])
+	// The preimage is kept sealed until the Hub settles: whoever reads the
+	// database alone cannot settle, or prove payment of, an open invoice.
+	sealed, err := atrest.Seal(hex.EncodeToString(preimageBytes))
+	if err != nil {
+		return nil, fmt.Errorf("seal the invoice's preimage: %w", err)
+	}
 
-	var row db.Transaction
-	issued := false
+	// The row is reserved under the Hub's lock and the node is asked outside any
+	// transaction, so a slow node never holds the write lock. The reservation
+	// counts against every cap at once; nobody can pay it before the node issues
+	// the invoice and this call returns it.
+	reserveExpiry := int64(expiry) //nolint:gosec // bounded by the caller
+	if reserveExpiry <= 0 {
+		reserveExpiry = lnclient.DEFAULT_INVOICE_EXPIRY
+	}
+	reservedUntil := now.Add(time.Duration(reserveExpiry) * time.Second)
+	row := db.Transaction{
+		AppId:              &wallet.ID,
+		RequestEventId:     requestEventId,
+		Type:               constants.TRANSACTION_TYPE_INCOMING,
+		State:              constants.TRANSACTION_STATE_PENDING,
+		AmountMloki:        amount,
+		Description:        description,
+		DescriptionHash:    descriptionHash,
+		PaymentHash:        paymentHash,
+		ExpiresAt:          &reservedUntil,
+		HoldPreimageSealed: &sealed,
+		Metadata:           datatypes.JSON(metadataBytes),
+		Hold:               true,
+	}
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
 		if err := lockCircleParties(tx, wallet); err != nil {
 			return err
@@ -209,43 +236,83 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 		if _, open := circlemoney.OpenInvoices(tx, []uint{wallet.ID}, now); open >= circlemoney.MaxOpenInvoices {
 			return &circlemoney.Refusal{Code: constants.ERROR_RATE_LIMITED, Message: "too many open invoices for this wallet"}
 		}
-		invoice, err := lnClient.MakeHoldInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), paymentHash) //nolint:gosec // bounded by the receive room
-		if err != nil {
-			return err
-		}
-		issued = true
-		var expiresAt *time.Time
-		if invoice.ExpiresAt != nil {
-			at := time.Unix(*invoice.ExpiresAt, 0)
-			expiresAt = &at
-		}
-		row = db.Transaction{
-			AppId:           &wallet.ID,
-			RequestEventId:  requestEventId,
-			Type:            constants.TRANSACTION_TYPE_INCOMING,
-			State:           constants.TRANSACTION_STATE_PENDING,
-			AmountMloki:     amount,
-			Description:     description,
-			DescriptionHash: descriptionHash,
-			PaymentRequest:  invoice.Invoice,
-			PaymentHash:     paymentHash,
-			ExpiresAt:       expiresAt,
-			Preimage:        &preimage,
-			Metadata:        datatypes.JSON(metadataBytes),
-			Hold:            true,
-		}
 		return tx.Create(&row).Error
 	})
 	if err != nil {
-		if issued {
-			if cancelErr := lnClient.CancelHoldInvoice(ctx, paymentHash); cancelErr != nil {
-				svc.logger.Error().Err(cancelErr).Str("payment_hash", paymentHash).
-					Msg("Failed to cancel a circle invoice whose row was not written")
-			}
+		return nil, err
+	}
+
+	invoice, err := lnClient.MakeHoldInvoice(ctx, int64(amount), description, descriptionHash, int64(expiry), paymentHash) //nolint:gosec // bounded by the receive room
+	if err != nil {
+		// Nothing was issued: the reservation goes.
+		if delErr := svc.db.Where("id = ? AND state = ?", row.ID, constants.TRANSACTION_STATE_PENDING).Delete(&db.Transaction{}).Error; delErr != nil {
+			svc.logger.Error().Err(delErr).Str("payment_hash", paymentHash).Msg("Failed to drop a circle invoice reservation the node did not issue")
 		}
 		return nil, err
 	}
+	var expiresAt *time.Time
+	if invoice.ExpiresAt != nil {
+		at := time.Unix(*invoice.ExpiresAt, 0)
+		expiresAt = &at
+	}
+	// The reservation is completed only while it is still open: a wallet that
+	// stopped receiving, or was deleted, meanwhile failed it, so the invoice is
+	// cancelled at the node before anyone learns it.
+	done := svc.db.Model(&db.Transaction{}).Where("id = ? AND state = ?", row.ID, constants.TRANSACTION_STATE_PENDING).
+		Updates(map[string]interface{}{"payment_request": invoice.Invoice, "expires_at": expiresAt})
+	if done.Error != nil || done.RowsAffected != 1 {
+		if cancelErr := lnClient.CancelHoldInvoice(ctx, paymentHash); cancelErr != nil {
+			svc.logger.Error().Err(cancelErr).Str("payment_hash", paymentHash).
+				Msg("Failed to cancel a circle invoice whose reservation was closed")
+		}
+		if done.Error != nil {
+			return nil, done.Error
+		}
+		return nil, &circlemoney.Refusal{Code: constants.ERROR_RESTRICTED, Message: "this circle wallet stopped receiving; the invoice was cancelled"}
+	}
+	row.PaymentRequest, row.ExpiresAt = invoice.Invoice, expiresAt
 	return &row, nil
+}
+
+// holdPreimage is the preimage of a Hub-settled hold invoice: opened from its
+// sealed copy, or the plain one once it settled; "" when it holds none.
+func holdPreimage(row *db.Transaction) (string, error) {
+	if row.HoldPreimageSealed != nil && *row.HoldPreimageSealed != "" {
+		return atrest.Open(*row.HoldPreimageSealed)
+	}
+	if row.Preimage != nil {
+		return *row.Preimage, nil
+	}
+	return "", nil
+}
+
+// SealHoldPreimages seals the plain preimage of every Hub-settled hold invoice
+// not yet settled, as one written before preimages were sealed at rest. It is
+// idempotent, and runs once the at-rest key is loaded.
+func SealHoldPreimages(gormDB *gorm.DB) (int, error) {
+	var rows []db.Transaction
+	if err := gormDB.Table("transactions").Select("transactions.id", "transactions.preimage").
+		Joins("JOIN apps ON apps.id = transactions.app_id").
+		Where("apps.kind = ? AND transactions.type = ? AND transactions.hold = ? AND transactions.state <> ?",
+			db.AppKindCircleWallet, constants.TRANSACTION_TYPE_INCOMING, true, constants.TRANSACTION_STATE_SETTLED).
+		Where("transactions.preimage IS NOT NULL AND transactions.preimage <> '' AND transactions.hold_preimage_sealed IS NULL").
+		Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	sealedCount := 0
+	for _, r := range rows {
+		sealed, err := atrest.Seal(*r.Preimage)
+		if err != nil {
+			return sealedCount, err
+		}
+		res := gormDB.Model(&db.Transaction{}).Where("id = ? AND hold_preimage_sealed IS NULL AND state <> ?", r.ID, constants.TRANSACTION_STATE_SETTLED).
+			Updates(map[string]interface{}{"hold_preimage_sealed": sealed, "preimage": nil})
+		if res.Error != nil {
+			return sealedCount, res.Error
+		}
+		sealedCount += int(res.RowsAffected)
+	}
+	return sealedCount, nil
 }
 
 // isCircleHold reports whether row is a Hub-settled Circle Wallet invoice:
@@ -292,9 +359,15 @@ func (svc *transactionsService) ResolveCircleHold(ctx context.Context, paymentHa
 		return nil
 	}
 	ok, reason := circleHoldAcceptable(svc.db, &row, amountPaid, time.Now())
-	if ok && row.Preimage != nil {
-		_, err := svc.SettleHoldInvoice(ctx, *row.Preimage, lnClient)
-		return err
+	if ok {
+		preimage, err := holdPreimage(&row)
+		if err != nil {
+			return fmt.Errorf("open the invoice's preimage: %w", err)
+		}
+		if preimage != "" {
+			_, err = svc.SettleHoldInvoice(ctx, preimage, lnClient)
+			return err
+		}
 	}
 	if !ok {
 		svc.logger.Info().Str("payment_hash", paymentHash).Str("reason", reason).Msg("Cancelling a circle wallet payment the Hub refuses")
@@ -369,6 +442,44 @@ func publishHoldAccepted(tx *gorm.DB, row *db.Transaction) bool {
 	return !isCircleHold(tx, row)
 }
 
+// CancelHoldInvoicesAtNode cancels at the node each hold invoice of
+// paymentHashes, whose rows the caller already failed (a deleted Circle
+// Wallet's): an invoice issued after the wallet's last cancel would otherwise
+// stay payable, and its HTLC held. Failures are logged; a payment that still
+// arrives is cancelled when the node reports it (cancelHeldForFailedRow).
+func (svc *transactionsService) CancelHoldInvoicesAtNode(ctx context.Context, paymentHashes []string, lnClient lnclient.LNClient) {
+	if lnClient == nil {
+		return
+	}
+	for _, hash := range paymentHashes {
+		if err := lnClient.CancelHoldInvoice(ctx, hash); err != nil && !errors.Is(err, lnclient.ErrInvoiceNotFound) {
+			svc.logger.Warn().Err(err).Str("payment_hash", hash).Msg("Failed to cancel a closed hold invoice at the node")
+		}
+	}
+}
+
+// cancelHeldForFailedRow cancels at the node a payment the node holds for an
+// invoice whose row is already failed: nothing will ever settle it, so it is
+// released now rather than at its CLTV.
+func (svc *transactionsService) cancelHeldForFailedRow(ctx context.Context, paymentHash string) {
+	var n int64
+	if err := svc.db.Model(&db.Transaction{}).Where("payment_hash = ? AND type = ? AND state = ? AND hold = ?",
+		paymentHash, constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_FAILED, true).Count(&n).Error; err != nil || n == 0 {
+		return
+	}
+	if svc.lnClientProvider == nil {
+		return
+	}
+	lnClient := svc.lnClientProvider()
+	if lnClient == nil {
+		return
+	}
+	svc.logger.Info().Str("payment_hash", paymentHash).Msg("Cancelling a payment held for a closed invoice")
+	if err := lnClient.CancelHoldInvoice(ctx, paymentHash); err != nil {
+		svc.logger.Error().Err(err).Str("payment_hash", paymentHash).Msg("Failed to cancel a payment held for a closed invoice")
+	}
+}
+
 // CancelOpenCircleInvoices cancels every open invoice of a Circle Wallet at the
 // node and fails its row, as a wallet that leaves Active or is deleted must
 // (NIP-CW §Own Funds and Caps, §Deleting a Circle Wallet). A held payment the
@@ -392,8 +503,10 @@ func (svc *transactionsService) CancelOpenCircleInvoices(ctx context.Context, wa
 			}
 			continue
 		}
+		// A node with no such invoice (never issued, or forgotten) has nothing
+		// left to cancel: the row is failed all the same.
 		if row.Hold && !row.SelfPayment && lnClient != nil {
-			if err := lnClient.CancelHoldInvoice(ctx, row.PaymentHash); err != nil {
+			if err := lnClient.CancelHoldInvoice(ctx, row.PaymentHash); err != nil && !errors.Is(err, lnclient.ErrInvoiceNotFound) {
 				return fmt.Errorf("cancel invoice %s at the node: %w", row.PaymentHash, err)
 			}
 		}

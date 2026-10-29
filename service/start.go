@@ -13,6 +13,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/nip47/models"
 	"github.com/flokiorg/lokihub/swaps"
+	"github.com/flokiorg/lokihub/transactions"
 	nostrlsps5 "github.com/flowgate-lsp/nostr-lsps5"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -437,6 +438,13 @@ func (svc *service) StartApp(encryptionKey string) error {
 		logger.Logger.Error().Err(err).Msg("Failed to init nostr keys")
 		return err
 	}
+	// The at-rest key is loaded now: seal any hold preimage stored plain.
+	if n, err := transactions.SealHoldPreimages(svc.db); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to seal stored hold invoice preimages")
+		return err
+	} else if n > 0 {
+		logger.Logger.Info().Int("count", n).Msg("Sealed stored hold invoice preimages at rest")
+	}
 
 	ctx, cancelFn := context.WithCancel(svc.ctx)
 	svc.shutdownGroup = new(errgroup.Group)
@@ -564,6 +572,14 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		svc.lnClient = nil
 		_ = lnClient.Shutdown()
 		return refusal
+	}
+	if info != nil {
+		if refusal := config.CheckNodeNetwork(svc.cfg.GetEnv().Network, info.Network); refusal != nil {
+			logger.Logger.Error().Err(refusal).Msg("Refusing to start beside a node on another network")
+			svc.lnClient = nil
+			_ = lnClient.Shutdown()
+			return refusal
+		}
 	}
 	// Every cash signature by the node identity waits on this check.
 	nodesign.Guard.Set(svc.checkCashIdentityNetwork)

@@ -59,8 +59,13 @@ func CreateRemintedBillTx(ctx context.Context, tx *gorm.DB, deps Deps, b RemintB
 	if err != nil {
 		return nil, err
 	}
+	phase, err := newSignPhase(ctx, deps.LNClient, 1)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to re-mint a bill without a signed token: %w", err)
+	}
+	defer phase.done()
 	identityRequired := nb.identityRequired
-	tok, encoded, err := issueCashToken(ctx, deps.LNClient, *app.WalletPubkey, secret, deps.RelayURLs, &identityRequired, b.AmountMillis, b.Hub, nil)
+	tok, encoded, err := phase.issue(*app.WalletPubkey, secret, deps.RelayURLs, &identityRequired, b.AmountMillis, b.Hub, nil)
 	if err != nil {
 		return nil, fmt.Errorf("refusing to re-mint a bill without a signed token: %w", err)
 	}

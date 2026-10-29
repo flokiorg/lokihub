@@ -254,14 +254,20 @@ func (controller *nip47Controller) HandleCashRedeemEvent(ctx context.Context, ni
 	if app.ParentAppID != nil {
 		hubID = *app.ParentAppID
 	}
+	payee := strings.ToLower(invoice.Payee)
+	if sameNode {
+		payee = ""
+	}
 	err = controller.appsService.ClaimSliceForRedeem(apps.RedeemClaim{
-		Slice:          apps.SliceRef{ClaimID: claim.ID, IdentityType: claim.IdentityType, IdentityValue: claim.IdentityValue, TransferCount: claim.TransferCount},
-		HubAppID:       hubID,
-		PaymentHash:    invoice.PaymentHash,
-		ProofID:        proofID,
-		ProofCreatedAt: proofCreatedAt,
-		InflightPerHub: env.CashRedeemInflightPerHub,
-		InflightNode:   env.CashRedeemInflightNode,
+		Slice:            apps.SliceRef{ClaimID: claim.ID, IdentityType: claim.IdentityType, IdentityValue: claim.IdentityValue, TransferCount: claim.TransferCount},
+		HubAppID:         hubID,
+		PaymentHash:      invoice.PaymentHash,
+		ProofID:          proofID,
+		ProofCreatedAt:   proofCreatedAt,
+		InflightPerHub:   env.CashRedeemInflightPerHub,
+		InflightNode:     env.CashRedeemInflightNode,
+		Payee:            payee,
+		InflightPerPayee: env.CashRedeemInflightPerPayee,
 	}, now)
 	switch {
 	case errors.Is(err, apps.ErrRedeemInflight):

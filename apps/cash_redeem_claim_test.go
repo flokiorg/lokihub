@@ -145,3 +145,56 @@ func TestClaimSliceForRedeem_NodeInflightBoundIsExact(t *testing.T) {
 	require.NoError(t, svc.DB.First(&after, c.ID).Error)
 	assert.Nil(t, after.ClaimedAt, "refused before the claim")
 }
+
+// One payee takes at most InflightPerPayee of a Hub's payouts in flight; other
+// payees and same-node payouts still get the Hub's remaining slots, and a
+// released payout gives its payee's slot back.
+func TestClaimSliceForRedeem_PerPayeeInflightBound(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := newCashHub(t, svc, 10_000_000, 3600)
+	other := newCashHub(t, svc, 10_000_000, 3600)
+	holder, honest := "02"+randomHex32(), "03"+randomHex32()
+	claim := func(h *db.App, c db.CashWalletClaim, payee string) (string, error) {
+		hash := randomHex32()
+		return hash, svc.AppsService.ClaimSliceForRedeem(apps.RedeemClaim{
+			Slice:       apps.SliceRef{ClaimID: c.ID, IdentityType: c.IdentityType, IdentityValue: c.IdentityValue, TransferCount: c.TransferCount},
+			HubAppID:    h.ID, PaymentHash: hash, InflightPerHub: 32, Payee: payee, InflightPerPayee: 2,
+		}, time.Now())
+	}
+	w1, s1 := redeemableSlice(t, svc, hub)
+	_, s2 := redeemableSlice(t, svc, hub)
+	_, s3 := redeemableSlice(t, svc, hub)
+	_, err = claim(hub, s1, holder)
+	require.NoError(t, err, "0 to this payee, bound 2")
+	_, err = claim(hub, s2, holder)
+	require.NoError(t, err, "1 to this payee, bound 2")
+	_, err = claim(hub, s3, holder)
+	assert.ErrorIs(t, err, apps.ErrRedeemInflight, "2 to this payee, bound 2")
+	var after db.CashWalletClaim
+	require.NoError(t, svc.DB.First(&after, s3.ID).Error)
+	assert.Nil(t, after.ClaimedAt, "refused before the claim")
+
+	_, s4 := redeemableSlice(t, svc, hub)
+	_, err = claim(hub, s4, honest)
+	assert.NoError(t, err, "another payee keeps the Hub's slots")
+	_, s5 := redeemableSlice(t, svc, hub)
+	_, err = claim(hub, s5, "")
+	assert.NoError(t, err, "a same-node payout is not counted per payee")
+	_, s6 := redeemableSlice(t, svc, other)
+	_, err = claim(other, s6, holder)
+	assert.NoError(t, err, "the bound is per Hub")
+
+	// Releasing a failed payout frees its payee's slot.
+	var c1 db.CashWalletClaim
+	require.NoError(t, svc.DB.First(&c1, s1.ID).Error)
+	released, err := svc.AppsService.ReleaseRedeemClaim(w1.ID, c1.PaymentHash, nil)
+	require.NoError(t, err)
+	require.True(t, released)
+	require.NoError(t, svc.DB.First(&c1, s1.ID).Error)
+	assert.Empty(t, c1.RedeemPayee)
+	_, s7 := redeemableSlice(t, svc, hub)
+	_, err = claim(hub, s7, holder)
+	assert.NoError(t, err, "a released payout gives its payee's slot back")
+}

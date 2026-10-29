@@ -49,6 +49,18 @@ type TestHooks struct {
 // committed first (NIP-CASH §Claim Proofs: UNAUTHORIZED, a proof already used).
 var ErrProofUsed = errors.New("a claim proof of this call was already used")
 
+// ErrLiveBillCap: the commit would take its Cash Hub past the live-bill cap
+// (NIP-CASH §Security Considerations for Cash-Mode Slices: QUOTA_EXCEEDED).
+var ErrLiveBillCap = errors.New("this Cash Hub holds its maximum of live bills")
+
+// LiveBillCap bounds a commit by its Cash Hub's live bills: Adds is how many it
+// adds net, checked against Limit under the Hub's live-bill lock. A nil cap, a
+// Limit of 0 or Adds of at most 0 checks nothing.
+type LiveBillCap struct {
+	Limit int
+	Adds  int
+}
+
 // ClaimProof is one claim proof a call consumes when, and only when, it commits.
 type ClaimProof struct {
 	EventID   string
@@ -123,6 +135,9 @@ type commitPlan struct {
 	proofs    []ClaimProof
 	// record, when set, is written last, under the call's deadline.
 	record *db.CashRequestRecord
+	// liveBillCap, when set, is counted inside the commit, so concurrent calls
+	// on different bills of one Hub cannot pass it together.
+	liveBillCap *LiveBillCap
 }
 
 // committedBill is a bill a commit created, and the token it was issued with;
@@ -140,7 +155,8 @@ type committedBill struct {
 //	IMMEDIATE transaction already holds the one write lock)
 //	create each new bill's app and derive its key from the app id
 //	sign each bill's token (the node signs inside the open transaction, so the
-//	  bill exists for no one until it commits)
+//	  bill exists for no one until it commits; all signatures share one
+//	  SignBudget deadline, which bounds the lock time)
 //	write the bills' slices, claim the sources or reassign in place
 //	move the value as ledger rows, consume every claim proof
 //	store each token, write the record, re-check the deadline last
@@ -164,6 +180,9 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		if err := lockAppsTx(tx, plan.lockApps); err != nil {
 			return err
 		}
+		if err := checkLiveBillCapTx(tx, plan.hub, plan.liveBillCap); err != nil {
+			return err
+		}
 		if err := deps.before(StageAfterLock); err != nil {
 			return err
 		}
@@ -181,6 +200,11 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 			return err
 		}
 
+		phase, err := newSignPhase(ctx, deps.LNClient, len(plan.bills))
+		if err != nil {
+			return fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
+		}
+		defer phase.done()
 		tokens := make([]string, len(plan.bills))
 		signed := make([]nipcash.Token, len(plan.bills))
 		zaps := make([]*nipcash.ZapContext, len(plan.bills))
@@ -194,7 +218,7 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 					return err
 				}
 			}
-			tok, encoded, err := issueCashToken(ctx, deps.LNClient, *billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub, zaps[i])
+			tok, encoded, err := phase.issue(*billApps[i].WalletPubkey, secrets[i], deps.RelayURLs, &identityRequired, b.amount, plan.hub, zaps[i])
 			if err != nil {
 				return fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
 			}
@@ -303,6 +327,26 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		deps.AppsService.NotifyAppCreated(b.App)
 	}
 	return out, nil
+}
+
+// checkLiveBillCapTx counts hub's live bills under its live-bill lock (sqlite's
+// write lock already serialises it) and refuses a commit that would add past
+// the cap.
+func checkLiveBillCapTx(tx *gorm.DB, hub *db.App, c *LiveBillCap) error {
+	if c == nil || c.Limit <= 0 || c.Adds <= 0 || hub == nil {
+		return nil
+	}
+	if err := db.LockNamespace(tx, db.LockNsLiveBills, int32(hub.ID)); err != nil { //nolint:gosec // app ids are small
+		return err
+	}
+	var live int64
+	if err := tx.Model(&db.App{}).Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Count(&live).Error; err != nil {
+		return fmt.Errorf("count the hub's live bills: %w", err)
+	}
+	if live+int64(c.Adds) > int64(c.Limit) {
+		return ErrLiveBillCap
+	}
+	return nil
 }
 
 // lockAppsTx takes the per-app advisory lock SendPaymentSync uses

@@ -61,6 +61,7 @@ func (controller *nip47Controller) HandleDeleteCircleWalletEvent(ctx context.Con
 		return
 	}
 
+	var openHolds []string
 	err = controller.db.Transaction(func(tx *gorm.DB) error {
 		var current db.App
 		if err := tx.Where("id = ?", app.ID).First(&current).Error; err != nil {
@@ -71,7 +72,9 @@ func (controller *nip47Controller) HandleDeleteCircleWalletEvent(ctx context.Con
 		if err := tx.Model(&db.RequestEvent{}).Where("id = ?", requestEventId).Update("app_id", nil).Error; err != nil {
 			return err
 		}
-		return circlewallet.DeleteWallet(tx, &current, hubclock.Now())
+		var err error
+		openHolds, err = circlewallet.DeleteWallet(tx, &current, hubclock.Now())
+		return err
 	})
 	switch {
 	case errors.Is(err, circlewallet.ErrNotDeletable):
@@ -83,6 +86,7 @@ func (controller *nip47Controller) HandleDeleteCircleWalletEvent(ctx context.Con
 		return
 	}
 
+	controller.transactionsService.CancelHoldInvoicesAtNode(ctx, openHolds, controller.lnClient)
 	controller.eventPublisher.Publish(&events.Event{
 		Event:      "nwc_app_deleted",
 		Properties: map[string]interface{}{"id": app.ID},

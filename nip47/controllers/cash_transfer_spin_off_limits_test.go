@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -79,8 +80,14 @@ func TestCashTransfer_LineageLimiter(t *testing.T) {
 	second := transferWith(t, controller, bill, p)
 	require.NotNil(t, second.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, second.Error.Code)
+	assert.Contains(t, second.Error.Message, "request_id stays used", "the refusal tells the caller its id is spent")
 	assert.True(t, isUsed(t, svc, p.RequestID))
 	assert.Nil(t, cashWalletClaimByIdentity(t, svc, bill.ID, db.CashIdentityPubkey, bobPub).ClaimedAt)
+	// NIP-CASH marks the id once authorization passes, before the limits: the
+	// same id again is REQUEST_REUSED, a fresh one is limited on its merits.
+	again := transferWith(t, controller, bill, p)
+	require.NotNil(t, again.Error)
+	assert.Equal(t, constants.ERROR_REQUEST_REUSED, again.Error.Code)
 }
 
 // R2-F4: a spin-off whose commit fails gives its lineage's allowance back, so
@@ -149,4 +156,13 @@ func TestCashTransfer_LiveBillCap(t *testing.T) {
 	resp = transferWithCall(t, f.svc, f.wallet, p, testPrivateCall(p.IdentityEvent))
 	require.Nil(t, resp.Error, "one new bill fits under the cap")
 	assert.NotEmpty(t, resp.Result.(cashTransferResponse).NewWalletPubkey)
+}
+
+// A commit refused by the live-bill cap it re-counts is QUOTA_EXCEEDED with a
+// fixed message, like the early count; other commit failures keep their codes.
+func TestCommitError_LiveBillCapIsQuotaExceeded(t *testing.T) {
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, mapCashWalletErrorCode(fmt.Errorf("commit: %w", cashwallet.ErrLiveBillCap)))
+	assert.Contains(t, commitErrorMessage(cashwallet.ErrLiveBillCap), "maximum of live bills")
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, mapCashWalletErrorCode(cashwallet.ErrProofUsed))
+	assert.Equal(t, constants.ERROR_INTERNAL, mapCashWalletErrorCode(errors.New("node down")))
 }

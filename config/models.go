@@ -66,6 +66,10 @@ type AppConfig struct {
 	// RATE_LIMITED before it claims anything. 0 disables that bound.
 	CashRedeemInflightPerHub int `envconfig:"CASH_REDEEM_INFLIGHT_PER_HUB" default:"32"`
 	CashRedeemInflightNode   int `envconfig:"CASH_REDEEM_INFLIGHT_NODE" default:"256"`
+	// CashRedeemInflightPerPayee bounds a Cash Hub's payouts in flight to one
+	// paying node, so one holder of many slices paying hold invoices cannot take
+	// every slot of the Hub. Same-node payouts are not counted. 0 disables it.
+	CashRedeemInflightPerPayee int `envconfig:"CASH_REDEEM_INFLIGHT_PER_PAYEE" default:"8"`
 	// CashRedeemLateFailureCooldownSecs is how long a slice whose payout failed
 	// only after cash_redeem answered is refused RATE_LIMITED for another
 	// redeem. 0 disables the cool-down.

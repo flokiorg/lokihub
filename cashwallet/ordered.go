@@ -32,6 +32,11 @@ type MintedBill struct {
 // Hub; it announces each bill after COMMIT (deps.AppsService.NotifyAppCreated).
 func MintOrderedTx(ctx context.Context, tx *gorm.DB, deps Deps, hub *db.App, bills []OrderedBill) ([]MintedBill, error) {
 	out := make([]MintedBill, 0, len(bills))
+	phase, err := newSignPhase(ctx, deps.LNClient, len(bills))
+	if err != nil {
+		return nil, fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
+	}
+	defer phase.done()
 	for _, b := range bills {
 		claim := b.Claim
 		claim.Ordered = true
@@ -43,7 +48,7 @@ func MintOrderedTx(ctx context.Context, tx *gorm.DB, deps Deps, hub *db.App, bil
 			return nil, err
 		}
 		identityRequired := nb.identityRequired
-		tok, encoded, err := issueCashToken(ctx, deps.LNClient, *app.WalletPubkey, secret, deps.RelayURLs, &identityRequired, b.Amount, hub, nil)
+		tok, encoded, err := phase.issue(*app.WalletPubkey, secret, deps.RelayURLs, &identityRequired, b.Amount, hub, nil)
 		if err != nil {
 			return nil, fmt.Errorf("refusing to issue a bill without a signed token: %w", err)
 		}
