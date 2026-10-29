@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Shows an LSP's announced and live terms side by side on the JIT receive
+  and channel order screens when the live ones are worse, and asks again
+  before buying (`terms` on `GET /api/lsps2/info` and `/api/lsps1/info`; the
+  purchase sends the worse values accepted as `acceptedTerms` /
+  `accepted_terms`, and a purchase whose terms turned worse meanwhile is
+  refused with 409 and both).
 - Takes order payments in and mints them (NIP-CO §Paying and Minting). A
   settled order invoice, or a payment of one by a wallet on this node, is
   recorded once by its payment hash and minted in one commit: the Hub is

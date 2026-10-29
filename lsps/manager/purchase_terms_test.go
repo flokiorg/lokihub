@@ -339,3 +339,36 @@ func TestJITFeeBounds(t *testing.T) {
 	_, err = jitFee(1<<63, lsps2.OpeningFeeParams{Proportional: 1 << 31})
 	assert.Error(t, err, "overflow")
 }
+
+// The order screens' comparison: the LSPS2 fee row offered and the LSPS1
+// bounds, each against the announced values, worse only where the live value
+// is worse for the buyer.
+func TestOrderScreenTermsCompareWithTheAnnouncement(t *testing.T) {
+	m, _, _ := gateManager(t, func(l *persist.LSP) {
+		o, _ := json.Marshal([]niplsp.Option{{Name: "max_channel_expiry_blocks", Value: "12960"}, {Name: "min_channel_balance", Value: "100000"}})
+		l.LSPS1 = string(o)
+	})
+	same, err := m.LSPS2Terms(gateLSP, liveRow())
+	require.NoError(t, err)
+	assert.False(t, same.Worse)
+	assert.Len(t, same.Fields, 6)
+	worse := liveRow()
+	worse.MaxPaymentSizeMloki--
+	w, err := m.LSPS2Terms(gateLSP, worse)
+	require.NoError(t, err)
+	assert.True(t, w.Worse)
+
+	opts := lsps1.Options{MaxChannelExpiryBlocks: 12960, MinChannelBalanceLoki: 100000}
+	l1, err := m.LSPS1Terms(gateLSP, opts)
+	require.NoError(t, err)
+	assert.False(t, l1.Worse)
+	opts.MaxChannelExpiryBlocks = 12959
+	l1, err = m.LSPS1Terms(gateLSP, opts)
+	require.NoError(t, err)
+	assert.True(t, l1.Worse)
+	assert.Contains(t, l1.Fields, TermField{Field: "max_channel_expiry_blocks", Announced: "12960", Live: "12959", Verdict: "worse"})
+	opts.MaxChannelExpiryBlocks, opts.MinChannelBalanceLoki = 12961, 99999
+	l1, err = m.LSPS1Terms(gateLSP, opts)
+	require.NoError(t, err)
+	assert.False(t, l1.Worse, "better on both")
+}

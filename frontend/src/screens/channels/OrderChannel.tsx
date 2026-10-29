@@ -38,7 +38,14 @@ import { useInfo } from "src/hooks/useInfo";
 import { useLSPS1 } from "src/hooks/useLSPS1";
 import { useInputUnit, useUnit } from "src/hooks/useUnit";
 import { cn } from "src/lib/utils";
-import { LSPS1CreateOrderRequest, LSPS1GetInfoResponse } from "src/types";
+import {
+  LSPAcceptedTerm,
+  LSPS1CreateOrderRequest,
+  LSPS1GetInfoResponse,
+  LSPTerms,
+} from "src/types";
+import { needsConfirmation, termsFromError } from "src/components/lsps/terms";
+import { TermsChangedDialog } from "src/components/lsps/TermsChangedDialog";
 import { LSPS5EventType } from "src/types/lspsEvents";
 import { request } from "src/utils/request";
 
@@ -90,6 +97,8 @@ export default function OrderChannel() {
   const [orderFee, setOrderFee] = useState<number>(0);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [lsps1Info, setLsps1Info] = useState<LSPS1GetInfoResponse | null>(null);
+  // Live LSPS1 bounds worse than announced, shown before ordering.
+  const [termsPrompt, setTermsPrompt] = useState<LSPTerms | null>(null);
 
   // The last used trusted LSP selling now, else the first (WP-26).
   useEffect(() => {
@@ -256,7 +265,14 @@ export default function OrderChannel() {
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLSP || !amountDisplay) return;
+    if (needsConfirmation(lsps1Info?.terms, [])) {
+      setTermsPrompt(lsps1Info?.terms ?? null);
+      return;
+    }
+    await placeOrder(undefined);
+  };
 
+  const placeOrder = async (acceptedTerms: LSPAcceptedTerm[] | undefined) => {
     try {
       const amountLoki = parseInputAmount(+amountDisplay, inputUnit);
       const req: LSPS1CreateOrderRequest = {
@@ -265,6 +281,7 @@ export default function OrderChannel() {
         channel_expiry_blocks: 144 * 30,
         announce_channel: false,
         opening_fee_params: lsps1Info?.opening_fee_params?.[0],
+        accepted_terms: acceptedTerms,
       };
 
       const res = await createOrder(req);
@@ -278,6 +295,13 @@ export default function OrderChannel() {
       }
     } catch (e: any) {
       console.error(e);
+      // Worse than announced at order time: show both and ask again.
+      const changed = termsFromError(e);
+      if (changed) {
+        toast(t("lspTerms.changed"));
+        setTermsPrompt(changed);
+        return;
+      }
       toast.error("Failed to create order", {
         description: e.message || "Unknown error",
       });
@@ -288,6 +312,14 @@ export default function OrderChannel() {
 
   return (
     <div className="flex flex-col gap-5">
+      <TermsChangedDialog
+        terms={termsPrompt}
+        onCancel={() => setTermsPrompt(null)}
+        onConfirm={(accepted) => {
+          setTermsPrompt(null);
+          void placeOrder(accepted);
+        }}
+      />
       {!paymentInvoice && (
         <AppHeader
           title={t("orderChannel.title", "Increase Inbound Liquidity")}

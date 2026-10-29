@@ -60,18 +60,26 @@ import { useTransaction } from "src/hooks/useTransaction";
 import { copyToClipboard } from "src/lib/clipboard";
 import {
   CreateInvoiceRequest,
+  LSPAcceptedTerm,
   LSPS2BuyRequest,
   LSPS2BuyResponse,
   LSPS2GetInfoResponse,
-  LSPS2OpeningFeeParams,
+  LSPTerms,
   Transaction,
 } from "src/types";
+import {
+  needsConfirmation,
+  termsFromError,
+  withoutTerms,
+} from "src/components/lsps/terms";
+import { TermsChangedDialog } from "src/components/lsps/TermsChangedDialog";
 
 import { useTranslation, Trans } from "react-i18next";
 import { request } from "src/utils/request";
 
 export default function ReceiveInvoice() {
   const { t } = useTranslation(["wallet", "common"]);
+  const { t: tc } = useTranslation("channels");
   const { data: info, hasChannelManagement } = useInfo();
   const { data: balances } = useBalances();
   const { parseAmount, scaleInputAmount, parseInputAmount } = useUnit();
@@ -98,7 +106,9 @@ export default function ReceiveInvoice() {
   );
   const [paymentDone, setPaymentDone] = React.useState(false);
   const [jitFeeParams, setJitFeeParams] =
-    React.useState<LSPS2OpeningFeeParams | null>(null);
+    React.useState<LSPS2GetInfoResponse | null>(null);
+  // Live terms worse than announced, shown before buying (NIP-LSP live check).
+  const [termsPrompt, setTermsPrompt] = React.useState<LSPTerms | null>(null);
   const [jitError, setJitError] = React.useState<string | null>(null);
   const [jitApplied, setJitApplied] = React.useState(false);
   const [selectedLspPubkey, setSelectedLspPubkey] = React.useState<string>("");
@@ -227,7 +237,14 @@ export default function ReceiveInvoice() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (needsJit && jitFeeParams && needsConfirmation(jitFeeParams.terms, [])) {
+      setTermsPrompt(jitFeeParams.terms ?? null);
+      return;
+    }
+    await submit(undefined);
+  };
 
+  const submit = async (acceptedTerms: LSPAcceptedTerm[] | undefined) => {
     try {
       setLoading(true);
       let jitSCID = "";
@@ -323,7 +340,8 @@ export default function ReceiveInvoice() {
             body: JSON.stringify({
               lspPubkey: firstLSP,
               paymentSizeMloki: buyLiquidityAmountMloki, // Buy liquidity for GROSS amount
-              openingFeeParams: jitFeeParams,
+              openingFeeParams: withoutTerms(jitFeeParams),
+              acceptedTerms,
             } as LSPS2BuyRequest),
           });
           if (buyRes) {
@@ -334,6 +352,13 @@ export default function ReceiveInvoice() {
           }
         } catch (e: any) {
           console.error("Failed to buy liquidity", e);
+          // Worse than announced at buy time: show both and ask again.
+          const changed = termsFromError(e);
+          if (changed) {
+            toast(tc("lspTerms.changed"));
+            setTermsPrompt(changed);
+            return;
+          }
           toast.error(t("wallet:receive.failedToBuyLiquidity"), {
             description: e.message || t("wallet:receive.unknownError"),
           });
@@ -383,6 +408,14 @@ export default function ReceiveInvoice() {
 
   return (
     <div className="grid gap-5">
+      <TermsChangedDialog
+        terms={termsPrompt}
+        onCancel={() => setTermsPrompt(null)}
+        onConfirm={(accepted) => {
+          setTermsPrompt(null);
+          void submit(accepted);
+        }}
+      />
       <AppHeader
         title={
           transaction
