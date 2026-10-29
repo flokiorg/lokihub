@@ -573,6 +573,14 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		_ = lnClient.Shutdown()
 		return refusal
 	}
+	if info != nil {
+		if refusal := config.CheckNodeNetwork(svc.cfg.GetEnv().Network, info.Network); refusal != nil {
+			logger.Logger.Error().Err(refusal).Msg("Refusing to start beside a node on another network")
+			svc.lnClient = nil
+			_ = lnClient.Shutdown()
+			return refusal
+		}
+	}
 	// Every cash signature by the node identity waits on this check.
 	nodesign.Guard.Set(svc.checkCashIdentityNetwork)
 	if info != nil {
