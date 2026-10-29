@@ -15,9 +15,11 @@ import (
 	"github.com/ohstr/nmilat/nipcash/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -325,4 +327,46 @@ func TestPrivateLookup_NoRecordStillVerifiesTheProof(t *testing.T) {
 	code, answer := lookupStatusOf(t, look)
 	require.Empty(t, code, "a proof over its own params verifies")
 	assert.Equal(t, nipcash.LookupUnknown, answer.Status)
+}
+
+// NIP-CASH §Archival on Deletion (CASH-458): cash_lookup rebuilds a split's
+// reply with the new bill's token while the bill lives, and never re-issues a
+// token for it once it is deleted.
+func TestPrivateLookup_NeverReissuesADeletedBillsToken(t *testing.T) {
+	f := newLookupFixture(t)
+	newPub, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	rid := tests.RandomHex32()
+	split := uint64(400)
+	res, served := f.serve(t, func(b nipcash.ItemBinding) (transport.Item, error) {
+		return nipcash.CashTransferParams{
+			Credential: nipcash.BySigning(f.ownerPriv), To: nipcash.Pubkey(newPub),
+			CurrentAmount: 1000, SplitAmount: &split, RequestID: rid,
+		}.Item("t", f.walletPubkey, f.connPriv, b)
+	})
+	require.True(t, served)
+	require.Nil(t, res.Error, "%+v", res.Error)
+	var original map[string]any
+	require.NoError(t, json.Unmarshal(res.Result, &original))
+	newWallet := original["new_wallet_pubkey"].(string)
+
+	rebuiltToken := func() any {
+		look, served := f.lookup(t, nipcash.BySigning(f.ownerPriv), nipcash.CashLookupRequest{RequestID: rid, Deadline: time.Now().Unix()})
+		require.True(t, served)
+		require.Nil(t, look.Error, "%+v", look.Error)
+		var answer nipcash.CashLookupResult
+		require.NoError(t, json.Unmarshal(look.Result, &answer))
+		var rebuilt map[string]any
+		require.NoError(t, json.Unmarshal(answer.Result, &rebuilt))
+		return rebuilt["new_wallet_token"]
+	}
+	live, _ := rebuiltToken().(string)
+	assert.NotEmpty(t, live, "the live bill's token is rebuilt")
+
+	var app db.App
+	require.NoError(t, f.svc.DB.Where("wallet_pubkey = ?", newWallet).First(&app).Error)
+	require.NoError(t, f.svc.DB.Transaction(func(tx *gorm.DB) error {
+		return archive.ArchiveAndDeleteCashBillTx(tx, &app, db.CashBillOutcomeDeleted, 0, time.Now())
+	}))
+	tok, isString := rebuiltToken().(string)
+	assert.False(t, isString && tok != "", "cash_lookup handed out a token for the deleted bill %s", newWallet)
 }
