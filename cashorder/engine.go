@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/hubclock"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -434,7 +435,11 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 			for i := range minted {
 				rb := minted[i].Record
 				rb.RecordID = rec.ID
-				rb.Ordinal = int16(ordinal) + int16(i) //nolint:gosec // bounded by the split floor
+				ord, err := BillOrdinal(ordinal, i)
+				if err != nil {
+					return err
+				}
+				rb.Ordinal = ord
 				rb.PaidMillis, rb.Outpoint = &paid, outpoint
 				if err := tx.Create(&rb).Error; err != nil {
 					return fmt.Errorf("record an ordered bill: %w", err)
@@ -767,4 +772,14 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 	e.notify(changed)
 	e.mintPending(ctx, order.ID)
 	return inv.Preimage, true, nil
+}
+
+// BillOrdinal is the record ordinal of the i-th bill a payment mints after
+// recorded bills already on the order's record, refused past int32.
+func BillOrdinal(recorded int64, i int) (int32, error) {
+	ord := recorded + int64(i)
+	if recorded < 0 || i < 0 || ord > math.MaxInt32 {
+		return 0, fmt.Errorf("bill ordinal %d+%d is out of range", recorded, i)
+	}
+	return int32(ord), nil
 }

@@ -98,7 +98,7 @@ func (s Store) CommitTx(tx *gorm.DB, rec *db.CashRequestRecord, bills []db.CashR
 	}
 	for i := range bills {
 		bills[i].RecordID = rec.ID
-		bills[i].Ordinal = int16(i) //nolint:gosec // a call creates at most a handful of bills
+		bills[i].Ordinal = int32(i) //nolint:gosec // a call creates at most a handful of bills
 	}
 	if len(bills) > 0 {
 		if err := tx.Create(&bills).Error; err != nil {
