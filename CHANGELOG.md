@@ -12,25 +12,25 @@ audits of both.
 - Asks again in the desktop app too when an LSP purchase is refused for
   terms worse than announced: the refusal carries the same body as the HTTP
   409 (message, announced and live terms), so the terms-changed dialog opens
-  and the user can accept there.
+  and the user can accept there. (#160)
 - Lists a Cash Hub's on-chain payouts (state, address, amount, payout, fee,
   `sent_by`, signed, txid:vout, depth / `final_depth`, cancellation, re-minted
   bill link) with a detail view of every version and archive fact
   (`GET /api/cash-hubs/:id/payouts/:payout`, also in the desktop app), and
   marks ordered and re-minted bills, whose remove and delete actions are
-  disabled (`ordered` / `reminted` on the cash-wallet listings).
+  disabled (`ordered` / `reminted` on the cash-wallet listings). (#160)
 - Adds the on-chain withdrawal operator screens: an "On-chain withdrawals"
   node switch under Settings → Advanced with the payout engine's status, and
   a per-Cash Hub card for its enable, `withdraw_fee_base`, `withdraw_fee_ppm`
   and optional minimum and maximum, with the script types paid and
   `final_depth` shown read-only. `GET /api/cash-withdraw/node` reads the
-  switch, and the desktop app serves every on-chain withdrawal route.
+  switch, and the desktop app serves every on-chain withdrawal route. (#160)
 - Shows an LSP's announced and live terms side by side on the JIT receive
   and channel order screens when the live ones are worse, and asks again
   before buying (`terms` on `GET /api/lsps2/info` and `/api/lsps1/info`; the
   purchase sends the worse values accepted as `acceptedTerms` /
   `accepted_terms`, and a purchase whose terms turned worse meanwhile is
-  refused with 409 and both).
+  refused with 409 and both). (#160)
 - Takes order payments in and mints them (NIP-CO §Paying and Minting). A
   settled order invoice, or a payment of one by a wallet on this node, is
   recorded once by its payment hash and minted in one commit: the Hub is
@@ -486,7 +486,7 @@ audits of both.
 - Builds with Go 1.26.10, which fixes a certificate-verification flaw in the
   standard library (GO-2026-6809) reachable from backup restore. (#152)
 - Moves to `nmilat` v0.5.0-rc.45, the published client SDK with the NIP-CASH
-  and NIP-CW wire changes in this release. (#153)
+  and NIP-CW wire changes in this release. (#153, #160)
 
 ### Fixed
 
@@ -494,181 +494,185 @@ audits of both.
   4): it is not seen, undoes such a newest-seen mark kept earlier, and ranks a
   future-dated row last when the catalogue is pruned. One far-future event
   locked out the node's later announcements, `closed` included, and
-  future-dated spam crowded real LSPs out of the catalogue.
+  future-dated spam crowded real LSPs out of the catalogue. (#160)
 - Keeps an LSP's announcement usable through its expiration second, as NIP-40
   asks, and refuses LSPS messages to an LSP whose announcement expired since
   the catalogue's last refresh. The sweep dropped it a second early, and
-  purchases went ahead until the next refresh.
+  purchases went ahead until the next refresh. (#160)
 - Buys JIT liquidity only at terms compared with the LSP's announcement: an
   automatic purchase fetches the fee menu at buy time (and again on a stale
   retry) and refuses it when worse for the buyer, a manual one compares the
   exact fee row bought and refuses a worse one, and both refuse a payment
   outside the row's size bounds or one the fee would take whole. The buy
   re-fetched the menu and bought its first row unseen, so an LSP could pass
-  the live check and sell at a higher fee.
+  the live check and sell at a higher fee. (#160)
 - Fails an LSP's live check when its announced LSPS1 or LSPS2 `get_info`
   errors or cannot be read. Such a check passed as terms equal to the
-  announced ones, so a purchase went ahead with no live terms compared.
+  announced ones, so a purchase went ahead with no live terms compared. (#160)
 - Asks no explorer at all when none is configured: `/api/mempool` and its
   Wails route answer empty, and the unused-address check keeps the current
-  address, instead of sending a request to an empty base URL.
+  address, instead of sending a request to an empty base URL. (#160)
 - Refuses to start beside a node on another chain than `NETWORK` names, and
   refuses an unknown `NETWORK` value, listing the accepted ones. A
   `NETWORK=regtest` on a mainnet node used regtest swap keys and addresses.
+  (#160)
 - Publishes the dev stack's ports (relay, flnd RPC, Caddy) on the loopback
   only, unless `DEV_BIND` says otherwise; they were open on every interface of
-  the host.
+  the host. (#160)
 - Rate-limits `/api/unlock`, `/api/start`, `/api/backup` and `/logout` by the
   connection's own address. The limiter trusted `X-Forwarded-For` and
   `X-Real-IP`, so a caller could forge a fresh address on every unlock attempt.
+  (#160)
 - Updates echo to 4.16.2, wails to 2.13.0, golang.org/x/net to 0.62.0,
   golang.org/x/image to 0.45.0 and the frontend's zod to 4.6.7, for the
   published advisories against the older versions (echo's WebSocket upgrade
-  access bypass among them).
+  access bypass among them). (#160)
 - Lets the operator rotate the private-transport inbox key
   (`POST /api/private-transport/rotate-inbox`, and its Wails route): the Hub
   moves to the next key index, subscribes the new inbox, announces it, and
   keeps opening requests to the old one for `max_request_age`. The index was a
-  constant, so a leaked inbox key could not be replaced.
+  constant, so a leaked inbox key could not be replaced. (#160)
 - Seals a circle wallet invoice's preimage at rest until it settles, with a
   key derived from the node's mnemonic at unlock; an open invoice's preimage
   is no longer stored plain or logged, and rows written before are sealed at
-  the next unlock.
+  the next unlock. (#160)
 - Never stores a cached `get_info` computed before an Order connection's
   retirement or new terms, or a circle's close, committed: such a result could
   be stored after the invalidation and served stale for up to 5 s. A listed
   circle connection's cached `get_info` is now also dropped when the circle
-  opens to new members again, and when any of its listings closes.
+  opens to new members again, and when any of its listings closes. (#160)
 - Bounds an operator's own on-chain spend or channel open by what the
   wallet's coin selection may spend (confirmed coins under no lease), less the
   floor and what payouts still need from those coins. The guard counted every
   leased coin, another user's included, as spendable, and subtracted the
-  set-aside of payouts whose coins were already spent.
+  set-aside of payouts whose coins were already spent. (#160)
 - Reads the node's wallet for on-chain order payments from a stored floor 100
   blocks below the tip (and the mempool) instead of its whole history every
   30 s, and stops checking a minted payment deeper than that, counting its
   confirmations from its height. A mint's confirmation check reads from the
-  payment's own block.
+  payment's own block. (#160)
 - Issues a circle wallet's hold invoice outside the database transaction:
   the invoice's row is reserved under the Hub's lock (it counts against every
   cap at once) and completed once the node answers, so a slow node no longer
   stalls every write. An invoice whose wallet stopped receiving meanwhile is
-  cancelled at the node before it is handed out.
+  cancelled at the node before it is handed out. (#160)
 - Cancels at the node, after the delete commits, every hold invoice a circle
   wallet delete fails, and releases at once a payment the node holds for an
   invoice already failed. An invoice issued between the delete's cancel and
-  its commit stayed payable, its HTLC held to its CLTV.
+  its commit stayed payable, its HTLC held to its CLTV. (#160)
 - Lets the circle lifecycle job delete a closing wallet even when the node
   refuses to cancel its open invoices, and asks the node only about wallets
   with an open invoice; an invoice the node does not know is taken as
   cancelled. One persistent node error blocked the wallet's deletion and
-  logged an error every minute.
+  logged an error every minute. (#160)
 - Bounds a Cash Hub's `cash_redeem` payouts in flight to any one paying node
   (`CASH_REDEEM_INFLIGHT_PER_PAYEE`, default 8; same-node payouts are not
   counted). One holder of many slices paying its own hold invoices could take
-  all 32 of the Hub's slots and block every other redeem.
+  all 32 of the Hub's slots and block every other redeem. (#160)
 - Spends `mint_cash`'s hourly allowance only on a mint that commits, as the
   lineage spin-off allowance already was (also under the regtest rate
   override). A refusal made after a call's `request_id` was marked used now
-  says the id stays used, so a retry needs another.
+  says the id stays used, so a retry needs another. (#160)
 - Counts a Cash Hub's live bills again inside a spin-off's or merge's commit,
   under a per-Hub lock, so concurrent calls on different bills can no longer
   pass `CASH_MAX_LIVE_BILLS_PER_HUB` together; the refusal stays
-  `QUOTA_EXCEEDED`.
+  `QUOTA_EXCEEDED`. (#160)
 - Records an order payment's bills past the 32768th in mint order. The
   record ordinal was 16 bits and wrapped, so `cash_lookup` of a very large
-  over-payment returned its bills out of order.
+  over-payment returned its bills out of order. (#160)
 - Bounds how long a cash commit holds the database write lock while the node
   signs its bills: all of a commit's signatures share one budget of 3 s plus
   25 ms a bill, and the node identity is read once per commit. A slow node
-  could hold the lock for up to 3 s per bill.
+  could hold the lock for up to 3 s per bill. (#160)
 - Records a private item's request event only while its target bill still
   exists, under a lock the bill's delete waits on. A bill deleted by a sibling
   item's split in the same envelope logged a `FOREIGN KEY constraint failed`
-  error before the item was answered as a destroyed bill.
+  error before the item was answered as a destroyed bill. (#160)
 - Keeps the newest-seen mark of an LSP pruned from the catalogue, until every
   version it covers has expired, so a relay cannot re-feed an older
-  announcement of it as new.
+  announcement of it as new. (#160)
 - Asks the owner to confirm a Cash Hub delete that ends the watch on paid
   on-chain order addresses, in the delete dialog and on every delete path
   (`DELETE /api/apps/:id` takes `{"confirmWatchEnd": true}`). The generic
-  delete went ahead unconfirmed.
+  delete went ahead unconfirmed. (#160)
 - Reports a Cash Hub's listed offers in its delete check (`listed_offers`,
   `listings_delete_due_at`) and in the delete dialog, as information: the
-  delete closes them and their deletions follow.
+  delete closes them and their deletions follow. (#160)
 - Keeps a cash bill live through its whole `expires_at` second, as NIP-CASH's
   inclusive bound asks: the expiry is stored in whole seconds at mint, and
   calls, the sweep and the operator views compare whole seconds on the hub
-  clock. A call late in that second was refused `RESTRICTED`.
+  clock. A call late in that second was refused `RESTRICTED`. (#160)
 - Ends a cash bill on an owner delete or the expiry sweep in one transaction:
   its unclaimed slices are taken first-wins, a `cash_redeem` in flight defers
   the delete, and the balance moves to the Cash Hub with the archive. A redeem
   claiming a slice during the old reclaim payment could lose its payout to
-  the Hub.
+  the Hub. (#160)
 - Removes a recipient's slice, sweeps its amount back to the Cash Hub and
   archives it in one transaction. A crash between the sweep and the removal
   could leave the slice claimed, impossible to remove again and archived as
-  `redeemed`.
+  `redeemed`. (#160)
 - Shows `cashhub1`, `circlehub1`, `cashorder1` and `lokicash1` QR codes in
   uppercase, which fits the QR alphanumeric mode; copying still gives the
-  lowercase string.
+  lowercase string. (#160)
 - Reports only NIP-47's four networks: testnet4 is `testnet`, simnet
-  `regtest`, and a node on a network with no NIP-47 name signs no cash.
+  `regtest`, and a node on a network with no NIP-47 name signs no cash. (#160)
 - Refuses cash serving when the node identity already signed cash on another
   network, recorded in `cash_identity_networks` the first time cash serving
   starts. The private transport stays down and the node signs no bill,
-  connection string, listing or withdraw quote.
+  connection string, listing or withdraw quote. (#160)
 - Drops a private envelope that carries a case variant of `nonce`,
   `reply_to`, `not_after` or `items`, and bounds a served envelope's
   `not_after` by `max_request_age` itself. Such an envelope could pass the
-  replay and freshness checks on one value and run with another.
+  replay and freshness checks on one value and run with another. (#160)
 - Answers `cash_lookup` with `unknown` only after any commit of that
   `request_id` still in flight has finished, under the same lock the commit
   checks its deadline in. A call whose commit landed just after its deadline
-  could otherwise be reported as never applied.
+  could otherwise be reported as never applied. (#160)
 - Lists every slice in a `cash_status` answer of scope `all`, including the
   claimed slice of an identity that was later given another slice in place;
   that identity's live row comes first, and `mine` still returns that one row.
+  (#160)
 - Gives a new Cash Hub a `min_transfer_millis` default of 1000 (one loki) when
   its creator names none, and starts the New Cash Hub form there; an explicit
-  0 still means no floor.
+  0 still means no floor. (#160)
 - Refuses a Lightning invoice that carries more than one payment hash, in
   `cash_redeem` and every other payment path. Decoders disagree on which hash
-  counts, so the hash a claim proof binds could differ from the one paid.
+  counts, so the hash a claim proof binds could differ from the one paid. (#160)
 - Refuses a recipient or `new_identity` whose `identity_value` or `ia_pubkey`
   has uppercase hex, in `mint_cash` and `cash_transfer`. Such a slice could
   never be claimed, because claim proofs and attestations carry lowercase keys.
+  (#160)
 - Keeps serving member requests for the Circle Wallets a Hub issued with a
   rotation delay after its host turns rotation off; only a Hub with no such
   wallet refuses them all with `NOT_IMPLEMENTED`. A member promised recovery
-  in their details lost it when the setting changed.
+  in their details lost it when the setting changed. (#160)
 - Bounds a Circle Wallet Hub's dust threshold by `CIRCLE_MAX_DUST_MLOKI`
   (default 10,000 mloki, the default routing-fee reserve floor), on creation
   and on update. A host could otherwise set a threshold above any balance and
-  keep every deleted wallet's funds as dust.
+  keep every deleted wallet's funds as dust. (#160)
 - Refuses a frozen Circle Wallet's payment under the payment's lock, so a
-  freeze committed while a request was past its gate still stops it.
+  freeze committed while a request was past its gate still stops it. (#160)
 - Refuses every request by a frozen Circle Wallet's key with `FROZEN`, a
   private-only method's included, and lets any other request by the current
   key cancel a pending rotation before a method is refused; both came after
-  the `NOT_IMPLEMENTED` refusal of private-only methods.
+  the `NOT_IMPLEMENTED` refusal of private-only methods. (#160)
 - Refuses `delete_circle_wallet`, and the lifecycle's deletion, while a
   same-node keysend to the wallet is still to be credited or a held keysend
   the node settled is not yet credited; the held keysend's reservation is now
   recorded in `circle_held_keysends`, under the Hub lock the deletion takes. A
   same-node credit cancelled meanwhile now fails its payer instead of being
-  settled to a deleted wallet.
+  settled to a deleted wallet. (#160)
 - Checks a joiner's membership again inside the join's commit, under the lock
   a membership resolution takes. A member an allowlist edit removed while
-  their join was in flight was issued an Active wallet.
+  their join was in flight was issued an Active wallet. (#160)
 - Resumes the node's invoice stream after a reconnect from the last
   `add_index` and `settle_index` it delivered, so an order invoice settled
-  while the stream was down is minted at once rather than at `pay_by`.
+  while the stream was down is minted at once rather than at `pay_by`. (#160)
 - Refuses `cash_lookup` of an order past its `pay_by` with a retryable
   `INTERNAL` while its window cannot be ended (the chain or its invoice cannot
   be read, or the invoice not cancelled), instead of answering `open`. A client
   reads an open order past `pay_by` as ended unpaid, and stopped reading an
-  order the Hub then minted.
+  order the Hub then minted. (#160)
 - Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
   cancel needs) from the inputs its broadcast version already spends. The node
   no longer lists a coin an unmined transaction of its own spends, so a
