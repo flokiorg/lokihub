@@ -6,6 +6,7 @@ import {
   LSPS1GetOrderResponse,
   LSPS1ListOrdersResponse,
 } from "src/types";
+import { termsFromError } from "src/components/lsps/terms";
 import { request } from "src/utils/request";
 
 export function useLSPS1(lspPubkey: string) {
@@ -49,6 +50,10 @@ export function useLSPS1(lspPubkey: string) {
       );
       return response;
     } catch (e: any) {
+      // Refused for live terms worse than announced: the caller asks again.
+      if (termsFromError(e)) {
+        throw e;
+      }
       setError(e.message || "Failed to create order");
       return null;
     } finally {
