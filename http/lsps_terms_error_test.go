@@ -29,7 +29,7 @@ func TestPurchaseTermsRefusalIsAConflictWithTheTerms(t *testing.T) {
 		fmt.Errorf("buy: %w", &manager.TermsWorseError{Terms: terms}))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusConflict, rec.Code)
-	var body TermsErrorResponse
+	var body manager.TermsRefusal
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, terms, body.Terms)
 	assert.Contains(t, body.Message, "worse than it announced")
