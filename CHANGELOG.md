@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Rate-limits `/api/unlock`, `/api/start`, `/api/backup` and `/logout` by the
+  connection's own address. The limiter trusted `X-Forwarded-For` and
+  `X-Real-IP`, so a caller could forge a fresh address on every unlock attempt.
 - Updates echo to 4.16.2, wails to 2.13.0, golang.org/x/net to 0.62.0 and
   golang.org/x/image to 0.45.0, for the published advisories against the
   older versions (echo's WebSocket upgrade access bypass among them).
