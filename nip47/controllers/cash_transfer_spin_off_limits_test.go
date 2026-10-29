@@ -80,8 +80,14 @@ func TestCashTransfer_LineageLimiter(t *testing.T) {
 	second := transferWith(t, controller, bill, p)
 	require.NotNil(t, second.Error)
 	assert.Equal(t, constants.ERROR_RATE_LIMITED, second.Error.Code)
+	assert.Contains(t, second.Error.Message, "request_id stays used", "the refusal tells the caller its id is spent")
 	assert.True(t, isUsed(t, svc, p.RequestID))
 	assert.Nil(t, cashWalletClaimByIdentity(t, svc, bill.ID, db.CashIdentityPubkey, bobPub).ClaimedAt)
+	// NIP-CASH marks the id once authorization passes, before the limits: the
+	// same id again is REQUEST_REUSED, a fresh one is limited on its merits.
+	again := transferWith(t, controller, bill, p)
+	require.NotNil(t, again.Error)
+	assert.Equal(t, constants.ERROR_REQUEST_REUSED, again.Error.Code)
 }
 
 // R2-F4: a spin-off whose commit fails gives its lineage's allowance back, so
