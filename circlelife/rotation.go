@@ -56,7 +56,18 @@ func refused(code, message string) MemberRequestResult {
 // a key not valid, in use on the node or named by a pending rotation. A freeze
 // of a frozen wallet, or an unfreeze of one that is not, changes nothing.
 func ApplyMemberRequest(gormDB *gorm.DB, hub *db.App, cfg *db.CircleHubConfig, ev *nip01.Event, now time.Time) (MemberRequestResult, error) {
-	if !cfg.RotationEnabled {
+	// A Hub that stopped offering rotation still serves the wallets it issued
+	// with a delay, fixed for their life; step 6 refuses the others.
+	served := cfg.RotationEnabled
+	if !served {
+		var n int64
+		if err := gormDB.Model(&db.App{}).Where("parent_app_id = ? AND kind = ? AND circle_rotation_delay_secs IS NOT NULL",
+			hub.ID, db.AppKindCircleWallet).Count(&n).Error; err != nil {
+			return MemberRequestResult{}, err
+		}
+		served = n > 0
+	}
+	if !served {
 		return refused(nipcw.ErrNotImplemented, "this Hub does not serve member requests"), nil
 	}
 	if hub.WalletPubkey == nil {
