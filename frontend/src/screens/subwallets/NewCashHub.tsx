@@ -4,7 +4,10 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
-import { DEFAULT_CASH_MIN_TRANSFER_LOKI, DEFAULT_CASH_SPENT_RETENTION_SECS } from "src/constants";
+import {
+  DEFAULT_CASH_MIN_TRANSFER_LOKI,
+  DEFAULT_CASH_SPENT_RETENTION_SECS,
+} from "src/constants";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
