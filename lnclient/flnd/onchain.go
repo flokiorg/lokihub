@@ -446,6 +446,17 @@ func (svc *FLNDService) ConfirmedBalance(ctx context.Context) (int64, error) {
 	return resp.ConfirmedBalance + resp.LockedBalance, nil
 }
 
+func (svc *FLNDService) SpendableBalance(ctx context.Context) (int64, error) {
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+	resp, err := svc.client.Lightning().WalletBalance(ctx, &lnrpc.WalletBalanceRequest{})
+	if err != nil {
+		return 0, err
+	}
+	// ConfirmedBalance leaves leased coins out, whoever leased them.
+	return resp.ConfirmedBalance, nil
+}
+
 func (svc *FLNDService) BestBlock(ctx context.Context) (lnclient.BlockEpoch, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()

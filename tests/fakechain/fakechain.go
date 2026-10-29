@@ -684,6 +684,23 @@ func (c *Chain) ConfirmedBalance(context.Context) (int64, error) {
 	return sum, nil
 }
 
+// SpendableBalance is the confirmed balance of the coins no unexpired lease
+// holds, as the node's own coin selection sees it.
+func (c *Chain) SpendableBalance(context.Context) (int64, error) {
+	utxos, _ := c.ListUnspent(context.TODO(), 1, "")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.now().Unix()
+	var sum int64
+	for _, u := range utxos {
+		if l, ok := c.leases[u.Outpoint]; ok && l.expiry > now {
+			continue
+		}
+		sum += u.ValueSat
+	}
+	return sum, nil
+}
+
 func (c *Chain) BestBlock(context.Context) (lnclient.BlockEpoch, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
