@@ -565,5 +565,9 @@
     "rotation": "Member requests (rotate, freeze, unfreeze)",
     "rotationHelper": "Lets a member who lost their connection move the wallet to a new key, after a delay the current key can cancel.",
     "rotationDelay": "Rotation delay"
+  },
+  "cashLock": {
+    "ordered": "ordered: never expires, cannot be removed",
+    "reminted": "re-minted: cannot be removed"
   }
 }

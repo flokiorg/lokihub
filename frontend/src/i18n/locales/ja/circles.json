@@ -453,5 +453,9 @@
     "perHubHint": "どのハブが債務を抱えているか、そしてそれに対して何を保有しているか。",
     "othersBar_one": "ほか {{count}} 件",
     "othersBar_other": "ほか {{count}} 件"
+  },
+  "cashLock": {
+    "ordered": "注文分: 期限なし、削除不可",
+    "reminted": "再発行: 削除不可"
   }
 }

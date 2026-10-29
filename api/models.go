@@ -12,6 +12,7 @@ import (
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/lsps/lsps1"
 	"github.com/flokiorg/lokihub/lsps/lsps2"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/swaps"
 )
 
@@ -660,6 +661,11 @@ type CashWalletClaimResponse struct {
 	// UI that exists to account for it.
 	SettledAt      *int64 `json:"settled_at,omitempty"`
 	RedeemFeeMloki int64  `json:"redeem_fee_mloki,omitempty"`
+	// Ordered and Reminted: a slice minted for an order, or re-minted by a
+	// cancelled on-chain withdrawal; its owner can neither remove it nor delete
+	// its bill (NIP-CASH §Data Model).
+	Ordered  bool `json:"ordered,omitempty"`
+	Reminted bool `json:"reminted,omitempty"`
 }
 
 // CashHubStatsResponse is the hub dashboard's data: what a hub owes, what has
@@ -1389,6 +1395,16 @@ type LSPS1CreateOrderRequest struct {
 	RefundOnchainAddress *string                 `json:"refund_onchain_address,omitempty"`
 	AnnounceChannel      bool                    `json:"announce_channel"`
 	OpeningFeeParams     *lsps1.OpeningFeeParams `json:"opening_fee_params,omitempty"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS1GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"accepted_terms,omitempty"`
+}
+
+// LSPS1GetInfoResponse is the LSP's first LSPS1 option set, with its bounds
+// compared with the announced ones (NIP-LSP §Client Behavior, Live check).
+type LSPS1GetInfoResponse struct {
+	lsps1.Options
+	Terms *manager.Terms `json:"terms"`
 }
 
 type LSPS1GetOrderRequest struct {
@@ -1431,6 +1447,16 @@ type LSPS2BuyRequest struct {
 	LSPPubkey        string                `json:"lspPubkey"`
 	PaymentSizeMloki *uint64               `json:"paymentSizeMloki,omitempty"`
 	OpeningFeeParams LSPS2OpeningFeeParams `json:"openingFeeParams"`
+	// AcceptedTerms are the live values worse than announced that the user
+	// saw and accepted (LSPS2GetInfoResponse.Terms).
+	AcceptedTerms []manager.AcceptedTerm `json:"acceptedTerms,omitempty"`
+}
+
+// LSPS2GetInfoResponse is the fee row offered first, compared with the
+// announced one (NIP-LSP §Client Behavior, Live check).
+type LSPS2GetInfoResponse struct {
+	lsps2.OpeningFeeParams
+	Terms *manager.Terms `json:"terms"`
 }
 
 type LSPS2BuyResponse struct {

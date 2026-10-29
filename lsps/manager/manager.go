@@ -727,135 +727,91 @@ func (m *LiquidityManager) EnsureInboundLiquidity(ctx context.Context, amountMlo
 		return nil, fmt.Errorf("%w: every trusted LSP's last live check found it unusable", ErrLSPNotUsable)
 	}
 
-	// 3. Helper to perform the Buy flow
-	performBuy := func() (*JitChannelHints, error) {
-		// A. Get Fee Params
-		feeParamsMenu, err := m.GetLSPS2FeeParams(ctx, activeLSP.Pubkey)
-		if err != nil {
-			return nil, err
-		}
-		if len(feeParamsMenu) == 0 {
-			return nil, fmt.Errorf("LSP returned no fee parameters")
-		}
-		// Select first param for now (simplest strategy)
-		// We could implement "cheapest" later
-		selectedParams := feeParamsMenu[0]
-
-		// Calculate Fee logic (Standardized with Frontend)
-		// Fee = Max(MinFee, Proportional)
-		minFee := selectedParams.MinFeeMloki
-		// Proportional is parts per million
-		// amount * proportional / 1000000
-		// We ceiling the result to be safe? JS used math.Ceil.
-		// Integer math: (amount * prop + 999999) / 1000000
-		proportionalFee := (amountMloki*uint64(selectedParams.Proportional) + 999999) / 1000000
-
-		feeMloki := minFee
-		if proportionalFee > feeMloki {
-			feeMloki = proportionalFee
-		}
-
-		// B. Buy
-		res, err := m.OpenJitChannel(ctx, activeLSP.Pubkey, amountMloki, selectedParams)
-		if err != nil {
-			return nil, err
-		}
-
-		return &JitChannelHints{
-			SCID:            fmt.Sprintf("%d", res.InterceptSCID),
-			LSPNodeID:       res.LSPNodeID,
-			CLTVExpiryDelta: res.CLTVExpiryDelta,
-			FeeMloki:        feeMloki,
-		}, nil
-	}
-
-	// 4. Try Buy (with retry logic)
-	hints, err := performBuy()
-	if err != nil {
-		// Check for specific error codes if possible
-		// Since OpenJitChannel wraps error strings, we check substring or improve OpenJitChannel.
-		// BLIP-52 Code 201: invalid_opening_fee_params
-		// flspd Code 100: "Invalid promise or expired params" (maps to same retryable condition)
-		if strings.Contains(err.Error(), "invalid_opening_fee_params") || strings.Contains(err.Error(), "LSP error 100") {
-			logger.Logger.Warn().Msg("JIT Buy failed due to stale params, retrying once...")
-			// Simple Retry
-			return performBuy()
-		}
-		return nil, err
-	}
-
-	return hints, nil
+	return m.buyCheckedJIT(ctx, activeLSP.Pubkey, amountMloki)
 }
 
-// BuyLiquidity buys inbound liquidity from a specific LSP with robust error handling (retries on stale params).
-func (m *LiquidityManager) BuyLiquidity(ctx context.Context, lspPubkey string, amountMloki uint64, manualParams *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
-	if err := m.CheckPurchase(ctx, lspPubkey, manualParams == nil); err != nil {
-		return nil, err
+// isStaleParams is an LSPS2 buy refused for expired or unknown fee params:
+// BLIP-52 code 201 invalid_opening_fee_params, or flspd's code 100.
+func isStaleParams(err error) bool {
+	return strings.Contains(err.Error(), "invalid_opening_fee_params") || strings.Contains(err.Error(), "LSP error 100")
+}
+
+// buyCheckedJIT is an automatic JIT purchase: it buys the first row of a menu
+// fetched now only once that menu compares with the announcement as not worse
+// for the buyer (NIP-LSP §Client Behavior, Live check), since no one can be
+// asked again. A buy refused for stale params is tried once more, on a menu
+// fetched and compared again.
+func (m *LiquidityManager) buyCheckedJIT(ctx context.Context, lspPubkey string, amountMloki uint64) (*JitChannelHints, error) {
+	hints, err := m.buyCheckedJITOnce(ctx, lspPubkey, amountMloki)
+	if err != nil && isStaleParams(err) {
+		logger.Logger.Warn().Msg("JIT buy failed due to stale params, retrying once...")
+		return m.buyCheckedJITOnce(ctx, lspPubkey, amountMloki)
 	}
-	// Helper to perform the Buy flow
-	performBuy := func(params *lsps2.OpeningFeeParams) (*JitChannelHints, error) {
-		var selectedParams lsps2.OpeningFeeParams
-		if params != nil {
-			selectedParams = *params
-		} else {
-			// A. Get Fee Params
-			feeParamsMenu, err := m.GetLSPS2FeeParams(ctx, lspPubkey)
-			if err != nil {
-				return nil, err
-			}
-			if len(feeParamsMenu) == 0 {
-				return nil, fmt.Errorf("LSP returned no fee parameters")
-			}
-			// Select first param for now (simplest strategy)
-			selectedParams = feeParamsMenu[0]
-		}
+	return hints, err
+}
 
-		// B. Buy
-		res, err := m.OpenJitChannel(ctx, lspPubkey, amountMloki, selectedParams)
-		if err != nil {
-			return nil, err
-		}
-
-		// Calculate Fee logic
-		minFee := selectedParams.MinFeeMloki
-		proportionalFee := (amountMloki*uint64(selectedParams.Proportional) + 999999) / 1000000
-		feeMloki := minFee
-		if proportionalFee > feeMloki {
-			feeMloki = proportionalFee
-		}
-
-		// Success
-		return &JitChannelHints{
-			SCID:            fmt.Sprintf("%d", res.InterceptSCID),
-			LSPNodeID:       res.LSPNodeID,
-			CLTVExpiryDelta: res.CLTVExpiryDelta,
-			FeeMloki:        feeMloki,
-		}, nil
-	}
-
-	// If manual params provided, try once (no retry, as invoice logic depends on these specific params)
-	if manualParams != nil {
-		hints, err := performBuy(manualParams)
-		if err != nil {
-			return nil, err
-		}
-		return hints, nil
-	}
-
-	// Automatic flow with retry
-	hints, err := performBuy(nil)
+func (m *LiquidityManager) buyCheckedJITOnce(ctx context.Context, lspPubkey string, amountMloki uint64) (*JitChannelHints, error) {
+	row, err := m.contactable(lspPubkey)
 	if err != nil {
-		// BLIP-52 Code 201: invalid_opening_fee_params
-		// flspd Code 100: "Invalid promise or expired params" (maps to same retryable condition)
-		if strings.Contains(err.Error(), "invalid_opening_fee_params") || strings.Contains(err.Error(), "LSP error 100") {
-			logger.Logger.Warn().Msg("Manual Buy failed due to stale params, retrying once...")
-			// Simple Retry will fetch fresh params
-			return performBuy(nil)
-		}
 		return nil, err
 	}
+	menu, err := m.GetLSPS2FeeParams(ctx, lspPubkey)
+	if err != nil {
+		return nil, err
+	}
+	if len(menu) == 0 {
+		return nil, fmt.Errorf("LSP returned no fee parameters")
+	}
+	terms, err := compareFeeMenu(row, menu)
+	if err != nil {
+		return nil, err
+	}
+	if terms.Worse {
+		return nil, fmt.Errorf("%w: %w", ErrLSPNotUsable, &TermsWorseError{Terms: terms})
+	}
+	return m.openJIT(ctx, lspPubkey, amountMloki, menu[0])
+}
 
-	return hints, nil
+// openJIT buys a JIT channel under params after checking its fee against the
+// payment.
+func (m *LiquidityManager) openJIT(ctx context.Context, lspPubkey string, amountMloki uint64, params lsps2.OpeningFeeParams) (*JitChannelHints, error) {
+	feeMloki, err := jitFee(amountMloki, params)
+	if err != nil {
+		return nil, err
+	}
+	res, err := m.OpenJitChannel(ctx, lspPubkey, amountMloki, params)
+	if err != nil {
+		return nil, err
+	}
+	return &JitChannelHints{
+		SCID:            fmt.Sprintf("%d", res.InterceptSCID),
+		LSPNodeID:       res.LSPNodeID,
+		CLTVExpiryDelta: res.CLTVExpiryDelta,
+		FeeMloki:        feeMloki,
+	}, nil
+}
+
+// BuyLiquidity buys a JIT channel from a specific LSP. Without manualParams it
+// is an automatic purchase (buyCheckedJIT). With them it buys exactly that fee
+// row, the one the user was shown: refused with a *TermsWorseError while a
+// value worse than announced is not in accepted at its live value.
+func (m *LiquidityManager) BuyLiquidity(ctx context.Context, lspPubkey string, amountMloki uint64, manualParams *lsps2.OpeningFeeParams, accepted []AcceptedTerm) (*JitChannelHints, error) {
+	row, _, err := m.checkPurchase(ctx, lspPubkey, manualParams == nil)
+	if err != nil {
+		return nil, err
+	}
+	if manualParams == nil {
+		return m.buyCheckedJIT(ctx, lspPubkey, amountMloki)
+	}
+	terms, err := compareFeeRow(row, *manualParams)
+	if err != nil {
+		return nil, err
+	}
+	if !terms.acceptedBy(accepted) {
+		return nil, &TermsWorseError{Terms: terms}
+	}
+	// One try: the invoice depends on these exact params.
+	return m.openJIT(ctx, lspPubkey, amountMloki, *manualParams)
 }
 
 // Synchronous LSPS2 Wrappers
@@ -959,9 +915,18 @@ func (m *LiquidityManager) GetLSPS1InfoList(ctx context.Context, pubkey string) 
 	}
 }
 
-func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, orderParams lsps1.OrderParams, refundAddr *string) (*lsps1.OrderCreatedEvent, error) {
-	if err := m.CheckPurchase(ctx, pubkey, false); err != nil {
+// CreateLSPS1Order orders a channel. The live check runs first; an LSPS1
+// value it finds worse than announced refuses the order with a
+// *TermsWorseError until accepted holds it at its live value.
+func (m *LiquidityManager) CreateLSPS1Order(ctx context.Context, pubkey string, orderParams lsps1.OrderParams, refundAddr *string, accepted []AcceptedTerm) (*lsps1.OrderCreatedEvent, error) {
+	_, live, err := m.checkPurchase(ctx, pubkey, false)
+	if err != nil {
 		return nil, err
+	}
+	if live != nil {
+		if terms := termsOf(lsps1Only(live.Fields)); !terms.acceptedBy(accepted) {
+			return nil, &TermsWorseError{Terms: terms}
+		}
 	}
 	reqID, err := m.lsps1Client.CreateOrder(ctx, pubkey, orderParams, refundAddr)
 	if err != nil {

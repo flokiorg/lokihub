@@ -227,5 +227,20 @@
     "title": "Maximum Spendable Balance Too Low",
     "desc": "Your payment will likely fail because your maximum spendable balance for the next payment is currently {{amount}}.",
     "increaseBtn": "Increase Spending Balance"
+  },
+  "lspTerms": {
+    "title": "The LSP's terms changed",
+    "description": "The LSP's live terms are worse than it announced. Compare them before you buy.",
+    "value": "Term",
+    "announced": "Announced",
+    "live": "Live",
+    "verdict": {
+      "worse": "worse",
+      "better": "better",
+      "same": "same"
+    },
+    "cancel": "Don't buy",
+    "confirm": "Buy at the live terms",
+    "changed": "The LSP's terms changed since you checked them. Review them and try again."
   }
 }

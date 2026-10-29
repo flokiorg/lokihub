@@ -46,7 +46,7 @@ func (svc *service) startLSPCatalogue(ctx context.Context, lspManager *manager.L
 			if err != nil {
 				return nil, err
 			}
-			return &manager.LiveCheck{Usable: res.Usable, Worse: res.Worse, Error: res.Error}, nil
+			return &manager.LiveCheck{Usable: res.Usable, Worse: res.Worse, Error: res.Error, Fields: res.Fields}, nil
 		})
 	}
 	svc.shutdownGroup.Go(func() error {

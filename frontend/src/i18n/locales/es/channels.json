@@ -163,5 +163,20 @@
     "addCustomRelay": "Agregar relé personalizado",
     "alreadyAdded": "Este relé ya está agregado",
     "add": "Agregar"
+  },
+  "lspTerms": {
+    "title": "Las condiciones del LSP cambiaron",
+    "description": "Las condiciones actuales del LSP son peores que las que anunció. Compáralas antes de comprar.",
+    "value": "Condición",
+    "announced": "Anunciado",
+    "live": "Actual",
+    "verdict": {
+      "worse": "peor",
+      "better": "mejor",
+      "same": "igual"
+    },
+    "cancel": "No comprar",
+    "confirm": "Comprar con las condiciones actuales",
+    "changed": "Las condiciones del LSP cambiaron desde que las revisaste. Revísalas e inténtalo de nuevo."
   }
 }

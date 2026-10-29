@@ -163,5 +163,20 @@
     "addCustomRelay": "カスタムリレーを追加",
     "alreadyAdded": "このリレーは既に追加済みです",
     "add": "追加"
+  },
+  "lspTerms": {
+    "title": "LSPの条件が変わりました",
+    "description": "LSPの現在の条件は告知された条件より不利です。購入前に比較してください。",
+    "value": "条件",
+    "announced": "告知",
+    "live": "現在",
+    "verdict": {
+      "worse": "不利",
+      "better": "有利",
+      "same": "同じ"
+    },
+    "cancel": "購入しない",
+    "confirm": "現在の条件で購入",
+    "changed": "確認後にLSPの条件が変わりました。内容を確認してもう一度お試しください。"
   }
 }

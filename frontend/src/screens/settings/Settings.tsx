@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LanguageSwitcher } from "src/components/LanguageSwitcher";
+import { WithdrawNodeSettings } from "src/components/withdraw/WithdrawNodeSettings";
 import Loading from "src/components/Loading";
 import SettingsHeader from "src/components/SettingsHeader";
 
@@ -210,6 +211,12 @@ function Settings() {
         <div className="space-y-4">
           <h3 className="text-xl font-medium">{t("sections.language")}</h3>
           <LanguageSwitcher />
+        </div>
+
+        {/* Advanced Section */}
+        <div className="space-y-4">
+          <h3 className="text-xl font-medium">{t("sections.advanced")}</h3>
+          <WithdrawNodeSettings />
         </div>
       </form>
     </>

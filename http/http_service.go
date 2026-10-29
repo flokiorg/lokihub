@@ -30,6 +30,7 @@ import (
 	lokidb "github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/manager"
 	"github.com/flokiorg/lokihub/service"
 	"github.com/flokiorg/lokihub/transactions"
 
@@ -1807,6 +1808,9 @@ func (httpSvc *HttpService) buyLSPS2LiquidityHandler(c echo.Context) error {
 
 // Helper to check for timeouts
 func handleErrorWithTimeout(c echo.Context, err error) error {
+	if refusal, ok := manager.TermsRefusalOf(err); ok {
+		return c.JSON(http.StatusConflict, refusal)
+	}
 	if strings.Contains(strings.ToLower(err.Error()), "time out") || errors.Is(err, context.DeadlineExceeded) {
 		return c.JSON(http.StatusGatewayTimeout, ErrorResponse{Message: "Request timed out, please retry"})
 	}

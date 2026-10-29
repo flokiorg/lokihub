@@ -163,5 +163,20 @@
     "addCustomRelay": "添加自定义中继",
     "alreadyAdded": "此中继已添加",
     "add": "添加"
+  },
+  "lspTerms": {
+    "title": "LSP 的条款已变更",
+    "description": "LSP 当前的条款比其公告的更差。购买前请先比较。",
+    "value": "条款",
+    "announced": "公告",
+    "live": "当前",
+    "verdict": {
+      "worse": "更差",
+      "better": "更好",
+      "same": "相同"
+    },
+    "cancel": "不购买",
+    "confirm": "按当前条款购买",
+    "changed": "在你查看之后 LSP 的条款已变更。请查看后重试。"
   }
 }

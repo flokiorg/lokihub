@@ -453,5 +453,9 @@
     "perHubHint": "哪个中心承担着负债，以及它持有多少来覆盖。",
     "othersBar_one": "其他 {{count}} 项",
     "othersBar_other": "其他 {{count}} 项"
+  },
+  "cashLock": {
+    "ordered": "订单票据：永不过期，不可移除",
+    "reminted": "已重铸：不可移除"
   }
 }
