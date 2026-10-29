@@ -108,7 +108,13 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		case "DELETE":
-			err := app.api.DeleteApp(dbApp)
+			var opts api.DeleteAppOptions
+			if body != "" {
+				if err := json.Unmarshal([]byte(body), &opts); err != nil {
+					return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+				}
+			}
+			err := app.api.DeleteAppWithOptions(dbApp, opts)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}

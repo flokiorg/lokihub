@@ -468,6 +468,13 @@ audits of both.
 
 ### Fixed
 
+- Asks the owner to confirm a Cash Hub delete that ends the watch on paid
+  on-chain order addresses, in the delete dialog and on every delete path
+  (`DELETE /api/apps/:id` takes `{"confirmWatchEnd": true}`). The generic
+  delete went ahead unconfirmed.
+- Reports a Cash Hub's listed offers in its delete check (`listed_offers`,
+  `listings_delete_due_at`) and in the delete dialog, as information: the
+  delete closes them and their deletions follow.
 - Keeps a cash bill live through its whole `expires_at` second, as NIP-CASH's
   inclusive bound asks: the expiry is stored in whole seconds at mint, and
   calls, the sweep and the operator views compare whole seconds on the hub

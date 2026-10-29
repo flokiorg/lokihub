@@ -538,6 +538,8 @@ export interface CashHubDeleteCheck {
   earliest_delete_at: number | null;
   watched_addresses: number;
   confirmation_required: boolean;
+  listed_offers: number;
+  listings_delete_due_at: number | null;
 }
 
 export interface ListCircleChildrenBalancesResponse {

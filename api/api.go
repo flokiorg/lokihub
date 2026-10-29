@@ -618,6 +618,10 @@ func (api *api) refuseOwnerDeleteOfHeldBill(walletAppID uint) error {
 }
 
 func (api *api) DeleteApp(userApp *db.App) error {
+	return api.DeleteAppWithOptions(userApp, DeleteAppOptions{})
+}
+
+func (api *api) DeleteAppWithOptions(userApp *db.App, opts DeleteAppOptions) error {
 	// cash_wallet/circle_wallet hold a shared balance that must be reclaimed
 	// back to their hub before the row disappears — apps.DeleteApp has no
 	// such logic (it only guards the hub kinds against orphaning children),
@@ -658,7 +662,13 @@ func (api *api) DeleteApp(userApp *db.App) error {
 			return err
 		}
 	}
-	if err := api.appsSvc.DeleteApp(userApp); err != nil {
+	var err error
+	if userApp.Kind == db.AppKindCashHub {
+		err = api.appsSvc.DeleteCashHub(userApp, opts.ConfirmWatchEnd)
+	} else {
+		err = api.appsSvc.DeleteApp(userApp)
+	}
+	if err != nil {
 		return err
 	}
 	for _, id := range orderConns {
