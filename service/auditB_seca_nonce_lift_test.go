@@ -41,7 +41,7 @@ func TestAuditBSecA_LapsedNonceCannotCarryALiftedBillProof(t *testing.T) {
 		Params: json.RawMessage(`{}`), Proof: json.RawMessage(`{"kind":23192}`), BillProof: billProof}
 	replyTo1, err := transport.NewNonce()
 	require.NoError(t, err)
-	env1 := transport.Envelope{Version: transport.EnvelopeVersion, NotAfter: t1.Unix(),
+	env1 := transport.Envelope{NotAfter: t1.Unix(),
 		Nonce: nonce, ReplyTo: replyTo1, Items: []transport.Item{item}}
 	_, _, err = pt.unwrap(seal(t, env1), transport.DefaultLimits(), t1.Add(-time.Second))
 	require.NoError(t, err, "envelope 1 is the honest one")
@@ -59,7 +59,7 @@ func TestAuditBSecA_LapsedNonceCannotCarryALiftedBillProof(t *testing.T) {
 	pt.nonces = newMemServedNonces()
 	replyTo2, err := transport.NewNonce()
 	require.NoError(t, err)
-	env2 := transport.Envelope{Version: transport.EnvelopeVersion, NotAfter: time.Now().Add(testHorizon).Unix(),
+	env2 := transport.Envelope{NotAfter: time.Now().Add(testHorizon).Unix(),
 		Nonce: nonce, ReplyTo: replyTo2, Items: []transport.Item{item}}
 	got, _, err := pt.unwrap(seal(t, env2), transport.DefaultLimits(), time.Now())
 	require.NoError(t, err)

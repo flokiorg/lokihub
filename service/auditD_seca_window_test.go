@@ -78,7 +78,6 @@ func auditDSecAEnvelopeOfExactly(t *testing.T, n int) []byte {
 	require.NoError(t, err)
 
 	env := transport.Envelope{
-		Version:  transport.EnvelopeVersion,
 		NotAfter: time.Now().Add(60 * time.Second).Unix(),
 		Nonce:    nonce,
 		ReplyTo:  replyTo,
@@ -216,7 +215,6 @@ func TestAuditD_SecA_HonestClientCannotBuildIntoTheWindow(t *testing.T) {
 	// rather than pad (Encode discards any incoming pad).
 	big := strings.Repeat("y", limits.MaxEnvelopeBytes)
 	env := transport.Envelope{
-		Version:  transport.EnvelopeVersion,
 		NotAfter: time.Now().Add(60 * time.Second).Unix(),
 		Nonce:    nonce,
 		ReplyTo:  replyTo,
@@ -253,8 +251,8 @@ func TestAuditD_SecA_ReplyDirectionNeverExceedsTheCap(t *testing.T) {
 		Result:     json.RawMessage(`{"filler":"` + strings.Repeat("z", 65535) + `"}`),
 	}
 	reply := transport.ResponseEnvelope{
-		Version: transport.EnvelopeVersion, ReqNonce: nonce,
-		Results: []transport.Result{oversizeResult}, Seq: 1, Total: 1,
+		ReqNonce: nonce,
+		Results:  []transport.Result{oversizeResult}, Seq: 1, Total: 1,
 	}
 	_, err = reply.EncodeResponse(limits)
 	require.Error(t, err, "a reply over the cap must not be encodable")

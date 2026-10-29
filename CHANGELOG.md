@@ -485,7 +485,7 @@ audits of both.
   backslash in a link (GHSA-wrjc-x8rr-h8h6). (#134)
 - Builds with Go 1.26.10, which fixes a certificate-verification flaw in the
   standard library (GO-2026-6809) reachable from backup restore. (#152)
-- Moves to `nmilat` v0.5.0-rc.32, the published client SDK with the NIP-CASH
+- Moves to `nmilat` v0.5.0-rc.45, the published client SDK with the NIP-CASH
   and NIP-CW wire changes in this release. (#153)
 
 ### Fixed

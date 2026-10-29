@@ -56,7 +56,7 @@ func TestDispatchEnvelope_ServesItemsAfterOmittedAndMalformedOnes(t *testing.T) 
 	// Encode is strict, so the envelope is marshalled directly, the way a careless
 	// or hostile assembler would send it.
 	raw, err := json.Marshal(transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 		Items: []transport.Item{ghost, malformed, real},
 	})
 	require.NoError(t, err)
