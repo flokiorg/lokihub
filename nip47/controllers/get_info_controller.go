@@ -82,14 +82,14 @@ func (controller *nip47Controller) HandleGetInfoEvent(ctx context.Context, nip47
 	// answered from a result at most listedGetInfoTTL old, dropped at once when
 	// its terms or retirement change (NIP-CASH §Hub Rules MAY, OQ-47; U-25.10).
 	if app != nil && app.Kind == db.AppKindCashOrder && app.AppPubkey != "" {
-		if result, ok := getinfocache.Get(app.AppPubkey); ok {
+		if result, ok := getinfocache.Orders.Get(app.AppPubkey); ok {
 			publishResponse(&models.Response{ResultType: nip47Request.Method, Result: result}, nostr.Tags{})
 			return
 		}
-		publish, key := publishResponse, app.AppPubkey
+		publish, key, stamp := publishResponse, app.AppPubkey, getinfocache.Orders.Begin()
 		publishResponse = func(resp *models.Response, tags nostr.Tags) {
 			if result, ok := resp.Result.(*getInfoResponse); ok && resp.Error == nil {
-				getinfocache.Put(key, result)
+				getinfocache.Orders.Put(key, stamp, result)
 			}
 			publish(resp, tags)
 		}

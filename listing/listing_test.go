@@ -606,3 +606,27 @@ func TestCreate_CannotSign(t *testing.T) {
 	require.Len(t, views, 1)
 	assert.Equal(t, db.ListingPhaseDeleted, views[0].Phase)
 }
+
+// R2-L3: closing a circle drops the cached get_info of every connection its
+// listings name, a closing one's too, but closes only the listed one again.
+func TestCloseCircle_InvalidatesEveryListingsConnection(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	hub := f.circle(t, db.CirclePolicyAllowlist)
+	v, err := f.s.Create(ctx, CreateRequest{CircleHubAppID: uintp(hub.ID)})
+	require.NoError(t, err)
+	listed, err := f.s.load(v.ID)
+	require.NoError(t, err)
+	closing := *listed
+	closing.ID, closing.ConnAppID, closing.Phase, closing.D = 0, 987654, db.ListingPhaseClosing, listed.D+"-old"
+	require.NoError(t, f.svc.DB.Create(&closing).Error)
+
+	f.inval = nil
+	f.clock.add(10)
+	require.NoError(t, f.s.CloseCircle(ctx, hub.ID))
+	assert.ElementsMatch(t, []uint{listed.ConnAppID, closing.ConnAppID}, f.inval, "a closing listing's connection is invalidated too")
+	assert.Equal(t, "closed", eventStatus(lastListing(t, f)))
+	stillClosing, err := f.s.load(closing.ID)
+	require.NoError(t, err)
+	assert.Equal(t, db.ListingPhaseClosing, stillClosing.Phase, "not closed a second time")
+}

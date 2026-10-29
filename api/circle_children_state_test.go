@@ -9,6 +9,7 @@ import (
 
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/getinfocache"
 	"github.com/flokiorg/lokihub/tests"
 )
 
@@ -74,4 +75,30 @@ func TestSetCircleAccepting(t *testing.T) {
 
 	require.NoError(t, svc.DB.Model(&db.CircleHubConfig{}).Where("app_id = ?", hub.ID).Update("teardown_requested_at", 1).Error)
 	assert.Error(t, theAPI.SetCircleAccepting(hub, true))
+}
+
+// R2-L3: a change of accepting, either way, drops the cached get_info of the
+// circle's listed connections at once; another circle's stays.
+func TestSetCircleAccepting_DropsTheListedConnectionsCachedGetInfo(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	hub := newCircleHub(t, svc, 100_000, 3600)
+	other := newCircleHub(t, svc, 100_000, 3600)
+	conn := &db.App{Name: "listed", AppPubkey: tests.RandomHex32(), Kind: db.AppKindCircleHubConn, ParentAppID: &hub.ID}
+	otherConn := &db.App{Name: "listed2", AppPubkey: tests.RandomHex32(), Kind: db.AppKindCircleHubConn, ParentAppID: &other.ID}
+	require.NoError(t, svc.DB.Create(conn).Error)
+	require.NoError(t, svc.DB.Create(otherConn).Error)
+	theAPI := newTestAPIForCircleDelete(svc)
+
+	for _, accepting := range []bool{false, true} {
+		stamp := getinfocache.Listed.Begin()
+		require.True(t, getinfocache.Listed.Put(conn.ID, stamp, "cached"))
+		require.True(t, getinfocache.Listed.Put(otherConn.ID, stamp, "cached"))
+		require.NoError(t, theAPI.SetCircleAccepting(hub, accepting))
+		_, ok := getinfocache.Listed.Get(conn.ID)
+		assert.False(t, ok, "accepting %v", accepting)
+		_, ok = getinfocache.Listed.Get(otherConn.ID)
+		assert.True(t, ok, "another circle's connection keeps its result")
+	}
 }
