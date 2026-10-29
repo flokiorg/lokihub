@@ -1,3 +1,5 @@
+# Every published port binds to DEV_BIND, the loopback by default: the dev
+# stack's node RPC, relay and Hub are for this machine, not its network.
 services:
   relay:
     image: ghcr.io/ohstr/ncli:rc
@@ -14,7 +16,7 @@ services:
       # container talks to over Docker DNS as `relay:5500`. Requires a host
       # /etc/hosts entry "127.0.0.1 relay" so both sides resolve the same
       # hostname to this one relay.
-      - "${RELAY_PORT:-5500}:5500"
+      - "${DEV_BIND:-127.0.0.1}:${RELAY_PORT:-5500}:5500"
     networks:
       - lokihub-dev
 
@@ -50,7 +52,7 @@ services:
       retries: 5
       start_period: 30s
     ports:
-      - "${FLND_RPC_PORT:-10005}:10005"
+      - "${DEV_BIND:-127.0.0.1}:${FLND_RPC_PORT:-10005}:10005"
     networks:
       - lokihub-dev
 
@@ -61,7 +63,7 @@ services:
     container_name: lokihub-dev-backend
     restart: unless-stopped
     # ports:
-    #   - "${PORT:-1610}:1610"
+    #   - "${DEV_BIND:-127.0.0.1}:${PORT:-1610}:1610"
     environment:
       - WORK_DIR=/data
       - PORT=1610
@@ -143,8 +145,8 @@ services:
     container_name: lokihub-dev-caddy
     restart: unless-stopped
     ports:
-      - "${CADDY_PORT:-5610}:80"
-      - "${CADDY_HTTPS_PORT:-5611}:443"
+      - "${DEV_BIND:-127.0.0.1}:${CADDY_PORT:-5610}:80"
+      - "${DEV_BIND:-127.0.0.1}:${CADDY_HTTPS_PORT:-5611}:443"
     volumes:
       - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
       - lokihub-caddy-data:/data
