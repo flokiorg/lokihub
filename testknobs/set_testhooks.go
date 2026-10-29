@@ -12,15 +12,20 @@ type Faults struct {
 	DropBeforeCommit *bool `json:"drop_before_commit,omitempty"`
 	RouteOverBound   *bool `json:"route_over_bound,omitempty"`
 	HoldPayments     *bool `json:"hold_payments,omitempty"`
+	HoldSelfPayments *bool `json:"hold_self_payments,omitempty"`
+	FailChainScan    *bool `json:"fail_chain_scan,omitempty"`
 }
 
 // SetFaults applies f after clearing every fault when reset is set, and
-// returns the faults now on. Clearing stall_commit or hold_payments releases
+// returns the faults now on. Clearing stall_commit, hold_payments or
+// hold_self_payments releases
 // whatever waits on it.
 func SetFaults(f Faults, reset bool) map[string]bool {
 	if reset {
 		stallCommit.set(false)
 		holdPayments.set(false)
+		holdSelfPayments.set(false)
+		failChainScan.Store(false)
 		breakSigner.Store(false)
 		dropReply.Store(false)
 		dropBeforeCommit.Store(false)
@@ -32,10 +37,13 @@ func SetFaults(f Faults, reset bool) map[string]bool {
 	if f.HoldPayments != nil {
 		holdPayments.set(*f.HoldPayments)
 	}
+	if f.HoldSelfPayments != nil {
+		holdSelfPayments.set(*f.HoldSelfPayments)
+	}
 	for _, s := range []struct {
 		v  *bool
 		to interface{ Store(bool) }
-	}{{f.BreakSigner, &breakSigner}, {f.DropReply, &dropReply}, {f.DropBeforeCommit, &dropBeforeCommit}, {f.RouteOverBound, &routeOverBound}} {
+	}{{f.BreakSigner, &breakSigner}, {f.DropReply, &dropReply}, {f.DropBeforeCommit, &dropBeforeCommit}, {f.RouteOverBound, &routeOverBound}, {f.FailChainScan, &failChainScan}} {
 		if s.v != nil {
 			s.to.Store(*s.v)
 		}
@@ -44,6 +52,7 @@ func SetFaults(f Faults, reset bool) map[string]bool {
 		"stall_commit": stallCommit.isOn(), "hold_payments": holdPayments.isOn(),
 		"break_signer": breakSigner.Load(), "drop_reply": dropReply.Load(),
 		"drop_before_commit": dropBeforeCommit.Load(), "route_over_bound": routeOverBound.Load(),
+		"hold_self_payments": holdSelfPayments.isOn(), "fail_chain_scan": failChainScan.Load(),
 	}
 }
 

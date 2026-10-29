@@ -15,6 +15,7 @@ import (
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/testknobs"
 )
 
 // ScanChain is the on-chain intake (NIP-CO §On-chain), run every 30 s: every
@@ -33,6 +34,9 @@ func (e *Engine) ScanChain(ctx context.Context) error {
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok || ln == nil {
 		return errNoChain
+	}
+	if testknobs.ChainScanFails() {
+		return errors.New("list on-chain outputs: failed by a test fault")
 	}
 	outputs, err := lister.ListOnchainOutputs(ctx)
 	if err != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/testknobs"
 	"github.com/flokiorg/lokihub/utils"
 
 	"gorm.io/datatypes"
@@ -1743,6 +1744,9 @@ func (svc *transactionsService) interceptSelfPayment(paymentHash string, payerAm
 		return nil, errors.New("preimage is not set on transaction. Self payments not supported")
 	}
 
+	if err := testknobs.WaitSelfPayments(context.Background()); err != nil {
+		return nil, err
+	}
 	var settledSelfTx *db.Transaction
 	err := svc.db.Transaction(func(tx *gorm.DB) error {
 		// Under the recipient's locks, as its deletion takes them: a credit the
