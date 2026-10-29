@@ -36,6 +36,7 @@ import (
 	"github.com/flokiorg/lokihub/connstr"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/listing"
@@ -44,7 +45,6 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/loki"
 	"github.com/flokiorg/lokihub/lsps/manager"
-	"github.com/flokiorg/lokihub/transactions"
 	"github.com/ohstr/nmilat/nipcash"
 
 	"github.com/flokiorg/lokihub/cashrequest"
@@ -3536,35 +3536,8 @@ func (api *api) DeleteCashClaim(hubAppID uint, walletAppID uint, claimID uint) e
 		return fmt.Errorf("%w: an ordered or re-minted slice cannot be removed", constants.ErrInvalidParams)
 	}
 
-	// The sweep runs while the slice is held (NIP-CASH §Removing a Recipient):
-	// if it fails, the slice stays exactly as it was.
-	sweepToHub := func(claim *db.CashWalletClaim) error {
-		if claim.AmountMloki <= 0 || wallet.ParentAppID == nil {
-			return nil
-		}
-		invoice, err := api.svc.GetTransactionsService().MakeInvoice(
-			context.Background(), uint64(claim.AmountMloki), "cash claim removed: sweep back to hub", "", 0, //nolint:gosec // claim.AmountMloki is this claim's own already-validated slice amount, an internal accounting value
-			nil, api.svc.GetLNClient(), wallet.ParentAppID, nil, nil, nil, nil, nil, nil,
-			&transactions.InternalMakeInvoiceMeta{InternalTransfer: true},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create sweep-back invoice: %w", err)
-		}
-		if _, err := api.svc.GetTransactionsService().SendPaymentSync(
-			invoice.PaymentRequest, nil, map[string]interface{}{"internal_transfer": true},
-			api.svc.GetLNClient(), &walletAppID, nil,
-		); err != nil {
-			// Sent but not recorded: the slice's funds are already at the hub. Keeping
-			// the slice would let a retry sweep the same amount again, out of the other
-			// recipients' share of this wallet, so the removal goes ahead.
-			if errors.Is(err, transactions.ErrPaymentSentNotRecorded) {
-				logger.Logger.Error().Err(err).Uint("wallet_app_id", walletAppID).Uint("claim_id", claimID).
-					Msg("Removed claim's sweep was sent but not recorded; treating it as swept, outgoing row left pending for the operator")
-				return nil
-			}
-			return fmt.Errorf("failed to sweep removed claim's balance back to hub: %w", err)
-		}
-		return nil
+	sweepToHub := func(tx *gorm.DB, from, to uint, amountMillis uint64) error {
+		return ledger.InternalTransferTx(tx, from, to, amountMillis, "cash claim removed")
 	}
 	if _, err := api.appsSvc.DeleteCashClaim(walletAppID, claimID, sweepToHub); err != nil {
 		return err

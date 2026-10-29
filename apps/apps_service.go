@@ -228,7 +228,7 @@ type AppsService interface {
 	// held; if sweep fails the slice is released untouched. Returns an error if
 	// the claim is not found, belongs to a different wallet, or has already
 	// been claimed.
-	DeleteCashClaim(walletAppID uint, claimID uint, sweep func(claim *db.CashWalletClaim) error) (*db.CashWalletClaim, error)
+	DeleteCashClaim(walletAppID uint, claimID uint, sweep CashSweepTx) (*db.CashWalletClaim, error)
 	// RecordCashSliceRedeemSettlement records a late-settling redeem payout's
 	// facts on its slice, found by payment hash; a slice already recorded is
 	// left alone.
