@@ -266,6 +266,12 @@ const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
 // a legitimate "effectively never expires" request.
 const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
 
+// DEFAULT_CASH_MIN_TRANSFER_MLOKI is a new Cash Hub's default split floor
+// (db.CashHubConfig.MinTransferMloki) when its creator names none: one whole
+// loki, so a split never carves off a piece no payment could carry. NIP-CASH
+// asks for a shipped default above zero; 0 stays available as "no floor".
+const DEFAULT_CASH_MIN_TRANSFER_MLOKI = 1000
+
 // DEFAULT_CASH_SPENT_RETENTION_SECS is a new Cash Hub's default window for
 // answering cash_status about a bill it has already destroyed
 // (db.CashHubConfig.SpentRetentionSecs). 15 days is long enough to cover the

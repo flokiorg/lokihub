@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Gives a new Cash Hub a `min_transfer_millis` default of 1000 (one loki) when
+  its creator names none, and starts the New Cash Hub form there; an explicit
+  0 still means no floor.
 - Refuses a Lightning invoice that carries more than one payment hash, in
   `cash_redeem` and every other payment path. Decoders disagree on which hash
   counts, so the hash a claim proof binds could differ from the one paid.

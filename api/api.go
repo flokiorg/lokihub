@@ -101,6 +101,13 @@ func cashSpentRetentionOrDefault(secs *int) int {
 	return *secs
 }
 
+func cashMinTransferOrDefault(mloki *int64) int64 {
+	if mloki == nil {
+		return constants.DEFAULT_CASH_MIN_TRANSFER_MLOKI
+	}
+	return *mloki
+}
+
 func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppResponse, error) {
 	if slices.Contains(createAppRequest.Scopes, constants.SUPERUSER_SCOPE) {
 		if !api.cfg.CheckUnlockPassword(createAppRequest.UnlockPassword) {
@@ -146,7 +153,7 @@ func (api *api) CreateApp(createAppRequest *CreateAppRequest) (*CreateAppRespons
 			db.CashHubConfig{
 				PerWalletMaxMloki:  createAppRequest.CashPerWalletMaxMloki,
 				MaxExpSecs:         createAppRequest.CashMaxExpSecs,
-				MinTransferMloki:   createAppRequest.CashMinTransferMloki,
+				MinTransferMloki:   cashMinTransferOrDefault(createAppRequest.CashMinTransferMloki),
 				RedeemFeePpm:       createAppRequest.CashRedeemFeePpm,
 				RedeemFeeBaseMloki: createAppRequest.CashRedeemFeeBaseMloki,
 				// Omitted means the default, not "disabled": a caller that
