@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Updates echo to 4.16.2, wails to 2.13.0, golang.org/x/net to 0.62.0 and
+  golang.org/x/image to 0.45.0, for the published advisories against the
+  older versions (echo's WebSocket upgrade access bypass among them).
 - Lets the operator rotate the private-transport inbox key
   (`POST /api/private-transport/rotate-inbox`, and its Wails route): the Hub
   moves to the next key index, subscribes the new inbox, announces it, and
