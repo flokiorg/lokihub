@@ -13,6 +13,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/atrest"
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
@@ -174,9 +175,14 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 	if err != nil {
 		return nil, err
 	}
-	preimage := hex.EncodeToString(preimageBytes)
 	sum := sha256.Sum256(preimageBytes)
 	paymentHash := hex.EncodeToString(sum[:])
+	// The preimage is kept sealed until the Hub settles: whoever reads the
+	// database alone cannot settle, or prove payment of, an open invoice.
+	sealed, err := atrest.Seal(hex.EncodeToString(preimageBytes))
+	if err != nil {
+		return nil, fmt.Errorf("seal the invoice's preimage: %w", err)
+	}
 
 	// The row is reserved under the Hub's lock and the node is asked outside any
 	// transaction, so a slow node never holds the write lock. The reservation
@@ -188,18 +194,18 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 	}
 	reservedUntil := now.Add(time.Duration(reserveExpiry) * time.Second)
 	row := db.Transaction{
-		AppId:           &wallet.ID,
-		RequestEventId:  requestEventId,
-		Type:            constants.TRANSACTION_TYPE_INCOMING,
-		State:           constants.TRANSACTION_STATE_PENDING,
-		AmountMloki:     amount,
-		Description:     description,
-		DescriptionHash: descriptionHash,
-		PaymentHash:     paymentHash,
-		ExpiresAt:       &reservedUntil,
-		Preimage:        &preimage,
-		Metadata:        datatypes.JSON(metadataBytes),
-		Hold:            true,
+		AppId:              &wallet.ID,
+		RequestEventId:     requestEventId,
+		Type:               constants.TRANSACTION_TYPE_INCOMING,
+		State:              constants.TRANSACTION_STATE_PENDING,
+		AmountMloki:        amount,
+		Description:        description,
+		DescriptionHash:    descriptionHash,
+		PaymentHash:        paymentHash,
+		ExpiresAt:          &reservedUntil,
+		HoldPreimageSealed: &sealed,
+		Metadata:           datatypes.JSON(metadataBytes),
+		Hold:               true,
 	}
 	err = svc.db.Transaction(func(tx *gorm.DB) error {
 		if err := lockCircleParties(tx, wallet); err != nil {
@@ -268,6 +274,47 @@ func (svc *transactionsService) MakeCircleInvoice(ctx context.Context, wallet *d
 	return &row, nil
 }
 
+// holdPreimage is the preimage of a Hub-settled hold invoice: opened from its
+// sealed copy, or the plain one once it settled; "" when it holds none.
+func holdPreimage(row *db.Transaction) (string, error) {
+	if row.HoldPreimageSealed != nil && *row.HoldPreimageSealed != "" {
+		return atrest.Open(*row.HoldPreimageSealed)
+	}
+	if row.Preimage != nil {
+		return *row.Preimage, nil
+	}
+	return "", nil
+}
+
+// SealHoldPreimages seals the plain preimage of every Hub-settled hold invoice
+// not yet settled, as one written before preimages were sealed at rest. It is
+// idempotent, and runs once the at-rest key is loaded.
+func SealHoldPreimages(gormDB *gorm.DB) (int, error) {
+	var rows []db.Transaction
+	if err := gormDB.Table("transactions").Select("transactions.id", "transactions.preimage").
+		Joins("JOIN apps ON apps.id = transactions.app_id").
+		Where("apps.kind = ? AND transactions.type = ? AND transactions.hold = ? AND transactions.state <> ?",
+			db.AppKindCircleWallet, constants.TRANSACTION_TYPE_INCOMING, true, constants.TRANSACTION_STATE_SETTLED).
+		Where("transactions.preimage IS NOT NULL AND transactions.preimage <> '' AND transactions.hold_preimage_sealed IS NULL").
+		Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	sealedCount := 0
+	for _, r := range rows {
+		sealed, err := atrest.Seal(*r.Preimage)
+		if err != nil {
+			return sealedCount, err
+		}
+		res := gormDB.Model(&db.Transaction{}).Where("id = ? AND hold_preimage_sealed IS NULL AND state <> ?", r.ID, constants.TRANSACTION_STATE_SETTLED).
+			Updates(map[string]interface{}{"hold_preimage_sealed": sealed, "preimage": nil})
+		if res.Error != nil {
+			return sealedCount, res.Error
+		}
+		sealedCount += int(res.RowsAffected)
+	}
+	return sealedCount, nil
+}
+
 // isCircleHold reports whether row is a Hub-settled Circle Wallet invoice:
 // every hold invoice of a Circle Wallet is one, since a member cannot issue a
 // hold invoice of its own.
@@ -312,9 +359,15 @@ func (svc *transactionsService) ResolveCircleHold(ctx context.Context, paymentHa
 		return nil
 	}
 	ok, reason := circleHoldAcceptable(svc.db, &row, amountPaid, time.Now())
-	if ok && row.Preimage != nil {
-		_, err := svc.SettleHoldInvoice(ctx, *row.Preimage, lnClient)
-		return err
+	if ok {
+		preimage, err := holdPreimage(&row)
+		if err != nil {
+			return fmt.Errorf("open the invoice's preimage: %w", err)
+		}
+		if preimage != "" {
+			_, err = svc.SettleHoldInvoice(ctx, preimage, lnClient)
+			return err
+		}
 	}
 	if !ok {
 		svc.logger.Info().Str("payment_hash", paymentHash).Str("reason", reason).Msg("Cancelling a circle wallet payment the Hub refuses")

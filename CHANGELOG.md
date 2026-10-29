@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Seals a circle wallet invoice's preimage at rest until it settles, with a
+  key derived from the node's mnemonic at unlock; an open invoice's preimage
+  is no longer stored plain or logged, and rows written before are sealed at
+  the next unlock.
 - Never stores a cached `get_info` computed before an Order connection's
   retirement or new terms, or a circle's close, committed: such a result could
   be stored after the invalidation and served stale for up to 5 s. A listed
