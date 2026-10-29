@@ -80,8 +80,10 @@ jobs:
       - name: Vet (integration, compile only)
         run: go vet -tags integration ./integration/...
 
+      # cashwallet and cashwithdraw take 6-7 minutes each under -race on a
+      # runner and more on a slow one, close to go test's 10 minute default.
       - name: Test (race)
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -timeout 20m ./...
 
       # The connection-drop resubscription test skips under -race: a server-side
       # drop trips go-nostr's own data race on Relay.Connection (still in the
