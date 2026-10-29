@@ -49,6 +49,8 @@ type ConsolidateParams struct {
 	Proofs []ClaimProof
 	// Record, when set, is the call's record, written last under its deadline.
 	Record *db.CashRequestRecord
+	// LiveBillCap, when set, bounds the Hub's live bills inside the commit.
+	LiveBillCap *LiveBillCap
 }
 
 // ConsolidateResult carries the merged wallet and its token, delivered to the
@@ -103,10 +105,11 @@ func Consolidate(ctx context.Context, deps Deps, params ConsolidateParams) (*Con
 			identityRequired: params.NewIdentityType != db.CashIdentityCash,
 			lineageRoot:      &root,
 		}},
-		sources:   refs,
-		transfers: transfers,
-		proofs:    params.Proofs,
-		record:    params.Record,
+		sources:     refs,
+		transfers:   transfers,
+		proofs:      params.Proofs,
+		record:      params.Record,
+		liveBillCap: params.LiveBillCap,
 	})
 	if err != nil {
 		return nil, err

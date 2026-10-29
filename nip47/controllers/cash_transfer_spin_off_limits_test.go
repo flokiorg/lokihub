@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -149,4 +150,13 @@ func TestCashTransfer_LiveBillCap(t *testing.T) {
 	resp = transferWithCall(t, f.svc, f.wallet, p, testPrivateCall(p.IdentityEvent))
 	require.Nil(t, resp.Error, "one new bill fits under the cap")
 	assert.NotEmpty(t, resp.Result.(cashTransferResponse).NewWalletPubkey)
+}
+
+// A commit refused by the live-bill cap it re-counts is QUOTA_EXCEEDED with a
+// fixed message, like the early count; other commit failures keep their codes.
+func TestCommitError_LiveBillCapIsQuotaExceeded(t *testing.T) {
+	assert.Equal(t, constants.ERROR_QUOTA_EXCEEDED, mapCashWalletErrorCode(fmt.Errorf("commit: %w", cashwallet.ErrLiveBillCap)))
+	assert.Contains(t, commitErrorMessage(cashwallet.ErrLiveBillCap), "maximum of live bills")
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, mapCashWalletErrorCode(cashwallet.ErrProofUsed))
+	assert.Equal(t, constants.ERROR_INTERNAL, mapCashWalletErrorCode(errors.New("node down")))
 }

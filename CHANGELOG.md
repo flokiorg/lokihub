@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Counts a Cash Hub's live bills again inside a spin-off's or merge's commit,
+  under a per-Hub lock, so concurrent calls on different bills can no longer
+  pass `CASH_MAX_LIVE_BILLS_PER_HUB` together; the refusal stays
+  `QUOTA_EXCEEDED`.
 - Records an order payment's bills past the 32768th in mint order. The
   record ordinal was 16 bits and wrapped, so `cash_lookup` of a very large
   over-payment returned its bills out of order.

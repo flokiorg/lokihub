@@ -37,6 +37,8 @@ func mapCashWalletErrorCode(err error) string {
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return constants.ERROR_UNAUTHORIZED
+	case errors.Is(err, cashwallet.ErrLiveBillCap):
+		return constants.ERROR_QUOTA_EXCEEDED
 	case errors.Is(err, cashwallet.ErrRestricted):
 		return constants.ERROR_RESTRICTED
 	case errors.Is(err, transactions.NewInsufficientBalanceError()):
@@ -237,6 +239,8 @@ func commitErrorMessage(err error) string {
 		return "this slice was already claimed by another call; nothing was committed"
 	case errors.Is(err, cashwallet.ErrProofUsed):
 		return "a claim proof of this call was already used"
+	case errors.Is(err, cashwallet.ErrLiveBillCap):
+		return "this Cash Hub holds its maximum of live bills; nothing was committed"
 	}
 	return err.Error()
 }
