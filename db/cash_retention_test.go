@@ -311,3 +311,27 @@ func TestRetentionWindowOpen_IsWhatSpentBillStillAnswerableUses(t *testing.T) {
 			"the two must agree at %s; a local comparison has been reintroduced", now)
 	}
 }
+
+// NIP-CASH §Lifecycle and Deletion (CASH-446): a slice is live while now <= its
+// wallet's expires_at, in whole seconds, the bound inclusive.
+func TestExpiredAt_WholeSecondsBoundInclusive(t *testing.T) {
+	at := time.Unix(1_800_000_010, 0)
+	legacy := time.Unix(1_800_000_010, 700_000_000) // stored before mints were truncated
+	for _, c := range []struct {
+		name      string
+		expiresAt *time.Time
+		now       time.Time
+		expired   bool
+	}{
+		{"at the second", &at, at, false},
+		{"late in the expires_at second", &at, at.Add(999 * time.Millisecond), false},
+		{"the next second", &at, at.Add(time.Second), true},
+		{"a second before", &at, at.Add(-time.Second), false},
+		{"legacy fraction, same second after it", &legacy, legacy.Add(200 * time.Millisecond), false},
+		{"legacy fraction, the next second", &legacy, time.Unix(1_800_000_011, 0), true},
+		{"never", nil, at.Add(100 * 365 * 24 * time.Hour), false},
+	} {
+		assert.Equal(t, c.expired, db.ExpiredAt(c.expiresAt, c.now), c.name)
+	}
+	assert.Equal(t, at, db.CashExpiryCutoff(at.Add(999*time.Millisecond)))
+}

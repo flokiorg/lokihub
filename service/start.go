@@ -25,6 +25,7 @@ import (
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/manager"
 	lspsnostr "github.com/flokiorg/lokihub/lsps/nostr"
+	"github.com/flokiorg/lokihub/nodesign"
 )
 
 func (svc *service) ReloadNostr() error {
@@ -564,6 +565,8 @@ func (svc *service) launchLNBackend(ctx context.Context, encryptionKey string) e
 		_ = lnClient.Shutdown()
 		return refusal
 	}
+	// Every cash signature by the node identity waits on this check.
+	nodesign.Guard.Set(svc.checkCashIdentityNetwork)
 	if info != nil {
 		svc.eventPublisher.SetGlobalProperty("node_id", info.Pubkey)
 		svc.eventPublisher.SetGlobalProperty("network", info.Network)

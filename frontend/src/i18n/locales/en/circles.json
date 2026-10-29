@@ -376,7 +376,12 @@
     "payoutsOpen_one": "{{count}} on-chain payout is not final or cancelled yet.",
     "payoutsOpen_other": "{{count}} on-chain payouts are not final or cancelled yet.",
     "earliestDelete": "The earliest this hub can be deleted is {{at}}.",
-    "earliestAfterBills": "This hub can be deleted only after its bills are gone."
+    "earliestAfterBills": "This hub can be deleted only after its bills are gone.",
+    "watchEnds_one": "{{count}} paid on-chain order address is still watched. Deleting this hub ends the watch: a later payment to it becomes no bill.",
+    "watchEnds_other": "{{count}} paid on-chain order addresses are still watched. Deleting this hub ends the watch: a later payment to one becomes no bill.",
+    "confirmWatchEnd": "Delete and end the watch",
+    "listedOffers_one": "{{count}} listed offer is closed with this hub; its listing is deleted at {{at}}.",
+    "listedOffers_other": "{{count}} listed offers are closed with this hub; their listings are deleted by {{at}}."
   },
   "cashStatus": {
     "legendLabel": "What each status means",

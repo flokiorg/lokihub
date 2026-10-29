@@ -229,9 +229,8 @@ func isCashConnection(kind string) bool {
 	return false
 }
 
-// cashNetwork is NIP-47's network for the node's: flnd reports mainnet as
-// "bitcoin" or "mainnet" (and an older build "flokicoin"); the test networks
-// keep their names.
+// cashNetwork is NIP-47's network for the node's (nodesign.Network); "" on a
+// network with no NIP-47 name, where the node identity signs no cash.
 func cashNetwork(nodeNetwork string) string {
 	return nodesign.Network(nodeNetwork)
 }

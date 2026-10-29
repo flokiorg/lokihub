@@ -19,7 +19,6 @@ package cashwallet
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/flokiorg/lokihub/hubclock"
@@ -324,7 +323,8 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 	var expiresAt *time.Time
 	if hubConfig.MaxExpSecs == 0 {
 		if params.ExpirySecs > 0 {
-			t := hubclock.Now().Add(time.Duration(params.ExpirySecs) * time.Second)
+			// Whole seconds, as the bill announces it.
+			t := hubclock.Now().Add(time.Duration(params.ExpirySecs) * time.Second).Truncate(time.Second)
 			expiresAt = &t
 		}
 	} else {
@@ -334,7 +334,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 		} else if expirySecs > hubConfig.MaxExpSecs {
 			return nil, fmt.Errorf("%w: expiry %d exceeds max_exp_secs %d", ErrRestricted, params.ExpirySecs, hubConfig.MaxExpSecs)
 		}
-		t := hubclock.Now().Add(time.Duration(expirySecs) * time.Second)
+		t := hubclock.Now().Add(time.Duration(expirySecs) * time.Second).Truncate(time.Second)
 		expiresAt = &t
 	}
 
@@ -358,7 +358,7 @@ func Resolve(ctx context.Context, deps Deps, params Params) (*Resolved, error) {
 // validateIdentityForm checks a pubkey or connection_key identity's shape:
 // 64-hex identity_value, and for connection_key a 64-hex ia_pubkey.
 func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
-	if decoded, decErr := hex.DecodeString(identityValue); decErr != nil || len(decoded) != 32 {
+	if !isLowerHex64(identityValue) {
 		return fmt.Errorf("%w: identity_value must be a 64-character lowercase hex string", constants.ErrInvalidParams)
 	}
 	switch identityType {
@@ -368,14 +368,28 @@ func validateIdentityForm(identityType, identityValue, iaPubkey string) error {
 		if iaPubkey == "" {
 			return fmt.Errorf("%w: ia_pubkey is required when identity_type is connection_key", constants.ErrInvalidParams)
 		}
-		if decoded, decErr := hex.DecodeString(iaPubkey); decErr != nil || len(decoded) != 32 {
-			return fmt.Errorf("%w: ia_pubkey must be a valid 32-byte hex nostr pubkey", constants.ErrInvalidParams)
+		if !isLowerHex64(iaPubkey) {
+			return fmt.Errorf("%w: ia_pubkey must be a 64-character lowercase hex nostr pubkey", constants.ErrInvalidParams)
 		}
 		return nil
 	default:
 		return fmt.Errorf("%w: identity_type must be %q or %q", constants.ErrInvalidParams,
 			db.CashIdentityPubkey, db.CashIdentityConnectionKey)
 	}
+}
+
+// isLowerHex64 reports whether s is 64 lowercase hex digits, the only form a
+// claim proof's signer or an attestation's d can match byte for byte.
+func isLowerHex64(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // checkIATrusted refuses an Identity Authority not on the allowlist right now

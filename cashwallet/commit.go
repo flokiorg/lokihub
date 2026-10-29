@@ -18,6 +18,7 @@ import (
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/logger"
 )
@@ -280,8 +281,9 @@ func commit(ctx context.Context, deps Deps, plan commitPlan) (out []committedBil
 		if err := deps.before(StageBeforeCommit); err != nil {
 			return err
 		}
-		// The deadline is checked again as the last statement before COMMIT.
-		if plan.record != nil && !nipcash.CommitAllowed(plan.record.Deadline, deps.now().Unix()) {
+		// The deadline is checked again as the last statement before COMMIT, on the
+		// wall clock as CommitTx and cash_lookup judge it.
+		if plan.record != nil && !nipcash.CommitAllowed(plan.record.Deadline, hubclock.Wall(deps.now()).Unix()) {
 			return cashrequest.ErrDeadlinePassed
 		}
 

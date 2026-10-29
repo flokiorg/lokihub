@@ -82,6 +82,7 @@ func TestCreate_SingleRecipient_HappyPath(t *testing.T) {
 	assert.Equal(t, uint64(1000), result.Recipients[0].AmountMloki)
 	require.NotNil(t, result.ExpiresAt)
 	assert.WithinDuration(t, time.Now().Add(1800*time.Second), *result.ExpiresAt, 5*time.Second)
+	assert.Zero(t, result.ExpiresAt.Nanosecond(), "expires_at is stored in whole seconds, as the bill announces it")
 
 	var childApps []db.App
 	svc.DB.Where("parent_app_id = ? AND kind = ?", hub.ID, db.AppKindCashWallet).Find(&childApps)

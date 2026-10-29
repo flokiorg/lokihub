@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/cashwithdraw"
@@ -291,13 +292,13 @@ func (svc *nip47Service) servePrivateItem(
 	if beforeRecordPrivateItem != nil {
 		beforeRecordPrivateItem(&app)
 	}
-	if err := svc.db.Create(&requestEvent).Error; err != nil {
+	if err := svc.recordPrivateItem(&requestEvent); err != nil {
 		// The target went between I2 and here: a drained bill is deleted after
 		// its last payout settles, asynchronously (the redeem outcome consumer),
-		// so an item for it may arrive while that runs. Served again from the
-		// top, it is answered as a destroyed bill (its tombstone, or omitted),
-		// never dropped for a foreign-key failure.
-		if !reservedAfterTargetGone(ctx) && !svc.appExists(app.ID) {
+		// or by a sibling item's split in the same envelope, so an item for it
+		// may arrive while that runs. Served again from the top, it is answered
+		// as a destroyed bill (its tombstone, or omitted).
+		if !reservedAfterTargetGone(ctx) && (errors.Is(err, errItemTargetGone) || !svc.appExists(app.ID)) {
 			logger.Logger.Info().Str("item", item.ID).Msg("A private item's target was deleted while it was served; serving it again")
 			return svc.servePrivateItem(context.WithValue(ctx, targetGoneKey{}, true), lnClient, item, binding)
 		}
@@ -533,6 +534,31 @@ func (svc *nip47Service) statusOfExpiredBill(app *db.App, method, scope string) 
 
 // appExists reports whether the app row id is still there; a read error counts
 // as there (the caller then keeps its original error).
+// errItemTargetGone: the item's target app was deleted before its request
+// event could be recorded.
+var errItemTargetGone = errors.New("the item's target was deleted")
+
+// recordPrivateItem inserts ev once its app is read under a share lock (on
+// sqlite the IMMEDIATE transaction holds the write lock), so a concurrent
+// delete of the target either commits first, giving errItemTargetGone, or
+// waits; the insert never fails on the app's foreign key.
+func (svc *nip47Service) recordPrivateItem(ev *db.RequestEvent) error {
+	return svc.db.Transaction(func(tx *gorm.DB) error {
+		q := tx.Model(&db.App{}).Select("id").Where("id = ?", *ev.AppId)
+		if tx.Name() == "postgres" {
+			q = q.Clauses(clause.Locking{Strength: "SHARE"})
+		}
+		var ids []uint
+		if err := q.Find(&ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return errItemTargetGone
+		}
+		return tx.Create(ev).Error
+	})
+}
+
 func (svc *nip47Service) appExists(id uint) bool {
 	var n int64
 	if err := svc.db.Model(&db.App{}).Where("id = ?", id).Count(&n).Error; err != nil {

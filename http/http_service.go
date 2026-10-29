@@ -1240,7 +1240,13 @@ func (httpSvc *HttpService) appsDeleteHandler(c echo.Context) error {
 		})
 	}
 
-	if err := httpSvc.api.DeleteApp(dbApp); err != nil {
+	var opts api.DeleteAppOptions
+	if c.Request().ContentLength > 0 {
+		if err := c.Bind(&opts); err != nil {
+			return c.JSON(http.StatusBadRequest, ErrorResponse{Message: fmt.Sprintf("Bad request: %s", err.Error())})
+		}
+	}
+	if err := httpSvc.api.DeleteAppWithOptions(dbApp, opts); err != nil {
 		// apps.DeleteApp's own child-count guard (a cash_hub/circle_hub still
 		// has live children attached) returns a constants.ErrInvalidParams-
 		// wrapped, human-readable reason - surface it as a 400 like every

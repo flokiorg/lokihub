@@ -3,9 +3,12 @@ package cashwithdraw
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/flokiorg/lokihub/db"
 )
 
 // U-24.15: on postgres only one engine leads; a second takes over once the
@@ -53,4 +56,23 @@ func TestEngineStatus(t *testing.T) {
 	assert.Equal(t, int64(1), st.Payouts["queued"])
 	assert.Positive(t, st.UnconfirmedMillis)
 	assert.Positive(t, st.SetAsideSat)
+}
+
+// NIP-CASH §Paying a Payout (CASH-87): a Hub broadcasts a version by sent_by,
+// however long its batch window.
+func TestEngine_BroadcastsBySentByWithALongBatchWindow(t *testing.T) {
+	w := newEngineWorld(t, 5)
+	w.svc.Cfg.GetEnv().CashWithdrawBatchWindowSecs = 6 * 3600
+	wd := w.commitTo(t, 21_000_000)
+	require.Greater(t, wd.SentBy, w.clock().Unix()+1800, "the quote leaves room before sent_by")
+
+	w.advance(time.Duration(wd.SentBy-w.clock().Unix()-1800-60) * time.Second)
+	w.pass(t)
+	require.Nil(t, w.payout(t, wd.ID).Txid, "still batching well before sent_by")
+
+	w.advance(time.Duration(wd.SentBy-w.clock().Unix()-1) * time.Second)
+	w.pass(t)
+	got := w.payout(t, wd.ID)
+	require.Equal(t, db.CashWithdrawBroadcast, got.State, "broadcast before sent_by")
+	require.LessOrEqual(t, w.clock().Unix(), got.SentBy)
 }
