@@ -601,14 +601,16 @@ const (
 // needs to rebuild its token (the connection secret is re-derived from
 // WalletAppID; nothing secret is stored).
 type CashRequestRecordBill struct {
-	ID               uint              `gorm:"primaryKey"`
-	RecordID         uint              `gorm:"not null;index"`
-	Record           CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
-	Ordinal          int16             `gorm:"not null"`
-	Role             string            `gorm:"size:12;not null"`
-	WalletAppID      uint              `gorm:"not null;index"` // no FK: the record outlives the bill
-	WalletPubkey     string            `gorm:"size:64;not null"`
-	RelayHints       string            `gorm:"type:text;not null"` // JSON array, exactly as encoded
+	ID       uint              `gorm:"primaryKey"`
+	RecordID uint              `gorm:"not null;index"`
+	Record   CashRequestRecord `gorm:"foreignKey:RecordID;constraint:OnDelete:CASCADE"`
+	// Ordinal orders a record's bills; an order payment may mint more than an
+	// int16 holds.
+	Ordinal          int32  `gorm:"not null"`
+	Role             string `gorm:"size:12;not null"`
+	WalletAppID      uint   `gorm:"not null;index"` // no FK: the record outlives the bill
+	WalletPubkey     string `gorm:"size:64;not null"`
+	RelayHints       string `gorm:"type:text;not null"` // JSON array, exactly as encoded
 	IdentityRequired *int16
 	HubGroup         *string `gorm:"size:8"`
 	AmountMillis     int64   `gorm:"not null"`

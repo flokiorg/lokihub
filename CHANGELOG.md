@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Records an order payment's bills past the 32768th in mint order. The
+  record ordinal was 16 bits and wrapped, so `cash_lookup` of a very large
+  over-payment returned its bills out of order.
 - Bounds how long a cash commit holds the database write lock while the node
   signs its bills: all of a commit's signatures share one budget of 3 s plus
   25 ms a bill, and the node identity is read once per commit. A slow node
