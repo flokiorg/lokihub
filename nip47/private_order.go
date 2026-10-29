@@ -66,20 +66,28 @@ func (svc *nip47Service) servePrivateOrder(ctx context.Context, lnClient lnclien
 	return transport.Result{ID: item.ID, ResultType: item.Method, Result: body}, true
 }
 
-// orderBills are an order's bills as its view lists them, each with its token
-// rebuilt, or its tombstone (NIP-CO §Reading an Order).
+// orderView is an order as it stands, its bills each with its token rebuilt,
+// or its tombstone (NIP-CO §Reading an Order). An order past its pay_by whose
+// window could not be ended is not answered: cashorder.ErrWindowNotEnded.
 func (svc *nip47Service) orderView(rec *db.CashRequestRecord) (json.RawMessage, error) {
 	if rec.OrderID == nil {
 		return nil, errors.New("an order record without its order")
 	}
 	if end := svc.orderPayBy.Load(); end != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		(*end)(ctx, *rec.OrderID)
+		err := (*end)(ctx, *rec.OrderID)
 		cancel()
+		if err != nil {
+			return nil, err
+		}
 	}
 	var order db.CashOrder
 	if err := svc.db.First(&order, *rec.OrderID).Error; err != nil {
 		return nil, err
+	}
+	// Never "open" past pay_by, whether or not a window-ending hook is set.
+	if cashorder.WindowNotEnded(&order, hubclock.Now().Unix()) {
+		return nil, cashorder.ErrWindowNotEnded
 	}
 	bills, err := svc.orderBills(rec)
 	if err != nil {

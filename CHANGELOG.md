@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Refuses `cash_lookup` of an order past its `pay_by` with a retryable
+  `INTERNAL` while its window cannot be ended (the chain or its invoice cannot
+  be read, or the invoice not cancelled), instead of answering `open`. A client
+  reads an open order past `pay_by` as ended unpaid, and stopped reading an
+  order the Hub then minted.
 - Funds an on-chain payout's replacement (an RBF bump, or the invalidation a
   cancel needs) from the inputs its broadcast version already spends. The node
   no longer lists a coin an unmined transaction of its own spends, so a
