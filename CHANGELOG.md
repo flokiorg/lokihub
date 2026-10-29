@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Bounds an operator's own on-chain spend or channel open by what the
+  wallet's coin selection may spend (confirmed coins under no lease), less the
+  floor and what payouts still need from those coins. The guard counted every
+  leased coin, another user's included, as spendable, and subtracted the
+  set-aside of payouts whose coins were already spent.
 - Reads the node's wallet for on-chain order payments from a stored floor 100
   blocks below the tip (and the mempool) instead of its whole history every
   30 s, and stops checking a minted payment deeper than that, counting its
