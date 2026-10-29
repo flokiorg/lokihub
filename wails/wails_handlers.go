@@ -70,6 +70,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	appMatch := appRegex.FindStringSubmatch(route)
 
+	if resp, ok := app.routeWithdraw(route, method, body); ok {
+		return resp
+	}
 	if resp, ok := app.routeListings(ctx, route, method, body); ok {
 		return resp
 	}

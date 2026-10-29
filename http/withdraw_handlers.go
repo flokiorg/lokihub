@@ -12,18 +12,9 @@ import (
 	"github.com/flokiorg/lokihub/constants"
 )
 
-// withdrawAPI is the part of the API the on-chain withdrawal routes use.
-type withdrawAPI interface {
-	GetCashHubWithdrawTerms(hubAppID uint) (*cashwithdraw.TermsView, error)
-	SetCashHubWithdrawTerms(hubAppID uint, in cashwithdraw.TermsInput) (*cashwithdraw.TermsView, error)
-	SetCashWithdrawNodeEnabled(on bool) error
-	ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, error)
-	CashWithdrawStatus() (*cashwithdraw.EngineStatus, error)
-}
-
 // registerWithdrawRoutes adds the on-chain withdrawal admin API (WP-23).
 func (httpSvc *HttpService) registerWithdrawRoutes(g *echo.Group) {
-	w, ok := httpSvc.api.(withdrawAPI)
+	w, ok := httpSvc.api.(api.WithdrawAPI)
 	if !ok {
 		return
 	}
@@ -66,6 +57,13 @@ func (httpSvc *HttpService) registerWithdrawRoutes(g *echo.Group) {
 	})
 	g.GET("/cash-withdraw/status", func(c echo.Context) error {
 		st, err := w.CashWithdrawStatus()
+		if err != nil {
+			return withdrawError(c, err)
+		}
+		return c.JSON(http.StatusOK, st)
+	})
+	g.GET("/cash-withdraw/node", func(c echo.Context) error {
+		st, err := w.CashWithdrawNode()
 		if err != nil {
 			return withdrawError(c, err)
 		}

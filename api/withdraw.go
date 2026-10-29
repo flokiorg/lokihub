@@ -9,6 +9,35 @@ import (
 // ErrWithdrawUnavailable: the on-chain withdrawal service is not running.
 var ErrWithdrawUnavailable = errors.New("on-chain withdrawals are not available")
 
+// WithdrawAPI is the on-chain withdrawal admin API (WP-23), served by the HTTP
+// and desktop routers.
+type WithdrawAPI interface {
+	GetCashHubWithdrawTerms(hubAppID uint) (*cashwithdraw.TermsView, error)
+	SetCashHubWithdrawTerms(hubAppID uint, in cashwithdraw.TermsInput) (*cashwithdraw.TermsView, error)
+	CashWithdrawNode() (*CashWithdrawNodeState, error)
+	SetCashWithdrawNodeEnabled(on bool) error
+	ListCashHubPayouts(hubAppID uint) ([]cashwithdraw.PayoutRow, error)
+	CashWithdrawStatus() (*cashwithdraw.EngineStatus, error)
+}
+
+// CashWithdrawNodeState is the node switch and whether this node can pay
+// on-chain withdrawals at all (the switch is refused on when it cannot).
+type CashWithdrawNodeState struct {
+	Enabled bool `json:"enabled"`
+	Capable bool `json:"capable"`
+}
+
+var _ WithdrawAPI = (*api)(nil)
+
+// CashWithdrawNode reads the node switch.
+func (api *api) CashWithdrawNode() (*CashWithdrawNodeState, error) {
+	w, err := api.withdrawService()
+	if err != nil {
+		return nil, err
+	}
+	return &CashWithdrawNodeState{Enabled: w.NodeEnabled(), Capable: w.Capable()}, nil
+}
+
 func (api *api) withdrawService() (*cashwithdraw.Service, error) {
 	w, ok := api.svc.(interface {
 		GetWithdrawService() *cashwithdraw.Service
