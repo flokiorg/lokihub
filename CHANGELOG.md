@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Records a private item's request event only while its target bill still
+  exists, under a lock the bill's delete waits on. A bill deleted by a sibling
+  item's split in the same envelope logged a `FOREIGN KEY constraint failed`
+  error before the item was answered as a destroyed bill.
 - Keeps the newest-seen mark of an LSP pruned from the catalogue, until every
   version it covers has expired, so a relay cannot re-feed an older
   announcement of it as new.
