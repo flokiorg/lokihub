@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Fails an LSP's live check when its announced LSPS1 or LSPS2 `get_info`
+  errors or cannot be read. Such a check passed as terms equal to the
+  announced ones, so a purchase went ahead with no live terms compared.
 - Records a private item's request event only while its target bill still
   exists, under a lock the bill's delete waits on. A bill deleted by a sibling
   item's split in the same envelope logged a `FOREIGN KEY constraint failed`
