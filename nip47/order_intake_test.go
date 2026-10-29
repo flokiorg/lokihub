@@ -35,13 +35,24 @@ type chainLN struct {
 	outputs []lnclient.OnchainOutput
 	err     error
 	tip     uint32
-	// froms are the heights each listing was asked from; tipErr fails GetInfo.
+	// froms are the heights each listing was asked from, under mu, as scans
+	// run concurrently; tipErr fails GetInfo.
+	mu     sync.Mutex
 	froms  []int32
 	tipErr error
 }
 
+// listedFroms answers a copy of the heights the listings were asked from.
+func (c *chainLN) listedFroms() []int32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]int32(nil), c.froms...)
+}
+
 func (c *chainLN) ListOnchainOutputs(_ context.Context, fromHeight int32) ([]lnclient.OnchainOutput, error) {
+	c.mu.Lock()
 	c.froms = append(c.froms, fromHeight)
+	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -788,10 +799,11 @@ func TestOrderIntake_LongScanFailureLogsAndStaysOpen(t *testing.T) {
 // scan runs one chain scan and answers the height its listing started from.
 func (f *intakeFixture) scan(t *testing.T) int32 {
 	t.Helper()
-	n := len(f.chain.froms)
+	n := len(f.chain.listedFroms())
 	require.NoError(t, f.engine.ScanChain(context.TODO()))
-	require.Greater(t, len(f.chain.froms), n)
-	return f.chain.froms[n]
+	froms := f.chain.listedFroms()
+	require.Greater(t, len(froms), n)
+	return froms[n]
 }
 
 // LO-L3: a scan reads the node's wallet from a stored floor that trails the tip
