@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Checks a joiner's membership again inside the join's commit, under the lock
+  a membership resolution takes. A member an allowlist edit removed while
+  their join was in flight was issued an Active wallet.
 - Resumes the node's invoice stream after a reconnect from the last
   `add_index` and `settle_index` it delivered, so an order invoice settled
   while the stream was down is minted at once rather than at `pay_by`.
