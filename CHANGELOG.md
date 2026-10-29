@@ -9,6 +9,12 @@ audits of both.
 
 ### Added
 
+- Adds the on-chain withdrawal operator screens: an "On-chain withdrawals"
+  node switch under Settings → Advanced with the payout engine's status, and
+  a per-Cash Hub card for its enable, `withdraw_fee_base`, `withdraw_fee_ppm`
+  and optional minimum and maximum, with the script types paid and
+  `final_depth` shown read-only. `GET /api/cash-withdraw/node` reads the
+  switch, and the desktop app serves every on-chain withdrawal route.
 - Shows an LSP's announced and live terms side by side on the JIT receive
   and channel order screens when the live ones are worse, and asks again
   before buying (`terms` on `GET /api/lsps2/info` and `/api/lsps1/info`; the

@@ -4,7 +4,8 @@
   "sections": {
     "appearance": "外观",
     "unitsAndCurrency": "单位与货币",
-    "language": "语言"
+    "language": "语言",
+    "advanced": "高级"
   },
   "appearance": {
     "theme": "主题",
@@ -96,5 +97,54 @@
     "refundTo": "退款至",
     "onchainAddress": "链上地址",
     "cancel": "取消"
+  },
+  "withdraw": {
+    "switch": "链上提现",
+    "switchDescription": "允许此节点上的 Cash Hub 将票据支付到链上地址 (cash_withdraw)。每个 Cash Hub 还需各自开启。",
+    "notCapable": "此节点的后端无法支付链上提现。",
+    "turnedOn": "链上提现已开启",
+    "turnedOff": "链上提现已关闭",
+    "switchFailed": "无法更改链上提现",
+    "ready": "支付引擎已就绪",
+    "notReady": "支付引擎尚未就绪",
+    "status": {
+      "eligible": "可用币",
+      "setAside": "已预留",
+      "floor": "下限",
+      "unconfirmed": "未确认",
+      "oldestUnbroadcast": "最早未广播",
+      "payouts": "支付",
+      "bumps": "手续费提升",
+      "reorgs": "重组",
+      "invalidations": "失效",
+      "coinsVanished": "消失的币",
+      "invariantFailures": "不变量失败"
+    },
+    "hubTitle": "链上提现",
+    "offered": "当前已向此 Cash Hub 的票据提供",
+    "notOffered": "未向此 Cash Hub 的票据提供",
+    "hubEnable": "提供链上提现",
+    "blocked": {
+      "nodeOff": "请先在设置中为节点开启链上提现。",
+      "notCapable": "此节点的后端无法支付链上提现。"
+    },
+    "feeBase": "提现基础费 (loki)",
+    "feePpm": "提现费率 (ppm)",
+    "min": "最小值 (loki)",
+    "max": "最大值 (loki)",
+    "none": "无",
+    "errors": {
+      "feeBase": "基础费是最多三位小数的 loki 金额。",
+      "feePpm": "费率是 0 到 {{max}} ppm 的整数。",
+      "min": "最小值是最多三位小数的 loki 金额。",
+      "max": "最大值是最多三位小数的 loki 金额。",
+      "minAboveMax": "最小值大于最大值。"
+    },
+    "scriptTypes": "支付的脚本类型",
+    "finalDepth": "最终深度（确认数）",
+    "networkFeeNote": "网络费由节点按每种地址类型实时估算并计入报价。",
+    "save": "保存",
+    "saved": "链上提现条款已保存",
+    "saveFailed": "无法保存链上提现条款"
   }
 }

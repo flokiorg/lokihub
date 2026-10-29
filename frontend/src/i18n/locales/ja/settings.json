@@ -4,7 +4,8 @@
   "sections": {
     "appearance": "外観",
     "unitsAndCurrency": "単位と通貨",
-    "language": "言語"
+    "language": "言語",
+    "advanced": "詳細"
   },
   "appearance": {
     "theme": "テーマ",
@@ -96,5 +97,54 @@
     "refundTo": "返金先",
     "onchainAddress": "オンチェーンアドレス",
     "cancel": "キャンセル"
+  },
+  "withdraw": {
+    "switch": "オンチェーン出金",
+    "switchDescription": "このノードの Cash Hub が紙幣をオンチェーンアドレスに支払えるようにします (cash_withdraw)。各 Cash Hub でも個別に有効にします。",
+    "notCapable": "このノードのバックエンドはオンチェーン出金を支払えません。",
+    "turnedOn": "オンチェーン出金をオンにしました",
+    "turnedOff": "オンチェーン出金をオフにしました",
+    "switchFailed": "オンチェーン出金を変更できませんでした",
+    "ready": "支払いエンジンは準備完了",
+    "notReady": "支払いエンジンはまだ準備中です",
+    "status": {
+      "eligible": "対象コイン",
+      "setAside": "確保済み",
+      "floor": "下限",
+      "unconfirmed": "未承認",
+      "oldestUnbroadcast": "最も古い未ブロードキャスト",
+      "payouts": "支払い",
+      "bumps": "手数料引き上げ",
+      "reorgs": "再編成",
+      "invalidations": "無効化",
+      "coinsVanished": "消失したコイン",
+      "invariantFailures": "不変条件の失敗"
+    },
+    "hubTitle": "オンチェーン出金",
+    "offered": "この Cash Hub の紙幣に現在提供中",
+    "notOffered": "この Cash Hub の紙幣には提供していません",
+    "hubEnable": "オンチェーン出金を提供する",
+    "blocked": {
+      "nodeOff": "まず設定でノードのオンチェーン出金をオンにしてください。",
+      "notCapable": "このノードのバックエンドはオンチェーン出金を支払えません。"
+    },
+    "feeBase": "出金手数料の基本額 (loki)",
+    "feePpm": "出金手数料 (ppm)",
+    "min": "最小 (loki)",
+    "max": "最大 (loki)",
+    "none": "なし",
+    "errors": {
+      "feeBase": "基本額は小数点以下3桁までの loki 金額です。",
+      "feePpm": "手数料率は 0 から {{max}} ppm の整数です。",
+      "min": "最小は小数点以下3桁までの loki 金額です。",
+      "max": "最大は小数点以下3桁までの loki 金額です。",
+      "minAboveMax": "最小が最大を超えています。"
+    },
+    "scriptTypes": "支払うスクリプトタイプ",
+    "finalDepth": "最終深度 (承認数)",
+    "networkFeeNote": "ネットワーク手数料はアドレスタイプごとにノードがその場で見積もり、見積もりに加算します。",
+    "save": "保存",
+    "saved": "オンチェーン出金の条件を保存しました",
+    "saveFailed": "オンチェーン出金の条件を保存できませんでした"
   }
 }

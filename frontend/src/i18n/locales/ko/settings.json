@@ -4,7 +4,8 @@
   "sections": {
     "appearance": "외관",
     "unitsAndCurrency": "단위 및 통화",
-    "language": "언어"
+    "language": "언어",
+    "advanced": "고급"
   },
   "appearance": {
     "theme": "테마",
@@ -96,5 +97,54 @@
     "refundTo": "환불 대상",
     "onchainAddress": "온체인 주소",
     "cancel": "취소"
+  },
+  "withdraw": {
+    "switch": "온체인 출금",
+    "switchDescription": "이 노드의 Cash Hub가 지폐를 온체인 주소로 지급할 수 있게 합니다 (cash_withdraw). 각 Cash Hub도 직접 켜야 합니다.",
+    "notCapable": "이 노드의 백엔드는 온체인 출금을 지급할 수 없습니다.",
+    "turnedOn": "온체인 출금을 켰습니다",
+    "turnedOff": "온체인 출금을 껐습니다",
+    "switchFailed": "온체인 출금을 변경할 수 없습니다",
+    "ready": "지급 엔진 준비됨",
+    "notReady": "지급 엔진이 아직 준비되지 않았습니다",
+    "status": {
+      "eligible": "대상 코인",
+      "setAside": "예약됨",
+      "floor": "하한",
+      "unconfirmed": "미확인",
+      "oldestUnbroadcast": "가장 오래된 미전파",
+      "payouts": "지급",
+      "bumps": "수수료 인상",
+      "reorgs": "재구성",
+      "invalidations": "무효화",
+      "coinsVanished": "사라진 코인",
+      "invariantFailures": "불변식 실패"
+    },
+    "hubTitle": "온체인 출금",
+    "offered": "현재 이 Cash Hub의 지폐에 제공 중",
+    "notOffered": "이 Cash Hub의 지폐에 제공하지 않음",
+    "hubEnable": "온체인 출금 제공",
+    "blocked": {
+      "nodeOff": "먼저 설정에서 노드의 온체인 출금을 켜세요.",
+      "notCapable": "이 노드의 백엔드는 온체인 출금을 지급할 수 없습니다."
+    },
+    "feeBase": "출금 기본 수수료 (loki)",
+    "feePpm": "출금 수수료 (ppm)",
+    "min": "최소 (loki)",
+    "max": "최대 (loki)",
+    "none": "없음",
+    "errors": {
+      "feeBase": "기본 수수료는 소수점 셋째 자리까지의 loki 금액입니다.",
+      "feePpm": "수수료율은 0부터 {{max}} ppm까지의 정수입니다.",
+      "min": "최소는 소수점 셋째 자리까지의 loki 금액입니다.",
+      "max": "최대는 소수점 셋째 자리까지의 loki 금액입니다.",
+      "minAboveMax": "최소가 최대보다 큽니다."
+    },
+    "scriptTypes": "지급하는 스크립트 유형",
+    "finalDepth": "최종 깊이 (확인 수)",
+    "networkFeeNote": "네트워크 수수료는 주소 유형마다 노드가 실시간으로 추정해 견적에 더합니다.",
+    "save": "저장",
+    "saved": "온체인 출금 조건을 저장했습니다",
+    "saveFailed": "온체인 출금 조건을 저장할 수 없습니다"
   }
 }
