@@ -127,14 +127,20 @@ func onchainKey(txid string, vout uint32) string {
 // payment that is not on-chain, or when the node cannot be asked.
 func (e *Engine) chainConfirmations(ctx context.Context, ln lnclient.LNClient, paymentID uint) (int, bool) {
 	var p db.CashOrderPayment
-	if err := e.DB.Select("payment_key").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
+	if err := e.DB.Select("payment_key", "block_height").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
 		return 0, false
 	}
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok {
 		return 0, false
 	}
-	outputs, err := lister.ListOnchainOutputs(ctx)
+	// Only the payment's own block onward: a reorganisation that moved it lower
+	// reads as 0, so its mint waits for the next scan.
+	from := int32(0)
+	if p.BlockHeight != nil {
+		from = int32(*p.BlockHeight) //nolint:gosec // a block height
+	}
+	outputs, err := lister.ListOnchainOutputs(ctx, from)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Could not read an order payment's confirmations; its mint waits")
 		return 0, true

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/ohstr/nmilat/nipCO"
 	"gorm.io/gorm"
@@ -28,13 +30,19 @@ import (
 // seen) is kept by the Hub: credited to it as income once confirmed, or to no
 // app when the Hub is gone. An error means the wallet could not be read: no
 // on-chain window may be ended on it.
+//
+// A scan reads the blocks from its stored floor up, and the mempool: the floor
+// trails the tip by chainRescanDepth, so a payment deeper than that is no
+// longer read from the node, and its confirmations are counted from its height.
 func (e *Engine) ScanChain(ctx context.Context) error {
 	ln := e.LN()
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok || ln == nil {
 		return errNoChain
 	}
-	outputs, err := lister.ListOnchainOutputs(ctx)
+	tip, tipErr := chainTip(ctx, ln)
+	from := e.scanFrom()
+	outputs, err := lister.ListOnchainOutputs(ctx, from)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Could not list on-chain outputs for order intake")
 		return fmt.Errorf("list on-chain outputs: %w", err)
@@ -65,7 +73,11 @@ func (e *Engine) ScanChain(ctx context.Context) error {
 			e.observeOutput(ctx, a, o, key)
 		}
 	}
-	e.missingOutputs(present)
+	e.missingOutputs(present, from)
+	if tipErr == nil {
+		e.ageDeepPayments(tip, from)
+		e.storeScanFloor(tip)
+	}
 
 	var orderIDs []uint
 	if err := e.DB.Model(&db.CashOrderPayment{}).Distinct().Where("state = ? AND order_id IS NOT NULL AND payment_key LIKE ?",
@@ -261,13 +273,83 @@ func (e *Engine) keepTx(p db.CashOrderPayment, conf int) error {
 	})
 }
 
+// chainRescanDepth is how many blocks below the tip every scan reads again; a
+// minted payment deeper than that is final for the intake.
+const chainRescanDepth = 100
+
+// scanFloorKey stores the lowest block height the next scan reads.
+const scanFloorKey = "CashOrderScanFloor"
+
+// chainTip is the node's best block height.
+func chainTip(ctx context.Context, ln lnclient.LNClient) (int32, error) {
+	info, err := ln.GetInfo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if info == nil || info.BlockHeight == 0 || info.BlockHeight > math.MaxInt32 {
+		return 0, errors.New("the node reports no block height")
+	}
+	return int32(info.BlockHeight), nil
+}
+
+// scanFrom is where a scan starts: the stored floor (0, the whole history,
+// before the first scan), lowered to the block of any payment seen or
+// confirmed but not yet minted, which stays read until it is.
+func (e *Engine) scanFrom() int32 {
+	var row db.UserConfig
+	from := int64(0)
+	if err := e.DB.Where(&db.UserConfig{Key: scanFloorKey}).Limit(1).Find(&row).Error; err == nil && row.ID != 0 {
+		if v, err := strconv.ParseInt(row.Value, 10, 32); err == nil && v > 0 {
+			from = v
+		}
+	}
+	var lowest *int
+	if err := e.DB.Model(&db.CashOrderPayment{}).Where("payment_key LIKE ? AND state IN ? AND block_height > 0", "oc:%",
+		[]string{db.CashOrderPaymentSeen, db.CashOrderPaymentConfirmed}).Select("MIN(block_height)").Scan(&lowest).Error; err != nil {
+		return 0
+	}
+	if lowest != nil && int64(*lowest) < from {
+		from = int64(*lowest)
+	}
+	return int32(from) //nolint:gosec // parsed as 32 bits
+}
+
+// storeScanFloor stores the floor the next scan starts from: chainRescanDepth
+// blocks below the tip this scan read up to.
+func (e *Engine) storeScanFloor(tip int32) {
+	floor := strconv.Itoa(int(max(tip-chainRescanDepth+1, 0)))
+	err := e.DB.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&db.UserConfig{}).Where(&db.UserConfig{Key: scanFloorKey}).Update("value", floor)
+		if res.Error != nil || res.RowsAffected > 0 {
+			return res.Error
+		}
+		return tx.Create(&db.UserConfig{Key: scanFloorKey, Value: floor}).Error
+	})
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to store the order intake's scan floor; the next scan reads more")
+	}
+}
+
+// ageDeepPayments counts the confirmations of minted payments below the scan's
+// floor from their height, as the scan no longer reads them.
+func (e *Engine) ageDeepPayments(tip, from int32) {
+	if err := e.DB.Model(&db.CashOrderPayment{}).
+		Where("payment_key LIKE ? AND state = ? AND block_height > 0 AND block_height < ?", "oc:%", db.CashOrderPaymentMinted, from).
+		Update("confirmations", gorm.Expr("? - block_height + 1", tip)).Error; err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to age deep order payments")
+	}
+}
+
 // missingOutputs handles on-chain payments the scan did not find: an
 // unconfirmed one is dropped after droppedAfterMisses scans; a confirmed,
 // unminted one lost its block and goes back to seen; a minted one is reorged.
-func (e *Engine) missingOutputs(present map[string]bool) {
+// A minted payment below from was not read, so it is not missing.
+func (e *Engine) missingOutputs(present map[string]bool, from int32) {
 	var payments []db.CashOrderPayment
 	if err := e.DB.Where("payment_key LIKE ? AND state IN ?", "oc:%",
-		[]string{db.CashOrderPaymentSeen, db.CashOrderPaymentConfirmed, db.CashOrderPaymentMinted}).Find(&payments).Error; err != nil {
+		[]string{db.CashOrderPaymentSeen, db.CashOrderPaymentConfirmed, db.CashOrderPaymentMinted}).
+		Where("state <> ? OR block_height IS NULL OR block_height >= ?", db.CashOrderPaymentMinted, from).
+		Find(&payments).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to list on-chain order payments")
 		return
 	}

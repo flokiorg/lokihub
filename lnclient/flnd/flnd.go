@@ -2280,13 +2280,16 @@ func (svc *FLNDService) SubscribeChannelAcceptor(ctx context.Context) (<-chan ln
 }
 
 // ListOnchainOutputs lists every output to one of the wallet's own addresses,
-// over every wallet transaction, confirmed or in the mempool.
-func (svc *FLNDService) ListOnchainOutputs(ctx context.Context) ([]lnclient.OnchainOutput, error) {
+// over the wallet transactions confirmed at fromHeight or above and those in
+// the mempool.
+func (svc *FLNDService) ListOnchainOutputs(ctx context.Context, fromHeight int32) ([]lnclient.OnchainOutput, error) {
 	var out []lnclient.OnchainOutput
 	offset := uint32(0)
 	const limit = uint32(1000)
 	for {
-		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{IndexOffset: offset, MaxTransactions: limit})
+		// EndHeight -1 includes the unconfirmed transactions.
+		resp, err := svc.client.GetTransactions(ctx, &lnrpc.GetTransactionsRequest{StartHeight: max(fromHeight, 0), EndHeight: -1,
+			IndexOffset: offset, MaxTransactions: limit})
 		if err != nil {
 			return nil, err
 		}

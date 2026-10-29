@@ -35,16 +35,29 @@ type chainLN struct {
 	outputs []lnclient.OnchainOutput
 	err     error
 	tip     uint32
+	// froms are the heights each listing was asked from; tipErr fails GetInfo.
+	froms  []int32
+	tipErr error
 }
 
-func (c *chainLN) ListOnchainOutputs(context.Context) ([]lnclient.OnchainOutput, error) {
+func (c *chainLN) ListOnchainOutputs(_ context.Context, fromHeight int32) ([]lnclient.OnchainOutput, error) {
+	c.froms = append(c.froms, fromHeight)
 	if c.err != nil {
 		return nil, c.err
 	}
-	return append([]lnclient.OnchainOutput(nil), c.outputs...), nil
+	var out []lnclient.OnchainOutput
+	for _, o := range c.outputs {
+		if o.BlockHeight == 0 || o.BlockHeight >= fromHeight {
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }
 
 func (c *chainLN) GetInfo(ctx context.Context) (*lnclient.NodeInfo, error) {
+	if c.tipErr != nil {
+		return nil, c.tipErr
+	}
 	info, err := c.MockLn.GetInfo(ctx)
 	if err == nil && c.tip > 0 {
 		info.BlockHeight = c.tip
@@ -765,4 +778,91 @@ func TestOrderIntake_LongScanFailureLogsAndStaysOpen(t *testing.T) {
 	f.chain.err = nil
 	f.engine.RunPayBy(context.TODO())
 	assert.Equal(t, db.CashOrderExpired, f.orderRow(t, p.RequestID).State)
+}
+
+// scan runs one chain scan and answers the height its listing started from.
+func (f *intakeFixture) scan(t *testing.T) int32 {
+	t.Helper()
+	n := len(f.chain.froms)
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	require.Greater(t, len(f.chain.froms), n)
+	return f.chain.froms[n]
+}
+
+// LO-L3: a scan reads the node's wallet from a stored floor that trails the tip
+// by chainRescanDepth (100) blocks, not the whole history. A minted payment
+// below the floor is no longer read, never taken as reorged, and its
+// confirmations still grow; one within the floor that leaves the chain is.
+func TestOrderIntake_ScanReadsFromAFloorBelowTheTip(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, deepAddr, deepOrder := f.onchainOrder(t)
+	_, shallowAddr, shallowOrder := f.onchainOrder(t)
+	deep := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: deepAddr, AmountLoki: 43, BlockHeight: 950, Confirmations: 51}
+	f.chain.tip = 1000
+	f.chain.outputs = []lnclient.OnchainOutput{deep}
+	assert.Equal(t, int32(0), f.scan(t), "the first scan reads everything")
+	assert.Equal(t, db.CashOrderMinted, f.orderRow(t, deepOrder.RequestID).State)
+
+	// 100 blocks deep at most: still read, and present.
+	f.chain.tip = 1049
+	deep.Confirmations = 100
+	f.chain.outputs = []lnclient.OnchainOutput{deep}
+	assert.Equal(t, int32(901), f.scan(t), "the tip less 99 of the last scan")
+
+	f.chain.tip = 1200
+	deep.Confirmations = 251
+	shallow := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: shallowAddr, AmountLoki: 43, BlockHeight: 1190, Confirmations: 11}
+	f.chain.outputs = []lnclient.OnchainOutput{deep, shallow}
+	assert.Equal(t, int32(950), f.scan(t))
+	assert.Equal(t, db.CashOrderMinted, f.orderRow(t, shallowOrder.RequestID).State)
+
+	// The deep payment is below the floor now: not listed, not missing.
+	f.chain.tip = 1210
+	assert.Equal(t, int32(1101), f.scan(t))
+	payment := func(o lnclient.OnchainOutput) db.CashOrderPayment {
+		var p db.CashOrderPayment
+		require.NoError(t, f.svc.DB.Where("payment_key = ?", fmt.Sprintf("oc:%s:%d", o.TxID, o.Vout)).First(&p).Error)
+		return p
+	}
+	assert.Equal(t, db.CashOrderPaymentMinted, payment(deep).State, "below the floor: not taken as reorged")
+	assert.Equal(t, 1210-950+1, payment(deep).Confirmations, "its depth counted from its height")
+
+	// Within the floor, a minted payment that leaves the chain is reorged.
+	f.chain.outputs = []lnclient.OnchainOutput{deep}
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	assert.Equal(t, db.CashOrderPaymentReorged, payment(shallow).State)
+	assert.Equal(t, db.CashOrderPaymentMinted, payment(deep).State)
+}
+
+// A node that cannot report its tip leaves the floor where it was, and a
+// payment seen but not yet minted keeps the scan reading from its block.
+func TestOrderIntake_ScanFloorHoldsForAnUnmintedPaymentAndAnUnknownTip(t *testing.T) {
+	f := newIntakeFixture(t)
+	_, addr, p := f.onchainOrder(t)
+	f.chain.tip = 1000
+	f.chain.outputs = nil
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+
+	key := f.ln.SigningKey
+	f.ln.SigningKey = nil // the mint fails: the payment stays confirmed, unminted
+	out := lnclient.OnchainOutput{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, BlockHeight: 990, Confirmations: 11}
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	f.chain.tip = 1500
+	out.Confirmations = 511
+	f.chain.outputs = []lnclient.OnchainOutput{out}
+	assert.Equal(t, int32(901), f.scan(t))
+	assert.Equal(t, int32(990), f.scan(t), "an unminted payment is read until it mints")
+
+	f.ln.SigningKey = key
+	f.clock = f.clock.Add(time.Hour)
+	f.engine.RetryMints(context.TODO())
+	assert.Equal(t, db.CashOrderMinted, f.orderRow(t, p.RequestID).State)
+
+	// Minted now: the floor follows the tip again, unless the tip is unknown.
+	require.NoError(t, f.engine.ScanChain(context.TODO()))
+	f.chain.tipErr = errors.New("node busy")
+	f.chain.tip = 3000
+	assert.Equal(t, int32(1401), f.scan(t))
+	assert.Equal(t, int32(1401), f.scan(t), "an unknown tip moves no floor")
 }
