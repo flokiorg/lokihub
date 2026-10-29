@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ohstr/nmilat/niplsp"
+
 	"github.com/flokiorg/lokihub/lsps/persist"
 )
 
@@ -23,6 +25,8 @@ type LiveCheck struct {
 	// Worse: a live value is worse for the buyer than announced.
 	Worse bool
 	Error string
+	// Fields are the compared values (niplsp.CheckLive).
+	Fields []niplsp.FieldDiff
 }
 
 // LiveChecker runs, stores and returns the live check of the LSP with node key
@@ -90,30 +94,37 @@ func (m *LiquidityManager) CheckContact(pubkey string) error {
 // check, run now, finds every announced protocol. An automatic purchase also
 // refuses a live value worse than announced, since no one can be asked again.
 func (m *LiquidityManager) CheckPurchase(ctx context.Context, pubkey string, automatic bool) error {
+	_, _, err := m.checkPurchase(ctx, pubkey, automatic)
+	return err
+}
+
+// checkPurchase is CheckPurchase, returning the catalogue row and the live
+// check run (nil without a live checker).
+func (m *LiquidityManager) checkPurchase(ctx context.Context, pubkey string, automatic bool) (*persist.LSP, *LiveCheck, error) {
 	row, err := m.contactable(pubkey)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if row.Status != "open" {
-		return fmt.Errorf("%w: it is %s and offers nothing new", ErrLSPNotUsable, row.Status)
+		return nil, nil, fmt.Errorf("%w: it is %s and offers nothing new", ErrLSPNotUsable, row.Status)
 	}
 	live := m.checker()
 	if live == nil {
-		return nil
+		return row, nil, nil
 	}
 	res, err := live(ctx, row.NodeKey)
 	if err != nil {
-		return fmt.Errorf("%w: the live check failed: %v", ErrLSPNotUsable, err)
+		return nil, nil, fmt.Errorf("%w: the live check failed: %v", ErrLSPNotUsable, err)
 	}
 	if !res.Usable {
 		reason := "an announced protocol is missing"
 		if res.Error != "" {
 			reason = res.Error
 		}
-		return fmt.Errorf("%w: the live check found it unusable: %s", ErrLSPNotUsable, reason)
+		return nil, nil, fmt.Errorf("%w: the live check found it unusable: %s", ErrLSPNotUsable, reason)
 	}
 	if automatic && res.Worse {
-		return fmt.Errorf("%w: its live terms are worse than announced", ErrLSPNotUsable)
+		return nil, nil, fmt.Errorf("%w: its live terms are worse than announced", ErrLSPNotUsable)
 	}
-	return nil
+	return row, res, nil
 }
