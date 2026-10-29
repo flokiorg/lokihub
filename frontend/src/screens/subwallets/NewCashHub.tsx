@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import AppHeader from "src/components/AppHeader";
 import { CashHubConfigCard } from "src/components/CashHubConfigCard";
-import { DEFAULT_CASH_SPENT_RETENTION_SECS } from "src/constants";
+import { DEFAULT_CASH_MIN_TRANSFER_LOKI, DEFAULT_CASH_SPENT_RETENTION_SECS } from "src/constants";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
 import { Label } from "src/components/ui/label";
@@ -21,7 +21,9 @@ export function NewCashHub() {
   const [name, setName] = React.useState("");
   const [perWalletMaxLoki, setPerWalletMaxLoki] = React.useState(1000);
   const [maxExpSecs, setMaxExpSecs] = React.useState(86400);
-  const [minTransferLoki, setMinTransferLoki] = React.useState(0);
+  const [minTransferLoki, setMinTransferLoki] = React.useState(
+    DEFAULT_CASH_MIN_TRANSFER_LOKI
+  );
   const [redeemFeePpm, setRedeemFeePpm] = React.useState(0);
   // Seeded with the backend's own default so the form shows what a hub would
   // get anyway, rather than looking unset.

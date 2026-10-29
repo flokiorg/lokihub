@@ -447,8 +447,9 @@ type CreateAppRequest struct {
 	UnlockPassword        string   `json:"unlockPassword"`
 	CashPerWalletMaxMloki int      `json:"cashPerWalletMaxMloki"`
 	CashMaxExpSecs        int      `json:"cashMaxExpSecs"`
-	CashMinTransferMloki  int64    `json:"cashMinTransferMloki"`
-	CashRedeemFeePpm      int      `json:"cashRedeemFeePpm"`
+	// CashMinTransferMloki omitted means DEFAULT_CASH_MIN_TRANSFER_MLOKI; 0 is no floor.
+	CashMinTransferMloki *int64 `json:"cashMinTransferMloki"`
+	CashRedeemFeePpm     int    `json:"cashRedeemFeePpm"`
 	// CashRedeemFeeBaseMloki is the FLAT part of the same fee (0 = none) — see
 	// db.CashHubConfig.RedeemFeeBaseMloki for why a proportional-only fee cannot
 	// cover a small slice's own routing cost.
