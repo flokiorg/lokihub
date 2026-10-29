@@ -196,3 +196,22 @@ func TestPrivateJoin_SameIdentityTwiceInOneBatch_OneWallet(t *testing.T) {
 	assert.Equal(t, nipcw.ErrWalletExists, second.Error.Code)
 	assert.Len(t, h.children(t), 1)
 }
+
+// NIP-CW §Private Join: an item proof by any key but the request pubkey is
+// UNAUTHORIZED, even with unchanged params; the member's own proof joins.
+func TestPrivateJoin_UnchangedParamsOtherItemSigner_Unauthorized(t *testing.T) {
+	member, relayer := nostr.GeneratePrivateKey(), nostr.GeneratePrivateKey()
+	memberPub, _ := nostr.GetPublicKey(member)
+	h := newJoinHub(t, memberPub)
+	params := joinParams(t, member, *h.app.WalletPubkey, 20_000)
+	res, served := h.serve(t, "x", params, relayer, strings.Repeat("0a", 32))
+	require.True(t, served)
+	require.NotNil(t, res.Error)
+	assert.Equal(t, constants.ERROR_UNAUTHORIZED, res.Error.Code)
+	assert.Empty(t, h.children(t))
+
+	res, served = h.serve(t, "y", params, member, strings.Repeat("0e", 32))
+	require.True(t, served)
+	require.Nil(t, res.Error, "%+v", res.Error)
+	assert.Len(t, h.children(t), 1)
+}
