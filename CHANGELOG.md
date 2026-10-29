@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Shows `cashhub1`, `circlehub1`, `cashorder1` and `lokicash1` QR codes in
+  uppercase, which fits the QR alphanumeric mode; copying still gives the
+  lowercase string.
 - Reports only NIP-47's four networks: testnet4 is `testnet`, simnet
   `regtest`, and a node on a network with no NIP-47 name signs no cash.
 - Refuses cash serving when the node identity already signed cash on another
