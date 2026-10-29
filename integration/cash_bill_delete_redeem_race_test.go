@@ -31,8 +31,8 @@ func TestOwnerDeleteRacingRedeem_OneWinnerAndValueConserved(t *testing.T) {
 			Recipients: onePubkeyRecipient(pub, happyPathAmountMloki),
 			Expiry:     happyPathExpirySecs,
 		}, &created))
-		walletAppID, err := admin.findAppIDByWalletPubkey(created.WalletPubkey)
-		require.NoError(t, err)
+		walletAppID, ok := cashWalletOf(t, admin, hubAppID, pub)
+		require.True(t, ok, "trial %d: the minted wallet is listed under its Hub", trial)
 		bill := mustConnectBill(t, created.CashToken, priv)
 		hubBefore := balanceOf(t, hubClient)
 
@@ -60,7 +60,7 @@ func TestOwnerDeleteRacingRedeem_OneWinnerAndValueConserved(t *testing.T) {
 			// The payout settled: the owner deletes what is left, unless the
 			// drained bill already deleted itself.
 			require.Eventually(t, func() bool {
-				if _, err := admin.findAppIDByWalletPubkey(created.WalletPubkey); err != nil {
+				if _, ok := cashWalletOf(t, admin, hubAppID, pub); !ok {
 					return true
 				}
 				return admin.deleteCashWallet(hubAppID, walletAppID) == nil
@@ -74,4 +74,19 @@ func TestOwnerDeleteRacingRedeem_OneWinnerAndValueConserved(t *testing.T) {
 			require.EqualValues(t, happyPathAmountMloki, gain, "trial %d: the whole amount went back to the Hub", trial)
 		}
 	}
+}
+
+// cashWalletOf answers the app id of the wallet holding recipient's slice
+// under hubAppID. Cash wallets are left out of the general app list, so they
+// are found through their Hub's claims.
+func cashWalletOf(t *testing.T, admin *adminClient, hubAppID uint, recipient string) (uint, bool) {
+	t.Helper()
+	claims, err := admin.listCashWalletClaims(hubAppID)
+	require.NoError(t, err)
+	for _, c := range claims {
+		if c.IdentityValue == recipient {
+			return c.WalletAppID, true
+		}
+	}
+	return 0, false
 }
