@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Removes a recipient's slice, sweeps its amount back to the Cash Hub and
+  archives it in one transaction. A crash between the sweep and the removal
+  could leave the slice claimed, impossible to remove again and archived as
+  `redeemed`.
 - Shows `cashhub1`, `circlehub1`, `cashorder1` and `lokicash1` QR codes in
   uppercase, which fits the QR alphanumeric mode; copying still gives the
   lowercase string.
