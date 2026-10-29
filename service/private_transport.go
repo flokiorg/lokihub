@@ -15,6 +15,7 @@ import (
 
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/nodesign"
 	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipcash/transport"
 )
@@ -303,6 +304,10 @@ func (svc *service) resolvePrivateTransport() (*privateTransport, error) {
 // leave a window where a client has been told where to write and nothing is
 // reading; the reverse order costs nothing.
 func (svc *service) startPrivateTransport(ctx context.Context, pool *nostr.SimplePool, group *errgroup.Group) error {
+	if err := nodesign.Guard.Allow(ctx); err != nil {
+		svc.resetPrivateTransportStatus()
+		return fmt.Errorf("cash serving refuses to start: %w", err)
+	}
 	pt, err := svc.resolvePrivateTransport()
 	if err != nil {
 		return err
