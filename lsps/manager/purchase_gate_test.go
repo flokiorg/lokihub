@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ohstr/nmilat/niplsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -46,12 +47,17 @@ func gateManager(t *testing.T, edit func(l *persist.LSP)) (*LiquidityManager, *m
 	m.lsps5Client = lsps5.NewClientHandler(m.transport, m.eventQueue)
 	l := persist.LSP{NodeKey: NodeKeyOf(gateLSP), Pubkey: gateLSP, Host: "10.0.0.1:9735", Name: "gate",
 		Trusted: true, Usable: true, Status: "open"}
+	announce(&l, announcedRow)
 	if edit != nil {
 		edit(&l)
 	}
 	require.NoError(t, db.Create(&l).Error)
 	return m, mockLN, db
 }
+
+// announcedRow is K-LSP-1's announced LSPS2 fee row.
+var announcedRow = niplsp.FeeRow{MinFeeMillis: 2000000, Proportional: 4000, MinLifetime: 4320,
+	MaxClientToSelfDelay: 2016, MinPaymentSizeMillis: 10000000, MaxPaymentSizeMillis: 4000000000}
 
 func sent(m *mockLNClientJIT) int {
 	m.mu.Lock()
@@ -72,9 +78,9 @@ func TestPurchaseRefusedWithoutTrustOrOpenStatus(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, ln, _ := gateManager(t, edit)
 			params := lsps2.OpeningFeeParams{MinFeeMloki: 1}
-			_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params)
+			_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params, nil)
 			assert.ErrorIs(t, err, ErrLSPNotUsable)
-			_, err = m.CreateLSPS1Order(context.TODO(), gateLSP, lsps1.OrderParams{LspBalanceLoki: 100_000}, nil)
+			_, err = m.CreateLSPS1Order(context.TODO(), gateLSP, lsps1.OrderParams{LspBalanceLoki: 100_000}, nil, nil)
 			assert.ErrorIs(t, err, ErrLSPNotUsable)
 			assert.Zero(t, sent(ln), "nothing is sent to the LSP")
 		})
@@ -97,7 +103,7 @@ func TestPurchaseRunsTheLiveCheck(t *testing.T) {
 		return result, nil
 	})
 	params := lsps2.OpeningFeeParams{MinFeeMloki: 1}
-	_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params)
+	_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params, nil)
 	assert.ErrorIs(t, err, ErrLSPNotUsable)
 	assert.Equal(t, 1, checks)
 	assert.Zero(t, sent(ln))

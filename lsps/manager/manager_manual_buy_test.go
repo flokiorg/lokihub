@@ -61,7 +61,7 @@ func TestBuyLiquidity_RetryOnStaleParams(t *testing.T) {
 
 	go func() {
 		// Call BuyLiquidity explicitly with the correct lspPubkey
-		hints, err := m.BuyLiquidity(ctx, lspPubkey, 100000, nil)
+		hints, err := m.BuyLiquidity(ctx, lspPubkey, 100000, nil, nil)
 		if err != nil {
 			errChan <- err
 		} else {

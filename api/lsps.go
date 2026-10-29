@@ -108,7 +108,7 @@ func (api *api) LSPS1CreateOrder(ctx context.Context, req *LSPS1CreateOrderReque
 
 	logger.Logger.Info().Interface("order_params", orderParams).Msg("Creating LSPS1 order")
 
-	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress)
+	event, err := api.svc.GetLiquidityManager().CreateLSPS1Order(ctx, req.LSPPubkey, orderParams, req.RefundOnchainAddress, nil)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Interface("params", orderParams).Msg("LSPS1 CreateOrder failed")
 		return nil, err
@@ -233,7 +233,7 @@ func (api *api) LSPS2Buy(ctx context.Context, req *LSPS2BuyRequest) (*LSPS2BuyRe
 	}
 
 	// Use the new robust BuyLiquidity method which handles retries
-	hints, err := api.svc.GetLiquidityManager().BuyLiquidity(ctx, req.LSPPubkey, *req.PaymentSizeMloki, &req.OpeningFeeParams)
+	hints, err := api.svc.GetLiquidityManager().BuyLiquidity(ctx, req.LSPPubkey, *req.PaymentSizeMloki, &req.OpeningFeeParams, nil)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("lsp", req.LSPPubkey).Uint64("amount", *req.PaymentSizeMloki).Msg("LSPS2 BuyLiquidity failed")
 		return nil, err

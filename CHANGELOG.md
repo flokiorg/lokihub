@@ -468,6 +468,13 @@ audits of both.
 
 ### Fixed
 
+- Buys JIT liquidity only at terms compared with the LSP's announcement: an
+  automatic purchase fetches the fee menu at buy time (and again on a stale
+  retry) and refuses it when worse for the buyer, a manual one compares the
+  exact fee row bought and refuses a worse one, and both refuse a payment
+  outside the row's size bounds or one the fee would take whole. The buy
+  re-fetched the menu and bought its first row unseen, so an LSP could pass
+  the live check and sell at a higher fee.
 - Fails an LSP's live check when its announced LSPS1 or LSPS2 `get_info`
   errors or cannot be read. Such a check passed as terms equal to the
   announced ones, so a purchase went ahead with no live terms compared.
