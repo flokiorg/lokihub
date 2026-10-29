@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { AppStoreApp } from "src/components/connections/SuggestedAppData";
 import Loading from "src/components/Loading";
 import QRCode from "src/components/QRCode";
+import { qrValue as qrDisplayValue } from "src/utils/qrValue";
 import { Badge } from "src/components/ui/badge";
 import { useAppLogo } from "src/hooks/useAppLogo";
 import { Button } from "src/components/ui/button";
@@ -166,7 +167,7 @@ export function ConnectAppCard({
             className={cn(!isQRCodeVisible ? "blur-md cursor-pointer" : "")}
             onClick={() => setIsQRCodeVisible(true)}
           >
-            <QRCode value={qrValue} withIcon={!logoSrc} />
+            <QRCode value={qrDisplayValue(qrValue)} withIcon={!logoSrc} />
             {logoSrc ? (
               <img
                 src={logoSrc}

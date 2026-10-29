@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flokiorg/lokihub/hubclock"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -126,14 +127,20 @@ func onchainKey(txid string, vout uint32) string {
 // payment that is not on-chain, or when the node cannot be asked.
 func (e *Engine) chainConfirmations(ctx context.Context, ln lnclient.LNClient, paymentID uint) (int, bool) {
 	var p db.CashOrderPayment
-	if err := e.DB.Select("payment_key").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
+	if err := e.DB.Select("payment_key", "block_height").First(&p, paymentID).Error; err != nil || !strings.HasPrefix(p.PaymentKey, "oc:") {
 		return 0, false
 	}
 	lister, ok := ln.(lnclient.OnchainOutputLister)
 	if !ok {
 		return 0, false
 	}
-	outputs, err := lister.ListOnchainOutputs(ctx)
+	// Only the payment's own block onward: a reorganisation that moved it lower
+	// reads as 0, so its mint waits for the next scan.
+	from := int32(0)
+	if p.BlockHeight != nil {
+		from = int32(*p.BlockHeight) //nolint:gosec // a block height
+	}
+	outputs, err := lister.ListOnchainOutputs(ctx, from)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Could not read an order payment's confirmations; its mint waits")
 		return 0, true
@@ -434,7 +441,11 @@ func (e *Engine) MintPayment(ctx context.Context, paymentID uint) error {
 			for i := range minted {
 				rb := minted[i].Record
 				rb.RecordID = rec.ID
-				rb.Ordinal = int16(ordinal) + int16(i) //nolint:gosec // bounded by the split floor
+				ord, err := BillOrdinal(ordinal, i)
+				if err != nil {
+					return err
+				}
+				rb.Ordinal = ord
 				rb.PaidMillis, rb.Outpoint = &paid, outpoint
 				if err := tx.Create(&rb).Error; err != nil {
 					return fmt.Errorf("record an ordered bill: %w", err)
@@ -630,28 +641,59 @@ func (e *Engine) logHeldOpen(err error, orders []db.CashOrder, now int64) {
 		Msg("cash_order_scan_failed_total: on-chain orders past pay_by stay open until the chain can be scanned")
 }
 
+// ErrWindowNotEnded: an order is past its pay_by and still open because its
+// window could not be ended (the chain or the node could not be read). It has
+// no answer yet: a read of it must be retried, never answered open, since a
+// client reads an open order past pay_by as ended unpaid (NIP-CO §Client
+// Behavior).
+var ErrWindowNotEnded = errors.New("the order's payment window could not be ended yet")
+
 // EndWindowIfDue is RunPayBy for one order, for a read of it: an order past
 // its pay_by is read in the state NIP-CO gives it then (a Lightning order
 // unpaid at pay_by is expired), not in the one the last job run left. An
-// on-chain order is left open when the chain cannot be scanned.
-func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) {
+// on-chain order is left open when the chain cannot be scanned, and a
+// Lightning one when its invoice cannot be cancelled or read; either way the
+// read gets ErrWindowNotEnded.
+func (e *Engine) EndWindowIfDue(ctx context.Context, orderID uint) error {
 	var o db.CashOrder
 	now := e.now().Unix()
 	if err := e.DB.Where("id = ? AND pay_by < ? AND state IN ?", orderID, now,
-		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil || o.ID == 0 {
-		return
+		[]string{db.CashOrderOpen, db.CashOrderPaid, db.CashOrderMinted}).Limit(1).Find(&o).Error; err != nil {
+		return err
+	}
+	if o.ID == 0 {
+		return nil
 	}
 	if o.Payment == nipCO.PaymentOnchain {
 		e.notePayByHeight(ctx, []db.CashOrder{o})
 		if err := e.ScanChain(ctx); err != nil {
 			e.logHeldOpen(err, []db.CashOrder{o}, now)
-			return
+			return e.windowEnded(o.ID, now)
 		}
 		if err := e.DB.First(&o, o.ID).Error; err != nil {
-			return
+			return err
 		}
 	}
 	e.endWindow(ctx, e.LN(), o)
+	return e.windowEnded(o.ID, now)
+}
+
+// windowEnded is ErrWindowNotEnded for an order still open past its pay_by.
+func (e *Engine) windowEnded(orderID uint, now int64) error {
+	var o db.CashOrder
+	if err := e.DB.Select("id", "state", "pay_by").First(&o, orderID).Error; err != nil {
+		return err
+	}
+	if WindowNotEnded(&o, now) {
+		return ErrWindowNotEnded
+	}
+	return nil
+}
+
+// WindowNotEnded reports an order still open past its pay_by: its window was
+// not ended, so its state is not known yet.
+func WindowNotEnded(o *db.CashOrder, now int64) bool {
+	return o.State == db.CashOrderOpen && now > o.PayBy
 }
 
 // endWindow ends o's payment window, its pay_by passed.
@@ -767,4 +809,14 @@ func (e *Engine) SelfPayLightning(ctx context.Context, paymentHash string, amoun
 	e.notify(changed)
 	e.mintPending(ctx, order.ID)
 	return inv.Preimage, true, nil
+}
+
+// BillOrdinal is the record ordinal of the i-th bill a payment mints after
+// recorded bills already on the order's record, refused past int32.
+func BillOrdinal(recorded int64, i int) (int32, error) {
+	ord := recorded + int64(i)
+	if recorded < 0 || i < 0 || ord > math.MaxInt32 {
+		return 0, fmt.Errorf("bill ordinal %d+%d is out of range", recorded, i)
+	}
+	return int32(ord), nil
 }

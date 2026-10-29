@@ -160,7 +160,11 @@ func (svc *service) PublishFollowSet(ctx context.Context, d string, content Foll
 // pubkey under the conversation key between the provider and the inbox key.
 // This hub holds the inbox key, so it computes that key from its own side.
 func (svc *service) encryptHiddenMembers(provider string, hidden []string) (nostr.Tags, error) {
-	inboxPrivKey, err := svc.keys.GetPrivateTransportKey(privateTransportKeyIndex)
+	index, err := db.CurrentInboxIndex(svc.db)
+	if err != nil {
+		return nil, fmt.Errorf("read the inbox key index: %w", err)
+	}
+	inboxPrivKey, err := svc.keys.GetPrivateTransportKey(index)
 	if err != nil {
 		return nil, fmt.Errorf("derive the inbox key: %w", err)
 	}

@@ -423,7 +423,11 @@ func TestU_4_11_CommitFaults(t *testing.T) {
 }
 
 // U-23.20 / U-23.21: concurrent withdrawals of one slice under different ids
-// commit once; one id sent twice commits once, the other REQUEST_REUSED.
+// commit once; one id sent twice commits once. The other copy is
+// REQUEST_REUSED when it reaches step 2 after the first marked the id, or
+// RESTRICTED when the first had already committed before its step 1 located
+// the slice (NIP-CASH §cash_withdraw: the slice is located before the id is
+// marked); either way it commits nothing.
 func TestU_23_20_Concurrency(t *testing.T) {
 	w := newWorld(t)
 	for i := range 20 {
@@ -453,7 +457,10 @@ func TestU_23_20_Concurrency(t *testing.T) {
 			}
 			c, _ := code(err)
 			if sameID {
-				assert.Contains(t, []string{constants.ERROR_REQUEST_REUSED}, c, "%v", err)
+				assert.Contains(t, []string{constants.ERROR_REQUEST_REUSED, constants.ERROR_RESTRICTED}, c, "%v", err)
+				if c == constants.ERROR_RESTRICTED {
+					assert.Contains(t, err.Error(), "already redeemed", "only the claimed slice is refused before the id")
+				}
 			} else {
 				assert.Contains(t, []string{constants.ERROR_RESTRICTED, constants.ERROR_UNAUTHORIZED, constants.ERROR_INTERNAL}, c, "%v", err)
 			}

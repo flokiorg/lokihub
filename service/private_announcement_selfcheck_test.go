@@ -28,7 +28,7 @@ func TestPublishTransportAnnouncement_RefusesOneThatDoesNotVerify(t *testing.T) 
 	ln.priv, err = btcec.NewPrivateKey() // signs with a key that is not the node's
 	require.NoError(t, err)
 
-	svc := &service{cfg: ts.Cfg, keys: ts.Keys, lnClient: ln}
+	svc := &service{cfg: ts.Cfg, db: ts.DB, keys: ts.Keys, lnClient: ln}
 	pt, err := svc.newPrivateTransport()
 	require.NoError(t, err)
 

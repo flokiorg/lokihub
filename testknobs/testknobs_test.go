@@ -66,3 +66,43 @@ func TestLimits_SpinOffWindowAndReset(t *testing.T) {
 	SetLimits(Limits{}, true)
 	assert.False(t, SpinOffRateSet())
 }
+
+func TestFaults_HoldSelfPaymentsAndFailChainScan(t *testing.T) {
+	t.Cleanup(func() { SetFaults(Faults{}, true) })
+	assert.False(t, ChainScanFails())
+	require.NoError(t, WaitSelfPayments(context.Background()), "off: nothing waits")
+
+	got := SetFaults(Faults{HoldSelfPayments: on(), FailChainScan: on()}, false)
+	assert.True(t, got["hold_self_payments"])
+	assert.True(t, got["fail_chain_scan"])
+	assert.True(t, ChainScanFails())
+	released := make(chan error, 1)
+	go func() { released <- WaitSelfPayments(context.Background()) }()
+	select {
+	case <-released:
+		t.Fatal("a held self-payment went through")
+	case <-time.After(50 * time.Millisecond):
+	}
+	SetFaults(Faults{}, true)
+	require.NoError(t, <-released)
+	assert.False(t, ChainScanFails())
+}
+
+func TestLimits_RefundSpinOffGivesOneBackInItsWindowOnly(t *testing.T) {
+	t.Cleanup(func() { SetLimits(Limits{}, true) })
+	n, per := 1, int64(60)
+	SetLimits(Limits{SpinOffRate: &n, PerSecs: &per}, false)
+	now := time.Now()
+	RefundSpinOff("never-charged", now) // no window: nothing happens
+	assert.True(t, AllowSpinOff("a", now))
+	assert.False(t, AllowSpinOff("a", now))
+	RefundSpinOff("a", now)
+	assert.True(t, AllowSpinOff("a", now), "a refunded spin-off is allowed again")
+	assert.False(t, AllowSpinOff("a", now))
+
+	RefundSpinOff("a", now.Add(61*time.Second)) // after the window: nothing to give back
+	RefundSpinOff("a", now)
+	RefundSpinOff("a", now) // never below zero
+	assert.True(t, AllowSpinOff("a", now))
+	assert.False(t, AllowSpinOff("a", now))
+}

@@ -234,14 +234,14 @@ const (
 	// grace period and dust threshold a Hub gets unless its host sets others.
 	CIRCLE_DEFAULT_GRACE_SECS = 604_800
 	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
+	// CIRCLE_MAX_DUST_MLOKI is the default bound on a Hub's dust threshold
+	// (CIRCLE_MAX_DUST_MLOKI in the environment): the default routing-fee
+	// reserve floor, a balance too small to pay out over Lightning.
+	CIRCLE_MAX_DUST_MLOKI = CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI
 	// CIRCLE_DEFAULT_ROTATION_DELAY_SECS is the rotation delay NIP-CW
 	// recommends: 5 days.
 	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000
 )
-
-// PRIVATE_TRANSPORT_KEY_INDEX is the rotation index of the private-transport
-// inbox key currently in use.
-const PRIVATE_TRANSPORT_KEY_INDEX = 0
 
 // CIRCLE_MEMBERSHIP_STALENESS_SECS bounds how old the membership a Circle
 // Wallet Hub acts on may be: the follow sets are refreshed every 300 seconds.
@@ -265,6 +265,12 @@ const MIN_CIRCLE_WALLET_MAX_MLOKI = MIN_FEE_RESERVE_MLOKI + 1_000
 // any wallet lifetime a real caller would ever need, so it never constrains
 // a legitimate "effectively never expires" request.
 const MAX_EXPIRY_SECS = 100 * 365 * 24 * 60 * 60
+
+// DEFAULT_CASH_MIN_TRANSFER_MLOKI is a new Cash Hub's default split floor
+// (db.CashHubConfig.MinTransferMloki) when its creator names none: one whole
+// loki, so a split never carves off a piece no payment could carry. NIP-CASH
+// asks for a shipped default above zero; 0 stays available as "no floor".
+const DEFAULT_CASH_MIN_TRANSFER_MLOKI = 1000
 
 // DEFAULT_CASH_SPENT_RETENTION_SECS is a new Cash Hub's default window for
 // answering cash_status about a bill it has already destroyed

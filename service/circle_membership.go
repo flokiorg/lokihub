@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/circlelife"
-	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/events"
 	"github.com/flokiorg/lokihub/keys"
@@ -63,10 +62,15 @@ func publishMembershipAlerts(eventPublisher events.EventPublisher, changes []cir
 // Active or Suspended Circle Wallet was issued under (NIP-CW §Hidden Members,
 // inbox rotation); the current index is not among them.
 func retiredInboxKeys(gormDB *gorm.DB, k keys.Keys) []string {
+	current, err := db.CurrentInboxIndex(gormDB)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Circle membership: failed to read the inbox key index")
+		return nil
+	}
 	var indexes []uint32
 	if err := gormDB.Model(&db.App{}).
 		Where("kind = ? AND circle_inbox_key_index IS NOT NULL AND circle_inbox_key_index <> ? AND circle_state IN ?", db.AppKindCircleWallet,
-			constants.PRIVATE_TRANSPORT_KEY_INDEX, []string{"", circlelife.StateActive, circlelife.StateSuspended}).
+			current, []string{"", circlelife.StateActive, circlelife.StateSuspended}).
 		Distinct().Pluck("circle_inbox_key_index", &indexes).Error; err != nil {
 		logger.Logger.Error().Err(err).Msg("Circle membership: failed to list retired inbox keys")
 		return nil

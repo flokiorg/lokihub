@@ -224,7 +224,7 @@ func (svc *service) watchInboxLiveness(ctx context.Context, pool *nostr.SimplePo
 		case <-ticker.C:
 		}
 
-		missing, err := pt.liveness.probe(ctx, pool, svc.cfg.GetRelayUrls(), pt.inboxXOnly, pt.probeTimeout)
+		missing, err := pt.liveness.probe(ctx, pool, svc.cfg.GetRelayUrls(), pt.inbox(), pt.probeTimeout)
 		if ctx.Err() != nil {
 			return
 		}

@@ -116,7 +116,10 @@ func mustEncodeCashToken(t *testing.T, walletPubkey, secret string, relayURLs []
 	t.Helper()
 	ln, err := tests.NewMockLn()
 	require.NoError(t, err)
-	_, token, err := issueCashToken(context.TODO(), ln, walletPubkey, secret, relayURLs, identityRequired, amountMillis, &db.App{AppPubkey: hubPubkey}, nil)
+	phase, err := newSignPhase(context.TODO(), ln, 1)
+	require.NoError(t, err)
+	defer phase.done()
+	_, token, err := phase.issue(walletPubkey, secret, relayURLs, identityRequired, amountMillis, &db.App{AppPubkey: hubPubkey}, nil)
 	require.NoError(t, err)
 	return token
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/nipcw"
 	"gorm.io/gorm"
 
+	"github.com/flokiorg/lokihub/cashorder"
 	"github.com/flokiorg/lokihub/cashrequest"
 	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/constants"
@@ -167,7 +168,7 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 		return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
 	}
 
-	if rec != nil {
+	served := func(rec *db.CashRequestRecord) (transport.Result, bool) {
 		if rec.TargetWalletPubkey != item.Target {
 			return refuse(constants.ERROR_UNAUTHORIZED, "this lookup does not match the call's record")
 		}
@@ -184,11 +185,17 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 			}
 		}
 		result, err := svc.rebuildResult(rec, hubclock.Now())
+		if errors.Is(err, cashorder.ErrWindowNotEnded) {
+			return refuse(constants.ERROR_INTERNAL, "this order's payment window could not be ended yet, please retry")
+		}
 		if err != nil {
 			logger.Logger.Error().Err(err).Str("request_id", rec.RequestID).Msg("Failed to rebuild a call's result")
 			return refuse(constants.ERROR_INTERNAL, "the hub could not rebuild this call's result")
 		}
 		return answer(nipcash.CashLookupResult{Status: nipcash.LookupDone, Result: result})
+	}
+	if rec != nil {
+		return served(rec)
 	}
 
 	// No record. A bearer item's secret, when present, must match the commitment
@@ -204,7 +211,19 @@ func (svc *nip47Service) servePrivateLookup(item transport.Item, binding Private
 	}
 	// The H in force: the configured one, raised at start, never below the stored.
 	h = max(h, svc.cfg.PrivateEnvelopeLimits().MaxRequestAgeSeconds)
-	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: hubclock.Now().Unix(), Deadline: params.Deadline, Horizon: h})
+	// The deadline is the client's, judged on the wall clock as every commit judges it.
+	decision := nipcash.DecideLookup(nipcash.LookupInput{Now: hubclock.Wall(hubclock.Now()).Unix(), Deadline: params.Deadline, Horizon: h})
+	if decision.Status == nipcash.LookupUnknown {
+		// "unknown" is final, so it is read again after any commit of this id in flight.
+		rec, err := store.GetSettled(params.RequestID)
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to read a request record")
+			return refuse(constants.ERROR_INTERNAL, "the hub could not read its records, please retry")
+		}
+		if rec != nil {
+			return served(rec)
+		}
+	}
 	return answer(nipcash.CashLookupResult{Status: decision.Status, RetryAfter: decision.RetryAfter})
 }
 

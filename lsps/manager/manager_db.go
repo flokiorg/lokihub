@@ -23,6 +23,7 @@ func NewLSPManager(db *gorm.DB) *LSPManager {
 		_ = db.Migrator().DropTable(&persist.LSP{})
 	}
 	_ = db.AutoMigrate(&persist.LSP{})
+	_ = db.AutoMigrate(&persist.LSPSeenMark{})
 	_ = db.AutoMigrate(&persist.LSPS1Order{})
 	return m
 }

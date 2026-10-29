@@ -238,7 +238,6 @@ func TestAuditD_SecA_ManyItemsOnOneBillAreNotDuplicates(t *testing.T) {
 	}
 
 	env := transport.Envelope{
-		Version:  transport.EnvelopeVersion,
 		NotAfter: time.Now().Add(60 * time.Second).Unix(),
 		Nonce:    nonce, ReplyTo: replyTo, Items: items,
 	}

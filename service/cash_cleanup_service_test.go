@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
@@ -229,37 +229,68 @@ func TestRunCashCleanup_ParentDeleted_BalanceWrittenOffNoFKError(t *testing.T) {
 	assert.Error(t, err, "orphaned expired app must still be deleted, not stuck retrying forever")
 }
 
-// E7: when the transfer-back payment fails, cleanup_in_progress must be reset so the
-// next cleanup tick can retry rather than leaving the sub-wallet permanently stuck.
-func TestRunCashCleanup_TransferFails_CleanupInProgressReset(t *testing.T) {
+// A failure inside the bill's delete transaction, here the archive write,
+// rolls the sweep back with it: the bill stands with its balance, the Hub got
+// nothing, and the next tick retries.
+func TestRunCashCleanup_AFailureInTheDeleteLeavesTheBillWhole(t *testing.T) {
 	ctx := context.TODO()
 	svc, err := tests.CreateTestService(t)
 	require.NoError(t, err)
 	defer svc.Remove()
 
-	// Do NOT set Pubkey = selfPaymentPubkey: we want the payment to go through
-	// lnClient.SendPaymentSync so we can control whether it fails.
-	mockLN := svc.LNClient.(*tests.MockLn)
-
 	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
 		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
 	require.NoError(t, err)
-
 	child := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, makeExpiredTime())
 	tests.FundApp(svc, child.ID, 200_000, "e7-fund-hash")
-	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, child.ID))
 
-	// Queue a payment failure so the transfer-back SendPaymentSync returns an error.
-	mockLN.PayInvoiceResponses = []*lnclient.PayInvoiceResponse{nil}
-	mockLN.PayInvoiceErrors = []error{errors.New("lightning payment failed")}
+	failArchive := true
+	require.NoError(t, svc.DB.Callback().Create().Before("gorm:create").Register("test:fail_bill_archive", func(tx *gorm.DB) {
+		if failArchive && tx.Statement.Table == "cash_bill_archives" {
+			_ = tx.AddError(errors.New("archive write failed"))
+		}
+	}))
+	t.Cleanup(func() { _ = svc.DB.Callback().Create().Remove("test:fail_bill_archive") })
 
 	transactionsSvc := transactions.NewTransactionsService(svc.DB, svc.EventPublisher)
 	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
 
-	// App must still exist (not deleted because transfer failed).
 	var found db.App
-	require.NoError(t, svc.DB.First(&found, child.ID).Error, "app must not be deleted when transfer-back fails")
+	require.NoError(t, svc.DB.First(&found, child.ID).Error, "the bill is not deleted")
+	assert.False(t, found.CleanupInProgress, "the next tick can retry")
+	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, child.ID), "the sweep was rolled back")
+	assert.Zero(t, queries.GetIsolatedBalance(svc.DB, parent.ID))
 
-	// cleanup_in_progress must be reset to false so the next tick can retry.
-	assert.False(t, found.CleanupInProgress, "cleanup_in_progress must be false after transfer failure so next tick retries")
+	failArchive = false
+	runCashCleanup(ctx, svc.DB, transactionsSvc, svc.LNClient, svc.EventPublisher)
+	assert.Error(t, svc.DB.First(&found, child.ID).Error, "the retry deletes it")
+	assert.Equal(t, int64(200_000), queries.GetIsolatedBalance(svc.DB, parent.ID))
+}
+
+// NIP-CASH §Lifecycle and Deletion (CASH-446): the sweep ends a bill only once
+// its expires_at second has passed, never inside it.
+func TestRunCashCleanup_SweepsOnlyPastTheExpirySecond(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	parent, _, err := svc.AppsService.CreateApp("hub", "", 0, "never", nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCashHub, nil, "", nil)
+	require.NoError(t, err)
+
+	for n := time.Now().Nanosecond(); n < 50e6 || n > 600e6; n = time.Now().Nanosecond() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	current := time.Unix(time.Now().Unix(), 0)
+	previous := current.Add(-time.Second)
+	live := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, &current)
+	ended := createSubWallet(t, svc, db.AppKindCashWallet, parent.ID, db.ParentKindCash, &previous)
+
+	runCashCleanup(context.TODO(), svc.DB, transactions.NewTransactionsService(svc.DB, svc.EventPublisher), svc.LNClient, svc.EventPublisher)
+	require.Equal(t, current.Unix(), time.Now().Unix(), "the sweep ran inside the expires_at second")
+
+	var n int64
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", live.ID).Count(&n).Error)
+	assert.EqualValues(t, 1, n, "a bill inside its expires_at second is live")
+	require.NoError(t, svc.DB.Model(&db.App{}).Where("id = ?", ended.ID).Count(&n).Error)
+	assert.Zero(t, n, "a bill a second past it is swept")
 }

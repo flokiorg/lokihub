@@ -10,6 +10,7 @@ import (
 	"github.com/flokiorg/go-flokicoin/chainutil/hdkeychain"
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 
+	"github.com/flokiorg/lokihub/atrest"
 	"github.com/flokiorg/lokihub/config"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/nbd-wtf/go-nostr"
@@ -109,6 +110,8 @@ func (keys *keys) Init(cfg config.Config, encryptionKey string) error {
 		return err
 	}
 	keys.appKey = appKey
+	// The key the database's own secrets are sealed with (atrest).
+	atrest.SetKey(atrest.DeriveKey(appKey.Key))
 
 	swapMnemonic, err := keys.GenerateSwapMnemonic(masterKey)
 	if err != nil {

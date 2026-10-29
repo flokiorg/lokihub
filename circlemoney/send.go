@@ -47,13 +47,17 @@ type SendInput struct {
 }
 
 // CheckSend runs a Circle Wallet's send checks in their order (NIP-CW §Own
-// Funds and Caps): the full cost against the balance (INSUFFICIENT_BALANCE),
+// Funds and Caps), after refusing a frozen wallet (FROZEN): the full cost against the balance (INSUFFICIENT_BALANCE),
 // an Active wallet's send cap (QUOTA_EXCEEDED), the circle's outbound ceiling,
 // for every state (QUOTA_EXCEEDED), the payments it has in flight
 // (RATE_LIMITED), and the same-circle transfer rate (RATE_LIMITED). The caller
 // holds the Hub's lock, then the wallet's.
 func CheckSend(tx *gorm.DB, in SendInput, limiter *Limiter) (SendQuote, error) {
 	wallet := in.Wallet
+	// Read under the lock: a freeze that landed after the request's gate holds.
+	if wallet.CircleFrozen {
+		return SendQuote{}, refuse(nipcw.ErrFrozen, "this wallet is frozen: its current key is refused until it is unfrozen or rotated")
+	}
 	cfg, err := HubConfig(tx, *wallet.ParentAppID)
 	if err != nil {
 		return SendQuote{}, err

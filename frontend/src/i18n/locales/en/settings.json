@@ -4,7 +4,8 @@
   "sections": {
     "appearance": "Appearance",
     "unitsAndCurrency": "Units & Currency",
-    "language": "Language"
+    "language": "Language",
+    "advanced": "Advanced"
   },
   "appearance": {
     "theme": "Theme",
@@ -125,5 +126,89 @@
     "formatUpdated": "Flokicoin display format updated",
     "currencyFetchFailed": "Failed to fetch currencies: {{error}}",
     "updateFailed": "Failed to update settings"
+  },
+  "withdraw": {
+    "switch": "On-chain withdrawals",
+    "switchDescription": "Lets Cash Hubs on this node pay bills out to on-chain addresses (cash_withdraw). Each Cash Hub also turns them on for itself.",
+    "notCapable": "This node's backend cannot pay on-chain withdrawals.",
+    "turnedOn": "On-chain withdrawals are on",
+    "turnedOff": "On-chain withdrawals are off",
+    "switchFailed": "Could not change on-chain withdrawals",
+    "ready": "Payout engine ready",
+    "notReady": "Payout engine not ready yet",
+    "status": {
+      "eligible": "Eligible coins",
+      "setAside": "Set aside",
+      "floor": "Floor",
+      "unconfirmed": "Unconfirmed",
+      "oldestUnbroadcast": "Oldest unbroadcast",
+      "payouts": "Payouts",
+      "bumps": "Fee bumps",
+      "reorgs": "Reorgs",
+      "invalidations": "Invalidations",
+      "coinsVanished": "Coins vanished",
+      "invariantFailures": "Invariant failures"
+    },
+    "hubTitle": "On-chain withdrawals",
+    "offered": "Offered to this Cash Hub's bills now",
+    "notOffered": "Not offered to this Cash Hub's bills",
+    "hubEnable": "Offer on-chain withdrawals",
+    "blocked": {
+      "nodeOff": "Turn on-chain withdrawals on for the node in Settings first.",
+      "notCapable": "This node's backend cannot pay on-chain withdrawals."
+    },
+    "feeBase": "Withdraw fee base (loki)",
+    "feePpm": "Withdraw fee (ppm)",
+    "min": "Minimum (loki)",
+    "max": "Maximum (loki)",
+    "none": "none",
+    "errors": {
+      "feeBase": "The fee base is a loki amount of at most three decimals.",
+      "feePpm": "The fee rate is a whole number from 0 to {{max}} ppm.",
+      "min": "The minimum is a loki amount of at most three decimals.",
+      "max": "The maximum is a loki amount of at most three decimals.",
+      "minAboveMax": "The minimum is above the maximum."
+    },
+    "scriptTypes": "Script types paid",
+    "finalDepth": "Final depth (confirmations)",
+    "networkFeeNote": "The network fee is estimated live by the node for each address type and added to the quote.",
+    "save": "Save",
+    "saved": "On-chain withdrawal terms saved",
+    "saveFailed": "Could not save the on-chain withdrawal terms",
+    "payouts": {
+      "title": "On-chain payouts",
+      "description": "This Cash Hub's on-chain withdrawals, newest first. No operator action changes a payout; only the bill's holder can ask to cancel one.",
+      "amount": "Amount",
+      "fee": "Fee",
+      "hubFee": "Hub fee",
+      "networkFee": "network fee",
+      "payout": "Payout",
+      "sentBy": "Send by",
+      "signed": "signed",
+      "unsigned": "not signed yet",
+      "depth": "Depth",
+      "remintedBill": "Re-minted bill",
+      "detailTitle": "Payout",
+      "address": "Address",
+      "requestId": "Request id",
+      "committed": "Committed",
+      "versions": "Versions",
+      "noVersions": "No transaction yet.",
+      "inputs_one": "{{count}} input",
+      "inputs_other": "{{count}} inputs",
+      "broadcast": "Broadcast first / last",
+      "facts": "Archive facts",
+      "state": {
+        "queued": "queued",
+        "broadcast": "broadcast",
+        "confirmed": "confirmed",
+        "final": "final",
+        "cancelled": "cancelled"
+      },
+      "cancel": {
+        "requested": "cancel requested by the holder",
+        "cancelled": "cancelled ({{reason}})"
+      }
+    }
   }
 }

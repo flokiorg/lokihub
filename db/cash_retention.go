@@ -129,3 +129,14 @@ func SpentBillReason(tx *gorm.DB, walletPubkey string) (string, bool) {
 	}
 	return *row.Reason, true
 }
+
+// CashExpiryCutoff is the instant before which an expires_at has passed at now
+// (NIP-CASH §Lifecycle and Deletion: live while now <= expires_at, in whole
+// seconds, the bound inclusive): expired exactly when expires_at < cutoff.
+func CashExpiryCutoff(now time.Time) time.Time { return now.Truncate(time.Second) }
+
+// ExpiredAt reports whether expiresAt has passed at now, in whole seconds; nil
+// never expires.
+func ExpiredAt(expiresAt *time.Time, now time.Time) bool {
+	return expiresAt != nil && expiresAt.Before(CashExpiryCutoff(now))
+}

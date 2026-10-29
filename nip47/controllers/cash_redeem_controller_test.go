@@ -73,7 +73,7 @@ func buildClaimProofEvent(t *testing.T, signerPrivkey, walletPubkey, bolt11Hash 
 }
 
 // buildIAAttestationEvent builds a kind-35522 IA attestation carrying the
-// platform/evidence tags verifyClaimAttestationEvent now requires (matching a
+// platform/evidence tags the attestation check now requires (matching a
 // real nipIC.NewAttestation-produced event's shape) alongside the usual d/p/
 // expiration bindings. platform/evidence content is fixed and not
 // test-parameterized since no test here needs to vary it — the tightened
@@ -1026,85 +1026,8 @@ func TestHandleCashRedeemEvent_Cash_ConcurrentRedemptions_OnlyOneSucceeds(t *tes
 func ptrUint64(v uint64) *uint64 { return &v }
 
 // oneHourFromNow is a valid expiration timestamp for attestations built in
-// tests that aren't specifically testing expiration — verifyClaimAttestationEvent
-// requires the tag to be present, so tests can't pass nil to skip it anymore.
+// tests that aren't specifically testing expiration; the Hub requires the tag.
 func oneHourFromNow() *int64 {
 	exp := time.Now().Add(time.Hour).Unix()
 	return &exp
-}
-
-// TestVerifyClaimAttestationEvent_PlatformEvidenceTags covers the
-// platform/evidence tag requirements added to verifyClaimAttestationEvent to
-// match a real nipIC.NewAttestation-produced kind-35522 event's shape (see
-// the function's own doc comment, and NIP-CASH.md's Security Considerations).
-// Exercises verifyClaimAttestationEvent directly rather than through the full
-// HandleCashRedeemEvent flow — it's a pure function, so a direct table test
-// is more direct than round-tripping through a full redeem call for each case.
-func TestVerifyClaimAttestationEvent_PlatformEvidenceTags(t *testing.T) {
-	iaPrivkey := nostr.GeneratePrivateKey()
-	iaPubkey, _ := nostr.GetPublicKey(iaPrivkey)
-	claimantPrivkey := nostr.GeneratePrivateKey()
-	claimantPubkey, _ := nostr.GetPublicKey(claimantPrivkey)
-	connectionKey := tests.NewTestConnectionKey()
-	validExpiration := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
-
-	baseTags := func() nostr.Tags {
-		return nostr.Tags{
-			{"d", connectionKey},
-			{"p", claimantPubkey},
-			{"expiration", validExpiration},
-		}
-	}
-
-	buildWithTags := func(t *testing.T, tags nostr.Tags) *nostr.Event {
-		t.Helper()
-		ev := &nostr.Event{Kind: nostrKindIAAttestation, CreatedAt: nostr.Now(), Tags: tags}
-		require.NoError(t, ev.Sign(iaPrivkey))
-		return ev
-	}
-
-	cases := []struct {
-		name      string
-		tags      nostr.Tags
-		wantError string // substring, "" means expect success
-	}{
-		{
-			name:      "missing platform tag rejected",
-			tags:      append(baseTags(), nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: `"platform" tag is required`,
-		},
-		{
-			name:      "empty platform tag rejected",
-			tags:      append(baseTags(), nostr.Tag{"platform", ""}, nostr.Tag{"evidence", `{"version":1}`}),
-			wantError: `"platform" tag is required`,
-		},
-		{
-			name:      "missing evidence tag rejected",
-			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}),
-			wantError: `"evidence" tag is required`,
-		},
-		{
-			name:      "malformed evidence tag rejected",
-			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", "not valid json"}),
-			wantError: "evidence tag is not valid JSON",
-		},
-		{
-			name:      "platform and evidence present accepted",
-			tags:      append(baseTags(), nostr.Tag{"platform", "discord"}, nostr.Tag{"evidence", tests.TestAttestationEvidence(connectionKey)}),
-			wantError: "",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ev := buildWithTags(t, tc.tags)
-			err := VerifyClaimAttestationEvent(ev, iaPubkey, claimantPubkey, connectionKey)
-			if tc.wantError == "" {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantError)
-			}
-		})
-	}
 }

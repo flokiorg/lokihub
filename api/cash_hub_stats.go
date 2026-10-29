@@ -2,11 +2,11 @@ package api
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/flokiorg/lokihub/apps"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/db/queries"
+	"github.com/flokiorg/lokihub/hubclock"
 )
 
 // GetCashHubStats totals one cash_hub's activity for its dashboard.
@@ -23,7 +23,7 @@ func (api *api) GetCashHubStats(appID uint) (*CashHubStatsResponse, error) {
 		return nil, fmt.Errorf("app is not a cash_hub")
 	}
 
-	stats, err := api.appsSvc.GetCashHubStats(appID, time.Now())
+	stats, err := api.appsSvc.GetCashHubStats(appID, db.CashExpiryCutoff(hubclock.Now()))
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (api *api) fillCashBacking(resp *CashHubStatsResponse, hubID *uint) error {
 // "every cash hub", including none at all, which is a valid answer rather than
 // an error.
 func (api *api) GetAllCashHubStats() (*CashHubStatsResponse, error) {
-	stats, err := api.appsSvc.GetAllCashHubStats(time.Now())
+	stats, err := api.appsSvc.GetAllCashHubStats(db.CashExpiryCutoff(hubclock.Now()))
 	if err != nil {
 		return nil, err
 	}

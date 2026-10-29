@@ -24,6 +24,7 @@ package controllers
 // no better than the bug.
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/tests"
 )
@@ -173,5 +175,34 @@ func TestCashRedeem_ZeroPayout_RefusedAndSliceSurvives(t *testing.T) {
 				Where("type = ?", "outgoing").Count(&outgoing).Error)
 			assert.Zero(t, outgoing, "a refused redemption must not have paid anything")
 		})
+	}
+}
+
+// NIP-CASH §The Redeem Fee (CASH-96, CASH-98): a zero payout is RESTRICTED, the
+// message points to consolidating, and the slice stays claimable.
+func TestCashRedeem_ZeroPayout_IsRestrictedAndPointsToConsolidate(t *testing.T) {
+	for _, amount := range []uint64{0, 500} {
+		svc, err := tests.CreateTestService(t)
+		require.NoError(t, err)
+		hub := tests.CreateCashHub(t, svc, 100_000, 3600)
+		wallet := newFundedCashWallet(t, svc, hub, 500)
+		priv := nostr.GeneratePrivateKey()
+		pub, _ := nostr.GetPublicKey(priv)
+		require.NoError(t, svc.AppsService.CreateCashWalletClaims(wallet.ID, []db.CashWalletClaim{{
+			IdentityType: db.CashIdentityPubkey, IdentityValue: pub, AmountMloki: 500, RedeemFeeBaseMloki: 1000,
+		}}))
+		proof := buildClaimProofEvent(t, priv, *wallet.WalletPubkey, tests.MockZeroAmountPaymentHash, nil, time.Now())
+		a := amount
+		response := handleClaimFundsFor(t, svc, NewTestNip47Controller(svc), wallet, nipcash.CashRedeemRequest{
+			Invoice: tests.MockZeroAmountInvoice, Amount: &a, IdentityType: db.CashIdentityPubkey,
+			IdentityValue: pub, IdentityEvent: mustMarshal(t, proof),
+		})
+		require.NotNil(t, response.Error)
+		assert.Equal(t, constants.ERROR_RESTRICTED, response.Error.Code, "amount %d", amount)
+		assert.True(t, strings.Contains(strings.ToLower(response.Error.Message), "consolidate"), response.Error.Message)
+		var claim db.CashWalletClaim
+		require.NoError(t, svc.DB.Where("wallet_app_id = ? AND identity_value = ?", wallet.ID, pub).First(&claim).Error)
+		assert.Nil(t, claim.ClaimedAt, "the slice stays claimable")
+		svc.Remove()
 	}
 }

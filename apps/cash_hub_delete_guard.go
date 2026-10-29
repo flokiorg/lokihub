@@ -63,7 +63,17 @@ type CashHubDeleteCheck struct {
 	EarliestDeleteAt     *int64                 `json:"earliest_delete_at"`
 	WatchedAddresses     int64                  `json:"watched_addresses"`
 	ConfirmationRequired bool                   `json:"confirmation_required"`
+	// ListedOffers counts the Hub's listed Order connections, which the delete
+	// closes; information, never a blocker (WP-16 item 9). ListingsDeleteDueAt
+	// is when the last listing deletion follows, nil when none is listed.
+	ListedOffers        int64  `json:"listed_offers"`
+	ListingsDeleteDueAt *int64 `json:"listings_delete_due_at"`
 }
+
+// ErrWatchEndUnconfirmed: the Hub watches paid on-chain order addresses, and the
+// owner has not confirmed that deleting it ends the watch (NIP-CASH §Lifecycle
+// and Deletion, Hub teardown, SHOULD).
+var ErrWatchEndUnconfirmed = fmt.Errorf("%w: deleting this Cash Hub ends the watch on its paid on-chain order addresses", constants.ErrInvalidParams)
 
 // Blocked reports whether anything keeps the Hub.
 func (c CashHubDeleteCheck) Blocked() bool { return len(c.Blockers) > 0 }
@@ -186,6 +196,21 @@ func CashHubDeleteCheckTx(tx *gorm.DB, hubID uint, now time.Time) (CashHubDelete
 		return check, err
 	}
 	check.ConfirmationRequired = check.WatchedAddresses > 0
+	var listed []db.OfferListing
+	if err := tx.Select("id", "last_open_expires_at").Where("hub_app_id = ? AND type = ? AND phase = ?",
+		hubID, db.ListingTypeCashOrder, db.ListingPhaseListed).Find(&listed).Error; err != nil {
+		return check, err
+	}
+	check.ListedOffers = int64(len(listed))
+	for _, l := range listed {
+		at := now.Unix()
+		if l.LastOpenExpiresAt != nil {
+			at = max(at, *l.LastOpenExpiresAt)
+		}
+		if check.ListingsDeleteDueAt == nil || at > *check.ListingsDeleteDueAt {
+			check.ListingsDeleteDueAt = &at
+		}
+	}
 	check.EarliestDeleteAt = earliestDelete(check.Blockers, now)
 	return check, nil
 }

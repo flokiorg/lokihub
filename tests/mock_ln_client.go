@@ -126,6 +126,9 @@ type SendKeysendCall struct {
 	Destination   string
 	CustomRecords []lnclient.TLVRecord
 	Preimage      string
+	// FeeLimitMloki is the routing-fee bound of a SendKeysendWithFeeLimit call;
+	// nil for SendKeysend, which leaves the node's own bound.
+	FeeLimitMloki *uint64
 }
 
 // MakeHoldInvoiceCall records one MakeHoldInvoice invocation's arguments.
@@ -316,7 +319,17 @@ func (mln *MockLn) SendPaymentSync(payReq string, amount *uint64, feeLimitMloki 
 	}, nil
 }
 
+// SendKeysendWithFeeLimit is SendKeysend with its routing fee bounded by
+// feeLimitMloki, recorded on the call.
+func (mln *MockLn) SendKeysendWithFeeLimit(amount uint64, destination string, customRecords []lnclient.TLVRecord, preimage string, feeLimitMloki uint64) (*lnclient.PayKeysendResponse, error) {
+	return mln.sendKeysend(amount, destination, customRecords, preimage, &feeLimitMloki)
+}
+
 func (mln *MockLn) SendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string) (*lnclient.PayKeysendResponse, error) {
+	return mln.sendKeysend(amount, destination, custom_records, preimage, nil)
+}
+
+func (mln *MockLn) sendKeysend(amount uint64, destination string, custom_records []lnclient.TLVRecord, preimage string, feeLimitMloki *uint64) (*lnclient.PayKeysendResponse, error) {
 	// Recorded before the delay and before any error, so a call that goes on to fail
 	// is still observable: what was ASKED for is the interesting part.
 	mln.callsMu.Lock()
@@ -325,6 +338,7 @@ func (mln *MockLn) SendKeysend(amount uint64, destination string, custom_records
 		Destination:   destination,
 		CustomRecords: append([]lnclient.TLVRecord(nil), custom_records...),
 		Preimage:      preimage,
+		FeeLimitMloki: feeLimitMloki,
 	})
 	mln.callsMu.Unlock()
 	if mln.PaymentDelay != nil {

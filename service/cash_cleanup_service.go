@@ -15,10 +15,12 @@ import (
 	"github.com/flokiorg/lokihub/db/archive"
 	"github.com/flokiorg/lokihub/db/queries"
 	"github.com/flokiorg/lokihub/events"
+	"github.com/flokiorg/lokihub/ledger"
 	"github.com/flokiorg/lokihub/lnclient"
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/transactions"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const cashCleanupInterval = 5 * time.Minute
@@ -129,7 +131,7 @@ func runCashCleanup(ctx context.Context, gormDB *gorm.DB, transactionsSvc transa
 		// (circle_lifecycle.go).
 		err := gormDB.Where(
 			"parent_app_id IS NOT NULL AND kind <> ? AND expires_at < ? AND cleanup_in_progress = ?",
-			db.AppKindCircleWallet, hubclock.Now(), false,
+			db.AppKindCircleWallet, db.CashExpiryCutoff(hubclock.Now()), false,
 		).Limit(cleanupBatchSize).Find(&batch).Error
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Cash cleanup: failed to query expired sub-wallets")
@@ -244,6 +246,10 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		}
 	}
 
+	if app.Kind == db.AppKindCashWallet {
+		return reclaimAndDeleteCashBill(gormDB, app, opts)
+	}
+
 	// A payment may still be settling into this wallet (e.g. an invoice created
 	// just before expiry/deletion). Deleting the app now would cascade-delete that
 	// pending transaction, and the settlement would then have nowhere to credit —
@@ -320,39 +326,13 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		}
 	}
 
-	now := hubclock.Now()
-	if app.Kind == db.AppKindCashWallet {
-		// A cash bill is archived and deleted atomically, so it can never
-		// disappear unrecorded. Deliberately AFTER the reclaim above: that is a
-		// real Lightning payment and cannot sit inside a DB transaction, and
-		// reversing the order would mean a failed reclaim with no app row left
-		// to pay from. A crash in between is safe — the funds are already at
-		// the hub, the bill still exists, and the next sweep finds a zero
-		// balance and skips straight to archiving.
-		reclaimed := int64(0)
-		outcome := opts.Outcome
-		if writtenOff {
-			// The caller cannot know this: only the parent-exists check above
-			// does, so it overrides whatever label was passed in.
-			outcome = db.CashBillOutcomeWrittenOff
-		} else {
-			reclaimed = balance
-		}
-		if err := gormDB.Transaction(func(tx *gorm.DB) error {
-			return archive.ArchiveAndDeleteCashBillTx(tx, &app, outcome, reclaimed, now)
-		}); err != nil {
-			resetCleanupInProgress(gormDB, app.ID)
-			return fmt.Errorf("failed to archive and delete cash bill: %w", err)
-		}
-	} else {
-		if err := gormDB.Delete(&db.App{}, app.ID).Error; err != nil {
-			// Without this reset the wallet is excluded from the sweep query
-			// AND from any manual retry (both require cleanup_in_progress =
-			// false) — stranding it forever, with its funds already reclaimed,
-			// while it goes on blocking its hub's child-count delete guard.
-			resetCleanupInProgress(gormDB, app.ID)
-			return fmt.Errorf("failed to delete sub-wallet: %w", err)
-		}
+	if err := gormDB.Delete(&db.App{}, app.ID).Error; err != nil {
+		// Without this reset the wallet is excluded from the sweep query
+		// AND from any manual retry (both require cleanup_in_progress =
+		// false) — stranding it forever, with its funds already reclaimed,
+		// while it goes on blocking its hub's child-count delete guard.
+		resetCleanupInProgress(gormDB, app.ID)
+		return fmt.Errorf("failed to delete sub-wallet: %w", err)
 	}
 
 	// Published after the delete commits. This is what drops the wallet from
@@ -375,6 +355,112 @@ func ReclaimAndDeleteSubWallet(ctx context.Context, gormDB *gorm.DB, transaction
 		logger.Logger.Info().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).Msg("sub-wallet balance reclaimed and app deleted")
 	}
 	return nil
+}
+
+// reclaimAndDeleteCashBill ends a cash bill in one transaction (NIP-CASH
+// §Lifecycle and Deletion): under the Hub's and the bill's locks it takes every
+// unclaimed slice it ends first-wins, refuses while anything is in flight to or
+// from the bill (a settling payment, a payout, a cash_redeem whose claim won),
+// moves the balance to the Hub as ledger rows and archives and deletes the
+// bill. A redeem claiming a slice meanwhile either commits first, and this
+// defers, or finds the slice gone; a crash leaves the bill as it was.
+func reclaimAndDeleteCashBill(gormDB *gorm.DB, app db.App, opts SubWalletDeletion) error {
+	now := hubclock.Now()
+	writtenOff, deleted := false, false
+	var balance int64
+	err := gormDB.Transaction(func(tx *gorm.DB) error {
+		if err := db.LockApp(tx, *app.ParentAppID); err != nil {
+			return err
+		}
+		if err := db.LockApp(tx, app.ID); err != nil {
+			return err
+		}
+		var live db.App
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&live, app.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil // another path already ended it
+			}
+			return err
+		}
+		// First-wins on every unclaimed slice: a concurrent claim of one waits on
+		// its row until this commits, then finds it gone.
+		var unclaimed []uint
+		if err := tx.Model(&db.CashWalletClaim{}).Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("wallet_app_id = ? AND claimed_at IS NULL", app.ID).Pluck("id", &unclaimed).Error; err != nil {
+			return err
+		}
+		if queries.HasPendingIncoming(tx, app.ID) {
+			return fmt.Errorf("%w: a payment is still settling into this wallet, try again shortly", constants.ErrInvalidParams)
+		}
+		if queries.HasPendingOutgoing(tx, app.ID) {
+			return fmt.Errorf("%w: a payment from this wallet is still in flight, try again shortly", constants.ErrInvalidParams)
+		}
+		if inFlight, err := redeemInFlight(tx, app.ID, now); err != nil {
+			return err
+		} else if inFlight {
+			return fmt.Errorf("%w: a redemption from this wallet is in flight, try again shortly", constants.ErrInvalidParams)
+		}
+
+		balance = queries.GetIsolatedBalance(tx, app.ID)
+		var parentExists int64
+		if err := tx.Model(&db.App{}).Where("id = ?", *app.ParentAppID).Count(&parentExists).Error; err != nil {
+			return err
+		}
+		outcome, reclaimed := opts.Outcome, int64(0)
+		switch {
+		case parentExists == 0:
+			// No destination for the funds (a Hub removed by a path that predates
+			// the child-count guard): written off, so the bill can still end.
+			writtenOff, outcome = true, db.CashBillOutcomeWrittenOff
+		case balance > 0:
+			if err := ledger.InternalTransferTx(tx, app.ID, *app.ParentAppID, uint64(balance), "cash cleanup"); err != nil { //nolint:gosec // positive, checked above
+				return fmt.Errorf("failed to transfer balance back to parent: %w", err)
+			}
+			reclaimed = balance
+		}
+		deleted = true
+		return archive.ArchiveAndDeleteCashBillTx(tx, &live, outcome, reclaimed, now)
+	})
+	if err != nil {
+		if errors.Is(err, constants.ErrInvalidParams) {
+			return err
+		}
+		return fmt.Errorf("failed to archive and delete cash bill: %w", err)
+	}
+	if !deleted {
+		return nil
+	}
+	if opts.EventPublisher != nil {
+		opts.EventPublisher.Publish(&events.Event{
+			Event:      "nwc_app_deleted",
+			Properties: map[string]interface{}{"name": app.Name, "id": app.ID},
+		})
+	}
+	if writtenOff {
+		logger.Logger.Error().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).
+			Int64("balance_mloki", balance).
+			Msg("Cash cleanup: parent app no longer exists, the bill's balance was written off and the bill deleted")
+	} else {
+		logger.Logger.Info().Uint("app_id", app.ID).Uint("parent_app_id", *app.ParentAppID).Msg("cash bill balance reclaimed and bill deleted")
+	}
+	return nil
+}
+
+// redeemInFlight reports a slice of wallet a cash_redeem claimed whose payout has
+// not settled: its payment is in the ledger and not settled, or its claim is
+// within redeemStartWindow and its payment not in the ledger yet.
+func redeemInFlight(tx *gorm.DB, walletAppID uint, now time.Time) (bool, error) {
+	var n int64
+	err := tx.Model(&db.CashWalletClaim{}).
+		Where("wallet_app_id = ? AND claimed_at IS NOT NULL AND payment_hash <> '' AND preimage = ''", walletAppID).
+		Where("NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.state = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)",
+			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_SETTLED).
+		Where("claimed_at > ? OR EXISTS (SELECT 1 FROM transactions WHERE transactions.app_id = cash_wallet_claims.wallet_app_id"+
+			" AND transactions.type = ? AND transactions.payment_hash = cash_wallet_claims.payment_hash)",
+			now.Add(-redeemStartWindow), constants.TRANSACTION_TYPE_OUTGOING).
+		Count(&n).Error
+	return n > 0, err
 }
 
 // redeemStartWindow bounds how long a redeem claim with no payment row yet

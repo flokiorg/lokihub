@@ -23,6 +23,7 @@ import (
 	"github.com/flokiorg/lokihub/db"
 	"github.com/flokiorg/lokihub/http"
 	"github.com/flokiorg/lokihub/logger"
+	"github.com/flokiorg/lokihub/lsps/manager"
 )
 
 type authTokenResponse struct {
@@ -37,6 +38,16 @@ type jwtCustomClaims struct {
 type WailsRequestRouterResponse struct {
 	Body  interface{} `json:"body"`
 	Error string      `json:"error"`
+}
+
+// purchaseError answers a refused LSP purchase. One refused for terms worse
+// than announced carries, as its body, the HTTP 409 body (message and both
+// sets of terms), so the desktop app can ask again as the web one does.
+func purchaseError(err error) WailsRequestRouterResponse {
+	if refusal, ok := manager.TermsRefusalOf(err); ok {
+		return WailsRequestRouterResponse{Body: refusal, Error: err.Error()}
+	}
+	return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 }
 
 // getAppOrErrorResponse parses idStr and looks up the app, returning a
@@ -70,6 +81,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 
 	appMatch := appRegex.FindStringSubmatch(route)
 
+	if resp, ok := app.routeWithdraw(route, method, body); ok {
+		return resp
+	}
 	if resp, ok := app.routeListings(ctx, route, method, body); ok {
 		return resp
 	}
@@ -108,7 +122,13 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			return WailsRequestRouterResponse{Body: nil, Error: ""}
 		case "DELETE":
-			err := app.api.DeleteApp(dbApp)
+			var opts api.DeleteAppOptions
+			if body != "" {
+				if err := json.Unmarshal([]byte(body), &opts); err != nil {
+					return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+				}
+			}
+			err := app.api.DeleteAppWithOptions(dbApp, opts)
 			if err != nil {
 				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 			}
@@ -840,6 +860,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	case len(mempoolApiEndpointMatch) > 1:
 		endpoint := mempoolApiEndpointMatch[1]
 		node, err := app.api.RequestMempoolApi(ctx, endpoint)
+		if errors.Is(err, api.ErrNoExplorer) {
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		}
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
@@ -1269,7 +1292,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			}
 			resp, err := app.api.LSPS1CreateOrder(ctx, req)
 			if err != nil {
-				return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+				return purchaseError(err)
 			}
 			return WailsRequestRouterResponse{Body: resp, Error: ""}
 		case "GET":
@@ -1327,7 +1350,7 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 		}
 		resp, err := app.api.LSPS2Buy(ctx, req)
 		if err != nil {
-			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+			return purchaseError(err)
 		}
 		return WailsRequestRouterResponse{Body: resp, Error: ""}
 
@@ -1966,6 +1989,19 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}
 		return WailsRequestRouterResponse{Body: nil, Error: ""}
+	case "/api/private-transport/rotate-inbox":
+		if method != "POST" {
+			break
+		}
+		resp, err := app.api.RotatePrivateTransportInbox()
+		if err != nil {
+			logger.Logger.Error().Fields(map[string]interface{}{
+				"route":  route,
+				"method": method,
+			}).Err(err).Msg("Failed to rotate the inbox key")
+			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
+		}
+		return WailsRequestRouterResponse{Body: resp, Error: ""}
 	case "/api/node/profile":
 		publishNodeProfileRequest := &api.PublishNodeProfileRequest{}
 		err := json.Unmarshal([]byte(body), publishNodeProfileRequest)
