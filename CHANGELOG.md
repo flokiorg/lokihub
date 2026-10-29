@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Keeps serving member requests for the Circle Wallets a Hub issued with a
+  rotation delay after its host turns rotation off; only a Hub with no such
+  wallet refuses them all with `NOT_IMPLEMENTED`. A member promised recovery
+  in their details lost it when the setting changed.
 - Bounds a Circle Wallet Hub's dust threshold by `CIRCLE_MAX_DUST_MLOKI`
   (default 10,000 mloki, the default routing-fee reserve floor), on creation
   and on update. A host could otherwise set a threshold above any balance and
