@@ -221,6 +221,27 @@ func TestU26_3_NewestSeen(t *testing.T) {
 	assert.False(t, f.row(t, kLSPKey).Usable)
 }
 
+// NIP-LSP §Client Behavior step 4: a stored announcement stays usable through
+// its expiration second and is no longer usable once that has passed, even
+// when the relays bring nothing newer.
+func TestStoredAnnouncementExpiresBetweenRefreshes(t *testing.T) {
+	f := newFixture(t)
+	f.fetch.evs = []*nip01.Event{f.v.event("K-LSP-1")}
+	require.NoError(t, f.s.Discover(context.Background()))
+	require.True(t, f.row(t, kLSPKey).Usable)
+
+	f.fetch.evs = nil
+	f.now = 1795305600 // its expiration
+	require.NoError(t, f.s.Discover(context.Background()))
+	assert.True(t, f.row(t, kLSPKey).Usable, "usable at its expiration")
+
+	f.now++ // a second after its expiration
+	require.NoError(t, f.s.Discover(context.Background()))
+	row := f.row(t, kLSPKey)
+	assert.False(t, row.Usable)
+	assert.Equal(t, "the announcement expired", row.InvalidReason)
+}
+
 // U-26.4: closed hides (not selling), paused disables.
 func TestU26_4_Status(t *testing.T) {
 	f := newFixture(t)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ohstr/nmilat/niplsp"
 
@@ -63,7 +64,7 @@ func storedCheckUsable(l *persist.LSP) bool {
 }
 
 // contactable is the catalogue row of an LSP this node may send LSPS messages
-// to: trusted, its newest announcement usable and not closed.
+// to: trusted, its newest announcement usable, unexpired and not closed.
 func (m *LiquidityManager) contactable(pubkey string) (*persist.LSP, error) {
 	if pubkey == "" {
 		return nil, fmt.Errorf("%w: no LSP named", ErrLSPNotUsable)
@@ -79,6 +80,9 @@ func (m *LiquidityManager) contactable(pubkey string) (*persist.LSP, error) {
 		return nil, fmt.Errorf("%w: its newest announcement failed a check or expired", ErrLSPNotUsable)
 	case row.Status == "closed":
 		return nil, fmt.Errorf("%w: it announced that it closed", ErrLSPNotUsable)
+	case row.ExpiresAt > 0 && time.Now().Unix() > row.ExpiresAt:
+		// Expired since the catalogue's last sweep (NIP-LSP step 4).
+		return nil, fmt.Errorf("%w: its newest announcement expired", ErrLSPNotUsable)
 	}
 	return row, nil
 }

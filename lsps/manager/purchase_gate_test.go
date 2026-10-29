@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ohstr/nmilat/niplsp"
 	"github.com/stretchr/testify/assert"
@@ -77,10 +78,13 @@ func TestPurchaseRefusedWithoutTrustOrOpenStatus(t *testing.T) {
 	for name, edit := range cases {
 		t.Run(name, func(t *testing.T) {
 			m, ln, _ := gateManager(t, edit)
+			// A purchase let through would wait for an answer: fail fast.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
 			params := lsps2.OpeningFeeParams{MinFeeMloki: 1}
-			_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params, nil)
+			_, err := m.BuyLiquidity(ctx, gateLSP, 100_000, &params, nil)
 			assert.ErrorIs(t, err, ErrLSPNotUsable)
-			_, err = m.CreateLSPS1Order(context.TODO(), gateLSP, lsps1.OrderParams{LspBalanceLoki: 100_000}, nil, nil)
+			_, err = m.CreateLSPS1Order(ctx, gateLSP, lsps1.OrderParams{LspBalanceLoki: 100_000}, nil, nil)
 			assert.ErrorIs(t, err, ErrLSPNotUsable)
 			assert.Zero(t, sent(ln), "nothing is sent to the LSP")
 		})
@@ -102,8 +106,10 @@ func TestPurchaseRunsTheLiveCheck(t *testing.T) {
 		assert.Equal(t, NodeKeyOf(gateLSP), key)
 		return result, nil
 	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	params := lsps2.OpeningFeeParams{MinFeeMloki: 1}
-	_, err := m.BuyLiquidity(context.TODO(), gateLSP, 100_000, &params, nil)
+	_, err := m.BuyLiquidity(ctx, gateLSP, 100_000, &params, nil)
 	assert.ErrorIs(t, err, ErrLSPNotUsable)
 	assert.Equal(t, 1, checks)
 	assert.Zero(t, sent(ln))
@@ -122,4 +128,39 @@ func TestJITHonoursStoredLiveCheck(t *testing.T) {
 	_, err := m.EnsureInboundLiquidity(context.TODO(), 100_000)
 	assert.ErrorIs(t, err, ErrLSPNotUsable)
 	assert.Zero(t, sent(ln), "no purchase message to an LSP its live check refused")
+}
+
+// NIP-LSP §Client Behavior: a closed announcement has stopped selling, so the
+// node sends it no LSPS message at all, even when the user still trusts it;
+// an open or paused one is still contactable.
+func TestClosedLSPIsNotContactable(t *testing.T) {
+	m, ln, _ := gateManager(t, func(l *persist.LSP) { l.Status = "closed" })
+	assert.ErrorIs(t, m.CheckContact(gateLSP), ErrLSPNotUsable)
+	_, err := m.LSPS2Terms(gateLSP, lsps2.OpeningFeeParams{})
+	assert.ErrorIs(t, err, ErrLSPNotUsable)
+	assert.Zero(t, sent(ln))
+	for _, status := range []string{"open", "paused"} {
+		t.Run(status, func(t *testing.T) {
+			m, _, _ := gateManager(t, func(l *persist.LSP) { l.Status = status })
+			assert.NoError(t, m.CheckContact(gateLSP))
+		})
+	}
+}
+
+// NIP-LSP §Client Behavior step 4: an announcement that expired since the
+// catalogue's last sweep makes its LSP not contactable at once; one still
+// before its expiration is contactable.
+func TestExpiredAnnouncementIsNotContactable(t *testing.T) {
+	m, ln, _ := gateManager(t, func(l *persist.LSP) { l.ExpiresAt = time.Now().Unix() - 1 })
+	assert.ErrorIs(t, m.CheckContact(gateLSP), ErrLSPNotUsable)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := m.EnsureInboundLiquidity(ctx, 100_000)
+	assert.ErrorIs(t, err, ErrLSPNotUsable)
+	assert.Zero(t, sent(ln))
+
+	t.Run("unexpired", func(t *testing.T) {
+		m, _, _ := gateManager(t, func(l *persist.LSP) { l.ExpiresAt = time.Now().Unix() + 60 })
+		assert.NoError(t, m.CheckContact(gateLSP))
+	})
 }
