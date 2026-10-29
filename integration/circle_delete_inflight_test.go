@@ -35,8 +35,9 @@ func TestDeleteCircleWallet_RefusedWhileASameNodeKeysendIsInFlight(t *testing.T)
 	require.NoError(t, err)
 	namesB := []tlvRecord{{Type: customKeyTLVType, Value: hex.EncodeToString([]byte(strconv.FormatUint(uint64(bID), 10)))}}
 
-	hooks.setFaults(t, map[string]bool{"hold_self_payments": true})
+	// Funded first: its funding transfer is itself a self-payment.
 	outsider := mustConnect(t, createEphemeralSimpleWallet(t, cfg).Connection)
+	hooks.setFaults(t, map[string]bool{"hold_self_payments": true})
 	sent := make(chan error, 1)
 	go func() {
 		sent <- outsider.Call(ctxT(t), "pay_keysend", payKeysendParams{Amount: 1_000, Pubkey: *info.Pubkey, TLVRecords: namesB}, &PayInvoiceResult{})
