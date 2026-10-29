@@ -146,8 +146,14 @@ func (httpSvc *HttpService) RegisterSharedRoutes(e *echo.Echo) {
 	// URL, so there's no arbitrary-fetch/SSRF surface here to gate.
 	e.GET("/api/appstore/logos/:appId", httpSvc.getAppStoreLogoHandler)
 
-	// allow one unlock request per second
-	unlockRateLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(1))
+	// allow one unlock request per second, per client address as the TCP
+	// connection gives it: echo's default identifier trusts X-Forwarded-For and
+	// X-Real-IP, so any caller could name a fresh address on each attempt
+	// (GHSA-246p-cpwv-v3jq). Behind a proxy every client then shares one budget.
+	unlockRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Store:               middleware.NewRateLimiterMemoryStore(1),
+		IdentifierExtractor: unlockLimiterIdentifier,
+	})
 	e.POST("/api/start", httpSvc.startHandler, unlockRateLimiter)
 	e.POST("/api/unlock", httpSvc.unlockHandler, unlockRateLimiter)
 	e.POST("/api/backup", httpSvc.createBackupHandler, unlockRateLimiter)
@@ -500,6 +506,12 @@ func (httpSvc *HttpService) unlockHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, &authTokenResponse{
 		Token: token,
 	})
+}
+
+// unlockLimiterIdentifier is the unlock rate limiter's key: the connection's
+// own peer address, never a forwarded header.
+func unlockLimiterIdentifier(c echo.Context) (string, error) {
+	return echo.ExtractIPDirect()(c.Request()), nil
 }
 
 func (httpSvc *HttpService) requireFullAccess(next echo.HandlerFunc) echo.HandlerFunc {
