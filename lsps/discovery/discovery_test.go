@@ -23,13 +23,24 @@ import (
 	testdb "github.com/flokiorg/lokihub/tests/db"
 )
 
-// vectors are K-LSP-1..6 from nmilat's lsp-announcement.json.
+// vectorClient is a vector's client side: chains, networks and clock.
+type vectorClient struct {
+	Chains   []string `json:"chains"`
+	Networks []string `json:"networks"`
+	Now      int64    `json:"now"`
+}
+
+// vectors are nmilat's lsp-announcement.json: K-LSP-1..6 and the
+// ParseAnnouncement cases.
 type vectors struct {
-	Client struct {
-		Chains   []string `json:"chains"`
-		Networks []string `json:"networks"`
-		Now      int64    `json:"now"`
-	} `json:"client"`
+	Client vectorClient `json:"client"`
+	Parse  []struct {
+		Name   string        `json:"name"`
+		Event  nip01.Event   `json:"event"`
+		Client *vectorClient `json:"client"`
+		Step   int           `json:"step"`
+		Error  string        `json:"error"`
+	} `json:"parse"`
 	Events []struct {
 		ID    string      `json:"id"`
 		Step  int         `json:"step"`
@@ -150,6 +161,9 @@ func (f *fixture) row(t *testing.T, key string) *persist.LSP {
 
 const kLSPKey = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
+// kLSP1CreatedAt is K-LSP-1's created_at.
+const kLSP1CreatedAt = 1792713600
+
 // U-26.1: K-LSP-1 is stored usable; K-LSP-3..6 each fail at their step and are
 // stored unusable with the reason (the newest seen remembered).
 func TestU26_1_KLSPThroughDiscovery(t *testing.T) {
@@ -172,6 +186,138 @@ func TestU26_1_KLSPThroughDiscovery(t *testing.T) {
 			_ = ae
 		})
 	}
+}
+
+// NIP-LSP §Client Behavior steps 1-5, through discovery: each vector case
+// passes and is stored usable, fails step 1 and is not the node's, is dated
+// more than 15 minutes ahead and is not seen, or fails its step and is stored
+// unusable with the reason.
+func TestParseVectorsThroughDiscovery(t *testing.T) {
+	v := loadVectors(t)
+	require.NotEmpty(t, v.Parse)
+	for _, c := range v.Parse {
+		t.Run(c.Name, func(t *testing.T) {
+			f := newFixture(t)
+			client := v.Client
+			if c.Client != nil {
+				client = *c.Client
+			}
+			f.now, f.s.d.Chain = client.Now, client.Chains[0]
+			f.s.d.Network = func(context.Context) (string, error) { return client.Networks[0], nil }
+			ev := c.Event
+			f.fetch.evs = []*nip01.Event{&ev}
+			require.NoError(t, f.s.Discover(context.Background()))
+			row, err := f.m.GetLSP(ev.PubKey)
+			future := c.Step == 4 && strings.Contains(c.Error, "ahead")
+			switch {
+			case c.Step == 1 || future:
+				assert.True(t, err != nil || row == nil, "not stored")
+				assert.Nil(t, f.seenMark(t, ev.PubKey))
+			case c.Step == 0:
+				require.NoError(t, err)
+				assert.True(t, row.Usable, row.InvalidReason)
+				assert.Equal(t, ev.ID, row.LastEventID)
+			default:
+				require.NoError(t, err)
+				assert.False(t, row.Usable)
+				assert.True(t, strings.HasSuffix(row.InvalidReason, c.Error), row.InvalidReason)
+				assert.EqualValues(t, ev.CreatedAt, row.NewestSeenCreatedAt)
+			}
+		})
+	}
+}
+
+// NIP-LSP §Client Behavior step 4: an announcement dated more than 15 minutes
+// ahead is not seen, so it neither replaces the node's announcement nor stops
+// a later real one, a closed one included, from replacing it; one dated
+// exactly 15 minutes ahead is taken.
+func TestFutureDatedAnnouncementIsNotSeen(t *testing.T) {
+	const priv = "0000000000000000000000000000000000000000000000000000000000000001"
+	const base, now = kLSP1CreatedAt, kLSP1CreatedAt + 100
+	f := newFixture(t)
+	require.EqualValues(t, base, f.v.event("K-LSP-1").CreatedAt)
+	f.now = now
+	current := f.announcementBy(t, priv, base)
+	future := f.announcementBy(t, priv, now+MaxFutureSecs+1)
+	f.fetch.evs = []*nip01.Event{current, future}
+	require.NoError(t, f.s.Discover(context.Background()))
+	row := f.row(t, kLSPKey)
+	assert.True(t, row.Usable)
+	assert.Equal(t, current.ID, row.LastEventID, "the future-dated one is not taken")
+	assert.Equal(t, current.ID, row.NewestSeenID, "nor seen")
+
+	closed := f.v.event("K-LSP-2").Copy()
+	closed.CreatedAt = base + 50
+	require.NoError(t, closed.Sign(priv))
+	f.fetch.evs = []*nip01.Event{future, closed}
+	require.NoError(t, f.s.Discover(context.Background()))
+	row = f.row(t, kLSPKey)
+	assert.Equal(t, "closed", row.Status, "a later real announcement still replaces it")
+	assert.Equal(t, closed.ID, row.NewestSeenID)
+
+	atBound := f.announcementBy(t, priv, now+MaxFutureSecs)
+	f.fetch.evs = []*nip01.Event{atBound}
+	require.NoError(t, f.s.Discover(context.Background()))
+	row = f.row(t, kLSPKey)
+	assert.Equal(t, atBound.ID, row.LastEventID, "exactly 15 minutes ahead is taken")
+	assert.Equal(t, "open", row.Status)
+}
+
+// A future-dated newest-seen mark kept before such marks were ignored is
+// undone: a row falls back to its usable announcement, a row whose usable
+// announcement is future-dated becomes unusable with no mark, and a pruned
+// node's mark is dropped, so the node's real announcements are taken again.
+func TestStoredFutureDatedMarksAreUndone(t *testing.T) {
+	const priv = "0000000000000000000000000000000000000000000000000000000000000001"
+	const base, far = kLSP1CreatedAt, kLSP1CreatedAt + 10*365*24*3600
+	f := newFixture(t)
+	f.now = base + 100
+	current := f.announcementBy(t, priv, base)
+	f.fetch.evs = []*nip01.Event{current}
+	require.NoError(t, f.s.Discover(context.Background()))
+	require.NoError(t, f.s.d.DB.Model(&persist.LSP{}).Where("node_key = ?", kLSPKey).
+		Updates(map[string]any{"newest_seen_created_at": far, "newest_seen_id": "future"}).Error)
+	other, pruned := strings.Repeat("ab", 32), strings.Repeat("cd", 32)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSP{NodeKey: other, Usable: true, AnnouncedAt: far, ExpiresAt: far + 1,
+		NewestSeenCreatedAt: far, NewestSeenID: "future", LastEventID: "future"}).Error)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSPSeenMark{NodeKey: pruned, CreatedAt: far, EventID: "future"}).Error)
+	keep := strings.Repeat("ef", 32)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSPSeenMark{NodeKey: keep, CreatedAt: f.now + MaxFutureSecs, EventID: "at bound"}).Error)
+
+	newer := f.announcementBy(t, priv, base+10)
+	f.fetch.evs = []*nip01.Event{newer}
+	require.NoError(t, f.s.Discover(context.Background()))
+	row := f.row(t, kLSPKey)
+	assert.Equal(t, newer.ID, row.LastEventID, "the real newer announcement is taken")
+	assert.EqualValues(t, base+10, row.NewestSeenCreatedAt)
+
+	o := f.row(t, other)
+	assert.False(t, o.Usable)
+	assert.Zero(t, o.NewestSeenCreatedAt)
+	assert.Contains(t, o.InvalidReason, "15 minutes ahead")
+	assert.Nil(t, f.seenMark(t, pruned))
+	assert.NotNil(t, f.seenMark(t, keep), "a mark exactly 15 minutes ahead stays")
+}
+
+// Prune ranks a future-dated row last, so rows dated ahead cannot push the
+// most recently announced nodes out of the catalogue.
+func TestPruneRanksFutureDatedRowsLast(t *testing.T) {
+	f := newFixture(t)
+	for i := 0; i < MaxAnnouncements; i++ {
+		require.NoError(t, f.s.d.DB.Create(&persist.LSP{NodeKey: fmt.Sprintf("%064x", 1000+i),
+			AnnouncedAt: f.now - 10, NewestSeenCreatedAt: f.now - 10}).Error)
+	}
+	require.NoError(t, f.s.d.DB.Create(&persist.LSP{NodeKey: fmt.Sprintf("%064x", 1), AnnouncedAt: f.now + MaxFutureSecs + 1}).Error)
+	atBound := fmt.Sprintf("%064x", 2)
+	require.NoError(t, f.s.d.DB.Create(&persist.LSP{NodeKey: atBound, AnnouncedAt: f.now + MaxFutureSecs}).Error)
+	require.NoError(t, f.s.prune())
+	gone, _ := f.m.GetLSP(fmt.Sprintf("%064x", 1))
+	assert.Nil(t, gone, "the future-dated row is pruned first")
+	kept, _ := f.m.GetLSP(atBound)
+	assert.NotNil(t, kept, "one exactly 15 minutes ahead ranks by its date")
+	all, err := f.m.ListLSPs()
+	require.NoError(t, err)
+	assert.Len(t, all, MaxAnnouncements)
 }
 
 // U-26.2: at most 200 announcements read, and only for this node's chain and

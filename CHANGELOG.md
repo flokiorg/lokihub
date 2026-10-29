@@ -468,6 +468,11 @@ audits of both.
 
 ### Fixed
 
+- Ignores an LSP announcement dated more than 15 minutes ahead (NIP-LSP step
+  4): it is not seen, undoes such a newest-seen mark kept earlier, and ranks a
+  future-dated row last when the catalogue is pruned. One far-future event
+  locked out the node's later announcements, `closed` included, and
+  future-dated spam crowded real LSPs out of the catalogue.
 - Keeps an LSP's announcement usable through its expiration second, as NIP-40
   asks, and refuses LSPS messages to an LSP whose announcement expired since
   the catalogue's last refresh. The sweep dropped it a second early, and
