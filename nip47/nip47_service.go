@@ -47,7 +47,7 @@ type nip47Service struct {
 	// withdraw serves on-chain withdrawals (private_withdraw.go); nil offers none.
 	withdraw *cashwithdraw.Service
 	// orderPayBy ends a read order's payment window when its pay_by passed.
-	orderPayBy atomic.Pointer[func(ctx context.Context, orderID uint)]
+	orderPayBy atomic.Pointer[func(ctx context.Context, orderID uint) error]
 }
 
 type Nip47Service interface {
@@ -72,8 +72,8 @@ type Nip47Service interface {
 	SetOrderIntake(intake func(ctx context.Context, inv *lnclient.Transaction) bool,
 		selfPay func(ctx context.Context, paymentHash string, amountMloki uint64) (string, bool, error))
 	// SetOrderPayBy lets a read of an order past its pay_by end its payment
-	// window first.
-	SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint))
+	// window first; its error refuses the read, which is retried.
+	SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint) error)
 }
 
 func NewNip47Service(db *gorm.DB, cfg config.Config, keys keys.Keys, eventPublisher events.EventPublisher, socialCache controllers.NostrSocialCache) *nip47Service {
@@ -189,7 +189,7 @@ func (svc *nip47Service) runNip47InfoPublisherWorker(ctx context.Context, pool *
 // SetOrderIntake implements Nip47Service: its payments go through its own
 // transactions service, which must know the order intake too.
 // SetOrderPayBy implements Nip47Service.
-func (svc *nip47Service) SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint)) {
+func (svc *nip47Service) SetOrderPayBy(endWindowIfDue func(ctx context.Context, orderID uint) error) {
 	svc.orderPayBy.Store(&endWindowIfDue)
 }
 

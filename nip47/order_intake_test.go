@@ -535,7 +535,8 @@ func TestOrderIntake_ScanFailureAtPayByKeepsOrderOpen(t *testing.T) {
 	f.requireMintedOnce(t, p.RequestID)
 }
 
-// Test 2: the same through a read of the order (EndWindowIfDue).
+// Test 2: the same through a read of the order (EndWindowIfDue): the read is
+// refused for a retry, never answered open.
 func TestOrderIntake_ScanFailureOnReadKeepsOrderOpen(t *testing.T) {
 	f := newIntakeFixture(t)
 	f.nip47svc.SetOrderPayBy(f.engine.EndWindowIfDue)
@@ -545,8 +546,7 @@ func TestOrderIntake_ScanFailureOnReadKeepsOrderOpen(t *testing.T) {
 	f.chain.err = errScan
 
 	f.pastPayBy(t, p.RequestID)
-	assert.Equal(t, nipCO.OrderOpen, f.lookupOrder(t, buyer, p).State)
-	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
+	f.requireRetry(t, buyer, p)
 
 	f.chain.err = nil
 	got := f.lookupOrder(t, buyer, p)
@@ -566,7 +566,7 @@ func TestOrderIntake_NoChainAtPayByKeepsOrderOpen(t *testing.T) {
 			f.engine.LN = func() lnclient.LNClient { return ln(f) }
 			f.pastPayBy(t, p.RequestID)
 			f.engine.RunPayBy(context.TODO())
-			f.engine.EndWindowIfDue(context.TODO(), f.orderRow(t, p.RequestID).ID)
+			assert.ErrorIs(t, f.engine.EndWindowIfDue(context.TODO(), f.orderRow(t, p.RequestID).ID), cashorder.ErrWindowNotEnded)
 			assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
 		})
 	}
@@ -682,7 +682,7 @@ func TestOrderIntake_ConcurrentPayByWithFailingScan(t *testing.T) {
 	f.chain.outputs = []lnclient.OnchainOutput{{TxID: tests.RandomHex32(), Address: addr, AmountLoki: 43, Confirmations: 1, SeenAt: f.clock.Unix()}}
 	f.chain.err = errScan
 	f.pastPayBy(t, p.RequestID)
-	race := func() {
+	race := func(want error) {
 		var wg sync.WaitGroup
 		for i := range 6 {
 			wg.Add(1)
@@ -691,17 +691,22 @@ func TestOrderIntake_ConcurrentPayByWithFailingScan(t *testing.T) {
 				if i%2 == 0 {
 					f.engine.RunPayBy(context.TODO())
 				} else {
-					f.engine.EndWindowIfDue(context.TODO(), id)
+					err := f.engine.EndWindowIfDue(context.TODO(), id)
+					if want == nil {
+						assert.NoError(t, err)
+					} else {
+						assert.ErrorIs(t, err, want)
+					}
 				}
 			}()
 		}
 		wg.Wait()
 	}
-	race()
+	race(cashorder.ErrWindowNotEnded)
 	assert.Equal(t, db.CashOrderOpen, f.orderRow(t, p.RequestID).State)
 
 	f.chain.err = nil
-	race()
+	race(nil)
 	f.engine.RetryMints(context.TODO())
 	f.requireMintedOnce(t, p.RequestID)
 }

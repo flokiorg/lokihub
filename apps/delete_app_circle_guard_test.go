@@ -62,3 +62,35 @@ func TestDeleteApp_CircleHubWithChildren_Rejected(t *testing.T) {
 	assert.NotNil(t, svc.AppsService.GetAppById(provider.ID))
 	assert.NotNil(t, svc.AppsService.GetAppById(child.ID))
 }
+
+// NIP-CW §Lifecycle and Deletion: a member's balance is never swept, so the
+// generic delete refuses a Circle Wallet whatever it holds; a standard app is
+// still deleted.
+func TestDeleteApp_CircleWalletRefused(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+
+	provider, _, err := svc.AppsService.CreateCircleHub(
+		"circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.GET_BALANCE_SCOPE}, nil,
+		apps.CircleIdentityRef{Name: "circle", Policy: db.CirclePolicyAllowlist},
+		db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000},
+	)
+	require.NoError(t, err)
+	wallet, _, err := svc.AppsService.CreateApp(
+		"child", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindCircleWallet,
+		&provider.ID, db.ParentKindCircle, nil,
+	)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, svc.AppsService.DeleteApp(wallet), constants.ErrInvalidParams)
+	assert.NotNil(t, svc.AppsService.GetAppById(wallet.ID), "an empty circle wallet too")
+
+	standard, _, err := svc.AppsService.CreateApp("standard", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+		[]string{constants.GET_BALANCE_SCOPE}, db.AppKindStandard, nil, "", nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.AppsService.DeleteApp(standard))
+	assert.Nil(t, svc.AppsService.GetAppById(standard.ID))
+}

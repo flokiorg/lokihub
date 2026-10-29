@@ -3,15 +3,17 @@ package transactions
 import (
 	"context"
 	"errors"
-	"github.com/flokiorg/lokihub/hubclock"
-	"sync"
+	"math"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
+	"github.com/flokiorg/lokihub/circlelife"
 	"github.com/flokiorg/lokihub/circlemoney"
 	"github.com/flokiorg/lokihub/constants"
 	"github.com/flokiorg/lokihub/db"
+	"github.com/flokiorg/lokihub/hubclock"
 	"github.com/flokiorg/lokihub/lnclient"
 )
 
@@ -47,7 +49,7 @@ func (svc *transactionsService) resolveHeldKeysend(ctx context.Context, held *ln
 		return checkHeldKeysend(tx, svc, held)
 	})
 	if err != nil || held.Preimage == "" {
-		svc.heldKeysends.release(held.PaymentHash)
+		svc.releaseHeldKeysend(held.PaymentHash)
 	}
 	switch {
 	case errors.Is(err, errKeysendRefused):
@@ -62,7 +64,7 @@ func (svc *transactionsService) resolveHeldKeysend(ctx context.Context, held *ln
 		log.Error().Msg("A held keysend has no preimage; the node fails it when its hold time ends")
 	default:
 		if settleErr := lnClient.SettleHoldInvoice(ctx, held.Preimage); settleErr != nil {
-			svc.heldKeysends.release(held.PaymentHash)
+			svc.releaseHeldKeysend(held.PaymentHash)
 			log.Error().Err(settleErr).Msg("Failed to settle a held keysend")
 		}
 	}
@@ -86,7 +88,10 @@ func checkHeldKeysend(tx *gorm.DB, svc *transactionsService, held *lnclient.Tran
 	}
 	hubID := *recipient.ParentAppID
 	// Keysends settled but not yet credited count as received.
-	forWallet, forHub := svc.heldKeysends.reserved(recipient.ID, hubID, held.PaymentHash)
+	forWallet, forHub, err := circlelife.HeldKeysendsReserved(tx, recipient.ID, hubID, held.PaymentHash, time.Now())
+	if err != nil {
+		return err
+	}
 	refused := func(err error) error {
 		var refusal *circlemoney.Refusal
 		if errors.As(err, &refusal) {
@@ -106,72 +111,19 @@ func checkHeldKeysend(tx *gorm.DB, svc *transactionsService, held *lnclient.Tran
 			return refused(err)
 		}
 	}
-	// Reserved under the Hub's lock, before it is released.
-	svc.heldKeysends.reserve(held.PaymentHash, recipient.ID, hubID, amount)
-	return nil
-}
-
-// heldKeysendTTL bounds a reservation whose credit never arrives (the settle
-// event lost): the node's own settle has happened or failed by then.
-const heldKeysendTTL = 10 * time.Minute
-
-// keysendReservations are held keysends to Circle Wallets that passed their
-// checks and are being settled, by payment hash, until the node's settle event
-// credits them.
-type keysendReservations struct {
-	mu   sync.Mutex
-	byID map[string]keysendReservation
-}
-
-type keysendReservation struct {
-	wallet, hub uint
-	amount      uint64
-	at          time.Time
-}
-
-func newKeysendReservations() *keysendReservations {
-	return &keysendReservations{byID: map[string]keysendReservation{}}
-}
-
-func (r *keysendReservations) reserve(hash string, wallet, hub uint, amount uint64) {
-	if r == nil {
-		return
+	// Reserved under the Hub's lock, in the checking transaction; lapsed
+	// reservations go.
+	if err := tx.Where("reserved_at < ?", time.Now().Add(-circlelife.HeldKeysendTTL).Unix()).Delete(&db.CircleHeldKeysend{}).Error; err != nil {
+		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byID[hash] = keysendReservation{wallet: wallet, hub: hub, amount: amount, at: time.Now()}
+	return tx.Clauses(clause.OnConflict{UpdateAll: true}).Create(&db.CircleHeldKeysend{PaymentHash: held.PaymentHash,
+		WalletAppID: recipient.ID, HubAppID: hubID, AmountMloki: int64(min(amount, math.MaxInt64)), ReservedAt: time.Now().Unix()}).Error //nolint:gosec // bounded
 }
 
-func (r *keysendReservations) release(hash string) {
-	if r == nil {
-		return
+// releaseHeldKeysend ends a held keysend's reservation that will not be
+// credited (refused, or its settle failed).
+func (svc *transactionsService) releaseHeldKeysend(paymentHash string) {
+	if err := svc.db.Where("payment_hash = ?", paymentHash).Delete(&db.CircleHeldKeysend{}).Error; err != nil {
+		svc.logger.Error().Err(err).Str("payment_hash", paymentHash).Msg("Failed to release a held keysend's reservation; it lapses")
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.byID, hash)
-}
-
-// reserved sums the live reservations for wallet and for its circle, other than
-// hash's own.
-func (r *keysendReservations) reserved(wallet, hub uint, hash string) (forWallet, forHub uint64) {
-	if r == nil {
-		return 0, 0
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := time.Now()
-	for h, res := range r.byID {
-		if now.Sub(res.at) > heldKeysendTTL {
-			delete(r.byID, h)
-			continue
-		}
-		if h == hash || res.hub != hub {
-			continue
-		}
-		forHub += res.amount
-		if res.wallet == wallet {
-			forWallet += res.amount
-		}
-	}
-	return forWallet, forHub
 }

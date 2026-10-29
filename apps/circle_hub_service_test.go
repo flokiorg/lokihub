@@ -586,3 +586,40 @@ func TestUpdateCircleHubConfig_DefaultLifetimeAgainstCeiling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, receive, cfg.PerWalletMaxReceiveMloki)
 }
+
+// The dust threshold is bounded by CIRCLE_MAX_DUST_MLOKI (default 10,000 mloki),
+// on creation and on update: the bound is accepted, one above it refused.
+func TestCircleHubConfig_DustThresholdBounded(t *testing.T) {
+	svc, err := tests.CreateTestService(t)
+	require.NoError(t, err)
+	defer svc.Remove()
+	create := func(dust int64) (*db.App, error) {
+		app, _, err := svc.AppsService.CreateCircleHub(
+			"test circle", "", 0, constants.BUDGET_RENEWAL_NEVER, nil,
+			[]string{constants.CIRCLE_WALLET_SCOPE, constants.GET_BALANCE_SCOPE}, nil,
+			apps.CircleIdentityRef{Name: "test circle", Policy: db.CirclePolicyAllowlist},
+			db.CircleHubConfig{MaxExpSecs: 3600, PerWalletMaxMloki: 100_000, DustThresholdMloki: dust},
+		)
+		return app, err
+	}
+	_, err = create(constants.CIRCLE_MAX_DUST_MLOKI + 1)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+	provider, err := create(constants.CIRCLE_MAX_DUST_MLOKI)
+	require.NoError(t, err)
+
+	over := int64(constants.CIRCLE_MAX_DUST_MLOKI + 1)
+	assert.ErrorIs(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{DustThresholdMloki: &over}),
+		constants.ErrInvalidParams)
+	zero := int64(0)
+	require.NoError(t, svc.AppsService.UpdateCircleHubConfig(provider.ID, apps.CircleHubConfigPatch{DustThresholdMloki: &zero}))
+	cfg, err := svc.AppsService.GetCircleHubConfig(provider.ID)
+	require.NoError(t, err)
+	assert.Zero(t, cfg.DustThresholdMloki)
+
+	// A host that raises CIRCLE_MAX_DUST_MLOKI may set up to it.
+	svc.Cfg.GetEnv().CircleMaxDustMloki = 100_000_000
+	_, err = create(100_000_000)
+	require.NoError(t, err)
+	_, err = create(100_000_001)
+	assert.ErrorIs(t, err, constants.ErrInvalidParams)
+}

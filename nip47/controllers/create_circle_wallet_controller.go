@@ -34,6 +34,13 @@ var errCircleQuotaExceeded = errors.New("the circle's holdings have reached its 
 // down, before its commit.
 var errCircleNotAccepting = errors.New("the circle is not accepting new members")
 
+// errNoLongerMember rolls a join back whose member was removed after step 4,
+// and errMembershipUnresolved one whose membership cannot be read again.
+var (
+	errNoLongerMember       = errors.New("requester is not a member of this circle")
+	errMembershipUnresolved = errors.New("the circle's membership could not be checked again")
+)
+
 // errJoinPastDeadline rolls a join back that reached its commit after its
 // proof's freshness window (NIP-CW §Processing Algorithm, step 9).
 var errJoinPastDeadline = errors.New("join reached commit after its deadline")
@@ -277,6 +284,13 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		if (hubNow.AcceptingJoins != nil && !*hubNow.AcceptingJoins) || hubNow.TeardownRequestedAt != nil {
 			return errCircleNotAccepting
 		}
+		// Membership again, under the lock a membership resolution takes: a
+		// member removed since step 4 gets no Active wallet (NIP-CW §Membership).
+		if member, err := controller.socialCache.IsAuthorized(ctx, params.Pubkey, &providerConfig.CircleIdentity, tx); err != nil {
+			return fmt.Errorf("%w: %w", errMembershipUnresolved, err)
+		} else if !member {
+			return errNoLongerMember
+		}
 		// The connection key is checked and claimed as one atomic step with
 		// every rotation's acceptance (NIP-CW §Recovering a Lost Connection).
 		if err := db.LockNamespace(tx, db.LockNsConnKey, 0); err != nil {
@@ -404,6 +418,12 @@ func (controller *nip47Controller) HandleCreateCircleWalletEvent(ctx context.Con
 		return
 	case errors.Is(err, apps.ErrDuplicateAppPubkey):
 		refuse(nipcw.ErrRestricted, "connection_pubkey is in use on this node: generate a new connection key")
+		return
+	case errors.Is(err, errNoLongerMember):
+		refuse(nipcw.ErrRestricted, errNoLongerMember.Error())
+		return
+	case errors.Is(err, errMembershipUnresolved):
+		refuse(nipcw.ErrNotReady, "the circle's membership could not be checked yet, please retry shortly")
 		return
 	case errors.Is(err, errJoinPastDeadline):
 		refuse(constants.ERROR_BAD_REQUEST, "join reached commit after its deadline")

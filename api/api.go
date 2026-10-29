@@ -2986,7 +2986,7 @@ func (api *api) applyAllowlistTx(tx *gorm.DB, identityID uint, changes *[]circle
 	for _, pk := range pubkeys {
 		members[pk] = true
 	}
-	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, time.Now())
+	applied, err := circlelife.ApplyResolution(tx, identityID, func(pk string) bool { return members[pk] }, hubclock.Now())
 	*changes = applied
 	return err
 }

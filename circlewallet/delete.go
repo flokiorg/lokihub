@@ -21,12 +21,19 @@ import (
 // payment to or from it is in flight.
 var ErrNotDeletable = errors.New("circlewallet: the wallet holds more than dust or has a payment in flight")
 
-// DeleteWallet deletes a wallet in tx, under its lock: it re-checks that the
+// DeleteWallet deletes a wallet in tx, under its Hub's lock and its own: it re-checks that the
 // wallet holds at most its dust and has nothing in flight (ErrNotDeletable
 // otherwise), moves the dust to its Hub, marks its join record and deletes it;
 // its membership row cascades. The caller has cancelled its open invoices and
 // publishes the deletion after commit.
 func DeleteWallet(tx *gorm.DB, wallet *db.App, now time.Time) error {
+	// The Hub first, as a held keysend's reservation is taken under it, then
+	// the wallet, as its payments' credits are.
+	if wallet.ParentAppID != nil {
+		if err := db.LockApp(tx, *wallet.ParentAppID); err != nil {
+			return err
+		}
+	}
 	if err := db.LockApp(tx, wallet.ID); err != nil {
 		return err
 	}

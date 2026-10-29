@@ -23,6 +23,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	nmilatnip01 "github.com/ohstr/nmilat/nip01"
 	nmilatnip47 "github.com/ohstr/nmilat/nip47"
+	"github.com/ohstr/nmilat/nipcw"
 )
 
 func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.SimplePool, event *nostr.Event, lnClient lnclient.LNClient) {
@@ -412,6 +413,24 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 		return
 	}
 
+	// A Circle Wallet's current key, whatever the method: refused FROZEN while
+	// the wallet is frozen; otherwise the request cancels a pending rotation
+	// before any method is refused (NIP-CW §Recovering a Lost Connection).
+	if app.Kind == db.AppKindCircleWallet {
+		if app.CircleFrozen {
+			publishResponse(&models.Response{
+				ResultType: nip47Request.Method,
+				Error:      &models.Error{Code: nipcw.ErrFrozen, Message: "this wallet is frozen: its current key is refused until it is unfrozen or rotated"},
+			}, nostr.Tags{})
+			return
+		}
+		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, hubclock.Now())
+		if err != nil {
+			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
+		}
+		circlelife.Publish(svc.eventPublisher, notices)
+	}
+
 	// Bill methods are served over the PRIVATE transport only (NIP-CASH §The
 	// Private Transport), which requires refusing them here with NOT_IMPLEMENTED —
 	// before the permission check, so a connection without the scope, or an
@@ -457,17 +476,6 @@ func (svc *nip47Service) HandleEvent(ctx context.Context, pool nostrmodels.Simpl
 			},
 		}, nostr.Tags{})
 		return
-	}
-
-	// A request validly signed by a Circle Wallet's current key cancels its
-	// pending rotation, unless the wallet is frozen (NIP-CW §Recovering a Lost
-	// Connection).
-	if app.Kind == db.AppKindCircleWallet && !app.CircleFrozen {
-		notices, err := circlelife.CancelPendingRotation(svc.db, app.ID, hubclock.Now())
-		if err != nil {
-			logger.Logger.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to cancel a pending rotation")
-		}
-		circlelife.Publish(svc.eventPublisher, notices)
 	}
 
 	// A Circle Wallet serves only the methods its state allows, before any scope

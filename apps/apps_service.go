@@ -557,6 +557,12 @@ func (svc *appsService) deleteApp(app *db.App, confirmWatchEnd bool) error {
 		// Its orders are still served and minted after it is retired, so an
 		// Order connection goes only with its Hub (NIP-CO §What It Allows).
 		return fmt.Errorf("%w: an order connection cannot be deleted; retire it instead", constants.ErrInvalidParams)
+	case db.AppKindCircleWallet:
+		// A member's balance is never swept (NIP-CW §Lifecycle and Deletion): a
+		// Circle Wallet goes only through circlewallet.DeleteWallet, at most
+		// dust left and nothing in flight.
+		return fmt.Errorf("%w: a circle wallet is deleted only by its member or after its grace period, holding at most dust",
+			constants.ErrInvalidParams)
 	case db.AppKindCashWallet:
 		// A cash bill is hard-deleted the instant it is spent, which is what
 		// makes it indistinguishable from a pubkey this hub never served. That

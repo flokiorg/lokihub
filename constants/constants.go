@@ -234,6 +234,10 @@ const (
 	// grace period and dust threshold a Hub gets unless its host sets others.
 	CIRCLE_DEFAULT_GRACE_SECS = 604_800
 	CIRCLE_DEFAULT_DUST_MLOKI = 1_000
+	// CIRCLE_MAX_DUST_MLOKI is the default bound on a Hub's dust threshold
+	// (CIRCLE_MAX_DUST_MLOKI in the environment): the default routing-fee
+	// reserve floor, a balance too small to pay out over Lightning.
+	CIRCLE_MAX_DUST_MLOKI = CIRCLE_DEFAULT_FEE_RESERVE_MIN_MLOKI
 	// CIRCLE_DEFAULT_ROTATION_DELAY_SECS is the rotation delay NIP-CW
 	// recommends: 5 days.
 	CIRCLE_DEFAULT_ROTATION_DELAY_SECS = 432_000

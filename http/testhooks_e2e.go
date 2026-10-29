@@ -18,7 +18,8 @@ import (
 // registerWithdrawTestHooks.
 func (httpSvc *HttpService) registerE2ETestHooks(g *echo.Group) {
 	// POST /api/test/faults {stall_commit, break_signer, drop_reply,
-	// drop_before_commit, route_over_bound, hold_payments: bool, reset}: a field
+	// drop_before_commit, route_over_bound, hold_payments, hold_self_payments,
+	// fail_chain_scan: bool, reset}: a field
 	// left out keeps its value; reset clears every fault first. Answers the
 	// faults now on.
 	g.POST("/faults", func(c echo.Context) error {
