@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Publishes the dev stack's ports (relay, flnd RPC, Caddy) on the loopback
+  only, unless `DEV_BIND` says otherwise; they were open on every interface of
+  the host.
 - Rate-limits `/api/unlock`, `/api/start`, `/api/backup` and `/logout` by the
   connection's own address. The limiter trusted `X-Forwarded-For` and
   `X-Real-IP`, so a caller could forge a fresh address on every unlock attempt.
