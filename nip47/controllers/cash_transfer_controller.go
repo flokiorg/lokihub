@@ -572,6 +572,11 @@ func (controller *nip47Controller) transferSpinsOff(app *db.App, claim *db.CashW
 	return removed, nil
 }
 
+// usedRequestIDNote ends a refusal made after the call's request_id was marked
+// used (NIP-CASH §request_id): a retry of the same call is REQUEST_REUSED, so
+// the caller retries under another id.
+const usedRequestIDNote = "; this request_id stays used, so a retry needs another"
+
 // spinOffLimitRefusal bounds spin-offs (NIP-CASH §Security Considerations for
 // Cash-Mode Slices): the live bills under the Cash Hub (QUOTA_EXCEEDED), for a
 // call that adds newBills (one that adds none passes the cap), then, when
@@ -591,19 +596,19 @@ func (controller *nip47Controller) spinOffLimitRefusal(app *db.App, newBills int
 			return constants.ERROR_INTERNAL, "failed to check this hub's live bills", refund
 		}
 		if live+int64(newBills) > int64(limit) {
-			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit), refund
+			return constants.ERROR_QUOTA_EXCEEDED, fmt.Sprintf("this Cash Hub holds its maximum of %d live bills", limit) + usedRequestIDNote, refund
 		}
 	}
 	if lineage {
 		key := strconv.FormatUint(uint64(cashwallet.LineageRoot(app)), 10)
 		if testknobs.SpinOffRateSet() {
-			// The test override keeps no refundable allowance: refund stays a no-op.
 			if !testknobs.AllowSpinOff(key, hubclock.Now()) {
-				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills; retry later", refund
+				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills; retry later" + usedRequestIDNote, refund
 			}
+			refund = func() { testknobs.RefundSpinOff(key, hubclock.Now()) }
 		} else if controller.lineageLimiter != nil {
 			if !controller.lineageLimiter.Allow(key, env.CashLineageSpinOffsPerHour) {
-				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later", refund
+				return constants.ERROR_RATE_LIMITED, "this bill's lineage has spun off too many bills this hour; retry later" + usedRequestIDNote, refund
 			}
 			if r, ok := controller.lineageLimiter.(refunder); ok {
 				refund = func() { r.Refund(key) }

@@ -131,3 +131,13 @@ func AllowSpinOff(lineage string, now time.Time) bool {
 	w.n++
 	return true
 }
+
+// RefundSpinOff gives back one spin-off AllowSpinOff charged to lineage in the
+// current window: a spin-off whose commit did not happen.
+func RefundSpinOff(lineage string, now time.Time) {
+	limitsMu.Lock()
+	defer limitsMu.Unlock()
+	if w := spinOffCount[lineage]; w != nil && w.n > 0 && now.Before(w.resetAt) {
+		w.n--
+	}
+}

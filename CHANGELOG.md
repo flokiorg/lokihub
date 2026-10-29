@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Spends `mint_cash`'s hourly allowance only on a mint that commits, as the
+  lineage spin-off allowance already was (also under the regtest rate
+  override). A refusal made after a call's `request_id` was marked used now
+  says the id stays used, so a retry needs another.
 - Counts a Cash Hub's live bills again inside a spin-off's or merge's commit,
   under a per-Hub lock, so concurrent calls on different bills can no longer
   pass `CASH_MAX_LIVE_BILLS_PER_HUB` together; the refusal stays
