@@ -77,7 +77,7 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 
 	binding := nipcash.ItemBinding{HubXOnly: pt.nodeXOnly, Nonce: nonce, NotAfter: notAfter}
 	envelope := transport.Envelope{
-		Version: transport.EnvelopeVersion, NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
+		NotAfter: notAfter, Nonce: nonce, ReplyTo: replyTo,
 	}
 	for i := 0; i < bills; i++ {
 		item, err := nipcash.StatusItem("bill"+string(rune('a'+i)), targets[i], connPrivs[i],
@@ -182,8 +182,8 @@ func TestFullLoop_MultiChunkReply_RealHubChunkerRealClientDecoder(t *testing.T) 
 		allResults = append(allResults, chunk.Results...)
 	}
 	reassembled := transport.ResponseEnvelope{
-		Version: transport.EnvelopeVersion, ReqNonce: got.Nonce,
-		Results: allResults, Seq: 1, Total: 1,
+		ReqNonce: got.Nonce,
+		Results:  allResults, Seq: 1, Total: 1,
 	}
 	assert.Empty(t, reassembled.Omitted(requestedIDs),
 		"Omitted must be empty once every chunk is in; a non-empty answer here is what a "+

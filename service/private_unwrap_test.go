@@ -66,7 +66,6 @@ func testEnvelope(t *testing.T) transport.Envelope {
 	require.NoError(t, err)
 
 	return transport.Envelope{
-		Version:  transport.EnvelopeVersion,
 		NotAfter: time.Now().Add(60 * time.Second).Unix(),
 		Nonce:    nonce,
 		ReplyTo:  replyTo,

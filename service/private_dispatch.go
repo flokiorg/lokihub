@@ -180,7 +180,7 @@ func (svc *service) publishPrivateRefusal(ctx context.Context, pool *nostr.Simpl
 		return fmt.Errorf("derive reply key: %w", err)
 	}
 	reply := transport.ResponseEnvelope{
-		Version: transport.EnvelopeVersion, ReqNonce: refusal.header.Nonce, Seq: 1, Total: 1,
+		ReqNonce: refusal.header.Nonce, Seq: 1, Total: 1,
 		Error: &transport.ResultError{Code: refusal.code, Message: "envelope refused"},
 	}
 	plaintext, err := reply.EncodeResponse(svc.cfg.PrivateEnvelopeLimits())
@@ -269,8 +269,8 @@ func (svc *service) publishReplyEvent(ctx context.Context, pool *nostr.SimplePoo
 func chunkResults(reqNonce string, results []transport.Result, limits transport.Limits) ([]transport.ResponseEnvelope, error) {
 	fits := func(rs []transport.Result, total int) bool {
 		probe := transport.ResponseEnvelope{
-			Version: transport.EnvelopeVersion, ReqNonce: reqNonce,
-			Results: rs, Seq: 1, Total: total,
+			ReqNonce: reqNonce,
+			Results:  rs, Seq: 1, Total: total,
 		}
 		_, err := probe.EncodeResponse(limits)
 		return err == nil
@@ -280,7 +280,7 @@ func chunkResults(reqNonce string, results []transport.Result, limits transport.
 	// omitted" is a legitimate answer it has to be able to observe.
 	if len(results) == 0 {
 		return []transport.ResponseEnvelope{{
-			Version: transport.EnvelopeVersion, ReqNonce: reqNonce, Seq: 1, Total: 1,
+			ReqNonce: reqNonce, Seq: 1, Total: 1,
 		}}, nil
 	}
 
@@ -325,8 +325,8 @@ func chunkResults(reqNonce string, results []transport.Result, limits transport.
 	out := make([]transport.ResponseEnvelope, 0, len(groups))
 	for i, g := range groups {
 		out = append(out, transport.ResponseEnvelope{
-			Version: transport.EnvelopeVersion, ReqNonce: reqNonce,
-			Results: g, Seq: i + 1, Total: len(groups),
+			ReqNonce: reqNonce,
+			Results:  g, Seq: i + 1, Total: len(groups),
 		})
 	}
 	return out, nil

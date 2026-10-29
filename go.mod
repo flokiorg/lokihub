@@ -40,7 +40,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/lightzapp/lightz-client v1.0.1-alpha
-	github.com/ohstr/nmilat v0.5.0-rc.44
+	github.com/ohstr/nmilat v0.5.0-rc.45
 	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.34.0
 	github.com/tv42/zbase32 v0.0.0-20220222190657-f76a9fc892fa
