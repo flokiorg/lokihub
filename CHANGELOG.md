@@ -468,6 +468,10 @@ audits of both.
 
 ### Fixed
 
+- Bounds a Cash Hub's `cash_redeem` payouts in flight to any one paying node
+  (`CASH_REDEEM_INFLIGHT_PER_PAYEE`, default 8; same-node payouts are not
+  counted). One holder of many slices paying its own hold invoices could take
+  all 32 of the Hub's slots and block every other redeem.
 - Spends `mint_cash`'s hourly allowance only on a mint that commits, as the
   lineage spin-off allowance already was (also under the regtest rate
   override). A refusal made after a call's `request_id` was marked used now

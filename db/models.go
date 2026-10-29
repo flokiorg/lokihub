@@ -362,6 +362,10 @@ type CashWalletClaim struct {
 	// is in flight, "" for a cash-mode slice. A payout that definitely fails
 	// releases the claim and forgets this proof in one transaction.
 	RedeemProofID string `gorm:"size:64"`
+	// RedeemPayee is the node the cash_redeem payout of this slice pays, as the
+	// invoice names it; "" for a same-node payout. The per-payee in-flight bound
+	// counts it.
+	RedeemPayee string `gorm:"size:66"`
 	// RedeemCooldownUntil is set when a payout failed only after cash_redeem had
 	// answered: until then another redeem of the slice is RATE_LIMITED.
 	RedeemCooldownUntil *time.Time
