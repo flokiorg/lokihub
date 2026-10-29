@@ -22,6 +22,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/niplsp"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/flokiorg/lokihub/logger"
 	"github.com/flokiorg/lokihub/lsps/persist"
@@ -209,6 +210,16 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 			seen.Remember(rows[i].NodeKey, niplsp.Mark{CreatedAt: rows[i].NewestSeenCreatedAt, ID: rows[i].NewestSeenID})
 		}
 	}
+	// A pruned node's newest seen still holds: an older version is not new.
+	var pruned []persist.LSPSeenMark
+	if err := s.d.DB.Find(&pruned).Error; err != nil {
+		return err
+	}
+	for _, m := range pruned {
+		if byKey[m.NodeKey] == nil {
+			seen.Remember(m.NodeKey, niplsp.Mark{CreatedAt: m.CreatedAt, ID: m.EventID})
+		}
+	}
 	// Oldest first, so every node ends on its newest.
 	sorted := slices.Clone(evs)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].CreatedAt < sorted[j].CreatedAt })
@@ -254,19 +265,67 @@ func (s *Service) Ingest(ctx context.Context, evs []*nip01.Event) error {
 	return s.prune()
 }
 
-// prune keeps at most MaxAnnouncements untrusted LSPs: the most recently
-// announced.
+// MaxSeenMarks bounds the newest-seen marks kept for pruned nodes, the newest
+// first, so announcement spam cannot grow them without end.
+const MaxSeenMarks = 20 * MaxAnnouncements
+
+// prune keeps at most MaxAnnouncements untrusted LSPs, the most recently
+// announced, and keeps each pruned one's newest-seen mark (R2-S3) until every
+// version it covers has expired: an announcement expires at most
+// niplsp.MaxExpirySecs after its created_at.
 func (s *Service) prune() error {
-	var keep []string
-	if err := s.d.DB.Model(&persist.LSP{}).Where("trusted = ?", false).Order("announced_at DESC, node_key").
-		Limit(MaxAnnouncements).Pluck("node_key", &keep).Error; err != nil {
-		return err
-	}
-	q := s.d.DB.Where("trusted = ?", false)
-	if len(keep) > 0 {
-		q = q.Where("node_key NOT IN ?", keep)
-	}
-	return q.Delete(&persist.LSP{}).Error
+	return s.d.DB.Transaction(func(tx *gorm.DB) error {
+		var keep []string
+		if err := tx.Model(&persist.LSP{}).Where("trusted = ?", false).Order("announced_at DESC, node_key").
+			Limit(MaxAnnouncements).Pluck("node_key", &keep).Error; err != nil {
+			return err
+		}
+		q := tx.Where("trusted = ?", false)
+		if len(keep) > 0 {
+			q = q.Where("node_key NOT IN ?", keep)
+		}
+		var victims []persist.LSP
+		if err := q.Select("node_key", "newest_seen_created_at", "newest_seen_id").Find(&victims).Error; err != nil {
+			return err
+		}
+		for _, v := range victims {
+			if v.NewestSeenCreatedAt == 0 {
+				continue
+			}
+			mark := persist.LSPSeenMark{NodeKey: v.NodeKey, CreatedAt: v.NewestSeenCreatedAt, EventID: v.NewestSeenID}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "node_key"}},
+				DoUpdates: clause.AssignmentColumns([]string{"created_at", "event_id"}),
+			}).Create(&mark).Error; err != nil {
+				return err
+			}
+		}
+		if len(victims) > 0 {
+			keys := make([]string, len(victims))
+			for i, v := range victims {
+				keys[i] = v.NodeKey
+			}
+			if err := tx.Where("node_key IN ?", keys).Delete(&persist.LSP{}).Error; err != nil {
+				return err
+			}
+		}
+		// A node back in the catalogue holds its mark on its row.
+		if err := tx.Where("node_key IN (?)", tx.Model(&persist.LSP{}).Select("node_key")).Delete(&persist.LSPSeenMark{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("created_at < ?", s.d.Now().Unix()-niplsp.MaxExpirySecs).Delete(&persist.LSPSeenMark{}).Error; err != nil {
+			return err
+		}
+		var newest []string
+		if err := tx.Model(&persist.LSPSeenMark{}).Order("created_at DESC, node_key").Limit(MaxSeenMarks).
+			Pluck("node_key", &newest).Error; err != nil {
+			return err
+		}
+		if len(newest) == MaxSeenMarks {
+			return tx.Where("node_key NOT IN ?", newest).Delete(&persist.LSPSeenMark{}).Error
+		}
+		return nil
+	})
 }
 
 func applyAnnouncement(row *persist.LSP, a *niplsp.Announcement) {

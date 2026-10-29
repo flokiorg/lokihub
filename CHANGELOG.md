@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Keeps the newest-seen mark of an LSP pruned from the catalogue, until every
+  version it covers has expired, so a relay cannot re-feed an older
+  announcement of it as new.
 - Asks the owner to confirm a Cash Hub delete that ends the watch on paid
   on-chain order addresses, in the delete dialog and on every delete path
   (`DELETE /api/apps/:id` takes `{"confirmWatchEnd": true}`). The generic
