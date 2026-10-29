@@ -165,13 +165,46 @@ func Dust(w *db.App) int64 {
 }
 
 // InFlight reports whether a payment to or from the wallet is in flight: an
-// outgoing payment pending, or a held payment the Hub accepted.
+// outgoing payment pending, a held payment the Hub accepted, a same-node
+// keysend's credit not yet settled, or a held keysend settled at the node and
+// not yet credited (NIP-CW §Deleting a Circle Wallet).
 func InFlight(tx *gorm.DB, walletID uint) (bool, error) {
 	var n int64
 	err := tx.Model(&db.Transaction{}).
-		Where("app_id = ? AND ((type = ? AND state = ?) OR (type = ? AND state = ?))", walletID,
+		Where("app_id = ? AND ((type = ? AND state = ?) OR (type = ? AND state = ?) OR (type = ? AND state = ? AND self_payment = ? AND hold = ?))", walletID,
 			constants.TRANSACTION_TYPE_OUTGOING, constants.TRANSACTION_STATE_PENDING,
-			constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_ACCEPTED).
+			constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_ACCEPTED,
+			constants.TRANSACTION_TYPE_INCOMING, constants.TRANSACTION_STATE_PENDING, true, false).
 		Count(&n).Error
+	if err != nil || n > 0 {
+		return n > 0, err
+	}
+	err = liveHeldKeysends(tx, time.Now()).Where("wallet_app_id = ?", walletID).Count(&n).Error
 	return n > 0, err
+}
+
+// HeldKeysendTTL bounds a held keysend's reservation whose credit never
+// arrives (its settle event lost): the node's own settle has happened or
+// failed by then.
+const HeldKeysendTTL = 10 * time.Minute
+
+func liveHeldKeysends(tx *gorm.DB, now time.Time) *gorm.DB {
+	return tx.Model(&db.CircleHeldKeysend{}).Where("reserved_at >= ?", now.Add(-HeldKeysendTTL).Unix())
+}
+
+// HeldKeysendsReserved sums the live held-keysend reservations for wallet and
+// for its circle hub, other than hash's own.
+func HeldKeysendsReserved(tx *gorm.DB, wallet, hub uint, hash string, now time.Time) (forWallet, forHub uint64, err error) {
+	var rows []db.CircleHeldKeysend
+	if err := liveHeldKeysends(tx, now).Where("hub_app_id = ? AND payment_hash <> ?", hub, hash).Find(&rows).Error; err != nil {
+		return 0, 0, err
+	}
+	for _, r := range rows {
+		amount := uint64(max(r.AmountMloki, 0)) //nolint:gosec // non-negative
+		forHub += amount
+		if r.WalletAppID == wallet {
+			forWallet += amount
+		}
+	}
+	return forWallet, forHub, nil
 }

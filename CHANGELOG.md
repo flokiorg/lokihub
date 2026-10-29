@@ -468,6 +468,12 @@ audits of both.
 
 ### Fixed
 
+- Refuses `delete_circle_wallet`, and the lifecycle's deletion, while a
+  same-node keysend to the wallet is still to be credited or a held keysend
+  the node settled is not yet credited; the held keysend's reservation is now
+  recorded in `circle_held_keysends`, under the Hub lock the deletion takes. A
+  same-node credit cancelled meanwhile now fails its payer instead of being
+  settled to a deleted wallet.
 - Checks a joiner's membership again inside the join's commit, under the lock
   a membership resolution takes. A member an allowlist edit removed while
   their join was in flight was issued an Active wallet.

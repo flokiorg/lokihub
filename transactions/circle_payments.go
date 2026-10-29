@@ -382,6 +382,10 @@ func (svc *transactionsService) CancelOpenCircleInvoices(ctx context.Context, wa
 	}
 	for i := range rows {
 		row := &rows[i]
+		// A same-node keysend's credit is no invoice: its payer settles or fails it.
+		if row.State == constants.TRANSACTION_STATE_PENDING && row.SelfPayment && !row.Hold {
+			continue
+		}
 		if row.State == constants.TRANSACTION_STATE_ACCEPTED {
 			if err := svc.CancelHoldInvoice(ctx, row.PaymentHash, lnClient); err != nil {
 				return err
