@@ -846,6 +846,9 @@ func (app *WailsApp) WailsRequestRouter(route string, method string, body string
 	case len(mempoolApiEndpointMatch) > 1:
 		endpoint := mempoolApiEndpointMatch[1]
 		node, err := app.api.RequestMempoolApi(ctx, endpoint)
+		if errors.Is(err, api.ErrNoExplorer) {
+			return WailsRequestRouterResponse{Body: nil, Error: ""}
+		}
 		if err != nil {
 			return WailsRequestRouterResponse{Body: nil, Error: err.Error()}
 		}

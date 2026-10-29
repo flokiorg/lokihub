@@ -468,6 +468,9 @@ audits of both.
 
 ### Fixed
 
+- Asks no explorer at all when none is configured: `/api/mempool` and its
+  Wails route answer empty, and the unused-address check keeps the current
+  address, instead of sending a request to an empty base URL.
 - Refuses to start beside a node on another chain than `NETWORK` names, and
   refuses an unknown `NETWORK` value, listing the accepted ones. A
   `NETWORK=regtest` on a mainnet node used regtest swap keys and addresses.

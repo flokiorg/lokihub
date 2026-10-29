@@ -1597,6 +1597,9 @@ func (api *api) GetUnusedOnchainAddress(ctx context.Context) (string, error) {
 	if currentAddress != "" {
 		// check if address has any transactions
 		response, err := api.RequestMempoolApi(ctx, "/address/"+currentAddress+"/txs")
+		if errors.Is(err, ErrNoExplorer) {
+			return currentAddress, nil
+		}
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to get current address transactions")
 			return currentAddress, nil
@@ -1673,9 +1676,18 @@ func (api *api) GetBalances(ctx context.Context) (*BalancesResponse, error) {
 	return balances, nil
 }
 
+// ErrNoExplorer: no explorer is configured, so nothing is asked of one.
+var ErrNoExplorer = errors.New("no Flokicoin Explorer is configured")
+
 // TODO: remove dependency on this endpoint
 func (api *api) RequestMempoolApi(ctx context.Context, endpoint string) (interface{}, error) {
-	url := api.cfg.GetMempoolApi() + "/api" + endpoint
+	// Only the explorer the operator configured is ever asked: with none, no
+	// address or txid leaves the node, whatever network it is on.
+	base := api.cfg.GetMempoolApi()
+	if base == "" {
+		return nil, ErrNoExplorer
+	}
+	url := base + "/api" + endpoint
 
 	client := http.Client{
 		Timeout: time.Second * 10,

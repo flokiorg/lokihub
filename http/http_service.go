@@ -891,6 +891,10 @@ func (httpSvc *HttpService) mempoolApiHandler(c echo.Context) error {
 	}
 
 	response, err := httpSvc.api.RequestMempoolApi(c.Request().Context(), endpoint)
+	if errors.Is(err, api.ErrNoExplorer) {
+		// Nothing to show, and nothing was sent anywhere.
+		return c.JSON(http.StatusOK, nil)
+	}
 	if err != nil {
 		httpSvc.logger.Error().Err(err).Str("endpoint", endpoint).Msg("Failed to request mempool API")
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
